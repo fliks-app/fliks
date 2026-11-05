@@ -3,6 +3,7 @@ import {
   computed,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -32,13 +33,15 @@ import { KIND_REGISTRY } from '../../../../../core/media-kinds';
 
 const PAGE_SIZE = 20;
 const SEARCH_CONCURRENCY = 8;
-/** Each unit copies/moves real files server-side; unlike a metadata search, unbounded
- *  fan-out here means dozens of full videos copying at once. */
-const AUTO_IMPORT_CONCURRENCY = 3;
 
 /** The ISBN or ASIN the files of a book name: the settle identifies the book from it. */
 export function bookFileId(group: OrphanGroup): OrphanFileId | undefined {
   return group.fileIds.find((f) => f.provider === 'isbn' || f.provider === 'asin');
+}
+
+/** A book is identified from its file at settle, with a confidence floor, unless a hit is picked. */
+function identifiesFromFile(group: OrphanGroup): boolean {
+  return group.mediaType === 'book';
 }
 
 /** Whether a search hit is the title one of the file ids names. */
@@ -52,9 +55,16 @@ function namesHit(ids: OrphanFileId[], hit: SearchHit): boolean {
   );
 }
 
+/** Its search failed and its file can't identify it: linking now would add it unmatched. */
+function unsearchable(vm: GroupVM): boolean {
+  return vm.searchFailed && !vm.fromFile;
+}
+
 interface GroupVM {
   group: OrphanGroup;
   query: string;
+  /** Books only: narrows the search. */
+  author: string;
   year: number | null;
   results: SearchHit[];
   searching: boolean;
@@ -64,6 +74,10 @@ interface GroupVM {
   fromFile: boolean;
   linking: boolean;
   done: boolean;
+  /** The user chose the selected row: an import keeps it instead of choosing again. */
+  chosen: boolean;
+  /** Every provider failed: shown as no result, never linked unmatched from here. */
+  searchFailed: boolean;
   error: string;
   collapsed: boolean;
 }
@@ -95,6 +109,8 @@ export class OrphanScanPanelComponent {
   readonly deferLink = input(false);
   /** The scanned folder is outside the library: copy or move each title into it. */
   readonly transfer = input<TransferMethod | null>(null);
+  /** The remaining groups were handed to the server, which imports them in the background. */
+  readonly queued = output<void>();
 
   private libraryId = 0;
   /** Set only by `scanPath`: caps how far the server's series-folder lookup climbs. */
@@ -155,6 +171,8 @@ export class OrphanScanPanelComponent {
   );
 
   toggleCollapse(index: number) {
+    // A click that ends a text selection in the title is not a toggle.
+    if (document.getSelection()?.isCollapsed === false) return;
     this.patch(index, { collapsed: !this.groups()[index].collapsed });
   }
 
@@ -207,14 +225,17 @@ export class OrphanScanPanelComponent {
         res.groups.map((group) => ({
           group,
           query: group.guessTitle ?? group.folderName,
+          author: group.guessAuthors?.[0] ?? '',
           year: group.guessYear,
           results: [],
           searching: false,
           searched: false,
           pick: null,
-          fromFile: !!bookFileId(group),
+          fromFile: identifiesFromFile(group),
           linking: false,
           done: false,
+          chosen: false,
+          searchFailed: false,
           error: '',
           collapsed: false,
         })),
@@ -255,33 +276,15 @@ export class OrphanScanPanelComponent {
     }
   }
 
-  /** Queues every group: untouched takes the provider's first result, no pick is added unmatched, a group whose search errored is left alone. Returns once queued; the server imports in the background. */
-  async importAll(libraryId: number): Promise<{ queued: number; unmatched: number; failed: number }> {
-    const pending = this.groups()
-      .map((g, i) => (g.done ? -1 : i))
-      .filter((i) => i >= 0);
-    await this.searchBatched(pending);
-
-    const items: RelinkOrphansBody[] = [];
-    let unmatched = 0;
-    let failed = 0;
-    for (const i of pending) {
-      const vm = this.groups()[i];
-      if (vm.error) {
-        failed++;
-        continue;
-      }
-      items.push(this.relinkBody(libraryId, vm, vm.pick));
-      if (!vm.pick) unmatched++;
-    }
-    if (items.length) await this.importsApi.relinkOrphansBatch(items);
-    return { queued: items.length, unmatched, failed };
+  /** Hands every remaining group to the server batch without searching here; returns how many. */
+  importAll(libraryId: number): Promise<number> {
+    return this.queueAll(libraryId);
   }
 
   private relinkBody(
     libraryId: number,
     vm: GroupVM,
-    pick: SearchHit | null,
+    pick: Pick<SearchHit, 'externalId' | 'provider'> | null,
   ): RelinkOrphansBody {
     const group = vm.group;
     return {
@@ -319,8 +322,9 @@ export class OrphanScanPanelComponent {
       this.translate,
       'settings.libraries.scan_error',
     );
-    const status = (err as { status?: number })?.status;
+    const { status, statusText } = (err ?? {}) as { status?: number; statusText?: string };
     if (status) return `${message} (HTTP ${status})`;
+    if (statusText) return `${message} (${statusText})`;
     return err instanceof Error ? `${message} (${err.message})` : message;
   }
 
@@ -331,13 +335,15 @@ export class OrphanScanPanelComponent {
   }
 
   /** The results and pick belong to the old name: the group needs a new search. */
-  edit(index: number, partial: Partial<Pick<GroupVM, 'query' | 'year'>>) {
+  edit(index: number, partial: Partial<Pick<GroupVM, 'query' | 'author' | 'year'>>) {
     this.latestSearch.delete(index);
     this.patch(index, {
       ...partial,
       results: [],
       pick: null,
-      fromFile: !!bookFileId(this.groups()[index].group),
+      fromFile: identifiesFromFile(this.groups()[index].group),
+      chosen: false,
+      searchFailed: false,
       searched: false,
       searching: false,
     });
@@ -351,17 +357,18 @@ export class OrphanScanPanelComponent {
     const generation = this.scanGeneration;
     const seq = ++this.searchSeq;
     this.latestSearch.set(index, seq);
-    this.patch(index, { searching: true, error: '' });
+    this.patch(index, { searching: true, searchFailed: false, error: '' });
     // A reply from a scan a newer `load()` replaced must not patch the new groups.
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
-      const results = await this.metadata.search(vm.group.mediaType, query, { year: vm.year ?? undefined, provider });
+      const author = vm.group.mediaType === 'book' ? vm.author.trim() || undefined : undefined;
+      const results = await this.metadata.search(vm.group.mediaType, query, { year: vm.year ?? undefined, provider, author });
       if (stale()) return;
 
-      // Auto-select the match a file id names; a book with an ISBN or ASIN is identified from it.
+      // Auto-select the match a file id names; a book is identified from its file.
       const auto = results.find((r) => namesHit(vm.group.fileIds, r));
-      const fromFile = !!auto || !!bookFileId(vm.group);
+      const fromFile = !!auto || identifiesFromFile(vm.group);
       // Import-all takes the first result when nothing is picked, so pick it
       // here: the row the import will use is the row the user sees selected.
       this.patch(index, {
@@ -370,19 +377,29 @@ export class OrphanScanPanelComponent {
         searched: true,
         pick: auto ?? (fromFile ? null : (results[0] ?? null)),
         fromFile,
+        chosen: false,
       });
     } catch (err: unknown) {
       if (stale()) return;
+      this.failure(`search "${query}"`, err);
       this.patch(index, {
+        results: [],
+        pick: null,
+        chosen: false,
         searching: false,
         searched: true,
-        error: this.failure(`search "${query}"`, err),
+        searchFailed: true,
       });
     }
   }
 
   readonly key = searchResultKey;
   protected readonly bookFileId = bookFileId;
+
+  /** The cover the group's first file carries, if it has one. */
+  protected bookCover(group: OrphanGroup): string {
+    return `/api/imports/orphans/cover?path=${encodeURIComponent(group.files[0].filePath)}`;
+  }
 
   isPicked(pick: SearchHit | null, result: SearchHit): boolean {
     return !!pick && searchResultKey(pick) === searchResultKey(result);
@@ -391,12 +408,16 @@ export class OrphanScanPanelComponent {
   pick(index: number, result: SearchHit) {
     const current = this.groups()[index]?.pick ?? null;
     const same = this.isPicked(current, result);
-    this.patch(index, { pick: same ? null : result, fromFile: false });
+    this.patch(index, { pick: same ? null : result, fromFile: false, chosen: true });
   }
 
   /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
   pickUnmatched(index: number) {
-    this.patch(index, { pick: null, fromFile: !!bookFileId(this.groups()[index].group) });
+    this.patch(index, {
+      pick: null,
+      fromFile: identifiesFromFile(this.groups()[index].group),
+      chosen: true,
+    });
   }
 
   /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */
@@ -409,9 +430,10 @@ export class OrphanScanPanelComponent {
     return '';
   }
 
-  async link(index: number) {
+  /** The number of files linked; `quiet` leaves the toast to the caller. */
+  async link(index: number, quiet = false): Promise<number> {
     const vm = this.groups()[index];
-    if (!vm || vm.linking || vm.done) return;
+    if (!vm || vm.linking || vm.done) return 0;
     // A reply from a link a newer `load()` replaced must not patch the new groups.
     const generation = this.scanGeneration;
     this.patch(index, { linking: true, error: '' });
@@ -421,19 +443,14 @@ export class OrphanScanPanelComponent {
       );
       // The server linked it either way: the library still needs its refresh.
       if (res.linked > 0) this.anyLinked.set(true);
-      if (generation !== this.scanGeneration) return;
+      if (generation !== this.scanGeneration) return res.linked;
       if (res.linked > 0) {
         this.patch(index, { linking: false, done: true });
-        this.toast.success(
-          this.translate.instant(
-            this.transfer() ? 'import_disk.imported' : 'settings.libraries.scan_linked',
-            { count: res.linked },
-          ),
-        );
+        if (!quiet) this.toastLinked(res.linked);
       } else if (res.alreadyPresent > 0 && !res.errors.length) {
         // Every file already sits at its destination: a no-op re-run, not a failure.
         this.patch(index, { linking: false, done: true });
-        this.toast.info(
+        if (!quiet) this.toast.info(
           this.translate.instant('settings.libraries.scan_already_present', {
             count: res.alreadyPresent,
           }),
@@ -448,13 +465,24 @@ export class OrphanScanPanelComponent {
             this.translate.instant('settings.libraries.scan_nothing_linked'),
         });
       }
+      return res.linked;
     } catch (err: unknown) {
-      if (generation !== this.scanGeneration) return;
+      if (generation !== this.scanGeneration) return 0;
       this.patch(index, {
         linking: false,
         error: this.failure(`link "${vm.group.folderName}"`, err),
       });
+      return 0;
     }
+  }
+
+  private toastLinked(count: number) {
+    this.toast.success(
+      this.translate.instant(
+        this.transfer() ? 'import_disk.imported' : 'settings.libraries.scan_linked',
+        { count },
+      ),
+    );
   }
 
   async linkAll() {
@@ -464,63 +492,53 @@ export class OrphanScanPanelComponent {
       .filter(({ g }) => !g.done && !g.linking)
       .map(({ i }) => i);
     await this.searchBatched(indices);
+    let linked = 0;
     for (const i of indices) {
       // Indices point into this scan's groups, not a newer one's.
       if (generation !== this.scanGeneration) return;
-      if (this.groups()[i].error) continue;
-      await this.link(i);
+      if (this.groups()[i].error || unsearchable(this.groups()[i])) continue;
+      linked += await this.link(i, true);
     }
+    if (linked > 0) this.toastLinked(linked);
   }
 
-  /** "Most accurate" = best year + title score; ties keep the provider's relevance order. */
   async autoImportAll() {
+    if (this.autoImporting()) return;
     this.autoImporting.set(true);
     try {
-      const generation = this.scanGeneration;
-      const indices = this.groups().map((_, i) => i);
-      for (let s = 0; s < indices.length; s += AUTO_IMPORT_CONCURRENCY) {
-        await Promise.all(
-          indices
-            .slice(s, s + AUTO_IMPORT_CONCURRENCY)
-            .map((i) => this.autoLinkOne(i, generation)),
-        );
-      }
+      const count = await this.queueAll(this.libraryId);
+      if (!count) return;
+      this.toast.info(this.translate.instant('settings.libraries.scan_auto_queued', { count }));
+      this.queued.emit();
+    } catch (err: unknown) {
+      this.toast.error(this.failure('auto import', err));
     } finally {
       this.autoImporting.set(false);
     }
   }
 
-  private async autoLinkOne(index: number, generation: number) {
-    const vm = this.groups()[index];
-    if (generation !== this.scanGeneration || !vm || vm.done || vm.linking) return;
-    if (!vm.searched) await this.search(index);
-    if (generation !== this.scanGeneration || this.groups()[index].error) return;
-    // A file id already chose; otherwise a best match, or none: add it unmatched rather than leave it behind.
-    if (!this.groups()[index].fromFile) this.patch(index, { pick: this.bestMatch(this.groups()[index]) });
-    await this.link(index);
+  /** One server batch for every group not linked yet: the row the user chose, the file's id or the
+   *  book's file decide, else the server takes the best hit of a search of the title. */
+  private async queueAll(libraryId: number): Promise<number> {
+    const queued = this.groups()
+      .map((vm, i) => ({ vm, i }))
+      .filter(({ vm }) => !vm.done && !vm.linking);
+    if (!queued.length) return 0;
+    await this.importsApi.relinkOrphansBatch(queued.map(({ vm }) => this.batchBody(libraryId, vm)));
+    this.anyLinked.set(true);
+    for (const { i } of queued) this.patch(i, { done: true });
+    return queued.length;
   }
 
-  private bestMatch(vm: GroupVM): SearchHit | null {
-    if (!vm.results.length) return null;
-    const norm = (s: string | null | undefined) =>
-      (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const query = norm(vm.query);
-    let best: SearchHit | null = null;
-    let bestScore = -Infinity;
-    vm.results.forEach((r, idx) => {
-      let score = 0;
-      if (vm.year != null && r.year === vm.year) score += 100;
-      const title = norm(r.title);
-      if (query && title === query) score += 50;
-      else if (query && (title.startsWith(query) || query.startsWith(title)))
-        score += 20;
-      // Keep provider relevance as the tie-breaker (earlier = better).
-      score -= idx * 0.01;
-      if (score > bestScore) {
-        bestScore = score;
-        best = r;
-      }
-    });
-    return best;
+  private batchBody(libraryId: number, vm: GroupVM): RelinkOrphansBody {
+    if (vm.chosen || vm.fromFile) return this.relinkBody(libraryId, vm, vm.pick);
+    const fileId = vm.group.fileIds.find((f) => f.provider === vm.group.suggestedProvider);
+    if (fileId) return this.relinkBody(libraryId, vm, fileId);
+    return {
+      ...this.relinkBody(libraryId, vm, null),
+      provider: vm.group.suggestedProvider,
+      auto: true,
+      reorganize: vm.group.folderName !== '' ? this.reorganize() : false,
+    };
   }
 }

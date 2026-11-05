@@ -50,6 +50,7 @@ const scanResult = (
     folderName,
     guessTitle: folderName,
     guessYear: 2001,
+    ...(mediaType === 'book' ? { guessAuthors: ['Author One'] } : {}),
     fileIds,
     suggestedProvider: 'tmdb',
     files: [
@@ -114,20 +115,27 @@ type KindSearch = { searchMovie: (...a: never[]) => unknown; searchTv: (...a: ne
 const withSearchByKind = (m: KindSearch) =>
   ({
     ...m,
-    search: (kind: string, query: never, opts?: { year?: number; provider?: string }) =>
-      (kind === 'series' ? m.searchTv : m.searchMovie)(query, opts?.year as never, opts?.provider as never),
+    search: (kind: string, query: never, opts?: { year?: number; provider?: string; author?: string }) =>
+      (kind === 'series' ? m.searchTv : m.searchMovie)(
+        query,
+        opts?.year as never,
+        opts?.provider as never,
+        opts?.author as never,
+      ),
   }) as unknown as MetadataService;
 
 describe('OrphanScanPanelComponent.importAll', () => {
-  it('queues every detected group, defaulting to the first result', async () => {
-    const { panel, relinked } = setup(['Alpha', 'Beta']);
+  it('queues every detected group without searching, the server picking the match', async () => {
+    const searchMovie = vi.fn(() => Promise.resolve([result(11, 'First')]));
+    const folders = Array.from({ length: 21 }, (_, i) => `F${i}`);
+    const { panel, relinked } = setup(folders, { searchMovie });
     await panel.scanPath('/medias', ['movie'], 'tmdb');
+    const searched = searchMovie.mock.calls.length;
 
-    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 0, failed: 0 });
-    expect(relinked.map((b) => [b.folderName, b.externalId, b.libraryId])).toEqual([
-      ['Alpha', '11', 7],
-      ['Beta', '11', 7],
-    ]);
+    expect(await panel.importAll(7)).toBe(21);
+    expect(searchMovie).toHaveBeenCalledTimes(searched);
+    expect(relinked[20]).toMatchObject({ folderName: 'F20', auto: true, provider: 'tmdb', libraryId: 7 });
+    expect(relinked[20].externalId).toBeUndefined();
   });
 
   it('adds a group whose default pick was deselected as unmatched, without dropping it', async () => {
@@ -135,14 +143,15 @@ describe('OrphanScanPanelComponent.importAll', () => {
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
 
-    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 1, failed: 0 });
+    expect(await panel.importAll(7)).toBe(2);
     const alpha = relinked.find((b) => b.folderName === 'Alpha')!;
     expect(alpha.externalId).toBeUndefined();
+    expect(alpha.auto).toBeUndefined();
     expect(alpha.title).toBe('Alpha');
     expect(alpha.year).toBe(2001);
     expect(alpha.reorganize).toBe(false);
     const beta = relinked.find((b) => b.folderName === 'Beta')!;
-    expect(beta.externalId).toBe('11');
+    expect(beta.auto).toBe(true);
   });
 
   it('selects the first result as soon as a group is searched', async () => {
@@ -177,20 +186,34 @@ describe('OrphanScanPanelComponent.importAll', () => {
     expect(relinked[0].title).toBe('Alpha');
   });
 
+  it('leaves a book with no file id to the file identification, searching with its author', async () => {
+    const searchMovie = vi.fn(() => Promise.resolve([result(11, 'First')]));
+    const { panel, relinked } = setup(['Alpha'], { searchMovie }, [], 'book');
+    await panel.scanPath('/medias', ['book'], 'openlibrary');
+
+    expect(searchMovie).toHaveBeenCalledWith('Alpha', 2001, 'tmdb', 'Author One');
+    expect(panel.groups()[0].pick).toBeNull();
+    expect(panel.groups()[0].fromFile).toBe(true);
+    await panel.autoImportAll();
+    expect(relinked[0].externalId).toBeUndefined();
+    expect(relinked[0].auto).toBeUndefined();
+  });
+
   it('keeps the file-id choice on autoImportAll and on re-clicking the identify option', async () => {
-    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'isbn', externalId: '9780000000002' }], 'book');
+    const { panel, relinked } = setup(['Alpha'], {}, [{ provider: 'isbn', externalId: '9780000000002' }], 'book');
     await panel.scanPath('/medias', ['book'], 'openlibrary');
     panel.pickUnmatched(0);
     expect(panel.groups()[0].fromFile).toBe(true);
     await panel.autoImportAll();
-    expect(linked[0].externalId).toBeUndefined();
+    expect(relinked[0].externalId).toBeUndefined();
   });
 
   it('keeps an nfo auto-pick on autoImportAll', async () => {
-    const { panel, linked } = setup(['Alpha'], {}, [{ provider: 'tmdb', externalId: '22' }]);
+    const { panel, relinked } = setup(['Alpha'], {}, [{ provider: 'tmdb', externalId: '22' }]);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     await panel.autoImportAll();
-    expect(linked[0].externalId).toBe('22');
+    expect(relinked[0].externalId).toBe('22');
+    expect(relinked[0].auto).toBeUndefined();
   });
 
   it('keeps an explicit pick over the first result', async () => {
@@ -204,50 +227,21 @@ describe('OrphanScanPanelComponent.importAll', () => {
 });
 
 describe('OrphanScanPanelComponent.autoImportAll', () => {
-  it('caps concurrent relinks instead of firing every group at once', async () => {
-    const folders = Array.from({ length: 7 }, (_, i) => `F${i}`);
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const importsApi = {
-      previewOrphans: () => Promise.resolve(scanResult(folders)),
-      relinkOrphansBatch: () => Promise.resolve({ queued: 0 }),
-      relinkOrphans: async (body: RelinkOrphansBody) => {
-        inFlight++;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await new Promise((r) => setTimeout(r, 0));
-        inFlight--;
-        return {
-          mediaId: 1,
-          created: true,
-          linked: body.files.length,
-          alreadyPresent: 0,
-          errors: [],
-        };
-      },
-    };
-    const metadata = {
-      searchMovie: () => Promise.resolve([result(11, 'First')]),
-      searchTv: () => Promise.resolve([]),
-    };
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTranslateService({
-          lang: 'en',
-          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
-        }),
-        { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
-        { provide: MetadataService, useValue: withSearchByKind(metadata) },
-        { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
-      ],
-    });
-    const panel = TestBed.createComponent(OrphanScanPanelComponent).componentInstance;
+  it('hands every group to one server batch, the server picking the match, and reports it queued', async () => {
+    const { panel, relinked, linked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
+    let queued = false;
+    panel.queued.subscribe(() => (queued = true));
 
     await panel.autoImportAll();
 
-    expect(maxInFlight).toBe(3);
+    expect(linked).toEqual([]);
+    expect(relinked.map((b) => [b.folderName, b.auto, b.externalId, b.provider, b.title])).toEqual([
+      ['Alpha', true, undefined, 'tmdb', 'Alpha'],
+      ['Beta', true, undefined, 'tmdb', 'Beta'],
+    ]);
     expect(panel.groups().every((g) => g.done)).toBe(true);
+    expect(queued).toBe(true);
   });
 });
 
@@ -436,26 +430,30 @@ describe('OrphanScanPanelComponent: a group whose search errored', () => {
           : Promise.resolve([result(11, 'First')]),
     });
 
-  it('is not queued by importAll, and is counted as failed', async () => {
+  it('is queued by importAll for the server to search again', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { panel, relinked } = withOneFailing(['Alpha', 'Beta'], 'Beta');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
-    expect(await panel.importAll(7)).toEqual({ queued: 1, unmatched: 0, failed: 1 });
-    expect(relinked.map((b) => b.folderName)).toEqual(['Alpha']);
+    expect(await panel.importAll(7)).toBe(2);
+    expect(relinked.map((b) => [b.folderName, b.auto])).toEqual([
+      ['Alpha', true],
+      ['Beta', true],
+    ]);
   });
 
-  it('is not linked unmatched by autoImportAll', async () => {
+  it('shows no error and leaves the search to the server on autoImportAll', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const { panel, linked } = withOneFailing(['Alpha', 'Beta'], 'Beta');
+    const { panel, relinked } = withOneFailing(['Alpha', 'Beta'], 'Beta');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
-    expect(panel.groups()[1].error).toBeTruthy();
+    expect(panel.groups()[1]).toMatchObject({ searchFailed: true, error: '', results: [] });
 
     await panel.autoImportAll();
 
-    expect(panel.groups()[1].done).toBe(false);
-    expect(linked.some((b) => b.folderName === 'Beta')).toBe(false);
-    expect(linked.some((b) => b.folderName === 'Alpha')).toBe(true);
+    expect(relinked.map((b) => [b.folderName, b.auto])).toEqual([
+      ['Alpha', true],
+      ['Beta', true],
+    ]);
   });
 });
 
@@ -502,24 +500,6 @@ describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
 
     expect(panel.isPicked(first, first)).toBe(true);
     expect(panel.isPicked(first, second)).toBe(false);
-  });
-});
-
-describe('OrphanScanPanelComponent — a failing search', () => {
-  it('VERDICT: shows the server\'s own reason instead of a bare "scan failed"', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const { panel } = setup(['Alpha'], {
-      searchMovie: () =>
-        Promise.reject({
-          status: 503,
-          error: { message: 'Metadata search failed on tmdb: HTTP 401 — Invalid API key' },
-        }),
-    });
-    await panel.scanPath('/medias', ['movie'], 'tmdb');
-
-    expect(panel.groups()[0].error).toBe(
-      'Metadata search failed on tmdb: HTTP 401 — Invalid API key (HTTP 503)',
-    );
   });
 });
 
@@ -596,7 +576,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
     expect(header?.textContent?.trim()).toBe('sample.movie.2001.mkv');
   });
 
-  it('forwards folderName \'\' untouched and forces reorganize off even with a match', async () => {
+  it('forwards folderName \'\' untouched and forces reorganize off', async () => {
     const { panel, relinked } = setupRoot('sample.movie.2001.mkv');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     expect(panel.groups()[0].pick?.title).toBe('Sample Movie');
@@ -605,7 +585,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
 
     expect(relinked).toHaveLength(1);
     expect(relinked[0].folderName).toBe('');
-    expect(relinked[0].externalId).toBe('11');
+    expect(relinked[0].auto).toBe(true);
     expect(relinked[0].reorganize).toBe(false);
   });
 
@@ -652,16 +632,16 @@ describe('OrphanScanPanelComponent.edit', () => {
       Promise.resolve(query === 'Renamed' ? [result(33, 'Renamed')] : [result(11, 'First')]),
   };
 
-  it('searches a renamed group again instead of importing the old name match', async () => {
+  it('sends the renamed title for the server to search instead of the old name match', async () => {
     const { panel, relinked } = setup(['Alpha', 'Beta'], byQuery);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     panel.edit(1, { query: 'Renamed' });
 
     expect(panel.groups()[1].pick).toBeNull();
     await panel.importAll(7);
-    expect(relinked.map((b) => [b.folderName, b.externalId])).toEqual([
-      ['Alpha', '11'],
-      ['Beta', '33'],
+    expect(relinked.map((b) => [b.folderName, b.title, b.auto])).toEqual([
+      ['Alpha', 'Alpha', true],
+      ['Beta', 'Renamed', true],
     ]);
   });
 

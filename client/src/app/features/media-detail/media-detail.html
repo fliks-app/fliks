@@ -527,6 +527,20 @@
           }}</span>
         </span>
       </label>
+      @if (analyze.opts().rescan) {
+        <label class="flex items-start gap-3 cursor-pointer ml-8">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-primary mt-0.5"
+            [checked]="analyze.opts().force"
+            (change)="analyze.setOpt('force', $any($event.target).checked)"
+          />
+          <span>
+            <span class="font-medium block">{{ 'media_detail.analyze_rescan_force' | translate }}</span>
+            <span class="text-sm text-base-content/60">{{ 'media_detail.analyze_rescan_force_hint' | translate }}</span>
+          </span>
+        </label>
+      }
       <label
         class="flex items-start gap-3 cursor-pointer"
         [class.opacity-50]="analyze.opts().rescan"

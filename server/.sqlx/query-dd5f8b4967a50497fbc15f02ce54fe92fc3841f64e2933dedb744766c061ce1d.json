@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id FROM collections c\n                   WHERE name_key(c.name) = name_key($1) AND EXISTS (\n                     SELECT 1 FROM collection_entries e\n                       JOIN media_credits a ON a.\"mediaId\" = e.\"mediaId\" AND a.role = 'author' AND a.\"editionId\" IS NULL\n                       JOIN media_credits mine ON mine.\"mediaId\" = $2 AND mine.role = 'author'\n                         AND mine.\"editionId\" IS NULL AND mine.\"personId\" = a.\"personId\"\n                      WHERE e.\"collectionId\" = c.id)\n                   ORDER BY c.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "collections",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dd5f8b4967a50497fbc15f02ce54fe92fc3841f64e2933dedb744766c061ce1d"
+}

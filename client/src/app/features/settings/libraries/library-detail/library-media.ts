@@ -21,6 +21,10 @@ import { LibraryFoldersComponent } from './library-folders/library-folders';
 import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
 import { mediaDetailLink } from '../../../../core/media-kinds';
 import type { MediaType } from '../../../../core/enums/media-type.enum';
+import type { BookListInfo } from '../../../../core/services/api/books.models';
+import { formatBytes } from '../../../../core/utils/format-bytes';
+
+type Row = Media & { book?: BookListInfo };
 
 const PAGE_SIZE = 30;
 
@@ -51,7 +55,7 @@ export class LibraryMediaComponent implements OnInit {
 
   private readonly scanModal = viewChild<OrphanScanModalComponent>('scanModal');
 
-  readonly items = signal<Media[]>([]);
+  readonly items = signal<Row[]>([]);
   readonly total = signal(0);
   readonly page = signal(1);
   readonly search = signal('');
@@ -109,6 +113,25 @@ export class LibraryMediaComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** A book's authors and series, a video's original title when it differs. */
+  details(m: Row): string {
+    if (m.book) {
+      const s = m.book.series;
+      const series = s && [s.name, s.position != null ? `#${s.position}` : s.positionLabel].filter(Boolean).join(' ');
+      return [m.book.authors.map((a) => a.name).join(', '), series].filter(Boolean).join(' · ');
+    }
+    return m.originalTitle && m.originalTitle !== m.title ? m.originalTitle : '';
+  }
+
+  /** The files' formats (a book's extensions, a video's qualities) and their size on disk. */
+  fileSummary(m: Row): { count: number; text: string } | null {
+    const files = m.files ?? [];
+    if (!files.length) return null;
+    const formats = [...new Set(files.map((f) => (m.book ? f.quality.toUpperCase() : f.quality)).filter(Boolean))];
+    const size = m.sizeOnDisk ?? files.reduce((n, f) => n + f.size, 0);
+    return { count: files.length, text: [...formats, formatBytes(size)].join(' · ') };
   }
 
   toggleUnidentified() {

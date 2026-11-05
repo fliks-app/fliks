@@ -200,6 +200,25 @@ async fn m1779100_refuses_orphan_root_folders(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn m1789000000760_name_key_ignores_accents_case_punctuation_and_order(pool: PgPool) {
+    apply_until(&pool, 1_789_000_000_761).await;
+    let keys: Vec<(Option<String>,)> = rows(
+        &pool,
+        "SELECT name_key(n) FROM unnest(ARRAY['Placeholder, Âna', 'ana PLACEHOLDER', 'Les Sept Sœurs', ' ']) n",
+    )
+    .await;
+    assert_eq!(
+        keys,
+        [
+            (Some("ana placeholder".into()),),
+            (Some("ana placeholder".into()),),
+            (Some("les sept soeurs".into()),),
+            (None,)
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn m1779500_keeps_the_newest_duplicate_per_media_and_title(pool: PgPool) {
     apply_until(&pool, 1_779_500_000_000).await;
     sql(&pool, r#"

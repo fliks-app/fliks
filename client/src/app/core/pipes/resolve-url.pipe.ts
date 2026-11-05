@@ -7,6 +7,8 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
 /** A Live TV channel logo can belong to a restricted group, so unlike every
  *  other local image it requires an authenticated caller — see LivetvController. */
 const LIVETV_LOGO_PATH = '/api/livetv/channels/';
+/** Images only an authenticated caller reads. */
+const AUTHED_IMAGE_PATHS = [LIVETV_LOGO_PATH, '/api/imports/orphans/cover'];
 
 /** TMDB serves its own sizes: an `original` backdrop is up to 3840 px wide. */
 const TMDB_ORIGINAL = /^(https:\/\/image\.tmdb\.org\/t\/p\/)original\//;
@@ -22,8 +24,8 @@ export function imageUrlWithSize(url: string, size: ImageSize): string {
 }
 
 /** Same-origin web requests carry the auth cookie; native/TV clients are cross-origin, so the token rides in the query like an HLS segment URL (see `withToken`). */
-export function withLiveTvLogoToken(url: string, token: string | null): string {
-  if (!token || !url.startsWith(LIVETV_LOGO_PATH)) return url;
+export function withAuthedImageToken(url: string, token: string | null): string {
+  if (!token || !AUTHED_IMAGE_PATHS.some((p) => url.startsWith(p))) return url;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
@@ -39,7 +41,7 @@ export class ResolveUrlPipe implements PipeTransform {
     let resolved = size ? imageUrlWithSize(url, size) : url;
     // Web already carries the auth cookie same-origin; only a native/TV client
     // needs the token riding in the query.
-    if (this.config.isNative) resolved = withLiveTvLogoToken(resolved, this.auth.playbackToken);
+    if (this.config.isNative) resolved = withAuthedImageToken(resolved, this.auth.playbackToken);
     return this.config.resolveUrl(resolved);
   }
 }

@@ -168,6 +168,7 @@ pub async fn remove_media(
     for f in files {
         drop_thumbnails(st, f);
     }
+    super::orphans::schedule(st);
     st.hub.emit_domain(DomainEvent::MediaRemoved {
         media_id: i64::from(id),
         external_ids,

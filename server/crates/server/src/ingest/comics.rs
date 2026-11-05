@@ -17,7 +17,6 @@ use std::path::Path;
 
 const FORMATS: [&str; 4] = ["cbz", "cb7", "cbr", "pdf"];
 /// The width of a stored cover.
-const COVER_WIDTH: u32 = 1000;
 
 /// The format of a comic file name: its extension when it is one of the four.
 pub fn format_of(name: &str) -> Option<&'static str> {
@@ -159,12 +158,9 @@ async fn cover(st: &AppState, media: i32, files: &[Placed], rows: &[Row]) {
     paged.sort_by(|a, b| a.0.total_cmp(&b.0));
     for (_, f) in paged {
         let p = f.abs.clone();
-        let jpeg = crate::comics::blocking_ingest(move || {
-            let first = archive::page(&p, 0).ok()?;
-            crate::comics::cover(&first, COVER_WIDTH)
-        })
-        .await
-        .flatten();
+        let jpeg = crate::comics::blocking_ingest(move || crate::comics::first_page_cover(&p))
+            .await
+            .flatten();
         if let Some(b) = jpeg {
             super::books::store_cover(st, media, &b).await;
             return;

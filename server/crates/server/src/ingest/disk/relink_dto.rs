@@ -23,11 +23,13 @@ pub struct RelinkDto {
     pub(super) transfer: Option<Method>,
     pub(super) folder_id: Option<i32>,
     pub(super) files: Vec<RelinkFile>,
+    /// A batch item with no id takes the best hit of a search of its title (rule 73).
+    pub(super) auto: bool,
     /// Background for a batch item; the single relink route makes it interactive.
     pub(super) priority: Priority,
 }
 
-pub(super) const RELINK_FIELDS: [&str; 14] = [
+pub(super) const RELINK_FIELDS: [&str; 15] = [
     "libraryId",
     "type",
     "externalId",
@@ -42,6 +44,7 @@ pub(super) const RELINK_FIELDS: [&str; 14] = [
     "transfer",
     "folderId",
     "files",
+    "auto",
 ];
 
 /// `@Type(() => Number) @IsInt @Min(0)` on the file numbering.
@@ -152,6 +155,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
         transfer,
         folder_id: b.id("folderId")?.flatten(),
         files,
+        auto: b.bool("auto")?.flatten().unwrap_or(false),
         priority: Priority::Background,
     })
 }

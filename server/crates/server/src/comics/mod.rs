@@ -8,4 +8,4 @@ mod pages;
 pub mod sandbox;
 
 pub use pages::{__path_page, __path_pages, page, pages, router};
-pub(crate) use pages::{MAX_WIDTH, blocking_ingest, cover, serve_page};
+pub(crate) use pages::{MAX_WIDTH, blocking_ingest, first_page_cover, serve_page};

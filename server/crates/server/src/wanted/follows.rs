@@ -146,6 +146,8 @@ pub async fn follow_put(
         return Err(AppError::bad_request(vec!["this person is not an author"]));
     }
     let wants = p.wants.as_deref().map(|w| wants_json(Some(w)));
+    let mut tx = st.db.begin().await?;
+    crate::media::write::orphans::hold_persons(&mut tx).await?;
     sqlx::query(
         r#"INSERT INTO person_follows ("userId", "personId", role, "newReleases", "libraryId", wants)
            VALUES ($1, $2, 'author', COALESCE($3, true), $4, COALESCE($5::jsonb, $6::jsonb))
@@ -160,8 +162,9 @@ pub async fn follow_put(
     .bind(p.library)
     .bind(wants)
     .bind(wants_json(None))
-    .execute(&st.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     follow_body(&st, a.user.id, id).await
 }
 

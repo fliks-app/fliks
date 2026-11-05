@@ -443,8 +443,15 @@ fn render(bytes: &[u8], width: Option<u32>) -> Result<(&'static str, Vec<u8>), &
 }
 
 /// A JPEG cover of at most `width` from a page's bytes.
-pub(crate) fn cover(bytes: &[u8], width: u32) -> Option<Vec<u8>> {
+fn cover(bytes: &[u8], width: u32) -> Option<Vec<u8>> {
     render(bytes, Some(width)).ok().map(|r| r.1)
+}
+
+const COVER_WIDTH: u32 = 1000;
+
+/// The poster an archive gives: its first page as a JPEG; blocking.
+pub(crate) fn first_page_cover(path: &std::path::Path) -> Option<Vec<u8>> {
+    cover(&super::archive::page(path, 0).ok()?, COVER_WIDTH)
 }
 
 #[cfg(test)]

@@ -195,7 +195,7 @@ impl ImageStore {
         Self::build(Some(root))
     }
 
-    fn root(&self) -> &Path {
+    pub fn root(&self) -> &Path {
         self.root.as_deref().unwrap_or_else(|| data_dir())
     }
 

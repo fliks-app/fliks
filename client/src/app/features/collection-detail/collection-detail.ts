@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../core/services/api/books-api.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import type { CollectionDetail } from '../../core/services/api/books.models';
 import { mediaDetailLink } from '../../core/media-kinds';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
@@ -47,6 +48,9 @@ export class CollectionDetailComponent {
 
   constructor() {
     void this.load(Number(this.route.snapshot.paramMap.get('id')));
+    const navbar = inject(NavbarService);
+    navbar.showBackButton.set(true);
+    inject(DestroyRef).onDestroy(() => navbar.showBackButton.set(false));
   }
 
   link(e: Entry) {

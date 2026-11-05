@@ -426,7 +426,7 @@ async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
     }
     if media.media_type != MediaKind::Book {
         let guard = st.ingest.media.lock(id).await;
-        if let Err(e) = rescan_files(st, &guard, id).await {
+        if let Err(e) = rescan_files(st, &guard, id, false).await {
             tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
         }
     }

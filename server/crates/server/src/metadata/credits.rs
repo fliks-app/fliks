@@ -49,11 +49,16 @@ pub async fn persist_credits(
             unique.push(id);
         }
     }
-    let mut people: HashMap<i32, Person> = HashMap::new();
-    if !unique.is_empty() {
-        people = upsert_persons(st, provider.as_str(), &unique, &all).await?;
-    }
-    replace_credits(st, media_id, &cast, &crew, &people).await?;
+    let mut tx = st.db.begin().await?;
+    crate::media::write::orphans::hold_persons(&mut tx).await?;
+    let (people, avatars) = if unique.is_empty() {
+        (HashMap::new(), vec![])
+    } else {
+        upsert_persons(&mut tx, provider.as_str(), &unique, &all).await?
+    };
+    replace_credits(&mut tx, media_id, &cast, &crew, &people).await?;
+    tx.commit().await?;
+    write_avatars(st, avatars).await;
     if unique.is_empty() {
         return Ok(());
     }
@@ -61,17 +66,19 @@ pub async fn persist_credits(
     Ok(())
 }
 
+/// A person to update once its credit is committed: id, changed name, avatar URL.
+type AvatarJob = (i32, Option<String>, Option<String>);
+
 /// Existing persons by `(provider, value)`, the missing ones inserted with their id row under a
-/// per-provider lock, avatars and changed names written with a concurrency of 8.
+/// per-provider lock, and the avatars and changed names to write after the commit.
 async fn upsert_persons(
-    st: &AppState,
+    tx: &mut sqlx::PgConnection,
     provider: &str,
     ids: &[i32],
     credits: &[&Value],
-) -> Result<HashMap<i32, Person>, AppError> {
+) -> Result<(HashMap<i32, Person>, Vec<AvatarJob>), AppError> {
     let credit_of = |id: i32| credits.iter().find(|c| ext(c) == Some(id)).copied();
     let name_of = |id: i32| credit_of(id).and_then(|c| s(c, "name")).unwrap_or_default();
-    let mut tx = st.db.begin().await?;
     sqlx::query!(
         "SELECT pg_advisory_xact_lock(hashtext('persons:' || $1::text))",
         provider
@@ -122,8 +129,7 @@ async fn upsert_persons(
             );
         }
     }
-    tx.commit().await?;
-    let jobs: Vec<(i32, Option<String>, Option<String>)> = ids
+    let jobs: Vec<AvatarJob> = ids
         .iter()
         .filter_map(|ext_id| {
             let p = rows.get(ext_id)?;
@@ -133,6 +139,11 @@ async fn upsert_persons(
             (name.is_some() || avatar.is_some()).then_some((p.id, name, avatar))
         })
         .collect();
+    Ok((rows, jobs))
+}
+
+/// Avatars and changed names, with a concurrency of 8.
+async fn write_avatars(st: &AppState, jobs: Vec<AvatarJob>) {
     stream::iter(jobs)
         .for_each_concurrent(AVATAR_CONCURRENCY, |(id, name, avatar)| async move {
             let local = match avatar {
@@ -155,7 +166,6 @@ async fn upsert_persons(
             }
         })
         .await;
-    Ok(rows)
 }
 
 async fn person_rows<'e>(
@@ -199,9 +209,9 @@ struct Credit {
     department: Option<String>,
 }
 
-/// The cast and crew `media_credits` of a media replaced in one transaction.
+/// The cast and crew `media_credits` of a media replaced in the caller's transaction.
 async fn replace_credits(
-    st: &AppState,
+    tx: &mut sqlx::PgConnection,
     media_id: i32,
     cast: &[Value],
     crew: &[Value],
@@ -234,7 +244,6 @@ async fn replace_credits(
         r.position = i as i32;
         rows.push(r);
     }
-    let mut tx = st.db.begin().await?;
     // Two writers of one media's credits queue here instead of interleaving their rows.
     sqlx::query!(
         "SELECT 1 AS one FROM media WHERE id = $1 FOR UPDATE",
@@ -271,7 +280,7 @@ async fn replace_credits(
         .execute(&mut *tx)
         .await?;
     }
-    tx.commit().await
+    Ok(())
 }
 
 /// Each person's departments merged with the ones this title gives them, sorted.

@@ -6,7 +6,7 @@
       </app-modal-header>
     </div>
 
-    <app-orphan-scan-panel #panel />
+    <app-orphan-scan-panel #panel (queued)="close()" />
 
     <app-modal-footer>
       <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
