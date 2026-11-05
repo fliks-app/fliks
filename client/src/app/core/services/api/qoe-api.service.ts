@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import type { MediaProgressSubject } from '../sse.service';
 
 // Wire contract: plan/playback-qoe.plan.md. Every backend shape the admin UI
 // reads is mapped here, so a backend adjustment touches this file only.
@@ -69,6 +70,8 @@ export interface QoeSessionRow extends QoeDiagnosis {
   userId: number | null;
   mediaFileId: number | null;
   mediaTitle: string | null;
+  /** The title and episode behind `mediaFileId`; null once the file is gone. */
+  media: MediaProgressSubject | null;
   startedAt: string;
   lastSeenAt: string;
   endedAt: string | null;

@@ -1,5 +1,5 @@
 import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
@@ -42,6 +42,7 @@ import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownS
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 import { mergeDevices } from '../qoe-devices';
 import { saveFile } from '../../../core/plugins/save-file.plugin';
+import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
 
 const PAGE_SIZE = 25;
 
@@ -74,6 +75,7 @@ type Tab = (typeof TABS)[number];
     ModalFooterComponent,
     ModalHeaderComponent,
     PaginationComponent,
+    RouterLink,
     SelectFieldComponent,
     ToggleFieldComponent,
   ],
@@ -245,6 +247,10 @@ export class SystemPlaybackQualityComponent implements OnInit {
       /* interceptor */
     }
   }
+
+  readonly episodeLine = subjectEpisodeLine;
+  readonly mediaLink = subjectMediaLink;
+  readonly episodeLink = subjectEpisodeLink;
 
   closeDetail() {
     this.detailDialog()?.nativeElement.close();

@@ -166,6 +166,11 @@
               "errorCount": 0,
               "height": null,
               "hwDecoder": null,
+              "media": {
+                "mediaId": 1,
+                "mediaType": "movie",
+                "title": "Parity Movie 01"
+              },
               "mediaFileId": 1,
               "mediaTitle": "Parity Movie 01",
               "medianTranscodeSpeed": null,
@@ -244,6 +249,11 @@
           ],
           "height": null,
           "hwDecoder": null,
+          "media": {
+            "mediaId": 1,
+            "mediaType": "movie",
+            "title": "Parity Movie 01"
+          },
           "mediaFileId": 1,
           "mediaTitle": "Parity Movie 01",
           "medianTranscodeSpeed": null,
