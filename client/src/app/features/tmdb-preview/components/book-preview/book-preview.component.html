@@ -1,95 +1,90 @@
-<div class="flex flex-col gap-6 max-w-4xl mx-auto">
-  @if (failed()) {
-    <div role="alert" class="alert alert-error text-sm">{{ 'books_search.preview_error' | translate }}</div>
-  } @else if (!book()) {
-    <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
-  } @else {
-    @let b = book()!;
-    <div class="flex flex-col sm:flex-row gap-6">
-      <div class="w-40 shrink-0 self-center sm:self-start aspect-[2/3] rounded-lg bg-base-200 overflow-hidden">
-        @if (b.posterUrl) {
-          <img [src]="b.posterUrl" alt="" class="size-full object-cover" />
-        }
-      </div>
-      <div class="flex flex-col gap-3 min-w-0">
-        <div>
-          <h1 class="text-2xl font-bold">{{ b.title }}</h1>
-          @if (b.subtitle) {
-            <p class="text-base-content/70">{{ b.subtitle }}</p>
+@if (failed()) {
+  <div role="alert" class="alert alert-error">{{ 'books_search.preview_error' | translate }}</div>
+} @else {
+  <app-hero-base
+    [title]="hero()?.title ?? null"
+    [loading]="!book()"
+    mediaType="book"
+    [posterUrl]="hero()?.posterUrl ?? null"
+    [viewTransitionName]="posterTransitionName()"
+    [subtitle]="book()?.subtitle ?? null"
+    [metaParts]="metaParts()"
+    [chips]="chips()"
+    [overview]="book()?.description ?? null"
+  >
+    @if (authors()) {
+      <p heroMeta class="font-medium mt-1">{{ authors() }}</p>
+    }
+
+    <ng-container ngProjectAs="[heroTags]">
+      @if (book()?.subjects?.length) {
+        <div class="flex flex-wrap gap-1.5 mt-2 md:mt-4">
+          @for (s of book()!.subjects; track s) {
+            <span class="badge badge-ghost badge-sm md:badge-md">{{ s }}</span>
           }
         </div>
-        <p class="text-base-content/80">
-          {{ authors() }}@if (b.year) { · {{ b.year }}}
-        </p>
-        @if (seriesLabel()) {
-          <p class="text-sm text-base-content/60">{{ seriesLabel() }}</p>
-        }
-        @if (b.subjects.length) {
-          <div class="flex flex-wrap gap-1">
-            @for (s of b.subjects; track s) {
-              <span class="badge badge-ghost badge-sm">{{ s }}</span>
-            }
+      } @else if (!book()) {
+        <div class="animate-pulse" aria-hidden="true">
+          <div class="h-5 w-1/3 bg-base-300/40 rounded mt-3"></div>
+          <div class="flex gap-1.5 mt-2 md:mt-4">
+            <div class="h-5 w-16 bg-base-300/40 rounded-full"></div>
+            <div class="h-5 w-20 bg-base-300/40 rounded-full"></div>
           </div>
-        }
-        @if (b.description) {
-          <p class="text-sm whitespace-pre-line">{{ b.description }}</p>
-        }
-        @if (b.unofficial) {
-          <p class="text-xs text-base-content/50">{{ 'books_search.unofficial' | translate }}</p>
-        }
+        </div>
+      }
+    </ng-container>
 
-        <div data-preview-actions class="flex flex-col gap-3 max-w-sm">
-          @if (inLibraryLink(); as link) {
-            <a class="btn btn-primary btn-sm self-start" [routerLink]="link">{{ 'books_search.open_in_library' | translate }}</a>
-          } @else if (canImport() || canRequest()) {
-            @if (bookLibraries().length === 0 && libraries().length) {
-              <div role="alert" class="alert alert-warning text-sm py-2">{{ 'discover.no_compatible_library' | translate }}</div>
-            }
-            @if (bookLibraries().length > 1) {
-              <label class="form-control w-full">
-                <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
-                <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="libraryId()" (ngModelChange)="selectLibrary($event ? +$event : null)">
-                  @for (l of bookLibraries(); track l.id) {
-                    <option [ngValue]="l.id">{{ l.name }}</option>
-                  }
-                </select>
-              </label>
-            }
-            <div>
-              <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
-              <app-wants-editor [(wants)]="wants" />
-            </div>
-            <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-            @if (canRequest() && requested().length) {
-              <p class="text-xs text-base-content/60" data-testid="book-already-requested">
-                {{ 'book_requests.already_requested' | translate }}
-                <app-request-wants [wants]="requested()" />
-              </p>
-            }
-            <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="adding() || !bookLibraries().length" (click)="canImport() ? add() : request()">
-              @if (adding()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}
-            </button>
-          }
+    <ng-container ngProjectAs="[heroActions]">
+      @if (!book()) {
+        <div class="h-10 w-44 max-md:flex-1 bg-base-300/40 rounded-lg animate-pulse" aria-hidden="true"></div>
+      }
+      @if (book()) {
+        @if (inLibraryLink(); as link) {
+          <a class="btn btn-primary max-md:flex-1" [routerLink]="link">{{ 'books_search.open_in_library' | translate }}</a>
+        } @else if (canImport()) {
+          <button type="button" class="btn btn-primary gap-2 max-md:flex-1" (click)="openDialog()">
+            <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
+          </button>
+        } @else if (canRequest()) {
+          <button type="button" class="btn btn-secondary max-md:flex-1" (click)="openDialog()">
+            {{ 'book_requests.request' | translate }}
+          </button>
+        }
+      }
+    </ng-container>
+
+    @if (book()) {
+      <app-facts-grid class="mt-6" [facts]="facts()" />
+      @if (book()!.unofficial) {
+        <p class="text-sm text-base-content/50 mt-4">{{ 'books_search.unofficial' | translate }}</p>
+      }
+    } @else {
+      <div class="animate-pulse mt-4" aria-hidden="true">
+        <div class="space-y-2">
+          <div class="h-4 bg-base-300/40 rounded"></div>
+          <div class="h-4 bg-base-300/40 rounded"></div>
+          <div class="h-4 w-2/3 bg-base-300/40 rounded"></div>
         </div>
       </div>
-    </div>
+    }
+  </app-hero-base>
 
-    @if (b.editions.length) {
-      <section>
-        <h2 class="text-lg font-semibold mb-3">{{ 'books_search.editions' | translate }}</h2>
-        <ul class="flex flex-col gap-2">
-          @for (e of b.editions; track e.provider + ':' + e.externalId) {
+  @if (book()?.editions?.length) {
+    <app-detail-section [heading]="'books_search.editions' | translate" persistKey="previewEditions">
+      <ul class="flex flex-col gap-2">
+          @for (e of editions(); track e.provider + ':' + e.externalId) {
             <li class="rounded-lg bg-base-200 p-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span class="badge badge-sm">{{ 'families.' + e.family | translate }}</span>
-              @if (e.format) {
-                <span class="uppercase text-base-content/70">{{ e.format }}</span>
+              @switch (e.format) {
+                @case (null) {}
+                @case ('audio') {}
+                @case ('print') { <span class="text-base-content/70">{{ 'books_search.format_print' | translate }}</span> }
+                @case ('ebook') { <span class="text-base-content/70">{{ 'books_search.format_ebook' | translate }}</span> }
+                @default { <span class="uppercase text-base-content/70">{{ e.format }}</span> }
               }
-              <span class="font-medium min-w-0 truncate">{{ e.title ?? b.title }}</span>
+              <span class="font-medium min-w-0 truncate">{{ e.title ?? book()!.title }}</span>
               @if (e.language) {
-                <span class="text-base-content/60">{{ e.language }}</span>
+                <span class="text-base-content/60">{{ language(e.language) }}</span>
               }
               @if (e.publisher) {
                 <span class="text-base-content/60">{{ e.publisher }}</span>
@@ -107,8 +102,65 @@
               }
             </li>
           }
-        </ul>
-      </section>
-    }
+      </ul>
+      @if (editions().length < book()!.editions.length) {
+        <button type="button" class="link link-primary no-underline hover:underline text-sm mt-2" (click)="editionsShown.set(editionsShown() + 5)">
+          {{ 'common.show_more' | translate }}
+        </button>
+      }
+    </app-detail-section>
   }
-</div>
+}
+
+@if (book() && !inLibraryLink() && (canImport() || canRequest())) {
+  <dialog #addDialog class="modal">
+    <div class="modal-box max-w-2xl">
+      <app-modal-header>
+        <div>
+          <h3 class="text-lg font-bold text-primary">{{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}</h3>
+          <p class="text-base-content/80">{{ book()!.title }}</p>
+        </div>
+      </app-modal-header>
+
+      <div class="mt-4 flex flex-col gap-3">
+        @if (bookLibraries().length === 0 && libraries().length) {
+          <div role="alert" class="alert alert-warning text-sm py-2">{{ 'discover.no_compatible_library' | translate }}</div>
+        }
+        @if (bookLibraries().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="libraryId()" (ngModelChange)="selectLibrary($event ? +$event : null)">
+              @for (l of bookLibraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        <div>
+          <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
+          <app-wants-editor [(wants)]="wants" />
+        </div>
+        <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
+        @if (canRequest() && requested().length) {
+          <p class="text-sm text-base-content/60" data-testid="book-already-requested">
+            {{ 'book_requests.already_requested' | translate }}
+            <app-request-wants [wants]="requested()" />
+          </p>
+        }
+      </div>
+
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="closeDialog()">{{ 'common.cancel' | translate }}</button>
+        <button type="button" class="btn btn-primary" [disabled]="adding() || !bookLibraries().length" (click)="canImport() ? add() : request()">
+          @if (adding()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}
+        </button>
+      </app-modal-footer>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeDialog()">close</button>
+    </form>
+  </dialog>
+}

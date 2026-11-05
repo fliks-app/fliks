@@ -2,16 +2,16 @@ import { Component, computed, effect, inject, input, signal, untracked } from '@
 import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookChapter, BookEdition } from '../../../core/services/api/books.models';
-import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
+import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
 import { editionLabel } from '../../../core/services/api/book-media';
 import { formatTime } from '../../../core/utils/player.utils';
 
 /** Chapters of one of the audio editions that has a file; hidden when the edition has none. */
 @Component({
   selector: 'app-book-chapters',
-  imports: [TranslatePipe, CollapsibleSectionComponent],
+  imports: [TranslatePipe, DetailSectionComponent],
   templateUrl: './book-chapters.component.html',
-  host: { class: 'block' },
+  host: { class: 'block', '[class.hidden]': '!chapters().length' },
 })
 export class BookChaptersComponent {
   readonly mediaId = input.required<number>();

@@ -31,7 +31,7 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import { hasProviderId } from '../../../core/utils/media-identity';
 import type { UiContribution } from '@fliks/plugin-ui';
-import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-actions';
+import { CORE_MEDIA_ACTIONS, sectionOf } from '../detail-hero/core-media-actions';
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';

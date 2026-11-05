@@ -1,0 +1,16 @@
+@if (shown().length) {
+  <dl class="grid grid-cols-2 gap-x-6 md:gap-x-8 gap-y-3 text-sm">
+    @for (f of shown(); track f.label) {
+      <div>
+        <dt class="text-base-content/50">{{ f.translate === false ? f.label : (f.label | translate) }}</dt>
+        <dd class="font-medium">
+          @switch (f.format) {
+            @case ('date') { {{ $any(f.value) | localeDate: { dateStyle: 'long' } }} }
+            @case ('currency') { {{ $any(f.value) | currency: 'USD' : 'symbol' : '1.0-0' }} }
+            @default { {{ f.value }} }
+          }
+        </dd>
+      </div>
+    }
+  </dl>
+}

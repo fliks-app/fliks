@@ -11,10 +11,14 @@ import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
   imports: [TranslatePipe, TranslatePluralPipe, LucideMic, LucideMicOff, LucideUser, LucideVolume2],
   templateUrl: './party-voice-bar.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.hidden]': '!shown()' },
 })
 export class PartyVoiceBarComponent {
   protected readonly voice = inject(VoiceService);
   private readonly party = inject(PartyService);
+  protected readonly shown = computed(
+    () => this.voice.supported && (this.variant() !== 'hint' || this.voice.joined() || this.voice.blocked()),
+  );
   /** People in the voice channel, a user with two devices counted once. */
   protected readonly inVoice = computed(
     () => new Set(this.party.members().filter((m) => m.voice && m.status !== 'away').map((m) => m.userId)).size,

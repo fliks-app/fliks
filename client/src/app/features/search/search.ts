@@ -1,6 +1,7 @@
 import {
   Component,
   signal,
+  computed,
   effect,
   untracked,
   inject,
@@ -163,6 +164,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly bookSeries = signal<CollectionSummary[]>([]);
   readonly bookExternal = signal<SearchHit[]>([]);
   readonly bookLoading = signal(false);
+  /** Books to add on the All tab: owned ones already show in the library section. */
+  readonly allBookResults = computed(() =>
+    this.state.applyPanelFilters(this.bookExternal().filter((r) => r.existingMediaId == null)),
+  );
 
   readonly requestedTitles = signal<Map<string, FliksRequestStatus>>(new Map());
 
@@ -685,16 +690,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.externalLoading.set(true);
     try {
       let rows: SearchHit[];
+      let books: SearchHit[] = [];
       if (ct !== 'all') {
         rows = await this.metadata.search(ct, q);
       } else {
-        const [movies, tv] = await Promise.all([
+        const [movies, tv, b] = await Promise.all([
           this.metadata.search('movie', q),
           this.metadata.search('series', q),
+          this.metadata.search('book', q).catch(() => []),
         ]);
         rows = [...movies, ...tv].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+        books = b;
       }
       if (fresh()) {
+        this.bookExternal.set(books);
         this.state.externalResults.set(rows);
         this.loadRequestedIds();
       }

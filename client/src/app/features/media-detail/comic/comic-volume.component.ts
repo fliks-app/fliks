@@ -14,6 +14,9 @@ import { CardActionsService } from '../../../core/services/card-actions.service'
 import { MediaActionsController } from '../../../shared/utils/media-actions-controller';
 import { openMediaMenu } from '../../../shared/utils/media-menu';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
+import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
+import { LikesApiService } from '../../../core/services/api/likes-api.service';
+import { LikeController } from '../../../shared/utils/like-controller';
 import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -30,6 +33,7 @@ import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
     NgTemplateOutlet,
     TranslatePipe,
     DetailHeroComponent,
+    DetailSectionComponent,
     ProviderAttributionComponent,
     LucideEllipsisVertical,
     LucidePencil,
@@ -45,6 +49,10 @@ export class ComicVolumeComponent {
   readonly media = input.required<Media>();
 
   private readonly api = inject(ComicsApiService);
+  protected readonly like = new LikeController(
+    { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
+    inject(LikesApiService),
+  );
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly volumeDialog = viewChild<ElementRef<HTMLDialogElement>>('volumeDialog');

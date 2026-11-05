@@ -1,7 +1,7 @@
 import type { UiContribution } from '@fliks/plugin-ui';
 
 /** Core's own `media.actions` as contributions, merged with plugin ones by weight/id. Gates `when` can't express
- *  (an OR, non-permission facts) stay in `media-info-header.ts`; label/icon toggles live in `displayLabelKey`/`displayIcon`. */
+ *  (an OR, non-permission facts) stay in `detail-hero.ts`; label/icon toggles live in `displayLabelKey`/`displayIcon`. */
 /** Section boundaries as weight bands (personal, acquisition, editing, maintenance, destructive), so plugin contributions group by their declared weight. */
 export function sectionOf(weight: number): string {
   if (weight < 500) return 'personal';
@@ -25,6 +25,16 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     labelKey: 'downloads.download',
     icon: 'download',
     when: ['!isTv', 'hasFiles', 'mediaType:movie'],
+    action: { kind: 'action', actionId: 'media.download' },
+  },
+  {
+    // An episode is one playable file, so it downloads like a movie; an OR is two contributions on one actionId.
+    id: 'core.download_episode',
+    slot: 'media.actions',
+    weight: 140,
+    labelKey: 'downloads.download',
+    icon: 'download',
+    when: ['!isTv', 'hasFiles', 'isEpisode', 'surface:detail'],
     action: { kind: 'action', actionId: 'media.download' },
   },
   {
@@ -101,6 +111,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.toggle-watched' },
   },
   {
+    id: 'core.toggle_episode_watched',
+    slot: 'media.actions',
+    weight: 210,
+    labelKey: 'media_card.mark_watched',
+    icon: 'eye',
+    when: ['isEpisode', 'surface:detail'],
+    action: { kind: 'action', actionId: 'media.toggle-watched' },
+  },
+  {
     // Groups the two rows that re-read a title from its provider.
     id: 'core.metadata_group',
     slot: 'media.actions',
@@ -127,6 +146,16 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       icon: 'rotate-ccw',
       when: ['isAdmin'],
       action: { kind: 'action', actionId: 'media.refresh-metadata' },
+    },
+    {
+      // Only the book page handles it: its editions carry the provider ids.
+      id: 'core.edit_sources',
+      slot: 'media.actions',
+      weight: 30,
+      labelKey: 'books_work.sources',
+      icon: 'external-link',
+      when: ['hasPermission:media.edit', '!isEpisode'],
+      action: { kind: 'action', actionId: 'media.edit-sources' },
     },
     ],
   },
@@ -248,6 +277,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {
+    id: 'core.edit_episode_subtitles',
+    slot: 'media.actions',
+    weight: 700,
+    labelKey: 'media_detail.edit_subtitles',
+    icon: 'captions',
+    when: ['isEpisode', 'surface:detail'],
+    action: { kind: 'action', actionId: 'media.edit-subtitles' },
+  },
+  {
     // Edits the title's own fields (a comic volume); each kind supplies the handler.
     id: 'core.edit',
     slot: 'media.actions',
@@ -265,7 +303,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'trash-2',
     tone: 'danger',
     confirmKey: 'media_detail.request_deletion_confirm',
-    // Pending deletion request is per-title async state, not a permission, so it can't be a `when` predicate; full guard in media-info-header.ts.
+    // Pending deletion request is per-title async state, not a permission, so it can't be a `when` predicate; full guard in detail-hero.ts.
     action: { kind: 'action', actionId: 'media.request-deletion' },
   },
 ];

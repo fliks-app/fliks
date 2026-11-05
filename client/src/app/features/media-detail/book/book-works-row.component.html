@@ -1,4 +1,4 @@
-<app-collapsible-section [heading]="heading()" [persistKey]="persistKey()">
+<app-detail-section [heading]="heading()" [persistKey]="persistKey()">
   <app-horizontal-scroller>
     @for (w of items(); track w.id) {
       <app-media-card
@@ -13,4 +13,4 @@
       />
     }
   </app-horizontal-scroller>
-</app-collapsible-section>
+</app-detail-section>

@@ -1,0 +1,99 @@
+@let m = media();
+
+<app-detail-hero
+  [title]="m.title"
+  [mediaId]="m.id"
+  [mediaType]="m.type"
+  [rating]="m.rating"
+  [dateLabel]="m.year ? '' + m.year : null"
+  [runtime]="displayRuntime()"
+  [overview]="m.overview"
+  [genres]="m.genres ?? []"
+  [status]="m.status"
+  [monitored]="m.monitored"
+  [libraryName]="m.library?.name ?? null"
+  [leavingLabel]="m.deleteAt ? leavingLabel(m.deleteAt) : null"
+  [qualityProfileName]="m.qualityProfile?.name ?? null"
+  [languageProfileName]="m.languageProfile?.name ?? null"
+  [originalLanguage]="m.metadata?.originalLanguage ?? null"
+  [fanartUrl]="m.fanartUrl ?? m.posterUrl ?? null"
+  [posterUrl]="m.posterUrl ?? null"
+  [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
+  [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
+  [translations]="subtitleSection()?.translationInProgress() ?? []"
+  [files]="headerFiles()"
+  [selectedFileId]="activeFileId()"
+  [userHasOpenWholeRequest]="host.requestFlow.hasBlockingRequest()"
+  [canRequestDeletion]="host.requestFlow.showRequestDeletion()"
+  [monitoredLoading]="host.monitoredLoading()"
+  [deleteLoading]="host.deleteLoading()"
+  [identified]="!unidentified()"
+  [actions]="actions()"
+  [download]="fileDownload()"
+  [badge]="headerBadge()"
+  [liked]="like.focusedLiked()"
+  (selectedFileIdChange)="selectedFileId.set($event)"
+  (openDownload)="openDownloadModal()"
+  (openDownloadDetail)="openDownloadDetailModal()"
+  (likeToggled)="like.toggle()"
+/>
+
+<app-media-info-extra [media]="m" [directors]="directors()" />
+
+@if (collection(); as coll) {
+  <app-detail-section [heading]="'media_detail.part_of' | translate: { name: coll.name }" persistKey="collection">
+    <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: coll.items, activeId: m.id }" />
+  </app-detail-section>
+}
+
+@if (similar().length) {
+  <app-detail-section [heading]="'media_detail.similar' | translate" persistKey="similar">
+    <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: similar() }" />
+  </app-detail-section>
+}
+
+<app-media-cast [cast]="castMembers()" />
+
+<app-subtitles-modal
+  [mediaId]="m.id"
+  [selectedFileId]="activeFileId()"
+  [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
+  [canManage]="canManageSubtitles()"
+  [languageProfileId]="m.languageProfile?.id ?? null"
+/>
+
+@if (activeFile(); as af) {
+  <app-media-file-info
+    [file]="af"
+    [mediaPath]="m.library?.path ?? null"
+    [canDelete]="canDelete()"
+    [canManageSubtitles]="canManageSubtitles()"
+    [canEditMedia]="canEditProfiles()"
+    [fileId]="activeFileId()"
+    [mediaId]="m.id"
+    (subtitlesChanged)="reloadSubtitles()"
+    (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+  />
+}
+
+<app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
+<app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
+
+<ng-template #movieRow let-items let-activeId="activeId">
+  <app-horizontal-scroller>
+    @for (item of items; track item.id) {
+      <app-media-card
+        class="shrink-0 w-28 sm:w-32 lg:w-40"
+        [aspect]="'portrait'"
+        [imageUrl]="item.posterUrl"
+        [fanartUrl]="item.fanartUrl"
+        [title]="item.title"
+        [subtitle]="item.year ? '' + item.year : ''"
+        [rating]="item.rating ?? 0"
+        [status]="item.hasFile ? null : 'missing'"
+        [highlighted]="item.id === activeId"
+        [link]="['/movies', '' + item.id]"
+      />
+    }
+  </app-horizontal-scroller>
+</ng-template>

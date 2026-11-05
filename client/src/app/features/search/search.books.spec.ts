@@ -62,6 +62,19 @@ describe('SearchComponent books', () => {
     expect(fixture.componentInstance.bookExternal()).toEqual([]);
   });
 
+  it('searches the book providers on the All tab, keeping only books to add', async () => {
+    const { fixture, state, http } = setup();
+    state.contentType.set('all');
+    const search = (fixture.componentInstance as unknown as { runExternalSearch(q: string, ct: 'all'): Promise<void> }).runExternalSearch('placeholder', 'all');
+    http.expectOne((r) => r.url === '/api/metadata/search/movie').flush([]);
+    http.expectOne((r) => r.url === '/api/metadata/search/tv').flush([]);
+    http
+      .expectOne((r) => r.url === '/api/metadata/search/book')
+      .flush([bookSearchResultFixture, { ...bookSearchResultFixture, externalId: 'OL2W', existingMediaId: 7 }]);
+    await search;
+    expect(fixture.componentInstance.allBookResults()).toEqual([bookSearchResultFixture]);
+  });
+
   it('links a provider hit to its add preview, or to the book when owned', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;

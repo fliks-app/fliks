@@ -584,7 +584,7 @@
       </span>
     </div>
     @if (genresLoading() && !genresList().length) {
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
         @for (i of skeletonCards; track i) {
           <app-card-skeleton [aspect]="'square'" />
         }
@@ -595,7 +595,7 @@
       </div>
     } @else {
       <!-- Genre grid: 4-poster mosaic (or folder icon) per genre; click pivots to `all` with the genre filter. -->
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
         @for (g of genresList(); track g.genre) {
           <app-mosaic-card
             [posters]="g.posters"
@@ -611,7 +611,7 @@
       {{ 'library.collections_count' | translate:{ count: collectionsList().length } }}
     </p>
     @if (collectionsLoading() && !collectionsList().length) {
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
         @for (i of skeletonCards; track i) {
           <app-card-skeleton [aspect]="'square'" />
         }
@@ -622,7 +622,7 @@
         <p class="text-lg">{{ 'library.collections_empty' | translate }}</p>
       </div>
     } @else {
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
         @for (c of collectionsList(); track c.id) {
           <app-mosaic-card
             [posters]="c.posters"
@@ -638,7 +638,7 @@
       {{ (seriesList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: seriesList().length } }}
     </p>
     @if (seriesLoading() && !seriesList().length) {
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
         @for (i of skeletonCards; track i) {
           <app-card-skeleton [aspect]="'square'" />
         }
@@ -648,7 +648,7 @@
         <p class="text-lg">{{ 'books_library.series_empty' | translate }}</p>
       </div>
     } @else {
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
         @for (c of seriesList(); track c.id) {
           <app-mosaic-card
             [posters]="c.posters"

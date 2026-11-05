@@ -16,6 +16,7 @@ export const defaultFolderId = (folders: LibraryFolderOption[] | undefined): num
   selector: 'app-library-folder-select',
   imports: [FormsModule, TranslatePipe, TvSelectDirective],
   templateUrl: './library-folder-select.html',
+  host: { '[class.hidden]': 'folders().length < 2' },
 })
 export class LibraryFolderSelectComponent {
   readonly folders = input<LibraryFolderOption[]>([]);

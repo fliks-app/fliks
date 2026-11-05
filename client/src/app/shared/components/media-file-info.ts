@@ -16,7 +16,7 @@ import {
 import { TvService } from '../../core/services/tv.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CompanionFilesModalComponent } from './companion-files-modal/companion-files-modal';
-import { CollapsibleSectionComponent } from './collapsible-section/collapsible-section';
+import { DetailSectionComponent } from './detail-section/detail-section';
 
 type FileInput = {
   relativePath: string;
@@ -30,7 +30,7 @@ type FileInput = {
   selector: 'app-media-file-info',
   imports: [
     TranslatePipe,
-    CollapsibleSectionComponent,
+    DetailSectionComponent,
     CompanionFilesModalComponent,
     LucideVideo,
     LucideVolume2,

@@ -1,7 +1,7 @@
 @let m = media();
 @let c = comic();
 
-<app-detail-hero [title]="title()" [mediaId]="m.id" mediaType="comic" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="overview()" [progressPercent]="progressPercent()" [progressLabel]="progressLabel()">
+<app-detail-hero [title]="title()" [mediaId]="m.id" mediaType="comic" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="overview()" [progress]="progressPercent()" [progressText]="progressLabel()" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
   @if (c) {
     <p heroMeta class="flex flex-wrap gap-x-3 text-base-content/70" data-testid="facts">
       @if (c.publisher) {
@@ -78,24 +78,19 @@
 </ng-template>
 
 @if (c) {
-<div class="mt-8 flex flex-col gap-8">
-  <section>
-    <h2 class="mb-2 text-lg font-semibold">{{ 'comic.issues' | translate }}</h2>
+  <app-detail-section [heading]="'comic.issues' | translate" [collapsible]="false">
     <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: main(), kind: 'issue' }" />
-  </section>
+  </app-detail-section>
   @if (annuals().length) {
-    <section>
-      <h2 class="mb-2 text-lg font-semibold">{{ 'comic.annuals' | translate }}</h2>
+    <app-detail-section [heading]="'comic.annuals' | translate" [collapsible]="false">
       <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: annuals(), kind: 'annual' }" />
-    </section>
+    </app-detail-section>
   }
   @if (specials().length) {
-    <section>
-      <h2 class="mb-2 text-lg font-semibold">{{ 'comic.specials' | translate }}</h2>
+    <app-detail-section [heading]="'comic.specials' | translate" [collapsible]="false">
       <ng-container *ngTemplateOutlet="issueRows; context: { $implicit: specials(), kind: 'special' }" />
-    </section>
+    </app-detail-section>
   }
-</div>
 }
 <dialog #volumeDialog class="modal" (close)="editingVolume.set(false)">
   <div class="modal-box max-w-lg">

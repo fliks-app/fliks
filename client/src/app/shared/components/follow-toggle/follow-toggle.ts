@@ -25,7 +25,7 @@ const DEFAULT_WANTS = (): WantSpec[] => [
   imports: [FormsModule, TranslatePipe, TvSelectDirective, WantsEditorComponent],
   templateUrl: './follow-toggle.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block' },
+  host: { class: 'block', '[class.hidden]': '!available()' },
 })
 export class FollowToggleComponent {
   private readonly api = inject(WantsApiService);

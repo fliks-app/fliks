@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, computed, inject, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -13,6 +13,15 @@ import type { WantSpec } from '../../../../core/services/api/wants-api.service';
 import { RequestWantsComponent } from '../../../requests/request-wants/request-wants';
 import { WantsEditorComponent } from '../../../../shared/components/wants-editor/wants-editor';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { LucidePlus } from '@lucide/angular';
+import { DetailSectionComponent } from '../../../../shared/components/detail-section/detail-section';
+import { FactsGridComponent, type Fact } from '../../../../shared/components/facts-grid/facts-grid';
+import { HeroBaseComponent, type HeroChip } from '../../../../shared/components/hero-base/hero-base';
+import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
+import { localizeLanguage } from '../../../../core/utils/language.utils';
+import { previewPosterName } from '../../../../shared/utils/view-transition';
 import {
   LibraryFolderSelectComponent,
   defaultFolderId,
@@ -21,10 +30,10 @@ import {
 /** The add preview of a book: the work, its editions, and Add, or Request for a user who cannot add. */
 @Component({
   selector: 'app-book-preview',
-  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
+  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, ModalHeaderComponent, ModalFooterComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent, LucidePlus],
   templateUrl: './book-preview.component.html',
 })
-export class BookPreviewComponent implements OnInit {
+export class BookPreviewComponent implements OnInit, OnDestroy {
   private readonly api = inject(BooksApiService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly router = inject(Router);
@@ -32,11 +41,44 @@ export class BookPreviewComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly auth = inject(AuthService);
   private readonly requests = inject(RequestsService);
+  private readonly host = inject(PREVIEW_HOST);
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('addDialog');
+  private destroyed = false;
 
   readonly provider = input.required<string>();
   readonly externalId = input.required<string>();
+  readonly seed = input<PreviewSeed | null>(null);
 
   protected readonly book = signal<BookPreview | null>(null);
+  /** The card's title and cover until the preview lands. */
+  /** The card's cover wins over the work's: the search may show another edition's cover. */
+  protected readonly hero = computed(() => {
+    const b = this.book();
+    const s = this.seed();
+    const posterUrl = s?.posterUrl ?? b?.posterUrl ?? null;
+    if (b) return { title: b.title, posterUrl };
+    return s ? { title: s.title, posterUrl } : null;
+  });
+  protected readonly posterTransitionName = computed(() => previewPosterName('book', this.provider(), this.externalId()));
+  protected readonly languageLabel = computed(() => localizeLanguage(this.book()?.language, this.translate));
+  protected readonly metaParts = computed(() => {
+    const b = this.book();
+    if (!b) return [];
+    const pages = b.pageCount ? this.translate.instant('books_search.pages_' + (b.pageCount === 1 ? 'one' : 'other'), { count: b.pageCount }) : '';
+    return [b.year ? String(b.year) : '', pages].filter(Boolean);
+  });
+  protected readonly chips = computed<HeroChip[]>(() => [{ label: 'kinds.book', cls: 'badge badge-outline badge-sm md:badge-md' }]);
+  protected readonly facts = computed<Fact[]>(() => {
+    const b = this.book();
+    return [
+      { label: 'books_search.series', value: this.seriesLabel() },
+      { label: 'books_search.publisher', value: b?.publisher },
+      { label: 'books_search.published', value: b?.published },
+      { label: 'discover.preview_original_language', value: b?.language ? this.languageLabel() : null },
+    ];
+  });
+  protected readonly editionsShown = signal(5);
+  protected readonly editions = computed(() => this.book()?.editions.slice(0, this.editionsShown()) ?? []);
   protected readonly failed = signal(false);
   protected readonly adding = signal(false);
   /** The editions already asked for by an active request. */
@@ -44,10 +86,7 @@ export class BookPreviewComponent implements OnInit {
   protected readonly libraries = signal<LibrarySummary[]>([]);
   protected readonly libraryId = signal<number | null>(null);
   protected readonly folderId = signal<number | null>(null);
-  protected readonly wants = signal<WantSpec[]>([
-    { family: 'text', language: null },
-    { family: 'audio', language: null },
-  ]);
+  protected readonly wants = signal<WantSpec[]>([{ family: 'text', language: null }]);
 
   protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   protected readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
@@ -66,18 +105,36 @@ export class BookPreviewComponent implements OnInit {
   });
 
   async ngOnInit() {
+    let book: BookPreview;
     try {
-      this.book.set(await this.api.preview(this.provider(), this.externalId()));
+      book = await this.api.preview(this.provider(), this.externalId());
     } catch {
       this.failed.set(true);
       return;
     }
+    if (this.destroyed) return;
+    this.book.set(book);
+    this.host.setTitle(book.title);
+    // A book has no backdrop: its cover, blurred, stands in like on the book page.
+    this.host.setBackground(book.fanartUrl ?? this.hero()?.posterUrl ?? null, { blur: !book.fanartUrl });
     if (!this.canImport() && !this.canRequest()) return;
     if (this.canRequest()) void this.loadRequested();
     try {
       this.libraries.set(await this.librariesApi.listMine());
     } catch { /* the picker stays empty, Add stays disabled */ }
     this.selectLibrary(this.bookLibraries()[0]?.id ?? null);
+  }
+
+  ngOnDestroy() {
+    this.destroyed = true;
+  }
+
+  protected openDialog() {
+    this.dialog()?.nativeElement.showModal();
+  }
+
+  protected closeDialog() {
+    this.dialog()?.nativeElement.close();
   }
 
   private async loadRequested() {
@@ -89,6 +146,10 @@ export class BookPreviewComponent implements OnInit {
   protected selectLibrary(id: number | null) {
     this.libraryId.set(id);
     this.folderId.set(defaultFolderId(this.folders()));
+  }
+
+  protected language(code: string): string {
+    return localizeLanguage(code, this.translate);
   }
 
   protected duration(seconds: number): string {
@@ -111,6 +172,7 @@ export class BookPreviewComponent implements OnInit {
         ...(libraryId != null ? { libraryId } : {}),
         ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
       });
+      if (this.destroyed) return;
       this.toast.success(this.translate.instant('discover.import_success'));
       void this.router.navigate(mediaDetailLink('book', saved.id));
     } catch {
@@ -135,7 +197,9 @@ export class BookPreviewComponent implements OnInit {
         ...(libraryId != null ? { libraryId } : {}),
         ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
       });
+      if (this.destroyed) return;
       this.toast.success(this.translate.instant('book_requests.request_success'));
+      this.closeDialog();
       await this.loadRequested();
     } catch {
       // the error interceptor shows the server's message (quota, duplicate edition)

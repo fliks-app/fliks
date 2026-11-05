@@ -135,4 +135,14 @@ describe('MediaDetailComponent — scroll memory across a sibling episode', () =
     expect(scrollMemory.activate).toHaveBeenLastCalledWith('episode-42');
     expect(scrollMemory.restoreSticky).toHaveBeenCalledWith('episode-42');
   });
+
+  it('shows the page again when moving from a missing episode to another one of the same series', () => {
+    const { fixture, goTo } = createFixture();
+    fixture.detectChanges();
+    fixture.componentInstance.notFound.set(true);
+
+    goTo('43');
+
+    expect(fixture.componentInstance.notFound()).toBe(false);
+  });
 });

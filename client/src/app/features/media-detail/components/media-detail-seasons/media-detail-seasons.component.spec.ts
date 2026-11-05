@@ -23,7 +23,7 @@ const WANT = { id: 1, family: 'video', language: null, qualityProfileId: 4, fold
  * `media.group.actions` is a plugin-only slot: core contributes nothing to it,
  * so the two release-picker rows in the season dropdown (search/grab) exist only
  * once a plugin declares them. This mirrors the `media.actions` characterisation
- * style in media-info-header.spec.ts, scoped to the season actions dropdown.
+ * style in detail-hero.spec.ts, scoped to the season actions dropdown.
  */
 
 const SEASON: Season = {

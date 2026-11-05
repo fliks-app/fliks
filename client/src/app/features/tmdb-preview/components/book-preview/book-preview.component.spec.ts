@@ -11,6 +11,7 @@ import { bookPreviewFixture } from '../../../../testing/books.fixtures';
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { PREVIEW_HOST } from '../../preview-host';
 
 const lib = (id: number, folders?: { id: number; name: string }[]) =>
   ({ id, name: `Library ${id}`, mediaTypes: ['book'], folders }) as unknown as LibrarySummary;
@@ -27,6 +28,7 @@ function setup(libraries: LibrarySummary[], canImport = true, allowed: string[] 
       { provide: LibrariesApiService, useValue: { listMine: async () => libraries } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => allowed.includes(p) } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
+      { provide: PREVIEW_HOST, useValue: { setTitle: vi.fn(), setBackground: vi.fn() } },
     ],
   });
   const fixture = TestBed.createComponent(BookPreviewComponent);
@@ -70,7 +72,7 @@ describe('BookPreviewComponent', () => {
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
     expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5,
-      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }] });
+      wants: [{ family: 'text', language: null }] });
     req.flush({ id: 42, type: 'book' });
     await pending;
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
@@ -79,20 +81,21 @@ describe('BookPreviewComponent', () => {
   it('adds with the wants edited in the editor', async () => {
     const { fixture, http } = setup([lib(1)]);
     const el = await settle(fixture);
-    const rows = el.querySelectorAll('[data-testid="want-row"]');
-    expect(rows).toHaveLength(2);
-    (rows[1].querySelector('button') as HTMLButtonElement).click();
+    expect(el.querySelectorAll('[data-testid="want-row"]')).toHaveLength(1);
+    (el.querySelector('[data-testid="wants-editor"] > button') as HTMLButtonElement).click();
     fixture.detectChanges();
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
-    expect(req.request.body.wants).toEqual([{ family: 'text', language: null }]);
+    expect(req.request.body.wants).toHaveLength(2);
     req.flush({ id: 42, type: 'book' });
     await pending;
   });
 
   it('offers no Add without the import permission', async () => {
     const { fixture } = setup([lib(1)], false);
-    expect((await settle(fixture)).querySelector('button')).toBeNull();
+    const el = await settle(fixture);
+    expect(el.querySelector('[data-hero-actions] button')).toBeNull();
+    expect(el.querySelector('dialog')).toBeNull();
   });
 
   it('requests the wished editions when the user cannot add', async () => {
@@ -110,7 +113,7 @@ describe('BookPreviewComponent', () => {
       externalId: 'OL1W',
       title: bookPreviewFixture.title,
       libraryId: 1,
-      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }],
+      wants: [{ family: 'text', language: null }],
     });
     req.flush({ id: 1 });
     await new Promise((r) => setTimeout(r));

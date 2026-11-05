@@ -13,6 +13,8 @@ import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-r
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
+import { LikesApiService } from '../../../core/services/api/likes-api.service';
+import { LikeController } from '../../../shared/utils/like-controller';
 import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
 import { asBookMedia } from '../../../core/services/api/book-media';
@@ -54,6 +56,10 @@ export class BookWorkComponent {
   readonly media = input.required<Media>();
 
   private readonly api = inject(BooksApiService);
+  protected readonly like = new LikeController(
+    { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
+    inject(LikesApiService),
+  );
   private readonly mediaApi = inject(MediaService);
   private readonly auth = inject(AuthService);
   private readonly start = inject(MediaStartService);
@@ -107,9 +113,16 @@ export class BookWorkComponent {
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
   private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
 
-  /** Profiles are the wants dialog for a book, offered once the dialog is rendered. */
+  /** Profiles are the wants dialog for a book; both dialogs are offered once rendered. */
   protected readonly actions = computed<MediaActionHandlers>(() =>
-    this.canEdit() && this.book() ? { 'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()) } : {},
+    this.canEdit() && this.book()
+      ? {
+          'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
+          ...(this.book()!.editions.length && {
+            'media.edit-sources': () => this.openDialog(this.sourcesOpen, this.sourcesDialog()),
+          }),
+        }
+      : {},
   );
 
   protected readonly seriesItems = signal<WorkItem[]>([]);

@@ -32,7 +32,7 @@ describe('BookEditionsComponent', () => {
     const rows = Array.from(render().querySelectorAll('[data-testid="edition-row"]'));
     expect(rows).toHaveLength(2);
     expect(rows[0].textContent).toContain('epub');
-    expect(rows[0].textContent).toContain('books_work.pages');
+    expect(rows[0].textContent).toContain('books_work.col_pages');
     expect(rows[1].textContent).toContain('10:00:00');
     expect(rows[1].textContent).toContain('Narrator One');
   });

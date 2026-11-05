@@ -54,7 +54,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
-import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
+import type { DetailHeroSubtitle } from '../detail-hero/detail-hero';
 import { ModalHeaderComponent } from '../modal-header';
 import { SyncReferenceSelectComponent } from '../sync-reference-select/sync-reference-select';
 import { ModalFooterComponent } from '../modal-footer';
@@ -498,8 +498,8 @@ export class SubtitlesModalComponent {
     return this.sse.translationProgress()[sub.id] ?? sub.translationProgress ?? null;
   }
 
-  /** Formatted subtitles for the media-info-header dropdown */
-  readonly headerSubtitles = computed<MediaInfoHeaderSubtitle[]>(() => {
+  /** Formatted subtitles for the detail hero dropdown */
+  readonly headerSubtitles = computed<DetailHeroSubtitle[]>(() => {
     const hideBurnIn = this.appSettings.hideBurnInSubtitles();
     // A subtitle only belongs in the header selector once it's a servable
     // file: an OCR run still processing (or one that failed) isn't playable.

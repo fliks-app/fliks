@@ -207,18 +207,21 @@ export const routes: Routes = [
         data: { kind: 'movie' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/video-preview/video-preview.component').then((m) => m.VideoPreviewComponent) },
       },
       {
         path: 'add/tv/:provider/:externalId',
         data: { kind: 'series' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/video-preview/video-preview.component').then((m) => m.VideoPreviewComponent) },
       },
       {
         path: 'add/book/:provider/:externalId',
         data: { kind: 'book' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/book-preview/book-preview.component').then((m) => m.BookPreviewComponent) },
       },
       {
         path: 'books/:id',
@@ -251,12 +254,14 @@ export const routes: Routes = [
         data: { kind: 'movie' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/video-preview/video-preview.component').then((m) => m.VideoPreviewComponent) },
       },
       {
         path: 'add/tv/:tmdbId',
         data: { kind: 'series' },
         loadComponent: () =>
           import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/video-preview/video-preview.component').then((m) => m.VideoPreviewComponent) },
       },
       {
         path: 'movies/:id',
@@ -265,6 +270,7 @@ export const routes: Routes = [
             (m) => m.MediaDetailComponent,
           ),
         data: { kind: 'movie', reuse: true },
+        resolve: { page: () => import('./features/media-detail/movie/movie-work.component').then((m) => m.MovieWorkComponent) },
       },
       {
         path: 'series/:id',
@@ -273,6 +279,7 @@ export const routes: Routes = [
             (m) => m.MediaDetailComponent,
           ),
         data: { kind: 'series', reuse: true },
+        resolve: { page: () => import('./features/media-detail/series/series-work.component').then((m) => m.SeriesWorkComponent) },
       },
       {
         path: 'series/:id/episode/:episodeId',
@@ -282,6 +289,7 @@ export const routes: Routes = [
           ),
         // Switching episodes only moves a param; the component reads params itself, so it keeps its instance.
         data: { kind: 'series', reuse: true, reuseOnParamChange: true },
+        resolve: { page: () => import('./features/media-detail/series/series-work.component').then((m) => m.SeriesWorkComponent) },
       },
       {
         path: 'requests',

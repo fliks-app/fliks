@@ -1,144 +1,67 @@
-import { Component, ElementRef, forwardRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, forwardRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
+import { NgComponentOutlet } from '@angular/common';
+import { TrackingModalService } from '../../core/services/tracking-modal.service';
 import { MediaAdminService } from '../../core/services/media-admin.service';
 import { IdentifyModalService } from '../../core/services/identify-modal.service';
-import { hasProviderId } from '../../core/utils/media-identity';
-import { TrackingModalService } from '../../core/services/tracking-modal.service';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  MediaService,
-  Media,
-  Season,
-  Episode,
-  MediaCastEntry,
-  MediaCrewEntry,
-  RelatedMedia,
-  MediaCollection,
-} from '../../core/services/api/media.service';
+import { MediaService, Media } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
-import { SpoilerService } from '../../core/services/spoiler.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
-import { leavingLabel, scopedLeavingLabels } from '../../shared/utils/cleanup.util';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
-import { centerRailOnCard } from '../../shared/utils/center-rail';
-import { armPageSlide } from '../../shared/utils/page-slide';
-import {
-  StreamingApiService,
-  MediaResumeInfo,
-} from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
-import {
-  MediaInfoHeaderComponent,
-  MediaInfoHeaderBadge,
-} from '../../shared/components/media-info-header/media-info-header';
-import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
-import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
-import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
-import { TrackingScope } from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaLibraryDialogComponent } from '../../shared/components/media-library-dialog/media-library-dialog';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
-import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
-import { RecommendService } from '../../core/services/recommend.service';
-import { LikesApiService } from '../../core/services/api/likes-api.service';
-import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
-import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
-import { MediaCardComponent } from '../../shared/components/media-card/media-card';
-import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
-import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
-import { isActive, nothingStartedKey } from '../../core/services/download-status';
-import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
-import { TvService } from '../../core/services/tv.service';
-import { DownloadProgressService } from '../../core/services/download-progress.service';
-import { filesForEpisode, filterSeasonEpisodesOnDisk, seasonsVisibleWithDiskFilter } from './media-detail.utils';
 import { serverMessage } from '../../core/utils/server-message';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
-import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
-
 import { ReleaseGrabController } from './release-grab-controller';
 import { WantsStore } from '../../core/acquisition/acquisition';
-import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
-import { LikeController } from '../../shared/utils/like-controller';
+import { DETAIL_HERO_HOST } from '../../shared/components/detail-hero/detail-hero';
 import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
-import { WatchedController } from './watched-controller';
-import { EpisodeViewController } from './episode-view-controller';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { MEDIA_DETAIL_HOST, type HandedEpisode, type MediaDetailHost } from './media-detail-host';
 
-const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
-
-function readEpisodesHasFileOnlyFromStorage(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  try {
-    return localStorage.getItem(LS_EPISODES_HAS_FILE_ONLY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** What a card can hand an episode page before its media request lands. */
-interface HandedEpisode {
-  episodeId: number;
-  stillUrl: string;
-  title: string | null;
-  label: string | null;
-}
-
+/** The route shell of every detail page: loads the title, owns the hero chrome, the scroll memory and the modals
+ *  every kind shares, and renders the kind's page (`data.page`) with the loaded media. */
 @Component({
   selector: 'app-media-detail',
   imports: [
     ModalFooterComponent,
     ModalHeaderComponent,
-    CachedSrcDirective,
     TranslatePipe,
     DefaultFocusDirective,
-    MediaInfoHeaderComponent,
-    MediaInfoExtraComponent,
-    SubtitlesModalComponent,
-    MediaFileInfoComponent,
-    MediaDetailSeasonsComponent,
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
     MediaLibraryDialogComponent,
     RequestModalComponent,
-    HorizontalScrollerComponent,
-    CollapsibleSectionComponent,
-    MediaCardComponent,
-    DownloadQualityModalComponent,
-    DownloadDetailModalComponent,
-    RouterLink,
-    NgTemplateOutlet,
     NgComponentOutlet,
-    ResolveUrlPipe,
-    SeasonLabelPipe,
-    ImgFadeInDirective,
     TvSectionDirective,
   ],
   templateUrl: './media-detail.html',
-  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }, ReleaseGrabController],
+  providers: [
+    { provide: MEDIA_DETAIL_HOST, useExisting: forwardRef(() => MediaDetailComponent) },
+    { provide: DETAIL_HERO_HOST, useExisting: forwardRef(() => MediaDetailComponent) },
+    ReleaseGrabController,
+  ],
 })
-export class MediaDetailComponent implements OnInit, OnDestroy {
+export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost {
   constructor() {
     this.grabs.attach(
       () => this.media(),
@@ -151,16 +74,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
   private readonly admin = inject(MediaAdminService);
-  private readonly trackingModalService = inject(TrackingModalService);
+  private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
-  private readonly spoilers = inject(SpoilerService);
   private readonly translate = inject(TranslateService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly navbarService = inject(NavbarService);
@@ -168,24 +89,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
-  private readonly streamingApi = inject(StreamingApiService);
   private readonly markersApi = inject(MarkersApiService);
   private readonly requestsApi = inject(RequestsService);
-  private readonly downloadManager = inject(DownloadManagerService);
-  private readonly downloadProgress = inject(DownloadProgressService);
-  private readonly tv = inject(TvService);
 
   readonly grabs = inject(ReleaseGrabController);
   private readonly wantsStore = inject(WantsStore);
-  readonly like = new LikeController(
-    {
-      // A book or comic page owns its likes through the shared hero.
-      media: () => (this.kindPage ? null : this.media()),
-      episodeMode: () => this.episodeMode(),
-      focusedEpisode: () => this.focusedEpisode(),
-    },
-    inject(LikesApiService),
-  );
   readonly analyze = new AnalyzeController(
     {
       media: () => this.media(),
@@ -204,91 +112,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       translate: this.translate,
     },
   );
-  readonly watched = new WatchedController({ media: () => this.media() }, this.streamingApi);
-  readonly episodeView = new EpisodeViewController(
-    {
-      media: () => this.media(),
-      focusedEpisode: () => this.focusedEpisode(),
-      focusedSeason: () => this.focusedSeason(),
-      selectedFileId: () => this.selectedFileId(),
-      resumeInfo: () => this.resumeInfo(),
-    },
-    { spoilers: this.spoilers, translate: this.translate, watchedEpisodeIds: this.watched.episodeIds },
-  );
 
-  /** Live download progress for the media on screen (null when not
-   *  downloading). Fed by `download.progress` SSE + a one-shot seed on load. */
-  readonly activeDownload = computed(() => {
-    const m = this.media();
-    return m ? (this.downloadProgress.progress().get(m.id) ?? null) : null;
-  });
-
-  /** Header download chip: one download shows its own state, several show a count.
-   *  Downloads only; the monitored state has its own chip and menu entry. */
-  private downloadBadge(
-    scope: { seasonFilter?: number[]; episodeFilter?: number } = {},
-  ): MediaInfoHeaderBadge | null {
-    const progress = this.activeDownload();
-    if (!progress) return null;
-    // Non-interactive on TV: a focusable header button would add a second D-pad
-    // stop. The download detail is a web/mobile drill-down.
-    const clickable = !this.tv.isTv();
-
-    const leaves = progress.seasons
-      ? collectScopedLeaves(progress, scope.seasonFilter, scope.episodeFilter)
-      : [];
-    if (leaves.length > 1) {
-      return {
-        // Only ever reached with several, so the label needs no singular form.
-        labelKey: 'media_detail.downloads_in_progress',
-        labelParams: { count: leaves.length },
-        percent: null,
-        badgeClass: 'badge-info',
-        clickable,
-        busy: leaves.some((l) => l.leaf.state === 'searching'),
-      };
-    }
-
-    const d = describeDownload(progress, scope);
-    if (!d?.labelKey) return null;
-    return {
-      labelKey: d.labelKey,
-      labelParams: null,
-      percent: d.percent,
-      badgeClass: d.badgeClass,
-      clickable,
-      busy: d.busy,
-    };
-  }
-
-  /** Whole-media download progress, on the movie/series header. */
-  protected scopedLeaving(seasons: Season[]): string[] {
-    return scopedLeavingLabels(this.translate, seasons);
-  }
-
-  protected leavingLabel(deleteAt: string): string {
-    return leavingLabel(this.translate, deleteAt);
-  }
-
-  readonly headerBadge = computed<MediaInfoHeaderBadge | null>(() =>
-    this.media() ? this.downloadBadge() : null,
-  );
-
-  /** Same chip on the episode page, narrowed to that episode's own downloads or
-   *  the season pack that carries it — a sibling episode's grab stays off it. */
-  readonly episodeHeaderBadge = computed<MediaInfoHeaderBadge | null>(() => {
-    const ep = this.focusedEpisode();
-    const season = this.focusedSeason();
-    if (!ep || !season) return null;
-    return this.downloadBadge({
-      seasonFilter: [season.seasonNumber],
-      episodeFilter: ep.episodeNumber,
-    });
-  });
-
-  private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
-  private readonly downloadDetailModal =
-    viewChild<DownloadDetailModalComponent>('downloadDetailModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect.
    *  Seeded from the service so a re-created instance doesn't replay an event from before it existed. */
   private lastHandledSseEvent: SseEvent | null = this.sse.lastEvent();
@@ -296,7 +120,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Signal mirror of paramMap: the component is reused across episode URLs, so a snapshot misses changes. */
   private readonly routeParams = toSignal(this.route.paramMap);
 
-  /** Skeleton shape (still vs poster) read off the URL, since `episodeMode` only settles after the season tree loads. */
+  /** Skeleton shape (still vs poster) read off the URL, since the page's episode focus only settles after the season tree loads. */
   protected readonly skeletonEpisode = computed(
     () => !!this.routeParams()?.get('episodeId'),
   );
@@ -326,7 +150,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private restoreChrome(): void {
     this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
     const m = this.media();
-    if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
+    if (m) this.navbarService.enterHeroPage(this.navTitle() ?? m.title, m.logoUrl);
     else this.navbarService.enterHeroPage('');
   }
 
@@ -336,6 +160,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!params) return;
     const id = Number(params.get('id'));
     if (id === this.loadedId) {
+      // Another episode of the same series: the page that flagged the last one missing is gone, a new one re-checks.
+      untracked(() => this.notFound.set(false));
       this.trackScroll();
       return;
     }
@@ -351,18 +177,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (untracked(() => this.navbarService.navigatedBack())) this.scrollMemory.restoreSticky(key);
   }
 
-  /** Syncs episode-focus state with the URL when the media or route params change. */
-  private readonly episodeFocusEffect = effect(() => {
+  /** The navbar title follows the page: the title's own unless the kind page names another (an episode). */
+  private readonly navbarEffect = effect(() => {
     const m = this.media();
+    const title = this.navTitle();
     const params = this.routeParams();
-    if (!m || !params) return;
-    // Seeded stub: the episode is already in place and there is no season tree
-    // to resolve against, so resolving now would only report it missing.
+    if (!m || !params || m.id !== Number(params.get('id'))) return;
+    // Seeded stub: no season tree yet, so the page has not resolved what its title is.
     if (KIND_REGISTRY[m.type].hasSeasons && !m.seasons) return;
-    const idParam = params.get('id');
-    const paramId = idParam ? Number(idParam) : NaN;
-    if (m.id !== paramId) return;
-    this.applyEpisodeFocus(m, params.get('episodeId'));
+    this.navbarService.enterHeroPage(title ?? m.title, m.logoUrl);
   });
 
   /** Fanart, never the episode still (TMDB stills cap at ~780×438 and look mushy fullscreen); the blurred cover when there is none. */
@@ -388,9 +211,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       event.type === 'import.complete' ||
       event.type === 'media.move.completed'
     ) {
-      void this.reloadMedia(m.id);
+      void this.reload();
     } else if (event.type === 'metadata.refreshed') {
-      void this.reloadMedia(m.id);
+      void this.reload();
       this.toast.success(this.translate.instant('media_detail.refresh_ok'));
     } else if (event.type === 'metadata.failed') {
       this.toast.error(
@@ -399,78 +222,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   });
 
-  /** Arms the page slide for the plain anchors of this page. A card does it
-   *  from its own click; a bare `routerLink` has nothing that would. */
-  protected readonly armSlide = armPageSlide;
-
   readonly media = signal<Media | null>(null);
-  /** The page of a book or comic, loaded by the route's resolver before this component activates. */
+  /** The page of the kind, loaded by the route's resolver before this component activates. */
   protected readonly kindPage: Type<unknown> | null = this.route.snapshot.data['page'] ?? null;
-  readonly cast = signal<MediaCastEntry[]>([]);
-  readonly crew = signal<MediaCrewEntry[]>([]);
-  readonly similar = signal<RelatedMedia[]>([]);
-  readonly collection = signal<MediaCollection | null>(null);
-  readonly resumeInfo = signal<MediaResumeInfo | null>(null);
-  readonly headerFiles = computed(() => {
-    const m = this.media();
-    return m && KIND_REGISTRY[m.type].hasSeasons ? (m.files ?? []) : this.mediaFiles();
-  });
-  readonly mediaFiles = computed(() => {
-    const m = this.media();
-    if (!m) return [];
-    const list = m.files ?? [];
-    // Series files belong to episodes; hide orphans at the root.
-    return KIND_REGISTRY[m.type].hasSeasons ? [] : list;
-  });
-
-  /** Falls back to the file's own duration when the provider never gave a runtime. */
-  readonly displayRuntime = computed(() => {
-    const m = this.media();
-    if (m?.runtime) return m.runtime;
-    const seconds = this.mediaFiles()[0]?.streamInfo?.durationSeconds;
-    return seconds ? Math.round(seconds / 60) : (m?.runtime ?? null);
-  });
-
-  readonly selectedFileId = signal<number | null>(null);
-  readonly activeFileId = computed(() => this.selectedFileId() ?? this.mediaFiles()[0]?.id ?? null);
-  readonly activeFile = computed(() => {
-    const id = this.activeFileId();
-    return this.mediaFiles().find((f) => f.id === id) ?? null;
-  });
-
-  /** Keep the selection pointing at a file that still exists — validated against
-   *  every file (a series' selection is an episode file, absent from `mediaFiles`). */
-  private readonly autoSelectFileEffect = effect(() => {
-    const all = this.media()?.files ?? [];
-    const current = this.selectedFileId();
-    if (current != null && all.some((f) => f.id === current)) return;
-    this.selectedFileId.set(this.mediaFiles()[0]?.id ?? null);
-  });
-
-  // ── Episode full-page mode (when navigating to series/:id/episode/:episodeId) ──
-  readonly episodeMode = signal(false);
-  readonly focusedEpisode = signal<Episode | null>(null);
-  readonly focusedSeason = signal<Season | null>(null);
-
-  /** Centre the "Plus de saison X" rail on the opened episode, catching cards that mount after the block's own centring. */
-  private readonly scrollToFocusedEpisodeEffect = effect(() => {
-    const active = this.focusedEpisode();
-    const season = this.focusedSeason();
-    if (!active || !this.episodeMode() || this.episodeView.currentSeasonEpisodes().length < 2) {
-      return;
-    }
-    setTimeout(
-      () => centerRailOnCard(`episode-${active.id}`, season ? `season-${season.id}` : undefined),
-      30,
-    );
-  });
-
-  /** Directors for shared header */
-  readonly directors = computed(() =>
-    this.crew()
-      .filter((c) => c.job?.toLowerCase() === 'director')
-      .map((c) => c.person.name),
-  );
+  readonly returns = signal(0);
+  readonly navTitle = signal<string | null>(null);
+  private pageActions: Record<string, () => void> = {};
 
   readonly loading = signal(true);
   /** False while only a list handover is shown: it carries no `fanartUrl`, so its cover must not stand in for fanart yet. */
@@ -478,7 +235,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly notFound = signal(false);
   /** Card-known episode data painted into the header while the media request is in flight, so the poster morph has a target. */
   readonly episodeSeed = signal<HandedEpisode | null>(this.handedEpisode());
-  readonly expectedKind = signal<MediaType>('movie');
 
   readonly qualityProfileOptions = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<LanguageProfile[]>([]);
@@ -493,65 +249,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly libraries = signal<LibrarySummary[]>([]);
 
   readonly canGrab = computed(() => this.auth.hasPermission('media.grab'));
-  readonly canManageSubtitles = computed(() => this.auth.hasPermission('subtitles.manage'));
-  readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
-  readonly canDelete = computed(() => this.auth.hasPermission('media.delete'));
-  readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
-
-  /** No metadata-provider id: title, artwork and provider-derived sections all come from the file. */
-  readonly unidentified = computed(() => {
-    const m = this.media();
-    return !!m && !hasProviderId(m);
-  });
-
-  /** Anti-spoiler masks for the focused episode's hero, still and synopsis. */
-  readonly episodeSpoilerImage = computed(() =>
-    this.focusedEpisodeWatched() === null
-      ? false
-      : this.spoilers.still(this.focusedEpisodeWatched()!),
-  );
-  readonly episodeSpoilerOverview = computed(() =>
-    this.focusedEpisodeWatched() === null
-      ? false
-      : this.spoilers.overview(this.focusedEpisodeWatched()!),
-  );
-
-  /** Watched state of the focused episode, `null` outside episode mode. */
-  private readonly focusedEpisodeWatched = computed(() => {
-    const ep = this.focusedEpisode();
-    return ep ? this.watched.episodeIds().has(ep.id) : null;
-  });
 
   readonly deleteLoading = signal(false);
   readonly monitoredLoading = signal(false);
-  /** Active season tab (series) — first season selected after load */
-  readonly activeSeasonId = signal<number | null>(null);
-  readonly seasonBusy = signal<number | null>(null);
-  readonly episodeBusy = signal<number | null>(null);
-
-  readonly episodeDrawerContext = signal<{ season: Season; episode: Episode } | null>(null);
-
-  /** Series: show only episodes with a file on disk (persisted in localStorage) */
-  readonly episodesHasFileOnly = signal(readEpisodesHasFileOnlyFromStorage());
 
   readonly releasesModal = viewChild<ReleasesModalComponent>('releasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
-  readonly subtitleSection = viewChild(SubtitlesModalComponent);
-  private readonly infoHeader = viewChild(MediaInfoHeaderComponent);
-
-  openTracking(scope: TrackingScope): void {
-    const id = this.media()?.id;
-    if (id == null) return;
-    this.trackingModalService.open(id, scope);
-  }
-
-  readonly episodeDialogFiles = computed(() => {
-    const c = this.episodeDrawerContext();
-    const m = this.media();
-    if (!c || !m?.files) return [];
-    return filesForEpisode(m.files, c.episode.id);
-  });
 
   private readonly scrollMemory = inject(ScrollMemoryService);
 
@@ -572,10 +276,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    // Enter hero page immediately (transparent navbar) — title will be set after media loads
+    // Enter hero page immediately (transparent navbar) - title will be set after media loads
     this.navbarService.enterHeroPage('');
-    this.expectedKind.set(this.route.snapshot.data['kind'] as MediaType);
-    // Load profiles in parallel with media — neither blocks the other
+    // Load profiles in parallel with media - neither blocks the other
     void this.loadProfiles();
   }
 
@@ -595,14 +298,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
       this.libraries.set(libs);
     } catch {
-      // Profiles will just be empty — the page still works
+      // Profiles will just be empty - the page still works
     } finally {
       this.profilesOptionsLoading.set(false);
     }
   }
 
   /** Paint the episode header from the card handoff: a stub series replaced wholesale when real media lands.
-   *  The stub has no `seasons`, which tells the focus effect to leave the seed alone. */
+   *  The stub has no `seasons`, which tells the series page to leave the seed alone. */
   private seedFromHandedEpisode(mediaId: number): boolean {
     const seed = this.handedEpisode();
     this.episodeSeed.set(seed);
@@ -613,15 +316,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       title: seed.title ?? '',
       monitored: true,
     } as unknown as Media);
-    this.episodeMode.set(true);
-    this.focusedSeason.set(null);
-    // `monitored` is bound straight through to the header, and an undefined here
-    // reads as false — flashing an "unmonitored" badge on every seeded load.
-    this.focusedEpisode.set({
-      id: seed.episodeId,
-      stillUrl: seed.stillUrl,
-      monitored: true,
-    } as unknown as Episode);
     return true;
   }
 
@@ -652,14 +346,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // Nothing here survives a switch to another title.
     this.notFound.set(false);
     this.fullLoaded.set(false);
-    this.cast.set([]);
-    this.crew.set([]);
-    this.similar.set([]);
-    this.collection.set(null);
-    this.resumeInfo.set(null);
-    this.watched.reset();
-    this.selectedFileId.set(null);
-    this.activeSeasonId.set(null);
+    this.navTitle.set(null);
 
     // Card handoff via router state renders immediately; the fetch below still brings cast/crew/files/seasons.
     const passed = (history.state as { media?: Media })?.media;
@@ -682,7 +369,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.media.set(m);
       this.fullLoaded.set(true);
       // Paint from the cache-served media immediately; the uncacheable
-      // playback-state calls below must not gate first paint.
+      // playback-state calls the page makes must not gate first paint.
       this.loading.set(false);
       this.openFromQueryParam();
       // Router scroll restoration is 'top', so restore by hand and sticky: late-landing content clamps a one-off scrollTo.
@@ -696,33 +383,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
             if (fresh.type === kind) this.media.set(fresh);
           })
           .catch(() => {
-            /* network failure — cached body keeps showing */
+            /* network failure - cached body keeps showing */
           });
       });
 
-      // Provider-derived sections have nothing to fetch for an unidentified title.
-      if (hasProviderId(m)) {
-        this.mediaService
-          .getCast(m.id)
-          .then((c) => this.cast.set(c))
-          .catch(() => {});
-        this.mediaService
-          .getCrew(m.id)
-          .then((c) => this.crew.set(c))
-          .catch(() => {});
-        if (m.type === 'movie') {
-          this.mediaService
-            .getSimilar(m.id)
-            .then((s) => this.similar.set(s))
-            .catch(() => {});
-          this.mediaService
-            .getCollection(m.id)
-            .then((c) => this.collection.set(c))
-            .catch(() => {});
-        }
-      }
       this.requestFlow.load(m);
-      void this.loadPlaybackState(m);
     } catch {
       this.notFound.set(true);
     } finally {
@@ -730,119 +395,23 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Re-read playback-affected state without touching the cached cast/crew/similar rails. */
+  /** Tells the page to re-read what playback changed, and forces a media refetch. */
   private refreshOnReturn(): void {
     const m = this.media();
     if (!m) return;
-    void this.loadPlaybackState(m);
-    this.infoHeader()?.reloadPlaybackState();
+    this.returns.update((n) => n + 1);
     void this.mediaService
       .getOne(m.id, { force: true })
       .then((fresh) => {
         if (fresh.id === m.id) this.media.set(fresh);
       })
       .catch(() => {
-        /* network failure — the cached page keeps showing */
+        /* network failure - the cached page keeps showing */
       });
-  }
-
-  /** Resume position, watched episodes and progress from uncacheable /api/playback routes,
-   *  kept off the render path and re-run when the page returns on screen. */
-  private async loadPlaybackState(m: Media): Promise<void> {
-    const [resumeInfo, watchedIds, progress] = await Promise.all([
-      this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
-      KIND_REGISTRY[m.type].hasSeasons
-        ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
-        : Promise.resolve([] as number[]),
-      KIND_REGISTRY[m.type].hasSeasons
-        ? this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>)
-        : Promise.resolve({} as Record<number, number>),
-    ]);
-    this.resumeInfo.set(resumeInfo);
-    const watchedSet = new Set(watchedIds);
-    this.watched.episodeIds.set(watchedSet);
-    this.watched.episodeProgress.set(progress);
-
-    // Pre-select the last-played file if available
-    if (resumeInfo?.mediaFileId) {
-      const files = m.files ?? [];
-      if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
-        this.selectedFileId.set(resumeInfo.mediaFileId);
-      }
-    }
-
-    // Preselect the season of the in-progress episode (resumeInfo), else of the first unwatched
-    // episode with a file (covers between-episodes, where resumeInfo is null).
-    let resumeHandled = false;
-    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
-      let targetSeasonId: number | null = null;
-      if (resumeInfo?.episodeId) {
-        targetSeasonId =
-          m.seasons.find((s) => s.episodes?.some((e) => e.id === resumeInfo.episodeId))?.id ??
-          null;
-      }
-      if (targetSeasonId == null) {
-        targetSeasonId =
-          m.seasons.find((s) => s.episodes?.some((e) => e.hasFile && !watchedSet.has(e.id)))
-            ?.id ?? null;
-      }
-      if (targetSeasonId != null) {
-        this.activeSeasonId.set(targetSeasonId);
-        this.persistActiveSeason(targetSeasonId);
-        resumeHandled = true;
-      }
-    }
-
-    if (KIND_REGISTRY[m.type].hasSeasons && m.seasons?.length) {
-      if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
-    } else {
-      this.activeSeasonId.set(null);
-    }
-  }
-
-  /** Apply episode focus (hero, navbar title) for the episodeId param; flips `notFound` on an unknown episode. */
-  private applyEpisodeFocus(m: Media, episodeIdParam: string | null): void {
-    if (!episodeIdParam) {
-      this.episodeMode.set(false);
-      this.focusedSeason.set(null);
-      this.focusedEpisode.set(null);
-      this.navbarService.enterHeroPage(m.title, m.logoUrl);
-      return;
-    }
-    const episodeId = Number(episodeIdParam);
-    let foundSeason: Season | null = null;
-    let foundEpisode: Episode | null = null;
-    for (const s of m.seasons ?? []) {
-      const ep = s.episodes?.find((e) => e.id === episodeId);
-      if (ep) {
-        foundSeason = s;
-        foundEpisode = ep;
-        break;
-      }
-    }
-    if (!foundEpisode) {
-      this.notFound.set(true);
-      return;
-    }
-    this.notFound.set(false);
-    this.episodeMode.set(true);
-    this.focusedSeason.set(foundSeason);
-    this.focusedEpisode.set(foundEpisode);
-    const sn = String(foundSeason!.seasonNumber).padStart(2, '0');
-    const en = String(foundEpisode.episodeNumber).padStart(2, '0');
-    this.navbarService.enterHeroPage(
-      [m.title, `S${sn}:E${en}`, foundEpisode.title].filter(Boolean).join(' - '),
-      m.logoUrl,
-    );
-  }
-
-  backSegment(): string {
-    return KIND_REGISTRY[this.expectedKind()].segment;
   }
 
   onLibrarySaved(updated: Media) {
     this.media.set(updated);
-    if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
   }
 
   async saveProfiles() {
@@ -857,7 +426,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
-      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
       this.profilesOk.set(this.translate.instant('media_detail.profiles_saved'));
@@ -869,33 +437,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   async toggleMonitored() {
-    const ep = this.focusedEpisode();
-    if (ep) {
-      // Episode mode: toggle episode monitoring
-      this.monitoredLoading.set(true);
-      try {
-        await this.mediaService.updateEpisodeMonitored(ep.id, !ep.monitored);
-        this.focusedEpisode.set({ ...ep, monitored: !ep.monitored });
-      } finally {
-        this.monitoredLoading.set(false);
-      }
-      return;
-    }
     const m = this.media();
     if (!m) return;
     this.monitoredLoading.set(true);
     try {
-      const updated = await this.mediaService.toggleMonitored(m.id, !m.monitored);
-      this.media.set(updated);
-      if (KIND_REGISTRY[updated.type].hasSeasons) {
-        this.syncActiveSeasonForSeriesFilter();
-        const open = this.episodeDrawerContext();
-        if (open) {
-          const s = updated.seasons?.find((x) => x.id === open.season.id);
-          const e = s?.episodes.find((x) => x.id === open.episode.id);
-          if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
-        }
-      }
+      this.media.set(await this.mediaService.toggleMonitored(m.id, !m.monitored));
     } finally {
       this.monitoredLoading.set(false);
     }
@@ -912,165 +458,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  openProfilesModal() {
+  registerPageActions(actions: Record<string, () => void>) {
+    this.pageActions = actions;
+  }
+
+  openProfiles() {
     this.profilesOk.set('');
     this.profilesErr.set('');
     this.profilesModal()?.showModal();
   }
 
+  openLibrary() {
+    this.libraryDialog()?.open();
+  }
+
+  openAnalyze() {
+    this.analyze.open();
+  }
+
   async refreshMetadata() {
     const m = this.media();
-    if (!m) return;
-    const ep = this.focusedEpisode();
-    if (!ep) return this.admin.refreshMetadata(m.id);
-    try {
-      await this.mediaService.refreshEpisodeMetadata(m.id, ep.id);
-      this.toast.success(this.translate.instant('media_detail.refresh_launched'));
-    } catch (err: unknown) {
-      this.toast.error(serverMessage(err, this.translate, 'media_detail.refresh_error'));
-    }
-  }
-
-  /** Targets chosen from a season, the series or an episode row; consumed by the next quality pick. */
-  private pendingDownloads: (DownloadTarget & { watched: boolean })[] | null = null;
-
-  private downloadTargets(seasons: Season[]): (DownloadTarget & { watched: boolean })[] {
-    const m = this.media();
-    if (!m) return [];
-    const watched = this.watched.episodeIds();
-    const targets: (DownloadTarget & { watched: boolean })[] = [];
-    for (const s of seasons) {
-      for (const ep of s.episodes) {
-        const file = m.files?.find((f) => f.episodeId === ep.id);
-        if (!file || targets.some((t) => t.mediaFileId === file.id)) continue;
-        targets.push({
-          mediaId: m.id,
-          episodeId: ep.id,
-          mediaFileId: file.id,
-          title: m.title,
-          episodeLabel: episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title),
-          seasonNumber: s.seasonNumber,
-          episodeNumber: ep.episodeNumber,
-          posterUrl: m.posterUrl,
-          type: m.type,
-          watched: watched.has(ep.id),
-        });
-      }
-    }
-    return targets;
-  }
-
-  private openBatch(targets: (DownloadTarget & { watched: boolean })[]) {
-    if (!targets.length) return;
-    this.pendingDownloads = targets;
-    const unwatched = targets.filter((t) => !t.watched).length;
-    void this.downloadModal()?.openBatch(targets[0].mediaFileId!, { all: targets.length, unwatched });
-  }
-
-  downloadSeason(season: Season) {
-    this.openBatch(this.downloadTargets([season]));
-  }
-
-  /** Episodes picked by hand: never filtered by watched state. */
-  downloadSeasons(seasons: Season[]) {
-    this.openBatch(this.downloadTargets(seasons).map((t) => ({ ...t, watched: false })));
-  }
-
-  downloadSeries() {
-    this.openBatch(this.downloadTargets((this.media()?.seasons ?? []).filter((s) => s.seasonNumber > 0)));
-  }
-
-  downloadEpisode(season: Season, episode: Episode) {
-    const [target] = this.downloadTargets([{ ...season, episodes: [episode] }]);
-    if (!target) return;
-    this.pendingDownloads = [{ ...target, watched: false }];
-    void this.downloadModal()?.open(target.mediaFileId!);
-  }
-
-  private downloadFileId() {
-    return this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
-  }
-
-  /** Download of the file on screen; a failed one reads as none. */
-  readonly fileDownload = computed(() => {
-    const id = this.downloadFileId();
-    const task = id ? this.downloadManager.tasks().find((t) => t.mediaFileId === id && t.status !== 'failed') : undefined;
-    return task ?? null;
-  });
-
-  readonly activeDownloadProgress = computed(() => {
-    const t = this.fileDownload();
-    return t && isActive(t.status) ? t.progress : null;
-  });
-
-  openDownloadModal() {
-    this.pendingDownloads = null;
-    const fileId = this.downloadFileId();
-    const task = this.fileDownload();
-    if (fileId) this.downloadModal()?.open(fileId, task?.quality ?? null);
-  }
-
-  openDownloadDetailModal() {
-    this.downloadDetailModal()?.open();
-  }
-
-  openSubtitles() {
-    this.subtitleSection()?.show();
-  }
-
-  async onRemoveDownload() {
-    const task = this.fileDownload();
-    if (!task) return;
-    const active = isActive(task.status);
-    const confirmed = await this.confirmation.confirm({
-      title: this.translate.instant('common.confirm'),
-      message: this.translate.instant(active ? 'downloads.confirm_cancel' : 'downloads.confirm_delete'),
-      confirmLabel: this.translate.instant(active ? 'downloads.cancel_download' : 'common.delete'),
-      variant: 'danger',
-    });
-    if (confirmed) await this.downloadManager.deleteDownload(task);
-  }
-
-  async onDownload(ev: { mediaFileId: number; quality: string; unwatchedOnly: boolean }) {
-    const pending = this.pendingDownloads;
-    this.pendingDownloads = null;
-    if (pending) {
-      const targets = ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
-      // Announced up front: the batch creates its downloads one by one, which takes a while.
-      const count = targets.filter((t) => !t.mediaFileId || !this.downloadManager.isOnDevice(t.mediaFileId)).length;
-      if (count) {
-        this.toast.success(
-          this.translate.instant(count === 1 ? 'downloads.episodes_queued_one' : 'downloads.episodes_queued_other', { count }),
-        );
-      }
-      const { started, failed, skipped } = await this.downloadManager.createMany(targets, ev.quality);
-      if (failed) this.toast.error(this.translate.instant('downloads.error'));
-      else if (!started) this.toast.info(this.translate.instant(nothingStartedKey(skipped, targets.length)));
-      return;
-    }
-    try {
-      const m = this.media();
-      const title = m?.title ?? 'Téléchargement';
-      const ep = this.focusedEpisode();
-      const s = this.focusedSeason();
-      let episode: string | undefined;
-      if (s && ep) {
-        episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
-      }
-      const prev = this.downloadManager.tasks().find((t) => t.mediaFileId === ev.mediaFileId && t.status !== 'failed');
-      if (prev) await this.downloadManager.deleteDownload(prev);
-      await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
-        mediaId: m?.id,
-        posterUrl: m?.posterUrl,
-        type: m?.type,
-        episodeId: ep?.id,
-        seasonNumber: s?.seasonNumber,
-        episodeNumber: ep?.episodeNumber,
-      });
-      this.toast.success(this.translate.instant('downloads.started'));
-    } catch {
-      this.toast.error(this.translate.instant('downloads.error'));
-    }
+    if (m) await this.admin.refreshMetadata(m.id);
   }
 
   /** Native <dialog>: showModal() gives focus trap, Tab cycling and Escape for free. */
@@ -1085,33 +493,35 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!action) return;
     const m = this.media();
     if (!m) return;
-    const openers: Record<string, () => void> = {
-      identify: () => this.openIdentifyModal(),
-      profiles: () => this.openProfilesModal(),
-      library: () => this.libraryDialog()?.open(),
-      subtitles: () => this.openSubtitles(),
-      analyze: () => this.analyze.open(),
-      refresh: () => void this.refreshMetadata(),
-      tracking: () =>
-        this.openTracking({ kind: m.type }),
-    };
-    const open = openers[action];
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { action: null },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
-    if (open) queueMicrotask(open);
+    // After the render that creates the page, so the actions it registers count.
+    afterNextRender(() => {
+      const openers: Record<string, () => void> = {
+        identify: () => this.openIdentify(),
+        library: () => this.openLibrary(),
+        analyze: () => this.openAnalyze(),
+        refresh: () => void this.refreshMetadata(),
+        tracking: () => this.trackingModals.open(m.id, { kind: m.type }),
+        // Profiles are a video title's; a book's are its wants, inside its own page.
+        ...(KIND_REGISTRY[m.type].families.includes('video') && { profiles: () => this.openProfiles() }),
+        ...this.pageActions,
+      };
+      openers[action]?.();
+    }, { injector: this.injector });
   }
 
-  openIdentifyModal() {
+  openIdentify() {
     const m = this.media();
     if (m) this.admin.identify(m);
   }
 
   /** The title, art and whole episode tree change, so the page reloads rather
-   *  than patching the row — same path the rescan takes. */
+   *  than patching the row - same path the rescan takes. */
   /** Dialog reports via a counter; the first read is ignored since an effect fires on creation. */
   private seenIdentified = -1;
   private readonly identifiedEffect = effect(() => {
@@ -1126,251 +536,20 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   onIdentified() {
-    const m = this.media();
-    if (m) void this.reloadMedia(m.id);
+    void this.reload();
   }
 
   /** Re-read media after an external change; forced because server events invalidate no cache entry. */
-  private async reloadMedia(mediaId: number) {
+  async reload() {
+    const id = this.media()?.id;
+    if (id == null) return;
     try {
-      const updated = await this.mediaService.getOne(mediaId, { force: true });
-      this.media.set(updated);
-      if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
-      // Re-resolve the focused episode against the refreshed tree.
-      const ep = this.focusedEpisode();
-      if (ep) {
-        for (const s of updated.seasons ?? []) {
-          const fresh = s.episodes?.find((e) => e.id === ep.id);
-          if (fresh) {
-            this.focusedSeason.set(s);
-            this.focusedEpisode.set(fresh);
-            break;
-          }
-        }
-      }
+      this.media.set(await this.mediaService.getOne(id, { force: true }));
     } catch {
       /* ignore */
     }
   }
 
-  selectSeason(seasonId: number) {
-    this.activeSeasonId.set(seasonId);
-    this.persistActiveSeason(seasonId);
-  }
-
-  private persistActiveSeason(seasonId: number | null) {
-    const m = this.media();
-    if (!m) return;
-    try {
-      if (seasonId != null) {
-        sessionStorage.setItem(`fliks.season.${m.id}`, String(seasonId));
-      } else {
-        sessionStorage.removeItem(`fliks.season.${m.id}`);
-      }
-    } catch {
-      /* private mode */
-    }
-  }
-
-  private restoreActiveSeason(): number | null {
-    const m = this.media();
-    if (!m) return null;
-    try {
-      const v = sessionStorage.getItem(`fliks.season.${m.id}`);
-      return v ? Number(v) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  setEpisodesHasFileOnly(value: boolean) {
-    this.episodesHasFileOnly.set(value);
-    try {
-      localStorage.setItem(LS_EPISODES_HAS_FILE_ONLY, value ? '1' : '0');
-    } catch {
-      /* private mode / quota */
-    }
-    this.syncActiveSeasonForSeriesFilter();
-  }
-
-  /** Garde activeSeasonId sur une saison visible (onglets) quand le filtre disque est actif. */
-  private syncActiveSeasonForSeriesFilter() {
-    const m = this.media();
-    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return;
-    const visible = seasonsVisibleWithDiskFilter(m, this.episodesHasFileOnly());
-    if (!visible.length) {
-      this.activeSeasonId.set(null);
-      return;
-    }
-
-    // Check query param ?season=NUMBER for deep-link from episode page
-    const qpSeason = Number(this.route.snapshot.queryParamMap.get('season'));
-    if (qpSeason) {
-      const match = visible.find((s) => s.seasonNumber === qpSeason);
-      if (match) {
-        this.activeSeasonId.set(match.id);
-        this.persistActiveSeason(match.id);
-        return;
-      }
-    }
-
-    // Restore from sessionStorage (browser back button)
-    const stored = this.restoreActiveSeason();
-    if (stored != null && visible.some((s) => s.id === stored)) {
-      this.activeSeasonId.set(stored);
-      return;
-    }
-
-    const cur = this.activeSeasonId();
-    if (cur == null || !visible.some((s) => s.id === cur)) {
-      this.activeSeasonId.set(visible[0].id);
-    }
-  }
-
-  filteredSeasonEpisodes(season: Season): Episode[] {
-    const m = this.media();
-    if (!m) return season.episodes;
-    return filterSeasonEpisodesOnDisk(season, this.episodesHasFileOnly());
-  }
-
-  activeSeason(m: Media): Season | null {
-    const id = this.activeSeasonId();
-    if (!m.seasons?.length || id == null) return null;
-    return m.seasons.find((s) => s.id === id) ?? null;
-  }
-
-  openEpisodeDetailDrawer(season: Season, episode: Episode) {
-    const current = this.episodeDrawerContext();
-    // Toggle: close if clicking the same episode
-    if (current?.episode.id === episode.id) {
-      this.episodeDrawerContext.set(null);
-    } else {
-      this.episodeDrawerContext.set({ season, episode });
-    }
-  }
-
-  closeEpisodeInline() {
-    this.episodeDrawerContext.set(null);
-  }
-
-  onEpisodeDialogToggleMonitored() {
-    const c = this.episodeDrawerContext();
-    if (c) void this.toggleEpisodeMonitored(c.season.id, c.episode);
-  }
-
-  async toggleSeasonMonitored(season: Season) {
-    if (!this.isAdmin()) return;
-    this.seasonBusy.set(season.id);
-    try {
-      const updated = await this.mediaService.updateSeasonMonitored(season.id, !season.monitored);
-      const m = this.media();
-      if (!m?.seasons) return;
-      const nextSeasons = m.seasons.map((s) =>
-        s.id === updated.id
-          ? {
-              ...s,
-              monitored: updated.monitored,
-              episodes: s.episodes.map((e) => ({
-                ...e,
-                monitored: updated.monitored,
-              })),
-            }
-          : s,
-      );
-      this.media.set({ ...m, seasons: nextSeasons });
-      this.syncActiveSeasonForSeriesFilter();
-      const open = this.episodeDrawerContext();
-      if (open?.season.id === updated.id) {
-        const s = nextSeasons.find((x) => x.id === updated.id);
-        const e = s?.episodes.find((x) => x.id === open.episode.id);
-        if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
-      }
-    } finally {
-      this.seasonBusy.set(null);
-    }
-  }
-
-  async toggleEpisodeMonitored(seasonId: number, episode: Episode) {
-    if (!this.isAdmin()) return;
-    this.episodeBusy.set(episode.id);
-    try {
-      const updated = await this.mediaService.updateEpisodeMonitored(
-        episode.id,
-        !episode.monitored,
-      );
-      const m = this.media();
-      if (!m?.seasons) return;
-      const nextSeasons = m.seasons.map((s) =>
-        s.id === seasonId
-          ? {
-              ...s,
-              episodes: s.episodes.map((e) =>
-                e.id === updated.id ? { ...e, monitored: updated.monitored } : e,
-              ),
-            }
-          : s,
-      );
-      this.media.set({ ...m, seasons: nextSeasons });
-      this.syncActiveSeasonForSeriesFilter();
-      const open = this.episodeDrawerContext();
-      if (open?.episode.id === updated.id) {
-        const s = nextSeasons.find((x) => x.id === open.season.id);
-        const e = s?.episodes.find((x) => x.id === updated.id);
-        if (s && e) this.episodeDrawerContext.set({ season: s, episode: e });
-      }
-    } finally {
-      this.episodeBusy.set(null);
-    }
-  }
-
-  reloadSubtitles() {
-    const m = this.media();
-    if (m) void this.subtitleSection()?.loadSubtitles(m.id);
-  }
-
-  async deleteFile(fileId: number, deleteOnDisk: boolean) {
-    const m = this.media();
-    if (!m) return;
-    try {
-      await this.mediaService.deleteFile(m.id, fileId, deleteOnDisk);
-      // Not a local splice: the server also flips the episode's `hasFile`, which
-      // the season tree renders from.
-      await this.reloadMedia(m.id);
-    } catch {
-      // ignore
-    }
-  }
-
-  // ---- Re-request (user-facing): UX gate only, backend dedups ----
-
+  private readonly trackingModals = inject(TrackingModalService);
   private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
-  private readonly addToPlaylist = inject(AddToPlaylistService);
-
-  /** Open the "add to playlist" dialog: the focused episode when browsing an
-   *  episode, otherwise the movie or the whole series (`mediaId`). */
-  protected openAddToPlaylist() {
-    const m = this.media();
-    if (!m) return;
-    const ep = this.episodeMode() ? this.focusedEpisode() : null;
-    this.addToPlaylist.open(ep ? { episodeId: ep.id } : { mediaId: m.id });
-  }
-
-  private readonly recommend = inject(RecommendService);
-
-  /** Recommend the current title to another member: the focused episode when
-   *  browsing an episode, otherwise the movie or the whole series. */
-  protected openRecommend() {
-    const m = this.media();
-    if (!m) return;
-    const ep = this.episodeMode() ? this.focusedEpisode() : null;
-    this.recommend.open(ep ? { mediaId: m.id, episodeId: ep.id } : { mediaId: m.id });
-  }
-
-  // ── Likes ──
-  recommendSeason(seasonId: number): void {
-    const m = this.media();
-    if (!m) return;
-    this.recommend.open({ mediaId: m.id, seasonId });
-  }
-
 }
