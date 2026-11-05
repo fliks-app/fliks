@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
@@ -61,6 +61,12 @@ export class AudioPlayerComponent {
     const d = this.audio.duration();
     return d ? Math.min(100, (this.audio.position() / d) * 100) : 0;
   });
+  /** The slider value while the user drags, so `timeupdate` doesn't snap the thumb back. */
+  protected readonly scrub = signal<number | null>(null);
+  protected readonly shown = computed(() => {
+    const s = this.scrub();
+    return s === null ? this.audio.position() : (s / 1000) * this.audio.duration();
+  });
   protected readonly chapter = computed(() => this.audio.chapters()[this.audio.chapterIndex()] ?? null);
   protected readonly sleepLabel = computed(() => {
     const s = this.audio.sleep();
@@ -78,6 +84,7 @@ export class AudioPlayerComponent {
 
   protected onSeek(e: Event): void {
     void this.audio.seek((Number((e.target as HTMLInputElement).value) / 1000) * this.audio.duration());
+    this.scrub.set(null);
   }
 
   protected cycleRate(): void {
