@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroBaseComponent } from './hero-base';
 
 @Component({
@@ -39,6 +39,9 @@ function render(patch: Partial<HostComponent> = {}) {
 }
 
 describe('HeroBaseComponent', () => {
+  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} }));
+  afterEach(() => vi.unstubAllGlobals());
+
   it('draws the title, the facts row, the synopsis and the slots, the buttons in their own row', () => {
     const el = render({ subtitle: 'Original' });
     expect(el.querySelector('h1')?.textContent).toBe('Title');

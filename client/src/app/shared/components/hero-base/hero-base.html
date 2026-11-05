@@ -16,7 +16,7 @@
         @if (loading() && !posterUrl()) {
           <div class="[grid-area:1/1] self-end justify-self-center relative z-20 w-[140px] aspect-2/3 rounded-xl bg-base-300/40 animate-pulse"></div>
         } @else {
-          <app-hero-poster class="[grid-area:1/1] self-end justify-self-center relative z-20" [kind]="mediaType()" [url]="posterUrl()" [alt]="title() ?? ''" [mode]="posterMode()" [viewTransitionName]="viewTransitionName()" />
+          <app-hero-poster class="[grid-area:1/1] self-end justify-self-center relative z-20" [class.w-full]="posterMode() === 'still'" [kind]="mediaType()" [url]="posterUrl()" [alt]="title() ?? ''" [mode]="posterMode()" [viewTransitionName]="viewTransitionName()" />
         }
       </div>
     }
@@ -38,6 +38,7 @@
       } @else {
         <!-- Compact on md-lg so the title keeps room in a short viewport; 200px from lg, 220 from xl, 280 from 2xl. -->
         <app-hero-poster
+          class="contents"
           [kind]="mediaType()" [url]="posterUrl()" [alt]="title() ?? ''" [mode]="posterMode()" [spoiler]="spoilerImage()"
           [viewTransitionName]="viewTransitionName()"
         />

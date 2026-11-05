@@ -52,6 +52,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
           snapshot: {
             data: { kind: 'series' },
             paramMap: PARAMS,
+            queryParamMap: { get: () => null },
           },
         },
       },

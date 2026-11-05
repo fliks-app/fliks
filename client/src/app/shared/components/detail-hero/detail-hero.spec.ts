@@ -141,6 +141,7 @@ async function createFixture(
         useValue: {
           hasPermission: (p: string) => hasPerm(role, p),
           sharingDisabled: () => !!media.sharingDisabled,
+          user: () => null,
         },
       },
       { provide: TvService, useValue: { isTv: () => !!media.isTv } },
