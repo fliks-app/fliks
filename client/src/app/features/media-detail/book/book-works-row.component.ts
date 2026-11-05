@@ -1,5 +1,5 @@
 import { Component, input } from '@angular/core';
-import { CollapsibleSectionComponent } from '../../../shared/components/collapsible-section/collapsible-section';
+import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
 import { HorizontalScrollerComponent } from '../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -15,7 +15,7 @@ export interface WorkItem {
 
 @Component({
   selector: 'app-book-works-row',
-  imports: [CollapsibleSectionComponent, HorizontalScrollerComponent, MediaCardComponent],
+  imports: [DetailSectionComponent, HorizontalScrollerComponent, MediaCardComponent],
   templateUrl: './book-works-row.component.html',
   host: { class: 'block' },
 })

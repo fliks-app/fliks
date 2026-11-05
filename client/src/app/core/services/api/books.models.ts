@@ -78,11 +78,11 @@ export interface BookPreview extends BookSearchResult {
               durationSeconds: number | null; pageCount: number | null }[];
   unofficial: boolean;             // true when a field comes from Audible or Audnexus (UI mention)
 }
-// POST /api/media/import  body adds: { type: 'book', provider, externalId, libraryId?, folderId? }
-//   201 = the MD of the created book. Requests for books are phase 3.4: the preview offers Add only.
+// POST /api/media/import  body: { type: 'book', provider, externalId, wants, libraryId?, folderId? }
+//   201 = the MD of the created book; every want carries a quality profile.
 export interface BookImportBody {
   type: 'book'; provider: string; externalId: string; libraryId?: number; folderId?: number;
-  wants?: { family: 'text' | 'audio'; language: string | null }[];
+  wants: { family: 'text' | 'audio'; language: string | null; qualityProfileId: number }[];
 }
 
 // GET/PUT/DELETE /api/media/:id/sources  (Sources panel)

@@ -25,6 +25,7 @@ export type CoreMediaActionId =
   | 'media.toggle-watched'
   | 'media.remove'
   | 'media.identify'
+  | 'media.edit-sources'
   | 'media.request-deletion';
 
 const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
@@ -53,6 +54,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.toggle-watched',
   'media.remove',
   'media.identify',
+  'media.edit-sources',
   'media.analyze',
   'media.toggle-monitored',
   'media.delete',

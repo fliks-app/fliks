@@ -26,6 +26,7 @@
       "as": "admin",
       "body": {
         "libraryId": 6,
+        "qualityProfileId": 1,
         "tmdbId": 3001,
         "type": "series"
       },
@@ -77,8 +78,16 @@
           "path": "/tmp/fliks-parity/providers/series/Better Call",
           "physicalRelease": null,
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 8.1,
           "releaseDate": "2008-01-20",
           "runtime": 47,
@@ -186,8 +195,16 @@
           "physicalRelease": null,
           "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 8.1,
           "releaseDate": "2008-01-20",
           "runtime": 47,
@@ -277,6 +294,7 @@
       "as": "admin",
       "body": {
         "libraryId": 6,
+        "qualityProfileId": 1,
         "tmdbId": 3001,
         "type": "series"
       },

@@ -25,7 +25,11 @@ use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::{Namespace, Namespaces},
-    media::{kind::MediaKind, release::ReleaseKind, wants::WantSpec},
+    media::{
+        kind::MediaKind,
+        release::ReleaseKind,
+        wants::{PROFILE_REQUIRED, WantSpec},
+    },
     metadata::{field::Field, limiter::Priority},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
 };
@@ -484,9 +488,13 @@ fn common(b: &Body) -> Result<Common, AppError> {
             "tmdb does not support {media_type}"
         )));
     }
+    let quality = b.id("qualityProfileId")?.flatten();
+    if quality.is_none() {
+        return Err(AppError::bad_request(vec![PROFILE_REQUIRED]));
+    }
     Ok(Common {
         media_type,
-        quality: b.id("qualityProfileId")?.flatten(),
+        quality,
         language: b.id("languageProfileId")?.flatten(),
         library: b.id("libraryId")?.flatten(),
         folder: b.id("folderId")?.flatten(),
@@ -544,6 +552,7 @@ pub async fn import_tmdb(
     a.require(Action::Create, Subject::Media)?;
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
+    crate::profiles::resolve_quality_profile_id_for_import(&st.db, c.quality, None).await?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
     st.metadata.require(&st.namespaces(), None)?;
     duplicate_ref(&st, c.media_type, Namespace::TMDB, &tmdb.to_string()).await?;
@@ -582,6 +591,7 @@ pub async fn import_media(
     }
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let c = common(&b)?;
+    crate::profiles::resolve_quality_profile_id_for_import(&st.db, c.quality, None).await?;
     let external = b.required(b.str("externalId")?, "externalId", "must be a string")?;
     let known = st.namespaces();
     let plugin =

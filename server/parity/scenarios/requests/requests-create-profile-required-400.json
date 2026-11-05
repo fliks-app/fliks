@@ -1,0 +1,26 @@
+{
+  "name": "requests-create-profile-required-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "movie",
+        "title": "No Profile",
+        "tmdbId": 5556
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "A quality profile is required"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

@@ -56,7 +56,7 @@ const HERO_MUTED = 'data-hero-muted';
 
 export function muteHeroUntilDone(transition: { finished: Promise<unknown> }): void {
   const heroes = [
-    ...document.querySelectorAll<HTMLElement>('app-media-info-header img, app-detail-hero img'),
+    ...document.querySelectorAll<HTMLElement>('app-detail-hero img'),
   ];
   heroes.forEach((el) => el.setAttribute(HERO_MUTED, ''));
   const done = () => heroes.forEach((el) => el.removeAttribute(HERO_MUTED));
@@ -79,6 +79,7 @@ const POSTER_ROUTES = new Set<string | undefined>([
   'series/:id/episode/:episodeId',
   'add/movie/:provider/:externalId',
   'add/tv/:provider/:externalId',
+  'add/book/:provider/:externalId',
   'add/movie/:tmdbId',
   'add/tv/:tmdbId',
   'parties/:id',

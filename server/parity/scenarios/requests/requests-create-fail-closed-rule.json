@@ -10,6 +10,7 @@
       "as": "user",
       "body": {
         "mediaType": "series",
+        "qualityProfileId": 1,
         "title": "Anime",
         "tmdbId": 9200
       },
@@ -33,8 +34,10 @@
           "mediaType": "series",
           "posterUrl": null,
           "provider": "tmdb",
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
           "seasons": null,
           "status": "pending",
           "title": "Anime",

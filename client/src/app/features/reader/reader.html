@@ -157,7 +157,7 @@
     }
     <button
       type="button"
-      class="btn btn-ghost btn-circle btn-md"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
       [class.btn-active]="panel() === 'appearance'"
       [attr.aria-label]="'reader.appearance' | translate"
       [attr.aria-expanded]="panel() === 'appearance'"
@@ -232,45 +232,47 @@
         <span class="rd-thumb" [style.inset-inline-start.%]="shownProgression() * 100" aria-hidden="true"></span>
       </div>
 
-      <div class="flex items-center justify-between gap-4 text-sm text-base-content/70">
-        <span class="min-w-0 truncate">
-          <span class="font-medium text-base-content">{{ chapterTitle() }}</span>
-          &middot;
-          @if (pagesLeft() !== null) {
-            {{ 'reader.pages_left' | translatePlural: (pagesLeft() ?? 0) }}
-          } @else {
-            {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
-          }
+      <!-- One row from sm up; on a phone the chapter keeps its own line and the book's time left goes. -->
+      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 text-sm text-base-content/70 sm:flex sm:justify-between">
+        <span class="flex min-w-0 gap-1 max-sm:contents">
+          <span class="truncate font-medium text-base-content">{{ chapterTitle() }}</span>
+          <span class="max-sm:hidden">&middot;</span>
+          <span class="truncate max-sm:order-last max-sm:col-span-2">
+            @if (pagesLeft() !== null) {
+              {{ 'reader.pages_left' | translatePlural: (pagesLeft() ?? 0) }}
+            } @else {
+              {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
+            }
+          </span>
         </span>
         <span class="shrink-0 tabular-nums">
           @if (page() !== null) {
-            {{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }} &middot;
+            <span class="max-sm:hidden">{{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }} &middot;</span>
+            <span class="sm:hidden">{{ page() }} / {{ pageTotal() }} &middot;</span>
           }
-          {{ percent() }}% &middot;
-          @if (bookTime().h) {
-            {{ 'reader.book_left_hm' | translate: { h: bookTime().h, m: bookTime().m } }}
-          } @else {
-            {{ 'reader.book_left_m' | translate: { m: bookTime().m } }}
-          }
+          {{ percent() }}%
+          <span class="max-sm:hidden">
+            &middot;
+            @if (bookTime().h) {
+              {{ 'reader.book_left_hm' | translate: { h: bookTime().h, m: bookTime().m } }}
+            } @else {
+              {{ 'reader.book_left_m' | translate: { m: bookTime().m } }}
+            }
+          </span>
         </span>
       </div>
 
       <nav
-        class="grid grid-cols-4 gap-1 sm:hidden"
+        class="grid auto-cols-fr grid-flow-col gap-1 pt-1 sm:hidden"
         [attr.aria-label]="'reader.actions' | translate"
       >
         <button type="button" class="rd-action" (click)="openPanel('sidebar', browseTab())">
           <svg lucideListTree class="h-5 w-5"></svg>
-          <span>{{ 'reader.contents' | translate }}</span>
+          <span>{{ 'reader.contents_short' | translate }}</span>
         </button>
-        <button
-          type="button"
-          class="rd-action"
-          [attr.aria-label]="'reader.appearance' | translate"
-          (click)="openPanel('appearance')"
-        >
+        <button type="button" class="rd-action" (click)="openPanel('appearance')">
           <svg lucideType class="h-5 w-5"></svg>
-          <span>{{ 'reader.appearance_short' | translate }}</span>
+          <span>{{ 'reader.appearance' | translate }}</span>
         </button>
         <button type="button" class="rd-action" (click)="openPanel('sidebar', 'notes')">
           <svg lucideNotebookPen class="h-5 w-5"></svg>

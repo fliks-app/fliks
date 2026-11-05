@@ -1,0 +1,106 @@
+@let isDesktop = desktop();
+<div [class.relative]="isDesktop">
+  @if (!isDesktop) {
+    @if (fanartLayout()) {
+      <app-mobile-fanart-hero
+        class="block"
+        [appSpoiler]="spoilerImage()"
+        [revealLabel]="'spoilers.reveal' | translate"
+        [fanartUrl]="fanartUrl()"
+        [viewTransitionName]="viewTransitionName()"
+      />
+    } @else {
+      <!-- The poster shares the backdrop's grid cell, so it sits inside the hero without a negative offset. -->
+      <div class="grid">
+        <app-mobile-fanart-hero class="block [grid-area:1/1]" [fanartUrl]="posterUrl()" [blur]="true" />
+        @if (loading() && !posterUrl()) {
+          <div class="[grid-area:1/1] self-end justify-self-center relative z-20 w-[140px] aspect-2/3 rounded-xl bg-base-300/40 animate-pulse"></div>
+        } @else {
+          <app-hero-poster class="[grid-area:1/1] self-end justify-self-center relative z-20" [class.w-full]="posterMode() === 'still'" [kind]="mediaType()" [url]="posterUrl()" [alt]="title() ?? ''" [mode]="posterMode()" [viewTransitionName]="viewTransitionName()" />
+        }
+      </div>
+    }
+  }
+
+  <div
+    class="relative z-20 has-[.dropdown-open]:z-50"
+    [attr.data-hero-lead]="isDesktop ? null : ''"
+    [class.flex]="isDesktop"
+    [class.gap-6]="isDesktop"
+    [class.lg:gap-10]="isDesktop"
+    [class.-mt-16]="!isDesktop && fanartLayout()"
+    [class.mt-4]="!isDesktop && !fanartLayout()"
+    [style.padding-top]="isDesktop ? navbar.heroPaddingTop() : null"
+  >
+    @if (isDesktop) {
+      @if (loading() && !posterUrl()) {
+        <div class="shrink-0 w-[140px] lg:w-[200px] xl:w-[220px] 2xl:w-[280px] aspect-2/3 rounded-xl bg-base-300/40 animate-pulse"></div>
+      } @else {
+        <!-- Compact on md-lg so the title keeps room in a short viewport; 200px from lg, 220 from xl, 280 from 2xl. -->
+        <app-hero-poster
+          class="contents"
+          [kind]="mediaType()" [url]="posterUrl()" [alt]="title() ?? ''" [mode]="posterMode()" [spoiler]="spoilerImage()"
+          [viewTransitionName]="viewTransitionName()"
+        />
+      }
+    }
+
+    <div [class.flex-1]="isDesktop" [class.min-w-0]="isDesktop" [class.pt-2]="isDesktop">
+      @if (title(); as t) {
+        @if (titleLink(); as link) {
+          <h1 [class]="titleClass()"><a [routerLink]="link" class="hover:underline rounded">{{ t }}</a></h1>
+        } @else {
+          <h1 [class]="titleClass()">{{ t }}</h1>
+        }
+      } @else {
+        <div class="h-9 md:h-10 w-2/3 bg-base-300/40 rounded animate-pulse"></div>
+      }
+      @if (subtitle(); as sub) {
+        <p class="text-base-content/70" [class]="isDesktop ? 'mt-1 text-lg' : 'mt-0.5'">{{ sub }}</p>
+      }
+
+      <ng-content select="[heroMeta]" />
+
+      @if (showMetaRow()) {
+        <div class="flex flex-wrap items-center text-base-content/60" [class]="isDesktop ? 'gap-x-4 gap-y-1 mt-3' : 'gap-x-3 gap-y-0.5 mt-2'">
+          @if (rating()) {
+            <span class="flex items-center text-warning font-semibold" [class]="isDesktop ? 'gap-1' : 'gap-0.5'">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              {{ rating()! | number:'1.1-1' }}
+            </span>
+          }
+          @for (part of metaParts(); track $index) { <span>{{ part | translate }}</span> }
+          @for (chip of chips(); track chip.label) { <span [class]="chip.cls">{{ chip.label | translate }}</span> }
+        </div>
+      }
+
+      <ng-content select="[heroTags]" />
+
+      <!-- The button row collapses when the page puts nothing in it. -->
+      <div
+        appTvRow
+        data-hero-actions
+        class="flex gap-2 mb-2 empty:hidden"
+        [class.flex-wrap]="isDesktop"
+        [class.items-center]="isDesktop"
+        [class.mt-6]="!tightActions()"
+        [class.mt-4]="tightActions()"
+      >
+        <ng-content select="[heroActions]" />
+      </div>
+
+      <ng-content select="[heroStatus]" />
+
+      @if (overview(); as text) {
+        <app-synopsis
+          class="mt-4"
+          [text]="text"
+          [spoiler]="overviewMasked()"
+          [textClass]="isDesktop ? 'text-base-content/90 leading-relaxed whitespace-pre-line' : 'text-base-content/80 leading-relaxed'"
+        />
+      }
+
+      <ng-content />
+    </div>
+  </div>
+</div>

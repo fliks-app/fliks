@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -83,12 +84,25 @@ export class RequestModalComponent {
   /** A series already has an active request: its profiles are fixed and the
    *  selectors are locked to them (all seasons share one profile set). */
   readonly profilesLocked = signal(false);
+  /** A lock can carry no quality profile (an older request); the select then stays open. */
+  readonly qualityLocked = signal(false);
+
+  constructor() {
+    // Profiles can land after open(): the quality select must not stay empty.
+    effect(() => {
+      const prefill = this.profilePrefill(this.libraryId()).qp;
+      if (this.qualityProfileId() === null && !this.qualityLocked()) this.qualityProfileId.set(prefill);
+    });
+  }
 
   /** Nothing to submit to: the destination is resolved from this very list,
    *  so an empty one can only end in a server-side refusal. */
   readonly noCompatibleLibrary = computed(
     () => !this.librariesLoading() && this.compatibleLibraries().length === 0,
   );
+
+  /** The server refuses a request without a quality profile. */
+  readonly noQualityProfile = computed(() => this.qualityProfileId() === null);
 
   /** Series only: a pick is required, unless the season list never loaded. */
   readonly nothingPicked = computed(
@@ -102,8 +116,9 @@ export class RequestModalComponent {
     const next = this.profilePrefill(id);
     this.libraryId.set(id);
     this.folderId.set(defaultFolderId(this.libraries().find((l) => l.id === id)?.folders));
-    if (this.profilesLocked()) return;
+    if (this.profilesLocked() && this.qualityLocked()) return;
     if (this.qualityProfileId() === prev.qp) this.qualityProfileId.set(next.qp);
+    if (this.profilesLocked()) return;
     if (this.languageProfileId() === prev.lp) this.languageProfileId.set(next.lp);
   }
 
@@ -141,7 +156,10 @@ export class RequestModalComponent {
     this.libraryId.set(target?.id ?? null);
     this.folderId.set(defaultFolderId(target?.folders));
     const prefill = this.profilePrefill(target?.id ?? null);
-    this.qualityProfileId.set(locked ? (params.lockedQualityProfileId ?? null) : prefill.qp);
+    this.qualityLocked.set(locked && params.lockedQualityProfileId != null);
+    this.qualityProfileId.set(
+      this.qualityLocked() ? (params.lockedQualityProfileId ?? null) : prefill.qp,
+    );
     this.languageProfileId.set(locked ? (params.lockedLanguageProfileId ?? null) : prefill.lp);
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());

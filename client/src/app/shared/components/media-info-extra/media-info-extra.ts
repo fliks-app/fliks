@@ -5,20 +5,19 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import { CurrencyPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
-import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
-import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-section';
+import { FactsGridComponent, type Fact } from '../facts-grid/facts-grid';
+import { DetailSectionComponent } from '../detail-section/detail-section';
 import { bestTrailerKey } from '../../utils/trailer.util';
 import { TrailerDialogComponent } from '../trailer-dialog/trailer-dialog';
 
 /** Jellyseerr-style "Extra info" table on the media-detail page; rows with an empty source hide, so freshly imported media collapse to nothing. */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay, TrailerDialogComponent],
+  imports: [FactsGridComponent, TranslatePipe, DetailSectionComponent, LucidePlay, TrailerDialogComponent],
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {
@@ -35,7 +34,7 @@ export class MediaInfoExtraComponent {
   }
 
   readonly media = input.required<Media>();
-  /** Director names. Sourced from `Media.crew` filtered by job — kept as a
+  /** Director names. Sourced from `Media.crew` filtered by job, kept as a
    *  separate input because crew isn't exposed on the Media interface yet. */
   readonly directors = input<string[]>([]);
 
@@ -70,7 +69,18 @@ export class MediaInfoExtraComponent {
 
   readonly revenue = computed(() => this.media().metadata?.revenue ?? null);
 
-  /** True when at least one row has content — keeps the parent template
+  readonly facts = computed<Fact[]>(() => [
+    { label: 'discover.preview_original_title', value: this.originalTitle() },
+    { label: 'discover.preview_release_date', value: this.media().releaseDate, format: 'date' },
+    { label: 'discover.preview_original_language', value: this.originalLanguage() !== 'und' ? this.originalLanguage() : null },
+    { label: 'discover.preview_countries', value: this.productionCountries() },
+    { label: 'discover.preview_studios', value: this.productionCompanies() },
+    { label: 'media_info.directors', value: this.directorsLabel() },
+    { label: 'discover.preview_budget', value: this.budget(), format: 'currency' },
+    { label: 'discover.preview_revenue', value: this.revenue(), format: 'currency' },
+  ]);
+
+  /** True when at least one row has content, keeps the parent template
    *  from rendering an empty wrapper / divider. */
   readonly hasAnyContent = computed(() => {
     const m = this.media();

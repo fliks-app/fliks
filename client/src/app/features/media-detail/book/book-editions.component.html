@@ -1,61 +1,68 @@
-<h2 class="text-lg font-bold mb-3">{{ 'books_work.editions' | translate }}</h2>
-<div class="overflow-x-auto scroll-ring-safe">
-  <table class="table table-sm">
-    <thead>
-      <tr>
-        <th>{{ 'books_work.col_format' | translate }}</th>
-        <th>{{ 'books_work.col_language' | translate }}</th>
-        <th>{{ 'books_work.col_published' | translate }}</th>
-        <th>{{ 'books_work.col_length' | translate }}</th>
-        <th>{{ 'books_work.col_narrators' | translate }}</th>
-        <th>{{ 'books_work.col_file' | translate }}</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (e of editions(); track e.id) {
-        <tr data-testid="edition-row">
-          <td>
-            <span class="badge badge-sm">{{ 'families.' + e.family | translate }}</span>
-            @if (e.format) {
-              <span class="ml-2 uppercase">{{ e.format }}</span>
-            }
-            @if (e.publisher) {
-              <div class="text-xs text-base-content/60">{{ e.publisher }}</div>
-            }
-          </td>
-          <td>{{ e.language ?? '' }}</td>
-          <td>{{ e.published ?? '' }}</td>
-          <td class="tabular-nums">
-            @if (e.durationSeconds != null) {
-              {{ clock(e.durationSeconds) }}
-            } @else if (e.pageCount != null) {
-              {{ 'books_work.pages' | translate: { count: e.pageCount } }}
-            }
-          </td>
-          <td>{{ e.narrators.map((n) => n.name).join(', ') }}</td>
-          <td>{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</td>
-          <td class="whitespace-nowrap">
+<app-detail-section [heading]="'books_work.editions' | translate" persistKey="bookEditions">
+  <div class="space-y-6">
+    @for (e of editions(); track e.id) {
+      <div data-testid="edition-row">
+        <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
+          @if (e.family === 'audio') {
+            <svg lucideHeadphones class="h-4 w-4"></svg>
+          } @else {
+            <svg lucideBookOpen class="h-4 w-4"></svg>
+          }
+          {{ 'families.' + e.family | translate }}
+          @if (e.format) {
+            <span class="uppercase text-base-content/60">{{ e.format }}</span>
+          }
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
+          @if (e.language) {
+            <div><span class="text-base-content/50">{{ 'books_work.col_language' | translate }} :&nbsp;</span><span class="font-medium">{{ language(e.language) }}</span></div>
+          }
+          @if (e.publisher) {
+            <div><span class="text-base-content/50">{{ 'books_work.col_publisher' | translate }} :&nbsp;</span><span class="font-medium">{{ e.publisher }}</span></div>
+          }
+          @if (e.published) {
+            <div><span class="text-base-content/50">{{ 'books_work.col_published' | translate }} :&nbsp;</span><span class="font-medium">{{ e.published }}</span></div>
+          }
+          @if (e.durationSeconds != null) {
+            <div><span class="text-base-content/50">{{ 'books_work.col_length' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ clock(e.durationSeconds) }}</span></div>
+          } @else if (e.pageCount != null) {
+            <div><span class="text-base-content/50">{{ 'books_work.col_pages' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ e.pageCount }}</span></div>
+          }
+          @if (e.narrators.length) {
+            <div class="col-span-full"><span class="text-base-content/50">{{ 'books_work.col_narrators' | translate }} :&nbsp;</span><span class="font-medium">{{ e.narrators.map((n) => n.name).join(', ') }}</span></div>
+          }
+          <div><span class="text-base-content/50">{{ 'books_work.col_file' | translate }} :&nbsp;</span><span class="font-medium">{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</span></div>
+        </div>
+        @if (canDeliver(e) || canOffline(e) || targets(e).length) {
+          <div class="pt-3 flex flex-wrap items-center gap-2">
             @if (canDeliver(e)) {
-              <button type="button" class="btn btn-xs btn-ghost" data-testid="deliver" (click)="deliver(e)">
+              <button type="button" class="btn btn-sm btn-outline" data-testid="deliver" (click)="deliver(e)">
+                @if (native) {
+                  <svg lucideShare2 class="h-4 w-4"></svg>
+                } @else {
+                  <svg lucideDownload class="h-4 w-4"></svg>
+                }
                 {{ (native ? 'books_work.share' : 'books_work.download') | translate }}
               </button>
             }
             @if (canOffline(e)) {
               @if (offlineTask(e); as t) {
                 @if (t.status === 'ready') {
-                  <button type="button" class="btn btn-xs btn-ghost" data-testid="offline" (click)="toggleOffline(e)">
+                  <button type="button" class="btn btn-sm btn-outline" data-testid="offline" (click)="toggleOffline(e)">
+                    <svg lucideTrash2 class="h-4 w-4"></svg>
                     {{ 'books_work.offline_remove' | translate }}
                   </button>
                 } @else if (t.status === 'failed') {
-                  <button type="button" class="btn btn-xs btn-ghost text-error" data-testid="offline" (click)="toggleOffline(e)">
+                  <button type="button" class="btn btn-sm btn-outline btn-error" data-testid="offline" (click)="toggleOffline(e)">
+                    <svg lucideRotateCw class="h-4 w-4"></svg>
                     {{ 'books_work.offline_retry' | translate }}
                   </button>
                 } @else {
-                  <span class="text-xs tabular-nums" data-testid="offline-state">{{ t.progress }}%</span>
+                  <span class="text-sm tabular-nums" data-testid="offline-state">{{ t.progress }}%</span>
                 }
               } @else {
-                <button type="button" class="btn btn-xs btn-ghost" data-testid="offline" (click)="toggleOffline(e)">
+                <button type="button" class="btn btn-sm btn-outline" data-testid="offline" (click)="toggleOffline(e)">
+                  <svg lucideHardDriveDownload class="h-4 w-4"></svg>
                   {{ 'books_work.offline_save' | translate }}
                 </button>
               }
@@ -63,7 +70,7 @@
             @if (targets(e); as list) {
               @if (list.length) {
                 <select
-                  class="select select-xs"
+                  class="select select-bordered select-sm w-auto"
                   data-testid="send-to"
                   [attr.aria-label]="'books_work.send_to' | translate"
                   (change)="send(e, $any($event.target).value); $any($event.target).value = ''"
@@ -75,9 +82,9 @@
                 </select>
               }
             }
-          </td>
-        </tr>
-      }
-    </tbody>
-  </table>
-</div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</app-detail-section>

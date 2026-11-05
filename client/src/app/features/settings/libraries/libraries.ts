@@ -1,5 +1,4 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
@@ -11,7 +10,7 @@ import { KIND_REGISTRY, MEDIA_KINDS } from '../../../core/media-kinds';
 
 @Component({
   selector: 'app-libraries-settings',
-  imports: [RouterLink, TranslatePipe, UpperCasePipe],
+  imports: [RouterLink, TranslatePipe],
   templateUrl: './libraries.html',
 })
 export class LibrariesSettingsComponent implements OnInit {

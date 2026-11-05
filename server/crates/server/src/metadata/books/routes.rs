@@ -31,7 +31,7 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::{Namespace, Namespaces},
-    media::{AUDIO_EXTS, kind::MediaKind},
+    media::{is_audio_format, kind::MediaKind},
     metadata::limiter::Priority,
 };
 use serde_json::{Map, Value, json};
@@ -123,10 +123,7 @@ fn edition_entry(p: Namespace, r: &Value) -> Option<Value> {
         .and_then(Value::as_i64)
         .filter(|n| *n > 0);
     let format = text(r, "format").map(|f| f.to_lowercase());
-    let audio = duration.is_some()
-        || format
-            .as_deref()
-            .is_some_and(|f| AUDIO_EXTS.iter().any(|e| e[1..] == *f));
+    let audio = duration.is_some() || format.as_deref().is_some_and(is_audio_format);
     let isbns = match r.get("isbn13") {
         Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
         _ => vec![],
@@ -198,6 +195,12 @@ pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
         _ => vec![],
     }
     .into();
+    if out["posterUrl"].is_null() {
+        // The work merge falls back to its editions' covers too (rule 8).
+        if let Some(cover) = editions.iter().find(|e| e["coverUrl"].is_string()) {
+            out["posterUrl"] = cover["coverUrl"].clone();
+        }
+    }
     out["published"] = opt(text(&record, "releaseDate"));
     out["language"] = opt(text(&record, "language"));
     out["editions"] = editions.into();

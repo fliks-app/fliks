@@ -6,7 +6,6 @@
 
 /* Only the two poster-morph halves join the flip below; the class (not `*`) keeps the card's badges and progress bar on their own animations. */
 app-media-card img,
-app-media-info-header img,
 app-detail-hero img,
 app-tmdb-preview img {
   view-transition-class: poster;
@@ -123,7 +122,6 @@ html.vt-poster-in nav.navbar,
 html.vt-poster-out nav.navbar {
   view-transition-name: vt-topbar;
 }
-html.vt-poster-in app-media-info-header [data-hero-lead],
 html.vt-poster-in app-detail-hero [data-hero-lead],
 html.vt-poster-in app-tmdb-preview [data-hero-lead],
 html.vt-poster-in app-party-page [data-hero-lead] {
@@ -136,7 +134,6 @@ img[data-hero-muted] {
 }
 
 /* A sliding page's hero and its stamped card are named so they stand still while the page moves under them. */
-html.vt-slide app-media-info-header img,
 html.vt-slide app-detail-hero img,
 html.vt-slide app-party-page img,
 html.vt-slide [data-poster-stamped] {
@@ -260,7 +257,6 @@ html.vt-player-close::view-transition-group(root) {
   z-index: 2;
 }
 /* Nothing pairs with the destination poster on close: keep it out of the capture so it paints with the page. */
-html.vt-player-close app-media-info-header img,
 html.vt-player-close app-detail-hero img,
 html.vt-player-close app-party-page img {
   view-transition-name: none !important;

@@ -30,7 +30,11 @@ export function editionLabel(e: BookEdition): string {
 export const offlinable = (e: BookEdition): boolean =>
   e.itemId != null && e.hasFile && e.fileIds.length > 0 && (e.family === 'audio' || ['epub', 'pdf'].includes(e.format?.toLowerCase() ?? ''));
 
-export function bookDownloadTarget(work: { mediaId: number; title: string; artist: string }, e: BookEdition): BookDownloadTarget {
+/** An edition with no cover of its own shows the work's poster. */
+export function bookDownloadTarget(
+  work: { mediaId: number; title: string; artist: string; posterUrl: string | null },
+  e: BookEdition,
+): BookDownloadTarget {
   return {
     mediaId: work.mediaId,
     itemId: e.itemId!,
@@ -38,8 +42,8 @@ export function bookDownloadTarget(work: { mediaId: number; title: string; artis
     format: e.format?.toLowerCase() ?? null,
     fileIds: e.fileIds,
     title: work.title,
-    posterUrl: e.coverUrl,
+    posterUrl: e.coverUrl ?? work.posterUrl,
     artist: work.artist,
-    coverUrl: e.coverUrl,
+    coverUrl: e.coverUrl ?? work.posterUrl,
   };
 }

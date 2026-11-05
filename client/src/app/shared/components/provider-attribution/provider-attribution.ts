@@ -7,7 +7,7 @@ import type { MediaProvider } from '../../../core/services/api/media.service';
   selector: 'app-provider-attribution',
   imports: [TranslatePipe],
   templateUrl: './provider-attribution.html',
-  host: { class: 'block' },
+  host: { class: 'block', '[class.hidden]': '!linked().length && !unofficial()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProviderAttributionComponent {

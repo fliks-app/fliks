@@ -67,6 +67,7 @@ export class ImportModalComponent {
   readonly importing = signal(false);
   readonly error = signal('');
   readonly loading = signal(false);
+  readonly loadFailed = signal(false);
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
@@ -100,6 +101,9 @@ export class ImportModalComponent {
       KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
+  /** The server refuses an import without a quality profile. */
+  protected readonly noQualityProfile = computed(() => this.selectedQualityProfileId() === null);
+
   async open(params: {
     title: string;
     mediaType: MediaType;
@@ -122,6 +126,7 @@ export class ImportModalComponent {
     if (KIND_REGISTRY[params.mediaType].hasSeasons) this.loadSeasons();
 
     this.loading.set(true);
+    this.loadFailed.set(false);
     try {
       const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
@@ -139,7 +144,7 @@ export class ImportModalComponent {
       this.selectedQualityProfileId.set(prefill.qp);
       this.selectedLanguageProfileId.set(prefill.lp);
     } catch {
-      /* ignore — selects will just be empty */
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }
@@ -205,6 +210,8 @@ export class ImportModalComponent {
   }
 
   async confirm() {
+    const qualityProfileId = this.selectedQualityProfileId();
+    if (qualityProfileId === null) return;
     this.importing.set(true);
     this.error.set('');
     try {
@@ -212,7 +219,7 @@ export class ImportModalComponent {
         type: this.mediaType(),
         externalId: this.externalId(),
         provider: this.provider(),
-        qualityProfileId: this.selectedQualityProfileId() ?? undefined,
+        qualityProfileId,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
         folderId: this.selectedFolderId() ?? undefined,

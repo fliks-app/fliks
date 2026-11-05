@@ -10,6 +10,7 @@
       "as": "user",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "x",
         "tmdbId": 2147483648
       },

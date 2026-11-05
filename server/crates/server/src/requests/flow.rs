@@ -562,7 +562,8 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if dto.media_type.has_seasons()
         && let Some((q, l)) = existing_series_profiles(&mut tx, &key, &keys).await?
     {
-        (dto.quality_profile_id, dto.language_profile_id) = (q, l);
+        dto.quality_profile_id = q.or(dto.quality_profile_id);
+        dto.language_profile_id = l.or(dto.language_profile_id);
     }
     let (quality, language) = (
         some_id(dto.quality_profile_id),

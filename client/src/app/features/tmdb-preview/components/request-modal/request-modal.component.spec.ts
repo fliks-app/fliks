@@ -19,7 +19,7 @@ const library = (id: number, folderIds: number[]): LibrarySummary => ({
   folders: folderIds.map((f) => ({ id: f, name: `f${f}` })),
 });
 
-function setup(libraries: LibrarySummary[]) {
+function setup(libraries: LibrarySummary[], qualityProfiles = [{ id: 7, name: 'HD' }]) {
   const sent: CreateRequestBody[] = [];
   TestBed.configureTestingModule({
     providers: [
@@ -41,6 +41,7 @@ function setup(libraries: LibrarySummary[]) {
   HTMLDialogElement.prototype.close = () => undefined;
   const fixture = TestBed.createComponent(RequestModalComponent);
   fixture.componentRef.setInput('libraries', libraries);
+  fixture.componentRef.setInput('qualityProfiles', qualityProfiles);
   fixture.detectChanges();
   fixture.componentInstance.open({ title: 'T', mediaType: 'movie', titleKey: { tmdbId: 1 } });
   return { cmp: fixture.componentInstance, sent };
@@ -61,5 +62,23 @@ describe('RequestModalComponent folder', () => {
     const { cmp, sent } = setup([library(1, [10])]);
     await cmp.confirm();
     expect(sent[0].folderId).toBeUndefined();
+  });
+
+  it('sends the first quality profile', () => {
+    const { cmp, sent } = setup([library(1, [10])]);
+    expect(cmp.qualityProfileId()).toBe(7);
+    expect(cmp.noQualityProfile()).toBe(false);
+    void cmp.confirm();
+    expect((sent[0] as { qualityProfileId?: number }).qualityProfileId).toBe(7);
+  });
+
+  it('refuses to submit without a quality profile', () => {
+    expect(setup([library(1, [10])], []).cmp.noQualityProfile()).toBe(true);
+  });
+
+  it('keeps the quality select open when the lock carries no profile', () => {
+    const { cmp } = setup([library(1, [10])]);
+    cmp.open({ title: 'T', mediaType: 'movie', titleKey: { tmdbId: 1 }, profilesLocked: true, lockedQualityProfileId: null });
+    expect([cmp.qualityLocked(), cmp.qualityProfileId()]).toEqual([false, 7]);
   });
 });

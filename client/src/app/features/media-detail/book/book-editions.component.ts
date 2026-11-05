@@ -1,6 +1,9 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { LucideBookOpen, LucideDownload, LucideHardDriveDownload, LucideHeadphones, LucideRotateCw, LucideShare2, LucideTrash2 } from '@lucide/angular';
+import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
+import { localizeLanguage } from '../../../core/utils/language.utils';
 import type { BookEdition } from '../../../core/services/api/books.models';
 import { EmailDevice, EmailDevicesApiService } from '../../../core/services/api/email-devices-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -13,7 +16,17 @@ import { formatTime } from '../../../core/utils/player.utils';
 
 @Component({
   selector: 'app-book-editions',
-  imports: [TranslatePipe],
+  imports: [
+    TranslatePipe,
+    DetailSectionComponent,
+    LucideBookOpen,
+    LucideDownload,
+    LucideHardDriveDownload,
+    LucideHeadphones,
+    LucideRotateCw,
+    LucideShare2,
+    LucideTrash2,
+  ],
   templateUrl: './book-editions.component.html',
   host: { class: 'block' },
 })
@@ -30,9 +43,11 @@ export class BookEditionsComponent implements OnInit {
   readonly mediaId = input.required<number>();
   readonly title = input('');
   readonly artist = input('');
+  readonly posterUrl = input<string | null>(null);
   readonly devices = signal<EmailDevice[]>([]);
 
   protected readonly clock = formatTime;
+  protected readonly language = (code: string) => localizeLanguage(code, this.translate);
   protected readonly native = Capacitor.isNativePlatform();
   protected readonly canOffline = (e: BookEdition) => !this.device.isTv() && offlinable(e);
   protected readonly offlineTask = (e: BookEdition) => {
@@ -86,7 +101,7 @@ export class BookEditionsComponent implements OnInit {
       else if (task) await this.offline.deleteDownload(task);
       else {
         await this.offline.createBookDownload(
-          bookDownloadTarget({ mediaId: this.mediaId(), title: this.title(), artist: this.artist() }, e),
+          bookDownloadTarget({ mediaId: this.mediaId(), title: this.title(), artist: this.artist(), posterUrl: this.posterUrl() }, e),
         );
       }
     } catch (err) {

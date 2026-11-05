@@ -59,7 +59,7 @@ import {
   type AnnotationColour,
 } from './annotations-api.service';
 import { bookProgression } from './book-progress';
-import { destroyNavigator, sandboxContentFrames, selectorOf } from './frame-hardening';
+import { destroyNavigator, provideFrameSelectors, selectorOf } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
 import {
   COLOUR_HEX,
@@ -213,7 +213,7 @@ export class ReaderComponent implements OnDestroy {
   private navigator: EpubNavigator | null = null;
   private publication: Publication | null = null;
   private positions: Locator[] = [];
-  private stopSandbox: (() => void) | null = null;
+  private stopSelectors: (() => void) | null = null;
   private destroyed = false;
   private searchRun = 0;
   private readonly chapterText = new Map<string, string>();
@@ -393,7 +393,7 @@ export class ReaderComponent implements OnDestroy {
     this.stopResize?.();
     this.phoneQuery.removeEventListener('change', this.onPhoneChange);
     this.closePanel();
-    this.stopSandbox?.();
+    this.stopSelectors?.();
     void this.progress.flush();
     clearTimeout(this.flashTimer);
     if (this.navigator) void destroyNavigator(this.navigator, this.pageHost().nativeElement);
@@ -441,7 +441,7 @@ export class ReaderComponent implements OnDestroy {
       const resizeObserver = new ResizeObserver(watchSize);
       resizeObserver.observe(container);
       this.stopResize = () => resizeObserver.disconnect();
-      this.stopSandbox = sandboxContentFrames(container);
+      this.stopSelectors = provideFrameSelectors(container);
       const prefs = toReaderPreferences(this.settings(), this.colors(), this.compact());
       this.navigator = new EpubNavigator(
         container,

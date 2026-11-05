@@ -265,6 +265,7 @@ async fn a_user_request_and_a_plugin_create_make_one_media() {
     sqlx::raw_sql(
         r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
 INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
+           INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
            INSERT INTO auto_approval_rules (name, enabled, criteria)
              VALUES ('all', true, '{"mediaType":"movie"}');
            INSERT INTO roles (id, name, permissions)
@@ -282,7 +283,8 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
             .header("content-type", "application/json")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::from(
-                json!({"mediaType": "movie", "tmdbId": 603, "title": "Movie 603"}).to_string(),
+                json!({"mediaType": "movie", "tmdbId": 603, "title": "Movie 603", "qualityProfileId": 1})
+                    .to_string(),
             ))
             .unwrap();
         app.oneshot(req).await.unwrap().status().as_u16()

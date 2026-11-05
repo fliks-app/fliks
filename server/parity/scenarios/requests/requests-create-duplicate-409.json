@@ -10,6 +10,7 @@
       "as": "user",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "Again",
         "tmdbId": 9001
       },
@@ -28,6 +29,7 @@
       "as": "admin",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "Available",
         "tmdbId": 1001
       },

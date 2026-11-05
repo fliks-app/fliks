@@ -1211,12 +1211,18 @@ async fn write_routes_apply_the_library_acl(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 400);
+    let profile: i32 = sqlx::query_scalar(
+        r#"INSERT INTO quality_profiles (name, cutoff, items) VALUES ('P', 18, '[]') RETURNING id"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
     let (s, b) = call(
         &c,
         "POST",
         "/api/media/import/tmdb",
         &c.admin,
-        json!({"type": "movie", "tmdbId": 5}),
+        json!({"type": "movie", "tmdbId": 5, "qualityProfileId": profile}),
     )
     .await;
     assert_eq!(

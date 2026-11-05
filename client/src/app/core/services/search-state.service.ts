@@ -116,7 +116,7 @@ export class SearchStateService {
   });
 
   /** Sorts only on a rating/recency pick (default keeps provider relevance); genre matches by TMDB id with a name fallback. */
-  private applyPanelFilters<T extends SearchHit>(rows: T[]): T[] {
+  applyPanelFilters<T extends SearchHit>(rows: T[]): T[] {
     const ids = [...this.discoverSelectedGenres()];
     const names = this.selectedGenreNames();
     const voteMin = this.discoverVoteMin();

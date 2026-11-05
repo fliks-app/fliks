@@ -1,52 +1,311 @@
-@if (!desktopLayout()) {
-  <!-- The poster shares the backdrop's grid cell, so it sits inside the hero without a negative offset. -->
-  <div class="grid">
-    <app-mobile-fanart-hero class="block [grid-area:1/1]" [fanartUrl]="posterUrl()" [blur]="true" />
-    <app-hero-poster class="[grid-area:1/1] self-end justify-self-center relative z-20" [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
-  </div>
-}
-
-<div
-  class="relative z-20 has-[.dropdown-open]:z-50 flex gap-4"
-  [attr.data-hero-lead]="desktopLayout() ? null : ''"
-  [class.mt-4]="!desktopLayout()"
-  [class.flex-col]="!desktopLayout()"
-  [class.items-center]="!desktopLayout()"
-  [class.lg:gap-10]="desktopLayout()"
-  [class.gap-6]="desktopLayout()"
-  [style.padding-top]="desktopLayout() ? navbar.heroPaddingTop() : null"
+@let desktop = desktopLayout();
+<app-hero-base
+  [title]="title()"
+  [titleLink]="episodeLabel() ? backRoute() : null"
+  [subtitle]="episodeLabel()"
+  [mediaType]="mediaType()"
+  [posterUrl]="posterUrl()"
+  [fanartUrl]="fanartUrl()"
+  [posterMode]="posterMode()"
+  [spoilerImage]="spoilerImage()"
+  [viewTransitionName]="viewTransitionName()"
+  [rating]="rating()"
+  [metaParts]="metaParts()"
+  [chips]="chips()"
+  [overview]="overview()"
+  [overviewMasked]="overviewMasked()"
+  [tightActions]="!!resumeEpisodeLabel()"
 >
-  @if (desktopLayout()) {
-    <app-hero-poster [kind]="mediaType()" [url]="posterUrl()" [alt]="title()" [viewTransitionName]="viewTransitionName()" />
-  }
+  <ng-container ngProjectAs="[heroMeta]"><ng-content select="[heroMeta]" /></ng-container>
 
-  <div class="min-w-0 self-stretch flex-1 flex flex-col gap-2 md:pt-2">
-    <h1 class="text-3xl md:text-2xl lg:text-4xl font-bold tracking-tight">{{ title() }}</h1>
-    <ng-content select="[heroMeta]" />
-
-    <div appTvRow class="flex flex-wrap items-center gap-2 mt-4">
-      <ng-content select="[heroActions]" />
-      <button type="button" class="btn btn-ghost btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="liked()" (click)="toggleLike()">
-        <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
-      </button>
-      <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist()">
-        <svg lucideListPlus class="h-4 w-4"></svg>
-      </button>
-      <button #more type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openMenu(more)">
-        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-      </button>
-    </div>
-
-    <app-hero-progress class="block mt-2 max-w-md" [percent]="progressPercent()" [label]="progressLabel()" />
-
-    @if (overview(); as text) {
-      <app-synopsis class="mt-2" [text]="text" textClass="text-base-content/80 leading-relaxed" />
+  <ng-container ngProjectAs="[heroTags]">
+    <!-- Genres are navigation, so they stay out of the folded details panel. -->
+    @if (genres().length) {
+      <div appTvRow class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
+        @for (genre of genres(); track genre; let last = $last) {
+          <span><button type="button" class="cursor-pointer hover:underline" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
+        }
+      </div>
     }
 
-    <ng-content />
-  </div>
-</div>
+    <ng-container *ngTemplateOutlet="streamInfoBlock"></ng-container>
 
-@if (media(); as m) {
-  <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
-}
+    <!-- Quality / language profiles and tags. -->
+    @if (desktop) {
+      @if (qualityProfileName() || languageProfileName() || tags().length) {
+        <div class="hidden lg:flex flex-wrap gap-x-8 gap-y-2 mt-4">
+          @if (qualityProfileName()) {
+            <div class="flex flex-col">
+              <span class="text-base-content/40 text-sm">{{ 'media_detail.quality_profile_label' | translate }}</span>
+              <span>{{ qualityProfileName() }}</span>
+            </div>
+          }
+          @if (languageProfileName()) {
+            <div class="flex flex-col">
+              <span class="text-base-content/40 text-sm">{{ 'media_detail.language_profile_label' | translate }}</span>
+              <span>{{ languageProfileName() }}</span>
+            </div>
+          }
+          @if (tags().length) {
+            <div class="flex flex-col">
+              <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
+              <span>{{ tags().join(', ') }}</span>
+            </div>
+          }
+        </div>
+      }
+    } @else if (tags().length) {
+      <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
+        <div class="flex flex-col">
+          <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
+          <span>{{ tags().join(', ') }}</span>
+        </div>
+      </div>
+    }
+
+    @if (resumeEpisodeLabel()) {
+      <p class="mt-4 mb-4 font-semibold">{{ resumeEpisodeLabel() }}</p>
+    }
+
+  </ng-container>
+
+  <ng-container ngProjectAs="[heroActions]">
+      <ng-content select="[heroActions]" />
+      @if (selectedFileId() || resumeMediaFileId()) {
+        <button class="btn btn-primary" [class]="desktop ? 'gap-1' : 'flex-1 gap-2'" [attr.autofocus]="desktop ? '' : null" (click)="play(false)">
+          <svg lucidePlay [class]="desktop ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor"></svg>
+          @if (resumeLabel()) {
+            {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
+          } @else {
+            {{ 'player.play' | translate }}
+          }
+        </button>
+        @if (resumeLabel()) {
+          <button class="btn btn-ghost" [class]="desktop ? 'gap-1' : 'gap-2'" (click)="play(true)">
+            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            {{ 'player.play_from_start' | translate }}
+          </button>
+        }
+      }
+      @if (desktop) {
+        @if (canToggleWatched()) {
+          <button type="button" class="btn btn-outline btn-circle" [attr.aria-label]="'media_info.watched' | translate" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
+            <svg lucideCheck class="h-4 w-4"></svg>
+          </button>
+        }
+        @if (selectedFileId() || resumeMediaFileId()) {
+          @if ((!kinds[mediaType()].hasSeasons || episodeId()) && !tv.isTv()) {
+            @if (download(); as d) {
+              @if (d.status === 'ready') {
+                <button type="button" class="btn btn-ghost btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
+                  <svg lucideDownload class="h-5 w-5"></svg>
+                </button>
+              } @else {
+                <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
+                  <div class="radial-progress text-info text-[0.6rem] font-semibold shadow-[inset_0_0_0_3px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 2rem; --thickness: 3px" role="progressbar" [attr.aria-valuenow]="d.progress">{{ d.progress }}</div>
+                </button>
+              }
+            } @else {
+              <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'downloads.download' | translate" (click)="openDownload.emit()">
+                <svg lucideDownload class="h-4 w-4"></svg>
+              </button>
+            }
+          }
+        }
+        @if (badge(); as b) {
+          <ng-container *ngTemplateOutlet="downloadBadge; context: { badge: b }"></ng-container>
+        }
+        <button type="button" class="btn btn-ghost btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="liked()" (click)="likeToggled.emit()">
+          <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist()">
+          <svg lucideListPlus class="h-4 w-4"></svg>
+        </button>
+        <button #moreDesktop type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openActionsMenu(moreDesktop)">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        </button>
+      }
+  </ng-container>
+
+  <ng-container ngProjectAs="[heroStatus]">
+    @if (showBar()) {
+      <app-hero-progress class="block max-w-md" [class]="desktop ? 'mt-5' : 'mt-4'" [percent]="barPercent()" [label]="barLabel()" [centered]="!desktop" />
+    }
+
+    <!-- OCR extraction in progress -->
+    @if (ocrLanguages().length) {
+      <div class="mt-3 flex items-center gap-2 text-sm text-base-content/60" [class.justify-center]="!desktop">
+        <span class="loading loading-spinner loading-xs"></span>
+        <span>{{ 'media_detail.ocr_in_progress' | translate:{ langs: ocrLanguages().join(', ') } }}</span>
+      </div>
+    }
+
+    <!-- Translation in progress -->
+    @if (translations().length) {
+      <div class="mt-3 flex flex-col gap-1 text-sm text-base-content/60" [class.items-center]="!desktop">
+        @for (t of translations(); track t.language) {
+          <div class="flex items-center gap-2">
+            <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: t.language } }}</span>
+            @if (t.percent !== null) {
+              <progress class="progress progress-primary w-40" [value]="t.percent" max="100"></progress>
+              <span class="tabular-nums">{{ t.percent }}%</span>
+            } @else {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    @if (!desktop) {
+      <!-- A download in flight is the headline state, so it gets its own full-width bar rather than a chip crowding the action row on phones. -->
+      @if (badge(); as b) {
+        <div class="flex mt-4">
+          <ng-container *ngTemplateOutlet="downloadBadge; context: { $implicit: 'xl', badge: b }"></ng-container>
+        </div>
+      }
+
+      <div class="flex items-center justify-around gap-2 mt-4">
+        @if (canToggleWatched()) {
+          <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
+            <svg lucideCheck class="h-5 w-5"></svg>
+            {{ 'media_info.watched' | translate }}
+          </button>
+        }
+        @if (selectedFileId() && (!kinds[mediaType()].hasSeasons || episodeId()) && !tv.isTv()) {
+          @if (download(); as d) {
+            @if (d.status === 'ready') {
+              <button class="flex flex-col items-center gap-1 text-sm text-success" (click)="openDownload.emit()">
+                <svg lucideCircleCheck class="h-5 w-5"></svg>
+                {{ 'downloads.downloaded' | translate }}
+              </button>
+            } @else {
+              <button class="flex flex-col items-center gap-1 text-sm" [attr.aria-label]="'downloads.downloading' | translate" (click)="openDownload.emit()">
+                <div class="radial-progress text-info shadow-[inset_0_0_0_2px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+                {{ d.progress }} %
+              </button>
+            }
+          } @else {
+            <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+              <svg lucideDownload class="h-5 w-5"></svg>
+              {{ 'downloads.download' | translate }}
+            </button>
+          }
+        }
+        <!-- Like is a taste signal, not a playback action: available with or without a local file. -->
+        <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" [class.text-error]="liked()" [attr.aria-pressed]="liked()" (click)="likeToggled.emit()">
+          <svg lucideHeart class="h-5 w-5" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+          {{ 'likes.like' | translate }}
+        </button>
+        <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="addToPlaylist()">
+          <svg lucideListPlus class="h-5 w-5"></svg>
+          {{ 'playlists.add_to_playlist' | translate }}
+        </button>
+        <button #moreMobile type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="openActionsMenu(moreMobile)">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          {{ 'common.more' | translate }}
+        </button>
+      </div>
+    }
+
+  </ng-container>
+
+  <ng-content />
+</app-hero-base>
+
+<!-- Download status chip shared by the mobile row and desktop actions; clickable (opens the detail modal) only while a grab is in flight. -->
+<ng-template #downloadBadge let-size let-b="badge">
+  @if (b.clickable) {
+    <button
+      type="button"
+      [class]="size === 'xl' ? 'flex-1 cursor-pointer' : 'btn btn-ghost btn-sm px-1.5'"
+      [title]="'media_detail.download_detail_title' | translate"
+      (click)="openDownloadDetail.emit()"
+    >
+      <app-progress-badge
+        [label]="badgeLabel(b)"
+        [percent]="b.percent"
+        [busy]="b.busy"
+        [badgeClass]="b.badgeClass"
+        [size]="size ?? 'sm'"
+      />
+    </button>
+  } @else {
+    <app-progress-badge
+      [class.flex-1]="size === 'xl'"
+      [label]="badgeLabel(b)"
+      [percent]="b.percent"
+      [busy]="b.busy"
+      [badgeClass]="b.badgeClass"
+      [size]="size ?? 'sm'"
+    />
+  }
+</ng-template>
+
+<!-- Video / Audio / Subtitles shared by mobile and desktop (hidden on series overview). -->
+<ng-template #streamInfoBlock>
+  @if (selectedFileId() && (!kinds[mediaType()].hasSeasons || episodeId())) {
+    <!-- min-h reserves the tallest child (a `select-sm`): the subtitle dropdown
+         arrives after the video/audio labels, which are plain text. -->
+    <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">
+      <!-- Cells shrink and values wrap: a long track label would exceed the phone, and this page can't clip overflow (`main` stays visible-x for the fanart). -->
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.video' | translate) } }}</span>
+        @if (multipleFiles()) {
+          <select class="select select-bordered select-sm w-fit" [appTvSelect]="'media_info.video' | translate" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+            @for (f of files(); track f.id) {
+              <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
+            }
+          </select>
+        } @else if (videoLabel()) {
+          <span class="min-w-0 break-words">{{ videoLabel() }}</span>
+        }
+      </div>
+      @if (audioTracks().length) {
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.audio' | translate) } }}</span>
+          @if (audioTracks().length === 1) {
+            <span class="min-w-0 break-words">{{ audioTracks()[0].label }}</span>
+          } @else {
+            <app-dropdown-menu placement="bottom-end" [heading]="'media_info.audio' | translate">
+              <button trigger type="button" class="select select-bordered select-sm w-fit max-w-full truncate text-left cursor-pointer transition-colors hover:bg-base-content/10">
+                {{ selectedAudio()?.head || selectedAudio()?.label }}
+              </button>
+              @for (t of audioTracks(); track t.index) {
+                <app-dropdown-option
+                  [head]="t.head || t.label"
+                  [sub]="t.sub"
+                  [selected]="t.index === selectedAudioIndex()"
+                  (click)="onAudioChange(t.index)"
+                />
+              }
+            </app-dropdown-menu>
+          }
+        </div>
+      }
+      @if (subtitles().length) {
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.subtitles' | translate) } }}</span>
+          <app-dropdown-menu placement="bottom-end" [heading]="'media_info.subtitles' | translate">
+            <button trigger type="button" class="select select-bordered select-sm w-fit max-w-full truncate text-left cursor-pointer transition-colors hover:bg-base-content/10">
+              {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
+            </button>
+            <app-dropdown-option
+              [head]="'player.off' | translate"
+              [selected]="!selectedSubtitleId()"
+              (click)="onSubtitleChange(null)"
+            />
+            @for (s of sortedSubtitles(); track s.id) {
+              <app-dropdown-option
+                [head]="s.head || s.label"
+                [sub]="s.sub"
+                [selected]="s.id === selectedSubtitleId()"
+                (click)="onSubtitleChange(s.id)"
+              />
+            }
+          </app-dropdown-menu>
+        </div>
+      }
+    </div>
+  }
+</ng-template>

@@ -1,6 +1,9 @@
 -- Parity seed delta "providers" (docs/spec/media-write.md Vectors/parity), applied on top of base.sql:
 -- provider-backed import, refresh, identify and season overrides against external/stub.py fixtures.
 -- base.sql predates the persons search vector migration; Rust relies on its trigger.
+INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
+ (1, '2026-01-01', '2026-01-01', 'Parity HD', 18, '[]');
+SELECT setval('quality_profiles_id_seq', 1);
 CREATE OR REPLACE FUNCTION persons_search_vector_update() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   NEW."searchVector" := to_tsvector('simple', NEW.name);

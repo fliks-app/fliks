@@ -1,56 +1,1016 @@
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { describe, expect, it, vi } from 'vitest';
-import { AuthService } from '../../../core/services/auth.service';
-import { MediaLibraryDialogComponent } from '../media-library-dialog/media-library-dialog';
-import { By } from '@angular/platform-browser';
+import {
+  CardActionsService,
+  type CardAction,
+} from '../../../core/services/card-actions.service';
+import { DetailHeroComponent, DETAIL_HERO_HOST } from './detail-hero';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import type { Media } from '../../../core/services/api/media.service';
-import { CardActionsService } from '../../../core/services/card-actions.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { MediaAdminService } from '../../../core/services/media-admin.service';
+import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
+import { RecommendService } from '../../../core/services/recommend.service';
+import { PartyApiService } from '../../../core/services/api/party-api.service';
+import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
+import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
+import { NavbarService } from '../../../core/services/navbar.service';
+import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import { TrackManagerService } from '../../../core/services/track-manager.service';
+import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import type { SlotId, UiContribution } from '@fliks/plugin-ui';
+import { WantsStore } from '../../../core/acquisition/acquisition';
 import { ReleaseGrabController } from '../../../features/media-detail/release-grab-controller';
-import { DetailHeroComponent, MEDIA_SAVED_HOST } from './detail-hero';
+import type { Want } from '../../../core/services/api/wants-api.service';
 
-describe('DetailHeroComponent', () => {
-  it('pairs the cover with its card and offers like, playlist and more', () => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
-        provideRouter([]),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
-        { provide: AuthService, useValue: { user: () => null, hasPermission: () => false, sharingDisabled: () => false } },
-      ],
-    });
-    const fixture = TestBed.createComponent(DetailHeroComponent);
-    fixture.componentRef.setInput('title', 'Title');
-    fixture.componentRef.setInput('mediaId', 9);
-    fixture.componentRef.setInput('mediaType', 'book');
-    fixture.componentRef.setInput('posterUrl', '/p.jpg');
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('img')!.getAttribute('style')).toContain('media-poster-9');
-    expect(el.querySelectorAll('button').length).toBeGreaterThanOrEqual(3);
+const VIDEO_WANT = { id: 1, family: 'video', language: null, qualityProfileId: 4, folderId: null, satisfied: false } as Want;
+
+/**
+ * Permission-matrix + characterisation test for the `media.actions` kebab
+ * menu. `when` is presentation only: every action behind these items stays
+ * CASL-guarded server-side, so a bypassed predicate here is a cosmetic bug,
+ * never an authorization one - but a WRONG one still offers a destructive
+ * action to the wrong viewer's eyes, which is what this file exists to catch.
+ */
+
+// ── Role model: mirrors server/crates/domain/src/acl.rs ──
+
+interface Role {
+  isAdmin: boolean;
+  permissions: string[];
+}
+
+function hasPerm(role: Role, perm: string): boolean {
+  return role.isAdmin || role.permissions.includes(perm);
+}
+
+const OWNER: Role = { isAdmin: true, permissions: [] };
+const READER: Role = { isAdmin: false, permissions: ['media.read'] };
+const REQUESTER: Role = { isAdmin: false, permissions: ['media.read', 'requests.create'] };
+const DELETER: Role = { isAdmin: false, permissions: ['media.delete'] };
+
+/** What the shell's request flow hands the hero: a requester without delete rights and no pending deletion request. */
+function canRequestDeletion(role: Role, pending: boolean): boolean {
+  return hasPerm(role, 'requests.create') && !hasPerm(role, 'media.delete') && !pending;
+}
+
+const noop = () => {};
+/** The menu handlers the movie and series pages hand the hero for the whole title. */
+const TITLE_ACTIONS = {
+  'media.identify': noop,
+  'media.refresh-metadata': noop,
+  'media.analyze': noop,
+  'media.edit-subtitles': noop,
+  'media.open-tracking': noop,
+  'media.request': noop,
+  'media.toggle-monitored': noop,
+  'media.edit-profiles': noop,
+  'media.edit-library': noop,
+  'media.delete': noop,
+  'media.request-deletion': noop,
+  'media.download-series': noop,
+};
+/** The series page leaves the title-wide entries out of an episode's menu. */
+const EPISODE_ACTIONS = {
+  'media.identify': noop,
+  'media.refresh-metadata': noop,
+  'media.analyze': noop,
+  'media.edit-subtitles': noop,
+  'media.open-tracking': noop,
+  'media.request': noop,
+  'media.toggle-monitored': noop,
+};
+
+// ── Fixture / rendering plumbing ──
+
+interface MediaFixture {
+  mediaType: 'movie' | 'series';
+  episodeId?: number;
+  selectedFileId: number | null;
+  monitored: boolean;
+  qualityProfileName: string | null;
+  userHasOpenWholeRequest?: boolean;
+  sharingDisabled?: boolean;
+  isTv?: boolean;
+  watched?: boolean;
+  /** The grab-best of this base is in flight. */
+  grabBusy?: boolean;
+  releasesLoading?: boolean;
+  grabs?: Partial<ReleaseGrabController>;
+  monitoredLoading?: boolean;
+  deleteLoading?: boolean;
+  registry?: Partial<Record<SlotId, UiContribution[]>>;
+  /** The episode page of a series: its menu carries no title-wide entries, and no deletion request. */
+  episodeInstance?: boolean;
+  /** Playback-state rows keyed by episodeId (0 = media-level), served to the
+   *  header's `getPlaybackState` stub. Absent key → no row, like the API. */
+  files?: { id: number; streamInfo?: unknown }[];
+  download?: { status: 'ready' | 'downloading'; progress: number } | null;
+  play?: (ctx: unknown, fromStart: boolean) => Promise<void>;
+  remembered?: string;
+  subtitles?: { id: string; label: string; language: string; languageTag?: string }[];
+  playbackStates?: Record<number, { positionSeconds: number; durationSeconds: number; completed: boolean; mediaFileId: number } | undefined>;
+}
+
+async function createFixture(
+  role: Role,
+  media: MediaFixture,
+  opts: { deleteRequestPending?: boolean } = {},
+): Promise<ComponentFixture<DetailHeroComponent>> {
+  const watched = media.watched ?? false;
+
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([]),
+      provideTranslateService({
+        lang: 'en',
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+      }),
+      {
+        provide: AuthService,
+        useValue: {
+          hasPermission: (p: string) => hasPerm(role, p),
+          sharingDisabled: () => !!media.sharingDisabled,
+          user: () => null,
+        },
+      },
+      { provide: TvService, useValue: { isTv: () => !!media.isTv } },
+      { provide: AutoDownloadService, useValue: { enabled: false, seriesKeep: () => null, setSeriesKeep: () => {} } },
+      {
+        provide: DeviceService,
+        useValue: {
+          isDesktop: () => true,
+          isTablet: () => false,
+          isPhone: () => false,
+          isTv: () => !!media.isTv,
+          isTouch: () => false,
+        },
+      },
+      {
+        provide: NavbarService,
+        useValue: {
+          canGoBack: () => false,
+          navbarTransparent: () => false,
+          heroLogoUrl: () => null,
+          heroTitle: () => '',
+          isHeroPage: () => false,
+          heroPaddingTop: () => null,
+          showBackButton: () => false,
+          mobileNavTitle: () => '',
+          mobileNavbarVisible: () => true,
+          effectiveSidebarPinned: () => false,
+          sidebarPinned: () => false,
+          sidebarDocked: () => false,
+          toggleSidebarPinned: () => {},
+          scrollAtTop: { set: () => {} },
+          setPageTitle: () => {},
+          resetNavHistory: () => {},
+          goBack: () => {},
+          lastWasBack: () => false,
+        },
+      },
+      {
+        provide: PlayerSettingsService,
+        useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
+      },
+      { provide: MediaAdminService, useValue: {} },
+      { provide: AddToPlaylistService, useValue: { open: vi.fn() } },
+      { provide: RecommendService, useValue: { open: vi.fn() } },
+      { provide: PartyApiService, useValue: { supported: () => true, canCreate: () => true } },
+      { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
+      { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
+      {
+        provide: PlayableMediaService,
+        useValue: { loadWatchedState: () => Promise.resolve(watched), play: media.play ?? (async () => {}) },
+      },
+      {
+        provide: StreamingApiService,
+        useValue: {
+          getPlaybackState: (_mediaId: number, episodeId?: number) =>
+            Promise.resolve(media.playbackStates?.[episodeId ?? 0] ?? null),
+        },
+      },
+      {
+        provide: PluginUiRegistryService,
+        useValue: { contributionsFor: (slot: SlotId) => media.registry?.[slot] ?? [] },
+      },
+      {
+        provide: WantsStore,
+        useValue: { load: async () => {}, wantsOf: () => (media.qualityProfileName ? [VIDEO_WANT] : []) },
+      },
+      {
+        provide: ReleaseGrabController,
+        useValue: {
+          search: async () => {},
+          grabBest: async () => {},
+          isBestBusy: () => !!media.grabBusy,
+          isSearching: () => !!media.releasesLoading,
+          grabBusy: () => null,
+          ...media.grabs,
+        },
+      },
+    ],
   });
 
-  function hero(mediaType: string, extra: object[] = [], hasPerm = true) {
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
-        provideRouter([]),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
-        { provide: AuthService, useValue: { user: () => null, hasPermission: () => hasPerm, sharingDisabled: () => false } },
-        ...extra,
-      ],
+  const fixture = TestBed.createComponent(DetailHeroComponent);
+  fixture.componentRef.setInput('title', 'Test title');
+  fixture.componentRef.setInput('mediaId', 1);
+  fixture.componentRef.setInput('mediaType', media.mediaType);
+  fixture.componentRef.setInput('episodeId', media.episodeId);
+  fixture.componentRef.setInput('selectedFileId', media.selectedFileId);
+  if (media.files) fixture.componentRef.setInput('files', media.files);
+  if (media.download) fixture.componentRef.setInput('download', media.download);
+  if (media.subtitles) fixture.componentRef.setInput('subtitles', media.subtitles);
+  fixture.componentRef.setInput('monitored', media.monitored);
+  fixture.componentRef.setInput('qualityProfileName', media.qualityProfileName);
+  // Series-root watched state comes from `seriesFullyWatched`, not the playback-state
+  // fetch - the component reads it directly when there's no episode context.
+  fixture.componentRef.setInput('seriesFullyWatched', watched);
+  fixture.componentRef.setInput('actions', media.episodeInstance ? EPISODE_ACTIONS : TITLE_ACTIONS);
+  if (!media.episodeInstance) {
+    fixture.componentRef.setInput('canRequestDeletion', canRequestDeletion(role, opts.deleteRequestPending ?? false));
+  }
+  fixture.componentRef.setInput('userHasOpenWholeRequest', !!media.userHasOpenWholeRequest);
+  fixture.componentRef.setInput('monitoredLoading', !!media.monitoredLoading);
+  fixture.componentRef.setInput('deleteLoading', !!media.deleteLoading);
+
+  fixture.detectChanges();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
+}
+
+interface CapturedItem {
+  label: string;
+  icon: string | null;
+  danger: boolean;
+  disabled: boolean;
+}
+
+function readItem(el: Element): CapturedItem {
+  const svg = el.querySelector('svg');
+  const icon = svg
+    ? (Array.from(svg.attributes).map((a) => a.name).find((n) => n.startsWith('lucide')) ?? null)
+    : null;
+  const labelHost = el.querySelector(':scope > span:not(.badge)') ?? el;
+  return {
+    label: (labelHost.textContent ?? '').trim(),
+    icon,
+    danger: el.classList.contains('text-error'),
+    disabled: (el as HTMLButtonElement).disabled === true,
+  };
+}
+
+/**
+ * The rows the header hands to the shared card actions panel. The header no
+ * longer renders the menu itself - it registers the actions and the globally
+ * mounted panel draws them - so the assertions read the registry, which is the
+ * header's actual output.
+ */
+function menuActions(fixture: ComponentFixture<DetailHeroComponent>): CardAction[] {
+  fixture.componentInstance.openActionsMenu(document.createElement('button'));
+  return TestBed.inject(CardActionsService).actions() ?? [];
+}
+
+/** Submenu rows flattened away: these assertions are about which actions a role
+ *  can reach and under what gate, not about how they are grouped. The grouping
+ *  has its own test. */
+function flatActions(fixture: ComponentFixture<DetailHeroComponent>): CardAction[] {
+  return menuActions(fixture).flatMap((a) => a.children ?? [a]);
+}
+
+function menuItems(fixture: ComponentFixture<DetailHeroComponent>): CapturedItem[] {
+  return flatActions(fixture).map((a) => ({
+    label: a.labelKey ?? a.label ?? '',
+    icon: a.icon ?? null,
+    danger: a.tone === 'danger',
+    disabled: a.disabled === true,
+  }));
+}
+
+function labels(fixture: ComponentFixture<DetailHeroComponent>): string[] {
+  return menuItems(fixture).map((i) => i.label);
+}
+
+// ── The permission matrix ──
+//
+// Every row lists the FULL expected item set for that role - not just
+// whether the destructive ones are absent. Baseline computed by hand from
+// the pre-refactor `media-info-header.html` (lines 504-599), independently
+// of whatever the registry refactor produces, so it doubles as the
+// pre-refactor-vs-post-refactor regression check the brief asks for.
+
+const MOVIE: Omit<MediaFixture, 'mediaType'> = {
+  selectedFileId: null,
+  monitored: true,
+  qualityProfileName: 'HD-1080p',
+};
+const SERIES: Omit<MediaFixture, 'mediaType'> = {
+  selectedFileId: null,
+  monitored: true,
+  qualityProfileName: 'HD-1080p',
+};
+
+describe('DetailHeroComponent - media.actions permission matrix', () => {
+  it('owner (isAdmin): movie root', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
+      'media_detail.edit_subtitles',
+      'media_detail.identify',
+      'media_detail.refresh_metadata',
+      'tracking.menu_item',
+      'media_detail.analyze',
+      'media_detail.edit_profiles',
+      'media_detail.edit_library',
+      'media_detail.unmonitor',
+      'media_detail.delete_from_library',
+    ]);
+  });
+
+  it('owner (isAdmin): series root', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'series', ...SERIES });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_detail.mark_series_watched',
+      'media_detail.identify',
+      'media_detail.refresh_metadata',
+      'tracking.menu_item',
+      'media_detail.analyze',
+      'media_detail.edit_profiles',
+      'media_detail.edit_library',
+      'media_detail.unmonitor',
+      'media_detail.delete_from_library',
+    ]);
+  });
+
+  it('media.read only: movie root', async () => {
+    const fixture = await createFixture(READER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
+      'media_detail.edit_subtitles',
+      'tracking.menu_item',
+    ]);
+  });
+
+  it('media.read only: series root', async () => {
+    const fixture = await createFixture(READER, { mediaType: 'series', ...SERIES });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_detail.mark_series_watched',
+      'tracking.menu_item',
+    ]);
+  });
+
+  it('media.read + requests.create: movie root', async () => {
+    const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
+      'media_detail.request_media',
+      'media_detail.edit_subtitles',
+      'tracking.menu_item',
+      'media_detail.request_deletion',
+    ]);
+  });
+
+  it('media.read + requests.create: series root', async () => {
+    const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_detail.mark_series_watched',
+      'media_detail.request_media',
+      'tracking.menu_item',
+      'media_detail.request_deletion',
+    ]);
+  });
+
+  it('media.delete: movie root', async () => {
+    const fixture = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
+      'media_detail.edit_subtitles',
+      'tracking.menu_item',
+      'media_detail.delete_from_library',
+    ]);
+  });
+
+  it('media.delete: series root', async () => {
+    const fixture = await createFixture(DELETER, { mediaType: 'series', ...SERIES });
+    expect(labels(fixture)).toEqual([
+      'recommend.menu_item',
+      'party.watch_together',
+      'media_detail.like',
+      'media_detail.add_to_list',
+      'media_detail.mark_series_watched',
+      'tracking.menu_item',
+      'media_detail.delete_from_library',
+    ]);
+  });
+});
+
+// ── Destructive items keep their styling, and stay gone once request state changes ──
+
+describe('DetailHeroComponent - destructive-item styling and ephemeral guards', () => {
+  it('Delete and Request deletion render with danger styling; nothing else does', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    const items = menuItems(fixture);
+    const dangerLabels = items.filter((i) => i.danger).map((i) => i.label);
+    expect(dangerLabels).toEqual(['media_detail.delete_from_library']);
+
+    const requester = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
+    const requesterDanger = menuItems(requester).filter((i) => i.danger).map((i) => i.label);
+    expect(requesterDanger).toEqual(['media_detail.request_deletion']);
+  });
+
+  it('a pending deletion request hides Request deletion even though the permission still holds', async () => {
+    const fixture = await createFixture(
+      REQUESTER,
+      { mediaType: 'movie', ...MOVIE },
+      { deleteRequestPending: true },
+    );
+    expect(labels(fixture)).not.toContain('media_detail.request_deletion');
+  });
+
+  it('an existing whole-title request hides Request media even though the permission still holds', async () => {
+    const fixture = await createFixture(REQUESTER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      userHasOpenWholeRequest: true,
     });
+    expect(labels(fixture)).not.toContain('media_detail.request_media');
+  });
+
+  it('a movie that already has a file hides Request media (nothing left to request)', async () => {
+    const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE, selectedFileId: 42 });
+    expect(labels(fixture)).not.toContain('media_detail.request_media');
+  });
+
+  it('a series root still offers Request media even with files present - partial availability is requestable', async () => {
+    const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES, selectedFileId: 42 });
+    expect(labels(fixture)).toContain('media_detail.request_media');
+  });
+
+  it('sharing-disabled hides Recommend for every role, including the owner', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, sharingDisabled: true });
+    expect(labels(fixture)).not.toContain('recommend.menu_item');
+  });
+
+  it('TV form factor hides Recommend for every role, including the owner', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, isTv: true });
+    expect(labels(fixture)).not.toContain('recommend.menu_item');
+  });
+
+  it('an episode menu leaves out the title-wide entries for an owner: profiles, library, delete, deletion request', async () => {
+    const fixture = await createFixture(OWNER, {
+      ...MOVIE,
+      mediaType: 'series',
+      episodeId: 999,
+      episodeInstance: true,
+    });
+    const shown = labels(fixture);
+    expect(shown).not.toContain('media_detail.edit_profiles');
+    expect(shown).not.toContain('media_detail.edit_library');
+    expect(shown).not.toContain('media_detail.request_deletion');
+    expect(shown).not.toContain('media_detail.delete_from_library');
+    // The entries the page binds per episode still show.
+    expect(shown).toContain('media_detail.refresh_metadata');
+    expect(shown).toContain('media_detail.analyze');
+  });
+
+  it('an episode-level header lists Download and Edit subtitles once, not twice', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      selectedFileId: 7,
+      episodeId: 999,
+      episodeInstance: true,
+    });
+    const shown = labels(fixture);
+    expect(shown.filter((l) => l === 'downloads.download').length).toBe(1);
+    expect(shown.filter((l) => l === 'media_detail.edit_subtitles').length).toBe(1);
+  });
+
+  it('Download shows only once a file is on disk', async () => {
+    const without = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(without)).not.toContain('downloads.download');
+
+    const withFile = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, selectedFileId: 7 });
+    expect(labels(withFile)).toContain('downloads.download');
+  });
+
+  it('the series-watched toggle swaps its label with the live watched state', async () => {
+    const unwatched = await createFixture(OWNER, { mediaType: 'series', ...SERIES, watched: false });
+    expect(labels(unwatched)).toContain('media_detail.mark_series_watched');
+
+    const watched = await createFixture(OWNER, { mediaType: 'series', ...SERIES, watched: true });
+    expect(labels(watched)).toContain('media_detail.mark_series_unwatched');
+  });
+});
+
+// ── New in this PR: merging with plugin contributions. Meaningless before the
+// registry existed, so these are additions, not part of the characterisation set above.
+
+describe('DetailHeroComponent - media.actions merges with plugin contributions', () => {
+  it('sorts a plugin item into position by weight, between two core items', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: {
+        'media.actions': [
+          {
+            id: 'fliks.acme.between',
+            slot: 'media.actions',
+            weight: 150,
+            labelKey: 'x.between',
+            action: { kind: 'route', path: '/plugins/acme/between' },
+          },
+        ],
+      },
+    });
+    const shown = labels(fixture);
+    expect(shown.indexOf('recommend.menu_item')).toBe(0);
+    // Relative: an index breaks whenever a row joins the list.
+    expect(shown.indexOf('x.between')).toBeGreaterThan(shown.indexOf('recommend.menu_item'));
+    expect(shown.indexOf('x.between')).toBeLessThan(shown.indexOf('tracking.menu_item'));
+    expect(shown.indexOf('tracking.menu_item')).toBeGreaterThan(1);
+  });
+
+  it('passes an unrecognised icon name through - the panel owns the fallback glyph', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: {
+        'media.actions': [
+          {
+            id: 'fliks.acme.weird-icon',
+            slot: 'media.actions',
+            weight: 150,
+            labelKey: 'x.weird',
+            icon: 'not-a-real-lucide-name',
+            action: { kind: 'route', path: '/plugins/acme/weird' },
+          },
+        ],
+      },
+    });
+    const item = menuItems(fixture).find((i) => i.label === 'x.weird');
+    expect(item?.icon).toBe('not-a-real-lucide-name');
+  });
+
+  it('VERDICT: an unknown actionId renders no row - fail closed, not a dead click', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: {
+        'media.actions': [
+          {
+            id: 'fliks.acme.bogus-action',
+            slot: 'media.actions',
+            weight: 150,
+            labelKey: 'x.bogus',
+            action: { kind: 'action', actionId: 'media.something-invented' },
+          },
+        ],
+      },
+    });
+    expect(labels(fixture)).not.toContain('x.bogus');
+  });
+
+  it('VERDICT: an unrecognised action.kind renders no row', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: {
+        'media.actions': [
+          { id: 'fliks.acme.broken', slot: 'media.actions', weight: 150, labelKey: 'x.broken', action: { kind: 'bogus' } as never },
+        ],
+      },
+    });
+    expect(labels(fixture)).not.toContain('x.broken');
+  });
+
+  it('a plugin can reuse a core actionId (its handler), but must bring its own `when` - core\'s `when` is per-contribution, not per-actionId', async () => {
+    const gatedRegistry = {
+      'media.actions': [
+        {
+          id: 'fliks.acme.delete-alias',
+          slot: 'media.actions' as const,
+          weight: 150,
+          labelKey: 'x.delete_alias',
+          when: ['hasPermission:media.delete' as const],
+          action: { kind: 'action' as const, actionId: 'media.delete' },
+        },
+      ],
+    };
+    const reader = await createFixture(READER, { mediaType: 'movie', ...MOVIE, registry: gatedRegistry });
+    expect(labels(reader)).not.toContain('x.delete_alias');
+
+    const deleter = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE, registry: gatedRegistry });
+    expect(labels(deleter)).toContain('x.delete_alias');
+  });
+
+  it('a plugin cannot widen a core action: an alias with no `when` stays hidden from a role core hides it from', async () => {
+    // The alias reuses core's Delete handler, so it must clear core's own gate too -
+    // otherwise a plugin could surface core's destructive action to anyone.
+    const wideOpen = {
+      'media.actions': [
+        {
+          id: 'fliks.acme.delete-wide',
+          slot: 'media.actions' as const,
+          weight: 150,
+          labelKey: 'x.delete_wide',
+          action: { kind: 'action' as const, actionId: 'media.delete' },
+        },
+      ],
+    };
+    const reader = await createFixture(READER, { mediaType: 'movie', ...MOVIE, registry: wideOpen });
+    expect(labels(reader)).not.toContain('x.delete_wide');
+
+    const deleter = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE, registry: wideOpen });
+    expect(labels(deleter)).toContain('x.delete_wide');
+  });
+});
+
+// ── The release picker (`media.grab-best` / `media.search-releases`): core owns the
+// handler and the modals it opens, but the menu entry itself is a plugin contribution -
+// with no plugin installed, no button exists at all.
+
+describe('DetailHeroComponent - release-picker actions are plugin-contributed, not core items', () => {
+  const releasePickerRegistry = {
+    'media.actions': [
+      {
+        id: 'fliks.acme.grab-best',
+        slot: 'media.actions' as const,
+        weight: 500,
+        labelKey: 'x.grab_best',
+        icon: 'download',
+        action: { kind: 'action' as const, actionId: 'media.grab-best' },
+      },
+      {
+        id: 'fliks.acme.search-releases',
+        slot: 'media.actions' as const,
+        weight: 600,
+        labelKey: 'x.search_releases',
+        icon: 'search',
+        action: { kind: 'action' as const, actionId: 'media.search-releases' },
+      },
+    ],
+  };
+
+  it('VERDICT: with no plugin installed, neither entry exists - core carries no acquisition menu item', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    const shown = labels(fixture);
+    expect(shown).not.toContain('x.grab_best');
+    expect(shown).not.toContain('x.search_releases');
+  });
+
+  it('a plugin contribution surfaces both actions and routes clicks to the release picker', async () => {
+    const grabs = { search: vi.fn(async () => {}), grabBest: vi.fn(async () => {}) };
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry, grabs });
+    const shown = labels(fixture);
+    const grabIdx = shown.indexOf('x.grab_best');
+    const searchIdx = shown.indexOf('x.search_releases');
+    expect(grabIdx).toBeGreaterThanOrEqual(0);
+    expect(searchIdx).toBeGreaterThanOrEqual(0);
+
+    const rows = flatActions(fixture);
+    rows[grabIdx].run();
+    rows[searchIdx].run();
+
+    const base = { mediaId: 1, kind: 'movie', level: 'work', itemId: undefined };
+    expect(grabs.grabBest).toHaveBeenCalledWith(base, [VIDEO_WANT]);
+    expect(grabs.search).toHaveBeenCalledWith(base, [VIDEO_WANT]);
+  });
+
+  it('an episode header reads media.item.actions and gates on level:item, a series root does not', async () => {
+    const registry = {
+      'media.item.actions': [
+        {
+          id: 'fliks.acme.item-grab',
+          slot: 'media.item.actions' as const,
+          weight: 500,
+          labelKey: 'x.item_grab',
+          icon: 'download',
+          when: ['level:item' as const, 'hasQualityProfile' as const],
+          action: { kind: 'action' as const, actionId: 'item.grab-best' },
+        },
+      ],
+    };
+    const base = { mediaType: 'series' as const, selectedFileId: 7, monitored: true, qualityProfileName: 'HD-1080p', registry };
+    expect(labels(await createFixture(OWNER, { ...base, episodeId: 5 }))).toContain('x.item_grab');
+    expect(labels(await createFixture(OWNER, base))).not.toContain('x.item_grab');
+    expect(labels(await createFixture(OWNER, { ...base, episodeId: 5, qualityProfileName: null }))).not.toContain('x.item_grab');
+  });
+
+  it('an episode of a series runs its menu as an item of that series, with the rows of a playable file', async () => {
+    const grabs = { search: vi.fn(async () => {}), grabBest: vi.fn(async () => {}) };
+    const registry = {
+      'media.item.actions': [
+        { id: 'fliks.acme.item-search', slot: 'media.item.actions' as const, weight: 500, labelKey: 'x.item_search', action: { kind: 'action' as const, actionId: 'item.search-releases' } },
+      ],
+    };
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'series', selectedFileId: 7, monitored: true, qualityProfileName: 'HD-1080p', episodeId: 5, episodeInstance: true, registry, grabs,
+    });
+    const shown = labels(fixture);
+    expect(shown.filter((l) => l === 'downloads.download').length).toBe(1);
+    expect(shown.filter((l) => l === 'media_detail.edit_subtitles').length).toBe(1);
+    expect(shown.filter((l) => l === 'media_card.mark_watched').length).toBe(1);
+    expect(shown).not.toContain('media_detail.identify');
+
+    flatActions(fixture)[shown.indexOf('x.item_search')].run();
+    expect(grabs.search).toHaveBeenCalledWith({ mediaId: 1, kind: 'series', level: 'item', itemId: 5 }, [VIDEO_WANT]);
+  });
+
+  it('grabBusy/releasesLoading still drive the busy spinner + disabled state for the plugin-contributed rows', async () => {
+    // Busy swaps the icon slot for a spinner, which shifts readItem's label lookup -
+    // so locate the row by index (idle fixture) rather than by its now-blank label.
+    const idle = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
+    const grabIdx = labels(idle).indexOf('x.grab_best');
+    expect(grabIdx).toBeGreaterThanOrEqual(0);
+    expect(flatActions(idle)[grabIdx].disabled).toBe(false);
+
+    const busy = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: releasePickerRegistry,
+      grabBusy: true,
+      releasesLoading: true,
+    });
+    expect(flatActions(busy)[grabIdx].disabled).toBe(true);
+  });
+});
+
+describe('DetailHeroComponent - resume state across an episode switch', () => {
+  const SERIES_EPISODE: MediaFixture = {
+    mediaType: 'series',
+    episodeId: 3,
+    selectedFileId: null,
+    monitored: true,
+    qualityProfileName: 'HD-1080p',
+    episodeInstance: true,
+    // Only episode 3 was ever played: 33:12 of a 61-minute episode.
+    playbackStates: {
+      3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 30 },
+    },
+  };
+
+  it('drops the previous episode progress when the header switches episode', async () => {
+    const fixture = await createFixture(OWNER, SERIES_EPISODE);
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+
+    fixture.componentRef.setInput('episodeId', 4);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Episode 4 has no playback row - nothing to resume, no progress bar.
+    expect(fixture.componentInstance.resumePositionSeconds()).toBeNull();
+    expect(fixture.componentInstance.durationSeconds()).toBeNull();
+  });
+
+  /** Opening a series from the home page renders the header before the parent
+   *  has resolved which episode the resume button targets. Reading the series'
+   *  own row (episode IS NULL) in that window flashed a progress bar that the
+   *  real episode then cleared. */
+  it('shows no progress on a series root until the resume episode is known', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'series',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: 'HD-1080p',
+      // A stale series-level row: what the header used to read and render.
+      playbackStates: {
+        0: { positionSeconds: 1200, durationSeconds: 3600, completed: false, mediaFileId: 30 },
+        3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 31 },
+      },
+    });
+    expect(fixture.componentInstance.resumePositionSeconds()).toBeNull();
+
+    // The parent resolves the resume target - now the episode's own row shows.
+    fixture.componentRef.setInput('resumeEpisodeId', 3);
+    fixture.detectChanges();
+    // The fetch starts inside the effect, so let its promise chain settle
+    // before reading - `whenStable` alone doesn't track a bare promise.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+  });
+
+  /** A cached detail page comes back from the player with the same inputs, so
+   *  the effect never re-fires and the bar kept the position from before. */
+  it('re-reads the resume position on demand with unchanged inputs', async () => {
+    const states = {
+      3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 30 },
+    };
+    const fixture = await createFixture(OWNER, { ...SERIES_EPISODE, playbackStates: states });
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+
+    states[3].positionSeconds = 2500;
+    fixture.componentInstance.reloadPlaybackState();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(2500);
+  });
+});
+
+/**
+ * Watched toggle reach. A movie or a single episode marks one file, so it needs
+ * one selected; a series root marks every episode at once through
+ * `toggleSeriesWatched` and needs no file - it used to be hidden there purely
+ * because the same gate was used for both.
+ */
+describe('DetailHeroComponent - watched toggle availability', () => {
+  const canToggle = (f: ComponentFixture<DetailHeroComponent>) =>
+    (f.componentInstance as unknown as { canToggleWatched: () => boolean }).canToggleWatched();
+
+  it('offers the toggle on a series root with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'series',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(true);
+  });
+
+  it('withholds it on a movie with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(false);
+  });
+
+  it('withholds it on an episode with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'series',
+      episodeId: 42,
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+      episodeInstance: true,
+    });
+    expect(canToggle(f)).toBe(false);
+  });
+
+  it('offers it on a movie once a file is selected', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: 7,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(true);
+  });
+});
+
+/** The pickers only fed the remembered store, so with remembering off the player never saw them. */
+describe('DetailHeroComponent - launch picks', () => {
+  async function launch(act: (header: DetailHeroComponent) => void) {
+    const play = vi.fn(async () => {});
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: 7,
+      monitored: true,
+      qualityProfileName: null,
+      files: [{ id: 7, streamInfo: { audio: [{ language: 'eng' }, { language: 'fra' }] } }],
+      play,
+    });
+    act(f.componentInstance);
+    await f.componentInstance.play(false);
+    return (play.mock.calls[0] as unknown[])[0] as { tracks?: unknown };
+  }
+
+  it('hands the audio and subtitle picked before play to the player', async () => {
+    const ctx = await launch((h) => {
+      h.onAudioChange(1);
+      h.onSubtitleChange('ext-3');
+    });
+    expect(ctx.tracks).toEqual({ fileId: 7, audioStreamIndex: 1, subtitleId: 'ext-3' });
+  });
+
+  it('hands an explicit Off over as Off', async () => {
+    const ctx = await launch((h) => h.onSubtitleChange(null));
+    expect(ctx.tracks).toEqual({ fileId: 7, subtitleId: null });
+  });
+
+  it('sends nothing when the viewer picked nothing: the defaults are not choices', async () => {
+    const ctx = await launch(() => {});
+    expect(ctx.tracks).toBeUndefined();
+  });
+});
+
+describe('DetailHeroComponent - remembered subtitle variant', () => {
+  const subtitles = [
+    { id: 'emb-1', label: 'pt-BR', language: 'pt', languageTag: 'pt-BR' },
+    { id: 'emb-2', label: 'pt-PT', language: 'pt', languageTag: 'pt-PT' },
+  ];
+
+  async function resolved(remembered: string, subs = subtitles) {
+    const f = await createFixture(READER, {
+      mediaType: 'movie', selectedFileId: 7, monitored: true, qualityProfileName: null,
+      files: [{ id: 7, streamInfo: {} }], subtitles: subs, remembered,
+    });
+    return f.componentInstance.selectedSubtitleId();
+  }
+
+  it('preselects the remembered variant over the first track of the language', async () => {
+    expect(await resolved('pt:embedded:pt-PT')).toBe('emb-2');
+  });
+
+  it('falls back to the language when the variant is gone, or the value has none', async () => {
+    expect(await resolved('pt:embedded:pt-PT', subtitles.slice(0, 1))).toBe('emb-1');
+    expect(await resolved('pt:embedded')).toBe('emb-1');
+  });
+});
+
+describe('DetailHeroComponent - download states', () => {
+  const movie = { mediaType: 'movie' as const, selectedFileId: 7, monitored: true, qualityProfileName: null };
+  const has = (f: ComponentFixture<DetailHeroComponent>, key: string) =>
+    (f.nativeElement as HTMLElement).querySelector(`[aria-label="${key}"]`) !== null;
+
+  it('offers the download button when nothing is on the device', async () => {
+    const f = await createFixture(OWNER, movie);
+    expect(has(f, 'downloads.download')).toBe(true);
+    expect(has(f, 'downloads.downloaded')).toBe(false);
+    expect(labels(f)).toContain('downloads.download');
+  });
+
+  it('shows a progress ring that opens the quality picker while in flight', async () => {
+    const f = await createFixture(OWNER, { ...movie, download: { status: 'downloading', progress: 40 } });
+    const el = f.nativeElement as HTMLElement;
+    const opened = vi.fn();
+    f.componentInstance.openDownload.subscribe(opened);
+    (el.querySelector('button .radial-progress')?.closest('button') as HTMLButtonElement).click();
+    expect(opened).toHaveBeenCalled();
+    expect(has(f, 'downloads.downloaded')).toBe(false);
+    expect(labels(f)).not.toContain('downloads.download');
+  });
+
+  it('shows the downloaded state and turns the menu entry into change quality', async () => {
+    const f = await createFixture(OWNER, { ...movie, download: { status: 'ready', progress: 100 } });
+    expect(has(f, 'downloads.downloaded')).toBe(true);
+    expect(labels(f)).toContain('downloads.change_quality');
+    expect(labels(f)).not.toContain('downloads.download');
+  });
+});
+
+// ── A book or comic hero: no files, the page's own actions, the shared admin entries ──
+
+describe('DetailHeroComponent - a title with no video', () => {
+  const providers = (hasPerm: boolean, extra: object[] = []) => [
+    provideZonelessChangeDetection(),
+    { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
+    provideRouter([]),
+    provideHttpClient(),
+    provideHttpClientTesting(),
+    provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
+    { provide: AuthService, useValue: { user: () => null, hasPermission: () => hasPerm, sharingDisabled: () => false } },
+    ...extra,
+  ];
+
+  function hero(mediaType: string, extra: object[] = [], hasPerm = true) {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: providers(hasPerm, extra) });
     const fixture = TestBed.createComponent(DetailHeroComponent);
     fixture.componentRef.setInput('title', 'Title');
     fixture.componentRef.setInput('mediaId', 9);
@@ -58,15 +1018,48 @@ describe('DetailHeroComponent', () => {
     return fixture;
   }
 
-  it('hands a saved library back to the page that owns the title', () => {
-    const onLibrarySaved = vi.fn();
-    const fixture = hero('book', [{ provide: MEDIA_SAVED_HOST, useValue: { onLibrarySaved } }]);
-    const media = { id: 9, type: 'book', title: 'T' } as Media;
-    fixture.componentRef.setInput('media', media);
+  const openMenu = (fixture: ComponentFixture<DetailHeroComponent>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button[aria-label="common.more"]')!.click();
+
+  it('pairs the cover with its card and offers like, playlist and more', () => {
+    const fixture = hero('book');
+    fixture.componentRef.setInput('posterUrl', '/p.jpg');
     fixture.detectChanges();
-    const saved = { ...media, libraryId: 2 } as Media;
-    fixture.debugElement.query(By.directive(MediaLibraryDialogComponent)).triggerEventHandler('updated', saved);
-    expect(onLibrarySaved).toHaveBeenCalledWith(saved);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('img')!.getAttribute('style')).toContain('media-poster-9');
+    expect(el.querySelectorAll('button').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('draws no play, watched or download control and reads no playback state', () => {
+    const getPlaybackState = vi.fn();
+    const fixture = hero('book', [{ provide: StreamingApiService, useValue: { getPlaybackState } }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[aria-label="media_info.watched"], [aria-label="downloads.download"]')).toBeNull();
+    expect(getPlaybackState).not.toHaveBeenCalled();
+  });
+
+  it('shows the reading progress it is handed, with no playback to resume', () => {
+    const fixture = hero('book');
+    fixture.componentRef.setInput('progress', 40);
+    fixture.componentRef.setInput('progressText', '40 %');
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-hero-progress')?.textContent).toContain('40 %');
+  });
+
+  it('asks its host for the library dialog', () => {
+    const register = vi.fn();
+    const openLibrary = vi.fn();
+    const fixture = hero('book', [
+      { provide: DETAIL_HERO_HOST, useValue: { openLibrary } },
+      { provide: CardActionsService, useValue: { register, show: vi.fn() } },
+    ]);
+    fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T' } as Media);
+    fixture.detectChanges();
+    openMenu(fixture);
+    const rows = register.mock.calls[0][0].actions.flatMap((a: { children?: unknown[] }) => [a, ...(a.children ?? [])]);
+    rows.find((r: { labelKey?: string }) => r.labelKey === 'media_detail.edit_library').run();
+    expect(openLibrary).toHaveBeenCalled();
   });
 
   it('labels a book profiles row as formats and languages and offers refresh once identified', () => {
@@ -75,7 +1068,7 @@ describe('DetailHeroComponent', () => {
     fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T', providers: [{ provider: 'openlibrary' }] } as unknown as Media);
     fixture.componentRef.setInput('actions', { 'media.edit-profiles': () => undefined });
     fixture.detectChanges();
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button[aria-label="common.more"]')!.click();
+    openMenu(fixture);
     const rows = register.mock.calls[0][0].actions.flatMap((a: { children?: unknown[] }) => [a, ...(a.children ?? [])]);
     expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'books_work.edit_profiles')).toBe(true);
     expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'media_detail.refresh_metadata')).toBe(true);
@@ -86,8 +1079,27 @@ describe('DetailHeroComponent', () => {
     const fixture = hero('book', [{ provide: CardActionsService, useValue: { register, show: vi.fn() } }]);
     fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T' } as Media);
     fixture.detectChanges();
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button[aria-label="common.more"]')!.click();
+    openMenu(fixture);
     const rows = register.mock.calls[0][0].actions.flatMap((a: { children?: unknown[] }) => [a, ...(a.children ?? [])]);
     expect(rows.some((r: { labelKey?: string }) => r.labelKey === 'media_detail.refresh_metadata')).toBe(true);
+  });
+
+  it('emits the like toggle and opens the playlist dialog on the episode on screen', () => {
+    const open = vi.fn();
+    const fixture = hero('series', [
+      { provide: AddToPlaylistService, useValue: { open } },
+      { provide: PlayableMediaService, useValue: { loadWatchedState: async () => false } },
+      { provide: StreamingApiService, useValue: { getPlaybackState: async () => null } },
+      { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
+    ]);
+    fixture.componentRef.setInput('episodeId', 42);
+    fixture.detectChanges();
+    const toggled = vi.fn();
+    fixture.componentInstance.likeToggled.subscribe(toggled);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button[aria-label="likes.like"]')!.click();
+    el.querySelector<HTMLButtonElement>('button[aria-label="playlists.add_to_playlist"]')!.click();
+    expect(toggled).toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith({ episodeId: 42 });
   });
 });

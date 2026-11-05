@@ -29,7 +29,7 @@ function sortByWeightThenId(list: readonly UiContribution[]): UiContribution[] {
   return [...list].sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** Resolves `settings.page` into sidebar sections: all of a plugin's pages form one own section after the core ones, ordered by plugin id.
+/** Resolves `settings.page` into sidebar sections: all of a non-provider plugin's pages form one own section after the core ones, ordered by plugin id.
  * Sections with no visible item never appear, so no orphaned header. */
 @Injectable({ providedIn: 'root' })
 export class SettingsSectionsService {
@@ -64,7 +64,9 @@ export class SettingsSectionsService {
       items: this.resolveItems(s.items, ctx),
     }));
 
+    // A provider's config page is reached from the Metadata page.
     const plugins = [...this.registry.pluginEntries()]
+      .filter((e) => !e.provider)
       .sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
       .map((e) => ({
         id: `plugin:${e.pluginId}`,

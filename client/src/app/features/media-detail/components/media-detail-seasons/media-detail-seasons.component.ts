@@ -39,7 +39,7 @@ import { DropdownMenuComponent } from '../../../../shared/components/dropdown-me
 import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 import { SynopsisComponent } from '../../../../shared/components/synopsis/synopsis';
-import { CollapsibleSectionComponent } from '../../../../shared/components/collapsible-section/collapsible-section';
+import { DetailSectionComponent } from '../../../../shared/components/detail-section/detail-section';
 import {
   Episode,
   Media,
@@ -81,7 +81,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {

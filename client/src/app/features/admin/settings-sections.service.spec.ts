@@ -72,6 +72,14 @@ describe('SettingsSectionsService', () => {
     expect(ids).toContain('core.cleanup');
   });
 
+  it('gives a metadata provider plugin no section', () => {
+    const svc = createService({
+      permissions: ALL_PERMISSIONS,
+      entries: [entry('fliks.p', [contribution('cfg', 100)], { provider: { namespaces: ['p'], kinds: ['book'] } })],
+    });
+    expect(svc.sections().map((s) => s.id)).not.toContain('plugin:fliks.p');
+  });
+
   it('sorts a plugin section\'s own items by weight then id, independent of core', () => {
     const svc = createService({
       permissions: ALL_PERMISSIONS,

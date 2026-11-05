@@ -11,6 +11,7 @@
       "body": {
         "libraryId": 3,
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "M",
         "tmdbId": 9304
       },
@@ -34,8 +35,10 @@
           "mediaType": "movie",
           "posterUrl": null,
           "provider": "tmdb",
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
           "seasons": null,
           "status": "pending",
           "title": "M",
@@ -57,6 +60,7 @@
       "body": {
         "libraryId": 1,
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "M",
         "tmdbId": 9305
       },
@@ -80,8 +84,10 @@
           "mediaType": "movie",
           "posterUrl": null,
           "provider": "tmdb",
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
           "seasons": null,
           "status": "pending",
           "title": "M",

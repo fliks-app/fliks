@@ -9,6 +9,7 @@ import { DropdownOptionComponent } from '../dropdown-option/dropdown-option';
   selector: 'app-auto-download-rule',
   imports: [TranslatePipe, DropdownMenuComponent, DropdownOptionComponent],
   templateUrl: './auto-download-rule.html',
+  host: { '[class.hidden]': '!auto.enabled' },
 })
 export class AutoDownloadRuleComponent {
   protected readonly auto = inject(AutoDownloadService);

@@ -33,6 +33,7 @@ import {
     LucideX,
   ],
   templateUrl: './setup-checklist.html',
+  host: { '[class.hidden]': '!shown()' },
 })
 export class SetupChecklistComponent implements OnInit {
   private readonly api = inject(SetupChecklistApiService);
@@ -53,6 +54,10 @@ export class SetupChecklistComponent implements OnInit {
     if (this.showAll()) return all;
     return all.filter((i) => !i.done && !i.dismissed);
   });
+
+  protected readonly shown = computed(
+    () => !this.isTv() && (this.visibleItems().length > 0 || (this.showAll() && this.items().length > 0)),
+  );
 
   /** Severity counters used by the header badge. */
   readonly pendingRequiredCount = computed(

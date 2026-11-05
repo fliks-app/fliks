@@ -26,6 +26,7 @@
       "as": "admin",
       "body": {
         "libraryId": 2,
+        "qualityProfileId": 1,
         "tmdbId": 3001,
         "type": "series"
       },
@@ -78,8 +79,16 @@
           "path": "/tmp/fliks-parity/media/series/Better Call",
           "physicalRelease": null,
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 0,
           "releaseDate": "2008-01-20",
           "runtime": null,
@@ -201,8 +210,16 @@
           "physicalRelease": null,
           "posterUrl": "https://image.tmdb.org/t/p/original/poster.jpg",
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 0,
           "releaseDate": "2008-01-20",
           "runtime": null,

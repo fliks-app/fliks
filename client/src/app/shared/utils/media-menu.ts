@@ -1,6 +1,6 @@
 import type { CardAction, CardActionsService } from '../../core/services/card-actions.service';
 import type { ResolvedMenuRow } from '../../core/plugin-ui/resolve-menu-contributions';
-import { sectionOf } from '../components/media-info-header/core-media-actions';
+import { sectionOf } from '../components/detail-hero/core-media-actions';
 
 /** A resolved menu row as a card-actions panel row; `adapt` overrides label, icon or disabled per row, children included. */
 export function toCardAction(r: ResolvedMenuRow, adapt?: (r: ResolvedMenuRow) => Partial<CardAction>): CardAction {

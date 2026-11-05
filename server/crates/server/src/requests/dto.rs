@@ -11,7 +11,7 @@ use fliks_domain::{
         family::Family,
         kind::MediaKind,
         query::js_number,
-        wants::{WantSpec, parse_wants},
+        wants::{PROFILE_REQUIRED, WantSpec, parse_wants, parse_wants_profiled},
     },
 };
 use serde_json::{Map, Value, json};
@@ -52,12 +52,12 @@ impl<T: Copy> Field<T> {
 }
 
 /// An optional integer field: absent, `null` or a value.
-fn opt_int(c: &mut Check, key: &str, coerced: bool) -> Field<i32> {
+fn opt_int(c: &mut Check, key: &str, coerced: bool, min: Option<i32>) -> Field<i32> {
     match c.o.get(key) {
         None => Field::Absent,
         Some(Value::Null) => Field::Null,
         Some(v) => c
-            .int(key, v, coerced, None, None)
+            .int(key, v, coerced, min, None)
             .map_or(Field::Absent, Field::Val),
     }
 }
@@ -135,8 +135,12 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         c.errs.push("property wants should not exist".into());
     }
     let wants = match o.get("wants") {
-        Some(w) if book && !delete => match parse_wants(w, MediaKind::Book) {
+        Some(w) if book && !delete => match parse_wants_profiled(w, MediaKind::Book) {
             Ok(w) => Some(w),
+            Err(m) if m == PROFILE_REQUIRED => {
+                c.errs.push(m);
+                None
+            }
             Err(m) => {
                 c.err("wants", &m);
                 None
@@ -157,12 +161,16 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         (Field::Absent, Field::Absent)
     } else {
         (
-            opt_int(&mut c, "qualityProfileId", true),
-            opt_int(&mut c, "languageProfileId", true),
+            opt_int(&mut c, "qualityProfileId", true, Some(1)),
+            opt_int(&mut c, "languageProfileId", true, None),
         )
     };
-    let library = opt_int(&mut c, "libraryId", true);
-    let folder = opt_int(&mut c, "folderId", true);
+    let video = media_type.is_some_and(MediaKind::is_video);
+    if video && !delete && o.get("qualityProfileId").is_none_or(Value::is_null) {
+        c.errs.push(PROFILE_REQUIRED.into());
+    }
+    let library = opt_int(&mut c, "libraryId", true, None);
+    let folder = opt_int(&mut c, "folderId", true, None);
     let title = o
         .get("title")
         .and_then(Value::as_str)
@@ -324,9 +332,9 @@ pub fn update_request(v: Value) -> Res<UpdateRequest> {
         });
     let u = UpdateRequest {
         wants,
-        quality_profile_id: opt_int(&mut c, "qualityProfileId", true),
-        language_profile_id: opt_int(&mut c, "languageProfileId", true),
-        library_id: opt_int(&mut c, "libraryId", true),
+        quality_profile_id: opt_int(&mut c, "qualityProfileId", true, None),
+        language_profile_id: opt_int(&mut c, "languageProfileId", true, None),
+        library_id: opt_int(&mut c, "libraryId", true, None),
     };
     c.finish(u)
 }
@@ -672,7 +680,10 @@ mod tests {
     #[test]
     fn create_messages_follow_nest() {
         assert_eq!(
-            msgs(create_request(&Namespaces::default(), json!({}))),
+            msgs(create_request(
+                &Namespaces::default(),
+                json!({"qualityProfileId": 1})
+            )),
             json!([
                 "mediaType must be one of the following values: movie, series, book, comic",
                 "tmdbId must not be less than 1",
@@ -683,7 +694,7 @@ mod tests {
         assert_eq!(
             msgs(create_request(
                 &Namespaces::default(),
-                json!({"mediaType":"movie","tmdbId":"5","title":"t","extra":1})
+                json!({"mediaType":"movie","tmdbId":"5","title":"t","extra":1,"qualityProfileId":1})
             )),
             json!([
                 "property extra should not exist",
@@ -694,17 +705,40 @@ mod tests {
     }
 
     #[test]
+    fn a_video_request_needs_a_quality_profile() {
+        for body in [
+            json!({"mediaType":"movie","tmdbId":5,"title":"t"}),
+            json!({"mediaType":"movie","tmdbId":5,"title":"t","qualityProfileId":null}),
+        ] {
+            assert_eq!(
+                msgs(create_request(&Namespaces::default(), body)),
+                json!(["A quality profile is required"])
+            );
+        }
+        let zero = json!({"mediaType":"movie","tmdbId":5,"title":"t","qualityProfileId":0});
+        assert_eq!(
+            msgs(create_request(&Namespaces::default(), zero)),
+            json!(["qualityProfileId must not be less than 1"])
+        );
+        let del = json!({"mediaType":"movie","kind":"delete","tmdbId":5,"title":"t"});
+        assert!(create_request(&Namespaces::default(), del).is_ok());
+    }
+
+    #[test]
     fn create_coerces_numeric_strings_and_keeps_null_as_absent() {
         let c = create_request(
             &Namespaces::default(),
             json!({
                 "mediaType":"series","tmdbId":7,"title":"","seasons":["2",3],
-                "libraryId":"4","qualityProfileId":null
+                "libraryId":"4","qualityProfileId":"3","languageProfileId":null
             }),
         )
         .unwrap();
         assert_eq!(c.seasons, Some(vec![2, 3]));
-        assert_eq!((c.library_id, c.quality_profile_id), (Some(4), None));
+        assert_eq!(
+            (c.library_id, c.quality_profile_id, c.language_profile_id),
+            (Some(4), Some(3), None)
+        );
     }
 
     #[test]
@@ -712,14 +746,14 @@ mod tests {
         let by = create_request(
             &Namespaces::default(),
             json!({
-                "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t"
+                "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t","qualityProfileId":1
             }),
         )
         .unwrap();
         assert_eq!(by.key.provider, Namespace::TVDB);
         assert_eq!(by.key.external_id, "81189");
         let both = json!({
-            "mediaType":"movie","tmdbId":5,"provider":"tmdb","externalId":"5","title":"t"
+            "mediaType":"movie","tmdbId":5,"provider":"tmdb","externalId":"5","title":"t","qualityProfileId":1
         });
         assert_eq!(
             msgs(create_request(&Namespaces::default(), both)),
@@ -728,7 +762,7 @@ mod tests {
         let bad = |p: &str, e: &str| {
             msgs(create_request(
                 &Namespaces::default(),
-                json!({"mediaType":"movie","provider":p,"externalId":e,"title":"t"}),
+                json!({"mediaType":"movie","provider":p,"externalId":e,"title":"t","qualityProfileId":1}),
             ))
         };
         assert_eq!(bad("nope", "1"), json!(["provider Unknown provider: nope"]));

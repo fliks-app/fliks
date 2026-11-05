@@ -30,8 +30,8 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 /**
  * The poster morph out of an episode card pairs with the episode page's hero,
  * and the browser captures that state roughly a frame after the route swap,
- * long before the media request lands. So the page has to paint its real
- * header from what the card handed over, on the very first pass.
+ * long before the media request lands. So the shell has to hand the series page
+ * what the card gave on the very first pass.
  */
 const PARAMS = {
   get: (k: string) => (k === 'id' ? '5' : k === 'episodeId' ? '42' : null),
@@ -52,6 +52,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
           snapshot: {
             data: { kind: 'series' },
             paramMap: PARAMS,
+            queryParamMap: { get: () => null },
           },
         },
       },
@@ -95,7 +96,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
   return TestBed.createComponent(MediaDetailComponent);
 }
 
-describe('MediaDetailComponent — episode seed from the card handoff', () => {
+describe('MediaDetailComponent - episode seed from the card handoff', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const SERIES = {
@@ -105,7 +106,7 @@ describe('MediaDetailComponent — episode seed from the card handoff', () => {
     seasons: [{ id: 9, seasonNumber: 1, episodes: [{ id: 42, episodeNumber: 3 }] }],
   };
 
-  it('focuses the handed episode on the first pass, with no skeleton', () => {
+  it('hands the series page a stub and the seed on the first pass, with no skeleton', () => {
     history.replaceState({ episode: { id: 42, stillUrl: '/still.jpg', label: 'S01:E03' } }, '');
     const fixture = createFixture();
 
@@ -113,10 +114,9 @@ describe('MediaDetailComponent — episode seed from the card handoff', () => {
 
     const c = fixture.componentInstance;
     expect(c.loading()).toBe(false);
-    expect(c.episodeMode()).toBe(true);
-    expect(c.focusedEpisode()?.id).toBe(42);
-    // No season tree yet: the label comes from the seed so the header is complete.
-    expect(c.focusedSeason()).toBeNull();
+    // No season tree yet: the page paints its header from the seed.
+    expect(c.media()).toMatchObject({ id: 5, type: 'series' });
+    expect(c.media()?.seasons).toBeUndefined();
     expect(c.episodeSeed()?.label).toBe('S01:E03');
   });
 
@@ -127,10 +127,10 @@ describe('MediaDetailComponent — episode seed from the card handoff', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.loading()).toBe(true);
-    expect(fixture.componentInstance.episodeMode()).toBe(false);
+    expect(fixture.componentInstance.episodeSeed()).toBeNull();
   });
 
-  it('resolves the season once the real media lands, replacing the seed', async () => {
+  it('replaces the seed with the real media once it lands', async () => {
     history.replaceState({ episode: { id: 42, stillUrl: '/still.jpg' } }, '');
     const fixture = createFixture(Promise.resolve(SERIES));
 
@@ -139,7 +139,7 @@ describe('MediaDetailComponent — episode seed from the card handoff', () => {
     fixture.detectChanges();
 
     const c = fixture.componentInstance;
-    expect(c.focusedSeason()?.id).toBe(9);
+    expect(c.media()?.seasons?.[0].id).toBe(9);
     expect(c.notFound()).toBe(false);
   });
 });

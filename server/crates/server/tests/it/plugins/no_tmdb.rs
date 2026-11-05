@@ -6,6 +6,10 @@ use serde_json::{Value, json};
 const NS: &str = "org.example.anime:aid";
 
 async fn series_library(h: &H) {
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]')")
+        .execute(&h.st.db)
+        .await
+        .unwrap();
     sqlx::query(r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Series', '["series"]'::jsonb)"#)
         .execute(&h.st.db)
         .await
@@ -44,7 +48,7 @@ async fn with_no_provider_lists_and_search_answer_empty_and_a_request_waits() {
     assert_eq!(st, 400, "{body}");
     assert_eq!(body["message"], "Unknown provider: tmdb");
 
-    let ask = json!({"mediaType": "series", "tmdbId": 1396, "title": "T"});
+    let ask = json!({"mediaType": "series", "tmdbId": 1396, "title": "T", "qualityProfileId": 1});
     let (st, r) = h
         .call("POST", "/api/requests", Some(&h.admin), Some(ask))
         .await;
@@ -95,8 +99,9 @@ async fn a_library_title_is_one_request_whichever_key_asks_and_a_double_hold_is_
     held(&h, 102, &[("tmdb", "3"), ("tvdb", "555")]).await;
     held(&h, 103, &[("tmdb", "4"), ("tvdb", "555")]).await;
     let ask = |body: Value| h.call("POST", "/api/requests", Some(&h.admin), Some(body));
-    let tmdb = |id: i64| json!({"mediaType": "series", "tmdbId": id, "title": "T"});
-    let tvdb = |id: &str| json!({"mediaType": "series", "provider": "tvdb", "externalId": id, "title": "T"});
+    let tmdb =
+        |id: i64| json!({"mediaType": "series", "tmdbId": id, "title": "T", "qualityProfileId": 1});
+    let tvdb = |id: &str| json!({"mediaType": "series", "provider": "tvdb", "externalId": id, "title": "T", "qualityProfileId": 1});
     assert_eq!(ask(tmdb(1396)).await.0, 201);
     assert_eq!(ask(tvdb("81189")).await.0, 409, "tmdb first, then tvdb");
     assert_eq!(ask(tvdb("20")).await.0, 201);
@@ -140,7 +145,7 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     let (st, d) = get(&h, &format!("/api/metadata/{NS}/tv/1")).await;
     assert_eq!((st, &d["title"]), (200, &json!("Sample")), "{d}");
 
-    let ask = json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "Sample"});
+    let ask = json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "Sample", "qualityProfileId": 1});
     let (st, r) = h
         .call("POST", "/api/requests", Some(&h.admin), Some(ask.clone()))
         .await;
@@ -194,7 +199,9 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
             "POST",
             "/api/media/import",
             Some(&h.admin),
-            Some(json!({"type": "series", "provider": NS, "externalId": "1"})),
+            Some(
+                json!({"type": "series", "provider": NS, "externalId": "1", "qualityProfileId": 1}),
+            ),
         )
         .await;
     assert_eq!(st, 409, "the plugin title is already held: {r}");
@@ -249,7 +256,7 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
             "POST",
             "/api/requests",
             Some(&limited),
-            Some(json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "T", "libraryId": 1})),
+            Some(json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "T", "libraryId": 1, "qualityProfileId": 1})),
         )
         .await;
     assert_eq!(
@@ -261,7 +268,7 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
             "POST",
             "/api/requests",
             Some(&h.admin),
-            Some(json!({"mediaType": "series", "provider": "org.example.gone:aid", "externalId": "1", "title": "T"})),
+            Some(json!({"mediaType": "series", "provider": "org.example.gone:aid", "externalId": "1", "title": "T", "qualityProfileId": 1})),
         )
         .await;
     assert_eq!(st, 400, "an unknown provider is refused: {r}");

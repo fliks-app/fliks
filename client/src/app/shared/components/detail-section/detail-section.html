@@ -1,0 +1,17 @@
+<div class="divider my-6"></div>
+<ng-content select="[sectionLead]" />
+@if (heading(); as h) {
+  @if (collapsible()) {
+    <app-collapsible-section [heading]="h" [persistKey]="persistKey()" [defaultOpen]="defaultOpen()">
+      <ng-container *ngTemplateOutlet="body" />
+    </app-collapsible-section>
+  } @else {
+    <h2 class="mb-3 text-lg font-bold">{{ h }}</h2>
+    <ng-container *ngTemplateOutlet="body" />
+  }
+} @else {
+  <ng-container *ngTemplateOutlet="body" />
+}
+<ng-content select="[sectionTail]" />
+
+<ng-template #body><ng-content /></ng-template>

@@ -1,7 +1,7 @@
 @let m = media();
 @let b = book();
 
-<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="m.overview" [progressPercent]="percent() ?? 0" [progressLabel]="progressLabel()">
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="m.overview" [progress]="percent() ?? 0" [progressText]="progressLabel()" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
   @if (b) {
     <div heroMeta class="flex flex-col gap-2">
       @if (b.subtitle) {
@@ -102,7 +102,17 @@
 </app-detail-hero>
 
 @if (b) {
-<div class="mt-8 flex flex-col gap-8">
+  @if (b.editions.length) {
+    <app-book-editions
+      [editions]="b.editions"
+      [mediaId]="m.id"
+      [title]="m.title"
+      [posterUrl]="m.posterUrl ?? null"
+      [artist]="b.authors.map((a) => a.name).join(', ')"
+    />
+    <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
+  }
+
   @if (seriesItems().length && b.series[0]; as s) {
     <app-book-works-row
       [heading]="'books_work.row_series' | translate: { series: s.name }"
@@ -119,21 +129,6 @@
     />
   }
 
-  @if (b.editions.length) {
-    <app-book-editions
-      [editions]="b.editions"
-      [mediaId]="m.id"
-      [title]="m.title"
-      [artist]="b.authors.map((a) => a.name).join(', ')"
-    />
-    <app-book-chapters [mediaId]="m.id" [editions]="b.editions" />
-    @if (canEdit()) {
-      <button type="button" class="btn btn-ghost btn-sm self-start" data-testid="sources-button" (click)="openDialog(sourcesOpen, sourcesDialog())">
-        {{ 'books_work.sources' | translate }}
-      </button>
-    }
-  }
-
   @if (similarItems().length) {
     <app-book-works-row
       [heading]="'books_work.row_similar' | translate"
@@ -141,7 +136,6 @@
       persistKey="book-similar"
     />
   }
-</div>
 }
 
 @if (canEdit() && b) {

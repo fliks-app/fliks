@@ -10,6 +10,7 @@
       "as": "validator",
       "body": {
         "mediaType": "series",
+        "qualityProfileId": 1,
         "title": "S",
         "tmdbId": 9302
       },
@@ -28,6 +29,7 @@
       "as": "validator",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "M",
         "tmdbId": 9303
       },

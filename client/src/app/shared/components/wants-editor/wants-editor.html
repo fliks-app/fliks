@@ -45,7 +45,9 @@
             [ngModel]="w.qualityProfileId ?? null"
             (ngModelChange)="set(i, { qualityProfileId: $event })"
           >
-            <option [ngValue]="null">{{ 'wants.no_profile' | translate }}</option>
+            @if (!profileRequired()) {
+              <option [ngValue]="null">{{ 'wants.no_profile' | translate }}</option>
+            }
             @for (p of profiles()[w.family]; track p.id) {
               <option [ngValue]="p.id">{{ p.name }}</option>
             }

@@ -1,6 +1,6 @@
 @let m = media();
 @let selSeason = selectedSeason();
-<div class="divider my-6"></div>
+<app-detail-section [heading]="sectionTitle()" persistKey="moreFromSeason">
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -409,15 +409,10 @@
       </ng-template>
 
       <div [class]="canSwitchEpisodeView() ? 'border-t border-base-content/10 py-3' : ''">
-        @if (sectionTitle(); as heading) {
-          <app-collapsible-section [heading]="heading" persistKey="moreFromSeason">
-            <ng-container *ngTemplateOutlet="episodeRow" />
-          </app-collapsible-section>
-        } @else {
-          <ng-container *ngTemplateOutlet="episodeRow" />
-        }
+        <ng-container *ngTemplateOutlet="episodeRow" />
       </div>
     }
 
   }
 </section>
+</app-detail-section>

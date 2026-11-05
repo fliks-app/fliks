@@ -42,4 +42,13 @@ describe('WantsEditorComponent', () => {
     fixture.componentInstance['setFamily'](0, 'audio');
     expect(fixture.componentInstance.wants()).toEqual([{ family: 'audio', language: null, qualityProfileId: null }]);
   });
+
+  it('starts every row on its family first profile when a profile is required', () => {
+    const { fixture } = setup([{ family: 'text', language: null }, { family: 'audio', language: 'en', qualityProfileId: 9 }]);
+    fixture.componentRef.setInput('profileRequired', true);
+    fixture.componentInstance['profiles'].set({ text: [{ id: 4 }, { id: 5 }] as never, audio: [] });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.wants().map((w) => w.qualityProfileId)).toEqual([4, 9]);
+    expect(fixture.nativeElement.textContent).not.toContain('wants.no_profile');
+  });
 });

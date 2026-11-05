@@ -43,7 +43,8 @@ export function resolveMenuContributions(opts: {
   /** A contribution aliasing a core actionId inherits that core row's gate: a
    *  plugin may narrow one of core's actions, never widen it. */
   const coreFor = (c: UiContribution) => {
-    if (c.action.kind !== 'action') return undefined;
+    // A core row is its own gate, so core can offer one action under several conditions (an OR).
+    if (c.action.kind !== 'action' || c.id.startsWith('core.')) return undefined;
     const wanted = c.action.actionId;
     return everything.find(
       (a) => a.id.startsWith('core.') && a.action.kind === 'action' && a.action.actionId === wanted,

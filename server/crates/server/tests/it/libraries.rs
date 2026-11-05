@@ -521,7 +521,11 @@ async fn folder_of_another_library_is_refused_on_a_request(pool: PgPool) {
     }
     let body = json!({"path": dir(&c, "b")});
     let (_, f) = call(&c, "POST", "/api/libraries/2/folders", &c.admin, body).await;
-    let req = |library: i32| json!({"mediaType": "movie", "tmdbId": 603, "title": "T", "libraryId": library, "folderId": f["id"]});
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 1, '[]')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let req = |library: i32| json!({"mediaType": "movie", "tmdbId": 603, "title": "T", "libraryId": library, "folderId": f["id"], "qualityProfileId": 1});
     let (s, b) = call(&c, "POST", "/api/requests", &c.admin, req(1)).await;
     assert_eq!(
         (s, b["message"].clone()),

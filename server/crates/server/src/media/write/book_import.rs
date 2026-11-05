@@ -31,9 +31,9 @@ use fliks_domain::external_id::Namespace;
 use fliks_domain::{
     media::kind::MediaKind,
     media::{
-        AUDIO_EXTS,
         family::Family,
-        wants::{MAX_WANTS, WantSpec, parse_wants},
+        is_audio_format,
+        wants::{MAX_WANTS, WantSpec, parse_wants_profiled},
     },
     metadata::limiter::Priority,
 };
@@ -91,12 +91,11 @@ pub(super) async fn import_book(
     let target = resolve_target(st, a, MediaKind::Book, library, folder).await?;
 
     let wants = match b.0.get("wants") {
-        None => None,
-        Some(w) => Some(parse_wants(w, MediaKind::Book).map_err(|m| bad(&m))?),
+        None => return Err(bad("wants must be an array")),
+        Some(w) => parse_wants_profiled(w, MediaKind::Book).map_err(|m| bad(&m))?,
     };
-    if let Some(w) = &wants {
-        wants::check_profiles(&st.db, w).await?;
-    }
+    wants::check_profiles(&st.db, &wants).await?;
+    let wants = Some(wants);
     let id = create_identified(
         st,
         &Creation {
@@ -334,7 +333,7 @@ async fn create_from_edition(
         .get("durationSeconds")
         .and_then(Value::as_i64)
         .is_some_and(|d| d > 0)
-        || text(record, "format").is_some_and(|f| AUDIO_EXTS.contains(&format!(".{f}").as_str()));
+        || text(record, "format").is_some_and(|f| is_audio_format(&f));
     let family = if audio { Family::Audio } else { Family::Text };
     let work = work_of(st, &hinted, &lang, c.prio).await;
     let held = match (&work, join) {

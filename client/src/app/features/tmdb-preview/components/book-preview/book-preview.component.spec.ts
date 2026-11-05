@@ -5,12 +5,15 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Router } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { vi, afterEach, describe, it, expect } from 'vitest';
+import { vi, afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { BookPreviewComponent } from './book-preview.component';
 import { bookPreviewFixture } from '../../../../testing/books.fixtures';
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { NavbarService } from '../../../../core/services/navbar.service';
+import { DeviceService } from '../../../../core/services/device.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { PREVIEW_HOST } from '../../preview-host';
 
 const lib = (id: number, folders?: { id: number; name: string }[]) =>
   ({ id, name: `Library ${id}`, mediaTypes: ['book'], folders }) as unknown as LibrarySummary;
@@ -27,6 +30,9 @@ function setup(libraries: LibrarySummary[], canImport = true, allowed: string[] 
       { provide: LibrariesApiService, useValue: { listMine: async () => libraries } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => allowed.includes(p) } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
+      { provide: NavbarService, useValue: { heroPaddingTop: () => null } },
+      { provide: DeviceService, useValue: { isTv: () => false } },
+      { provide: PREVIEW_HOST, useValue: { setTitle: vi.fn(), setBackground: vi.fn() } },
     ],
   });
   const fixture = TestBed.createComponent(BookPreviewComponent);
@@ -45,8 +51,23 @@ async function settle(fixture: ReturnType<typeof setup>['fixture']) {
   return fixture.nativeElement as HTMLElement;
 }
 
+async function flushProfiles(fixture: ReturnType<typeof setup>['fixture'], http: HttpTestingController) {
+  for (const r of http.match((q) => q.url === '/api/profiles/quality')) {
+    r.flush([r.request.params.get('family') === 'text' ? { id: 7, name: 'Text' } : { id: 8, name: 'Audio' }]);
+  }
+  await settle(fixture);
+}
+
 describe('BookPreviewComponent', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+    // jsdom has no dialog methods.
+    HTMLDialogElement.prototype.close ??= function () {};
+  });
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
+  });
 
   it('lists the editions', async () => {
     const { fixture } = setup([lib(1)]);
@@ -67,10 +88,11 @@ describe('BookPreviewComponent', () => {
   it('adds with the chosen library and folder, then opens the book', async () => {
     const { fixture, http, navigate } = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
     await settle(fixture);
+    await flushProfiles(fixture, http);
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
     expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5,
-      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }] });
+      wants: [{ family: 'text', language: null, qualityProfileId: 7 }] });
     req.flush({ id: 42, type: 'book' });
     await pending;
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
@@ -79,20 +101,32 @@ describe('BookPreviewComponent', () => {
   it('adds with the wants edited in the editor', async () => {
     const { fixture, http } = setup([lib(1)]);
     const el = await settle(fixture);
-    const rows = el.querySelectorAll('[data-testid="want-row"]');
-    expect(rows).toHaveLength(2);
-    (rows[1].querySelector('button') as HTMLButtonElement).click();
-    fixture.detectChanges();
+    expect(el.querySelectorAll('[data-testid="want-row"]')).toHaveLength(1);
+    await flushProfiles(fixture, http);
+    (el.querySelector('[data-testid="wants-editor"] > button') as HTMLButtonElement).click();
+    await settle(fixture);
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
-    expect(req.request.body.wants).toEqual([{ family: 'text', language: null }]);
+    expect(req.request.body.wants).toHaveLength(2);
     req.flush({ id: 42, type: 'book' });
     await pending;
   });
 
+  it('blocks Add while a want has no profile', async () => {
+    const { fixture, http } = setup([lib(1)]);
+    const el = await settle(fixture);
+    const add = () => el.querySelector('dialog .btn-primary') as HTMLButtonElement;
+    expect(add().disabled).toBe(true);
+    expect(el.querySelector('[data-testid="book-profile-missing"]')).not.toBeNull();
+    await flushProfiles(fixture, http);
+    expect(add().disabled).toBe(false);
+  });
+
   it('offers no Add without the import permission', async () => {
     const { fixture } = setup([lib(1)], false);
-    expect((await settle(fixture)).querySelector('button')).toBeNull();
+    const el = await settle(fixture);
+    expect(el.querySelector('[data-hero-actions] button')).toBeNull();
+    expect(el.querySelector('dialog')).toBeNull();
   });
 
   it('requests the wished editions when the user cannot add', async () => {
@@ -103,6 +137,7 @@ describe('BookPreviewComponent', () => {
       .flush({ requested: true, requestedWants: [{ family: 'audio', language: 'en' }] });
     const el = await settle(fixture);
     expect(el.querySelector('[data-testid="book-already-requested"]')).not.toBeNull();
+    await flushProfiles(fixture, http);
     const pending = fixture.componentInstance.request();
     const req = http.expectOne('/api/requests');
     expect(req.request.body).toEqual({
@@ -110,7 +145,7 @@ describe('BookPreviewComponent', () => {
       externalId: 'OL1W',
       title: bookPreviewFixture.title,
       libraryId: 1,
-      wants: [{ family: 'text', language: null }, { family: 'audio', language: null }],
+      wants: [{ family: 'text', language: null, qualityProfileId: 7 }],
     });
     req.flush({ id: 1 });
     await new Promise((r) => setTimeout(r));

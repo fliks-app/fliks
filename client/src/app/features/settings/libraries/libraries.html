@@ -31,9 +31,6 @@
                       <span class="badge badge-outline badge-sm">{{ registry[kind].libraryLabelKey | translate }}</span>
                     }
                   }
-                  @if (lib.preferredProvider) {
-                    <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
-                  }
                 </div>
                 @for (folder of lib.folders; track folder.id) {
                   <p class="font-mono text-xs text-base-content/60 mt-1 truncate">

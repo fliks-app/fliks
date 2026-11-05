@@ -146,6 +146,10 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'HD', 1, '[]')")
+        .execute(&pool)
+        .await
+        .unwrap();
     for (id, name, types) in [
         (MOVIES, "Movies", r#"["movie"]"#),
         (SERIES, "Series", r#"["series"]"#),
@@ -280,11 +284,11 @@ fn rid(v: &Value) -> i64 {
 }
 
 fn movie(tmdb: i32) -> Value {
-    json!({"mediaType": "movie", "tmdbId": tmdb, "title": format!("Movie {tmdb}")})
+    json!({"mediaType": "movie", "tmdbId": tmdb, "title": format!("Movie {tmdb}"), "qualityProfileId": 1})
 }
 
 fn series(tmdb: i32, seasons: Value) -> Value {
-    json!({"mediaType": "series", "tmdbId": tmdb, "title": format!("Series {tmdb}"), "seasons": seasons})
+    json!({"mediaType": "series", "tmdbId": tmdb, "title": format!("Series {tmdb}"), "seasons": seasons, "qualityProfileId": 1})
 }
 
 async fn status_of(c: &Ctx, id: i64) -> (String, Option<i64>) {
@@ -336,9 +340,32 @@ async fn a_book_is_not_a_tmdb_title(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_video_request_needs_a_quality_profile(pool: PgPool) {
+    let c = ctx(pool).await;
+    for profile in [None, Some(json!(null))] {
+        let mut body = movie(10);
+        body.as_object_mut().unwrap().remove("qualityProfileId");
+        if let Some(p) = profile {
+            body["qualityProfileId"] = p;
+        }
+        let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+        assert_eq!(s, 400, "{r}");
+        assert_eq!(r["message"], json!(["A quality profile is required"]));
+    }
+    q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (3, 'T', 'text', 1, '[]')").await;
+    let mut body = movie(10);
+    body["qualityProfileId"] = json!(3);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (400, &json!("Quality profile #3 not found"))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_explicit_library_must_accept_the_requested_kind(pool: PgPool) {
     let c = ctx(pool).await;
-    let body = json!({"mediaType": "movie", "tmdbId": 10, "title": "m", "libraryId": SERIES});
+    let body = json!({"mediaType": "movie", "tmdbId": 10, "title": "m", "libraryId": SERIES, "qualityProfileId": 1});
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
     assert_eq!(s, 400, "{r}");
 }
@@ -602,7 +629,11 @@ async fn the_quota_window_is_the_period_in_24_hour_days(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn duplicates_series_seasons_and_profile_lock(pool: PgPool) {
     let c = ctx(pool).await;
-    q(&c.pool(), "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'HD', 1, '[]'), (2, 'SD', 1, '[]')").await;
+    q(
+        &c.pool(),
+        "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (2, 'SD', 1, '[]')",
+    )
+    .await;
     let mut first = series(60, json!([1, 2]));
     first["qualityProfileId"] = json!(1);
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, first).await;
@@ -632,7 +663,7 @@ async fn duplicates_series_seasons_and_profile_lock(pool: PgPool) {
         "POST",
         "/api/requests",
         &c.other,
-        json!({"mediaType": "series", "tmdbId": 60, "title": "t"}),
+        json!({"mediaType": "series", "tmdbId": 60, "title": "t", "qualityProfileId": 1}),
     )
     .await;
     assert_eq!(
@@ -825,7 +856,7 @@ async fn a_delete_request_needs_a_readable_library_and_a_detail_hides_the_media(
         ),
         "{r}"
     );
-    let add = json!({"mediaType": "movie", "tmdbId": 75, "title": "A"});
+    let add = json!({"mediaType": "movie", "tmdbId": 75, "title": "A", "qualityProfileId": 1});
     let (s, a) = call(&c, "POST", "/api/requests", &c.user, add).await;
     assert_eq!(s, 201, "{a}");
     q(&c.pool(), "UPDATE requests SET \"mediaId\" = 8").await;
@@ -967,6 +998,11 @@ async fn existing_media_is_reused_only_when_its_profiles_cover_the_request(pool:
     let c = ctx(pool).await;
     q(&c.pool(), "INSERT INTO language_profiles (id, name, \"audioLanguages\") VALUES (101, 'EN', '[{\"isoCode\":\"en\",\"name\":\"English\"}]'), (102, 'FR', '[{\"isoCode\":\"fr\",\"name\":\"French\"}]')").await;
     q(&c.pool(), r#"WITH m AS (INSERT INTO media (id, title, type, "libraryId", "languageProfileId", monitored) VALUES (9, 'M', 'movie', 1, 101, false) RETURNING id, type) INSERT INTO media_external_ids ("mediaId", kind, provider, value) SELECT m.id, m.type, p.provider, p.value FROM m, (VALUES ('tmdb', (82)::text)) AS p(provider, value) WHERE p.value IS NOT NULL"#).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES (9, 'video', 1)"#,
+    )
+    .await;
     let mut body = movie(82);
     body["languageProfileId"] = json!(102);
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, body).await;

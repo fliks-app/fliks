@@ -1,5 +1,5 @@
 @if (file(); as f) {
-  <app-collapsible-section [heading]="'file_info.title' | translate" persistKey="fileInfo">
+  <app-detail-section [heading]="'file_info.title' | translate" persistKey="fileInfo">
   <div class="space-y-4">
 
     <!-- File info from DB (always available) -->
@@ -127,5 +127,5 @@
         (subtitlesChanged)="subtitlesChanged.emit()" />
     }
   </div>
-  </app-collapsible-section>
+  </app-detail-section>
 }

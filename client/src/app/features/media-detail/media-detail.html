@@ -1,6 +1,6 @@
 <div appTvSection appDefaultFocus="[autofocus]" class="flex flex-col gap-4">
   @if (loading()) {
-    <!-- Skeleton mirrors app-media-info-header's geometry so nothing reflows when data lands. -->
+    <!-- Skeleton mirrors the detail hero's geometry so nothing reflows when data lands. -->
     <div class="animate-pulse">
       <div class="md:hidden tv:hidden">
         <div
@@ -40,326 +40,9 @@
     </div>
   } @else if (kindPage && media(); as m) {
     <ng-container *ngComponentOutlet="kindPage; inputs: { media: m }" />
-  } @else if (media(); as m) {
-    <!-- ===== EPISODE MODE ===== -->
-    @if (episodeMode() && focusedEpisode(); as ep) {
-      <div class="flex flex-col">
-        <app-media-info-header
-          [title]="m.title"
-          [mediaId]="m.id"
-          [episodeId]="ep.id"
-          [episodeLabel]="episodeView.episodeLabel() ?? episodeSeed()?.label ?? null"
-          [rating]="null"
-          [dateLabel]="episodeView.episodeDateLabel()"
-          [runtime]="episodeView.episodeDisplayRuntime()"
-          [overview]="ep.overview ?? null"
-          [monitored]="ep.monitored"
-          [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
-          [posterUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
-          [posterMode]="'still'"
-          [originalLanguage]="m.metadata?.originalLanguage ?? null"
-          [badge]="episodeHeaderBadge()"
-          (openDownloadDetail)="openDownloadDetailModal()"
-          [spoilerImage]="episodeSpoilerImage()"
-          [spoilerOverview]="episodeSpoilerOverview()"
-          [backRoute]="episodeView.episodeSeriesRoute()"
-          [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
-          [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
-          [translations]="subtitleSection()?.translationInProgress() ?? []"
-          [files]="episodeView.episodeFiles()"
-          [selectedFileId]="episodeView.episodeActiveFileId()"
-          [qualityProfileName]="m.qualityProfile?.name ?? null"
-          [canDelete]="canDelete()"
-          [isAdmin]="isAdmin()"
-          [canRequest]="requestFlow.canRequest()"
-          [userHasOpenWholeRequest]="requestFlow.hasBlockingRequest()"
-          [identified]="!unidentified()"
-          (selectedFileIdChange)="selectedFileId.set($event)"
-          [download]="fileDownload()"
-          (openDownload)="openDownloadModal()"
-          (refreshMetadata)="refreshMetadata()"
-          (toggleMonitored)="toggleMonitored()"
-          (identify)="openIdentifyModal()"
-          (openAnalyze)="analyze.open()"
-          (editSubtitles)="openSubtitles()"
-          (episodeWatchedToggled)="watched.onEpisodeToggledFromHeader($event)"
-          (requestMedia)="requestFlow.openForMedia()"
-          (addToPlaylist)="openAddToPlaylist()"
-          (recommend)="openRecommend()"
-          [liked]="like.focusedLiked()"
-          (likeToggled)="like.toggle()"
-          (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
-        />
 
-        @if (focusedSeason(); as s) {
-          @if (episodeView.currentSeasonEpisodes().length > 1) {
-            <app-media-detail-seasons
-              [media]="m"
-              [selectedSeason]="s"
-              [activeSeasonId]="s.id"
-              [filteredEpisodes]="episodeView.currentSeasonEpisodes()"
-              [activeEpisodeId]="ep.id"
-              [watchedEpisodeIds]="watched.episodeIds()"
-              [episodeProgress]="watched.episodeProgress()"
-              [hideControls]="true"
-              [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
-              [likedEpisodeIds]="like.state().episodeIds"
-              (toggleEpisodeLike)="like.toggleEpisode($event)"
-              (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
-              (downloadEpisode)="downloadEpisode($event.season, $event.episode)"
-            />
-          }
-        }
-
-        @if (episodeView.seasonsRow().length > 1) {
-          <div class="divider my-6"></div>
-          <app-collapsible-section
-            [heading]="'media_detail.other_seasons_of' | translate: { title: m.title }"
-            persistKey="otherSeasons"
-          >
-            <app-horizontal-scroller>
-              @for (other of episodeView.seasonsRow(); track other.id) {
-                <!-- Opens the page it sits on, so its picture has no hero to
-                     pair with: stamped, it would morph into itself. -->
-                <app-media-card
-                  class="shrink-0 w-28 sm:w-32 lg:w-40"
-                  [aspect]="'portrait'"
-                  [imageUrl]="other.posterUrl ?? m.posterUrl"
-                  [title]="other.seasonNumber | seasonLabel"
-                  [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
-                  [link]="episodeView.seasonLink(m, other)"
-                  [posterMorph]="false"
-                  [interactiveWatched]="true"
-                  [status]="watched.seasonFullyWatched(other) ? 'watched' : null"
-                  [highlighted]="other.id === focusedSeason()?.id"
-                  [liked]="like.seasonLiked(other.id)"
-                  (likeToggled)="like.toggleSeason(other.id)"
-                  (watchedToggled)="watched.onToggleSeasonWatched(m.id, other, $event)"
-                />
-              }
-            </app-horizontal-scroller>
-          </app-collapsible-section>
-        }
-
-        @if (cast().length) {
-          <div class="divider my-6"></div>
-          <ng-container *ngTemplateOutlet="castCrewBlock" />
-        }
-
-        <app-subtitles-modal
-          [mediaId]="m.id"
-          [episodeId]="ep.id"
-          [selectedFileId]="episodeView.episodeActiveFileId()"
-          [streamSubtitles]="episodeView.episodeActiveFile()?.streamInfo?.subtitles"
-          [canManage]="canManageSubtitles()"
-          [searchDisabled]="!ep.hasFile"
-          [languageProfileId]="m.languageProfile?.id ?? null"
-        />
-
-        @if (episodeView.episodeActiveFile(); as sf) {
-          <div class="divider my-6"></div>
-          <app-media-file-info
-            [file]="sf"
-            [mediaPath]="m.library?.path ?? null"
-            [canDelete]="canDelete()"
-            [canManageSubtitles]="canManageSubtitles()"
-            [canEditMedia]="canEditProfiles()"
-            [fileId]="episodeView.episodeActiveFileId()"
-            [mediaId]="m.id"
-            [episodeId]="ep.id"
-            (subtitlesChanged)="reloadSubtitles()"
-            (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
-          />
-        }
-      </div>
-
-      <!-- ===== NORMAL MODE (movie / series) ===== -->
-    } @else {
-      <div class="flex flex-col">
-        <app-media-info-header
-          [title]="m.title"
-          [mediaId]="m.id"
-          [rating]="m.rating"
-          [dateLabel]="m.year ? '' + m.year : null"
-          [runtime]="displayRuntime()"
-          [overview]="m.overview"
-          [genres]="m.genres ?? []"
-          [resumeEpisodeLabel]="episodeView.resumeEpisodeLabel()"
-          [resumeEpisodeId]="episodeView.nextPlayEpisodeId()"
-          [resumeMediaFileId]="episodeView.nextPlayMediaFileId()"
-          [status]="m.status"
-          [monitored]="m.monitored"
-          [libraryName]="m.library?.name ?? null"
-          [leavingLabel]="m.deleteAt ? leavingLabel(m.deleteAt) : null"
-          [scopedLeaving]="scopedLeaving(m.seasons ?? [])"
-          [qualityProfileName]="m.qualityProfile?.name ?? null"
-          [languageProfileName]="m.languageProfile?.name ?? null"
-          [originalLanguage]="m.metadata?.originalLanguage ?? null"
-          [fanartUrl]="m.fanartUrl ?? m.posterUrl ?? null"
-          [posterUrl]="m.posterUrl ?? null"
-          [backRoute]="['/', backSegment()]"
-          [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
-          [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
-          [translations]="subtitleSection()?.translationInProgress() ?? []"
-          [files]="headerFiles()"
-          [selectedFileId]="activeFileId()"
-          [mediaType]="m.type"
-          [seriesFullyWatched]="watched.seriesFullyWatched()"
-          [canEditProfiles]="canEditProfiles()"
-          [canDelete]="canDelete()"
-          [isAdmin]="isAdmin()"
-          [canRequest]="requestFlow.canRequest()"
-          [userHasOpenWholeRequest]="requestFlow.hasBlockingRequest()"
-          [canRequestDeletion]="requestFlow.showRequestDeletion()"
-          [monitoredLoading]="monitoredLoading()"
-          [deleteLoading]="deleteLoading()"
-          [identified]="!unidentified()"
-          (selectedFileIdChange)="selectedFileId.set($event)"
-          [download]="fileDownload()"
-          (openDownload)="openDownloadModal()"
-          (downloadSeries)="downloadSeries()"
-          (openProfiles)="openProfilesModal()"
-          (openLibrary)="libraryDialog()?.open()"
-          (refreshMetadata)="refreshMetadata()"
-          (toggleMonitored)="toggleMonitored()"
-          (deleteMedia)="deleteMedia()"
-          (identify)="openIdentifyModal()"
-          (openAnalyze)="analyze.open()"
-          (seriesWatchedToggled)="watched.onSeriesToggled($event)"
-          (editSubtitles)="openSubtitles()"
-          (requestMedia)="requestFlow.openForMedia()"
-          (requestDeletion)="requestFlow.requestDeletion()"
-          (addToPlaylist)="openAddToPlaylist()"
-          (recommend)="openRecommend()"
-          [liked]="like.focusedLiked()"
-          (likeToggled)="like.toggle()"
-          (openTracking)="openTracking({ kind: m.type })"
-          [badge]="headerBadge()"
-          (openDownloadDetail)="openDownloadDetailModal()"
-        />
-
-        @if (m.type === 'movie') {
-          <app-media-info-extra [media]="m" [directors]="directors()" />
-        }
-
-        @if (m.type === 'movie' && collection(); as coll) {
-          <div class="divider my-6"></div>
-          <app-collapsible-section
-            [heading]="'media_detail.part_of' | translate: { name: coll.name }"
-            persistKey="collection"
-          >
-            <ng-container
-              *ngTemplateOutlet="movieRow; context: { $implicit: coll.items, activeId: m.id }"
-            />
-          </app-collapsible-section>
-        }
-
-        @if (m.type === 'movie' && similar().length) {
-          <div class="divider my-6"></div>
-          <app-collapsible-section
-            [heading]="'media_detail.similar' | translate"
-            persistKey="similar"
-          >
-            <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: similar() }" />
-          </app-collapsible-section>
-        }
-
-        @if (!kinds[m.type].hasSeasons && cast().length) {
-          <div class="divider my-6"></div>
-          <ng-container *ngTemplateOutlet="castCrewBlock" />
-        }
-
-        @if (m.type === 'movie') {
-          <app-subtitles-modal
-            [mediaId]="m.id"
-            [selectedFileId]="activeFileId()"
-            [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
-            [canManage]="canManageSubtitles()"
-            [languageProfileId]="m.languageProfile?.id ?? null"
-          />
-        }
-
-        @if (activeFile(); as af) {
-          <div class="divider my-6"></div>
-          <app-media-file-info
-            [file]="af"
-            [mediaPath]="m.library?.path ?? null"
-            [canDelete]="canDelete()"
-            [canManageSubtitles]="canManageSubtitles()"
-            [canEditMedia]="canEditProfiles()"
-            [fileId]="activeFileId()"
-            [mediaId]="m.id"
-            (subtitlesChanged)="reloadSubtitles()"
-            (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
-          />
-        }
-
-        @if (kinds[m.type].hasSeasons && m.seasons?.length) {
-          <app-media-detail-seasons
-            [media]="m"
-            [selectedSeason]="activeSeason(m)"
-            [watchedEpisodeIds]="watched.episodeIds()"
-            [episodeProgress]="watched.episodeProgress()"
-            [activeSeasonId]="activeSeasonId()"
-            [episodesHasFileOnly]="episodesHasFileOnly()"
-            [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"
-            [seasonBusyId]="seasonBusy()"
-            [seasonWatchedBusyId]="watched.seasonBusy()"
-            [isAdmin]="isAdmin()"
-            [canRequest]="requestFlow.canRequest()"
-            [userRequestedSeasonNumbers]="requestFlow.requestedSeasons()"
-            [likedSeasonIds]="like.state().seasonIds"
-            [likedEpisodeIds]="like.state().episodeIds"
-            (toggleEpisodeLike)="like.toggleEpisode($event)"
-            (selectSeason)="selectSeason($event)"
-            (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
-            (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
-            (toggleSeasonWatched)="watched.onToggleSeasonWatched(m.id, $event.season, $event.watched)"
-            (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
-            (requestSeason)="requestFlow.openForSeason($event)"
-            (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
-            (toggleSeasonLike)="like.toggleSeason($event)"
-            (recommendSeason)="recommendSeason($event)"
-            (downloadEpisode)="downloadEpisode($event.season, $event.episode)"
-            (downloadSeason)="downloadSeason($event)"
-            (downloadSelected)="downloadSeasons($event)"
-          />
-        }
-
-        @if (kinds[m.type].hasSeasons) {
-          <app-media-info-extra [media]="m" [directors]="directors()" />
-        }
-
-        @if (kinds[m.type].hasSeasons && cast().length) {
-          <div class="divider my-6"></div>
-          <ng-container *ngTemplateOutlet="castCrewBlock" />
-        }
-      </div>
-    }
-
-    <!-- Modals (shared between modes) -->
+    <!-- Modals every kind shares -->
     <div>
-      <app-releases-modal
-        #releasesModal
-        [title]="grabs.titleKey() | translate"
-        [releases]="grabs.releases()"
-        [indexers]="grabs.indexers()"
-        [loading]="grabs.loading()"
-        [searched]="grabs.searched()"
-        [error]="grabs.error()"
-        [emptyMessage]="grabs.emptyMessage()"
-        [grabBusy]="grabs.grabBusy()"
-        [grabState]="grabs.grabState()"
-        [canGrab]="canGrab()"
-        [showCfScore]="grabs.showCfScore()"
-        [wants]="grabs.wants()"
-        [wantFamily]="grabs.target()?.family ?? null"
-        [wantLanguage]="grabs.target()?.language ?? null"
-        grabPrefix="r"
-        (grab)="grabs.grabRelease($event.release, $event.key)"
-        (wantChange)="grabs.selectWant($event)"
-      />
-
       <app-media-detail-profiles-modal
         [profilesOptionsLoading]="profilesOptionsLoading()"
         [draftQualityProfileId]="draftQualityProfileId()"
@@ -375,81 +58,30 @@
       />
 
       <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
-      <app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
-      <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>
   }
+
+  <app-releases-modal
+    #releasesModal
+    [title]="grabs.titleKey() | translate"
+    [releases]="grabs.releases()"
+    [indexers]="grabs.indexers()"
+    [loading]="grabs.loading()"
+    [searched]="grabs.searched()"
+    [error]="grabs.error()"
+    [emptyMessage]="grabs.emptyMessage()"
+    [grabBusy]="grabs.grabBusy()"
+    [grabState]="grabs.grabState()"
+    [canGrab]="canGrab()"
+    [showCfScore]="grabs.showCfScore()"
+    [wants]="grabs.wants()"
+    [wantFamily]="grabs.target()?.family ?? null"
+    [wantLanguage]="grabs.target()?.language ?? null"
+    grabPrefix="r"
+    (grab)="grabs.grabRelease($event.release, $event.key)"
+    (wantChange)="grabs.selectWant($event)"
+  />
 </div>
-
-<ng-template #movieRow let-items let-activeId="activeId">
-  <app-horizontal-scroller>
-    @for (item of items; track item.id) {
-      <app-media-card
-        class="shrink-0 w-28 sm:w-32 lg:w-40"
-        [aspect]="'portrait'"
-        [imageUrl]="item.posterUrl"
-        [fanartUrl]="item.fanartUrl"
-        [title]="item.title"
-        [subtitle]="item.year ? '' + item.year : ''"
-        [rating]="item.rating ?? 0"
-        [status]="item.hasFile ? null : 'missing'"
-        [highlighted]="item.id === activeId"
-        [link]="['/movies', '' + item.id]"
-      />
-    }
-  </app-horizontal-scroller>
-</ng-template>
-
-<ng-template #castCrewBlock>
-  @if (cast().length) {
-    <div class="cv-auto py-5 -my-5 px-4 -mx-4" style="contain-intrinsic-size: auto 12rem">
-      <app-collapsible-section [heading]="'media_detail.cast' | translate" persistKey="cast">
-        <app-horizontal-scroller>
-          @for (c of cast(); track c.id) {
-            <a
-              [routerLink]="['/persons', c.person.id]"
-              (click)="armSlide()"
-              data-no-focus-ring
-              class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group"
-            >
-              <div class="avatar">
-                <div
-                  class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-4 group-focus-visible:ring-4 group-focus:ring-offset-2 group-focus-visible:ring-offset-2 group-focus:ring-offset-base-100 group-focus-visible:ring-offset-base-100 transition-colors"
-                >
-                  @if (c.person.avatarUrl) {
-                    <img
-                      appImgFadeIn
-                      [cachedSrc]="c.person.avatarUrl | resolveUrl: 'thumb'"
-                      [alt]="c.person.name"
-                      loading="lazy"
-                      decoding="async"
-                      fetchpriority="low"
-                    />
-                  } @else {
-                    <div
-                      class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30"
-                    >
-                      {{ c.person.name.charAt(0) }}
-                    </div>
-                  }
-                </div>
-              </div>
-              <span class="text-xs text-center font-medium line-clamp-1 w-full">{{
-                c.person.name
-              }}</span>
-              @if (c.character) {
-                <span
-                  class="text-[10px] text-base-content/50 text-center line-clamp-1 w-full -mt-1"
-                  >{{ c.character }}</span
-                >
-              }
-            </a>
-          }
-        </app-horizontal-scroller>
-      </app-collapsible-section>
-    </div>
-  }
-</ng-template>
 
 <!-- Analyse modal (admin-only): Rescan hits /rescan (superset) and disables the granular options when ticked. -->
 <dialog
@@ -600,7 +232,7 @@
   </form>
 </dialog>
 
-<!-- Request modal — only relevant for users who can request (regular
+<!-- Request modal - only relevant for users who can request (regular
      requesters). Profiles + libraries already loaded by media-detail. -->
 @if (requestFlow.canRequest()) {
   <app-request-modal

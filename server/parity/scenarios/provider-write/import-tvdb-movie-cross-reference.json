@@ -28,6 +28,7 @@
         "externalId": "169",
         "libraryId": 7,
         "provider": "tvdb",
+        "qualityProfileId": 1,
         "type": "movie"
       },
       "expect": {
@@ -76,8 +77,16 @@
           "path": "/tmp/fliks-parity/providers/movies-fr/The Matrix",
           "physicalRelease": null,
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 0,
           "releaseDate": "1999-03-31",
           "runtime": 136,
@@ -179,8 +188,16 @@
           "physicalRelease": null,
           "posterUrl": "https://artworks.thetvdb.com/mp.jpg",
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 0,
           "releaseDate": "1999-03-31",
           "runtime": 136,

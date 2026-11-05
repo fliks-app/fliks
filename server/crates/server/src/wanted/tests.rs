@@ -51,6 +51,8 @@ async fn ctx(pool: PgPool) -> Ctx {
         INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'reader', false, 1);
         INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]'), (2, 'Films', '["movie"]');
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one'), (2, '/b/two');
+        INSERT INTO quality_profiles (id, name, family, cutoff, items)
+          VALUES (1, 'Text', 'text', 1, '[]'), (2, 'Audio', 'audio', 1, '[]');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (2, 2);
         INSERT INTO persons (id, name) VALUES (1, 'Una Roe');
         INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'openlibrary', 'OL7A');
@@ -662,7 +664,8 @@ async fn a_series_watch_adds_the_new_volume_of_its_series(pool: PgPool) {
 async fn an_import_creates_the_book_with_the_chosen_wants(pool: PgPool) {
     let c = ctx(pool).await;
     let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL9W", "libraryId": 1,
-                      "wants": [{"family": "text", "language": "fr"}, {"family": "audio", "language": "en"}]});
+                      "wants": [{"family": "text", "language": "fr", "qualityProfileId": 1},
+                                {"family": "audio", "language": "en", "qualityProfileId": 2}]});
     let (s, v) = c.admin("POST", "/api/media/import", Some(body)).await;
     assert_eq!(s, 201, "{v}");
     let id = v["id"].as_i64().unwrap();
@@ -678,4 +681,31 @@ async fn an_import_creates_the_book_with_the_chosen_wants(pool: PgPool) {
     );
     let bad = json!({"type": "book", "provider": "openlibrary", "externalId": "OL8W", "wants": [{"family": "video"}]});
     assert_eq!(c.admin("POST", "/api/media/import", Some(bad)).await.0, 400);
+    for (wants, message) in [
+        (None, "wants must be an array"),
+        (
+            Some(json!([{"family": "text"}])),
+            "A quality profile is required",
+        ),
+    ] {
+        let mut body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL8W", "libraryId": 1});
+        if let Some(w) = wants {
+            body["wants"] = w;
+        }
+        let (s, v) = c.admin("POST", "/api/media/import", Some(body)).await;
+        assert_eq!(s, 400, "{v}");
+        assert_eq!(v["message"], json!([message]));
+    }
+    let movie = |q: Value| json!({"type": "movie", "externalId": "1", "libraryId": 2, "qualityProfileId": q});
+    for (q, message) in [
+        (json!(null), json!(["A quality profile is required"])),
+        (
+            json!(0),
+            json!(["qualityProfileId must not be less than 1"]),
+        ),
+        (json!(1), json!("Quality profile #1 not found")),
+    ] {
+        let (s, v) = c.admin("POST", "/api/media/import", Some(movie(q))).await;
+        assert_eq!((s, &v["message"]), (400, &message));
+    }
 }

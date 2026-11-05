@@ -38,6 +38,8 @@ async fn ctx(pool: PgPool, fakes: Vec<Fake>) -> (Ctx, AppState) {
         INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'reader', false, 1);
         INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]'), (2, 'Other', '["book"]');
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one'), (2, '/b/two');
+        INSERT INTO quality_profiles (id, name, family, cutoff, items)
+          VALUES (1, 'Text', 'text', 1, '[]'), (2, 'Audio', 'audio', 1, '[]');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         "#,
     )
@@ -299,8 +301,26 @@ async fn preview_describes_the_work_and_its_editions(pool: PgPool) {
     assert_eq!(c.get("/api/metadata/tmdb/book/OL1W").await.0, 400);
 }
 
+#[sqlx::test(migrations = false)]
+async fn preview_takes_an_edition_cover_when_the_work_has_none(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol.works.insert("OL3W".into(), json!({"title": "Gamma"}));
+    ol.children.insert(
+        "OL3W".into(),
+        vec![
+            json!({"externalId": "OL7M", "title": "Gamma"}),
+            json!({"externalId": "OL8M", "title": "Gamma", "posterUrl": "http://img/e.jpg"}),
+        ],
+    );
+    let (c, _) = ctx(pool, vec![ol]).await;
+    let (s, v) = c.get("/api/metadata/openlibrary/book/OL3W").await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v["posterUrl"], "http://img/e.jpg");
+}
+
 fn import(extra: Value) -> Value {
-    let mut b = json!({"type": "book", "provider": "openlibrary", "externalId": "OL1W"});
+    let mut b = json!({"type": "book", "provider": "openlibrary", "externalId": "OL1W",
+        "wants": [{"family": "text", "qualityProfileId": 1}, {"family": "audio", "qualityProfileId": 2}]});
     b.as_object_mut()
         .unwrap()
         .extend(extra.as_object().unwrap().clone());
@@ -409,6 +429,22 @@ async fn import_validates_before_it_writes(pool: PgPool) {
         400
     );
     assert_eq!(post(import(json!({"externalId": "OL1M"}))).await.0, 400);
+    let partial = json!([{"family": "text", "qualityProfileId": 1}, {"family": "audio"}]);
+    let (s, v) = post(import(
+        json!({"libraryId": 1, "externalId": "OL2W", "wants": partial}),
+    ))
+    .await;
+    assert_eq!(
+        (s, &v["message"]),
+        (400, &json!(["A quality profile is required"]))
+    );
+    let no_wants =
+        json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W", "libraryId": 1});
+    let (s, v) = post(no_wants).await;
+    assert_eq!(
+        (s, &v["message"]),
+        (400, &json!(["wants must be an array"]))
+    );
     assert_eq!(
         post(import(
             json!({"provider": "googlebooks", "externalId": "x"})

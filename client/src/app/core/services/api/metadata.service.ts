@@ -323,15 +323,15 @@ export class MetadataService {
   importFromTmdb(
     type: MediaType,
     tmdbId: number,
-    qualityProfileId?: number,
+    qualityProfileId: number,
     languageProfileId?: number,
     libraryId?: number,
   ) {
-    const body: { type: string; tmdbId: number; qualityProfileId?: number; languageProfileId?: number; libraryId?: number } = {
+    const body: { type: string; tmdbId: number; qualityProfileId: number; languageProfileId?: number; libraryId?: number } = {
       type,
       tmdbId,
+      qualityProfileId,
     };
-    if (qualityProfileId != null) body.qualityProfileId = qualityProfileId;
     if (languageProfileId != null) body.languageProfileId = languageProfileId;
     if (libraryId != null) body.libraryId = libraryId;
     return firstValueFrom(this.http.post<Media>('/api/media/import/tmdb', body));
@@ -342,7 +342,7 @@ export class MetadataService {
     type: MediaType;
     externalId: string;
     provider: string;
-    qualityProfileId?: number;
+    qualityProfileId: number;
     languageProfileId?: number;
     libraryId?: number;
     /** One of the library's folders; omitted means its default one. */
