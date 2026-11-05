@@ -138,7 +138,6 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
     media::write::recover(&state).await;
-    media::write::orphans::schedule(&state);
     ingest::books::backfill_unmatched(&state).await;
     ingest::books::merge::resume_backfills(&state).await;
     party::boot(&state).await?;

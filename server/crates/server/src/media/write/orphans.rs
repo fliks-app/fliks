@@ -1,17 +1,14 @@
-//! What a deleted media leaves behind (`media-write.md` rule 67a): persons with no credit and no
-//! follow, collections with no entry and no watch, and the image files of rows that are gone.
-use crate::state::AppState;
-use sqlx::PgConnection;
-use std::{
-    collections::HashSet,
-    sync::atomic::{AtomicBool, Ordering},
+//! What a deleted media leaves behind (`media-write.md` rule 67a): the persons it credited and the
+//! collections it was in, once nothing else holds them, and its images.
+use crate::{
+    images::paths::{Size, Target},
+    state::AppState,
 };
+use sqlx::PgConnection;
+use std::path::Path;
 
-static PENDING: AtomicBool = AtomicBool::new(false);
-static RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// Taken by every transaction that references a person or a collection, so a sweep never deletes one
-/// between its lookup and its use.
+/// Taken by every transaction that references a person or a collection, so a cleanup never deletes
+/// one between its lookup and its use.
 pub async fn hold(c: &mut PgConnection) -> sqlx::Result<()> {
     sqlx::query("SELECT pg_advisory_xact_lock_shared(hashtext('persons:orphans'))")
         .execute(c)
@@ -19,108 +16,94 @@ pub async fn hold(c: &mut PgConnection) -> sqlx::Result<()> {
         .map(|_| ())
 }
 
-/// Queues a sweep in the background; calls made while one waits share it.
-pub fn schedule(st: &AppState) {
-    if PENDING.swap(true, Ordering::SeqCst) {
-        return;
-    }
+/// The rows a media references, read in its delete transaction before the cascade.
+#[derive(Debug, Default)]
+pub struct Refs {
+    media: i32,
+    persons: Vec<i32>,
+    collections: Vec<i32>,
+    groups: Vec<i32>,
+    items: Vec<i32>,
+}
+
+pub async fn refs_of(c: &mut PgConnection, media: i32) -> sqlx::Result<Refs> {
+    let ids = |sql: &'static str| sqlx::query_scalar::<_, i32>(sql).bind(media);
+    Ok(Refs {
+        media,
+        persons: ids(r#"SELECT DISTINCT "personId" FROM media_credits WHERE "mediaId" = $1"#)
+            .fetch_all(&mut *c)
+            .await?,
+        collections: ids(
+            r#"SELECT DISTINCT "collectionId" FROM collection_entries WHERE "mediaId" = $1"#,
+        )
+        .fetch_all(&mut *c)
+        .await?,
+        groups: ids(r#"SELECT id FROM item_groups WHERE "mediaId" = $1"#)
+            .fetch_all(&mut *c)
+            .await?,
+        items: ids(r#"SELECT id FROM items WHERE "mediaId" = $1"#)
+            .fetch_all(&mut *c)
+            .await?,
+    })
+}
+
+/// `clean` in the background, once the media's delete has committed.
+pub fn release(st: &AppState, refs: Refs) {
     let st = st.clone();
     tokio::spawn(async move {
-        let _one = RUNNING.lock().await;
-        PENDING.store(false, Ordering::SeqCst);
-        if let Err(e) = sweep(&st).await {
-            tracing::warn!("Orphan sweep failed: {e}");
+        if let Err(e) = clean(&st, &refs).await {
+            tracing::warn!("Cleanup after media #{}: {e}", refs.media);
         }
     });
 }
 
-pub async fn sweep(st: &AppState) -> sqlx::Result<()> {
+pub async fn clean(st: &AppState, refs: &Refs) -> sqlx::Result<()> {
     let mut tx = st.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('persons:orphans'))")
         .execute(&mut *tx)
         .await?;
     let persons = sqlx::query_scalar::<_, i32>(
-        r#"DELETE FROM persons p
-           WHERE NOT EXISTS (SELECT 1 FROM media_credits c WHERE c."personId" = p.id)
+        r#"DELETE FROM persons p WHERE p.id = ANY($1)
+             AND NOT EXISTS (SELECT 1 FROM media_credits c WHERE c."personId" = p.id)
              AND NOT EXISTS (SELECT 1 FROM person_follows f WHERE f."personId" = p.id)
            RETURNING id"#,
     )
+    .bind(&refs.persons)
     .fetch_all(&mut *tx)
     .await?;
-    let collections = sqlx::query(
-        r#"DELETE FROM collections c
-           WHERE NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e."collectionId" = c.id)
+    sqlx::query(
+        r#"DELETE FROM collections c WHERE c.id = ANY($1)
+             AND NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e."collectionId" = c.id)
              AND NOT EXISTS (SELECT 1 FROM series_watches w WHERE w."collectionId" = c.id)"#,
     )
+    .bind(&refs.collections)
     .execute(&mut *tx)
-    .await?
-    .rows_affected();
+    .await?;
     tx.commit().await?;
-    let mut files = 0;
-    for (dir, rows) in [
-        ("media", "SELECT id FROM media"),
-        ("seasons", "SELECT id FROM item_groups"),
-        ("episodes", "SELECT id FROM items"),
-        ("persons", "SELECT id FROM persons"),
-    ] {
-        let dir = st.images.root().join(dir);
-        // Listed before the ids are read: an image is written after its row commits.
-        let Ok(mut rd) = tokio::fs::read_dir(&dir).await else {
-            continue;
-        };
-        let mut names = vec![];
-        while let Ok(Some(e)) = rd.next_entry().await {
-            names.push(e.file_name().to_string_lossy().into_owned());
+    let root = st.images.root();
+    remove(&root.join("media").join(refs.media.to_string())).await;
+    let targets = (refs.groups.iter().map(|g| Target::season(*g)))
+        .chain(refs.items.iter().map(|i| Target::episode(*i)))
+        .chain(persons.iter().map(|p| Target::person(*p)));
+    for t in targets {
+        for size in [Size::Full, Size::Medium, Size::Thumb] {
+            remove(&t.file(root, size)).await;
         }
-        let ids: HashSet<i32> = sqlx::query_scalar(rows)
-            .fetch_all(&st.db)
-            .await?
-            .into_iter()
-            .collect();
-        for name in names {
-            let Some(id) = owner(&name) else { continue };
-            if ids.contains(&id) {
-                continue;
-            }
-            let path = dir.join(&name);
-            let gone = if path.is_dir() {
-                tokio::fs::remove_dir_all(&path).await
-            } else {
-                tokio::fs::remove_file(&path).await
-            };
-            match gone {
-                Ok(()) => files += 1,
-                Err(e) => tracing::warn!("Orphan image {} not removed: {e}", path.display()),
-            }
-        }
-    }
-    if !persons.is_empty() || collections > 0 || files > 0 {
-        tracing::info!(
-            "Orphan sweep: {} person(s), {collections} collection(s), {files} image entries removed",
-            persons.len()
-        );
+        remove(&t.sidecar(root)).await;
     }
     Ok(())
 }
 
-/// The row id an image entry belongs to: `137`, `42-thumb.jpg`, `42.src.json`; `None` for anything else.
-fn owner(name: &str) -> Option<i32> {
-    let id = name.split(['-', '.']).next()?;
-    (!id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
-        .then(|| id.parse().ok())
-        .flatten()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::owner;
-
-    #[test]
-    fn an_image_entry_names_its_row() {
-        assert_eq!(owner("137"), Some(137));
-        assert_eq!(owner("42-thumb.jpg"), Some(42));
-        assert_eq!(owner("42.src.json"), Some(42));
-        assert_eq!(owner(".fliks-tmp-ab12"), None);
-        assert_eq!(owner("notes.txt"), None);
+/// A missing file or folder is already clean.
+async fn remove(path: &Path) {
+    let gone = if path.is_dir() {
+        tokio::fs::remove_dir_all(path).await
+    } else {
+        tokio::fs::remove_file(path).await
+    };
+    if let Err(e) = gone
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!("Image {} not removed: {e}", path.display());
     }
 }

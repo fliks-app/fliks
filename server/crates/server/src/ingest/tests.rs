@@ -1061,112 +1061,110 @@ async fn a_complete_file_is_imported(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_orphan_sweep_drops_uncredited_persons_empty_collections_and_gone_images(pool: PgPool) {
+async fn a_deleted_media_takes_only_what_nothing_else_holds(pool: PgPool) {
     let c = ctx(pool).await;
     let l = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
     let (kept, gone) = (
         media(&c, l, "A", "movie").await,
         media(&c, l, "B", "movie").await,
     );
-    let person = |name: &'static str| {
-        let db = c.st.db.clone();
-        async move {
-            sqlx::query_scalar::<_, i32>("INSERT INTO persons (name) VALUES ($1) RETURNING id")
-                .bind(name)
-                .fetch_one(&db)
-                .await
-                .unwrap()
-        }
+    let db = &c.st.db;
+    let row = |sql: &'static str, name: &'static str| async move {
+        sqlx::query_scalar::<_, i32>(sql)
+            .bind(name)
+            .fetch_one(db)
+            .await
+            .unwrap()
     };
-    let (credited, orphaned, followed, bare) = (
+    let person = |n| row("INSERT INTO persons (name) VALUES ($1) RETURNING id", n);
+    let collection = |n| row("INSERT INTO collections (name) VALUES ($1) RETURNING id", n);
+    let (shared, orphaned, followed, unrelated) = (
         person("P1").await,
         person("P2").await,
         person("P3").await,
         person("P4").await,
     );
-    for (m, p) in [(kept, credited), (gone, orphaned)] {
-        sqlx::query(
-            r#"INSERT INTO media_credits ("mediaId", "personId", role) VALUES ($1, $2, 'cast')"#,
-        )
-        .bind(m)
-        .bind(p)
-        .execute(&c.st.db)
-        .await
-        .unwrap();
-    }
-    sqlx::query(
-        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants)
-           SELECT id, $1, 'author', $2, '{}'::jsonb FROM users WHERE username = 'admin'"#,
-    )
-    .bind(followed)
-    .bind(l)
-    .execute(&c.st.db)
-    .await
-    .unwrap();
-    let collection = |name: &'static str| {
-        let db = c.st.db.clone();
-        async move {
-            sqlx::query_scalar::<_, i32>("INSERT INTO collections (name) VALUES ($1) RETURNING id")
-                .bind(name)
-                .fetch_one(&db)
-                .await
-                .unwrap()
-        }
-    };
-    let (held, empty, watched) = (
+    let (held, emptied, watched, untouched) = (
         collection("C1").await,
         collection("C2").await,
         collection("C3").await,
+        collection("C4").await,
     );
-    sqlx::query(r#"INSERT INTO collection_entries ("collectionId", "mediaId") VALUES ($1, $2)"#)
-        .bind(held)
-        .bind(kept)
-        .execute(&c.st.db)
-        .await
-        .unwrap();
-    sqlx::query(
+    let link = |sql: &'static str, a: i32, b: i32| async move {
+        sqlx::query(sql).bind(a).bind(b).execute(db).await.unwrap();
+    };
+    let credit =
+        r#"INSERT INTO media_credits ("mediaId", "personId", role) VALUES ($1, $2, 'author')"#;
+    let entry = r#"INSERT INTO collection_entries ("mediaId", "collectionId") VALUES ($1, $2)"#;
+    for (m, p) in [
+        (kept, shared),
+        (gone, shared),
+        (gone, orphaned),
+        (gone, followed),
+    ] {
+        link(credit, m, p).await;
+    }
+    for (m, k) in [(kept, held), (gone, held), (gone, emptied), (gone, watched)] {
+        link(entry, m, k).await;
+    }
+    link(
+        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants)
+           SELECT id, $1, 'author', $2, '{}'::jsonb FROM users WHERE username = 'admin'"#,
+        followed,
+        l,
+    )
+    .await;
+    link(
         r#"INSERT INTO series_watches ("userId", "collectionId", "libraryId", wants)
            SELECT id, $1, $2, '{}'::jsonb FROM users WHERE username = 'admin'"#,
+        watched,
+        l,
     )
-    .bind(watched)
-    .bind(l)
-    .execute(&c.st.db)
-    .await
-    .unwrap();
+    .await;
     let data = c.dir.join("data");
     let files = [
         format!("media/{kept}/poster.jpg"),
         format!("media/{gone}/poster.jpg"),
-        format!("persons/{credited}.jpg"),
+        format!("persons/{shared}.jpg"),
         format!("persons/{orphaned}.jpg"),
         format!("persons/{orphaned}-thumb.jpg"),
-        "persons/.fliks-tmp-x".to_owned(),
+        format!("persons/{unrelated}.jpg"),
     ];
     for f in &files {
         touch(&data.join(f), b"x");
     }
+    let mut tx = db.begin().await.unwrap();
+    let refs = crate::media::write::orphans::refs_of(&mut tx, gone)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM media WHERE id = $1")
         .bind(gone)
-        .execute(&c.st.db)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    crate::media::write::orphans::clean(&c.st, &refs)
         .await
         .unwrap();
 
-    crate::media::write::orphans::sweep(&c.st).await.unwrap();
-
-    let left: Vec<i32> =
-        sqlx::query_scalar("SELECT id FROM persons WHERE id = ANY($1) ORDER BY id")
-            .bind(vec![credited, orphaned, followed, bare])
-            .fetch_all(&c.st.db)
+    let ids = |sql: &'static str, all: Vec<i32>| async move {
+        sqlx::query_scalar::<_, i32>(sql)
+            .bind(all)
+            .fetch_all(db)
             .await
-            .unwrap();
-    assert_eq!(left, [credited, followed]);
-    let collections: Vec<i32> =
-        sqlx::query_scalar("SELECT id FROM collections WHERE id = ANY($1) ORDER BY id")
-            .bind(vec![held, empty, watched])
-            .fetch_all(&c.st.db)
-            .await
-            .unwrap();
-    assert_eq!(collections, [held, watched]);
+            .unwrap()
+    };
+    let persons = ids(
+        "SELECT id FROM persons WHERE id = ANY($1) ORDER BY id",
+        vec![shared, orphaned, followed, unrelated],
+    );
+    assert_eq!(persons.await, [shared, followed, unrelated]);
+    let collections = ids(
+        "SELECT id FROM collections WHERE id = ANY($1) ORDER BY id",
+        vec![held, emptied, watched, untouched],
+    );
+    assert_eq!(collections.await, [held, watched, untouched]);
     let exists: Vec<bool> = files.iter().map(|f| data.join(f).exists()).collect();
     assert_eq!(exists, [true, false, true, false, false, true]);
 }

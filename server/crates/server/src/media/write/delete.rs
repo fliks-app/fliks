@@ -161,6 +161,7 @@ pub async fn remove_media(
         .on_media_removed(&mut tx, &media.lifecycle_ref())
         .await?;
     let external_ids = external_ids::refs(&mut *tx, id).await?;
+    let held = super::orphans::refs_of(&mut tx, id).await?;
     sqlx::query!("DELETE FROM media WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
@@ -168,7 +169,7 @@ pub async fn remove_media(
     for f in files {
         drop_thumbnails(st, f);
     }
-    super::orphans::schedule(st);
+    super::orphans::release(st, held);
     st.hub.emit_domain(DomainEvent::MediaRemoved {
         media_id: i64::from(id),
         external_ids,
