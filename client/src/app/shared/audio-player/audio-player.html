@@ -128,13 +128,15 @@
           class="range range-primary range-xs w-full"
           min="0"
           max="1000"
-          [value]="percent() * 10"
+          [value]="scrub() ?? percent() * 10"
+          (input)="scrub.set(+$any($event.target).value)"
           (change)="onSeek($event)"
+          (blur)="scrub.set(null)"
           [attr.aria-label]="'audio_player.seek' | translate"
         />
         <div class="flex justify-between text-xs tabular-nums text-base-content/60">
-          <span>{{ clock(audio.position()) }}</span>
-          <span>-{{ clock(audio.duration() - audio.position()) }}</span>
+          <span>{{ clock(shown()) }}</span>
+          <span>-{{ clock(audio.duration() - shown()) }}</span>
         </div>
       </div>
 
