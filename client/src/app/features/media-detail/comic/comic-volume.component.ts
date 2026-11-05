@@ -84,7 +84,7 @@ export class ComicVolumeComponent {
       identified: true,
     }),
   });
-  protected readonly canAcquire = this.issueActions.available;
+  protected readonly canAcquire = computed(() => this.issueActions.rows().length > 0);
   protected readonly editingVolume = signal(false);
   protected readonly editingIssue = signal<ComicIssue | null>(null);
   protected readonly saving = signal(false);

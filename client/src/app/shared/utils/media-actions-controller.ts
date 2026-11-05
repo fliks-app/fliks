@@ -1,4 +1,4 @@
-import { computed, effect, inject, untracked } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import type { UiContribution } from '@fliks/plugin-ui';
 import {
@@ -48,12 +48,7 @@ export class MediaActionsController {
   private readonly wantsStore = inject(WantsStore);
   private readonly grabs = inject(ReleaseGrabController);
 
-  constructor(private readonly cfg: MediaActionsConfig) {
-    effect(() => {
-      const id = this.cfg.base().mediaId;
-      untracked(() => void this.wantsStore.load(id));
-    });
-  }
+  constructor(private readonly cfg: MediaActionsConfig) {}
 
   readonly acquisition = computed<AcquisitionContext>(() => {
     const b = this.cfg.base();

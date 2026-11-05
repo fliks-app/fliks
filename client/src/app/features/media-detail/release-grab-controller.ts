@@ -27,8 +27,8 @@ export function baseKey(b: AcquisitionBase): string {
 }
 
 /** The one release search and grab of every kind and level: the list the modal shows, the busy flags and the per-release result marks.
- *  The page showing the modal calls `attach`; a menu anywhere under it calls `search` and `grabBest`. */
-@Injectable({ providedIn: 'root' })
+ *  One per detail page (provided by it, so a cached page keeps its own modal and media); a menu under it calls `search` and `grabBest`. */
+@Injectable()
 export class ReleaseGrabController {
   private readonly api = inject(MediaDetailReleasePickerService);
   private readonly stream = inject(ReleaseSearchStreamService);
@@ -74,11 +74,6 @@ export class ReleaseGrabController {
     return this.loading() && !!t && baseKey(t) === baseKey(base);
   }
 
-  /** What a header button shows: its own grab-best spins, a release grabbed by hand in the modal only locks it. */
-  headerBusy(base: AcquisitionBase): string | null {
-    return this.isBestBusy(base) ? 'best' : this.grabBusy();
-  }
-
   /** Opens the modal on the first want; the selector switches between the rest. */
   async search(base: AcquisitionBase, wants: readonly Want[]): Promise<void> {
     if (!wants.length) return;
@@ -106,8 +101,10 @@ export class ReleaseGrabController {
         releases: this.releases,
         indexers: this.indexers,
       });
+      if (this.target() !== target) return;
       this.releases.set(rows);
     } catch (err: unknown) {
+      if (this.target() !== target) return;
       this.releases.set([]);
       if (isUnprofiledReleaseError(err)) {
         this.emptyMessage.set('media_detail.no_quality_profile');
@@ -115,8 +112,10 @@ export class ReleaseGrabController {
         this.error.set(serverMessage(err, this.translate, 'media_detail.releases_error'));
       }
     } finally {
-      this.searched.set(true);
-      this.loading.set(false);
+      if (this.target() === target) {
+        this.searched.set(true);
+        this.loading.set(false);
+      }
     }
   }
 

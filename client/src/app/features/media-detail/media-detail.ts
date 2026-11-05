@@ -77,7 +77,7 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 import { ReleaseGrabController } from './release-grab-controller';
-import { WantsStore, aimedWants } from '../../core/acquisition/acquisition';
+import { WantsStore } from '../../core/acquisition/acquisition';
 import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
 import { LikeController } from '../../shared/utils/like-controller';
 import { AnalyzeController } from './analyze-controller';
@@ -136,9 +136,21 @@ interface HandedEpisode {
     TvSectionDirective,
   ],
   templateUrl: './media-detail.html',
-  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }],
+  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }, ReleaseGrabController],
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
+  constructor() {
+    this.grabs.attach(
+      () => this.media(),
+      () => this.releasesModal(),
+    );
+    // A refreshed media is the moment a want may have become satisfied.
+    effect(() => {
+      const id = this.media()?.id;
+      if (id != null) untracked(() => void this.wantsStore.load(id));
+    });
+  }
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
   private readonly admin = inject(MediaAdminService);
@@ -523,10 +535,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodesHasFileOnly = signal(readEpisodesHasFileOnlyFromStorage());
 
   readonly releasesModal = viewChild<ReleasesModalComponent>('releasesModal');
-  private readonly grabsAttached = this.grabs.attach(
-    () => this.media(),
-    () => this.releasesModal(),
-  );
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
@@ -849,7 +857,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
-      void this.wantsStore.reload(updated.id);
       if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
@@ -1249,15 +1256,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   onEpisodeDialogToggleMonitored() {
     const c = this.episodeDrawerContext();
     if (c) void this.toggleEpisodeMonitored(c.season.id, c.episode);
-  }
-
-  onEpisodeDialogLoadReleases() {
-    const c = this.episodeDrawerContext();
-    const media = this.media();
-    if (c && media) {
-      const wants = aimedWants({ level: 'item', wants: this.wantsStore.wantsOf(media.id) });
-      void this.grabs.search({ mediaId: media.id, kind: media.type, level: 'item', itemId: c.episode.id }, wants);
-    }
   }
 
   async toggleSeasonMonitored(season: Season) {

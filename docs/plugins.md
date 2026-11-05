@@ -94,11 +94,12 @@ disc), `media.item.actions` (an episode, an issue, a track), `card.actions`), wi
 predicate evaluates false, so a client that does not know a rule hides the entry rather than
 guessing. `level:work`, `level:group` and `level:item` name the level the menu is built for;
 `hasQualityProfile` is true when the target has at least one want with a quality profile, whatever
-its kind (`wants-follows.md` rule 2b); `isEpisode` equals `level:item` on a series and is kept for
-installed manifests, new ones use `level:*`. The core release-picker actionIds are
-`media.grab-best` and `media.search-releases` (work), `group.grab-best` and `group.search-releases`
-(group), `item.grab-best` and `item.search-releases` (item); each acts on the level of its slot. The action is either a route or a **core-declared `actionId`**: core keeps a closed
-catalogue per slot, and an id it does not know renders nothing.
+its kind (`wants-follows.md` rule 2b); `isEpisode` is core's own gate on its title-level
+rows (identity, profiles, library), true on a series item, and a manifest should use `level:*`.
+The core release-picker actionIds are `media.grab-best` and `media.search-releases` (work),
+`group.grab-best` and `group.search-releases` (group), `item.grab-best` and `item.search-releases`
+(item); each acts on the level of its slot. The action is either a route or a
+**core-declared `actionId`**: core keeps a closed catalogue per slot, and an id it does not know renders nothing.
 
 A contribution whose route opens one of your own views (`/plugins/<id>/<pageId>`, or
 `/admin/settings/plugins/<id>/<pageId>`) must name a page you declare in `ui.configPages[]`; anything

@@ -58,12 +58,11 @@ export function acquisitionWhen(ctx: AcquisitionContext, kind: MediaType): Parti
   };
 }
 
-/** The wants of the titles shown, fetched once each and shared by every menu of the page. */
+/** The wants of the titles shown, shared by every menu of the page; the page reloads them when its media refreshes. */
 @Injectable({ providedIn: 'root' })
 export class WantsStore {
   private readonly api = inject(WantsApiService);
   private readonly byMedia = signal<ReadonlyMap<number, readonly Want[]>>(new Map());
-  private readonly asked = new Set<number>();
 
   wantsOf(mediaId: number): readonly Want[] {
     return this.byMedia().get(mediaId) ?? [];
@@ -73,20 +72,12 @@ export class WantsStore {
     this.byMedia.update((m) => new Map(m).set(mediaId, wants));
   }
 
-  /** Fetches once per title; a failure leaves it without wants, which hides the acquisition rows. */
+  /** Fetches the wants again; a failure leaves what was known, or none, which hides the acquisition rows. */
   async load(mediaId: number): Promise<void> {
-    if (this.asked.has(mediaId)) return;
-    this.asked.add(mediaId);
     try {
       this.set(mediaId, await this.api.wants(mediaId));
     } catch {
-      this.asked.delete(mediaId);
+      /* keeps the previous wants */
     }
-  }
-
-  /** Forgets what was fetched, for a page that knows the wants changed. */
-  async reload(mediaId: number): Promise<void> {
-    this.asked.delete(mediaId);
-    await this.load(mediaId);
   }
 }
