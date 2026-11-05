@@ -269,6 +269,12 @@ pub enum SseEvent {
         title: String,
         error: String,
     },
+    #[serde(rename = "orphan_import.completed")]
+    OrphanImportCompleted {
+        created: i64,
+        linked: i64,
+        failed: i64,
+    },
     #[serde(rename = "media.move.completed")]
     MediaMoveCompleted {
         media_id: i64,
@@ -657,6 +663,7 @@ mod tests {
             json!({"type":"rescan.started","mediaId":1,"title":"t"}),
             json!({"type":"rescan.completed","mediaId":1,"title":"t","added":1,"removed":0,"updated":2,"subtitleRemovedMissing":0}),
             json!({"type":"rescan.failed","mediaId":1,"title":"t","error":"e"}),
+            json!({"type":"orphan_import.completed","created":1,"linked":2,"failed":1}),
             json!({"type":"media.files.delete_failed","mediaId":1,"title":"t"}),
             json!({"type":"player.command","sessionId":"s","mediaFileId":1,"userId":2,"action":"message","message":"m"}),
             json!({"type":"markers.season.completed","mediaId":1,"seasonId":2,"seasonNumber":3,"introsDetected":4}),
@@ -702,7 +709,7 @@ mod tests {
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 53);
+        assert_eq!(all.len(), 54);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

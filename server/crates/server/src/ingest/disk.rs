@@ -11,14 +11,23 @@ use crate::{
     events::{DomainEvent, Num, SseEvent, Subject as Subj, event::ImportSource},
     http::{
         AppError,
-        auth::Authed,
+        auth::{Authed, StreamAuthed},
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, paths_visible},
     media::write::{self as mw, body::Body},
     state::AppState,
 };
-use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+    Json, Router,
+    extract::{Query, State},
+    http::{
+        StatusCode,
+        header::{CACHE_CONTROL, CONTENT_TYPE},
+    },
+    response::{IntoResponse, Response},
+    routing::{get, post},
+};
 use fliks_domain::{
     acl::{Action, Subject},
     media::{
@@ -44,6 +53,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/imports/library/{libraryId}/orphans/scan", post(scan))
         .route("/api/imports/orphans/preview", post(preview))
+        .route("/api/imports/orphans/cover", get(cover))
         .route(
             "/api/imports/library/orphans/relink-batch",
             post(relink_batch),
@@ -138,6 +148,8 @@ struct Group {
     folder_name: String,
     guess_title: String,
     guess_year: Option<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    guess_authors: Vec<String>,
     file_ids: Vec<record::FileId>,
     suggested_provider: String,
     files: Vec<FileEntry>,
@@ -306,6 +318,7 @@ async fn scan_under(
                     folder_name: folder.clone(),
                     guess_title: folder,
                     guess_year: None,
+                    guess_authors: vec![],
                     file_ids: vec![],
                     suggested_provider: suggested(st, provider, media_type),
                     files: vec![entry],
@@ -405,6 +418,15 @@ async fn book_groups(
             folder_name: w.anchor.unwrap_or_default(),
             guess_title: title.unwrap_or(w.title),
             guess_year: year.or(w.year.map(i64::from)),
+            guess_authors: record
+                .as_ref()
+                .map(|r| {
+                    crate::metadata::books::people(r, "authors")
+                        .into_iter()
+                        .map(|(n, _)| n)
+                        .collect()
+                })
+                .unwrap_or_default(),
             file_ids: record.as_ref().map(record::file_ids).unwrap_or_default(),
             suggested_provider: provider.to_owned(),
             files: entries,
@@ -468,6 +490,7 @@ async fn comic_groups(
             folder_name: if at_root { String::new() } else { dir },
             guess_title: title.unwrap_or_default(),
             guess_year: year,
+            guess_authors: vec![],
             file_ids: vec![],
             suggested_provider: provider.to_owned(),
             files: entries,
@@ -612,6 +635,52 @@ pub async fn preview(
     ))
 }
 
+/// `GET /api/imports/orphans/cover?path=` (rule 107): the cover of a book file not imported yet.
+#[utoipa::path(get, path = "/api/imports/orphans/cover", responses((status = 200), (status = 404)))]
+pub async fn cover(
+    State(st): State<AppState>,
+    StreamAuthed(a): StreamAuthed,
+    Query(q): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
+    a.require(Action::Create, Subject::Media)?;
+    let none = || AppError::bare(StatusCode::NOT_FOUND);
+    let path = q
+        .get("path")
+        .map(|p| crate::libraries::sanitize_path(p))
+        .filter(|p| Path::new(p).is_absolute())
+        .ok_or_else(none)?;
+    let real = dunce::canonicalize(&path).map_err(|_| none())?;
+    if !books::is_book_file(&file_name(&real)) || !may_read(&st, &a, &real).await? {
+        return Err(none());
+    }
+    let bytes = books::file_cover(&real).await.ok_or_else(none)?;
+    let mime = image::guess_format(&bytes).map_or("application/octet-stream", |f| f.to_mime_type());
+    Ok((
+        [
+            (CONTENT_TYPE, mime),
+            (CACHE_CONTROL, "private, max-age=3600"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+/// A settings manager previews any folder (rule 71); anyone else reads under a library they can access.
+async fn may_read(st: &AppState, a: &Authed, real: &Path) -> Result<bool, AppError> {
+    if a.perms.can(Action::Manage, &Subject::Settings) {
+        return Ok(true);
+    }
+    let ids = accessible_library_ids(&st.db, a).await?;
+    let roots: Vec<String> =
+        sqlx::query_scalar(r#"SELECT path FROM library_folders WHERE "libraryId" = ANY($1)"#)
+            .bind(&ids)
+            .fetch_all(&st.db)
+            .await?;
+    Ok(roots
+        .iter()
+        .any(|r| dunce::canonicalize(resolve(r, "/")).is_ok_and(|r| real.starts_with(r))))
+}
+
 #[utoipa::path(post, path = "/api/imports/library/orphans/relink", responses((status = 201)))]
 pub async fn relink(
     State(st): State<AppState>,
@@ -652,6 +721,58 @@ pub async fn relink_batch(
     let n = items.len();
     tokio::spawn(run_batch(st, a, items));
     Ok((StatusCode::CREATED, Json(json!({ "queued": n }))))
+}
+
+/// Rule 73: an `auto` video or comic with no id takes the best hit of its title; a book is
+/// identified from its file at settle, and no hit leaves the item unmatched. A failed search skips it.
+async fn auto_pick(st: &AppState, d: &mut RelinkDto) -> Result<(), AppError> {
+    let Some(title) = d
+        .title
+        .clone()
+        .filter(|_| d.auto && d.external_id.is_none())
+    else {
+        return Ok(());
+    };
+    if d.media_type == MediaKind::Book {
+        return Ok(());
+    }
+    let named = d.provider.as_deref().and_then(|n| st.namespaces().parse(n));
+    let search = crate::metadata::Search::text(d.media_type, &title, d.year.map(i64::from));
+    let hits = crate::metadata::walk(st, named.into_iter(), &search, Priority::Background).await?;
+    match best_hit(&hits, &title, d.year) {
+        Some(h) => {
+            d.external_id = h["externalId"].as_str().map(str::to_owned);
+            d.provider = h["provider"].as_str().map(str::to_owned);
+        }
+        None => d.reorganize = false,
+    }
+    Ok(())
+}
+
+/// Same year first, then an equal title, then one a prefix of the other; ties keep the provider's order.
+fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a Value> {
+    let norm = |s: &str| -> String {
+        s.to_lowercase()
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect()
+    };
+    let wanted = norm(title);
+    let score = |h: &Value| {
+        let t = norm(h["title"].as_str().unwrap_or_default());
+        let y = year.is_some_and(|y| h["year"].as_i64() == Some(i64::from(y)));
+        let named = if wanted.is_empty() {
+            0
+        } else if t == wanted {
+            50
+        } else if t.starts_with(&wanted) || wanted.starts_with(&t) {
+            20
+        } else {
+            0
+        };
+        u32::from(y) * 100 + named
+    };
+    hits.iter().rev().max_by_key(|h| score(h))
 }
 
 /// Rule 73: sequential, failures logged, every activity row removed at the end.
@@ -697,7 +818,12 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
             Some(batch.clone()),
         );
         let folder = d.folder_name.clone();
-        match relink_orphans(&st, &a, d).await {
+        let mut d = d;
+        let done = match auto_pick(&st, &mut d).await {
+            Ok(()) => relink_orphans(&st, &a, d).await,
+            Err(e) => Err(e),
+        };
+        match done {
             Ok(r) => {
                 created += usize::from(r["created"] == true);
                 let l = r["linked"].as_i64().unwrap_or(0);
@@ -723,6 +849,14 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
     });
     tracing::info!(
         "Orphan batch import done: {total} item(s), {created} created, {linked} linked, {failed} failed"
+    );
+    st.hub.emit_to_user(
+        a.user.id,
+        SseEvent::OrphanImportCompleted {
+            created: created as i64,
+            linked,
+            failed,
+        },
     );
 }
 
@@ -844,8 +978,27 @@ use relink_dto::*;
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_relink, record::guess_from_path};
+    use super::{best_hit, parse_relink, record::guess_from_path};
     use std::path::Path;
+
+    #[test]
+    fn the_auto_pick_prefers_the_year_then_the_title_then_the_provider_order() {
+        let h = |t: &str, y: i64| json!({"title": t, "year": y});
+        let hits = [
+            h("Alpha Two", 2001),
+            h("Alpha", 1999),
+            h("Alpha", 2001),
+            h("Beta", 2001),
+        ];
+        let pick = |t, y| best_hit(&hits, t, y).map(|v| (v["title"].clone(), v["year"].clone()));
+        assert_eq!(
+            pick("Alpha", Some(2001)),
+            Some((json!("Alpha"), json!(2001)))
+        );
+        assert_eq!(pick("Alpha", None), Some((json!("Alpha"), json!(1999))));
+        assert_eq!(pick("Gamma", None), Some((json!("Alpha Two"), json!(2001))));
+        assert_eq!(best_hit(&[], "Alpha", None), None);
+    }
 
     #[test]
     fn a_yearless_file_name_takes_the_title_of_its_folder() {

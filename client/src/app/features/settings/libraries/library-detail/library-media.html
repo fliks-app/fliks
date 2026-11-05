@@ -53,6 +53,7 @@
               <th>{{ 'settings.libraries.media_title' | translate }}</th>
               <th class="w-24">{{ 'settings.libraries.media_year' | translate }}</th>
               <th class="w-28">{{ 'settings.libraries.media_type' | translate }}</th>
+              <th>{{ 'settings.libraries.media_files' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -66,10 +67,21 @@
                     <div class="h-16 w-11 rounded bg-base-300 shrink-0"></div>
                   }
                 </td>
-                <td class="text-lg font-semibold">{{ item.title }}</td>
+                <td>
+                  <div class="text-lg font-semibold">{{ item.title }}</div>
+                  @if (details(item); as d) {
+                    <div class="text-sm text-base-content/60">{{ d }}</div>
+                  }
+                </td>
                 <td class="text-base">{{ item.year || '' }}</td>
                 <td class="text-base">
                   {{ typeLabelKeys[item.type] | translate }}
+                </td>
+                <td class="text-sm text-base-content/70">
+                  @if (fileSummary(item); as f) {
+                    <div>{{ 'settings.libraries.scan_files' | translate: { count: f.count } }}</div>
+                    <div class="text-base-content/50">{{ f.text }}</div>
+                  }
                 </td>
               </tr>
             }

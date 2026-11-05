@@ -154,10 +154,12 @@ async fn rescan_folders(
 }
 
 /// `rescanFiles` (rules 38-48): one pass per folder (libraries rule 55); the caller holds the media's lock.
+/// `force` reads every file again as if it had changed.
 pub async fn rescan_files(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,
     media_id: i32,
+    force: bool,
 ) -> Result<Counts, AppError> {
     let _moves = st.folder_moves.read().await;
     let media = load_media(&st.db, media_id)
@@ -250,9 +252,9 @@ pub async fn rescan_files(
             .collect();
         applied = async {
             if super::registers(media.media_type) {
-                return book_pass(st, &m, &base, &kept, &disk, &linked, &mut c).await;
+                return book_pass(st, &m, &base, &kept, &disk, &linked, force, &mut c).await;
             }
-            refresh_existing(st, &m, &base, &kept, &slots, &mut c, &mut touched).await?;
+            refresh_existing(st, &m, &base, &kept, &slots, force, &mut c, &mut touched).await?;
             add_new(st, &m, &disk, &linked, &slots, &mut c, &mut touched).await
         }
         .await;
@@ -292,7 +294,9 @@ pub async fn rescan_files(
     Ok(c)
 }
 
-/// A book's rows are refreshed and its new files registered together (`book-ingest.md` rule 6).
+/// A book's rows are refreshed and its new files registered together (`book-ingest.md` rule 6);
+/// `force` registers its known files again too.
+#[allow(clippy::too_many_arguments)]
 async fn book_pass(
     st: &AppState,
     media: &MediaRow,
@@ -300,6 +304,7 @@ async fn book_pass(
     kept: &[&Row],
     disk: &[(String, PathBuf)],
     linked: &HashSet<String>,
+    force: bool,
     c: &mut Counts,
 ) -> Result<(), AppError> {
     let known: Vec<super::books::KnownFile> = kept
@@ -313,12 +318,14 @@ async fn book_pass(
         })
         .collect();
     let refs: Vec<&super::books::KnownFile> = known.iter().collect();
-    c.updated += if media.media_type == MediaKind::Comic {
-        super::comics::refresh(st, base, &refs).await
-    } else {
-        super::books::refresh(st, base, &refs).await
+    if !force {
+        c.updated += if media.media_type == MediaKind::Comic {
+            super::comics::refresh(st, base, &refs).await
+        } else {
+            super::books::refresh(st, base, &refs).await
+        }
+        .map_err(AppError::internal)?;
     }
-    .map_err(AppError::internal)?;
     let Some(folder) = media.folder.as_ref() else {
         return Ok(());
     };
@@ -340,7 +347,7 @@ async fn book_pass(
     .collect();
     let fresh: Vec<super::books::Placed> = disk
         .iter()
-        .filter(|(r, _)| !linked.contains(r) && !owned.contains(r))
+        .filter(|(r, _)| (force || !linked.contains(r)) && !owned.contains(r))
         .map(|(rel, abs)| super::books::Placed {
             folder_id: folder.id,
             rel: rel.clone(),
@@ -363,7 +370,9 @@ async fn book_pass(
     {
         tracing::warn!("Rescan[media #{}]: {e}", media.id);
     }
-    c.added += reg.files.len() as i64;
+    let again = reg.files.iter().filter(|f| linked.contains(&f.rel)).count() as i64;
+    c.updated += again;
+    c.added += reg.files.len() as i64 - again;
     Ok(())
 }
 
@@ -447,12 +456,14 @@ async fn remove_missing(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn refresh_existing(
     st: &AppState,
     media: &MediaRow,
     dir: &Path,
     rows: &[&Row],
     slots: &Slots,
+    force: bool,
     c: &mut Counts,
     touched: &mut Vec<(i32, Option<i32>)>,
 ) -> Result<(), AppError> {
@@ -501,7 +512,7 @@ async fn refresh_existing(
                 _ => {}
             }
         }
-        let unchanged = r.size == disk_size;
+        let unchanged = !force && r.size == disk_size;
         if unchanged
             && mtime.is_some()
             && r.mtime_ms == mtime

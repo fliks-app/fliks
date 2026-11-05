@@ -604,8 +604,10 @@ export class MediaService {
     return firstValueFrom(this.http.post<Media>(`/api/media/${mediaId}/episodes/${episodeId}/refresh`, {}));
   }
 
-  rescanFiles(id: number) {
-    return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/media/${id}/rescan`, {}));
+  /** `force` reads every file again, unchanged ones included. */
+  rescanFiles(id: number, force = false) {
+    const params: Record<string, string> = force ? { force: 'true' } : {};
+    return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/media/${id}/rescan`, {}, { params }));
   }
 
   analyzeMedia(

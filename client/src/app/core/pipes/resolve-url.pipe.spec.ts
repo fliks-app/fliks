@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { imageUrlWithSize, withLiveTvLogoToken } from './resolve-url.pipe';
+import { imageUrlWithSize, withAuthedImageToken } from './resolve-url.pipe';
 
 /**
  * Stored artwork URLs carry a `?v=<content hash>` so a re-identified media does
@@ -44,27 +44,33 @@ describe('imageUrlWithSize', () => {
  * client fetches it cross-origin and can't attach a header, so the token
  * rides in the query, same as an HLS segment URL.
  */
-describe('withLiveTvLogoToken', () => {
+describe('withAuthedImageToken', () => {
   it('appends the token to a Live TV channel logo URL', () => {
-    expect(withLiveTvLogoToken('/api/livetv/channels/12/logo', 'tok')).toBe(
+    expect(withAuthedImageToken('/api/livetv/channels/12/logo', 'tok')).toBe(
       '/api/livetv/channels/12/logo?token=tok',
     );
   });
 
   it('appends after an existing query string', () => {
-    expect(withLiveTvLogoToken('/api/livetv/channels/12/logo?size=thumb', 'tok')).toBe(
+    expect(withAuthedImageToken('/api/livetv/channels/12/logo?size=thumb', 'tok')).toBe(
       '/api/livetv/channels/12/logo?size=thumb&token=tok',
     );
   });
 
+  it('appends the token to an orphan cover URL', () => {
+    expect(withAuthedImageToken('/api/imports/orphans/cover?path=%2Fb.epub', 'tok')).toBe(
+      '/api/imports/orphans/cover?path=%2Fb.epub&token=tok',
+    );
+  });
+
   it('leaves a non-logo URL alone', () => {
-    expect(withLiveTvLogoToken('/api/images/media/795/poster', 'tok')).toBe(
+    expect(withAuthedImageToken('/api/images/media/795/poster', 'tok')).toBe(
       '/api/images/media/795/poster',
     );
   });
 
   it('leaves the URL alone when there is no token', () => {
-    expect(withLiveTvLogoToken('/api/livetv/channels/12/logo', null)).toBe(
+    expect(withAuthedImageToken('/api/livetv/channels/12/logo', null)).toBe(
       '/api/livetv/channels/12/logo',
     );
   });

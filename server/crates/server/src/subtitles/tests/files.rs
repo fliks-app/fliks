@@ -884,7 +884,7 @@ async fn a_rescan_and_a_file_delete_reach_the_subtitle_hooks(pool: PgPool) {
         )],
     );
     let guard = c.st.ingest.media.lock(c.media).await;
-    let counts = crate::ingest::rescan::rescan_files(&c.st, &guard, c.media)
+    let counts = crate::ingest::rescan::rescan_files(&c.st, &guard, c.media, false)
         .await
         .unwrap();
     drop(guard);

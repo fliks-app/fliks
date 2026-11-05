@@ -65,11 +65,9 @@
               </div>
               @if (vm.done) {
                 <span class="badge badge-success badge-sm">{{ 'common.saved' | translate }}</span>
-              } @else if (vm.pick) {
-                <span class="badge badge-primary badge-sm truncate max-w-40">{{ vm.pick.title }}</span>
-              } @else if (vm.searched && vm.fromFile) {
+              } @else if (vm.searched && !vm.pick && vm.fromFile) {
                 <span class="badge badge-ghost badge-sm">{{ 'settings.libraries.scan_from_file' | translate }}</span>
-              } @else if (vm.searched) {
+              } @else if (vm.searched && !vm.pick) {
                 <span class="badge badge-ghost badge-sm">{{ 'settings.libraries.scan_unmatched_badge' | translate }}</span>
               }
             </div>
@@ -89,6 +87,12 @@
                         [ngModel]="vm.query" (ngModelChange)="edit(i, { query: $event })"
                         (keydown.enter)="search(i)" />
                     </label>
+                    @if (vm.group.mediaType === 'book') {
+                      <input type="text" class="input input-bordered input-sm w-48"
+                        [ngModel]="vm.author" (ngModelChange)="edit(i, { author: $event })"
+                        (keydown.enter)="search(i)"
+                        [placeholder]="'settings.libraries.scan_author_placeholder' | translate" />
+                    }
                     <input type="number" class="input input-bordered input-sm w-24"
                       [ngModel]="vm.year" (ngModelChange)="edit(i, { year: $event })"
                       [placeholder]="'settings.libraries.scan_year_placeholder' | translate" />
@@ -119,16 +123,28 @@
                             <svg lucideCheck class="h-3 w-3"></svg>
                           </span>
                         }
-                        <div class="h-14 w-9 rounded bg-base-300 shrink-0"></div>
-                        <div class="min-w-0">
-                          <span class="font-medium truncate italic text-base-content/70">
-                            @if (bookFileId(vm.group); as id) {
-                              {{ 'settings.libraries.scan_identify_from_file' | translate: { id: (id.provider | uppercase) + ' ' + id.externalId } }}
-                            } @else {
+                        @if (vm.group.mediaType === 'book') {
+                          <div class="h-14 min-w-9 rounded bg-base-300 shrink-0 overflow-hidden">
+                            <img [src]="bookCover(vm.group) | resolveUrl" alt="" loading="lazy"
+                              class="h-14 w-auto" (error)="$any($event.target).hidden = true" />
+                          </div>
+                          <div class="min-w-0">
+                            <span class="font-medium truncate">{{ vm.group.guessTitle || vm.group.files[0].filename }}</span>
+                            <div class="text-sm text-base-content/50">
+                              @if (vm.group.guessAuthors?.length) { {{ vm.group.guessAuthors!.join(', ') }} · }
+                              @if (vm.group.guessYear) { {{ vm.group.guessYear }} · }
+                              @if (bookFileId(vm.group); as id) { {{ id.provider | uppercase }} {{ id.externalId }} · }
+                              {{ 'settings.libraries.scan_local_source' | translate | uppercase }}
+                            </div>
+                          </div>
+                        } @else {
+                          <div class="h-14 w-9 rounded bg-base-300 shrink-0"></div>
+                          <div class="min-w-0">
+                            <span class="font-medium truncate italic text-base-content/70">
                               {{ 'settings.libraries.scan_unmatched_option' | translate }}
-                            }
-                          </span>
-                        </div>
+                            </span>
+                          </div>
+                        }
                       </button>
                     }
                     @for (r of vm.results; track key(r)) {
@@ -156,7 +172,8 @@
                               <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_file' | translate }}</span>
                             }
                           </div>
-                          <div class="text-xs text-base-content/50">
+                          <div class="text-sm text-base-content/50">
+                            @if (r.authors?.length) { {{ r.authors!.join(', ') }} · }
                             @if (r.year) { {{ r.year }} · } {{ r.provider | uppercase }}
                             @if (r.existingMediaId) {
                               · <span class="text-warning">{{ 'settings.libraries.scan_already' | translate }}</span>
@@ -174,7 +191,7 @@
                         (click)="link(i)" [disabled]="vm.linking || vm.searching || !vm.searched">
                         @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
                         {{ (!vm.pick
-                          ? 'settings.libraries.scan_add_unmatched'
+                          ? (vm.fromFile ? 'settings.libraries.scan_add_from_file' : 'settings.libraries.scan_add_unmatched')
                           : transfer()
                             ? 'import_disk.import'
                             : vm.pick.existingMediaId
@@ -203,9 +220,8 @@
   </div>
 
   @if (!scanning() && !scanError() && hasLinkable() && !deferLink()) {
-    <div class="flex justify-end gap-2">
+    <div class="flex justify-end gap-2 pt-2">
       <button type="button" class="btn btn-secondary btn-sm" (click)="autoImportAll()" [disabled]="autoImporting()">
-        @if (autoImporting()) { <span class="loading loading-spinner loading-xs"></span> }
         {{ 'settings.libraries.scan_auto_import' | translate }}
       </button>
       @if (pendingGroups().length > 1) {

@@ -137,7 +137,15 @@ pub fn epub_record(m: &OpfMetadata, name_path: &str, format: &str) -> Map<String
     put(&mut r, "year", m.year.map(Value::from));
     put(&mut r, "overview", m.description.clone().map(Value::from));
     put(&mut r, "subjects", names(&m.subjects));
-    if let Some(s) = &m.series {
+    // A file name that numbers the volume beats a package series that does not.
+    let numbered = r
+        .get("series")
+        .is_some_and(|v| v[0]["position"].is_string());
+    if let Some(s) = m
+        .series
+        .as_ref()
+        .filter(|s| s.position.is_some() || !numbered)
+    {
         r.insert(
             "series".into(),
             series_value(&s.name, s.position.map(position_text)),
@@ -258,5 +266,30 @@ mod tests {
         assert_eq!(bare.authors, ["Aldric Vexmoor"]);
         assert_eq!(rec["format"], "epub");
         assert_eq!(rec["isbn13"], json!(["9791234567896"]));
+    }
+
+    #[test]
+    fn a_numbered_file_name_series_beats_an_unnumbered_package_series() {
+        let series = |opf: &str, name: &str| {
+            let meta = opf::parse(
+                format!(r#"<package><metadata xmlns:dc="x"><dc:title>T</dc:title>{opf}</metadata></package>"#)
+                    .as_bytes(),
+            );
+            epub_record(&meta, name, "epub")["series"].clone()
+        };
+        let stray = r#"<meta name="calibre:series" content="Stray Shelf"/>"#;
+        let numbered = r#"<meta name="calibre:series" content="Saga"/><meta name="calibre:series_index" content="4"/>"#;
+        assert_eq!(
+            series(stray, "Ana Placeholder - Saga T3 - Title.epub"),
+            json!([{"name": "Saga", "position": "3"}])
+        );
+        assert_eq!(
+            series(stray, "Ana Placeholder - Title.epub"),
+            json!([{"name": "Stray Shelf", "position": null}])
+        );
+        assert_eq!(
+            series(numbered, "Ana Placeholder - Other T3 - Title.epub"),
+            json!([{"name": "Saga", "position": "4"}])
+        );
     }
 }

@@ -286,7 +286,7 @@ async fn rescan(st: &AppState, job: &str, select: MediaQuery<'_>) -> Outcome {
         hub.activity()
             .upsert_running(&child(*id), job, Some(subject), None, None, None);
         let guard = st.ingest.media.lock(*id).await;
-        let scanned = rescan_files(st, &guard, *id).await;
+        let scanned = rescan_files(st, &guard, *id, false).await;
         drop(guard);
         match scanned {
             Ok(r) => changes += r.added + r.removed + r.updated,

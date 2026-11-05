@@ -130,6 +130,7 @@ pub async fn attach_with(
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
         .execute(&mut *tx)
         .await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     let alive = sqlx::query_scalar!("SELECT id FROM media WHERE id = $1 FOR UPDATE", media)
         .fetch_optional(&mut *tx)
         .await?;
@@ -442,9 +443,16 @@ async fn person(
     let found = match by_id {
         Some(id) => Some(id),
         None => {
+            // A person holding another id of the same provider is someone else.
             sqlx::query_scalar!(
-                "SELECT id FROM persons WHERE lower(name) = lower($1) ORDER BY id LIMIT 1",
-                name
+                r#"SELECT p.id FROM persons p
+                   WHERE name_key(p.name) = name_key($1)
+                     AND NOT EXISTS (SELECT 1 FROM person_external_ids x
+                                      WHERE x."personId" = p.id AND x.provider = $2 AND x.value <> $3)
+                   ORDER BY p.id LIMIT 1"#,
+                name,
+                ext.as_ref().map(|(ns, _)| *ns),
+                ext.as_ref().map(|(_, v)| v.as_str())
             )
             .fetch_optional(&mut *c)
             .await?
@@ -630,7 +638,7 @@ async fn collection(
         None => {
             sqlx::query_scalar!(
                 r#"SELECT c.id FROM collections c
-                   WHERE lower(c.name) = lower($1) AND EXISTS (
+                   WHERE name_key(c.name) = name_key($1) AND EXISTS (
                      SELECT 1 FROM collection_entries e
                        JOIN media_credits a ON a."mediaId" = e."mediaId" AND a.role = 'author' AND a."editionId" IS NULL
                        JOIN media_credits mine ON mine."mediaId" = $2 AND mine.role = 'author'

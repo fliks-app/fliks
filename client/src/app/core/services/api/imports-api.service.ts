@@ -26,6 +26,8 @@ export interface OrphanGroup {
   folderName: string;
   guessTitle: string | null;
   guessYear: number | null;
+  /** Books only, absent when the file names no author. */
+  guessAuthors?: string[];
   fileIds: OrphanFileId[];
   suggestedProvider: string;
   files: OrphanFileEntry[];
@@ -66,6 +68,8 @@ export interface RelinkOrphansBody {
   languageProfileId?: number;
   folderName: string;
   reorganize?: boolean;
+  /** Batch only: with no `externalId`, the server takes the best hit of a search of `title`. */
+  auto?: boolean;
   transfer?: TransferMethod;
   /** The folder this group was scanned from; caps a series-folder lookup on the server. */
   scanRoot?: string;

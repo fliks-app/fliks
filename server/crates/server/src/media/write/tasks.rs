@@ -10,16 +10,23 @@ use crate::{
     ingest::{load_media, post_import, rescan},
     state::AppState,
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
 use fliks_domain::acl::Action;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 #[utoipa::path(post, path = "/api/media/{id}/rescan", responses((status = 201)))]
 pub async fn rescan(
     State(st): State<AppState>,
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
+    Query(q): Query<HashMap<String, String>>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
+    let force = q.get("force").is_some_and(|v| v == "true");
     let id = gate(&st, &a, Action::Update, id).await?;
     let media = load_media(&st.db, id)
         .await?
@@ -45,7 +52,7 @@ pub async fn rescan(
     let st2 = st.clone();
     tokio::spawn(async move {
         let guard = st2.ingest.media.lock(id).await;
-        let r = rescan::rescan_files(&st2, &guard, id).await;
+        let r = rescan::rescan_files(&st2, &guard, id, force).await;
         drop(guard);
         st2.hub.activity().remove(&key);
         let title = media.title.clone();

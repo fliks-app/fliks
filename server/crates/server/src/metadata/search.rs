@@ -21,7 +21,10 @@ use fliks_domain::{
         kind::MediaKind,
         query::{js_number, js_parse_int},
     },
-    metadata::limiter::Priority,
+    metadata::{
+        book_match::{Candidate, Hints, score},
+        limiter::Priority,
+    },
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
@@ -253,10 +256,9 @@ pub async fn search_hits(
     };
     let page = page(&q)?;
     let md = &st.metadata;
-    let known = st.namespaces();
     let named = field("provider")
         .map(|n| {
-            known
+            st.namespaces()
                 .parse(&n)
                 .filter(|p| md.get(*p).is_some_and(|x| x.supports(kind)))
                 .ok_or_else(|| unknown_provider(&n))
@@ -265,17 +267,11 @@ pub async fn search_hits(
     let pinned = preferred(&st.db, bare(&q, "mediaId").as_deref())
         .await?
         .and_then(|n| Namespace::parse(&n));
-    let mut order: Vec<Namespace> = vec![];
-    for p in named.into_iter().chain(pinned).chain(md.serving(kind)) {
-        let usable = md.available(p) && md.of(p).supports(kind) && md.of(p).has_search(kind);
-        if usable && !order.contains(&p) {
-            order.push(p);
-        }
-    }
+    let wanted_year = year(bare(&q, "year").as_deref());
     let search = Search {
         kind,
         query: &query,
-        year: year(bare(&q, "year").as_deref()),
+        year: wanted_year,
         title: title.as_deref(),
         author: author.as_deref(),
         author_id: None,
@@ -283,14 +279,40 @@ pub async fn search_hits(
         language: language.as_deref(),
         page,
     };
-    let lang = lang(&st).await?;
-    let (mut hits, mut answered, mut failed) = (vec![], false, None);
+    let order = named.into_iter().chain(pinned);
+    let mut hits = walk(&st, order, &search, Priority::Interactive).await?;
+    if book {
+        let wanted = title.as_deref().unwrap_or(&query);
+        rank_books(&mut hits, wanted, author.as_deref(), wanted_year);
+    }
+    mark_existing(&st.db, &a, kind, &mut hits).await?;
+    Ok(Json(Value::Array(hits)))
+}
+
+/// The hits of the first provider with any, trying `first` then the providers serving the kind; an
+/// error only when no provider answered.
+pub(crate) async fn walk(
+    st: &AppState,
+    first: impl Iterator<Item = Namespace>,
+    search: &Search<'_>,
+    prio: Priority,
+) -> Result<Vec<Value>, AppError> {
+    let (md, kind, known) = (&st.metadata, search.kind, st.namespaces());
+    let mut order: Vec<Namespace> = vec![];
+    for p in first.chain(md.serving(kind)) {
+        let usable = md.available(p) && md.of(p).supports(kind) && md.of(p).has_search(kind);
+        if usable && !order.contains(&p) {
+            order.push(p);
+        }
+    }
+    let lang = lang(st).await?;
+    let (mut answered, mut failed) = (false, None);
     for p in order {
-        match md.of(p).search(&search, &lang, Priority::Interactive).await {
+        match md.of(p).search(search, &lang, prio).await {
             Ok(r) => {
-                hits = r.iter().filter_map(|v| hit(&known, kind, p, v)).collect();
+                let hits: Vec<Value> = r.iter().filter_map(|v| hit(&known, kind, p, v)).collect();
                 if !hits.is_empty() {
-                    break;
+                    return Ok(hits);
                 }
                 answered = true;
             }
@@ -300,9 +322,63 @@ pub async fn search_hits(
             }
         }
     }
-    if let (true, false, Some((p, e))) = (hits.is_empty(), answered, failed) {
-        return Err(unavailable("search", p, &e));
+    match (answered, failed) {
+        (false, Some((p, e))) => Err(unavailable("search", p, &e)),
+        _ => Ok(vec![]),
     }
-    mark_existing(&st.db, &a, kind, &mut hits).await?;
-    Ok(Json(Value::Array(hits)))
+}
+
+/// Book hits best first by `book_match::score` (`book-metadata.md` rule 18); ties keep the provider's order.
+fn rank_books(hits: &mut [Value], title: &str, author: Option<&str>, year: Option<i64>) {
+    let authors: Vec<String> = author.map(str::to_owned).into_iter().collect();
+    let h = Hints {
+        title,
+        authors: &authors,
+        year: year.and_then(|y| i32::try_from(y).ok()),
+    };
+    hits.sort_by_cached_key(|v| {
+        let listed: Vec<String> = v["authors"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|n| n.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let c = Candidate {
+            title: v["title"].as_str().unwrap_or_default(),
+            subtitle: v["subtitle"].as_str(),
+            authors: &listed,
+            year: v["year"].as_i64().and_then(|y| i32::try_from(y).ok()),
+        };
+        std::cmp::Reverse(score(&h, &c))
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rank_books;
+    use serde_json::json;
+
+    #[test]
+    fn book_hits_rank_by_title_author_and_year_ties_in_provider_order() {
+        let hit = |t: &str, y: i64| json!({"title": t, "authors": ["Ana Placeholder"], "year": y});
+        let mut hits = vec![
+            hit("Other Story", 2024),
+            hit("Second Story", 2021),
+            hit("Wanted Place", 2023),
+            hit("Third Story", 2021),
+        ];
+        rank_books(
+            &mut hits,
+            "det_11Wanted Place",
+            Some("Ana Placeholder"),
+            Some(2024),
+        );
+        let order: Vec<_> = hits.iter().map(|h| h["title"].as_str().unwrap()).collect();
+        assert_eq!(
+            order,
+            ["Wanted Place", "Other Story", "Second Story", "Third Story"]
+        );
+    }
 }

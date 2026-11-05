@@ -482,7 +482,7 @@ async fn scans(c: &Ctx, want: usize) -> usize {
 
 async fn rescan(c: &Ctx, id: i32) -> Result<super::rescan::Counts, crate::http::AppError> {
     let g = c.st.ingest.media.lock(id).await;
-    super::rescan::rescan_files(&c.st, &g, id).await
+    super::rescan::rescan_files(&c.st, &g, id, false).await
 }
 
 #[sqlx::test(migrations = false)]
@@ -1061,6 +1061,115 @@ async fn a_complete_file_is_imported(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_deleted_media_takes_only_what_nothing_else_holds(pool: PgPool) {
+    let c = ctx(pool).await;
+    let l = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
+    let (kept, gone) = (
+        media(&c, l, "A", "movie").await,
+        media(&c, l, "B", "movie").await,
+    );
+    let db = &c.st.db;
+    let row = |sql: &'static str, name: &'static str| async move {
+        sqlx::query_scalar::<_, i32>(sql)
+            .bind(name)
+            .fetch_one(db)
+            .await
+            .unwrap()
+    };
+    let person = |n| row("INSERT INTO persons (name) VALUES ($1) RETURNING id", n);
+    let collection = |n| row("INSERT INTO collections (name) VALUES ($1) RETURNING id", n);
+    let (shared, orphaned, followed, unrelated) = (
+        person("P1").await,
+        person("P2").await,
+        person("P3").await,
+        person("P4").await,
+    );
+    let (held, emptied, watched, untouched) = (
+        collection("C1").await,
+        collection("C2").await,
+        collection("C3").await,
+        collection("C4").await,
+    );
+    let link = |sql: &'static str, a: i32, b: i32| async move {
+        sqlx::query(sql).bind(a).bind(b).execute(db).await.unwrap();
+    };
+    let credit =
+        r#"INSERT INTO media_credits ("mediaId", "personId", role) VALUES ($1, $2, 'author')"#;
+    let entry = r#"INSERT INTO collection_entries ("mediaId", "collectionId") VALUES ($1, $2)"#;
+    for (m, p) in [
+        (kept, shared),
+        (gone, shared),
+        (gone, orphaned),
+        (gone, followed),
+    ] {
+        link(credit, m, p).await;
+    }
+    for (m, k) in [(kept, held), (gone, held), (gone, emptied), (gone, watched)] {
+        link(entry, m, k).await;
+    }
+    link(
+        r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants)
+           SELECT id, $1, 'author', $2, '{}'::jsonb FROM users WHERE username = 'admin'"#,
+        followed,
+        l,
+    )
+    .await;
+    link(
+        r#"INSERT INTO series_watches ("userId", "collectionId", "libraryId", wants)
+           SELECT id, $1, $2, '{}'::jsonb FROM users WHERE username = 'admin'"#,
+        watched,
+        l,
+    )
+    .await;
+    let data = c.dir.join("data");
+    let files = [
+        format!("media/{kept}/poster.jpg"),
+        format!("media/{gone}/poster.jpg"),
+        format!("persons/{shared}.jpg"),
+        format!("persons/{orphaned}.jpg"),
+        format!("persons/{orphaned}-thumb.jpg"),
+        format!("persons/{unrelated}.jpg"),
+    ];
+    for f in &files {
+        touch(&data.join(f), b"x");
+    }
+    let mut tx = db.begin().await.unwrap();
+    let refs = crate::media::write::orphans::refs_of(&mut tx, gone)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM media WHERE id = $1")
+        .bind(gone)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    crate::media::write::orphans::clean(&c.st, &refs)
+        .await
+        .unwrap();
+
+    let ids = |sql: &'static str, all: Vec<i32>| async move {
+        sqlx::query_scalar::<_, i32>(sql)
+            .bind(all)
+            .fetch_all(db)
+            .await
+            .unwrap()
+    };
+    let persons = ids(
+        "SELECT id FROM persons WHERE id = ANY($1) ORDER BY id",
+        vec![shared, orphaned, followed, unrelated],
+    );
+    assert_eq!(persons.await, [shared, followed, unrelated]);
+    let collections = ids(
+        "SELECT id FROM collections WHERE id = ANY($1) ORDER BY id",
+        vec![held, emptied, watched, untouched],
+    );
+    assert_eq!(collections.await, [held, watched, untouched]);
+    let exists: Vec<bool> = files.iter().map(|f| data.join(f).exists()).collect();
+    assert_eq!(exists, [true, false, true, false, false, true]);
+}
+
+#[sqlx::test(migrations = false)]
 async fn write_routes_apply_the_library_acl(pool: PgPool) {
     let c = ctx(pool).await;
     let l = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
@@ -1229,6 +1338,44 @@ mod book_ingest {
         w.finish().unwrap();
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_cover_is_read_under_an_accessible_library_or_by_a_settings_manager(
+        pool: PgPool,
+    ) {
+        let c = ctx(pool).await;
+        let shelf = c.dir.join("shelf");
+        let l = library(&c, "B", &shelf, r#"["book"]"#).await;
+        epub(&shelf.join("Mirelune.epub"));
+        epub(&c.dir.join("elsewhere/Mirelune.epub"));
+        touch(&shelf.join("notes.txt"), b"x");
+        let get = |tok: &str, rel: &str| {
+            let uri = format!(
+                "/api/imports/orphans/cover?path={}",
+                c.dir.join(rel).display()
+            );
+            let tok = tok.to_owned();
+            let c = &c;
+            async move { call(c, "GET", &uri, &tok, Value::Null).await.0 }
+        };
+        assert_eq!(get(&c.admin, "elsewhere/Mirelune.epub").await, 200);
+        assert_eq!(get(&c.editor, "shelf/Mirelune.epub").await, 404);
+        sqlx::query(
+            r#"INSERT INTO library_user_access ("userId", "libraryId")
+               SELECT id, $1 FROM users WHERE username = 'editor'"#,
+        )
+        .bind(l)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(get(&c.editor, "shelf/Mirelune.epub").await, 200);
+        assert_eq!(
+            get(&c.editor, "shelf/../elsewhere/Mirelune.epub").await,
+            404
+        );
+        assert_eq!(get(&c.editor, "elsewhere/Mirelune.epub").await, 404);
+        assert_eq!(get(&c.admin, "shelf/notes.txt").await, 404);
+    }
+
     fn audio_probe() -> Value {
         json!({"ok": true, "info": {"video": [], "audio": [{"streamIndex": 0, "codec": "mp3", "language": "und"}],
             "subtitles": [], "durationSeconds": 60.0,
@@ -1285,6 +1432,60 @@ mod book_ingest {
             .await
             .unwrap();
         assert_eq!(families, ["text"]);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_cbz_book_takes_its_first_page_as_its_cover(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = book(&c, "Brumevent").await;
+        let path = c.dir.join("books/Brumevent/Brumevent T01.cbz");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut png = vec![];
+        image::RgbImage::new(8, 12)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let mut w = ZipWriter::new(fs::File::create(&path).unwrap());
+        let o = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        w.start_file("p01.png", o).unwrap();
+        w.write_all(&png).unwrap();
+        w.finish().unwrap();
+        books::register(&c.st, m, &placed(&c, &["Brumevent/Brumevent T01.cbz"]))
+            .await
+            .unwrap();
+        let state = || async {
+            sqlx::query_as::<_, (Option<String>, i64)>(
+                r#"SELECT "posterUrl", (SELECT count(*) FROM editions WHERE "mediaId" = $1) FROM media WHERE id = $1"#,
+            )
+            .bind(m)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap()
+        };
+        assert!(state().await.0.is_some());
+
+        sqlx::query(r#"UPDATE media SET "posterUrl" = NULL WHERE id = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let c = &c;
+        let rescan = |force| async move {
+            let g = c.st.ingest.media.lock(m).await;
+            crate::ingest::rescan::rescan_files(&c.st, &g, m, force)
+                .await
+                .unwrap()
+        };
+        rescan(false).await;
+        assert_eq!(
+            state().await,
+            (None, 1),
+            "an unchanged file is not read again"
+        );
+        let forced = rescan(true).await;
+        assert_eq!((forced.added, forced.updated), (0, 1));
+        let (poster, editions) = state().await;
+        assert!(poster.is_some());
+        assert_eq!(editions, 1);
     }
 
     #[sqlx::test(migrations = false)]
@@ -2893,6 +3094,7 @@ mod book_ingest {
         );
         let text = groups.iter().find(|g| g["folderName"] == "").unwrap();
         assert_eq!(text["guessTitle"], "Le Phare des Brumes");
+        assert_eq!(text["guessAuthors"], json!(["Aldric Vexmoor"]));
         assert_eq!(b["orphanCount"], 3);
     }
 

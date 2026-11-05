@@ -19,10 +19,11 @@ export interface AnalyzeDeps {
   translate: TranslateService;
 }
 
-export type AnalyzeOptKey = 'rescan' | 'sprites' | 'crop' | 'subtitleCache' | 'markers';
+export type AnalyzeOptKey = 'rescan' | 'force' | 'sprites' | 'crop' | 'subtitleCache' | 'markers';
 
 const NO_OPTIONS: Record<AnalyzeOptKey, boolean> = {
   rescan: false,
+  force: false,
   sprites: false,
   crop: false,
   subtitleCache: false,
@@ -60,7 +61,8 @@ export class AnalyzeController {
   }
 
   setOpt(key: AnalyzeOptKey, value: boolean) {
-    this.opts.update((o) => ({ ...o, [key]: value }));
+    // Force only qualifies a rescan: it goes with it.
+    this.opts.update((o) => ({ ...o, [key]: value, ...(key === 'rescan' && !value && { force: false }) }));
   }
 
   async run() {
@@ -72,7 +74,7 @@ export class AnalyzeController {
       // Rescan is the superset: hit /rescan alone so the SSE event stream still fires.
       if (opts.rescan) {
         // Rescan already re-runs intro/outro detection on completion.
-        await this.deps.media.rescanFiles(m.id);
+        await this.deps.media.rescanFiles(m.id, opts.force);
       } else {
         if (opts.sprites || opts.crop || opts.subtitleCache) {
           await this.deps.media.analyzeMedia(m.id, {

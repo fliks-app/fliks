@@ -153,6 +153,24 @@ async fn store_hash(db: &PgPool, file: i32, abs: &Path) {
     }
 }
 
+/// The cover a book file carries: an EPUB's own, a CBZ's first page.
+pub(crate) async fn file_cover(path: &Path) -> Option<Vec<u8>> {
+    let p = path.to_path_buf();
+    match group::classify(&file_name(path))?.1.as_str() {
+        "epub" => {
+            tokio::task::spawn_blocking(move || archive::read_epub(&p))
+                .await
+                .ok()
+                .flatten()?
+                .cover
+        }
+        "cbz" => crate::comics::blocking_ingest(move || crate::comics::first_page_cover(&p))
+            .await
+            .flatten(),
+        _ => None,
+    }
+}
+
 /// The picture becomes the work's poster when it has none.
 pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
     let _one = st.ingest.covers.lock(media).await;
@@ -365,6 +383,8 @@ pub async fn register_to(
                     });
                     found_cover = e.cover;
                 }
+            } else if cover.is_none() {
+                found_cover = file_cover(&f.abs).await;
             }
             (None::<Value>, None)
         };

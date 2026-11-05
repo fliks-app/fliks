@@ -840,6 +840,19 @@
         }
       }
     },
+    "/api/imports/orphans/cover": {
+      "get": {
+        "tags": [
+          "crate::ingest::disk"
+        ],
+        "summary": "`GET /api/imports/orphans/cover?path=` (rule 107): the cover of a book file not imported yet.",
+        "operationId": "cover",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      }
+    },
     "/api/imports/orphans/preview": {
       "post": {
         "tags": [

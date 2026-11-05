@@ -299,6 +299,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::write::companions_edl,
         crate::ingest::disk::scan,
         crate::ingest::disk::preview,
+        crate::ingest::disk::cover,
         crate::ingest::disk::relink_batch,
         crate::ingest::disk::relink,
         metadata::providers,

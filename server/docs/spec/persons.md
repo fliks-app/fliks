@@ -53,6 +53,7 @@ Scope: the four persons routes (the book `list` and `works` routes are `books-ap
 ### D. Book bibliography (`GET :id/bibliography`)
 
 23. A person can hold a video id (`tmdb`/`tvdb`) and a book id (`openlibrary`, `asin`) at once, so the book bibliography is its own route and `provider-credits` stays the video object. The anchor provider (`book-metadata.md` rule 1) is asked, at interactive priority, `search` of kind `book` with the person's name and `author_id` = their `openlibrary` id, pages 1 to 3 (stopping at an empty page), the same discovery as the author follow of `wants-follows.md` rule 10: only hits whose `authors` hold that id are kept, deduplicated by work id (the provider may answer homonyms). Hits are built and marked with `existingMediaId` exactly as `GET /api/metadata/search/book` (`book-metadata.md` rules 18-19). A person with no `openlibrary` id, including one with only an `asin` id (Audible cannot list an author's works), answers `[]` with no provider call, as does an anchor that is not available or has no book search; 404 for an unknown person. A failing anchor is a 503.
+24. A person a deleted media credited is deleted with its avatar files once it has no credit and no follow left (`media-write.md` rule 67a); a person with no credit that no deleted media named stays.
 
 ## SQL
 
