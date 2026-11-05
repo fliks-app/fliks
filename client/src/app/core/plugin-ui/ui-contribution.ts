@@ -69,14 +69,7 @@ export const SECRETS_SET_KEY = 'secretsSet';
 
 /** The eight field kinds `<app-schema-form>` renders, over four form components. */
 export type FieldType =
-  | 'text'
-  | 'email'
-  | 'password'
-  | 'url'
-  | 'number'
-  | 'toggle'
-  | 'select'
-  | 'multiselect';
+  'text' | 'email' | 'password' | 'url' | 'number' | 'toggle' | 'select' | 'multiselect';
 
 /** One input of a plugin's settings form; `kind` defaults to `'field'`. */
 export interface FieldDef {
@@ -212,7 +205,9 @@ export interface TableSubValue {
 export interface TableColumn {
   key: string;
   labelKey: string;
-  format?: 'date' | 'bytes' | 'percent' | 'speed';
+  /** `peers` renders `key` as seeders and `leechersKey` as leechers, the release picker's ▲/▼. */
+  format?: 'date' | 'bytes' | 'percent' | 'speed' | 'peers';
+  leechersKey?: string;
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
   /** Renders the cell as a badge, the value picking its tone; `*` covers every other value. `format`ted cells are never badged. */
@@ -325,7 +320,12 @@ export const TABLE_REFRESH_MIN_MS = 2000;
  *  `key`; an empty value is omitted. Filtering itself is the plugin's job, core only forwards it. */
 export type TableFilter =
   | { kind: 'search'; key: string; placeholderKey: string }
-  | { kind: 'select'; key: string; labelKey: string; options: { value: string; labelKey: string }[] };
+  | {
+      kind: 'select';
+      key: string;
+      labelKey: string;
+      options: { value: string; labelKey: string }[];
+    };
 
 /** Read-mostly: declared columns and declared row actions, never a general grid. */
 export interface TableConfigPage extends ConfigPageBase {
@@ -339,7 +339,13 @@ export interface TableConfigPage extends ConfigPageBase {
   /** `when` gates on the viewer (same vocabulary as `ui.contributions[]`), `visibleWhen` on the row; presentation
    *  only, the route is CASL-guarded. A `proxy` path may carry `:id`, substituted with the row's id. */
   rowActions?: (
-    | { kind: 'route'; labelKey: string; path: string; when?: WhenPredicate[]; visibleWhen?: TableRowCondition }
+    | {
+        kind: 'route';
+        labelKey: string;
+        path: string;
+        when?: WhenPredicate[];
+        visibleWhen?: TableRowCondition;
+      }
     | {
         kind: 'action';
         labelKey: string;

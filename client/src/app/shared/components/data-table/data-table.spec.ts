@@ -109,13 +109,25 @@ describe('DataTableComponent — characterisation', () => {
   });
 
   it('shows a translated error when the list fails', async () => {
-    const fixture = await createComponent({ http: { get: () => { throw new Error('boom'); } } });
+    const fixture = await createComponent({
+      http: {
+        get: () => {
+          throw new Error('boom');
+        },
+      },
+    });
     expect(fixture.componentInstance.listError()).not.toBe('');
   });
 
   it('sorts once by the declared default key', async () => {
     const fixture = await createComponent({
-      http: { get: () => of([{ id: 2, name: 'B' }, { id: 1, name: 'A' }]) },
+      http: {
+        get: () =>
+          of([
+            { id: 2, name: 'B' },
+            { id: 1, name: 'A' },
+          ]),
+      },
       defaultSortKey: 'name',
     });
     expect(fixture.componentInstance.rows().map((r) => r['id'])).toEqual([1, 2]);
@@ -124,7 +136,9 @@ describe('DataTableComponent — characterisation', () => {
   it('omits a row action whose actionId is unknown to the host', async () => {
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
-      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' as TableRowActionId }],
+      rowActions: [
+        { kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' as TableRowActionId },
+      ],
       resolveAction: () => undefined,
     });
     expect(fixture.componentInstance.visibleActions({ id: 1, name: 'A' })).toHaveLength(0);
@@ -202,13 +216,16 @@ describe('DataTableComponent — characterisation', () => {
     expect(text).not.toContain('2026-01-02');
   });
 
-  it('renders a paged response\'s rows and pager, keyed off `paged`', async () => {
+  it("renders a paged response's rows and pager, keyed off `paged`", async () => {
     const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
     const fixture = await createComponent({ http: { get }, paged: true, pageSize: 20 });
     expect(fixture.componentInstance.rows()).toEqual([{ id: 1, name: 'A' }]);
     expect(fixture.componentInstance.totalPages()).toBe(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('nav')).not.toBeNull();
-    const [, options] = get.mock.calls[0] as unknown as [string, { params: { toString(): string } }];
+    const [, options] = get.mock.calls[0] as unknown as [
+      string,
+      { params: { toString(): string } },
+    ];
     expect(options.params.toString()).toBe('page=1&pageSize=20');
   });
 
@@ -220,15 +237,26 @@ describe('DataTableComponent — characterisation', () => {
 
   it('renders a listAction once above the rows, and running it reloads', async () => {
     const post = vi.fn(() => of({}));
-    const get = vi.fn(() => of([{ id: 1, name: 'A' }, { id: 2, name: 'B' }]));
+    const get = vi.fn(() =>
+      of([
+        { id: 1, name: 'A' },
+        { id: 2, name: 'B' },
+      ]),
+    );
     const fixture = await createComponent({
       http: { get, post },
       listActions: [{ labelKey: 'x.clear', method: 'POST', path: '/api/x/clear' }],
     });
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
     const matches = buttons.filter((b) => b.textContent?.includes('x.clear'));
     expect(matches).toHaveLength(1);
-    await fixture.componentInstance.runListAction({ labelKey: 'x.clear', method: 'POST', path: '/api/x/clear' });
+    await fixture.componentInstance.runListAction({
+      labelKey: 'x.clear',
+      method: 'POST',
+      path: '/api/x/clear',
+    });
     expect(post).toHaveBeenCalledWith('/api/x/clear', {});
     expect(get).toHaveBeenCalledTimes(2);
   });
@@ -238,7 +266,15 @@ describe('DataTableComponent — characterisation', () => {
     const get = vi.fn(() => of([{ id: 1, name: 'A' }]));
     const fixture = await createComponent({
       http: { get, post },
-      rowActions: [{ kind: 'proxy', labelKey: 'x.grab', method: 'POST', path: '/api/x/1/grab', confirmKey: 'x.confirm' }],
+      rowActions: [
+        {
+          kind: 'proxy',
+          labelKey: 'x.grab',
+          method: 'POST',
+          path: '/api/x/1/grab',
+          confirmKey: 'x.confirm',
+        },
+      ],
     });
     const [item] = fixture.componentInstance.visibleActions({ id: 1, name: 'A' });
     await item.run();
@@ -253,7 +289,10 @@ describe('DataTableComponent — declared filters', () => {
     kind: 'select',
     key: 'status',
     labelKey: 'x.status',
-    options: [{ value: '', labelKey: 'x.all' }, { value: 'failed', labelKey: 'x.failed' }],
+    options: [
+      { value: '', labelKey: 'x.all' },
+      { value: 'failed', labelKey: 'x.failed' },
+    ],
   };
 
   it('VERDICT: typing in a search filter sends it as a query param, debounced, and resets the page', async () => {
@@ -274,7 +313,10 @@ describe('DataTableComponent — declared filters', () => {
     fixture.detectChanges();
 
     expect(get).toHaveBeenCalledTimes(1);
-    const [, options] = get.mock.calls[0] as unknown as [string, { params: { toString(): string } }];
+    const [, options] = get.mock.calls[0] as unknown as [
+      string,
+      { params: { toString(): string } },
+    ];
     expect(options.params.toString()).toBe('q=abc&page=1&pageSize=20');
   });
 
@@ -292,7 +334,10 @@ describe('DataTableComponent — declared filters', () => {
     fixture.detectChanges();
 
     expect(get).toHaveBeenCalledTimes(1);
-    const [, options] = get.mock.calls[0] as unknown as [string, { params: { toString(): string } }];
+    const [, options] = get.mock.calls[0] as unknown as [
+      string,
+      { params: { toString(): string } },
+    ];
     expect(options.params.toString()).toBe('status=failed&page=1&pageSize=20');
   });
 
@@ -325,7 +370,10 @@ describe('DataTableComponent — declared filters', () => {
   });
 
   it('VERDICT: the rendered selection comes from state, not from a prior DOM write', async () => {
-    const fixture = await createComponent({ http: { get: () => of([{ id: 1, name: 'A' }]) }, filters: [STATUS] });
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }]) },
+      filters: [STATUS],
+    });
 
     fixture.componentInstance.filterValues.set({ status: 'failed' });
     fixture.detectChanges();
@@ -365,8 +413,12 @@ describe('DataTableComponent — declared filters', () => {
       http: { get: () => of([{ id: 1, status: 'failed' }]) },
       columns: [{ key: 'status', labelKey: 'x.status', labelKeys: { failed: 'x.failed_label' } }],
     });
-    expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'failed')).toBe('x.failed_label');
-    expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'other')).toBe('other');
+    expect(
+      fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'failed'),
+    ).toBe('x.failed_label');
+    expect(
+      fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'other'),
+    ).toBe('other');
   });
 
   it('VERDICT: a declared badge renders as a badge span, and an undeclared tone cannot reach the class', async () => {
@@ -389,7 +441,11 @@ describe('DataTableComponent — declared filters', () => {
     expect(c.badgeClass(quality, 'WEBDL-1080p')).toBe('badge-ghost');
     expect(c.badgeClass(title, 'A')).toBeNull();
     // A manifest is untrusted JSON: an unknown tone resolves to a known class, never itself.
-    const hostile = { key: 'status', labelKey: 'x.status', badges: { failed: 'error" onmouseover="x' } } as unknown as TableColumn;
+    const hostile = {
+      key: 'status',
+      labelKey: 'x.status',
+      badges: { failed: 'error" onmouseover="x' },
+    } as unknown as TableColumn;
     expect(c.badgeClass(hostile, 'failed')).toBe('badge-ghost');
 
     const badges = fixture.nativeElement.querySelectorAll('td span.badge');
@@ -473,7 +529,11 @@ describe('DataTableComponent — declared filters', () => {
 
   it('VERDICT: a select change inside the search debounce window does not double-fire the request', async () => {
     const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
-    const fixture = await createComponent({ http: { get }, paged: true, filters: [SEARCH, STATUS] });
+    const fixture = await createComponent({
+      http: { get },
+      paged: true,
+      filters: [SEARCH, STATUS],
+    });
     get.mockClear();
 
     vi.useFakeTimers();
@@ -522,6 +582,23 @@ describe('DataTableComponent — formatting the moving values', () => {
     expect(fixture.nativeElement.textContent).not.toContain('/s');
   });
 
+  it('shows seeders and leechers as one pair, and nothing without a live count', async () => {
+    const fixture = await createComponent({
+      http: {
+        get: () =>
+          of([
+            { id: 1, seeders: 12, leechers: 3 },
+            { id: 2, seeders: null, leechers: null },
+          ]),
+      },
+      columns: [{ key: 'seeders', labelKey: 'x.peers', format: 'peers', leechersKey: 'leechers' }],
+    });
+    const cells = fixture.nativeElement.querySelectorAll('tbody td');
+    expect(cells[0].querySelector('.text-success').textContent).toBe('▲12');
+    expect(cells[0].querySelector('.text-warning').textContent).toBe('▼3');
+    expect(cells[1].textContent.trim()).toBe('');
+  });
+
   it('clips a truncated cell to one line and keeps the full text reachable', async () => {
     const long = 'A release name long enough to wrap a phone over several lines';
     const fixture = await createComponent({
@@ -533,7 +610,9 @@ describe('DataTableComponent — formatting the moving values', () => {
     expect(span.getAttribute('title')).toBe(long);
     // A truncated cell must not also be nowrap: that would size the column to the
     // content and there would be nothing left to clip.
-    expect(fixture.componentInstance.cellNowrap({ key: 'title', labelKey: 'x', truncate: true })).toBe(false);
+    expect(
+      fixture.componentInstance.cellNowrap({ key: 'title', labelKey: 'x', truncate: true }),
+    ).toBe(false);
   });
 });
 
@@ -581,7 +660,11 @@ describe('DataTableComponent — refreshing', () => {
   it('ignores an event type the page did not declare', async () => {
     const get = vi.fn(() => of([{ id: 1 }]));
     const event = signal<{ type: string } | null>(null);
-    const fixture = await createComponent({ http: { get }, refreshOn: ['queue.updated'], sseEvent: event });
+    const fixture = await createComponent({
+      http: { get },
+      refreshOn: ['queue.updated'],
+      sseEvent: event,
+    });
     const before = get.mock.calls.length;
     event.set({ type: 'something.else' });
     fixture.detectChanges();
@@ -591,7 +674,11 @@ describe('DataTableComponent — refreshing', () => {
   it('refreshes nothing while nobody is looking at the page', async () => {
     const get = vi.fn(() => of([{ id: 1 }]));
     const event = signal<{ type: string } | null>(null);
-    const fixture = await createComponent({ http: { get }, refreshOn: ['queue.updated'], sseEvent: event });
+    const fixture = await createComponent({
+      http: { get },
+      refreshOn: ['queue.updated'],
+      sseEvent: event,
+    });
     const spy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     try {
       const before = get.mock.calls.length;
@@ -706,7 +793,12 @@ describe('DataTableComponent — a confirmation that carries a decision', () => 
     let seen: { toggleHint?: string } | undefined;
     const fixture = await createComponent({
       http: { get: () => of([ROW]), delete: () => of({}) },
-      rowActions: [{ ...REMOVE, confirmToggle: { labelKey: 'x.delete_files', param: 'deleteFiles', hintKey: 'x.kept' } }],
+      rowActions: [
+        {
+          ...REMOVE,
+          confirmToggle: { labelKey: 'x.delete_files', param: 'deleteFiles', hintKey: 'x.kept' },
+        },
+      ],
       confirmation: {
         confirmWithToggle: (o: { toggleHint?: string }) => {
           seen = o;
@@ -777,12 +869,16 @@ describe('DataTableComponent — progress inside a badge', () => {
 
   it('rounds the named field into a 0–100 fill', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) } });
-    expect(fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: 47.4 })).toBe(47);
+    expect(
+      fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: 47.4 }),
+    ).toBe(47);
   });
 
   it('VERDICT: a row reporting no number stays flat — an unreachable client is not 0%', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) } });
-    expect(fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: null })).toBeNull();
+    expect(
+      fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: null }),
+    ).toBeNull();
   });
 
   it('VERDICT: a full row shows no percentage — an importing queue row is not "100%"', async () => {
@@ -795,7 +891,10 @@ describe('DataTableComponent — progress inside a badge', () => {
   it('a column declaring no progressField never fills', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) } });
     expect(
-      fixture.componentInstance.cellProgress({ key: 'state', labelKey: 'x.state' }, { id: 1, progress: 50 }),
+      fixture.componentInstance.cellProgress(
+        { key: 'state', labelKey: 'x.state' },
+        { id: 1, progress: 50 },
+      ),
     ).toBeNull();
   });
 });
@@ -874,8 +973,13 @@ describe('DataTableComponent — a cell that links', () => {
   });
 
   it('a column declaring no linkActionId never links', async () => {
-    const fixture = await createComponent({ http: { get: () => of([]) }, resolveAction: () => vi.fn() });
-    expect(fixture.componentInstance.cellLink({ key: 'name', labelKey: 'x' }, { id: 1 })).toBeUndefined();
+    const fixture = await createComponent({
+      http: { get: () => of([]) },
+      resolveAction: () => vi.fn(),
+    });
+    expect(
+      fixture.componentInstance.cellLink({ key: 'name', labelKey: 'x' }, { id: 1 }),
+    ).toBeUndefined();
   });
 });
 
@@ -886,7 +990,12 @@ describe('DataTableComponent: bulk selection', () => {
     { id: 3, name: 'C', state: 'paused' },
   ];
 
-  const REMOVE: RowAction = { kind: 'proxy', labelKey: 'x.rm', method: 'DELETE', path: '/api/x/:id' };
+  const REMOVE: RowAction = {
+    kind: 'proxy',
+    labelKey: 'x.rm',
+    method: 'DELETE',
+    path: '/api/x/:id',
+  };
 
   it('selects, deselects and covers every loaded row from the header box', async () => {
     const fixture = await createComponent({ http: { get: () => of(ROWS) }, bulkSelect: true });
@@ -979,7 +1088,10 @@ describe('DataTableComponent: bulk selection', () => {
       bulkSelect: true,
       toast,
       rowActions: [{ ...REMOVE, confirmKey: 'x.confirm_rm' }],
-      confirmation: { confirm, confirmWithToggle: () => Promise.resolve({ ok: true, toggle: true }) },
+      confirmation: {
+        confirm,
+        confirmWithToggle: () => Promise.resolve({ ok: true, toggle: true }),
+      },
     });
     const c = fixture.componentInstance;
     c.toggleAllSelected();
@@ -1066,7 +1178,10 @@ describe('DataTableComponent: bulk selection', () => {
       kind: 'select',
       key: 'status',
       labelKey: 'x.status',
-      options: [{ value: '', labelKey: 'x.all' }, { value: 'failed', labelKey: 'x.failed' }],
+      options: [
+        { value: '', labelKey: 'x.all' },
+        { value: 'failed', labelKey: 'x.failed' },
+      ],
     };
     const get = vi.fn(() => of({ data: ROWS, total: 40, page: 1, pageSize: 20 }));
     const fixture = await createComponent({

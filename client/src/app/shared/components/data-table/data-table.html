@@ -44,7 +44,10 @@
     >
       @if (bulkSelect() && selectedRows().length > 0) {
         <span class="text-sm font-medium">
-          {{ (selectedRows().length === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedRows().length } }}
+          {{
+            (selectedRows().length === 1 ? 'bulk.selected_one' : 'bulk.selected_other')
+              | translate: { count: selectedRows().length }
+          }}
         </span>
         <div class="flex flex-wrap gap-2 ms-auto">
           @for (item of batchActions(); track item.action.labelKey) {
@@ -62,7 +65,12 @@
               {{ item.action.labelKey | translate }}
             </button>
           }
-          <button type="button" class="btn btn-ghost btn-sm" [disabled]="bulkBusy()" (click)="clearSelection()">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            [disabled]="bulkBusy()"
+            (click)="clearSelection()"
+          >
             {{ 'bulk.clear' | translate }}
           </button>
         </div>
@@ -85,7 +93,7 @@
             }
             @case ('select') {
               <select
-      appTvSelect
+                appTvSelect
                 class="select select-bordered select-sm"
                 [attr.aria-label]="filter.labelKey | translate"
                 (change)="onSelectChange(filter.key, $event)"
@@ -167,6 +175,15 @@
                     }
                     @case ('speed') {
                       {{ cellSpeed(row[col.key]) }}
+                    }
+                    @case ('peers') {
+                      @if (typeof row[col.key] === 'number') {
+                        <span class="tabular-nums">
+                          <span class="text-success">▲{{ row[col.key] }}</span>
+                          <span class="text-base-content/40 mx-0.5">/</span>
+                          <span class="text-warning">▼{{ row[col.leechersKey ?? ''] ?? 0 }}</span>
+                        </span>
+                      }
                     }
                     @default {
                       @if (cellLink(col, row); as open) {
@@ -255,7 +272,9 @@
                               (click)="runFromMenu(item.run)"
                               [disabled]="
                                 busy() ===
-                                row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')
+                                row.id +
+                                  ':' +
+                                  (item.action.kind === 'proxy' ? item.action.path : '')
                               "
                             >
                               {{ item.action.labelKey | translate }}
@@ -293,7 +312,9 @@
             <dt class="text-sm text-base-content/60">{{ line.labelKey | translate }}</dt>
             <dd class="break-words">
               @if (line.href) {
-                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{ line.text }}</a>
+                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{
+                  line.text
+                }}</a>
               } @else {
                 {{ line.text }}
               }
