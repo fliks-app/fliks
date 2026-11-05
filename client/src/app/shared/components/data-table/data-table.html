@@ -44,7 +44,10 @@
     >
       @if (bulkSelect() && selectedRows().length > 0) {
         <span class="text-sm font-medium">
-          {{ (selectedRows().length === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedRows().length } }}
+          {{
+            (selectedRows().length === 1 ? 'bulk.selected_one' : 'bulk.selected_other')
+              | translate: { count: selectedRows().length }
+          }}
         </span>
         <div class="flex flex-wrap gap-2 ms-auto">
           @for (item of batchActions(); track item.action.labelKey) {
@@ -62,7 +65,12 @@
               {{ item.action.labelKey | translate }}
             </button>
           }
-          <button type="button" class="btn btn-ghost btn-sm" [disabled]="bulkBusy()" (click)="clearSelection()">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            [disabled]="bulkBusy()"
+            (click)="clearSelection()"
+          >
             {{ 'bulk.clear' | translate }}
           </button>
         </div>
@@ -85,7 +93,7 @@
             }
             @case ('select') {
               <select
-      appTvSelect
+                appTvSelect
                 class="select select-bordered select-sm"
                 [attr.aria-label]="filter.labelKey | translate"
                 (change)="onSelectChange(filter.key, $event)"
@@ -168,6 +176,15 @@
                     @case ('speed') {
                       {{ cellSpeed(row[col.key]) }}
                     }
+                    @case ('peers') {
+                      @if (typeof row[col.key] === 'number') {
+                        <span class="tabular-nums">
+                          <span class="text-success">▲{{ row[col.key] }}</span>
+                          <span class="text-base-content/40 mx-0.5">/</span>
+                          <span class="text-warning">▼{{ row[col.leechersKey ?? ''] ?? 0 }}</span>
+                        </span>
+                      }
+                    }
                     @default {
                       @if (cellLink(col, row); as open) {
                         <button type="button" class="link link-hover text-start" (click)="open()">
@@ -243,23 +260,72 @@
                         <app-popover-menu
                           [open]="openMenuRow() === row.id"
                           [anchor]="menuTrigger"
-                          (closed)="openMenuRow.set(null)"
+                          (closed)="openMenuRow.set(null); closeSubmenu()"
                         >
-                          @for (item of menu; track item.action.labelKey) {
-                            <button
-                              type="button"
-                              class="dropdown-item"
-                              [class.text-error]="
-                                item.action.kind === 'proxy' && item.action.tone === 'danger'
-                              "
-                              (click)="runFromMenu(item.run)"
-                              [disabled]="
-                                busy() ===
-                                row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')
-                              "
-                            >
-                              {{ item.action.labelKey | translate }}
-                            </button>
+                          @if (sheetSubmenu(menu); as sub) {
+                            <div class="panel-slide-fwd">
+                              <button
+                                type="button"
+                                class="dropdown-item mb-1"
+                                (click)="closeSubmenu()"
+                              >
+                                <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+                                <span class="flex-1 truncate text-left font-medium">{{
+                                  sub.action.labelKey | translate
+                                }}</span>
+                              </button>
+                              <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+                              @for (child of sub.children; track child.action.labelKey) {
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    menuRow;
+                                    context: { $implicit: child, row: row }
+                                  "
+                                />
+                              }
+                            </div>
+                          } @else {
+                            @for (item of menu; track item.action.labelKey) {
+                              @if (item.children) {
+                                <button
+                                  #subTrigger
+                                  type="button"
+                                  class="dropdown-item"
+                                  [attr.aria-expanded]="openSubmenu() === item.action.labelKey"
+                                  (click)="toggleSubmenu(item, subTrigger)"
+                                >
+                                  <span class="flex-1 truncate text-left">{{
+                                    item.action.labelKey | translate
+                                  }}</span>
+                                  <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+                                </button>
+                                @if (!menuSheet()) {
+                                  <app-popover-menu
+                                    [open]="openSubmenu() === item.action.labelKey"
+                                    [anchor]="submenuAnchor()"
+                                    placement="right-start"
+                                    [submenu]="true"
+                                    (closed)="closeSubmenu()"
+                                  >
+                                    @for (child of item.children; track child.action.labelKey) {
+                                      <ng-container
+                                        *ngTemplateOutlet="
+                                          menuRow;
+                                          context: { $implicit: child, row: row }
+                                        "
+                                      />
+                                    }
+                                  </app-popover-menu>
+                                }
+                              } @else {
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    menuRow;
+                                    context: { $implicit: item, row: row }
+                                  "
+                                />
+                              }
+                            }
                           }
                         </app-popover-menu>
                       }
@@ -283,6 +349,18 @@
   }
 </div>
 
+<ng-template #menuRow let-item let-row="row">
+  <button
+    type="button"
+    class="dropdown-item"
+    [class.text-error]="item.action.kind === 'proxy' && item.action.tone === 'danger'"
+    (click)="runFromMenu(item.run)"
+    [disabled]="busy() === row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')"
+  >
+    {{ item.action.labelKey | translate }}
+  </button>
+</ng-template>
+
 <dialog #rowDetailDialog class="modal">
   @if (rowDetail(); as open) {
     <div class="modal-box max-w-lg">
@@ -293,7 +371,9 @@
             <dt class="text-sm text-base-content/60">{{ line.labelKey | translate }}</dt>
             <dd class="break-words">
               @if (line.href) {
-                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{ line.text }}</a>
+                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{
+                  line.text
+                }}</a>
               } @else {
                 {{ line.text }}
               }

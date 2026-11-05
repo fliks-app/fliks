@@ -61,6 +61,20 @@
         [refreshMs]="view.refreshMs ?? 0"
         [refreshOn]="view.refreshOn ?? []"
         [resolveAction]="tableResolveAction"
+        [openReleases]="releasePicker.open"
+      />
+      <app-releases-modal
+        [title]="releasePicker.titleKey() | translate"
+        [releases]="releasePicker.releases()"
+        [indexers]="releasePicker.indexers()"
+        [loading]="releasePicker.loading()"
+        [searched]="releasePicker.searched()"
+        [error]="releasePicker.error()"
+        [emptyMessage]="releasePicker.emptyMessage()"
+        [grabBusy]="releasePicker.grabBusy()"
+        [grabState]="releasePicker.grabState()"
+        grabPrefix="row"
+        (grab)="releasePicker.grab($event.release, $event.key)"
       />
     } @else if (formPage(); as page) {
       @if (formLoading()) {

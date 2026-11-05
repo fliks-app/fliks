@@ -149,6 +149,10 @@ export class ReleasesModalComponent {
     return { icon: 'none', key: 'media_detail.releases_empty_indexer' };
   });
 
+  close() {
+    this.dialogEl()?.nativeElement.close();
+  }
+
   showModal() {
     this.activeTab.set(null);
     const el = this.dialogEl()?.nativeElement;

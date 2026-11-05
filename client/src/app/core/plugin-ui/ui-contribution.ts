@@ -69,14 +69,7 @@ export const SECRETS_SET_KEY = 'secretsSet';
 
 /** The eight field kinds `<app-schema-form>` renders, over four form components. */
 export type FieldType =
-  | 'text'
-  | 'email'
-  | 'password'
-  | 'url'
-  | 'number'
-  | 'toggle'
-  | 'select'
-  | 'multiselect';
+  'text' | 'email' | 'password' | 'url' | 'number' | 'toggle' | 'select' | 'multiselect';
 
 /** One input of a plugin's settings form; `kind` defaults to `'field'`. */
 export interface FieldDef {
@@ -212,7 +205,9 @@ export interface TableSubValue {
 export interface TableColumn {
   key: string;
   labelKey: string;
-  format?: 'date' | 'bytes' | 'percent' | 'speed';
+  /** `peers` renders `key` as seeders and `leechersKey` as leechers, the release picker's ▲/▼. */
+  format?: 'date' | 'bytes' | 'percent' | 'speed' | 'peers';
+  leechersKey?: string;
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
   /** Renders the cell as a badge, the value picking its tone; `*` covers every other value. `format`ted cells are never badged. */
@@ -325,7 +320,63 @@ export const TABLE_REFRESH_MIN_MS = 2000;
  *  `key`; an empty value is omitted. Filtering itself is the plugin's job, core only forwards it. */
 export type TableFilter =
   | { kind: 'search'; key: string; placeholderKey: string }
-  | { kind: 'select'; key: string; labelKey: string; options: { value: string; labelKey: string }[] };
+  | {
+      kind: 'select';
+      key: string;
+      labelKey: string;
+      options: { value: string; labelKey: string }[];
+    };
+
+/** One row action of a declared table; `rowActions[]` also takes a `submenu` of them. */
+export type TableRowAction =
+  | {
+      kind: 'route';
+      labelKey: string;
+      path: string;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  | {
+      kind: 'action';
+      labelKey: string;
+      actionId: TableRowActionId;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  /** Opens a dialog of declared fields read off the row. Needs no route: everything it shows
+   *  is already on the row the table loaded. */
+  | {
+      kind: 'detail';
+      labelKey: string;
+      titleKey?: string;
+      fields: TableDetailField[];
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  | {
+      kind: 'proxy';
+      labelKey: string;
+      method: 'POST' | 'DELETE';
+      path: string;
+      confirmKey?: string;
+      /** Renders a checkbox in the confirmation sending its state as query param `param`; needs `confirmKey`. `hintKey` is the line under it. */
+      confirmToggle?: { labelKey: string; param: string; hintKey?: string };
+      /** Danger styling on the button: a destructive row action must not look like the
+       *  two beside it. */
+      tone?: 'default' | 'danger';
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  /** Opens core's release picker on the row: `search` lists the releases, `grab` takes the picked one. */
+  | {
+      kind: 'releases';
+      labelKey: string;
+      titleKey: string;
+      search: string;
+      grab: string;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    };
 
 /** Read-mostly: declared columns and declared row actions, never a general grid. */
 export interface TableConfigPage extends ConfigPageBase {
@@ -337,37 +388,14 @@ export interface TableConfigPage extends ConfigPageBase {
    *  one confirmation for the whole selection instead of one per row. */
   bulkSelect?: boolean;
   /** `when` gates on the viewer (same vocabulary as `ui.contributions[]`), `visibleWhen` on the row; presentation
-   *  only, the route is CASL-guarded. A `proxy` path may carry `:id`, substituted with the row's id. */
+   *  only, the route is CASL-guarded. A `proxy` or `releases` path may carry `:id`, substituted with the row's id. */
   rowActions?: (
-    | { kind: 'route'; labelKey: string; path: string; when?: WhenPredicate[]; visibleWhen?: TableRowCondition }
+    | TableRowAction
+    /** A menu row opening its `children`; hidden when none of them is left for the row. */
     | {
-        kind: 'action';
+        kind: 'submenu';
         labelKey: string;
-        actionId: TableRowActionId;
-        when?: WhenPredicate[];
-        visibleWhen?: TableRowCondition;
-      }
-    /** Opens a dialog of declared fields read off the row. Needs no route: everything it shows
-     *  is already on the row the table loaded. */
-    | {
-        kind: 'detail';
-        labelKey: string;
-        titleKey?: string;
-        fields: TableDetailField[];
-        when?: WhenPredicate[];
-        visibleWhen?: TableRowCondition;
-      }
-    | {
-        kind: 'proxy';
-        labelKey: string;
-        method: 'POST' | 'DELETE';
-        path: string;
-        confirmKey?: string;
-        /** Renders a checkbox in the confirmation sending its state as query param `param`; needs `confirmKey`. `hintKey` is the line under it. */
-        confirmToggle?: { labelKey: string; param: string; hintKey?: string };
-        /** Danger styling on the button — a destructive row action must not look like the
-         *  two beside it. */
-        tone?: 'default' | 'danger';
+        children: TableRowAction[];
         when?: WhenPredicate[];
         visibleWhen?: TableRowCondition;
       }
