@@ -31,8 +31,11 @@ import {
   resetPatch,
   type ReaderSettings,
 } from './reader-settings.service';
+import { COMIC_MODES, type ComicPrefs } from './comic-layout';
+import type { AppearanceSection } from './reader-features';
 
-/** The Aa panel: a card under the top bar on a wide screen, a bottom sheet on a phone with the extras folded away. */
+/** The Aa panel, with the sections the format offers: a card under the top bar on a wide screen, a bottom sheet on a
+ *  phone with the extras folded away. */
 @Component({
   selector: 'app-reader-appearance',
   imports: [TranslatePipe, LucideChevronDown, LucideMinus, LucidePlus, LucideRotateCcw, LucideX],
@@ -41,11 +44,16 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderAppearanceComponent {
+  readonly sections = input.required<readonly AppearanceSection[]>();
   readonly settings = input.required<ReaderSettings>();
+  readonly comic = input<ComicPrefs | null>(null);
   readonly changed = output<Partial<ReaderSettings>>();
+  readonly comicChanged = output<ComicPrefs>();
   readonly closed = output<void>();
 
   protected readonly more = signal(false);
+  protected readonly comicModes = COMIC_MODES;
+  protected readonly has = (section: AppearanceSection) => this.sections().includes(section);
   protected readonly range = FONT_SIZE_RANGE;
   protected readonly lineRange = LINE_HEIGHT_RANGE;
   protected readonly fonts = READER_FONTS;
@@ -62,7 +70,7 @@ export class ReaderAppearanceComponent {
 
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef);
-    afterNextRender(() => host.nativeElement.querySelector<HTMLElement>('.rd-theme[aria-pressed=true]')?.focus());
+    afterNextRender(() => host.nativeElement.querySelector<HTMLElement>('[aria-pressed=true]')?.focus());
   }
 
   protected pick(theme: ReaderSettings['theme']): void {

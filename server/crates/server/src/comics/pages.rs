@@ -99,9 +99,9 @@ async fn source(
     let acl = accessible_library_ids(&st.db, auth).await?;
     let row: Option<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT mf.id, mf."relativePath" FROM items i
-           JOIN comic_issues ci ON ci."itemId" = i.id
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
-           JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
+           JOIN editions e ON e.id = i."editionId" AND (e.family = 'image'
+             OR (e.family = 'text' AND lower(e.format) IN ('cbz', 'cb7', 'cbr')))
            JOIN media_files mf ON mf.id = comic_part(i.id, $3)
            WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)"#
     )))

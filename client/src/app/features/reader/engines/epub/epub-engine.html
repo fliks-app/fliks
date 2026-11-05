@@ -1,0 +1,12 @@
+<!-- The toolkit sizes the host to its line length; the wrapper centres it and leaves the text clear of the bars. -->
+<div
+  class="absolute inset-x-0 flex justify-center"
+  (click)="onMarginClick($event)"
+  style="
+    top: max(3rem, calc(env(safe-area-inset-top) + 2.5rem));
+    bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2.5rem));
+  "
+>
+  <div #pageHost class="reader-host relative h-full"></div>
+</div>
+<app-epub-selection />

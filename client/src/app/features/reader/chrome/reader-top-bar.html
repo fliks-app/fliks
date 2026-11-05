@@ -1,0 +1,141 @@
+<header
+  class="rd-bar absolute inset-x-0 top-0 z-30 flex items-center gap-1 border-b border-base-content/10 bg-base-300/90 px-2 pb-2 text-base-content backdrop-blur transition-opacity duration-300"
+  style="
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+  "
+  [class.opacity-0]="!s.chromeVisible()"
+  [class.pointer-events-none]="!s.chromeVisible()"
+  [attr.inert]="s.chromeVisible() ? null : ''"
+>
+  <button
+    type="button"
+    class="btn btn-ghost btn-circle btn-md"
+    [attr.aria-label]="'reader.back' | translate"
+    (click)="s.close()"
+  >
+    <svg lucideArrowLeft class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+  </button>
+  <div class="flex min-w-0 flex-1 items-center gap-3 px-1">
+    @if (s.info()?.coverUrl; as cover) {
+      <img
+        class="h-10 w-7 shrink-0 rounded object-cover max-sm:hidden"
+        alt=""
+        [cachedSrc]="cover | resolveUrl: 'thumb'"
+      />
+    }
+    <div class="min-w-0">
+      <h1 class="truncate text-sm font-semibold leading-tight">{{ s.title() }}</h1>
+      @if (s.info()?.author) {
+        <p class="truncate text-sm leading-tight text-base-content/60">{{ s.info()?.author }}</p>
+      }
+    </div>
+  </div>
+  @if (zoom(); as z) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md"
+      [attr.aria-label]="'reader.zoom_out' | translate"
+      [disabled]="!z.canOut()"
+      (click)="z.by(-1)"
+    >
+      <svg lucideZoomOut class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md"
+      [attr.aria-label]="'reader.zoom_in' | translate"
+      [disabled]="!z.canIn()"
+      (click)="z.by(1)"
+    >
+      <svg lucideZoomIn class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (f().contents) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [class.btn-active]="sidebarTab() === 'contents' || sidebarTab() === 'bookmarks'"
+      [attr.aria-label]="'reader.contents' | translate"
+      (click)="s.openPanel('sidebar', s.browseTab())"
+    >
+      <svg lucideListTree class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (f().search) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md"
+      [class.btn-active]="sidebarTab() === 'search'"
+      [attr.aria-label]="'reader.search' | translate"
+      (click)="s.openPanel('sidebar', 'search')"
+    >
+      <svg lucideSearch class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (f().bookmarks) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md"
+      [class.text-primary]="bookmarked()"
+      [attr.aria-label]="(bookmarked() ? 'reader.remove_bookmark' : 'reader.add_bookmark') | translate"
+      [attr.aria-pressed]="bookmarked()"
+      (click)="s.act('bookmark')"
+    >
+      <svg
+        lucideBookmark
+        class="h-6 w-6 max-sm:h-5 max-sm:w-5"
+        [attr.fill]="bookmarked() ? 'currentColor' : 'none'"
+      ></svg>
+    </button>
+  }
+  @if (f().notes) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [class.btn-active]="sidebarTab() === 'notes'"
+      [attr.aria-label]="'reader.tab_notes' | translate"
+      (click)="s.openPanel('sidebar', 'notes')"
+    >
+      <svg lucideNotebookPen class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (s.canListen()) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [attr.aria-label]="'reader.listen' | translate"
+      (click)="s.listen()"
+    >
+      <svg lucideHeadphones class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (f().appearance.length) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [class.btn-active]="s.panel() === 'appearance'"
+      [attr.aria-label]="'reader.appearance' | translate"
+      [attr.aria-expanded]="s.panel() === 'appearance'"
+      (click)="s.openPanel('appearance')"
+    >
+      <svg lucideType class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    </button>
+  }
+  @if (s.canFullscreen) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
+      [attr.aria-label]="(s.fullscreen() ? 'reader.exit_fullscreen' : 'reader.fullscreen') | translate"
+      [attr.aria-pressed]="s.fullscreen()"
+      (click)="s.toggleFullscreen()"
+    >
+      @if (s.fullscreen()) {
+        <svg lucideMinimize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      } @else {
+        <svg lucideMaximize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      }
+    </button>
+  }
+</header>

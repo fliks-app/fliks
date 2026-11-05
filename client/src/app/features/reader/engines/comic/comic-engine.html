@@ -1,0 +1,63 @@
+<div class="absolute inset-0 flex flex-col overflow-hidden bg-black text-white select-none">
+  @if (webtoon()) {
+    <div
+      #stage
+      class="comic-stage relative min-h-0 flex-1 overflow-y-auto"
+      tabindex="0"
+      role="group"
+      [attr.aria-label]="'reader.comic_pages' | translate"
+      data-testid="comic-webtoon"
+      (scroll)="onScroll()"
+      (click)="toggleChrome()"
+      (wheel)="gestures.wheel($event)"
+    >
+      <div class="mx-auto flex w-max min-w-full flex-col items-center">
+        @if (ready()) {
+          @for (p of pages(); track $index; let i = $index) {
+            @let n = i + 1;
+            <img
+              class="block max-w-none bg-neutral"
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+              [attr.data-page]="n"
+              [src]="src(n)"
+              [alt]="'reader.comic_page_alt' | translate: { n: n }"
+              [style.width.px]="webtoonWidth()"
+              [style.aspect-ratio]="aspect(n)"
+            />
+          }
+        }
+      </div>
+    </div>
+  } @else {
+    <div
+      #stage
+      class="comic-stage relative min-h-0 flex-1 touch-none overflow-hidden"
+      tabindex="0"
+      role="group"
+      [attr.aria-label]="'reader.comic_pages' | translate"
+      data-testid="comic-paged"
+      (pointerdown)="gestures.down($event)"
+      (pointermove)="gestures.move($event)"
+      (pointerup)="gestures.up($event)"
+      (pointercancel)="gestures.cancel($event)"
+      (wheel)="gestures.wheel($event)"
+    >
+      <div class="comic-spread" [class.comic-pair]="shown().length > 1" [style.transform]="transform()">
+        @if (ready()) {
+          @for (n of shown(); track n) {
+            <img
+              decoding="async"
+              draggable="false"
+              [src]="src(n)"
+              [alt]="'reader.comic_page_alt' | translate: { n: n }"
+            />
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <p class="sr-only" aria-live="polite">{{ 'reader.comic_page_of' | translate: { n: page(), total: total() } }}</p>
+</div>

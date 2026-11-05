@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { mediaDetailLink } from '../media-kinds';
 import { asComicMedia, nextIssue } from '../../features/media-detail/comic/comic-media';
 import { AudioPlayerService } from './audio-player/audio-player.service';
-import { asBookMedia, type BookMedia } from './api/book-media';
+import { asBookMedia, readable, type BookMedia } from './api/book-media';
 import { BooksApiService } from './api/books-api.service';
 import type { BookDetail, BookEdition, BookFormatFamily } from './api/books.models';
 import { Media, MediaService } from './api/media.service';
@@ -19,10 +19,8 @@ const emptyBook = { editions: [], progress: null, series: [] } as unknown as Pic
 /** The text edition last read, else the first readable one. */
 export function readEdition(book: BookDetail | null): BookEdition | null {
   const { editions, progress } = book ?? emptyBook;
-  const readable = editions.filter(
-    (e) => e.family === 'text' && e.itemId != null && e.fileIds.length && ['epub', 'pdf'].includes(e.format ?? ''),
-  );
-  return readable.find((x) => x.id === progress?.editionId) ?? readable[0] ?? null;
+  const open = editions.filter(readable);
+  return open.find((x) => x.id === progress?.editionId) ?? open[0] ?? null;
 }
 
 /** The audio edition last listened to, else the first one with a file. */

@@ -8,3 +8,8 @@ export function pdfPageOf(locator: unknown, pages: number): number {
   const n = (locator as { page?: unknown } | null)?.page;
   return typeof n === 'number' && Number.isInteger(n) ? Math.min(pages, Math.max(1, n)) : 1;
 }
+
+/** The page at a whole-book progression, the inverse of `pdfProgression`. */
+export function pageAtProgression(at: number, pages: number): number {
+  return pages > 1 ? Math.round(Math.min(1, Math.max(0, at)) * (pages - 1)) + 1 : 1;
+}

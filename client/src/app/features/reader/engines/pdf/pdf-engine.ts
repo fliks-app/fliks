@@ -10,30 +10,24 @@ import {
   effect,
   inject,
   input,
-  output,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideArrowLeft, LucideZoomIn, LucideZoomOut } from '@lucide/angular';
+import { TranslateService } from '@ngx-translate/core';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
-import { AuthService } from '../../core/services/auth.service';
-import { ServerConfigService } from '../../core/services/server-config.service';
-import { ToastService } from '../../core/services/toast.service';
-import { pdfPageOf, pdfProgression } from './pdf-position';
-import { pageAtProbe, scrollToPageSlot } from './page-scroll';
-import { ReaderApiService, type ReaderTarget } from './reader-api.service';
-import { OfflineBookStoreService } from '../../core/services/offline-book-store.service';
-import { ReaderProgressService } from './reader-progress.service';
-import {
-  READER_THEMES,
-  ReaderSettingsService,
-  ZOOM_RANGE,
-  isDarkTheme,
-  readerThemeColors,
-  type ReaderTheme,
-} from './reader-settings.service';
+import { AuthService } from '../../../../core/services/auth.service';
+import { OfflineBookStoreService } from '../../../../core/services/offline-book-store.service';
+import { ServerConfigService } from '../../../../core/services/server-config.service';
+import { ToastService } from '../../../../core/services/toast.service';
+import { pageAtProbe, scrollToPageSlot } from '../../page-scroll';
+import { pageAtProgression, pdfPageOf, pdfProgression } from '../../pdf-position';
+import { ReaderApiService, type ReaderTarget } from '../../reader-api.service';
+import type { ReaderEngine, ReaderStatus, ReaderZoom, ScrubPreview } from '../../reader-engine';
+import type { ReaderKeyAction } from '../../reader-keys';
+import { ReaderProgressService } from '../../reader-progress.service';
+import { ReaderSession } from '../../reader-session';
+import { ReaderSettingsService, ZOOM_RANGE, isDarkTheme } from '../../reader-settings.service';
 
 /** Pages around the viewport that are drawn; the others hold only their size. */
 const RENDER_MARGIN = '150% 0px';
@@ -43,23 +37,14 @@ const MAX_CANVAS_PIXELS = 16_000_000;
 
 /** The PDF of a book, one canvas per page in a scroller; pdf.js and its worker load on first open. */
 @Component({
-  selector: 'app-pdf-reader',
-  imports: [TranslatePipe, LucideArrowLeft, LucideZoomIn, LucideZoomOut],
-  templateUrl: './pdf-reader.html',
-  styleUrl: './pdf-reader.css',
+  selector: 'app-pdf-engine',
+  templateUrl: './pdf-engine.html',
+  styleUrl: './pdf-engine.css',
   encapsulation: ViewEncapsulation.None,
-  providers: [ReaderSettingsService, ReaderProgressService],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '(window:keydown)': 'onKeydown($event)',
-    '(window:pagehide)': 'flushProgress()',
-    '(document:visibilitychange)': 'flushProgress()',
-  },
 })
-export class PdfReaderComponent implements OnDestroy {
+export class PdfEngineComponent implements ReaderEngine, OnDestroy {
   readonly target = input.required<ReaderTarget>();
-  readonly title = input('');
-  readonly closed = output<void>();
 
   private readonly api = inject(ReaderApiService);
   private readonly auth = inject(AuthService);
@@ -68,6 +53,7 @@ export class PdfReaderComponent implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly settingsStore = inject(ReaderSettingsService);
   private readonly progress = inject(ReaderProgressService);
+  private readonly session = inject(ReaderSession);
   private readonly books = inject(OfflineBookStoreService);
   private readonly injector = inject(Injector);
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
@@ -81,22 +67,32 @@ export class PdfReaderComponent implements OnDestroy {
   private raf = 0;
 
   protected readonly settings = this.settingsStore.settings;
-  protected readonly colors = computed(() => readerThemeColors(this.settings().theme));
-  protected readonly zoomRange = ZOOM_RANGE;
-  protected readonly themes = READER_THEMES;
-  protected readonly loading = signal(true);
+  readonly loading = signal(true);
+  readonly rtl = signal(false);
   protected readonly pages = signal<number[]>([]);
   protected readonly page = signal(1);
+  readonly steps = computed(() => this.pages().length);
+  readonly progression = computed(() => pdfProgression(this.page(), this.pages().length));
+  readonly segments = signal([0]);
+  readonly status = computed<ReaderStatus>(() => ({
+    section: '',
+    sectionLeft: null,
+    page: this.page(),
+    pages: this.pages().length,
+    bookLeft: null,
+  }));
+  readonly zoom: ReaderZoom = {
+    canIn: computed(() => this.settings().zoom < ZOOM_RANGE.max),
+    canOut: computed(() => this.settings().zoom > ZOOM_RANGE.min),
+    by: (dir) => this.zoomBy(dir * ZOOM_RANGE.step),
+  };
   protected readonly ratio = signal(1.414);
   protected readonly viewportWidth = signal(0);
   protected readonly pageWidth = computed(() =>
     Math.round(Math.min(this.viewportWidth(), MAX_FIT_WIDTH) * this.settings().zoom),
   );
-  /** The page named by the slider while it is dragged, before the jump. */
-  protected readonly scrubbing = signal<number | null>(null);
-  protected readonly shownPage = computed(() => this.scrubbing() ?? this.page());
-
   constructor() {
+    this.session.attach(this);
     afterNextRender(() => void this.open());
     effect(() => {
       this.pageWidth();
@@ -157,7 +153,7 @@ export class PdfReaderComponent implements OnDestroy {
     } catch {
       if (this.destroyed) return;
       this.toast.error(this.translate.instant('reader.open_failed'));
-      this.closed.emit();
+      this.session.close();
     }
   }
 
@@ -223,7 +219,7 @@ export class PdfReaderComponent implements OnDestroy {
     scrollToPageSlot(this.scroller().nativeElement, n);
   }
 
-  protected zoom(delta: number): void {
+  private zoomBy(delta: number): void {
     const n = this.page();
     this.settingsStore.save({ zoom: this.settings().zoom + delta });
     afterNextRender(() => this.scrollToPage(n), { injector: this.injector });
@@ -233,49 +229,41 @@ export class PdfReaderComponent implements OnDestroy {
     return isDarkTheme(this.settings().theme);
   }
 
-  protected swatch(theme: ReaderTheme): string {
-    return readerThemeColors(theme).background;
+  /** A tap on the pages shows or hides the bars. */
+  protected onTap(): void {
+    if (!window.getSelection()?.isCollapsed) return;
+    this.session.toggleChrome();
   }
 
-  protected setTheme(theme: ReaderTheme): void {
-    this.settingsStore.save({ theme });
+  seek(at: number): void {
+    this.scrollToPage(pageAtProgression(at, this.pages().length));
   }
 
-  protected onScrub(e: Event): void {
-    this.scrubbing.set(Number((e.target as HTMLInputElement).value));
+  preview(at: number): ScrubPreview {
+    return { section: '', page: pageAtProgression(at, this.pages().length) };
   }
 
-  protected onSeek(e: Event): void {
-    this.scrubbing.set(null);
-    this.scrollToPage(Number((e.target as HTMLInputElement).value));
+  onKey(e: KeyboardEvent): boolean {
+    if (e.ctrlKey || e.altKey || e.metaKey) return false;
+    const step = { '+': 1, '=': 1, '-': -1 }[e.key];
+    if (!step) return false;
+    this.zoomBy(step * ZOOM_RANGE.step);
+    return true;
   }
 
-  protected onKeydown(e: KeyboardEvent): void {
-    const el = e.target as HTMLElement | null;
-    if (e.ctrlKey || e.altKey || e.metaKey || el?.closest('input, select, textarea')) return;
-    if ((e.key === 'Enter' || e.key === ' ') && el?.closest('button, a, summary')) return;
+  act(action: ReaderKeyAction): boolean {
     const root = this.scroller().nativeElement;
     const last = this.pages().length;
-    const keys: Record<string, () => void> = {
-      Escape: () => this.closed.emit(),
-      Home: () => this.scrollToPage(1),
-      End: () => this.scrollToPage(last),
-      '+': () => this.zoom(ZOOM_RANGE.step),
-      '=': () => this.zoom(ZOOM_RANGE.step),
-      '-': () => this.zoom(-ZOOM_RANGE.step),
-      ArrowRight: () => this.scrollToPage(Math.min(last, this.page() + 1)),
-      ArrowLeft: () => this.scrollToPage(Math.max(1, this.page() - 1)),
-      PageDown: () => root.scrollBy({ top: root.clientHeight * 0.9 }),
-      PageUp: () => root.scrollBy({ top: -root.clientHeight * 0.9 }),
-      ' ': () => root.scrollBy({ top: root.clientHeight * 0.9 * (e.shiftKey ? -1 : 1) }),
+    const moves: Partial<Record<ReaderKeyAction, () => void>> = {
+      start: () => this.scrollToPage(1),
+      end: () => this.scrollToPage(last),
+      right: () => this.scrollToPage(Math.min(last, this.page() + 1)),
+      left: () => this.scrollToPage(Math.max(1, this.page() - 1)),
+      next: () => root.scrollBy({ top: root.clientHeight * 0.9 }),
+      prev: () => root.scrollBy({ top: -root.clientHeight * 0.9 }),
     };
-    const act = keys[e.key];
-    if (!act) return;
-    e.preventDefault();
-    act();
-  }
-
-  protected flushProgress(): void {
-    void this.progress.flush();
+    const move = moves[action];
+    move?.();
+    return !!move;
   }
 }

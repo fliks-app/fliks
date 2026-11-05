@@ -1,299 +1,82 @@
 <div
   class="fixed inset-0 overflow-clip"
-  [style.background-color]="colors().background"
-  [style.color]="colors().text"
+  [style.background-color]="s.colors().background"
+  [style.color]="s.colors().text"
 >
-  <!-- The toolkit sizes the host to its line length; the wrapper centres it and leaves the text clear of the bars. -->
-  <div
-    class="absolute inset-x-0 flex justify-center"
-    (click)="onMarginClick($event)"
-    style="
-      top: max(3rem, calc(env(safe-area-inset-top) + 2.5rem));
-      bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2.5rem));
-    "
-  >
-    <div #pageHost class="reader-host relative h-full"></div>
-  </div>
+  @switch (format()) {
+    @case ('epub') {
+      <app-epub-engine [target]="target()" />
+    }
+    @case ('pdf') {
+      <app-pdf-engine [target]="target()" />
+    }
+    @case ('comic') {
+      <app-comic-engine [target]="target()" [pages]="pages()" />
+    }
+  }
 
-  <!-- Running header and footer, faint, while the bars are away. -->
-  <div
-    class="pointer-events-none absolute inset-x-0 top-0 flex justify-center gap-2 px-6 text-sm tracking-wide transition-opacity duration-300"
-    style="padding-top: max(0.75rem, env(safe-area-inset-top))"
-    [style.opacity]="chromeVisible() ? 0 : 0.45"
-    aria-hidden="true"
-  >
-    <span class="truncate">{{ title() }}</span>
-    @if (chapterTitle()) {
-      <span>&middot;</span>
-      <span class="truncate">{{ chapterTitle() }}</span>
-    }
-  </div>
-  <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-3 px-6 text-sm tabular-nums transition-opacity duration-300"
-    style="padding-bottom: max(0.75rem, calc(env(safe-area-inset-bottom) + 0.25rem))"
-    [style.opacity]="chromeVisible() ? 0 : 0.45"
-    aria-hidden="true"
-  >
-    @if (page() !== null) {
-      <span>{{ page() }} / {{ pageTotal() }}</span>
-    }
-    <span>{{ percent() }}%</span>
-  </div>
-  <div
-    class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-current/10"
-    aria-hidden="true"
-  >
+  @if (s.features().runningHead && s.engine()?.status(); as st) {
+    <!-- Running header and footer, faint, while the bars are away. -->
     <div
-      class="h-full bg-primary"
-      [style.width.%]="shownProgression() * 100"
-      [style.margin-inline-start]="rtl() ? 'auto' : null"
-    ></div>
-  </div>
+      class="pointer-events-none absolute inset-x-0 top-0 flex justify-center gap-2 px-6 text-sm tracking-wide transition-opacity duration-300"
+      style="padding-top: max(0.75rem, env(safe-area-inset-top))"
+      [style.opacity]="s.chromeVisible() ? 0 : 0.45"
+      aria-hidden="true"
+    >
+      <span class="truncate">{{ s.title() }}</span>
+      @if (st.section) {
+        <span>&middot;</span>
+        <span class="truncate">{{ st.section }}</span>
+      }
+    </div>
+    <div
+      class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-3 px-6 text-sm tabular-nums transition-opacity duration-300"
+      style="padding-bottom: max(0.75rem, calc(env(safe-area-inset-bottom) + 0.25rem))"
+      [style.opacity]="s.chromeVisible() ? 0 : 0.45"
+      aria-hidden="true"
+    >
+      @if (st.page !== null) {
+        <span>{{ st.page }} / {{ st.pages }}</span>
+      }
+      <span>{{ s.percent() }}%</span>
+    </div>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-current/10" aria-hidden="true">
+      <div
+        class="h-full bg-primary"
+        [style.width.%]="s.shownProgression() * 100"
+        [style.margin-inline-start]="s.engine()?.rtl() ? 'auto' : null"
+      ></div>
+    </div>
+  }
 
-  @if (loading()) {
+  @if (s.engine()?.loading() ?? true) {
     <div class="absolute inset-0 flex items-center justify-center">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   }
 
   <!-- A side panel leaves the book usable beside it on a wide screen, so highlights can follow one another. -->
-  @if (panel() && !compact()) {
+  @if (s.panel() && !s.compact()) {
     <button
       type="button"
       class="absolute inset-0 z-20 cursor-default"
-      [class.hidden]="panel() === 'sidebar'"
+      [class.hidden]="s.panel() === 'sidebar'"
       tabindex="-1"
       [attr.aria-label]="'common.close' | translate"
-      (click)="closePanel()"
+      (click)="s.closePanel()"
     ></button>
   }
 
-  <header
-    class="rd-bar absolute inset-x-0 top-0 z-30 flex items-center gap-1 border-b border-base-content/10 bg-base-300/90 px-2 pb-2 text-base-content backdrop-blur transition-opacity duration-300"
-    style="
-      padding-top: max(0.5rem, env(safe-area-inset-top));
-      padding-left: max(0.5rem, env(safe-area-inset-left));
-      padding-right: max(0.5rem, env(safe-area-inset-right));
-    "
-    [class.opacity-0]="!chromeVisible()"
-    [class.pointer-events-none]="!chromeVisible()"
-    [attr.inert]="chromeVisible() ? null : ''"
-  >
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md"
-      [attr.aria-label]="'reader.back' | translate"
-      (click)="back()"
-    >
-      <svg lucideArrowLeft class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-    </button>
-    <div class="flex min-w-0 flex-1 items-center gap-3 px-1">
-      @if (info()?.coverUrl; as cover) {
-        <img
-          class="h-10 w-7 shrink-0 rounded object-cover max-sm:hidden"
-          alt=""
-          [cachedSrc]="cover | resolveUrl: 'thumb'"
-        />
-      }
-      <div class="min-w-0">
-        <h1 class="truncate text-sm font-semibold leading-tight">{{ title() }}</h1>
-        @if (info()?.author) {
-          <p class="truncate text-sm leading-tight text-base-content/60">{{ info()?.author }}</p>
-        }
-      </div>
-    </div>
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
-      [class.btn-active]="panel() === 'sidebar' && (tab() === 'contents' || tab() === 'bookmarks')"
-      [attr.aria-label]="'reader.contents' | translate"
-      (click)="openPanel('sidebar', browseTab())"
-    >
-      <svg lucideListTree class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md"
-      [class.btn-active]="panel() === 'sidebar' && tab() === 'search'"
-      [attr.aria-label]="'reader.search' | translate"
-      (click)="openPanel('sidebar', 'search')"
-    >
-      <svg lucideSearch class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md"
-      [class.text-primary]="bookmarked()"
-      [attr.aria-label]="
-        (bookmarked() ? 'reader.remove_bookmark' : 'reader.add_bookmark') | translate
-      "
-      [attr.aria-pressed]="bookmarked()"
-      (click)="toggleBookmark()"
-    >
-      <svg
-        lucideBookmark
-        class="h-6 w-6 max-sm:h-5 max-sm:w-5"
-        [attr.fill]="bookmarked() ? 'currentColor' : 'none'"
-      ></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
-      [class.btn-active]="panel() === 'sidebar' && tab() === 'notes'"
-      [attr.aria-label]="'reader.tab_notes' | translate"
-      (click)="openPanel('sidebar', 'notes')"
-    >
-      <svg lucideNotebookPen class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-    </button>
-    @if (info()?.listen) {
-      <button
-        type="button"
-        class="btn btn-ghost btn-circle btn-md max-sm:hidden"
-        [attr.aria-label]="'reader.listen' | translate"
-        (click)="listen()"
-      >
-        <svg lucideHeadphones class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-      </button>
-    }
-    <button
-      type="button"
-      class="btn btn-ghost btn-circle btn-md max-sm:hidden"
-      [class.btn-active]="panel() === 'appearance'"
-      [attr.aria-label]="'reader.appearance' | translate"
-      [attr.aria-expanded]="panel() === 'appearance'"
-      (click)="openPanel('appearance')"
-    >
-      <svg lucideType class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-    </button>
-    @if (canFullscreen) {
-      <button
-        type="button"
-        class="btn btn-ghost btn-circle btn-md max-sm:hidden"
-        [attr.aria-label]="(fullscreen() ? 'reader.exit_fullscreen' : 'reader.fullscreen') | translate"
-        [attr.aria-pressed]="fullscreen()"
-        (click)="toggleFullscreen()"
-      >
-        @if (fullscreen()) {
-          <svg lucideMinimize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-        } @else {
-          <svg lucideMaximize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
-        }
-      </button>
-    }
-  </header>
-
-  <footer
-    class="rd-bar absolute inset-x-0 bottom-0 z-30 border-t border-base-content/10 bg-base-300/90 px-4 pt-1 text-base-content backdrop-blur transition-opacity duration-300"
-    style="
-      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-      padding-left: max(1rem, env(safe-area-inset-left));
-      padding-right: max(1rem, env(safe-area-inset-right));
-    "
-    [class.opacity-0]="!chromeVisible()"
-    [class.pointer-events-none]="!chromeVisible()"
-    [attr.inert]="chromeVisible() ? null : ''"
-  >
-    <div class="relative mx-auto flex max-w-4xl flex-col pb-1">
-      <div
-        class="rd-scrub"
-        [attr.dir]="rtl() ? 'rtl' : 'ltr'"
-        [class.rd-scrub-active]="scrubbing() !== null"
-        (pointermove)="onHover($event)"
-        (pointerleave)="hovering.set(null)"
-      >
-        @if (bubble(); as b) {
-          <div class="rd-bubble" [style.inset-inline-start.%]="b.at * 100" aria-hidden="true">
-            <span class="block truncate font-medium">{{ b.title }}</span>
-            <span class="tabular-nums text-base-content/70">
-              @if (b.page) {
-                {{ 'reader.page_of' | translate: { n: b.page, total: pageTotal() } }} &middot;
-              }
-              {{ b.percent }}%
-            </span>
-          </div>
-        }
-        <input
-          type="range"
-          min="0"
-          max="1000"
-          step="1"
-          [attr.aria-label]="'reader.progress' | translate"
-          [value]="shownProgression() * 1000"
-          (input)="onScrub($event)"
-          (change)="onSeek($event)"
-        />
-        <div class="rd-track" aria-hidden="true">
-          @for (s of segments(); track s.start) {
-            <span [style.inset-inline-start.%]="s.start * 100" [style.width.%]="s.width * 100">
-              <span><span [style.width.%]="s.fill * 100"></span></span>
-            </span>
-          }
-        </div>
-        <span class="rd-thumb" [style.inset-inline-start.%]="shownProgression() * 100" aria-hidden="true"></span>
-      </div>
-
-      <!-- One row from sm up; on a phone the chapter keeps its own line and the book's time left goes. -->
-      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 text-sm text-base-content/70 sm:flex sm:justify-between">
-        <span class="flex min-w-0 gap-1 max-sm:contents">
-          <span class="truncate font-medium text-base-content">{{ chapterTitle() }}</span>
-          <span class="max-sm:hidden">&middot;</span>
-          <span class="truncate max-sm:order-last max-sm:col-span-2">
-            @if (pagesLeft() !== null) {
-              {{ 'reader.pages_left' | translatePlural: (pagesLeft() ?? 0) }}
-            } @else {
-              {{ 'reader.min_left' | translatePlural: chapterMinutes() }}
-            }
-          </span>
-        </span>
-        <span class="shrink-0 tabular-nums">
-          @if (page() !== null) {
-            <span class="max-sm:hidden">{{ 'reader.page_of' | translate: { n: page(), total: pageTotal() } }} &middot;</span>
-            <span class="sm:hidden">{{ page() }} / {{ pageTotal() }} &middot;</span>
-          }
-          {{ percent() }}%
-          <span class="max-sm:hidden">
-            &middot;
-            @if (bookTime().h) {
-              {{ 'reader.book_left_hm' | translate: { h: bookTime().h, m: bookTime().m } }}
-            } @else {
-              {{ 'reader.book_left_m' | translate: { m: bookTime().m } }}
-            }
-          </span>
-        </span>
-      </div>
-
-      <nav
-        class="grid auto-cols-fr grid-flow-col gap-1 pt-1 sm:hidden"
-        [attr.aria-label]="'reader.actions' | translate"
-      >
-        <button type="button" class="rd-action" (click)="openPanel('sidebar', browseTab())">
-          <svg lucideListTree class="h-5 w-5"></svg>
-          <span>{{ 'reader.contents_short' | translate }}</span>
-        </button>
-        <button type="button" class="rd-action" (click)="openPanel('appearance')">
-          <svg lucideType class="h-5 w-5"></svg>
-          <span>{{ 'reader.appearance' | translate }}</span>
-        </button>
-        <button type="button" class="rd-action" (click)="openPanel('sidebar', 'notes')">
-          <svg lucideNotebookPen class="h-5 w-5"></svg>
-          <span>{{ 'reader.tab_notes' | translate }}</span>
-        </button>
-        @if (info()?.listen) {
-          <button type="button" class="rd-action" (click)="listen()">
-            <svg lucideHeadphones class="h-5 w-5"></svg>
-            <span>{{ 'reader.listen' | translate }}</span>
-          </button>
-        }
-      </nav>
-    </div>
-  </footer>
+  <app-reader-top-bar />
+  <app-reader-bottom-bar />
 
   <!-- One template per panel: beside the book on a wide screen, in the shared bottom sheet on a phone. -->
   <ng-template #panelTpl let-kind>
+    @let engine = s.engine();
     @if (kind === 'sidebar') {
       <app-reader-sidebar
         [class]="
-          compact()
+          s.compact()
             ? 'rd-panel flex flex-col text-base-content [--panel-off:none]'
             : 'rd-panel [--panel-off:translateX(100%)] absolute bottom-0 right-0 top-[calc(env(safe-area-inset-top)+4rem)] z-40 flex w-[26rem] flex-col pb-[env(safe-area-inset-bottom)] border-l border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
         "
@@ -301,30 +84,30 @@
         [attr.aria-label]="'reader.panel' | translate"
         animate.enter="panel-slide-in"
         animate.leave="panel-slide-out"
-        [(tab)]="tab"
-        [toc]="tocEntries()"
-        [tocRows]="tocRows()"
-        [currentRow]="currentRow()"
-        [progression]="readThrough()"
-        [annotations]="annotations()"
-        [hits]="hits()"
-        [searching]="searching()"
-        [searched]="searched()"
-        [searchText]="searchText()"
-        [focusId]="focusId()"
-        (closed)="closePanel()"
-        (goToc)="goToRow($event)"
-        (goAnnotation)="goToAnnotation($event)"
-        (removeAnnotation)="removeAnnotation($event)"
-        (saveNote)="saveNote($event)"
-        (exportMarkdown)="exportMarkdown()"
-        (query)="search($event)"
-        (goHit)="goToHit($event)"
+        [(tab)]="s.tab"
+        [toc]="engine?.toc?.entries() ?? []"
+        [tocRows]="engine?.toc?.rows() ?? []"
+        [currentRow]="engine?.toc?.current() ?? -1"
+        [progression]="engine?.toc?.readThrough() ?? 0"
+        [annotations]="engine?.notes?.list() ?? []"
+        [hits]="engine?.search?.hits() ?? []"
+        [searching]="engine?.search?.searching() ?? false"
+        [searched]="engine?.search?.searched() ?? false"
+        [searchText]="engine?.search?.text() ?? ''"
+        [focusId]="engine?.notes?.focusId() ?? null"
+        (closed)="s.closePanel()"
+        (goToc)="engine?.toc?.go($event)"
+        (goAnnotation)="engine?.notes?.go($event)"
+        (removeAnnotation)="engine?.notes?.remove($event)"
+        (saveNote)="engine?.notes?.save($event)"
+        (exportMarkdown)="engine?.notes?.exportMarkdown()"
+        (query)="engine?.search?.run($event)"
+        (goHit)="engine?.search?.go($event)"
       />
     } @else if (kind === 'appearance') {
       <app-reader-appearance
         [class]="
-          compact()
+          s.compact()
             ? 'rd-panel flex flex-col text-base-content [--panel-off:none]'
             : 'rd-panel [--panel-off:translateX(calc(100%_+_0.75rem))] absolute right-3 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex max-h-[calc(100%-6rem)] w-96 flex-col rounded-2xl border border-base-content/10 bg-base-300/95 text-base-content shadow-2xl backdrop-blur'
         "
@@ -332,100 +115,21 @@
         [attr.aria-label]="'reader.appearance' | translate"
         animate.enter="panel-slide-in"
         animate.leave="panel-slide-out"
-        [settings]="settings()"
-        (changed)="change($event)"
-        (closed)="closePanel()"
+        [sections]="s.features().appearance"
+        [settings]="s.settings()"
+        [comic]="engine?.layout?.prefs() ?? null"
+        (changed)="settingsStore.save($event)"
+        (comicChanged)="engine?.layout?.set($event)"
+        (closed)="s.closePanel()"
       />
     }
   </ng-template>
-  @if (!compact() && panel(); as p) {
+  @if (!s.compact() && s.panel(); as p) {
     <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
   }
-  <app-bottom-sheet [open]="compact() && panel() !== null" (closed)="closePanel(); sheetPanel.set(null)">
-    @if (compact() && sheetPanel(); as p) {
+  <app-bottom-sheet [open]="s.compact() && s.panel() !== null" (closed)="s.closePanel(); sheetPanel.set(null)">
+    @if (s.compact() && sheetPanel(); as p) {
       <ng-container *ngTemplateOutlet="panelTpl; context: { $implicit: p }" />
     }
   </app-bottom-sheet>
-
-  @if (selection(); as sel) {
-    <div
-      class="rd-selection fixed z-50 flex items-center gap-1 rounded-2xl bg-base-100 p-1.5 text-base-content shadow-2xl"
-      role="toolbar"
-      [attr.aria-label]="'reader.selection' | translate"
-      [style.left]="'clamp(10rem, ' + sel.x + 'px, calc(100% - 10rem))'"
-      [style.top]="'max(5rem, ' + sel.y + 'px)'"
-      (mousedown)="writing() || $event.preventDefault()"
-    >
-      @if (writing()) {
-        <form
-          class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-2 p-1"
-          (submit)="$event.preventDefault(); saveDraft($event)"
-        >
-          <textarea
-            class="textarea textarea-bordered w-full text-sm"
-            rows="3"
-            maxlength="4000"
-            [attr.aria-label]="'reader.note' | translate"
-            [placeholder]="'reader.note_placeholder' | translate"
-          ></textarea>
-          <div class="flex justify-end gap-2">
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm h-11 min-h-11"
-              (click)="writing.set(false)"
-            >
-              {{ 'common.cancel' | translate }}
-            </button>
-            <button type="submit" class="btn btn-primary btn-sm h-11 min-h-11">
-              {{ 'common.save' | translate }}
-            </button>
-          </div>
-        </form>
-      } @else {
-        @for (c of colours; track c) {
-          <button
-            type="button"
-            class="rd-swatch"
-            [attr.aria-label]="'reader.highlight_' + c | translate"
-            (click)="highlight(c)"
-          >
-            <span class="size-8 rounded-full" [style.background-color]="hex[c]"></span>
-          </button>
-        }
-        <span class="mx-1 h-7 w-px bg-base-content/15"></span>
-        <button
-          type="button"
-          class="btn btn-ghost btn-circle size-11"
-          [attr.aria-label]="'reader.add_note' | translate"
-          (click)="writing.set(true)"
-        >
-          <svg lucideStickyNote class="h-5 w-5"></svg>
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-circle size-11"
-          [attr.aria-label]="'reader.copy' | translate"
-          (click)="copySelection()"
-        >
-          <svg lucideCopy class="h-5 w-5"></svg>
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-circle size-11"
-          [attr.aria-label]="'reader.search_selection' | translate"
-          (click)="searchSelection()"
-        >
-          <svg lucideSearch class="h-5 w-5"></svg>
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-circle size-11"
-          [attr.aria-label]="'reader.share_quote' | translate"
-          (click)="shareSelection()"
-        >
-          <svg lucideShare2 class="h-5 w-5"></svg>
-        </button>
-      }
-    </div>
-  }
 </div>

@@ -1,0 +1,27 @@
+<!-- The pages start and end clear of the bars, which float over them. -->
+<div
+  #scroller
+  class="absolute inset-0 overflow-auto"
+  data-testid="pdf-scroller"
+  (scroll)="onScroll()"
+  (click)="onTap()"
+>
+  <div
+    class="flex w-max min-w-full flex-col items-center gap-3"
+    style="
+      padding-top: calc(env(safe-area-inset-top) + 4.5rem);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
+    "
+  >
+    @for (n of pages(); track n) {
+      <div
+        class="pdf-page bg-white shadow"
+        [class.pdf-page-dark]="isDark()"
+        [class.pdf-page-sepia]="settings().theme === 'sepia'"
+        [attr.data-page]="n"
+        [style.width.px]="pageWidth()"
+        [style.aspect-ratio]="1 / ratio()"
+      ></div>
+    }
+  </div>
+</div>

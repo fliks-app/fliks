@@ -1,0 +1,77 @@
+@if (selection(); as sel) {
+  <div
+    class="rd-selection fixed z-50 flex items-center gap-1 rounded-2xl bg-base-100 p-1.5 text-base-content shadow-2xl"
+    role="toolbar"
+    [attr.aria-label]="'reader.selection' | translate"
+    [style.left]="'clamp(10rem, ' + sel.x + 'px, calc(100% - 10rem))'"
+    [style.top]="'max(5rem, ' + sel.y + 'px)'"
+    (mousedown)="writing() || $event.preventDefault()"
+  >
+    @if (writing()) {
+      <form
+        class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-2 p-1"
+        (submit)="$event.preventDefault(); saveDraft($event)"
+      >
+        <textarea
+          class="textarea textarea-bordered w-full text-sm"
+          rows="3"
+          maxlength="4000"
+          [attr.aria-label]="'reader.note' | translate"
+          [placeholder]="'reader.note_placeholder' | translate"
+        ></textarea>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11" (click)="writing.set(false)">
+            {{ 'common.cancel' | translate }}
+          </button>
+          <button type="submit" class="btn btn-primary btn-sm h-11 min-h-11">
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </form>
+    } @else {
+      @for (c of colours; track c) {
+        <button
+          type="button"
+          class="rd-swatch"
+          [attr.aria-label]="'reader.highlight_' + c | translate"
+          (click)="highlight(c)"
+        >
+          <span class="size-8 rounded-full" [style.background-color]="hex[c]"></span>
+        </button>
+      }
+      <span class="mx-1 h-7 w-px bg-base-content/15"></span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle size-11"
+        [attr.aria-label]="'reader.add_note' | translate"
+        (click)="writing.set(true)"
+      >
+        <svg lucideStickyNote class="h-5 w-5"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle size-11"
+        [attr.aria-label]="'reader.copy' | translate"
+        (click)="copy()"
+      >
+        <svg lucideCopy class="h-5 w-5"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle size-11"
+        [attr.aria-label]="'reader.search_selection' | translate"
+        (click)="find()"
+      >
+        <svg lucideSearch class="h-5 w-5"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle size-11"
+        [attr.aria-label]="'reader.share_quote' | translate"
+        (click)="share()"
+      >
+        <svg lucideShare2 class="h-5 w-5"></svg>
+      </button>
+    }
+  </div>
+}
