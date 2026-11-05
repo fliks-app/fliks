@@ -17,9 +17,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
 
-/** The acquisition actionIds of every level slot, the group ones keeping their historical names. */
-const SEARCH_IDS: ReadonlySet<string> = new Set(['media.search-releases', 'season.search-releases']);
-const GRAB_BEST_IDS: ReadonlySet<string> = new Set(['media.grab-best', 'season.grab-best']);
+/** The acquisition actionIds of a level: `media.*` for the work, `group.*`, `item.*` below it. */
+const ID_PREFIX = { work: 'media', group: 'group', item: 'item' } as const;
 
 /** Where each level reads its plugin contributions. */
 const SLOTS = {
@@ -91,21 +90,29 @@ export class MediaActionsController {
     });
   });
 
+  private isSearch(id: string | undefined): boolean {
+    return id === `${ID_PREFIX[this.cfg.base().level]}.search-releases`;
+  }
+
+  private isGrabBest(id: string | undefined): boolean {
+    return id === `${ID_PREFIX[this.cfg.base().level]}.grab-best`;
+  }
+
   private resolve(id: string): (() => void) | null {
-    if (SEARCH_IDS.has(id)) return () => void this.grabs.search(this.cfg.base(), aimedWants(this.acquisition()));
-    if (GRAB_BEST_IDS.has(id)) return () => void this.grabs.grabBest(this.cfg.base(), aimedWants(this.acquisition()));
+    if (this.isSearch(id)) return () => void this.grabs.search(this.cfg.base(), aimedWants(this.acquisition()));
+    if (this.isGrabBest(id)) return () => void this.grabs.grabBest(this.cfg.base(), aimedWants(this.acquisition()));
     return resolveMediaAction(id, this.cfg.handlers?.() ?? {});
   }
 
   /** Mid-request spinner of an acquisition row. */
   isBusy(actionId: string | undefined): boolean {
     const base = this.cfg.base();
-    if (actionId && GRAB_BEST_IDS.has(actionId)) return this.grabs.isBestBusy(base);
-    return !!actionId && SEARCH_IDS.has(actionId) && this.grabs.isSearching(base);
+    if (this.isGrabBest(actionId)) return this.grabs.isBestBusy(base);
+    return this.isSearch(actionId) && this.grabs.isSearching(base);
   }
 
   /** A grab-best locks while any release is being grabbed, here or from the modal. */
   isDisabled(actionId: string | undefined): boolean {
-    return !!actionId && GRAB_BEST_IDS.has(actionId) && (this.grabs.isBestBusy(this.cfg.base()) || this.grabs.grabBusy() !== null);
+    return this.isGrabBest(actionId) && (this.grabs.isBestBusy(this.cfg.base()) || this.grabs.grabBusy() !== null);
   }
 }

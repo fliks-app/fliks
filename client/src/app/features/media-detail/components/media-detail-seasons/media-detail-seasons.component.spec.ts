@@ -140,7 +140,7 @@ const SEASON_ACTIONS_REGISTRY: Partial<Record<SlotId, UiContribution[]>> = {
       weight: 500,
       labelKey: 'x.search_releases',
       icon: 'package',
-      action: { kind: 'action', actionId: 'season.search-releases' },
+      action: { kind: 'action', actionId: 'group.search-releases' },
     },
     {
       id: 'fliks.acme.season-grab',
@@ -148,7 +148,7 @@ const SEASON_ACTIONS_REGISTRY: Partial<Record<SlotId, UiContribution[]>> = {
       weight: 600,
       labelKey: 'x.grab_best',
       icon: 'download',
-      action: { kind: 'action', actionId: 'season.grab-best' },
+      action: { kind: 'action', actionId: 'group.grab-best' },
     },
   ],
 };

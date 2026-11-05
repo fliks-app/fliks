@@ -704,7 +704,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
           labelKey: 'x.item_grab',
           icon: 'download',
           when: ['level:item' as const, 'hasQualityProfile' as const],
-          action: { kind: 'action' as const, actionId: 'media.grab-best' },
+          action: { kind: 'action' as const, actionId: 'item.grab-best' },
         },
       ],
     };
