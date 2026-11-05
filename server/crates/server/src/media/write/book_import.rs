@@ -31,8 +31,8 @@ use fliks_domain::external_id::Namespace;
 use fliks_domain::{
     media::kind::MediaKind,
     media::{
-        AUDIO_EXTS,
         family::Family,
+        is_audio_format,
         wants::{MAX_WANTS, WantSpec, parse_wants},
     },
     metadata::limiter::Priority,
@@ -334,7 +334,7 @@ async fn create_from_edition(
         .get("durationSeconds")
         .and_then(Value::as_i64)
         .is_some_and(|d| d > 0)
-        || text(record, "format").is_some_and(|f| AUDIO_EXTS.contains(&format!(".{f}").as_str()));
+        || text(record, "format").is_some_and(|f| is_audio_format(&f));
     let family = if audio { Family::Audio } else { Family::Text };
     let work = work_of(st, &hinted, &lang, c.prio).await;
     let held = match (&work, join) {

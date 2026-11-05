@@ -299,6 +299,23 @@ async fn preview_describes_the_work_and_its_editions(pool: PgPool) {
     assert_eq!(c.get("/api/metadata/tmdb/book/OL1W").await.0, 400);
 }
 
+#[sqlx::test(migrations = false)]
+async fn preview_takes_an_edition_cover_when_the_work_has_none(pool: PgPool) {
+    let mut ol = full_anchor();
+    ol.works.insert("OL3W".into(), json!({"title": "Gamma"}));
+    ol.children.insert(
+        "OL3W".into(),
+        vec![
+            json!({"externalId": "OL7M", "title": "Gamma"}),
+            json!({"externalId": "OL8M", "title": "Gamma", "posterUrl": "http://img/e.jpg"}),
+        ],
+    );
+    let (c, _) = ctx(pool, vec![ol]).await;
+    let (s, v) = c.get("/api/metadata/openlibrary/book/OL3W").await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v["posterUrl"], "http://img/e.jpg");
+}
+
 fn import(extra: Value) -> Value {
     let mut b = json!({"type": "book", "provider": "openlibrary", "externalId": "OL1W"});
     b.as_object_mut()
