@@ -268,7 +268,7 @@ export class AutoDownloadService {
         const edition = media?.book.editions.find((e) => e.family === t.book!.family && offlinable(e));
         if (!media || !edition) continue;
         const artist = media.book.authors.map((a) => a.name).join(', ');
-        await this.downloads.createBookDownload(bookDownloadTarget({ mediaId: next.id, title: media.title, artist }, edition), { auto: true });
+        await this.downloads.createBookDownload(bookDownloadTarget({ mediaId: next.id, title: media.title, artist, posterUrl: media.posterUrl ?? null }, edition), { auto: true });
         this.log(`next volume ${next.id} of ${t.mediaId} queued`);
       } catch (err) {
         this.log(`next volume of ${t.mediaId} failed: ${(err as Error).message}`);
