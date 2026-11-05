@@ -26,6 +26,14 @@ export function editionLabel(e: BookEdition): string {
   return [e.label, narrators, e.format?.toUpperCase(), e.language].filter(Boolean).join(' · ') || `#${e.id}`;
 }
 
+/** A text edition of these formats opens in the comic page reader. */
+export const COMIC_ARCHIVES = ['cbz', 'cb7', 'cbr'];
+const READABLE = ['epub', 'pdf', ...COMIC_ARCHIVES];
+
+/** A text edition with a file the reader opens. */
+export const readable = (e: BookEdition): boolean =>
+  e.family === 'text' && e.itemId != null && e.fileIds.length > 0 && READABLE.includes(e.format?.toLowerCase() ?? '');
+
 /** An audio item, or a text edition the reader opens, with a file to keep on the device. */
 export const offlinable = (e: BookEdition): boolean =>
   e.itemId != null && e.hasFile && e.fileIds.length > 0 && (e.family === 'audio' || ['epub', 'pdf'].includes(e.format?.toLowerCase() ?? ''));

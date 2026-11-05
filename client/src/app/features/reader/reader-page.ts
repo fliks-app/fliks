@@ -7,15 +7,15 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ComicsApiService } from '../../core/services/api/comics-api.service';
 import type { ComicPageSize } from '../../core/services/api/comics.models';
-import { asBookMedia } from '../../core/services/api/book-media';
+import { COMIC_ARCHIVES, asBookMedia, readable } from '../../core/services/api/book-media';
 import { asComicMedia, type ComicMedia } from '../media-detail/comic/comic-media';
-import { PdfReaderComponent } from './pdf-reader';
-import { ComicReaderComponent } from './comic-reader';
-import { ReaderComponent, type ReaderBookInfo } from './reader';
+import { ReaderComponent } from './reader';
 import type { ReaderTarget } from './reader-api.service';
+import type { ReaderFormat } from './reader-features';
+import type { ReaderBookInfo } from './reader-session';
 
 interface Opened {
-  format: 'epub' | 'pdf' | 'comic';
+  format: ReaderFormat;
   /** Set for a comic issue read as images. */
   pages?: ComicPageSize[];
   title: string;
@@ -23,10 +23,10 @@ interface Opened {
   info?: ReaderBookInfo;
 }
 
-/** `/read/:mediaId/:itemId`: finds the item's file among the book's editions and hands it to the reader of its format. */
+/** `/read/:mediaId/:itemId`: finds the item's file among the book's editions and opens it in the reader. */
 @Component({
   selector: 'app-reader-page',
-  imports: [ReaderComponent, PdfReaderComponent, ComicReaderComponent],
+  imports: [ReaderComponent],
   templateUrl: './reader-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -69,16 +69,21 @@ export class ReaderPageComponent {
         });
         return;
       }
-      const edition = book?.book.editions.find((e) => e.itemId === itemId && e.family === 'text' && e.fileIds.length);
+      const edition = book?.book.editions.find((e) => e.itemId === itemId && readable(e));
       const format = edition?.format?.toLowerCase();
-      if (!book || !edition || (format !== 'epub' && format !== 'pdf')) throw new Error('not readable');
+      if (!book || !edition || !format) throw new Error('not readable');
+      const target = { mediaId, itemId, fileId: edition.fileIds[0], localKey };
+      if (COMIC_ARCHIVES.includes(format)) {
+        this.opened.set({ format: 'comic', title: book.title, target, pages: await this.comics.pages(itemId) });
+        return;
+      }
       const audio = book.book.editions.find((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
       const info: ReaderBookInfo = {
         author: book.book.authors.map((a) => a.name).join(', '),
         coverUrl: edition.coverUrl ?? book.posterUrl,
         listen: audio?.itemId != null ? { itemId: audio.itemId, coverUrl: audio.coverUrl } : null,
       };
-      this.opened.set({ format, title: book.title, target: { mediaId, itemId, fileId: edition.fileIds[0], localKey }, info });
+      this.opened.set({ format: format as Opened['format'], title: book.title, target, info });
     } catch {
       this.toast.error(this.translate.instant('reader.open_failed'));
       this.back();

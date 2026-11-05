@@ -1,0 +1,85 @@
+<footer
+  class="rd-bar absolute inset-x-0 bottom-0 z-30 border-t border-base-content/10 bg-base-300/90 px-4 pt-1 text-base-content backdrop-blur transition-opacity duration-300"
+  style="
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  "
+  [class.opacity-0]="!s.chromeVisible()"
+  [class.pointer-events-none]="!s.chromeVisible()"
+  [attr.inert]="s.chromeVisible() ? null : ''"
+>
+  <div class="relative mx-auto flex max-w-4xl flex-col pb-1">
+    <app-reader-scrubber />
+
+    <!-- One row from sm up; on a phone the section keeps its own line and the book's time left goes. -->
+    @if (status(); as st) {
+      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 text-sm text-base-content/70 sm:flex sm:justify-between">
+        <span class="flex min-w-0 gap-1 max-sm:contents">
+          <span class="truncate font-medium text-base-content">{{ st.section }}</span>
+          @if (st.sectionLeft; as left) {
+            @if (st.section) {
+              <span class="max-sm:hidden">&middot;</span>
+            }
+            <span class="truncate max-sm:order-last max-sm:col-span-2">
+              @if (pagesLeft(left) !== null) {
+                {{ 'reader.pages_left' | translatePlural: (pagesLeft(left) ?? 0) }}
+              } @else {
+                {{ 'reader.min_left' | translatePlural: minutesLeft(left) }}
+              }
+            </span>
+          }
+        </span>
+        <span class="shrink-0 tabular-nums">
+          @if (st.page !== null) {
+            <span class="max-sm:hidden">{{ 'reader.page_of' | translate: { n: st.page, total: st.pages } }} &middot;</span>
+            <span class="sm:hidden">{{ st.page }} / {{ st.pages }} &middot;</span>
+          }
+          {{ s.percent() }}%
+          @if (st.bookLeft; as t) {
+            <span class="max-sm:hidden">
+              &middot;
+              @if (t.h) {
+                {{ 'reader.book_left_hm' | translate: { h: t.h, m: t.m } }}
+              } @else {
+                {{ 'reader.book_left_m' | translate: { m: t.m } }}
+              }
+            </span>
+          }
+        </span>
+      </div>
+    }
+
+    @if (phoneActions()) {
+      <nav
+        class="grid auto-cols-fr grid-flow-col gap-1 pt-1 sm:hidden"
+        [attr.aria-label]="'reader.actions' | translate"
+      >
+        @if (f().contents) {
+          <button type="button" class="rd-action" (click)="s.openPanel('sidebar', s.browseTab())">
+            <svg lucideListTree class="h-5 w-5"></svg>
+            <span>{{ 'reader.contents_short' | translate }}</span>
+          </button>
+        }
+        @if (f().appearance.length) {
+          <button type="button" class="rd-action" (click)="s.openPanel('appearance')">
+            <svg lucideType class="h-5 w-5"></svg>
+            <span>{{ 'reader.appearance' | translate }}</span>
+          </button>
+        }
+        @if (f().notes) {
+          <button type="button" class="rd-action" (click)="s.openPanel('sidebar', 'notes')">
+            <svg lucideNotebookPen class="h-5 w-5"></svg>
+            <span>{{ 'reader.tab_notes' | translate }}</span>
+          </button>
+        }
+        @if (s.canListen()) {
+          <button type="button" class="rd-action" (click)="s.listen()">
+            <svg lucideHeadphones class="h-5 w-5"></svg>
+            <span>{{ 'reader.listen' | translate }}</span>
+          </button>
+        }
+      </nav>
+    }
+  </div>
+</footer>

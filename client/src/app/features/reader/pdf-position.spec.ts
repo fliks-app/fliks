@@ -1,4 +1,4 @@
-import { pdfPageOf, pdfProgression } from './pdf-position';
+import { pageAtProgression, pdfPageOf, pdfProgression } from './pdf-position';
 
 describe('pdf position', () => {
   it('maps pages to 0..1, the last page finishing the book', () => {
@@ -13,5 +13,11 @@ describe('pdf position', () => {
     expect(pdfPageOf({ page: 0 }, 10)).toBe(1);
     expect(pdfPageOf({ page: '4' }, 10)).toBe(1);
     expect(pdfPageOf(null, 10)).toBe(1);
+  });
+
+  it('finds the page back from its progression', () => {
+    for (let n = 1; n <= 10; n++) expect(pageAtProgression(pdfProgression(n, 10), 10)).toBe(n);
+    expect(pageAtProgression(0.5, 1)).toBe(1);
+    expect(pageAtProgression(2, 10)).toBe(10);
   });
 });

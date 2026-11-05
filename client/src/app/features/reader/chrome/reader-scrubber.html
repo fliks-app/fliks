@@ -1,0 +1,40 @@
+<div
+  class="rd-scrub"
+  [attr.dir]="rtl() ? 'rtl' : 'ltr'"
+  [class.rd-scrub-active]="s.scrubbing() !== null"
+  (pointermove)="onHover($event)"
+  (pointerleave)="onLeave()"
+>
+  @if (bubble(); as b) {
+    <div class="rd-bubble" [style.inset-inline-start.%]="b.at * 100" aria-hidden="true">
+      @if (b.section) {
+        <span class="block truncate font-medium">{{ b.section }}</span>
+      }
+      <span class="tabular-nums text-base-content/70">
+        @if (b.page) {
+          {{ 'reader.page_of' | translate: { n: b.page, total: b.pages } }} &middot;
+        }
+        {{ b.percent }}%
+      </span>
+    </div>
+  }
+  <input
+    type="range"
+    min="0"
+    step="1"
+    [max]="max()"
+    [disabled]="!max()"
+    [attr.aria-label]="'reader.progress' | translate"
+    [value]="s.shownProgression() * max()"
+    (input)="onScrub($event)"
+    (change)="onSeek($event)"
+  />
+  <div class="rd-track" aria-hidden="true">
+    @for (seg of segments(); track seg.start) {
+      <span [style.inset-inline-start.%]="seg.start * 100" [style.width.%]="seg.width * 100">
+        <span><span [style.width.%]="seg.fill * 100"></span></span>
+      </span>
+    }
+  </div>
+  <span class="rd-thumb" [style.inset-inline-start.%]="s.shownProgression() * 100" aria-hidden="true"></span>
+</div>
