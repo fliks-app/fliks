@@ -124,12 +124,29 @@
                         <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
                         <td>{{ userName(s.userId) }}</td>
                         <td>{{ deviceText(s) }}</td>
-                        <td class="truncate max-w-48">
-                          {{ s.mediaTitle ?? '-' }}
-                          @if (s.sessionIds.length > 1) {
-                            <span class="ml-1 text-base-content/50">
-                              {{ 'qoe.sessions_count' | translate: { count: s.sessionIds.length } }}
-                            </span>
+                        <td class="max-w-56">
+                          <div class="truncate">
+                            @if (s.media && mediaLink(s.media); as link) {
+                              <a class="link link-hover" [routerLink]="link" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">{{ s.media.title }}</a>
+                            } @else {
+                              {{ s.mediaTitle ?? '-' }}
+                            }
+                            @if (s.sessionIds.length > 1) {
+                              <span class="ml-1 text-base-content/50">
+                                {{ 'qoe.sessions_count' | translate: { count: s.sessionIds.length } }}
+                              </span>
+                            }
+                          </div>
+                          @if (s.media; as m) {
+                            @if (episodeLine(m); as ep) {
+                              <div class="truncate text-base-content/60">
+                                @if (episodeLink(m); as link) {
+                                  <a class="link link-hover" [routerLink]="link" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">{{ ep }}</a>
+                                } @else {
+                                  {{ ep }}
+                                }
+                              </div>
+                            }
                           }
                         </td>
                         <td class="tabular-nums text-base-content/60">{{ s.startedAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}</td>
@@ -227,7 +244,10 @@
     @if (detail(); as d) {
       <app-modal-header flush>
         <div class="min-w-0">
-          <h3 class="text-lg font-bold">{{ d.mediaTitle ?? d.sessionId }}</h3>
+          <h3 class="text-lg font-bold">{{ d.media?.title ?? d.mediaTitle ?? d.sessionId }}</h3>
+          @if (d.media && episodeLine(d.media); as ep) {
+            <p class="text-sm">{{ ep }}</p>
+          }
           <p class="text-sm text-base-content/60">{{ userName(d.userId) }} · {{ deviceText(d) }}</p>
         </div>
       </app-modal-header>
@@ -244,6 +264,24 @@
           <div class="mt-1 italic text-base-content/70">{{ reasonText(r) }}</div>
         }
         <dl class="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          @if (d.media; as m) {
+            <dt class="text-base-content/50">{{ 'qoe.col_media' | translate }}</dt>
+            <dd class="min-w-0 break-words">
+              @if (mediaLink(m); as link) {
+                <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ m.title }}</a>
+              } @else {
+                {{ m.title }}
+              }
+              @if (episodeLine(m); as ep) {
+                <span class="text-base-content/50"> · </span>
+                @if (episodeLink(m); as link) {
+                  <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ ep }}</a>
+                } @else {
+                  {{ ep }}
+                }
+              }
+            </dd>
+          }
           @for (row of summaryRows(d); track row.label) {
             <dt class="text-base-content/50" [title]="row.hint ?? ''">{{ row.label }}</dt>
             <dd class="min-w-0 break-words">{{ row.value }}</dd>

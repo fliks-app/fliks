@@ -131,11 +131,28 @@ pub async fn sessions(
     .into_iter()
     .filter(|r| keys.contains(&playbacks::key(r)))
     .collect();
-    let items: Vec<Value> = playbacks::merge_playbacks(rows)
+    let mut items: Vec<Value> = playbacks::merge_playbacks(rows)
         .iter()
         .map(playbacks::Playback::to_json)
         .collect();
+    attach_media(&st, &mut items).await?;
     Ok(Json(json!({"items": items, "total": total})))
+}
+
+/// `media`: the title and episode behind each playback's file, `null` once the file is gone.
+async fn attach_media(st: &AppState, items: &mut [Value]) -> Result<(), AppError> {
+    let ids: Vec<i32> = items
+        .iter()
+        .filter_map(|v| v["mediaFileId"].as_i64()?.try_into().ok())
+        .collect();
+    let subjects = crate::events::subject::for_files(&st.db, &ids).await?;
+    for v in items {
+        let subject = v["mediaFileId"]
+            .as_i64()
+            .and_then(|id| subjects.get(&i32::try_from(id).ok()?));
+        v["media"] = to_value(subject).expect("subject");
+    }
+    Ok(())
 }
 
 #[utoipa::path(get, path = "/api/system/qoe/sessions/{sessionId}", responses((status = 200), (status = 404)))]
@@ -162,6 +179,7 @@ pub async fn session(
     let mut v = playbacks::merge_playbacks(rows).remove(0).to_json();
     v["sessions"] = sessions;
     v["events"] = to_value(events).expect("events");
+    attach_media(&st, std::slice::from_mut(&mut v)).await?;
     Ok(Json(v))
 }
 

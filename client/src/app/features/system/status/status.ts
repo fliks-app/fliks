@@ -12,7 +12,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
-import { mediaDetailLink } from '../../../core/media-kinds';
+import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
@@ -230,30 +230,9 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     return Math.min(100, Math.round(((item.current ?? 0) / item.total) * 100));
   }
 
-  /** "S01E03 · Episode title" (or just "S01" for a whole-season task); empty when
-   *  the subject carries no season at all (a movie, or plain media-level work). */
-  episodeLine(subject: MediaProgressSubject): string {
-    if (subject.seasonNumber == null) return '';
-    const season = `S${String(subject.seasonNumber).padStart(2, '0')}`;
-    const code = subject.episodeNumber != null
-      ? `${season}E${String(subject.episodeNumber).padStart(2, '0')}`
-      : season;
-    return subject.episodeTitle ? `${code} · ${subject.episodeTitle}` : code;
-  }
-
-  /** `null` when the subject carries no media id: the title then renders as
-   *  plain text instead of a link a producer can't actually resolve. */
-  mediaRouterLink(subject: MediaProgressSubject): unknown[] | null {
-    if (subject.mediaId == null) return null;
-    return mediaDetailLink(subject.mediaType ?? 'movie', subject.mediaId);
-  }
-
-  /** `null` when there's no episode id to link to (a season-level row, or a
-   *  producer that didn't have one cheaply in hand). */
-  episodeRouterLink(subject: MediaProgressSubject): unknown[] | null {
-    if (subject.mediaId == null || subject.episodeId == null) return null;
-    return ['/series', subject.mediaId, 'episode', subject.episodeId];
-  }
+  readonly episodeLine = subjectEpisodeLine;
+  readonly mediaRouterLink = subjectMediaLink;
+  readonly episodeRouterLink = subjectEpisodeLink;
 
   visibleChildren(item: ActivityRow): ActivityEntry[] {
     return item.children?.slice(0, MAX_VISIBLE_CHILDREN) ?? [];
