@@ -17,6 +17,7 @@ pub struct SpriteJob<'a> {
     pub subject: Subject,
     pub force: bool,
     pub priority: JobPriority,
+    pub parent_id: Option<String>,
 }
 
 /// `None` when the file has no probed duration or no path yet, or when the job fails.
@@ -26,9 +27,19 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
         .filter(|i| i.duration_seconds.is_some_and(|d| d != 0.0))?;
     let key = format!("GenerateSprite:{}", job.file_id);
     let activity = st.hub.activity();
-    activity.upsert_pending(&key, "GenerateSprite", Some(job.subject.clone()), None);
+    activity.upsert_pending(
+        &key,
+        "GenerateSprite",
+        Some(job.subject.clone()),
+        job.parent_id.clone(),
+    );
     let progress = {
-        let (hub, key, subject) = (st.hub.clone(), key.clone(), job.subject.clone());
+        let (hub, key, subject, parent) = (
+            st.hub.clone(),
+            key.clone(),
+            job.subject.clone(),
+            job.parent_id.clone(),
+        );
         Arc::new(move |pct: f64| {
             hub.activity().upsert_running(
                 &key,
@@ -36,7 +47,7 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
                 Some(subject.clone()),
                 Some(Num(pct.round())),
                 Some(Num(100.0)),
-                None,
+                parent.clone(),
             );
         })
     };

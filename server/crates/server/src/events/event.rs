@@ -54,6 +54,8 @@ pub struct Subject {
     pub episode_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub episode_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

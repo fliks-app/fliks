@@ -1,4 +1,5 @@
 //! Every integration test in one binary: each file would otherwise link the whole server on its own.
+mod analyze_activity;
 mod annotations;
 mod auth;
 mod auth_routes;

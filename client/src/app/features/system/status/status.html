@@ -54,8 +54,8 @@
         </thead>
         <tbody>
           @for (item of activity(); track item.id) {
-            <tr [class.bg-base-200]="!item.subject">
-              <!-- A parent row carries no media of its own, so its label takes that column too. -->
+            <tr [class.bg-base-200]="!item.subject || item.children?.length">
+              <!-- A row without a subject takes the subject column too. -->
               <td class="font-medium" [attr.colspan]="item.subject ? null : 2">
                 {{ commandLabelKey(item.type) | translate }}
                 @if (item.status === 'pending') {
@@ -68,6 +68,9 @@
                     <a [routerLink]="link" class="link link-hover block truncate max-w-64">{{ item.subject.title }}</a>
                   } @else {
                     <div class="truncate max-w-64">{{ item.subject.title }}</div>
+                  }
+                  @if (item.subject.quality) {
+                    <span class="badge badge-ghost badge-sm">{{ item.subject.quality }}</span>
                   }
                   @if (episodeLine(item.subject); as episode) {
                     <div class="text-sm text-base-content/50 truncate max-w-64">
@@ -95,8 +98,11 @@
             @for (child of visibleChildren(item); track child.id) {
               <tr class="text-sm text-base-content/60">
                 <td>
+                  @if (child.type !== item.type) {
+                    {{ commandLabelKey(child.type) | translate }}
+                  }
                   @if (child.status === 'pending') {
-                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'system.status_pending' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap ml-1.5">{{ 'system.status_pending' | translate }}</span>
                   }
                 </td>
                 <td class="pl-6">
@@ -105,6 +111,9 @@
                       <a [routerLink]="link" class="link link-hover block truncate max-w-64">{{ child.subject.title }}</a>
                     } @else {
                       <div class="truncate max-w-64">{{ child.subject.title }}</div>
+                    }
+                    @if (child.subject.quality) {
+                      <span class="badge badge-ghost badge-sm">{{ child.subject.quality }}</span>
                     }
                     @if (episodeLine(child.subject); as episode) {
                       <div class="text-base-content/50 truncate max-w-64">

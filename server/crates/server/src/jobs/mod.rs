@@ -1,7 +1,7 @@
 //! The scheduler (`docs/spec/scheduler.md`): `commands` rows, cron runner, core jobs, /api/commands*.
 //! Other domains audit their work through `run_audited`.
 mod audit;
-mod bodies;
+pub(crate) mod bodies;
 mod cron;
 mod names;
 mod routes;

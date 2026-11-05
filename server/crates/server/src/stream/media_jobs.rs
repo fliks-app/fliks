@@ -9,6 +9,7 @@ pub async fn sprite_file(
     id: i32,
     force: bool,
     priority: JobPriority,
+    parent_id: Option<String>,
 ) -> Result<Option<SpriteMeta>, AppError> {
     let file = resolve_file(st, None, i64::from(id)).await?;
     let title = file.media_title.clone().unwrap_or_default();
@@ -27,6 +28,7 @@ pub async fn sprite_file(
                 subject,
                 force,
                 priority,
+                parent_id,
             },
         )
         .await

@@ -64,11 +64,12 @@ pub async fn for_files(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
         Option<i32>,
         Option<String>,
         Option<i32>,
+        String,
     );
     let mut out = HashMap::new();
     for chunk in ids.chunks(1000) {
         let rows: Vec<Row> = sqlx::query_as(
-            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."number", e.title, s."number"
+            r#"SELECT f.id, m.id, m."type", m.title, e.id, e."number", e.title, s."number", f.quality
                FROM media_files f JOIN media m ON m.id = f."mediaId"
                LEFT JOIN items e ON e.id = (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id) LEFT JOIN item_groups s ON s.id = e."groupId"
                WHERE f.id = ANY($1)"#,
@@ -76,9 +77,13 @@ pub async fn for_files(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
         .bind(chunk)
         .fetch_all(db)
         .await?;
-        for (file, media, kind, title, ep, number, ep_title, season) in rows {
+        for (file, media, kind, title, ep, number, ep_title, season, quality) in rows {
             let subject = Subject::media(media, &title, Some(crate::db::kind(&kind)?))
                 .with_episode(ep, season, number, ep_title);
+            let subject = Subject {
+                quality: Some(quality).filter(|q| !q.is_empty()),
+                ..subject
+            };
             out.insert(file, subject);
         }
     }

@@ -120,6 +120,8 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     // and, for the per-file ones, in the live Activity table.
     { name: 'IntroDetection', label: 'system.cmd_intro_detection' },
     { name: 'GenerateSprite', label: 'system.cmd_generate_sprite' },
+    { name: 'Analyze', label: 'system.cmd_analyze' },
+    { name: 'SubtitleExtract', label: 'system.cmd_subtitle_extract' },
     { name: 'WarmupSubtitles', label: 'system.cmd_warmup_subtitles' },
     { name: 'PostImportEnrich', label: 'system.cmd_post_import_enrich' },
     { name: 'PostImportEnrichQueue', label: 'system.cmd_post_import_enrich_queue' },

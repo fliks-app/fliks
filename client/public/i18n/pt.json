@@ -1530,6 +1530,8 @@
     "cmd_generate_missing_sprites": "Gerar os sprites em falta",
     "cmd_intro_detection": "Deteção das intros",
     "cmd_generate_sprite": "Gerar o sprite",
+    "cmd_analyze": "Análise",
+    "cmd_subtitle_extract": "Extrair as legendas",
     "cmd_warmup_subtitles": "Extrair as legendas",
     "cmd_post_import_enrich": "Finalizar a importação",
     "cmd_post_import_enrich_queue": "Finalizando importações",

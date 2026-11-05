@@ -60,6 +60,7 @@ struct State {
     dropped: u64,
     cap_warned: bool,
     timer_armed: bool,
+    holds: HashMap<String, usize>,
 }
 
 pub struct Activity {
@@ -125,6 +126,29 @@ impl Activity {
             &mut st, id, r#type, subject, running, current, total, parent_id,
         );
         true
+    }
+
+    /// Registers a running row shared by several runs of the same work: each `hold` is paired with
+    /// a `release`, and only the last release removes it.
+    pub fn hold(&self, id: &str, r#type: &str, subject: Option<Subject>) {
+        let mut st = self.state();
+        *st.holds.entry(id.to_owned()).or_default() += 1;
+        let running = Status::Running;
+        self.put(&mut st, id, r#type, subject, running, None, None, None);
+    }
+
+    pub fn release(&self, id: &str) {
+        let mut st = self.state();
+        let Some(n) = st.holds.get_mut(id) else {
+            return;
+        };
+        *n -= 1;
+        if *n == 0 {
+            st.holds.remove(id);
+            if st.entries.remove(id).is_some() {
+                self.arm(&mut st);
+            }
+        }
     }
 
     pub fn remove(&self, id: &str) {
@@ -304,6 +328,18 @@ mod tests {
         assert_eq!(l["data"][0]["children"][1]["id"], "k2");
         assert_eq!(l["data"][0]["children"][1]["parentId"], "p");
         assert_eq!(l["data"][1]["id"], "o");
+    }
+
+    #[tokio::test]
+    async fn a_held_row_goes_with_its_last_release() {
+        let hub = Hub::new();
+        let a = hub.activity();
+        a.hold("p", "T", None);
+        a.hold("p", "T", None);
+        a.release("p");
+        assert_eq!(a.list(1, 25).total, 1);
+        a.release("p");
+        assert_eq!(a.list(1, 25).total, 0);
     }
 
     #[tokio::test]

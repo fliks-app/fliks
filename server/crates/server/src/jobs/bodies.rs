@@ -343,7 +343,7 @@ async fn sprites(st: &AppState, job: &str, force: bool) -> Outcome {
         running(hub, job, job, None, n * SPRITE_BATCH, total, None);
         let one = |id: Option<i32>| async move {
             let Some(id) = id else { return false };
-            let made = sprite_of(st, id, subjects.get(&id), force).await;
+            let made = sprite_of(st, id, subjects.get(&id), force, job).await;
             hub.activity().remove(&child(id));
             made
         };
@@ -355,7 +355,13 @@ async fn sprites(st: &AppState, job: &str, force: bool) -> Outcome {
 }
 
 /// `PostImportService.generateSprite`: a failure is a warning and counts as not generated.
-async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: bool) -> bool {
+async fn sprite_of(
+    st: &AppState,
+    id: i32,
+    subject: Option<&Subject>,
+    force: bool,
+    job: &str,
+) -> bool {
     let file = match stream::resolve_file(st, None, i64::from(id)).await {
         Ok(f) => f,
         Err(e) => {
@@ -382,6 +388,7 @@ async fn sprite_of(st: &AppState, id: i32, subject: Option<&Subject>, force: boo
             subject,
             force,
             priority,
+            parent_id: Some(job.into()),
         },
     )
     .await
@@ -487,13 +494,13 @@ fn running(
 }
 
 /// Removes its rows when the job ends, however it ends (the `finally` of the TS loops).
-struct ActivityRows {
+pub(crate) struct ActivityRows {
     hub: Hub,
     ids: Vec<String>,
 }
 
 impl ActivityRows {
-    fn new(hub: &Hub, ids: impl IntoIterator<Item = String>) -> Self {
+    pub(crate) fn new(hub: &Hub, ids: impl IntoIterator<Item = String>) -> Self {
         Self {
             hub: hub.clone(),
             ids: ids.into_iter().collect(),
