@@ -12,7 +12,7 @@ import {
   ElementRef,
 } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
-import { LucideEllipsisVertical } from '@lucide/angular';
+import { LucideArrowLeft, LucideChevronRight, LucideEllipsisVertical } from '@lucide/angular';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -25,6 +25,8 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { ToastService } from '../../../core/services/toast.service';
 import { SseService } from '../../../core/services/sse.service';
+import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import {
@@ -32,7 +34,9 @@ import {
   CellValue,
   ListAction,
   PagedResult,
+  OpenReleases,
   RowAction,
+  RowActionItem,
   TableColumn,
   TableDetailField,
   TableFilter,
@@ -40,6 +44,7 @@ import {
   TableRowCondition,
   TableSubValue,
 } from './data-table.types';
+import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../modal-header';
 import { PopoverMenuComponent } from '../popover-menu';
 import { ModalFooterComponent } from '../modal-footer';
@@ -72,7 +77,10 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
   imports: [
     TvSelectDirective,
     PopoverMenuComponent,
+    NgTemplateOutlet,
     LucideEllipsisVertical,
+    LucideChevronRight,
+    LucideArrowLeft,
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslatePipe,
@@ -91,6 +99,8 @@ export class DataTableComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly localeDate = inject(LocaleDatePipe);
   private readonly toast = inject(ToastService);
+  private readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
 
   /** Empty renders no heading — an embedded table (a row action's result) carries its own. */
   readonly titleKey = input('');
@@ -107,6 +117,8 @@ export class DataTableComponent implements OnInit {
   readonly resolveAction = input<(actionId: string, row: TableRow) => (() => void) | undefined>(
     () => undefined,
   );
+  /** Runs a `releases` row action; without it the action does not render (fail closed). */
+  readonly openReleases = input<OpenReleases | null>(null);
   /** `list` answers `{data,total,page,pageSize}` rather than a bare array. */
   readonly paged = input(false);
   readonly pageSize = input(20);
@@ -414,12 +426,28 @@ export class DataTableComponent implements OnInit {
     return path.replace(':id', encodeURIComponent(String(row.id)));
   }
 
-  /** Drops any `action`-kind entry whose actionId the host doesn't recognise. */
-  visibleActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
-    const result: { action: RowAction; run: () => void | Promise<void> }[] = [];
-    for (const action of this.rowActions()) {
+  visibleActions(row: TableRow): RowActionItem[] {
+    return this.actionItems(this.rowActions(), row);
+  }
+
+  /** Drops any `action`-kind entry whose actionId the host doesn't recognise, and a submenu left empty. */
+  private actionItems(actions: readonly RowAction[], row: TableRow): RowActionItem[] {
+    const result: RowActionItem[] = [];
+    for (const action of actions) {
       if (!this.rowAllows(action.visibleWhen, row)) continue;
-      if (action.kind === 'action') {
+      if (action.kind === 'submenu') {
+        const children = this.actionItems(action.children, row);
+        if (children.length) result.push({ action, run: () => undefined, children });
+      } else if (action.kind === 'releases') {
+        const open = this.openReleases();
+        if (!open) continue;
+        const picker = {
+          titleKey: action.titleKey,
+          search: this.rowPath(action.search, row),
+          grab: this.rowPath(action.grab, row),
+        };
+        result.push({ action, run: () => open(picker, () => void this.loadRows()) });
+      } else if (action.kind === 'action') {
         const handler = this.resolveAction()(action.actionId, row);
         if (handler) result.push({ action, run: handler });
       } else if (action.kind === 'detail') {
@@ -445,22 +473,48 @@ export class DataTableComponent implements OnInit {
   readonly openMenuRow = signal<CellValue | null>(null);
 
   toggleRowMenu(row: TableRow): void {
+    this.closeSubmenu();
     this.openMenuRow.update((open) => (open === row.id ? null : row.id));
   }
 
   /** The menu is a popover, not a dropdown, so it doesn't close itself on a pick. */
   runFromMenu(run: () => void | Promise<void>): void {
+    this.closeSubmenu();
     this.openMenuRow.set(null);
     void run();
   }
 
+  /** Touch and TV menus are a sheet, where a submenu replaces the list instead of flying out beside it. */
+  readonly menuSheet = computed(() => this.tv.isTv() || this.device.isTouch());
+  /** By label: the items are rebuilt on every check, so an object would never match twice. */
+  readonly openSubmenu = signal<string | null>(null);
+  readonly submenuAnchor = signal<HTMLElement | null>(null);
+
+  toggleSubmenu(item: RowActionItem, anchor: HTMLElement): void {
+    if (this.openSubmenu() === item.action.labelKey) return this.closeSubmenu();
+    this.submenuAnchor.set(anchor);
+    this.openSubmenu.set(item.action.labelKey);
+  }
+
+  sheetSubmenu(menu: RowActionItem[]): RowActionItem | undefined {
+    const open = this.openSubmenu();
+    return this.menuSheet() && open
+      ? menu.find((i) => i.children && i.action.labelKey === open)
+      : undefined;
+  }
+
+  closeSubmenu(): void {
+    this.openSubmenu.set(null);
+    this.submenuAnchor.set(null);
+  }
+
   /** `detail` is the one action that only reads, so it stays on the row; everything that acts
    *  moves into the row menu, which keeps the Actions column from swallowing the table. */
-  inlineActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
+  inlineActions(row: TableRow): RowActionItem[] {
     return this.visibleActions(row).filter((i) => i.action.kind === 'detail');
   }
 
-  menuActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
+  menuActions(row: TableRow): RowActionItem[] {
     return this.visibleActions(row).filter((i) => i.action.kind !== 'detail');
   }
 

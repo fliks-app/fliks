@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -24,7 +24,14 @@ import {
   ProviderTestResult,
 } from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
-import type { ListAction, RowAction, TableRow } from '../../shared/components/data-table/data-table.types';
+import type {
+  ListAction,
+  RowAction,
+  TableRow,
+  TableRowAction,
+} from '../../shared/components/data-table/data-table.types';
+import { ReleasesModalComponent } from '../media-detail/components/releases-modal/releases-modal.component';
+import { RowReleasePicker } from './row-release-picker';
 import {
   FORM_ACTION_IDS,
   TABLE_ROW_ACTION_IDS,
@@ -111,7 +118,15 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
 /** Resolves `plugins/:pluginId/:view` to a `ConfigPage` and renders it by `kind` (`form` when absent). */
 @Component({
   selector: 'app-plugin-view',
-  imports: [TranslatePipe, LucideTriangleAlert, SchemaFormComponent, ProviderListComponent, DataTableComponent],
+  imports: [
+    TranslatePipe,
+    LucideTriangleAlert,
+    SchemaFormComponent,
+    ProviderListComponent,
+    DataTableComponent,
+    ReleasesModalComponent,
+  ],
+  providers: [RowReleasePicker],
   templateUrl: './plugin-view.html',
 })
 export class PluginViewComponent implements OnDestroy {
@@ -123,6 +138,8 @@ export class PluginViewComponent implements OnDestroy {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly auth = inject(AuthService);
+  readonly releasePicker = inject(RowReleasePicker);
+  private readonly releasesModal = viewChild(ReleasesModalComponent);
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
 
@@ -182,6 +199,7 @@ export class PluginViewComponent implements OnDestroy {
   readonly implementationsLoadError = signal(false);
 
   constructor() {
+    this.releasePicker.attach(() => this.releasesModal());
     effect(() => {
       const p = this.page();
       if (p && isFormView(p)) void this.loadFormValue(p.fields);
@@ -353,12 +371,26 @@ export class PluginViewComponent implements OnDestroy {
       }));
   }
 
-  /** Only `kind: 'proxy'` carries a plugin-relative path. `when` is evaluated here, not in `<app-data-table>`, which shouldn't know about permissions;
+  /** `proxy` and `releases` carry plugin-relative paths, a `submenu` its children's. `when` is evaluated here, not in `<app-data-table>`, which shouldn't know about permissions;
    *  the row-scoped `visibleWhen` passes through. */
   tableRowActions(view: TableView): RowAction[] {
-    return (view.rowActions ?? [])
-      .filter((a) => evaluateWhen(a.when, this.whenContext()))
-      .map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
+    return this.allowedActions(view.rowActions ?? []).map((a) =>
+      a.kind === 'submenu'
+        ? { ...a, children: this.allowedActions(a.children).map((c) => this.resolved(c)) }
+        : this.resolved(a),
+    );
+  }
+
+  private allowedActions<T extends RowAction>(actions: readonly T[]): T[] {
+    return actions.filter((a) => evaluateWhen(a.when, this.whenContext()));
+  }
+
+  /** Declared paths are the plugin's own; the table calls them through its proxy. */
+  private resolved(a: TableRowAction): TableRowAction {
+    if (a.kind === 'proxy') return { ...a, path: this.resourceUrl(a.path) };
+    if (a.kind === 'releases')
+      return { ...a, search: this.resourceUrl(a.search), grab: this.resourceUrl(a.grab) };
+    return a;
   }
 
   /** Same rule as a row action: a clear-all the viewer's routes refuse is a button that 403s. */

@@ -13,7 +13,14 @@ import { ToastService } from '../../../core/services/toast.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { HttpContext } from '@angular/common/http';
 import type { TableRowActionId } from '../../../core/plugin-ui/ui-contribution';
-import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
+import {
+  ListAction,
+  OpenReleases,
+  RowAction,
+  TableColumn,
+  TableFilter,
+  TableRow,
+} from './data-table.types';
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
 
@@ -47,6 +54,7 @@ async function createComponent(opts: {
   listActions?: ListAction[];
   filters?: TableFilter[];
   resolveAction?: (actionId: string, row: unknown) => (() => void) | undefined;
+  openReleases?: OpenReleases;
   defaultSortKey?: string;
   paged?: boolean;
   pageSize?: number;
@@ -89,6 +97,7 @@ async function createComponent(opts: {
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   if (opts.filters) fixture.componentRef.setInput('filters', opts.filters);
   if (opts.resolveAction) fixture.componentRef.setInput('resolveAction', opts.resolveAction);
+  if (opts.openReleases) fixture.componentRef.setInput('openReleases', opts.openReleases);
   if (opts.defaultSortKey) fixture.componentRef.setInput('defaultSortKey', opts.defaultSortKey);
   if (opts.paged) fixture.componentRef.setInput('paged', opts.paged);
   if (opts.pageSize) fixture.componentRef.setInput('pageSize', opts.pageSize);
@@ -142,6 +151,46 @@ describe('DataTableComponent — characterisation', () => {
       resolveAction: () => undefined,
     });
     expect(fixture.componentInstance.visibleActions({ id: 1, name: 'A' })).toHaveLength(0);
+  });
+
+  it('keeps a submenu only with a child left for the row, and fills the children\'s :id', async () => {
+    const open = vi.fn();
+    const rowActions: RowAction[] = [
+      {
+        kind: 'submenu',
+        labelKey: 'x.replace',
+        children: [
+          { kind: 'proxy', labelKey: 'x.auto', method: 'POST', path: '/q/:id/replace' },
+          { kind: 'releases', labelKey: 'x.manual', titleKey: 'x.t', search: '/q/:id/r', grab: '/q/:id/replace' },
+        ],
+        visibleWhen: { key: 'replaceable', in: [true] },
+      },
+    ];
+    const fixture = await createComponent({
+      http: { get: () => of([]) },
+      rowActions,
+      openReleases: open,
+    });
+    const table = fixture.componentInstance;
+    expect(table.visibleActions({ id: 1, replaceable: false })).toHaveLength(0);
+    const [menu] = table.visibleActions({ id: 4, replaceable: true });
+    expect(menu.children?.map((c) => c.action.labelKey)).toEqual(['x.auto', 'x.manual']);
+    menu.children![1].run();
+    expect(open).toHaveBeenCalledWith({ titleKey: 'x.t', search: '/q/4/r', grab: '/q/4/replace' }, expect.any(Function));
+  });
+
+  it('drops a releases action, and a submenu left empty, when the host opens no picker', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([]) },
+      rowActions: [
+        {
+          kind: 'submenu',
+          labelKey: 'x.replace',
+          children: [{ kind: 'releases', labelKey: 'x.manual', titleKey: 'x.t', search: '/r', grab: '/g' }],
+        },
+      ],
+    });
+    expect(fixture.componentInstance.visibleActions({ id: 1 })).toHaveLength(0);
   });
 
   it('renders a row action whose actionId the host resolves', async () => {

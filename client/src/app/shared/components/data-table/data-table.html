@@ -260,25 +260,72 @@
                         <app-popover-menu
                           [open]="openMenuRow() === row.id"
                           [anchor]="menuTrigger"
-                          (closed)="openMenuRow.set(null)"
+                          (closed)="openMenuRow.set(null); closeSubmenu()"
                         >
-                          @for (item of menu; track item.action.labelKey) {
-                            <button
-                              type="button"
-                              class="dropdown-item"
-                              [class.text-error]="
-                                item.action.kind === 'proxy' && item.action.tone === 'danger'
-                              "
-                              (click)="runFromMenu(item.run)"
-                              [disabled]="
-                                busy() ===
-                                row.id +
-                                  ':' +
-                                  (item.action.kind === 'proxy' ? item.action.path : '')
-                              "
-                            >
-                              {{ item.action.labelKey | translate }}
-                            </button>
+                          @if (sheetSubmenu(menu); as sub) {
+                            <div class="panel-slide-fwd">
+                              <button
+                                type="button"
+                                class="dropdown-item mb-1"
+                                (click)="closeSubmenu()"
+                              >
+                                <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+                                <span class="flex-1 truncate text-left font-medium">{{
+                                  sub.action.labelKey | translate
+                                }}</span>
+                              </button>
+                              <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+                              @for (child of sub.children; track child.action.labelKey) {
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    menuRow;
+                                    context: { $implicit: child, row: row }
+                                  "
+                                />
+                              }
+                            </div>
+                          } @else {
+                            @for (item of menu; track item.action.labelKey) {
+                              @if (item.children) {
+                                <button
+                                  #subTrigger
+                                  type="button"
+                                  class="dropdown-item"
+                                  [attr.aria-expanded]="openSubmenu() === item.action.labelKey"
+                                  (click)="toggleSubmenu(item, subTrigger)"
+                                >
+                                  <span class="flex-1 truncate text-left">{{
+                                    item.action.labelKey | translate
+                                  }}</span>
+                                  <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+                                </button>
+                                @if (!menuSheet()) {
+                                  <app-popover-menu
+                                    [open]="openSubmenu() === item.action.labelKey"
+                                    [anchor]="submenuAnchor()"
+                                    placement="right-start"
+                                    [submenu]="true"
+                                    (closed)="closeSubmenu()"
+                                  >
+                                    @for (child of item.children; track child.action.labelKey) {
+                                      <ng-container
+                                        *ngTemplateOutlet="
+                                          menuRow;
+                                          context: { $implicit: child, row: row }
+                                        "
+                                      />
+                                    }
+                                  </app-popover-menu>
+                                }
+                              } @else {
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    menuRow;
+                                    context: { $implicit: item, row: row }
+                                  "
+                                />
+                              }
+                            }
                           }
                         </app-popover-menu>
                       }
@@ -301,6 +348,18 @@
     }
   }
 </div>
+
+<ng-template #menuRow let-item let-row="row">
+  <button
+    type="button"
+    class="dropdown-item"
+    [class.text-error]="item.action.kind === 'proxy' && item.action.tone === 'danger'"
+    (click)="runFromMenu(item.run)"
+    [disabled]="busy() === row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')"
+  >
+    {{ item.action.labelKey | translate }}
+  </button>
+</ng-template>
 
 <dialog #rowDetailDialog class="modal">
   @if (rowDetail(); as open) {

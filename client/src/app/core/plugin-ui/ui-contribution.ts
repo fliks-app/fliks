@@ -327,6 +327,57 @@ export type TableFilter =
       options: { value: string; labelKey: string }[];
     };
 
+/** One row action of a declared table; `rowActions[]` also takes a `submenu` of them. */
+export type TableRowAction =
+  | {
+      kind: 'route';
+      labelKey: string;
+      path: string;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  | {
+      kind: 'action';
+      labelKey: string;
+      actionId: TableRowActionId;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  /** Opens a dialog of declared fields read off the row. Needs no route: everything it shows
+   *  is already on the row the table loaded. */
+  | {
+      kind: 'detail';
+      labelKey: string;
+      titleKey?: string;
+      fields: TableDetailField[];
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  | {
+      kind: 'proxy';
+      labelKey: string;
+      method: 'POST' | 'DELETE';
+      path: string;
+      confirmKey?: string;
+      /** Renders a checkbox in the confirmation sending its state as query param `param`; needs `confirmKey`. `hintKey` is the line under it. */
+      confirmToggle?: { labelKey: string; param: string; hintKey?: string };
+      /** Danger styling on the button: a destructive row action must not look like the
+       *  two beside it. */
+      tone?: 'default' | 'danger';
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    }
+  /** Opens core's release picker on the row: `search` lists the releases, `grab` takes the picked one. */
+  | {
+      kind: 'releases';
+      labelKey: string;
+      titleKey: string;
+      search: string;
+      grab: string;
+      when?: WhenPredicate[];
+      visibleWhen?: TableRowCondition;
+    };
+
 /** Read-mostly: declared columns and declared row actions, never a general grid. */
 export interface TableConfigPage extends ConfigPageBase {
   kind: 'table';
@@ -337,43 +388,14 @@ export interface TableConfigPage extends ConfigPageBase {
    *  one confirmation for the whole selection instead of one per row. */
   bulkSelect?: boolean;
   /** `when` gates on the viewer (same vocabulary as `ui.contributions[]`), `visibleWhen` on the row; presentation
-   *  only, the route is CASL-guarded. A `proxy` path may carry `:id`, substituted with the row's id. */
+   *  only, the route is CASL-guarded. A `proxy` or `releases` path may carry `:id`, substituted with the row's id. */
   rowActions?: (
+    | TableRowAction
+    /** A menu row opening its `children`; hidden when none of them is left for the row. */
     | {
-        kind: 'route';
+        kind: 'submenu';
         labelKey: string;
-        path: string;
-        when?: WhenPredicate[];
-        visibleWhen?: TableRowCondition;
-      }
-    | {
-        kind: 'action';
-        labelKey: string;
-        actionId: TableRowActionId;
-        when?: WhenPredicate[];
-        visibleWhen?: TableRowCondition;
-      }
-    /** Opens a dialog of declared fields read off the row. Needs no route: everything it shows
-     *  is already on the row the table loaded. */
-    | {
-        kind: 'detail';
-        labelKey: string;
-        titleKey?: string;
-        fields: TableDetailField[];
-        when?: WhenPredicate[];
-        visibleWhen?: TableRowCondition;
-      }
-    | {
-        kind: 'proxy';
-        labelKey: string;
-        method: 'POST' | 'DELETE';
-        path: string;
-        confirmKey?: string;
-        /** Renders a checkbox in the confirmation sending its state as query param `param`; needs `confirmKey`. `hintKey` is the line under it. */
-        confirmToggle?: { labelKey: string; param: string; hintKey?: string };
-        /** Danger styling on the button — a destructive row action must not look like the
-         *  two beside it. */
-        tone?: 'default' | 'danger';
+        children: TableRowAction[];
         when?: WhenPredicate[];
         visibleWhen?: TableRowCondition;
       }
