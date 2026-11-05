@@ -1,8 +1,7 @@
-import { Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { WantsApiService, type Want, type WantSpec } from '../../../core/services/api/wants-api.service';
-import { localizeLanguage } from '../../../core/utils/language.utils';
-import { WantsEditorComponent } from '../../../shared/components/wants-editor/wants-editor';
+import { WantsEditorComponent, wantKey } from '../../../shared/components/wants-editor/wants-editor';
 import { ToastService } from '../../../core/services/toast.service';
 
 /** The formats and languages a work is wished in, and which of them are already owned. */
@@ -22,16 +21,13 @@ export class BookWantsComponent {
   protected readonly saved = signal<Want[]>([]);
   protected readonly draft = signal<WantSpec[]>([]);
   protected readonly busy = signal(false);
+  protected readonly state = computed(() => Object.fromEntries(this.saved().map((w) => [wantKey(w), w.satisfied])));
 
   constructor() {
     effect(() => {
       const id = this.mediaId();
       untracked(() => void this.load(id));
     });
-  }
-
-  protected language(code: string | null) {
-    return code ? localizeLanguage(code, this.translate) : this.translate.instant('wants.any_language');
   }
 
   private apply(wants: Want[]) {

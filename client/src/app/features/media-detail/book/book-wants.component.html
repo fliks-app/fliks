@@ -1,15 +1,6 @@
-  <ul class="flex flex-col divide-y divide-base-300 mb-4">
-    @for (w of saved(); track w.id) {
-      <li class="flex flex-wrap items-center gap-2 py-2" data-testid="want-state">
-        <span class="font-medium">{{ 'families.' + w.family | translate }}</span>
-        <span class="text-base-content/70">{{ language(w.language) }}</span>
-        <span class="badge badge-sm ml-auto" [class.badge-success]="w.satisfied" [class.badge-warning]="!w.satisfied">
-          {{ (w.satisfied ? 'wants.owned' : 'wants.missing') | translate }}
-        </span>
-      </li>
-    }
-  </ul>
-  <app-wants-editor [(wants)]="draft" />
-  <button type="button" class="btn btn-primary btn-sm mt-3" data-testid="wants-save" [disabled]="busy()" (click)="save()">
+<app-wants-editor [(wants)]="draft" [state]="state()" />
+<div class="mt-4 flex justify-end">
+  <button type="button" class="btn btn-primary btn-sm" data-testid="wants-save" [disabled]="busy()" (click)="save()">
     {{ 'wants.save' | translate }}
   </button>
+</div>

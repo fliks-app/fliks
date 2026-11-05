@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, model, signal } from '@angular/core';
+import { LucidePlus, LucideTrash2 } from '@lucide/angular';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { WantFamily, WantSpec } from '../../../core/services/api/wants-api.service';
@@ -10,10 +11,12 @@ const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
 const FAMILIES: WantFamily[] = ['text', 'audio'];
 const MAX_WANTS = 8;
 
+export const wantKey = (w: Pick<WantSpec, 'family' | 'language'>) => `${w.family}|${w.language ?? ''}`;
+
 /** The formats and languages a work is wished in, e.g. ebook FR + audio EN. */
 @Component({
   selector: 'app-wants-editor',
-  imports: [FormsModule, TranslatePipe, TvSelectDirective],
+  imports: [FormsModule, LucidePlus, LucideTrash2, TranslatePipe, TvSelectDirective],
   templateUrl: './wants-editor.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -23,6 +26,8 @@ export class WantsEditorComponent {
   private readonly profilesApi = inject(ProfilesService);
 
   readonly wants = model.required<WantSpec[]>();
+  /** Whether each saved want is owned, keyed by `wantKey`; unsaved rows show no state. */
+  readonly state = input<Record<string, boolean> | null>(null);
 
   protected readonly families = FAMILIES;
   protected readonly profiles = signal<Record<WantFamily, QualityProfile[]>>({ text: [], audio: [] });
@@ -42,6 +47,8 @@ export class WantsEditorComponent {
         .catch(() => undefined);
     }
   }
+
+  protected readonly key = wantKey;
 
   protected label(code: string) {
     return localizeLanguage(code, this.translate);

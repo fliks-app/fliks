@@ -25,7 +25,7 @@ use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
     external_id::{Namespace, Namespaces},
-    media::{kind::MediaKind, release::ReleaseKind},
+    media::{kind::MediaKind, release::ReleaseKind, wants::WantSpec},
     metadata::{field::Field, limiter::Priority},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
 };
@@ -705,6 +705,8 @@ pub struct Unmatched {
     /// The title or year was typed by the caller: it is locked.
     pub lock_title: bool,
     pub lock_year: bool,
+    /// Book only: the wants, one per family when unset.
+    pub wants: Option<Vec<WantSpec>>,
     pub artwork: Artwork,
 }
 
@@ -777,6 +779,11 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
         folder_id: u.folder_id,
     };
     items::create_shell(&mut tx, id, u.media_type, want).await?;
+    if let Some(w) = &u.wants {
+        crate::media::wants::replace(&mut tx, id, w)
+            .await
+            .map_err(|e| crate::media::wants::write_error(e, id))?;
+    }
     tx.commit().await?;
     store_local_artwork(st, id, &u.artwork).await;
     st.hub.emit_domain(DomainEvent::MediaImported {
