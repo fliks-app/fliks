@@ -808,7 +808,7 @@
   "quick_connect": {
     "starting": "Anfrage wird vorbereitet…",
     "waiting_title": "Warten auf Bestätigung",
-    "waiting_subtitle": "Öffnen Sie Fliks auf Ihrem Telefon und akzeptieren Sie die Anfrage auf der Seite „Verbindungsanfragen“.",
+    "waiting_subtitle": "Öffnen Sie Fliks auf einem angemeldeten Telefon oder Computer und geben Sie diesen Code auf der Seite „Verbindungsanfragen“ ein.",
     "device_name": "Dieses Gerät: {{name}}",
     "expires_in": "Läuft ab in {{minutes}} Min.",
     "denied": "Die Anfrage wurde abgelehnt.",
@@ -825,10 +825,12 @@
     "deny": "Ablehnen",
     "approved_toast": "Verbindung akzeptiert",
     "requested_toast": "{{device}} möchte sich anmelden",
-    "accept": "Annehmen",
     "denied_toast": "Anfrage abgelehnt.",
     "load_error": "Die ausstehenden Anfragen konnten nicht geladen werden.",
-    "action_error": "Die Aktion konnte nicht abgeschlossen werden."
+    "action_error": "Die Aktion konnte nicht abgeschlossen werden.",
+    "code_label": "Auf dem Gerät angezeigter Code",
+    "code_hint": "Das Gerät, das sich verbinden möchte, zeigt ihn an.",
+    "enter_code": "Code eingeben"
   },
   "server_history": {
     "section_title": "Zuletzt verwendete Server",

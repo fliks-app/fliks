@@ -35,6 +35,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
    *  line under the device name. Empty until resolved / on platforms without it. */
   readonly systemName = signal('');
   readonly secondsLeft = signal(0);
+  readonly code = signal('');
 
   readonly minutesLeft = computed(() => Math.max(0, Math.ceil(this.secondsLeft() / 60)));
 
@@ -82,13 +83,14 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       // UA-derived model fallback when a native source provides it.
       const realName = this.systemInfo.deviceName();
       if (realName) this.deviceName.set(realName);
-      const { pairingId, expiresIn } = await this.auth.pairingRequest(
+      const { pairingId, code, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
         this.deviceName(),
         this.systemName() || undefined,
       );
       this.pairingId = pairingId;
+      this.code.set(`${code.slice(0, 3)} ${code.slice(3)}`);
       // Left the page while the request was in flight.
       if (this.destroyed) return this.cancelPending();
       this.secondsLeft.set(expiresIn);

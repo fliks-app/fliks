@@ -5,7 +5,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -29,6 +29,7 @@ export class PendingRequestsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly sse = inject(SseService);
 
   readonly requests = signal<PendingRequest[]>([]);
@@ -36,6 +37,8 @@ export class PendingRequestsComponent implements OnInit {
   readonly error = signal('');
   /** pairingId currently being approved/denied — disables its buttons. */
   readonly busy = signal<string | null>(null);
+  readonly code = signal('');
+  readonly approving = signal(false);
 
   /** Refreshes on a pairing event for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
   private readonly pairingSub = this.sse.pairingEvents.pipe(takeUntilDestroyed()).subscribe((ev) => {
@@ -43,6 +46,8 @@ export class PendingRequestsComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    // The device's QR code carries its code.
+    this.code.set(this.route.snapshot.queryParamMap.get('code') ?? '');
     void this.refresh();
   }
 
@@ -59,16 +64,20 @@ export class PendingRequestsComponent implements OnInit {
     }
   }
 
-  async approve(req: PendingRequest) {
-    this.busy.set(req.pairingId);
+  /** A wrong code is toasted by the error interceptor with the server's message. */
+  async approve(event: Event) {
+    event.preventDefault();
+    if (this.approving() || !this.code().trim()) return;
+    this.approving.set(true);
     try {
-      await this.auth.pairingApprove(req.pairingId);
-      this.requests.set(this.requests().filter((r) => r.pairingId !== req.pairingId));
+      await this.auth.pairingApprove(this.code());
+      this.code.set('');
       this.toast.success(this.translate.instant('pending_requests.approved_toast'));
+      void this.refresh();
     } catch {
-      this.toast.error(this.translate.instant('pending_requests.action_error'));
+      // Toasted by the interceptor.
     } finally {
-      this.busy.set(null);
+      this.approving.set(false);
     }
   }
 

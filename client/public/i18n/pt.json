@@ -808,7 +808,7 @@
   "quick_connect": {
     "starting": "A preparar o pedido…",
     "waiting_title": "A aguardar validação",
-    "waiting_subtitle": "Abra o Fliks no seu telemóvel e aceite o pedido na página «Pedidos de ligação».",
+    "waiting_subtitle": "Abra o Fliks num telemóvel ou computador com sessão iniciada e introduza este código na página «Pedidos de ligação».",
     "device_name": "Este dispositivo: {{name}}",
     "expires_in": "Expira em {{minutes}} min",
     "denied": "O pedido foi recusado.",
@@ -825,10 +825,12 @@
     "deny": "Recusar",
     "approved_toast": "Ligação aceite",
     "requested_toast": "{{device}} pede para ligar-se",
-    "accept": "Aceitar",
     "denied_toast": "Pedido recusado.",
     "load_error": "Não foi possível carregar os pedidos pendentes.",
-    "action_error": "A ação não pôde ser concluída."
+    "action_error": "A ação não pôde ser concluída.",
+    "code_label": "Código mostrado no dispositivo",
+    "code_hint": "É apresentado pelo dispositivo que quer ligar-se.",
+    "enter_code": "Introduzir código"
   },
   "server_history": {
     "section_title": "Servidores recentes",

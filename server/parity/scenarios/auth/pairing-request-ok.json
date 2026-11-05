@@ -1,6 +1,7 @@
 {
   "ignore": [
-    "$..pairingId"
+    "$..pairingId",
+    "$..code"
   ],
   "name": "auth-pairing-request-ok",
   "seed": "base",

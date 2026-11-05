@@ -1,6 +1,7 @@
 {
   "ignore": [
-    "$..pairingId"
+    "$..pairingId",
+    "$..code"
   ],
   "name": "auth-pairing-request-too-many-pending",
   "seed": "base",

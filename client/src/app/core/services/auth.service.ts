@@ -310,9 +310,9 @@ export class AuthService {
     deviceId: string,
     deviceName: string,
     systemName?: string,
-  ): Promise<{ pairingId: string; expiresIn: number }> {
+  ): Promise<{ pairingId: string; code: string; expiresIn: number }> {
     return firstValueFrom(
-      this.http.post<{ pairingId: string; expiresIn: number }>(
+      this.http.post<{ pairingId: string; code: string; expiresIn: number }>(
         '/api/auth/pairing/request',
         { userId, deviceName, systemName },
         { headers: { 'X-Device-Id': deviceId } },
@@ -341,10 +341,8 @@ export class AuthService {
     return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
   }
 
-  pairingApprove(pairingId: string): Promise<void> {
-    return firstValueFrom(
-      this.http.post<void>(`/api/auth/pairing/${pairingId}/approve`, {}),
-    );
+  pairingApprove(code: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>('/api/auth/pairing/approve', { code }));
   }
 
   pairingDeny(pairingId: string): Promise<void> {

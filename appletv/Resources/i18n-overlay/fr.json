@@ -20,7 +20,7 @@
   "login.title": "Connexion",
   "login.error": "Nom d'utilisateur ou mot de passe invalide",
   "quick_connect.title": "Connexion rapide",
-  "quick_connect.instructions": "Sur votre téléphone, connectez-vous en tant que %@ et approuvez cette demande depuis l'écran des demandes en attente.",
+  "quick_connect.instructions": "Sur votre téléphone, connectez-vous en tant que %@ et saisissez ce code sur l'écran des demandes en attente.",
   "quick_connect.expires_in": "Expire dans %d min",
   "quick_connect.denied": "Demande refusée",
   "quick_connect.expired": "Demande expirée",

@@ -1,5 +1,6 @@
 {
   "capture": {
+    "code": "$.steps[0].body.code",
     "pid": "$.steps[0].body.pairingId"
   },
   "ignore": [
@@ -9,7 +10,8 @@
     "$..accessTokenExpiresAt",
     "$..refreshTokenExpiresAt",
     "$..createdAt",
-    "$..updatedAt"
+    "$..updatedAt",
+    "$..code"
   ],
   "name": "auth-pairing-approve-ok",
   "seed": "base",
@@ -35,11 +37,14 @@
     },
     {
       "as": "user",
+      "body": {
+        "code": "{code}"
+      },
       "expect": {
         "status": 204
       },
       "method": "POST",
-      "path": "/api/auth/pairing/{pid}/approve"
+      "path": "/api/auth/pairing/approve"
     },
     {
       "as": "anon",

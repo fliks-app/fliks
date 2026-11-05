@@ -22,7 +22,7 @@
   "login.submit": "Sign in",
   "login.error": "Invalid username or password",
   "quick_connect.title": "Quick Connect",
-  "quick_connect.instructions": "On your phone, sign in as %@ and approve this request from the pending-requests screen.",
+  "quick_connect.instructions": "On your phone, sign in as %@ and enter this code on the pending-requests screen.",
   "quick_connect.expires_in": "Expires in %d min",
   "quick_connect.denied": "Request denied",
   "quick_connect.expired": "Request expired",

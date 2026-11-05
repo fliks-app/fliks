@@ -242,7 +242,7 @@ pub async fn cleanup_pairings(db: &PgPool, now: DateTime<Utc>) -> Result<u64, sq
 }
 
 pub enum Opened {
-    Created(String),
+    Created { id: String, code: String },
     NoUser,
     TooMany,
 }
@@ -278,19 +278,35 @@ pub async fn open_pairing(
     if pending >= MAX_PENDING_PER_DEVICE {
         return Ok(Opened::TooMany);
     }
-    let public_id = sqlx::query_scalar!(
-        r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5) RETURNING "publicId""#,
-        user_id,
-        device_id,
-        device_name,
-        system_name,
-        now + Duration::seconds(PAIRING_TTL_SECS)
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(Opened::Created(public_id))
+    // A code is unique among the user's pending requests, so approving by code picks exactly one.
+    for _ in 0..10 {
+        let code = new_code();
+        let id = sqlx::query_scalar!(
+            r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt", code)
+               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6)
+               ON CONFLICT ("userId", code) WHERE status = 'pending' DO NOTHING
+               RETURNING "publicId""#,
+            user_id,
+            device_id,
+            device_name,
+            system_name,
+            now + Duration::seconds(PAIRING_TTL_SECS),
+            code
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(id) = id {
+            tx.commit().await?;
+            return Ok(Opened::Created { id, code });
+        }
+    }
+    Ok(Opened::TooMany)
+}
+
+fn new_code() -> String {
+    let mut b = [0u8; 4];
+    getrandom::fill(&mut b).expect("os rng");
+    format!("{:06}", u32::from_le_bytes(b) % 1_000_000)
 }
 
 pub enum PairingStatus {
@@ -389,23 +405,22 @@ pub async fn pending(
 
 pub enum Approval {
     NotFound,
-    NotPending(String),
     Expired,
     Approved,
 }
 
-/// `pairing/:id/approve`: only the request's own user (a foreign row is not found).
+/// `pairing/approve`: the code shown on the requesting device, among the caller's own pending requests.
 pub async fn approve(
     db: &PgPool,
-    public_id: &str,
+    code: &str,
     user_id: i32,
     now: DateTime<Utc>,
 ) -> Result<Approval, sqlx::Error> {
     let mut tx = db.begin().await?;
     let Some(p) = sqlx::query!(
-        r#"SELECT id, status, "expiresAt" AS expires_at FROM pairing_requests
-           WHERE "publicId" = $1 AND "userId" = $2 FOR UPDATE"#,
-        public_id,
+        r#"SELECT id, "expiresAt" AS expires_at FROM pairing_requests
+           WHERE code = $1 AND "userId" = $2 AND status = 'pending' FOR UPDATE"#,
+        code,
         user_id
     )
     .fetch_optional(&mut *tx)
@@ -413,9 +428,6 @@ pub async fn approve(
     else {
         return Ok(Approval::NotFound);
     };
-    if p.status != "pending" {
-        return Ok(Approval::NotPending(p.status));
-    }
     if p.expires_at < now {
         sqlx::query!(
             r#"UPDATE pairing_requests SET status = 'expired' WHERE id = $1"#,
@@ -659,9 +671,9 @@ mod tests {
         open_pairing(pool, u, dev, "TV", None, at).await.unwrap()
     }
 
-    fn created(o: Opened) -> String {
+    fn created(o: Opened) -> (String, String) {
         match o {
-            Opened::Created(id) => id,
+            Opened::Created { id, code } => (id, code),
             _ => panic!("not created"),
         }
     }
@@ -679,7 +691,7 @@ mod tests {
         ));
         assert!(matches!(
             open(&pool, u, "other", Utc::now()).await,
-            Opened::Created(_)
+            Opened::Created { .. }
         ));
         assert!(matches!(
             open(&pool, 999, "x", Utc::now()).await,
@@ -692,7 +704,7 @@ mod tests {
     async fn pairing_claims_once_on_the_issuing_device_and_not_after_expiry(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
-        let id = created(open(&pool, u, "d", now).await);
+        let (id, code) = created(open(&pool, u, "d", now).await);
         let st = |dev: &'static str, at| {
             let (pool, id) = (pool.clone(), id.clone());
             async move {
@@ -704,16 +716,17 @@ mod tests {
         };
         assert!(matches!(st("d", now).await, PairingStatus::Status(s) if s == "pending"));
         assert!(matches!(
-            approve(&pool, &id, u + 1, now).await.unwrap(),
+            approve(&pool, &code, u + 1, now).await.unwrap(),
             Approval::NotFound
         ));
         assert!(matches!(
-            approve(&pool, &id, u, now).await.unwrap(),
+            approve(&pool, &code, u, now).await.unwrap(),
             Approval::Approved
         ));
-        assert!(
-            matches!(approve(&pool, &id, u, now).await.unwrap(), Approval::NotPending(s) if s == "approved")
-        );
+        assert!(matches!(
+            approve(&pool, &code, u, now).await.unwrap(),
+            Approval::NotFound
+        ));
         assert!(matches!(st("other", now).await, PairingStatus::Status(s) if s == "approved"));
         assert!(matches!(st("d", now).await, PairingStatus::Claimed { .. }));
         assert!(matches!(st("d", now).await, PairingStatus::Status(_)));
@@ -723,8 +736,8 @@ mod tests {
     async fn approved_claim_checks_expiry(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
-        let id = created(open(&pool, u, "d", now).await);
-        approve(&pool, &id, u, now).await.unwrap();
+        let (id, code) = created(open(&pool, u, "d", now).await);
+        approve(&pool, &code, u, now).await.unwrap();
         let late = now + Duration::seconds(PAIRING_TTL_SECS + 1);
         let s = pairing_status(&pool, &id, "d", 60, late)
             .await
@@ -742,8 +755,8 @@ mod tests {
     async fn concurrent_claims_mint_one_pair(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
-        let id = created(open(&pool, u, "d", now).await);
-        approve(&pool, &id, u, now).await.unwrap();
+        let (id, code) = created(open(&pool, u, "d", now).await);
+        approve(&pool, &code, u, now).await.unwrap();
         let claim = |pool: PgPool, id: String| {
             tokio::spawn(async move {
                 pairing_status(&pool, &id, "d", 60, now)
@@ -764,16 +777,17 @@ mod tests {
     async fn expired_pending_is_flipped_and_approve_refuses(pool: PgPool) {
         let u = setup(&pool).await;
         let t0 = Utc::now();
-        let id = created(open(&pool, u, "d", t0).await);
+        let (_, code) = created(open(&pool, u, "d", t0).await);
         let late = t0 + Duration::seconds(PAIRING_TTL_SECS + 1);
         assert!(matches!(
-            approve(&pool, &id, u, late).await.unwrap(),
+            approve(&pool, &code, u, late).await.unwrap(),
             Approval::Expired
         ));
-        assert!(
-            matches!(approve(&pool, &id, u, late).await.unwrap(), Approval::NotPending(s) if s == "expired")
-        );
-        let id2 = created(open(&pool, u, "e", t0).await);
+        assert!(matches!(
+            approve(&pool, &code, u, late).await.unwrap(),
+            Approval::NotFound
+        ));
+        let (id2, _) = created(open(&pool, u, "e", t0).await);
         assert!(pending(&pool, u, late).await.unwrap().is_empty());
         assert!(deny(&pool, &id2, u).await.unwrap());
         assert!(!deny(&pool, &id2, u + 1).await.unwrap());

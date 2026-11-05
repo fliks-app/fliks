@@ -17,6 +17,7 @@ struct QuickConnectView: View {
 
     @State private var viewState: ViewState = .starting
     @State private var pairingId: String?
+    @State private var code = ""
     @State private var secondsLeft = 0
     @State private var pollTask: Task<Void, Never>?
 
@@ -33,7 +34,10 @@ struct QuickConnectView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 700)
-                if let qr = qrImage("\(server.url)/pending-requests") {
+                Text(code)
+                    .font(.system(size: 72, weight: .bold, design: .monospaced))
+                    .tracking(8)
+                if let qr = qrImage("\(server.url)/pending-requests?code=\(code.filter(\.isNumber))") {
                     qr.interpolation(.none)
                         .resizable()
                         .frame(width: 220, height: 220)
@@ -82,6 +86,7 @@ struct QuickConnectView: View {
                 systemName: "tvOS \(UIDevice.current.systemVersion)"
             )
             pairingId = res.pairingId
+            code = "\(res.code.prefix(3)) \(res.code.dropFirst(3))"
             secondsLeft = res.expiresIn
             viewState = .waiting
             pollTask = Task { await poll() }

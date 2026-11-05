@@ -3,7 +3,8 @@
     "pid": "$.steps[0].body.pairingId"
   },
   "ignore": [
-    "$..pairingId"
+    "$..pairingId",
+    "$..code"
   ],
   "name": "auth-pairing-status-other-device",
   "seed": "base",

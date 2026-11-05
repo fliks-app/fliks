@@ -4,16 +4,19 @@
   "steps": [
     {
       "as": "user",
+      "body": {
+        "code": "000000"
+      },
       "expect": {
         "body": {
           "error": "Not Found",
-          "message": "Pairing request not found",
+          "message": "No pending request with this code",
           "statusCode": 404
         },
         "status": 404
       },
       "method": "POST",
-      "path": "/api/auth/pairing/nope/approve"
+      "path": "/api/auth/pairing/approve"
     }
   ]
 }

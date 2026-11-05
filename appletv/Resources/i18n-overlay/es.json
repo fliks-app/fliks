@@ -23,7 +23,7 @@
   "login.username": "Usuario",
   "login.error": "Usuario o contraseña incorrectos",
   "quick_connect.title": "Conexión rápida",
-  "quick_connect.instructions": "En tu teléfono, inicia sesión como %@ y aprueba esta solicitud desde la pantalla de solicitudes pendientes.",
+  "quick_connect.instructions": "En tu teléfono, inicia sesión como %@ e introduce este código en la pantalla de solicitudes pendientes.",
   "quick_connect.expires_in": "Caduca en %d min",
   "quick_connect.denied": "Solicitud rechazada",
   "quick_connect.expired": "Solicitud caducada",

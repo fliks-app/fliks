@@ -1,6 +1,26 @@
 <div class="flex min-w-0 max-w-full flex-col gap-3">
   <h1 class="page-title">{{ 'pending_requests.title' | translate }}</h1>
 
+  <form class="flex flex-col gap-2 rounded-md bg-base-100 shadow-sm p-3" (submit)="approve($event)">
+    <label for="pairing-code" class="font-semibold">{{ 'pending_requests.code_label' | translate }}</label>
+    <p class="text-sm text-base-content/70">{{ 'pending_requests.code_hint' | translate }}</p>
+    <div class="flex gap-2">
+      <input
+        id="pairing-code"
+        class="input input-bordered flex-1 min-w-0 font-mono text-lg tracking-widest"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        maxlength="7"
+        placeholder="123 456"
+        [value]="code()"
+        (input)="code.set($any($event.target).value)"
+      />
+      <button type="submit" class="btn btn-primary" [disabled]="approving() || !code().trim()">
+        {{ 'pending_requests.approve' | translate }}
+      </button>
+    </div>
+  </form>
+
   @if (loading()) {
     <div class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg"></span>
@@ -27,21 +47,13 @@
           <div class="flex-1 min-w-0">
             <div class="font-semibold truncate">{{ req.deviceName }}</div>
             @if (req.systemName) {
-              <div class="text-xs text-base-content/70 truncate">
+              <div class="text-sm text-base-content/70 truncate">
                 {{ 'system.device_app_with_system' | translate: { system: req.systemName } }}
               </div>
             }
-            <div class="text-xs text-base-content/60">{{ formatRelative(req.requestedAt) }}</div>
+            <div class="text-sm text-base-content/60">{{ formatRelative(req.requestedAt) }}</div>
           </div>
           <div class="flex gap-2 shrink-0">
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              [disabled]="busy() === req.pairingId"
-              (click)="approve(req)"
-            >
-              {{ 'pending_requests.approve' | translate }}
-            </button>
             <button
               type="button"
               class="btn btn-ghost btn-sm"

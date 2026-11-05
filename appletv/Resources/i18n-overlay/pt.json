@@ -21,7 +21,7 @@
   "login.username": "Utilizador",
   "login.error": "Utilizador ou palavra-passe inválidos",
   "quick_connect.title": "Ligação rápida",
-  "quick_connect.instructions": "No seu telemóvel, inicie sessão como %@ e aprove este pedido no ecrã de pedidos pendentes.",
+  "quick_connect.instructions": "No seu telemóvel, inicie sessão como %@ e introduza este código no ecrã de pedidos pendentes.",
   "quick_connect.expires_in": "Expira em %d min",
   "quick_connect.denied": "Pedido recusado",
   "quick_connect.expired": "Pedido expirado",

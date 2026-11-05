@@ -44,7 +44,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/pairing/request", post(pairing_request))
         .route("/api/auth/pairing/status", get(pairing_status))
         .route("/api/auth/pairing/pending", get(pairing_pending))
-        .route("/api/auth/pairing/{id}/approve", post(pairing_approve))
+        .route("/api/auth/pairing/approve", post(pairing_approve))
         .route("/api/auth/pairing/{id}/deny", post(pairing_deny))
         .route("/api/auth/pairing/{id}/cancel", post(pairing_cancel))
 }
@@ -617,8 +617,8 @@ pub(crate) async fn pairing_request(
         Utc::now(),
     )
     .await?;
-    let id = match opened {
-        Opened::Created(id) => id,
+    let (id, code) = match opened {
+        Opened::Created { id, code } => (id, code),
         Opened::NoUser => return Err(AppError::not_found("User not found")),
         Opened::TooMany => {
             return Err(AppError::bad_request(
@@ -637,7 +637,7 @@ pub(crate) async fn pairing_request(
     );
     Ok((
         StatusCode::CREATED,
-        Json(json!({"pairingId": id, "expiresIn": db::PAIRING_TTL_SECS})),
+        Json(json!({"pairingId": id, "code": code, "expiresIn": db::PAIRING_TTL_SECS})),
     )
         .into_response())
 }
@@ -713,18 +713,22 @@ pub(crate) async fn pairing_pending(
     ))
 }
 
-#[utoipa::path(post, path = "/api/auth/pairing/{id}/approve", responses((status = 200)))]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PairingApproveDto {
+    code: String,
+}
+
+#[utoipa::path(post, path = "/api/auth/pairing/approve", responses((status = 204)))]
 pub(crate) async fn pairing_approve(
     State(st): State<AppState>,
     a: Authed,
-    PathParams(id): PathParams<String>,
+    ValidJson(dto): ValidJson<PairingApproveDto>,
 ) -> Result<StatusCode, AppError> {
-    match db::approve(&st.db, &id, a.user.id, Utc::now()).await? {
+    let code: String = dto.code.chars().filter(char::is_ascii_digit).collect();
+    match db::approve(&st.db, &code, a.user.id, Utc::now()).await? {
         Approval::Approved => Ok(StatusCode::NO_CONTENT),
-        Approval::NotFound => Err(AppError::not_found("Pairing request not found")),
-        Approval::NotPending(s) => Err(AppError::bad_request(format!(
-            "Cannot approve a {s} request"
-        ))),
+        Approval::NotFound => Err(AppError::not_found("No pending request with this code")),
         Approval::Expired => Err(AppError::bad_request("Pairing request expired")),
     }
 }
