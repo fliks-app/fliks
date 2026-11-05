@@ -21,6 +21,11 @@ import { PlayableMediaService } from '../../../core/services/playable-media.serv
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
+import { WantsStore } from '../../../core/acquisition/acquisition';
+import { ReleaseGrabController } from '../../../features/media-detail/release-grab-controller';
+import type { Want } from '../../../core/services/api/wants-api.service';
+
+const VIDEO_WANT = { id: 1, family: 'video', language: null, qualityProfileId: 4, folderId: null, satisfied: false } as Want;
 
 /**
  * Permission-matrix + characterisation test for the `media.actions` kebab
@@ -71,8 +76,10 @@ interface MediaFixture {
   sharingDisabled?: boolean;
   isTv?: boolean;
   watched?: boolean;
-  grabBusy?: string | null;
+  /** The grab-best of this base is in flight. */
+  grabBusy?: boolean;
   releasesLoading?: boolean;
+  grabs?: Partial<ReleaseGrabController>;
   monitoredLoading?: boolean;
   deleteLoading?: boolean;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
@@ -172,6 +179,21 @@ async function createFixture(
         provide: PluginUiRegistryService,
         useValue: { contributionsFor: (slot: SlotId) => media.registry?.[slot] ?? [] },
       },
+      {
+        provide: WantsStore,
+        useValue: { load: async () => {}, wantsOf: () => (media.qualityProfileName ? [VIDEO_WANT] : []) },
+      },
+      {
+        provide: ReleaseGrabController,
+        useValue: {
+          search: async () => {},
+          grabBest: async () => {},
+          isBestBusy: () => !!media.grabBusy,
+          isSearching: () => !!media.releasesLoading,
+          grabBusy: () => null,
+          ...media.grabs,
+        },
+      },
     ],
   });
 
@@ -197,8 +219,6 @@ async function createFixture(
     fixture.componentRef.setInput('canRequestDeletion', derived.canRequestDeletion);
   }
   fixture.componentRef.setInput('userHasOpenWholeRequest', !!media.userHasOpenWholeRequest);
-  fixture.componentRef.setInput('grabBusy', media.grabBusy ?? null);
-  fixture.componentRef.setInput('releasesLoading', !!media.releasesLoading);
   fixture.componentRef.setInput('monitoredLoading', !!media.monitoredLoading);
   fixture.componentRef.setInput('deleteLoading', !!media.deleteLoading);
 
@@ -455,8 +475,8 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
 
   it('an episode-level header hides Edit profiles/library and Request deletion for an owner — the parent never binds those inputs there, regardless of permission', async () => {
     const fixture = await createFixture(OWNER, {
-      mediaType: 'movie',
       ...MOVIE,
+      mediaType: 'series',
       episodeId: 999,
       episodeInstance: true,
     });
@@ -656,25 +676,42 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
     expect(shown).not.toContain('x.search_releases');
   });
 
-  it('a plugin contribution surfaces both actions and routes clicks to core\'s own outputs', async () => {
-    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
+  it('a plugin contribution surfaces both actions and routes clicks to the release picker', async () => {
+    const grabs = { search: vi.fn(async () => {}), grabBest: vi.fn(async () => {}) };
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry, grabs });
     const shown = labels(fixture);
     const grabIdx = shown.indexOf('x.grab_best');
     const searchIdx = shown.indexOf('x.search_releases');
     expect(grabIdx).toBeGreaterThanOrEqual(0);
     expect(searchIdx).toBeGreaterThanOrEqual(0);
 
-    let grabbed = false;
-    let searched = false;
-    fixture.componentInstance.grabBest.subscribe(() => (grabbed = true));
-    fixture.componentInstance.loadReleases.subscribe(() => (searched = true));
-
     const rows = flatActions(fixture);
     rows[grabIdx].run();
     rows[searchIdx].run();
 
-    expect(grabbed).toBe(true);
-    expect(searched).toBe(true);
+    const base = { mediaId: 1, kind: 'movie', level: 'work', itemId: undefined };
+    expect(grabs.grabBest).toHaveBeenCalledWith(base, [VIDEO_WANT]);
+    expect(grabs.search).toHaveBeenCalledWith(base, [VIDEO_WANT]);
+  });
+
+  it('an episode header reads media.item.actions and gates on level:item, a series root does not', async () => {
+    const registry = {
+      'media.item.actions': [
+        {
+          id: 'fliks.acme.item-grab',
+          slot: 'media.item.actions' as const,
+          weight: 500,
+          labelKey: 'x.item_grab',
+          icon: 'download',
+          when: ['level:item' as const, 'hasQualityProfile' as const],
+          action: { kind: 'action' as const, actionId: 'item.grab-best' },
+        },
+      ],
+    };
+    const base = { mediaType: 'series' as const, selectedFileId: 7, monitored: true, qualityProfileName: 'HD-1080p', registry };
+    expect(labels(await createFixture(OWNER, { ...base, episodeId: 5 }))).toContain('x.item_grab');
+    expect(labels(await createFixture(OWNER, base))).not.toContain('x.item_grab');
+    expect(labels(await createFixture(OWNER, { ...base, episodeId: 5, qualityProfileName: null }))).not.toContain('x.item_grab');
   });
 
   it('grabBusy/releasesLoading still drive the busy spinner + disabled state for the plugin-contributed rows', async () => {
@@ -689,7 +726,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
       mediaType: 'movie',
       ...MOVIE,
       registry: releasePickerRegistry,
-      grabBusy: 'best',
+      grabBusy: true,
       releasesLoading: true,
     });
     expect(flatActions(busy)[grabIdx].disabled).toBe(true);

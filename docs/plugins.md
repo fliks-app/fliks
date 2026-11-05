@@ -87,12 +87,19 @@ Unknown top-level keys are rejected, so a typo fails the install rather than bei
 
 A plugin ships **no** Angular. It declares data; core renders it.
 
-**`ui.contributions[]`** puts an entry in one of six slots (`nav.main`, `nav.acquisition`,
-`settings.page`, `media.actions`, `media.season.actions`, `card.actions`), with a weight, a
+**`ui.contributions[]`** puts an entry in one of seven slots (`nav.main`, `nav.acquisition`,
+`settings.page`, `media.actions` (the whole work), `media.group.actions` (a season, a volume, a
+disc), `media.item.actions` (an episode, an issue, a track), `card.actions`), with a weight, a
 `labelKey`, an optional icon, and `when` predicates from a closed vocabulary — an unknown
 predicate evaluates false, so a client that does not know a rule hides the entry rather than
-guessing. The action is either a route or a **core-declared `actionId`**: core keeps a closed
-catalogue per slot, and an id it does not know renders nothing.
+guessing. `level:work`, `level:group` and `level:item` name the level the menu is built for;
+`hasQualityProfile` is true when the target has at least one want with a quality profile, whatever
+its kind (`wants-follows.md` rule 2b); `isEpisode` is core's own gate on its title-level
+rows (identity, profiles, library), true on a series item, and a manifest should use `level:*`.
+The core release-picker actionIds are `media.grab-best` and `media.search-releases` (work),
+`group.grab-best` and `group.search-releases` (group), `item.grab-best` and `item.search-releases`
+(item); each acts on the level of its slot. The action is either a route or a
+**core-declared `actionId`**: core keeps a closed catalogue per slot, and an id it does not know renders nothing.
 
 A contribution whose route opens one of your own views (`/plugins/<id>/<pageId>`, or
 `/admin/settings/plugins/<id>/<pageId>`) must name a page you declare in `ui.configPages[]`; anything
@@ -102,11 +109,15 @@ and the contributions opening a withheld page are withheld with it. So a nav ent
 `when` to restate its own route's policy; use `when` for what the policy cannot express.
 
 **`ui.releasePicker`** names the routes of the release picker per kind of work and level: kinds are
-`movie`, `series`, `book`, `comic`, `album`, levels `work` (the whole title), `group` (a
-season) and `item` (an episode), each a `{search, grab}` pair of the plugin's own routes (`search` a
-`GET`, `grab` a `POST`), at least one level per kind: `{ movie: { work: {...} }, series: { group: {...},
-item: {...} } }`. The core picker fills `:id`, `:seasonId` and `:episodeId` in the routes. A kind the
-server does not serve is accepted and ignored.
+open lowercase words (`movie`, `series`, `book`, `comic`, `album`, ...), levels `work` (the whole
+title), `group` (a season, a volume, a disc) and `item` (an episode, an issue, a track), each a
+`{search, grab}` pair of the plugin's own routes (`search` a `GET`, `grab` a `POST`), at least one
+level per kind: `{ movie: { work: {...} }, series: { group: {...}, item: {...} } }`. The core picker
+fills `:id` (the media id), `:groupId` (`item_groups.id`) and `:itemId` (`items.id`) in the routes.
+`search` takes the query parameters `family` and `language` (the want aimed at; `language` is absent
+for an any-language want), `q` and `sid`; `grab` takes a JSON body with `family`, `language` and the
+manual-release fields (`downloadUrl`, `sourceTitle`, `sourceId`, `force`, `infoUrl`; none for a
+grab-best). A kind the server does not serve is accepted and ignored.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 

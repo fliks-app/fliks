@@ -1,5 +1,14 @@
 import type { MediaType } from './enums/media-type.enum';
 
+export type MediaFamily = 'video' | 'text' | 'audio' | 'image';
+/** `work` is the whole title, `group` a season, a volume or a disc, `item` an episode, an issue or a track. */
+export type AcquisitionLevel = 'work' | 'group' | 'item';
+
+/** A level below the work: the key of the release modal title when it is searched. */
+export interface LevelDescriptor {
+  releasesTitleKey: string;
+}
+
 export interface KindDescriptor {
   /** Route segment of the detail page, without the leading slash. */
   segment: string;
@@ -11,7 +20,13 @@ export interface KindDescriptor {
   libraryLabelKey: string;
   /** The kind is made of seasons and episodes. */
   hasSeasons: boolean;
+  /** The families a want of this kind can name. */
+  families: readonly MediaFamily[];
+  /** The levels below the work this kind has; a kind with none is acquired as a whole. */
+  levels: { group?: LevelDescriptor; item?: LevelDescriptor };
 }
+
+export const WORK_RELEASES_TITLE_KEY = 'media_detail.releases_title';
 
 /** Adding a `MediaType` fails to compile until it is described here. */
 export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
@@ -21,6 +36,8 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     requestLabelKey: 'requests.type_movie',
     libraryLabelKey: 'settings.libraries.media_type_movie',
     hasSeasons: false,
+    families: ['video'],
+    levels: {},
   },
   series: {
     segment: 'series',
@@ -28,6 +45,11 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     requestLabelKey: 'requests.type_series',
     libraryLabelKey: 'settings.libraries.media_type_series',
     hasSeasons: true,
+    families: ['video'],
+    levels: {
+      group: { releasesTitleKey: 'media_detail.season_packs_title' },
+      item: { releasesTitleKey: 'media_detail.ep_releases_title' },
+    },
   },
   book: {
     segment: 'books',
@@ -35,6 +57,8 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     requestLabelKey: 'kinds.book',
     libraryLabelKey: 'settings.libraries.media_type_book',
     hasSeasons: false,
+    families: ['text', 'audio'],
+    levels: {},
   },
   comic: {
     segment: 'comics',
@@ -42,6 +66,8 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     requestLabelKey: 'kinds.comic',
     libraryLabelKey: 'settings.libraries.media_type_comic',
     hasSeasons: false,
+    families: ['image'],
+    levels: { item: { releasesTitleKey: 'media_detail.issue_releases_title' } },
   },
 };
 
@@ -79,4 +105,10 @@ export const PROVIDER_SEGMENTS_PATTERN = MEDIA_KINDS.map((k) => KIND_REGISTRY[k]
 /** The kind served at an `/add/<segment>` route segment, if any. */
 export function kindFromProviderSegment(segment: string | null | undefined): MediaType | undefined {
   return MEDIA_KINDS.find((k) => KIND_REGISTRY[k].providerSegment === segment);
+}
+
+/** The release modal title of a target's level; the work's own when the kind has no such level. */
+export function releasesTitleKey(kind: MediaType, level: AcquisitionLevel): string {
+  const levels = KIND_REGISTRY[kind].levels;
+  return (level === 'work' ? undefined : levels[level])?.releasesTitleKey ?? WORK_RELEASES_TITLE_KEY;
 }

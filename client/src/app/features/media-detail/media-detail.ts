@@ -17,8 +17,6 @@ import {
   RelatedMedia,
   MediaCollection,
 } from '../../core/services/api/media.service';
-import { MediaDetailReleasePickerService } from './media-detail-release-picker.service';
-import { ReleaseSearchStreamService } from './release-search-stream.service';
 import { AuthService } from '../../core/services/auth.service';
 import { SpoilerService } from '../../core/services/spoiler.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
@@ -79,6 +77,7 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 import { ReleaseGrabController } from './release-grab-controller';
+import { WantsStore } from '../../core/acquisition/acquisition';
 import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
 import { LikeController } from '../../shared/utils/like-controller';
 import { AnalyzeController } from './analyze-controller';
@@ -137,9 +136,21 @@ interface HandedEpisode {
     TvSectionDirective,
   ],
   templateUrl: './media-detail.html',
-  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }],
+  providers: [{ provide: MEDIA_SAVED_HOST, useExisting: forwardRef(() => MediaDetailComponent) }, ReleaseGrabController],
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
+  constructor() {
+    this.grabs.attach(
+      () => this.media(),
+      () => this.releasesModal(),
+    );
+    // A refreshed media is the moment a want may have become satisfied.
+    effect(() => {
+      const id = this.media()?.id;
+      if (id != null) untracked(() => void this.wantsStore.load(id));
+    });
+  }
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly identifyModalService = inject(IdentifyModalService);
   private readonly admin = inject(MediaAdminService);
@@ -147,8 +158,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
-  private readonly releasePickerApi = inject(MediaDetailReleasePickerService);
-  private readonly releaseStream = inject(ReleaseSearchStreamService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
   private readonly spoilers = inject(SpoilerService);
@@ -166,22 +175,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly tv = inject(TvService);
 
-  readonly grabs = new ReleaseGrabController(
-    {
-      media: () => this.media(),
-      focusedSeason: () => this.focusedSeason(),
-      focusedEpisode: () => this.focusedEpisode(),
-      movieModal: () => this.movieReleasesModal(),
-      episodeModal: () => this.episodeReleasesModal(),
-      seasonModal: () => this.seasonReleasesModal(),
-    },
-    {
-      stream: this.releaseStream,
-      api: this.releasePickerApi,
-      progress: this.downloadProgress,
-      translate: this.translate,
-    },
-  );
+  readonly grabs = inject(ReleaseGrabController);
+  private readonly wantsStore = inject(WantsStore);
   readonly like = new LikeController(
     {
       // A book or comic page owns its likes through the shared hero.
@@ -539,9 +534,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Series: show only episodes with a file on disk (persisted in localStorage) */
   readonly episodesHasFileOnly = signal(readEpisodesHasFileOnlyFromStorage());
 
-  readonly movieReleasesModal = viewChild<ReleasesModalComponent>('movieReleasesModal');
-  readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
-  readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
+  readonly releasesModal = viewChild<ReleasesModalComponent>('releasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
@@ -1263,14 +1256,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   onEpisodeDialogToggleMonitored() {
     const c = this.episodeDrawerContext();
     if (c) void this.toggleEpisodeMonitored(c.season.id, c.episode);
-  }
-
-  onEpisodeDialogLoadReleases() {
-    const c = this.episodeDrawerContext();
-    const media = this.media();
-    if (c && media) {
-      void this.grabs.loadEpisodeReleases(media.id, c.episode.id);
-    }
   }
 
   async toggleSeasonMonitored(season: Season) {

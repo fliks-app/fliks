@@ -10,7 +10,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import type { Want } from '../../../../core/services/api/wants-api.service';
+import { localizeLanguage } from '../../../../core/utils/language.utils';
 import { LucideCirclePause, LucideSearchX, LucideTriangleAlert } from '@lucide/angular';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry } from '../../release-search-stream.service';
@@ -61,7 +63,24 @@ export class ReleasesModalComponent {
   readonly grabPrefix = input('r');
   readonly showCfScore = input(true);
 
+  /** The wants the search can aim at; with more than one, the modal offers the choice. */
+  readonly wants = input<readonly Want[]>([]);
+  readonly wantFamily = input<string | null>(null);
+  readonly wantLanguage = input<string | null>(null);
+
   readonly grab = output<{ release: MovieRelease; key: string }>();
+  readonly wantChange = output<Want>();
+
+  private readonly translate = inject(TranslateService);
+
+  wantLabel(w: Want): string {
+    const language = w.language ? localizeLanguage(w.language, this.translate) : this.translate.instant('wants.any_language');
+    return `${this.translate.instant('families.' + w.family)} · ${language}`;
+  }
+
+  isSelectedWant(w: Want): boolean {
+    return w.family === this.wantFamily() && (w.language ?? null) === (this.wantLanguage() ?? null);
+  }
 
   private readonly dismissStack = inject(DismissableStackService);
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');

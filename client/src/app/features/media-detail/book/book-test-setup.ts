@@ -4,6 +4,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
+import { ReleaseGrabController } from '../release-grab-controller';
 
 /** Providers shared by the book work page specs: missing keys render as themselves. */
 export function bookSpecProviders(...extra: Provider[]): (Provider | EnvironmentProviders)[] {
@@ -16,6 +17,7 @@ export function bookSpecProviders(...extra: Provider[]): (Provider | Environment
       lang: 'en',
       loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
     }),
+    { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
     ...extra,
   ];
 }

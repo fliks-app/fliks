@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, model, sig
 import { LucidePlus, LucideTrash2 } from '@lucide/angular';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import type { WantFamily, WantSpec } from '../../../core/services/api/wants-api.service';
+import type { Want, WantFamily, WantSpec } from '../../../core/services/api/wants-api.service';
 import { ProfilesService, type QualityProfile } from '../../../core/services/api/profiles.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
@@ -11,7 +11,7 @@ const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
 const FAMILIES: WantFamily[] = ['text', 'audio'];
 const MAX_WANTS = 8;
 
-export const wantKey = (w: Pick<WantSpec, 'family' | 'language'>) => `${w.family}|${w.language ?? ''}`;
+export const wantKey = (w: Pick<Want, 'family' | 'language'>) => `${w.family}|${w.language ?? ''}`;
 
 /** The formats and languages a work is wished in, e.g. ebook FR + audio EN. */
 @Component({

@@ -11,6 +11,7 @@ import { MediaLibraryDialogComponent } from '../media-library-dialog/media-libra
 import { By } from '@angular/platform-browser';
 import type { Media } from '../../../core/services/api/media.service';
 import { CardActionsService } from '../../../core/services/card-actions.service';
+import { ReleaseGrabController } from '../../../features/media-detail/release-grab-controller';
 import { DetailHeroComponent, MEDIA_SAVED_HOST } from './detail-hero';
 
 describe('DetailHeroComponent', () => {
@@ -18,6 +19,7 @@ describe('DetailHeroComponent', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -40,6 +42,7 @@ describe('DetailHeroComponent', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        { provide: ReleaseGrabController, useValue: { grabBusy: () => null } },
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),

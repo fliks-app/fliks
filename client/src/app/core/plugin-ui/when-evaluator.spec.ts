@@ -9,6 +9,13 @@ const ctx = (overrides: Partial<WhenContext> = {}): WhenContext => ({
 });
 
 describe('evaluateWhen', () => {
+  it('level:<name> matches the level the menu is built for, and nothing else', () => {
+    expect(evaluateWhen(['level:item'], ctx({ level: 'item' }))).toBe(true);
+    expect(evaluateWhen(['level:group'], ctx({ level: 'item' }))).toBe(false);
+    expect(evaluateWhen(['!level:work'], ctx({ level: 'group' }))).toBe(true);
+    expect(evaluateWhen(['level:item'], ctx())).toBe(false);
+  });
+
   it('passes with no when array at all', () => {
     expect(evaluateWhen(undefined, ctx())).toBe(true);
   });

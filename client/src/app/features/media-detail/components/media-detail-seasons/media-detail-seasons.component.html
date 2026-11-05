@@ -161,12 +161,12 @@
               type="button"
               class="dropdown-item text-white"
               [disabled]="seasonActionPending(item.actionId)"
-              (click)="item.handler()"
+              (click)="item.run?.()"
             >
               @if (seasonActionPending(item.actionId)) {
                 <span class="loading loading-spinner loading-sm"></span>
                 <span class="flex-1"></span>
-              } @else if (item.actionId === 'season.search-releases') {
+              } @else if (item.actionId === 'group.search-releases') {
                 <svg lucidePackage class="h-5 w-5 shrink-0 opacity-80"></svg>
                 <span class="flex-1">{{ item.labelKey | translate }}</span>
               } @else {

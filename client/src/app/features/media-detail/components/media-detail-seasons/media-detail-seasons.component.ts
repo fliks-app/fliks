@@ -63,9 +63,7 @@ import { DeviceService } from '../../../../core/services/device.service';
 import { DisplaySettingsService } from '../../../../core/services/display-settings.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { SeasonLabelPipe } from '../../../../core/pipes/season-label.pipe';
-import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
-import { evaluateWhen, type WhenContext } from '../../../../core/plugin-ui/when-evaluator';
-import { resolveSeasonAction, type CoreSeasonActionId, type SeasonActionHandlers } from '../../../../core/plugin-ui/season-action-registry';
+import { MediaActionsController } from '../../../../shared/utils/media-actions-controller';
 
 const LS_EPISODE_VIEW = 'fliks.mediaDetail.episodeView';
 
@@ -95,7 +93,6 @@ export class MediaDetailSeasonsComponent {
   readonly auth = inject(AuthService);
   private readonly spoilers = inject(SpoilerService);
   private readonly device = inject(DeviceService);
-  private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly downloads = inject(DownloadManagerService);
   private readonly confirmation = inject(ConfirmationService);
@@ -109,11 +106,6 @@ export class MediaDetailSeasonsComponent {
     seasonsVisibleWithDiskFilter(this.media(), this.episodesHasFileOnly()),
   );
   readonly filteredEpisodes = input.required<Episode[]>();
-  readonly seasonReleasesLoading = input(false);
-  readonly seasonReleasesOpenId = input<number | null>(null);
-  readonly seasonGrabBusy = input<string | null>(null);
-  /** Season ids with a grab-best in flight, so one running season never locks the others. */
-  readonly seasonGrabBestBusyIds = input<ReadonlySet<number>>(new Set());
   readonly seasonBusyId = input<number | null>(null);
   readonly watchedEpisodeIds = input<Set<number>>(new Set());
   readonly episodeProgress = input<Record<number, number>>({});
@@ -151,8 +143,6 @@ export class MediaDetailSeasonsComponent {
 
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();
-  readonly loadSeasonReleases = output<Season>();
-  readonly grabSeason = output<Season>();
   readonly toggleSeasonMonitored = output<Season>();
   readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
@@ -171,56 +161,20 @@ export class MediaDetailSeasonsComponent {
   readonly recommendSeason = output<number>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
-  // ── media.season.actions: release-picker entries in the season dropdown, from the contribution registry (empty without plugins).
-
-  private readonly seasonActionsContext = computed<WhenContext>(() => ({
-    isAdmin: this.isAdmin(),
-    hasPermission: (p: string) => this.auth.hasPermission(p),
-    mediaType: 'series',
-    hasFiles: onDiskEpisodeNumbers(this.selectedSeason()?.episodes ?? []).size > 0,
-    isMonitored: this.selectedSeason()?.monitored ?? false,
-    hasQualityProfile: !!this.media().qualityProfile,
-    isEpisode: false,
-    isTv: this.tv.isTv(),
-    isTouch: this.device.isTouch(),
-  }));
-
-  private readonly seasonActionHandlers: SeasonActionHandlers = {
-    'season.search-releases': () => {
-      const s = this.selectedSeason();
-      if (s) this.loadSeasonReleases.emit(s);
-    },
-    'season.grab-best': () => {
-      const s = this.selectedSeason();
-      if (s) this.grabSeason.emit(s);
-    },
-  };
-
-  /** Season-dropdown rows: plugin contributions only, `when`-filtered and resolved to handlers; an unknown actionId drops the row. */
-  readonly seasonActionItems = computed(() => {
-    const ctx = this.seasonActionsContext();
-    const items: { id: string; labelKey: string; actionId: CoreSeasonActionId; handler: () => void }[] = [];
-    for (const c of this.pluginUi.contributionsFor('media.season.actions')) {
-      if (!evaluateWhen(c.when, ctx)) continue;
-      if (c.action.kind !== 'action') continue;
-      const handler = resolveSeasonAction(c.action.actionId, this.seasonActionHandlers);
-      if (!handler) continue;
-      items.push({ id: c.id, labelKey: c.labelKey, actionId: c.action.actionId as CoreSeasonActionId, handler });
-    }
-    return items;
+  /** The season dropdown's plugin rows (`media.group.actions`); empty without plugins. */
+  private readonly seasonActions = new MediaActionsController({
+    base: () => ({ mediaId: this.media().id, kind: 'series', level: 'group', groupId: this.selectedSeason()?.id }),
+    facts: () => ({
+      isAdmin: this.isAdmin(),
+      hasFiles: onDiskEpisodeNumbers(this.selectedSeason()?.episodes ?? []).size > 0,
+      isMonitored: this.selectedSeason()?.monitored ?? false,
+      identified: true,
+    }),
   });
 
-  /** Busy/disabled state per actionId: both a search and a grab only spin for the
-   *  season they were started on, so grabs on other seasons can run alongside. */
-  seasonActionPending(actionId: CoreSeasonActionId): boolean {
-    const selectedId = this.selectedSeason()?.id;
-    if (actionId === 'season.search-releases') {
-      return this.seasonReleasesLoading() && this.seasonReleasesOpenId() === selectedId;
-    }
-    if (selectedId != null && this.seasonGrabBestBusyIds().has(selectedId)) return true;
-    // A release picked by hand in the modal still locks the row it was picked from.
-    return this.seasonGrabBusy() !== null;
-  }
+  readonly seasonActionItems = this.seasonActions.rows;
+  readonly seasonActionPending = (actionId: string | undefined) =>
+    this.seasonActions.isBusy(actionId) || this.seasonActions.isDisabled(actionId);
 
   /** Every episode with a file in the season is in the watched set. */
   seasonFullyWatched(season: Season | null): boolean {

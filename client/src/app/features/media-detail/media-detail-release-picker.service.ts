@@ -2,7 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
-import type { ReleasePickerPair, ReleasePickerRoutes } from '@fliks/plugin-ui';
+import type { ReleasePickerPair } from '@fliks/plugin-ui';
+import type { AcquisitionTarget } from '../../core/acquisition/acquisition';
 
 export interface MovieRelease {
   title: string;
@@ -31,7 +32,7 @@ export interface MovieRelease {
   videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
 
-interface GrabBody {
+export interface GrabBody {
   downloadUrl?: string;
   sourceTitle?: string;
   sourceId?: number;
@@ -41,18 +42,12 @@ interface GrabBody {
   infoUrl?: string;
 }
 
-interface RouteParams {
-  id: number;
-  seasonId?: number;
-  episodeId?: number;
-}
-
-/** Substitutes `:id`/`:seasonId`/`:episodeId` and prefixes the plugin's proxy path.
- *  Null (never a request) when a placeholder the params don't cover survives. */
-export function resolveReleasePickerUrl(pluginId: string, route: string, params: RouteParams): string | null {
-  let path = route.replace(':id', String(params.id));
-  if (params.seasonId != null) path = path.replace(':seasonId', String(params.seasonId));
-  if (params.episodeId != null) path = path.replace(':episodeId', String(params.episodeId));
+/** Substitutes `:id`/`:groupId`/`:itemId` and prefixes the plugin's proxy path.
+ *  Null (never a request) when a placeholder the target doesn't cover survives. */
+export function resolveReleasePickerUrl(pluginId: string, route: string, t: AcquisitionTarget): string | null {
+  let path = route.replace(':id', String(t.mediaId));
+  if (t.groupId != null) path = path.replace(':groupId', String(t.groupId));
+  if (t.itemId != null) path = path.replace(':itemId', String(t.itemId));
   return /:[A-Za-z]/.test(path) ? null : `/api/plugins/${pluginId}${path}`;
 }
 
@@ -63,59 +58,31 @@ export class MediaDetailReleasePickerService {
   private readonly http = inject(HttpClient);
   private readonly registry = inject(PluginUiRegistryService);
 
-  getMovieReleases(id: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind?.movie?.work ?? r.movie, { id }, q, searchId);
+  /** `searchId` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */
+  async search(target: AcquisitionTarget, q?: string, searchId?: string): Promise<MovieRelease[]> {
+    const url = this.resolve(target, 'search');
+    const params: Record<string, string> = { family: target.family };
+    if (target.language) params['language'] = target.language;
+    if (q?.trim()) params['q'] = q.trim();
+    if (searchId) params['sid'] = searchId;
+    return firstValueFrom(this.http.get<MovieRelease[]>(url, { params }));
   }
 
-  grabMovie(id: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind?.movie?.work ?? r.movie, { id }, body);
+  async grab(target: AcquisitionTarget, body: GrabBody = {}): Promise<void> {
+    const url = this.resolve(target, 'grab');
+    return firstValueFrom(this.http.post<void>(url, { family: target.family, language: target.language ?? null, ...body }));
   }
 
-  getSeasonReleases(mediaId: number, seasonId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind?.series?.group ?? r.season, { id: mediaId, seasonId }, q, searchId);
-  }
-
-  grabSeason(mediaId: number, seasonId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind?.series?.group ?? r.season, { id: mediaId, seasonId }, body);
-  }
-
-  getEpisodeReleases(mediaId: number, episodeId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.byKind?.series?.item ?? r.episode, { id: mediaId, episodeId }, q, searchId);
-  }
-
-  grabEpisode(mediaId: number, episodeId: number, body: GrabBody = {}): Promise<void> {
-    return this.grab((r) => r.byKind?.series?.item ?? r.episode, { id: mediaId, episodeId }, body);
-  }
-
-  /** `sid` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */
-  private async search(
-    pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined,
-    params: RouteParams,
-    q?: string,
-    searchId?: string,
-  ): Promise<MovieRelease[]> {
-    const url = this.resolve(pick, 'search', params);
-    const httpParams: Record<string, string> = {};
-    if (q?.trim()) httpParams['q'] = q.trim();
-    if (searchId) httpParams['sid'] = searchId;
-    return firstValueFrom(this.http.get<MovieRelease[]>(url, { params: httpParams }));
-  }
-
-  private async grab(pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined, params: RouteParams, body: GrabBody): Promise<void> {
-    const url = this.resolve(pick, 'grab', params);
-    return firstValueFrom(this.http.post<void>(url, body));
+  private pair(target: Pick<AcquisitionTarget, 'kind' | 'level'>): ReleasePickerPair | undefined {
+    return this.registry.releasePicker()?.routes.byKind[target.kind]?.[target.level];
   }
 
   /** Throws rather than firing a malformed request — unreachable in practice, since
    *  every caller is itself a plugin contribution that disappears with the plugin. */
-  private resolve(
-    pick: (r: ReleasePickerRoutes) => ReleasePickerPair | undefined,
-    which: keyof ReleasePickerPair,
-    params: RouteParams,
-  ): string {
-    const picker = this.registry.releasePicker();
-    const pair = picker && pick(picker.routes);
-    const url = picker && pair && resolveReleasePickerUrl(picker.pluginId, pair[which], params);
+  private resolve(target: AcquisitionTarget, which: keyof ReleasePickerPair): string {
+    const pair = this.pair(target);
+    const pluginId = this.registry.releasePicker()?.pluginId;
+    const url = pair && pluginId && resolveReleasePickerUrl(pluginId, pair[which], target);
     if (!url) throw new Error('release picker route unavailable');
     return url;
   }

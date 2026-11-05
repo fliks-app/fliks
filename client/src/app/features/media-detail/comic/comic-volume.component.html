@@ -37,6 +37,11 @@
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </div>
         }
+        @if (canAcquire()) {
+          <button #more type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'common.more' | translate" (click)="openIssueMenu(i, more)" data-testid="issue-menu">
+            <svg lucideEllipsisVertical class="size-4"></svg>
+          </button>
+        }
         @if (canEdit()) {
           <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'comic.edit.issue' | translate" (click)="openIssue(i)" data-testid="edit-issue">
             <svg lucidePencil class="size-4"></svg>

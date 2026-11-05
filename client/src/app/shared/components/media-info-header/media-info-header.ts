@@ -66,17 +66,12 @@ import {
   type CardAction,
 } from '../../../core/services/card-actions.service';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
-import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
+import { MediaActionsController } from '../../utils/media-actions-controller';
 import type { MediaType } from '../../../core/enums/media-type.enum';
-import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
+import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CORE_MEDIA_ACTIONS } from './core-media-actions';
 import { openMediaMenu } from '../../utils/media-menu';
-import {
-  resolveMenuContributions,
-  type ResolvedMenuRow,
-} from '../../../core/plugin-ui/resolve-menu-contributions';
-import type { UiContribution } from '@fliks/plugin-ui';
+import type { ResolvedMenuRow } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { KIND_REGISTRY } from '../../../core/media-kinds';
@@ -174,7 +169,6 @@ export class MediaInfoHeaderComponent {
   private readonly spoilers = inject(SpoilerService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
-  private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly cardActions = inject(CardActionsService);
 
   // ── Inputs: content ──
@@ -260,8 +254,6 @@ export class MediaInfoHeaderComponent {
   readonly userHasOpenWholeRequest = input(false);
   /** Requester without `media.delete` and no pending deletion request; shows the deletion entry in the More dropdown. */
   readonly canRequestDeletion = input(false);
-  readonly releasesLoading = input(false);
-  readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
   /** Status badge beside the kebab menu (download progress or monitored state); a clickable one emits openDownloadDetail. */
@@ -298,8 +290,6 @@ export class MediaInfoHeaderComponent {
   readonly refreshMetadata = output<void>();
   readonly toggleMonitored = output<void>();
   readonly deleteMedia = output<void>();
-  readonly loadReleases = output<void>();
-  readonly grabBest = output<void>();
   readonly identify = output<void>();
   readonly openAnalyze = output<void>();
   readonly editSubtitles = output<void>();
@@ -664,20 +654,6 @@ export class MediaInfoHeaderComponent {
 
   // ── media.actions: the kebab menu, rendered from the contribution registry ──
 
-  private readonly mediaActionsContext = computed<WhenContext>(() => ({
-    isAdmin: this.isAdmin(),
-    hasPermission: (p: string) => this.auth.hasPermission(p),
-    mediaType: this.mediaType() as MediaType,
-    hasFiles: !!this.selectedFileId(),
-    isMonitored: this.monitored(),
-    hasQualityProfile: !!this.qualityProfileName(),
-    isEpisode: !!this.episodeId(),
-    identified: this.identified(),
-    isTv: this.tv.isTv(),
-    isTouch: this.device.isTouch(),
-    surface: 'detail',
-  }));
-
   /** Visibility the `when` vocabulary can't express (an OR, or non-permission facts); only narrows, for three ids. */
   private readonly partyApi = inject(PartyApiService);
   private readonly extraGuards: Record<string, () => boolean> = {
@@ -710,8 +686,6 @@ export class MediaInfoHeaderComponent {
     'media.watch-together': () => this.watchTogether(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
-    'media.grab-best': () => this.grabBest.emit(),
-    'media.search-releases': () => this.loadReleases.emit(),
     'media.edit-profiles': () => this.openProfiles.emit(),
     'media.edit-library': () => this.openLibrary.emit(),
     'media.edit-subtitles': () => this.editSubtitles.emit(),
@@ -723,20 +697,26 @@ export class MediaInfoHeaderComponent {
     'media.request-deletion': () => this.requestDeletion.emit(),
   };
 
-  /** Core list merged with plugin contributions, sorted by weight then id and `when`-filtered; unknown actionId/kind drops the row. */
-  readonly menuItems = computed<ResolvedMediaAction[]>(() => {
-    return resolveMenuContributions({
-      contributions: [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions'),
-        // `card.actions` stays read: it is in the plugin contract and installed
-        // plugins target it. One list on our side, both slots on theirs.
-        ...this.pluginUi.contributionsFor('card.actions'),
-      ],
-      ctx: this.mediaActionsContext(),
-      guards: this.extraGuards,
-      resolveAction: (id) => resolveMediaAction(id, this.actionHandlers),
-      navigate: (path) => void this.router.navigate([path]),
-    }).map((r) => ({ ...r, handler: r.run }));
+  /** The when-context, the acquisition handlers and the contribution merge, shared with every other detail header. */
+  private readonly actions = new MediaActionsController({
+    base: () => ({
+      mediaId: this.mediaId(),
+      kind: this.mediaType(),
+      level: this.episodeId() ? 'item' : 'work',
+      itemId: this.episodeId(),
+    }),
+    facts: () => ({
+      isAdmin: this.isAdmin(),
+      hasFiles: !!this.selectedFileId(),
+      isMonitored: this.monitored(),
+      identified: this.identified(),
+    }),
+    core: CORE_MEDIA_ACTIONS,
+    handlers: () => this.actionHandlers,
+    guards: this.extraGuards,
   });
+
+  readonly menuItems = computed<ResolvedMediaAction[]>(() => this.actions.rows().map((r) => ({ ...r, handler: r.run })));
 
   /** A couple of rows swap their label by live state (watched, monitored) —
    *  cosmetic, so the swap lives here rather than in the static contribution. */
@@ -805,17 +785,14 @@ export class MediaInfoHeaderComponent {
 
   /** Mid-request spinner, per actionId — the ids not listed never show one. */
   isItemBusy(item: ResolvedMediaAction): boolean {
-    if (item.actionId === 'media.grab-best') return this.grabBusy() === 'best';
-    if (item.actionId === 'media.search-releases') return this.releasesLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
-    return false;
+    return this.actions.isBusy(item.actionId);
   }
 
   /** Disabled state, per actionId — the ids not listed are never disabled. */
   isItemDisabled(item: ResolvedMediaAction): boolean {
-    if (item.actionId === 'media.grab-best') return this.grabBusy() !== null;
     if (item.actionId === 'media.toggle-monitored') return this.monitoredLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
-    return false;
+    return this.actions.isDisabled(item.actionId);
   }
 }

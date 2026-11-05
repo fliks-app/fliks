@@ -665,7 +665,7 @@ mod tests {
         required("TableConfigPage", &["kind", "list", "columns"]);
         required("ProvidersConfigPage", &["kind", "list", "implementations"]);
         required("ReleasePickerPair", &["search", "grab"]);
-        required("ReleasePickerRoutes", &["byKind?"]);
+        required("ReleasePickerRoutes", &["byKind"]);
         assert!(
             ts.contains("export const SECRETS_SET_KEY = 'secretsSet';"),
             "the settings read key"

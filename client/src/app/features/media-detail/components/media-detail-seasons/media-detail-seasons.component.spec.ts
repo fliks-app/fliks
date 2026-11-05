@@ -13,9 +13,14 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { DeviceService } from '../../../../core/services/device.service';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
+import { WantsStore } from '../../../../core/acquisition/acquisition';
+import type { Want } from '../../../../core/services/api/wants-api.service';
+import { ReleaseGrabController } from '../../release-grab-controller';
+
+const WANT = { id: 1, family: 'video', language: null, qualityProfileId: 4, folderId: null, satisfied: true } as Want;
 
 /**
- * `media.season.actions` is a plugin-only slot — core contributes nothing to it,
+ * `media.group.actions` is a plugin-only slot: core contributes nothing to it,
  * so the two release-picker rows in the season dropdown (search/grab) exist only
  * once a plugin declares them. This mirrors the `media.actions` characterisation
  * style in media-info-header.spec.ts, scoped to the season actions dropdown.
@@ -55,11 +60,14 @@ function makeMedia(overrides: Partial<Media> = {}): Media {
 
 interface FixtureOpts {
   registry?: Partial<Record<SlotId, UiContribution[]>>;
-  seasonReleasesLoading?: boolean;
-  seasonReleasesOpenId?: number | null;
-  seasonGrabBusy?: string | null;
+  /** A search is open on the selected season. */
+  searching?: boolean;
+  /** A release grabbed by hand in the modal locks every grab-best. */
+  grabBusy?: boolean;
+  /** Ids of the groups with a grab-best in flight. */
+  bestBusyGroupIds?: ReadonlySet<number>;
   media?: Media;
-  seasonGrabBestBusyIds?: ReadonlySet<number>;
+  grabs?: Partial<ReleaseGrabController>;
 }
 
 async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<MediaDetailSeasonsComponent>> {
@@ -82,6 +90,18 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
         provide: PluginUiRegistryService,
         useValue: { contributionsFor: (slot: SlotId) => opts.registry?.[slot] ?? [] },
       },
+      { provide: WantsStore, useValue: { load: async () => {}, wantsOf: () => [WANT] } },
+      {
+        provide: ReleaseGrabController,
+        useValue: {
+          search: async () => {},
+          grabBest: async () => {},
+          isBestBusy: (b: { groupId?: number | null }) => opts.bestBusyGroupIds?.has(b.groupId ?? -1) ?? false,
+          isSearching: () => !!opts.searching,
+          grabBusy: () => (opts.grabBusy ? 'k' : null),
+          ...opts.grabs,
+        },
+      },
     ],
   });
 
@@ -90,10 +110,6 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
   fixture.componentRef.setInput('selectedSeason', SEASON);
   fixture.componentRef.setInput('activeSeasonId', SEASON.id);
   fixture.componentRef.setInput('filteredEpisodes', []);
-  fixture.componentRef.setInput('seasonReleasesLoading', opts.seasonReleasesLoading ?? false);
-  fixture.componentRef.setInput('seasonReleasesOpenId', opts.seasonReleasesOpenId ?? null);
-  fixture.componentRef.setInput('seasonGrabBusy', opts.seasonGrabBusy ?? null);
-  fixture.componentRef.setInput('seasonGrabBestBusyIds', opts.seasonGrabBestBusyIds ?? new Set<number>());
 
   fixture.detectChanges();
   await fixture.whenStable();
@@ -117,27 +133,27 @@ function seasonDropdownLabels(root: HTMLElement): string[] {
 }
 
 const SEASON_ACTIONS_REGISTRY: Partial<Record<SlotId, UiContribution[]>> = {
-  'media.season.actions': [
+  'media.group.actions': [
     {
       id: 'fliks.acme.season-search',
-      slot: 'media.season.actions',
+      slot: 'media.group.actions',
       weight: 500,
       labelKey: 'x.search_releases',
       icon: 'package',
-      action: { kind: 'action', actionId: 'season.search-releases' },
+      action: { kind: 'action', actionId: 'group.search-releases' },
     },
     {
       id: 'fliks.acme.season-grab',
-      slot: 'media.season.actions',
+      slot: 'media.group.actions',
       weight: 600,
       labelKey: 'x.grab_best',
       icon: 'download',
-      action: { kind: 'action', actionId: 'season.grab-best' },
+      action: { kind: 'action', actionId: 'group.grab-best' },
     },
   ],
 };
 
-describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', () => {
+describe('MediaDetailSeasonsComponent, media.group.actions is plugin-only', () => {
 
   it('VERDICT: with no plugin installed, no release-picker row renders in the season dropdown', async () => {
     const fixture = await createFixture();
@@ -146,28 +162,25 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
     expect(labels).not.toContain('x.grab_best');
   });
 
-  it('a plugin contribution surfaces both season actions and routes clicks to loadSeasonReleases/grabSeason', async () => {
-    const fixture = await createFixture({ registry: SEASON_ACTIONS_REGISTRY });
+  it('a plugin contribution surfaces both season actions and routes clicks to the release picker', async () => {
+    const grabs = { search: vi.fn(async () => {}), grabBest: vi.fn(async () => {}) };
+    const fixture = await createFixture({ registry: SEASON_ACTIONS_REGISTRY, grabs });
     const labels = seasonDropdownLabels(fixture.nativeElement);
     const searchIdx = labels.indexOf('x.search_releases');
     const grabIdx = labels.indexOf('x.grab_best');
     expect(searchIdx).toBeGreaterThanOrEqual(0);
     expect(grabIdx).toBeGreaterThanOrEqual(0);
 
-    let loaded: Season | undefined;
-    let grabbed: Season | undefined;
-    fixture.componentInstance.loadSeasonReleases.subscribe((s) => (loaded = s));
-    fixture.componentInstance.grabSeason.subscribe((s) => (grabbed = s));
-
     const items = seasonDropdownItems(fixture.nativeElement);
     items[searchIdx].click();
     items[grabIdx].click();
 
-    expect(loaded?.id).toBe(SEASON.id);
-    expect(grabbed?.id).toBe(SEASON.id);
+    const base = { mediaId: 5, kind: 'series', level: 'group', groupId: SEASON.id };
+    expect(grabs.search).toHaveBeenCalledWith(base, [WANT]);
+    expect(grabs.grabBest).toHaveBeenCalledWith(base, [WANT]);
   });
 
-  it('seasonReleasesLoading/seasonGrabBusy still drive the busy spinner + disabled state for the plugin-contributed rows', async () => {
+  it('the picker search and grab state still drive the busy spinner + disabled state for the plugin-contributed rows', async () => {
     // Busy swaps the icon slot for a spinner, which shifts the label lookup — locate
     // rows by index from an idle fixture rather than by their now-blank label.
     const idle = await createFixture({ registry: SEASON_ACTIONS_REGISTRY });
@@ -179,13 +192,12 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
 
     const busySearch = await createFixture({
       registry: SEASON_ACTIONS_REGISTRY,
-      seasonReleasesLoading: true,
-      seasonReleasesOpenId: SEASON.id,
+      searching: true,
     });
     expect(seasonDropdownItems(busySearch.nativeElement)[searchIdx].disabled).toBe(true);
     expect(seasonDropdownItems(busySearch.nativeElement)[grabIdx].disabled).toBe(false);
 
-    const busyGrab = await createFixture({ registry: SEASON_ACTIONS_REGISTRY, seasonGrabBusy: 'best' });
+    const busyGrab = await createFixture({ registry: SEASON_ACTIONS_REGISTRY, grabBusy: true });
     expect(seasonDropdownItems(busyGrab.nativeElement)[grabIdx].disabled).toBe(true);
     expect(seasonDropdownItems(busyGrab.nativeElement)[searchIdx].disabled).toBe(false);
   });
@@ -196,13 +208,13 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
 
     const own = await createFixture({
       registry: SEASON_ACTIONS_REGISTRY,
-      seasonGrabBestBusyIds: new Set([SEASON.id]),
+      bestBusyGroupIds: new Set([SEASON.id]),
     });
     expect(seasonDropdownItems(own.nativeElement)[grabIdx].disabled).toBe(true);
 
     const other = await createFixture({
       registry: SEASON_ACTIONS_REGISTRY,
-      seasonGrabBestBusyIds: new Set([SEASON.id + 1]),
+      bestBusyGroupIds: new Set([SEASON.id + 1]),
     });
     expect(seasonDropdownItems(other.nativeElement)[grabIdx].disabled).toBe(false);
   });
