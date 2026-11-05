@@ -9,3 +9,8 @@ runs:
     - if: runner.os == 'Linux'
       shell: bash
       run: sudo apt-get update -qq && sudo apt-get install -y -qq cmake libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev
+    # The archives build.rs would otherwise fetch from GitHub Releases in every job, keyed by their pins.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: server/bundled-plugins
+        key: bundled-plugins-${{ hashFiles('server/providers.lock') }}

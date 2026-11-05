@@ -33,7 +33,7 @@ fn main() {
             fs::create_dir_all(&dir).unwrap();
             let tmp = path.with_extension(format!("{}.part", std::process::id()));
             let ok = Command::new("curl")
-                .args(["-fsSL", "--retry", "3", "-o"])
+                .args(["-fsSL", "--retry", "8", "--retry-delay", "10", "-o"])
                 .arg(&tmp)
                 .arg(url)
                 .status()
