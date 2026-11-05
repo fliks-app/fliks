@@ -1,53 +1,66 @@
 <div class="flex flex-col gap-2" data-testid="wants-editor">
   @for (w of wants(); track $index; let i = $index) {
-    <div class="flex flex-wrap items-center gap-2" data-testid="want-row">
-      <select
-        appTvSelect
-        class="select select-bordered select-sm"
-        [attr.aria-label]="'wants.family' | translate"
-        [ngModel]="w.family"
-        (ngModelChange)="setFamily(i, $event)"
-      >
-        @for (f of families; track f) {
-          <option [ngValue]="f">{{ 'families.' + f | translate }}</option>
+    @let owned = state()?.[key(w)];
+    <div class="flex flex-col gap-2 rounded-box border border-base-300 p-3" data-testid="want-row">
+      <div class="flex items-center gap-2">
+        <select
+          appTvSelect
+          class="select select-bordered select-sm min-w-0 flex-1"
+          [attr.aria-label]="'wants.family' | translate"
+          [ngModel]="w.family"
+          (ngModelChange)="setFamily(i, $event)"
+        >
+          @for (f of families; track f) {
+            <option [ngValue]="f">{{ 'families.' + f | translate }}</option>
+          }
+        </select>
+        <select
+          appTvSelect
+          class="select select-bordered select-sm min-w-0 flex-1"
+          [attr.aria-label]="'wants.language' | translate"
+          [ngModel]="w.language"
+          (ngModelChange)="set(i, { language: $event })"
+        >
+          <option [ngValue]="null">{{ 'wants.any_language' | translate }}</option>
+          @for (l of languages(); track l) {
+            <option [ngValue]="l">{{ label(l) }}</option>
+          }
+        </select>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square text-error"
+          [disabled]="!canRemove()"
+          [attr.aria-label]="'wants.remove' | translate"
+          (click)="remove(i)"
+        >
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+        </button>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="flex min-w-0 flex-1 items-center gap-2 text-sm text-base-content/70">
+          {{ 'wants.quality_profile' | translate }}
+          <select
+            appTvSelect
+            class="select select-bordered select-sm min-w-0 flex-1"
+            [ngModel]="w.qualityProfileId ?? null"
+            (ngModelChange)="set(i, { qualityProfileId: $event })"
+          >
+            <option [ngValue]="null">{{ 'wants.no_profile' | translate }}</option>
+            @for (p of profiles()[w.family]; track p.id) {
+              <option [ngValue]="p.id">{{ p.name }}</option>
+            }
+          </select>
+        </label>
+        @if (owned !== undefined) {
+          <span class="badge" [class.badge-success]="owned" [class.badge-warning]="!owned" data-testid="want-state">
+            {{ (owned ? 'wants.owned' : 'wants.missing') | translate }}
+          </span>
         }
-      </select>
-      <select
-        appTvSelect
-        class="select select-bordered select-sm"
-        [attr.aria-label]="'wants.language' | translate"
-        [ngModel]="w.language"
-        (ngModelChange)="set(i, { language: $event })"
-      >
-        <option [ngValue]="null">{{ 'wants.any_language' | translate }}</option>
-        @for (l of languages(); track l) {
-          <option [ngValue]="l">{{ label(l) }}</option>
-        }
-      </select>
-      <select
-        appTvSelect
-        class="select select-bordered select-sm"
-        [attr.aria-label]="'wants.quality_profile' | translate"
-        [ngModel]="w.qualityProfileId ?? null"
-        (ngModelChange)="set(i, { qualityProfileId: $event })"
-      >
-        <option [ngValue]="null">{{ 'wants.no_profile' | translate }}</option>
-        @for (p of profiles()[w.family]; track p.id) {
-          <option [ngValue]="p.id">{{ p.name }}</option>
-        }
-      </select>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        [disabled]="!canRemove()"
-        [attr.aria-label]="'wants.remove' | translate"
-        (click)="remove(i)"
-      >
-        {{ 'wants.remove' | translate }}
-      </button>
+      </div>
     </div>
   }
   <button type="button" class="btn btn-ghost btn-sm self-start" [disabled]="!canAdd()" (click)="add()">
+    <svg lucidePlus class="h-4 w-4"></svg>
     {{ 'wants.add' | translate }}
   </button>
 </div>

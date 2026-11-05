@@ -4,7 +4,10 @@ use crate::{
     ingest::books,
     media::write::book_import::{book_or_held, held_book_in},
 };
-use fliks_domain::{external_id::Namespace, media::family::Family};
+use fliks_domain::{
+    external_id::Namespace,
+    media::{family::Family, wants::WantSpec},
+};
 
 /// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
@@ -416,6 +419,28 @@ fn folder_error(kind: MediaKind, name: &str) -> bool {
     }
 }
 
+/// A book found on disk is wished in the families of its files only (`books.md` rule 3).
+fn disk_wants(d: &RelinkDto) -> Option<Vec<WantSpec>> {
+    if d.media_type != MediaKind::Book {
+        return None;
+    }
+    let found: Vec<Family> = d
+        .files
+        .iter()
+        .filter_map(|f| books::classify(&file_name(Path::new(&f.path))).map(|(family, _)| family))
+        .collect();
+    let wants: Vec<WantSpec> = [Family::Text, Family::Audio]
+        .into_iter()
+        .filter(|f| found.contains(f))
+        .map(|family| WantSpec {
+            family,
+            language: None,
+            quality_profile_id: None,
+        })
+        .collect();
+    (!wants.is_empty()).then_some(wants)
+}
+
 /// `findOrImportIdentified` (rule 78): the media of the pick, created when the library has none.
 pub(super) async fn find_or_import(
     st: &AppState,
@@ -462,6 +487,7 @@ pub(super) async fn find_or_import(
     if let Some(m) = lookup().await? {
         return Ok((m, false));
     }
+    let wants = disk_wants(d);
     let imported = async {
         let target =
             mw::resolve_target(st, a, d.media_type, Some(d.library_id), d.folder_id).await?;
@@ -473,7 +499,7 @@ pub(super) async fn find_or_import(
             user: Some(a.user.id),
             links: vec![],
             seasons: None,
-            wants: None,
+            wants: wants.as_deref(),
             prio: d.priority,
         };
         match on_edition {
@@ -711,6 +737,7 @@ pub(super) async fn find_or_create_unmatched(
                     record,
                     lock_title: typed.is_some(),
                     lock_year: d.year.is_some(),
+                    wants: disk_wants(d),
                     artwork,
                 },
                 user,

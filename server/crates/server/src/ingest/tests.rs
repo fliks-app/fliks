@@ -1264,6 +1264,30 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_book_found_on_disk_is_wished_in_its_files_families_only(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("books");
+        let l = library(&c, "B", &lib, r#"["book"]"#).await;
+        epub(&lib.join("Mirelune/Mirelune.epub"));
+        let body = json!({"libraryId": l, "type": "book", "folderName": "Mirelune",
+            "files": [{"filePath": lib.join("Mirelune/Mirelune.epub")}]});
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!((s, b["created"].clone()), (201, json!(true)), "{b}");
+        let families: Vec<String> = sqlx::query_scalar("SELECT family FROM wants")
+            .fetch_all(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(families, ["text"]);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn an_epub_becomes_an_edition_with_its_hash_and_cover(pool: PgPool) {
         let c = ctx(pool).await;
         let m = book(&c, "Mirelune").await;
