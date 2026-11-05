@@ -6,26 +6,6 @@ use fliks_domain::acl::Permissions;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
-/// `byKind` as declared, plus the `movie`, `season` and `episode` pairs installed apps read.
-fn picker_entry(rp: Value) -> Value {
-    let pair = |kind: &str, level: &str| Some(rp[kind][level].clone()).filter(Value::is_object);
-    let pairs = (
-        pair("movie", "work"),
-        pair("series", "group"),
-        pair("series", "item"),
-    );
-    let mut out = Map::new();
-    if let (Some(movie), Some(season), Some(episode)) = pairs {
-        out.extend([
-            ("movie".to_owned(), movie),
-            ("season".to_owned(), season),
-            ("episode".to_owned(), episode),
-        ]);
-    }
-    out.insert("byKind".into(), rp);
-    Value::Object(out)
-}
-
 fn i18n_keys(r: &Registered) -> BTreeSet<String> {
     r.manifest["i18n"]
         .as_object()
@@ -184,7 +164,7 @@ impl Plugins {
                     );
                 }
                 if let Some(rp) = self.registry.release_picker_for(id) {
-                    e.insert("releasePicker".into(), picker_entry(rp));
+                    e.insert("releasePicker".into(), json!({"byKind": rp}));
                 }
                 Value::Object(e)
             })
@@ -195,23 +175,6 @@ impl Plugins {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn picker_entry_serves_by_kind_and_the_three_pairs() {
-        let pair = json!({"search": "/s", "grab": "/g"});
-        let all = json!({"movie": {"work": pair}, "series": {"group": pair, "item": pair}});
-        let e = picker_entry(all.clone());
-        assert_eq!(e["byKind"], all);
-        assert_eq!(
-            (&e["movie"], &e["season"], &e["episode"]),
-            (&pair, &pair, &pair)
-        );
-        let movie_only = picker_entry(json!({"movie": {"work": pair}}));
-        assert_eq!(
-            movie_only.as_object().unwrap().keys().collect::<Vec<_>>(),
-            ["byKind"]
-        );
-    }
 
     #[test]
     fn marking_adds_a_flag_and_no_value() {
