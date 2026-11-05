@@ -47,6 +47,13 @@ async function settle(fixture: ReturnType<typeof setup>['fixture']) {
   return fixture.nativeElement as HTMLElement;
 }
 
+async function flushProfiles(fixture: ReturnType<typeof setup>['fixture'], http: HttpTestingController) {
+  for (const r of http.match((q) => q.url === '/api/profiles/quality')) {
+    r.flush(r.request.params.get('family') === 'text' ? [{ id: 7, name: 'Text' }] : []);
+  }
+  await settle(fixture);
+}
+
 describe('BookPreviewComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -69,10 +76,11 @@ describe('BookPreviewComponent', () => {
   it('adds with the chosen library and folder, then opens the book', async () => {
     const { fixture, http, navigate } = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
     await settle(fixture);
+    await flushProfiles(fixture, http);
     const pending = fixture.componentInstance.add();
     const req = http.expectOne('/api/media/import');
     expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5,
-      wants: [{ family: 'text', language: null }] });
+      wants: [{ family: 'text', language: null, qualityProfileId: 7 }] });
     req.flush({ id: 42, type: 'book' });
     await pending;
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
@@ -82,6 +90,7 @@ describe('BookPreviewComponent', () => {
     const { fixture, http } = setup([lib(1)]);
     const el = await settle(fixture);
     expect(el.querySelectorAll('[data-testid="want-row"]')).toHaveLength(1);
+    await flushProfiles(fixture, http);
     (el.querySelector('[data-testid="wants-editor"] > button') as HTMLButtonElement).click();
     fixture.detectChanges();
     const pending = fixture.componentInstance.add();
@@ -89,6 +98,16 @@ describe('BookPreviewComponent', () => {
     expect(req.request.body.wants).toHaveLength(2);
     req.flush({ id: 42, type: 'book' });
     await pending;
+  });
+
+  it('blocks Add while a want has no profile', async () => {
+    const { fixture, http } = setup([lib(1)]);
+    const el = await settle(fixture);
+    const add = () => el.querySelector('dialog .btn-primary') as HTMLButtonElement;
+    expect(add().disabled).toBe(true);
+    expect(el.querySelector('[data-testid="book-profile-missing"]')).not.toBeNull();
+    await flushProfiles(fixture, http);
+    expect(add().disabled).toBe(false);
   });
 
   it('offers no Add without the import permission', async () => {
@@ -106,6 +125,7 @@ describe('BookPreviewComponent', () => {
       .flush({ requested: true, requestedWants: [{ family: 'audio', language: 'en' }] });
     const el = await settle(fixture);
     expect(el.querySelector('[data-testid="book-already-requested"]')).not.toBeNull();
+    await flushProfiles(fixture, http);
     const pending = fixture.componentInstance.request();
     const req = http.expectOne('/api/requests');
     expect(req.request.body).toEqual({
@@ -113,7 +133,7 @@ describe('BookPreviewComponent', () => {
       externalId: 'OL1W',
       title: bookPreviewFixture.title,
       libraryId: 1,
-      wants: [{ family: 'text', language: null }],
+      wants: [{ family: 'text', language: null, qualityProfileId: 7 }],
     });
     req.flush({ id: 1 });
     await new Promise((r) => setTimeout(r));

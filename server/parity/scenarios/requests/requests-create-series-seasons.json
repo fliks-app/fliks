@@ -10,6 +10,7 @@
       "as": "user",
       "body": {
         "mediaType": "series",
+        "qualityProfileId": 1,
         "seasons": [
           1,
           2
@@ -37,8 +38,10 @@
           "mediaType": "series",
           "posterUrl": null,
           "provider": "tmdb",
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
           "seasons": [
             1,
             2
@@ -63,7 +66,7 @@
       "expect": {
         "body": {
           "lockedLanguageProfileId": null,
-          "lockedQualityProfileId": null,
+          "lockedQualityProfileId": 1,
           "profilesLocked": true,
           "requested": false,
           "requestedSeasons": [

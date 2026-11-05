@@ -10,6 +10,7 @@
       "as": "other",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "Too Many",
         "tmdbId": 9020
       },

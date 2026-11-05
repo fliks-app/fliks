@@ -17,6 +17,16 @@
       </div>
     }
 
+    @if (loadFailed()) {
+      <div role="alert" class="alert alert-error text-sm mt-4 py-2">
+        {{ 'discover.profiles_load_error' | translate }}
+      </div>
+    } @else if (!loading() && qualityProfiles().length === 0) {
+      <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
+        {{ 'discover.no_quality_profile' | translate }}
+      </div>
+    }
+
     @if (kinds[mediaType()].hasSeasons) {
       @if (seasonsFailed()) {
         <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
@@ -104,7 +114,12 @@
         type="button"
         class="btn btn-primary"
         [disabled]="
-          importing() || loading() || seasonsLoading() || nothingToMonitor() || noCompatibleLibrary()
+          importing() ||
+          loading() ||
+          seasonsLoading() ||
+          nothingToMonitor() ||
+          noCompatibleLibrary() ||
+          noQualityProfile()
         "
         (click)="confirm()"
       >

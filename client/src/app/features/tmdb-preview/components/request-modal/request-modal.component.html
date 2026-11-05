@@ -19,6 +19,12 @@
       </div>
     }
 
+    @if (qualityProfiles().length === 0 && !qualityLocked()) {
+      <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
+        {{ 'discover.no_quality_profile' | translate }}
+      </div>
+    }
+
     @if (kinds[mediaType()].hasSeasons) {
       @if (seasonsFailed()) {
         <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
@@ -63,7 +69,7 @@
             </label>
           }
           <app-library-folder-select [folders]="folderChoices()" [(folderId)]="folderId" />
-          @if (qualityProfiles().length && !profilesLocked()) {
+          @if (qualityProfiles().length && !qualityLocked()) {
             <label class="form-control w-full">
               <span class="label-text text-base-content/60">{{
                 'discover.quality_profile' | translate
@@ -108,7 +114,7 @@
       <button
         type="button"
         class="btn btn-primary"
-        [disabled]="requesting() || nothingPicked() || noCompatibleLibrary()"
+        [disabled]="requesting() || nothingPicked() || noCompatibleLibrary() || noQualityProfile()"
         (click)="confirm()"
       >
         @if (requesting()) {

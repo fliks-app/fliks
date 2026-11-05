@@ -1216,7 +1216,7 @@ async fn write_routes_apply_the_library_acl(pool: PgPool) {
         "POST",
         "/api/media/import/tmdb",
         &c.admin,
-        json!({"type": "movie", "tmdbId": 5}),
+        json!({"type": "movie", "tmdbId": 5, "qualityProfileId": 1}),
     )
     .await;
     assert_eq!(

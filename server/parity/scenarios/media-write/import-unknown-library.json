@@ -7,6 +7,7 @@
       "body": {
         "externalId": "777",
         "libraryId": 99,
+        "qualityProfileId": 1,
         "type": "movie"
       },
       "expect": {

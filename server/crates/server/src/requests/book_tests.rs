@@ -47,6 +47,8 @@ async fn slow_ctx(pool: PgPool, delay: Duration) -> Ctx {
           (1, 'admin', true, NULL), (2, 'user', false, 1), (3, 'manager', false, 2), (4, 'reader', false, 3);
         INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]');
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one');
+        INSERT INTO quality_profiles (id, name, family, cutoff, items)
+          VALUES (1, 'Text', 'text', 1, '[]'), (2, 'Audio', 'audio', 1, '[]');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3), (1, 4);
         INSERT INTO user_quotas ("userId", kind, "limit") VALUES (2, 'book', 2);
         "#,
@@ -102,7 +104,13 @@ impl Ctx {
 }
 
 fn want(family: &str, language: Option<&str>) -> Value {
-    json!({"family": family, "language": language})
+    let profile = if family == "audio" { 2 } else { 1 };
+    json!({"family": family, "language": language, "qualityProfileId": profile})
+}
+
+fn import_body() -> Value {
+    json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W",
+           "wants": [want("text", None), want("audio", None)]})
 }
 
 #[sqlx::test(migrations = false)]
@@ -227,7 +235,7 @@ async fn only_a_manager_approves_and_the_book_gets_the_requested_wants(pool: PgP
 #[sqlx::test(migrations = false)]
 async fn a_book_already_in_the_library_gets_the_wants_added(pool: PgPool) {
     let c = ctx(pool).await;
-    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let body = import_body();
     let (s, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
     assert_eq!(s, 201, "{m}");
     let media = m["id"].as_i64().unwrap() as i32;
@@ -389,6 +397,18 @@ async fn concurrent_approvals_of_one_work_keep_every_edition_wished(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_book_request_needs_a_profile_on_every_want(pool: PgPool) {
+    let c = ctx(pool).await;
+    let wants = json!([want("text", None), {"family": "audio"}]);
+    let (s, r) = c.request(&c.user, "OL2W", wants).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (400, &json!(["A quality profile is required"])),
+        "{r}"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_book_delete_request_takes_no_wants(pool: PgPool) {
     let c = ctx(pool).await;
     let body = json!({"mediaType": "book", "kind": "delete", "externalId": "OL2W", "title": "t",
@@ -487,7 +507,7 @@ async fn an_existing_work_only_gets_the_missing_wants_and_stays_inside_the_reque
     pool: PgPool,
 ) {
     let c = ctx(pool).await;
-    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let body = import_body();
     let (_, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
     let media = m["id"].as_i64().unwrap() as i32;
     let before: Vec<(String, Option<i32>)> = sqlx::query_as(
@@ -711,7 +731,7 @@ async fn a_pending_requests_wants_are_edited_before_approval(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn a_book_whose_wants_are_all_satisfied_is_refused(pool: PgPool) {
     let c = ctx(pool).await;
-    let body = json!({"type": "book", "provider": "openlibrary", "externalId": "OL2W"});
+    let body = import_body();
     let (_, m) = c.call(&c.admin, "POST", "/api/media/import", body).await;
     let media = m["id"].as_i64().unwrap();
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

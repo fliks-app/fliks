@@ -1,0 +1,24 @@
+{
+  "name": "media-write-import-profile-required-400",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "777",
+        "libraryId": 3,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "A quality profile is required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    }
+  ]
+}

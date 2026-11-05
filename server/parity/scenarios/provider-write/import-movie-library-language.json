@@ -26,6 +26,7 @@
       "as": "admin",
       "body": {
         "libraryId": 7,
+        "qualityProfileId": 1,
         "tmdbId": 1002,
         "type": "movie"
       },
@@ -80,8 +81,16 @@
           "path": "/tmp/fliks-parity/providers/movies-fr/Casablanca Redux (orig) (2001)",
           "physicalRelease": "2000-01-01",
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 7.5,
           "releaseDate": "2001-05-02",
           "runtime": 136,
@@ -227,8 +236,16 @@
           "physicalRelease": "2000-01-01",
           "posterUrl": "/api/images/media/211/poster?v=612f4295",
           "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
           "rating": 7.5,
           "releaseDate": "2001-05-02",
           "runtime": 136,

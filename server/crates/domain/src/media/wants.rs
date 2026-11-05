@@ -69,6 +69,18 @@ pub fn parse_wants(v: &Value, kind: MediaKind) -> Result<Vec<WantSpec>, String> 
     Ok(out)
 }
 
+/// The message of a create path that gets no quality profile.
+pub const PROFILE_REQUIRED: &str = "A quality profile is required";
+
+/// `parse_wants` for the create paths: every want must carry a quality profile.
+pub fn parse_wants_profiled(v: &Value, kind: MediaKind) -> Result<Vec<WantSpec>, String> {
+    let w = parse_wants(v, kind)?;
+    if w.iter().any(|w| w.quality_profile_id.is_none()) {
+        return Err(PROFILE_REQUIRED.into());
+    }
+    Ok(w)
+}
+
 /// A provider's date text (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) as a day, the first of the month or year when coarser.
 pub fn parse_release(text: &str) -> Option<NaiveDate> {
     let mut parts = text.trim().splitn(3, '-');
@@ -163,6 +175,17 @@ mod tests {
             .is_err()
         );
         assert!(parse_wants(&json!([{"family": "video"}]), MediaKind::Movie).is_ok());
+        assert_eq!(
+            parse_wants_profiled(&json!([{"family": "video"}]), MediaKind::Movie),
+            Err(PROFILE_REQUIRED.into())
+        );
+        assert!(
+            parse_wants_profiled(
+                &json!([{"family": "video", "qualityProfileId": 3}]),
+                MediaKind::Movie
+            )
+            .is_ok()
+        );
     }
 
     #[test]

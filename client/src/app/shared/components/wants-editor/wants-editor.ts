@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, signal } from '@angular/core';
 import { LucidePlus, LucideTrash2 } from '@lucide/angular';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -29,6 +29,9 @@ export class WantsEditorComponent {
   /** Whether each saved want is owned, keyed by `wantKey`; unsaved rows show no state. */
   readonly state = input<Record<string, boolean> | null>(null);
 
+  /** Create flows: no empty choice, each row starts on its family's first profile. */
+  readonly profileRequired = input(false);
+
   protected readonly families = FAMILIES;
   protected readonly profiles = signal<Record<WantFamily, QualityProfile[]>>({ text: [], audio: [] });
   protected readonly canAdd = computed(() => this.wants().length < MAX_WANTS && this.free() !== null);
@@ -40,6 +43,15 @@ export class WantsEditorComponent {
   ]);
 
   constructor() {
+    effect(() => {
+      if (!this.profileRequired()) return;
+      const all = this.profiles();
+      const rows = this.wants();
+      if (!rows.some((w) => w.qualityProfileId == null && all[w.family].length)) return;
+      this.wants.set(
+        rows.map((w) => (w.qualityProfileId == null ? { ...w, qualityProfileId: all[w.family][0]?.id ?? null } : w)),
+      );
+    });
     for (const family of FAMILIES) {
       this.profilesApi
         .getQualityProfiles(family)

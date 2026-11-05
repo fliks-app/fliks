@@ -8,7 +8,9 @@
   "steps": [
     {
       "as": "user",
-      "body": {},
+      "body": {
+        "qualityProfileId": 1
+      },
       "expect": {
         "body": {
           "error": "Bad Request",
@@ -30,6 +32,7 @@
       "body": {
         "extra": 1,
         "mediaType": "x",
+        "qualityProfileId": 1,
         "seasons": [
           "a",
           1.5
@@ -59,6 +62,7 @@
       "as": "user",
       "body": {
         "mediaType": "movie",
+        "qualityProfileId": 1,
         "title": "t",
         "tmdbId": 0
       },

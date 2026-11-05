@@ -38,6 +38,7 @@
       "as": "admin",
       "body": {
         "libraryId": 1,
+        "qualityProfileId": 1,
         "tmdbId": 1002,
         "type": "movie"
       },
@@ -70,6 +71,7 @@
       "as": "admin",
       "body": {
         "libraryId": 1,
+        "qualityProfileId": 1,
         "tmdbId": 9999,
         "type": "movie"
       },

@@ -10,6 +10,7 @@
       "as": "user",
       "body": {
         "mediaType": "series",
+        "qualityProfileId": 1,
         "seasons": [
           1
         ],
@@ -31,6 +32,7 @@
       "as": "user",
       "body": {
         "mediaType": "series",
+        "qualityProfileId": 1,
         "title": "S",
         "tmdbId": 9005
       },

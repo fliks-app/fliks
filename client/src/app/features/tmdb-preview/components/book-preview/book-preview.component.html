@@ -138,7 +138,10 @@
         }
         <div>
           <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
-          <app-wants-editor [(wants)]="wants" />
+          <app-wants-editor [(wants)]="wants" [profileRequired]="true" />
+          @if (!wantsReady()) {
+            <p class="text-sm text-warning" data-testid="book-profile-missing">{{ 'wants.profile_required' | translate }}</p>
+          }
         </div>
         <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
         @if (canRequest() && requested().length) {
@@ -151,7 +154,7 @@
 
       <app-modal-footer>
         <button type="button" class="btn btn-ghost" (click)="closeDialog()">{{ 'common.cancel' | translate }}</button>
-        <button type="button" class="btn btn-primary" [disabled]="adding() || !bookLibraries().length" (click)="canImport() ? add() : request()">
+        <button type="button" class="btn btn-primary" [disabled]="adding() || !bookLibraries().length || !wantsReady()" (click)="canImport() ? add() : request()">
           @if (adding()) {
             <span class="loading loading-spinner loading-xs"></span>
           }

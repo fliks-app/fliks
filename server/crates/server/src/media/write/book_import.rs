@@ -33,7 +33,7 @@ use fliks_domain::{
     media::{
         family::Family,
         is_audio_format,
-        wants::{MAX_WANTS, WantSpec, parse_wants},
+        wants::{MAX_WANTS, WantSpec, parse_wants_profiled},
     },
     metadata::limiter::Priority,
 };
@@ -91,12 +91,11 @@ pub(super) async fn import_book(
     let target = resolve_target(st, a, MediaKind::Book, library, folder).await?;
 
     let wants = match b.0.get("wants") {
-        None => None,
-        Some(w) => Some(parse_wants(w, MediaKind::Book).map_err(|m| bad(&m))?),
+        None => return Err(bad("wants must be an array")),
+        Some(w) => parse_wants_profiled(w, MediaKind::Book).map_err(|m| bad(&m))?,
     };
-    if let Some(w) = &wants {
-        wants::check_profiles(&st.db, w).await?;
-    }
+    wants::check_profiles(&st.db, &wants).await?;
+    let wants = Some(wants);
     let id = create_identified(
         st,
         &Creation {

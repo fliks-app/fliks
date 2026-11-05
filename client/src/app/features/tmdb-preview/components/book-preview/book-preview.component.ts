@@ -88,6 +88,7 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   protected readonly folderId = signal<number | null>(null);
   protected readonly wants = signal<WantSpec[]>([{ family: 'text', language: null }]);
 
+  protected readonly wantsReady = computed(() => this.wants().every((w) => w.qualityProfileId != null));
   protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   protected readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
   protected readonly bookLibraries = computed(() => this.libraries().filter((l) => l.mediaTypes.includes('book')));
@@ -159,7 +160,8 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   }
 
   async add() {
-    if (!this.book() || this.adding()) return;
+    const wants = this.wants().flatMap((w) => (w.qualityProfileId == null ? [] : [{ ...w, qualityProfileId: w.qualityProfileId }]));
+    if (!this.book() || this.adding() || wants.length !== this.wants().length) return;
     this.adding.set(true);
     try {
       const libraryId = this.libraryId();
@@ -168,7 +170,7 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
         type: 'book',
         provider: this.provider(),
         externalId: this.externalId(),
-        wants: this.wants(),
+        wants,
         ...(libraryId != null ? { libraryId } : {}),
         ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
       });

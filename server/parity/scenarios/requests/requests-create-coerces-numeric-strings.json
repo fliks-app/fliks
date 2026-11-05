@@ -11,6 +11,7 @@
       "body": {
         "libraryId": "2",
         "mediaType": "series",
+        "qualityProfileId": 1,
         "seasons": [
           "2"
         ],
@@ -37,8 +38,10 @@
           "mediaType": "series",
           "posterUrl": null,
           "provider": "tmdb",
-          "qualityProfile": null,
-          "qualityProfileId": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
           "seasons": [
             2
           ],
