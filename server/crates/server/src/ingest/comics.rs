@@ -16,8 +16,6 @@ use sqlx::{PgConnection, PgPool};
 use std::path::Path;
 
 const FORMATS: [&str; 4] = ["cbz", "cb7", "cbr", "pdf"];
-/// The width of a stored cover.
-
 /// The format of a comic file name: its extension when it is one of the four.
 pub fn format_of(name: &str) -> Option<&'static str> {
     let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();

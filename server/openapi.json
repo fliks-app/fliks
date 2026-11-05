@@ -845,7 +845,7 @@
         "tags": [
           "crate::ingest::disk"
         ],
-        "summary": "`GET /api/imports/orphans/cover?path=` (rule 107): the cover of an EPUB not imported yet.",
+        "summary": "`GET /api/imports/orphans/cover?path=` (rule 107): the cover of a book file not imported yet.",
         "operationId": "cover",
         "responses": {
           "200": {},
