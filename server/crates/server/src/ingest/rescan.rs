@@ -5,6 +5,10 @@ use super::{
     load_media, probe,
 };
 use crate::{
+    events::{Num, Subject},
+    jobs::bodies::ActivityRows,
+};
+use crate::{
     http::AppError,
     media::items::{self, Link},
     state::AppState,
@@ -26,8 +30,9 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
-use tokio::sync::OwnedMutexGuard;
+use tokio::{sync::OwnedMutexGuard, task::JoinSet};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Counts {
@@ -1209,17 +1214,73 @@ fn truthy<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
     Ok(v == serde_json::json!(true) || v == serde_json::json!("true"))
 }
 
-/// `analyzeMedia` (rule 51); runs detached, errors logged by the caller.
+/// Activity id of the parent row grouping one analysis (rule 51).
+fn analyze_activity_id(media_id: i32) -> String {
+    format!("Analyze:{media_id}")
+}
+
+/// Releases the shared `Analyze` row however the analysis ends.
+struct ParentRow(crate::events::Hub, String);
+
+impl Drop for ParentRow {
+    fn drop(&mut self) {
+        self.0.activity().release(&self.1);
+    }
+}
+
+/// `analyzeMedia` (rule 51); runs detached, errors logged by the caller. The `Analyze` parent row
+/// stays until every spawned job has ended, and until the last concurrent analysis of the media.
 pub async fn analyze(st: &AppState, media_id: i32, o: Analyze) -> Result<(), AppError> {
     if !(o.sprites || o.crop || o.subtitle_cache) {
         return Ok(());
     }
+    let parent = analyze_activity_id(media_id);
+    let mut jobs = JoinSet::new();
+    let mut media = None;
+    let _row = ParentRow(st.hub.clone(), parent.clone());
+    let done = analyze_files(st, media_id, o, &parent, &mut jobs, &mut media).await;
+    let total = jobs.len();
+    let report = |ended: usize| {
+        st.hub.activity().upsert_running(
+            &parent,
+            "Analyze",
+            media.clone(),
+            Some(Num(ended as f64)),
+            Some(Num(total as f64)),
+            None,
+        );
+    };
+    if media.is_some() {
+        report(0);
+    }
+    while jobs.join_next().await.is_some() {
+        report(total - jobs.len());
+    }
+    done
+}
+
+async fn analyze_files(
+    st: &AppState,
+    media_id: i32,
+    o: Analyze,
+    parent: &str,
+    jobs: &mut JoinSet<()>,
+    media: &mut Option<Subject>,
+) -> Result<(), AppError> {
     let ids = sqlx::query_scalar!(
         r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         media_id
     )
     .fetch_all(&st.db)
     .await?;
+    let subjects = crate::events::subject::for_files(&st.db, &ids).await?;
+    if let Some(s) = subjects.values().next() {
+        let subject = Subject::media(media_id, &s.title, s.media_type);
+        st.hub
+            .activity()
+            .hold(parent, "Analyze", Some(subject.clone()));
+        *media = Some(subject);
+    }
     for id in ids {
         let Some((abs, info)) = super::post_import::file_path(st, id).await? else {
             continue;
@@ -1256,6 +1317,15 @@ pub async fn analyze(st: &AppState, media_id: i32, o: Analyze) -> Result<(), App
             && let Some(info) = info.filter(|i| i.subtitles.iter().any(|s| !s.is_image_based))
         {
             let st = st.clone();
+            let child = format!("SubtitleExtract:{id}");
+            let subject = subjects.get(&id).cloned();
+            let parent = parent.to_owned();
+            st.hub.activity().upsert_pending(
+                &child,
+                "SubtitleExtract",
+                subject.clone(),
+                Some(parent.clone()),
+            );
             let req = JobRequest {
                 kind: JobKind::SubtitleExtract { info },
                 media: MediaRef {
@@ -1265,16 +1335,34 @@ pub async fn analyze(st: &AppState, media_id: i32, o: Analyze) -> Result<(), App
                 priority: Some(JobPriority::High),
                 force: true,
             };
-            tokio::spawn(async move {
-                if let Err(e) = st.engine.run_job(&req, None).await {
+            jobs.spawn(async move {
+                let _row = ActivityRows::new(&st.hub, [child.clone()]);
+                let progress = {
+                    let (hub, child, parent) = (st.hub.clone(), child.clone(), parent);
+                    Arc::new(move |pct: f64| {
+                        hub.activity().upsert_running(
+                            &child,
+                            "SubtitleExtract",
+                            subject.clone(),
+                            Some(Num(pct.round())),
+                            Some(Num(100.0)),
+                            Some(parent.clone()),
+                        );
+                    })
+                };
+                if let Err(e) = st.engine.run_job(&req, Some(progress)).await {
                     tracing::warn!("Subtitle cache of file #{id} failed: {e}");
                 }
             });
         }
         if o.sprites {
             let st = st.clone();
-            tokio::spawn(async move {
-                if let Err(e) = crate::stream::sprite_file(&st, id, true, JobPriority::High).await {
+            let parent = Some(parent.to_owned());
+            jobs.spawn(async move {
+                let _row = ActivityRows::new(&st.hub, [format!("GenerateSprite:{id}")]);
+                if let Err(e) =
+                    crate::stream::sprite_file(&st, id, true, JobPriority::High, parent).await
+                {
                     tracing::warn!("Sprite failed for file #{id}: {e:?}");
                 }
             });

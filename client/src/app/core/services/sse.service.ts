@@ -129,6 +129,8 @@ export interface MediaProgressSubject {
   episodeNumber?: number;
   episodeTitle?: string;
   episodeId?: number;
+  /** Quality of the file a per-file row works on ("HDTV-1080p"). */
+  quality?: string;
 }
 
 export interface TaskProgress {

@@ -391,7 +391,8 @@ async fn settled(st: &AppState, media_id: i32) {
             if thumbs.join(id.to_string()).join("sprite.json").exists() {
                 continue;
             }
-            if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low).await {
+            if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await
+            {
                 tracing::warn!(
                     "Post-import[media #{media_id}]: sprite of file #{id} failed: {e:?}"
                 );
