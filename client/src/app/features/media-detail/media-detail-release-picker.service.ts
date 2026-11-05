@@ -68,7 +68,7 @@ export class MediaDetailReleasePickerService {
     return firstValueFrom(this.http.get<MovieRelease[]>(url, { params }));
   }
 
-  grab(target: AcquisitionTarget, body: GrabBody = {}): Promise<void> {
+  async grab(target: AcquisitionTarget, body: GrabBody = {}): Promise<void> {
     const url = this.resolve(target, 'grab');
     return firstValueFrom(this.http.post<void>(url, { family: target.family, language: target.language ?? null, ...body }));
   }

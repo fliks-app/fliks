@@ -17,6 +17,7 @@ function setup() {
   const modal = { showModal: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
+      ReleaseGrabController,
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: MediaDetailReleasePickerService, useValue: api },

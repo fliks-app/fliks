@@ -475,8 +475,8 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
 
   it('an episode-level header hides Edit profiles/library and Request deletion for an owner — the parent never binds those inputs there, regardless of permission', async () => {
     const fixture = await createFixture(OWNER, {
-      mediaType: 'movie',
       ...MOVIE,
+      mediaType: 'series',
       episodeId: 999,
       episodeInstance: true,
     });
