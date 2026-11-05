@@ -43,6 +43,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   private pollHandle: ReturnType<typeof setTimeout> | null = null;
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private userId = 0;
+  private destroyed = false;
 
   ngOnInit(): void {
     const param = this.route.snapshot.paramMap.get('userId');
@@ -57,10 +58,17 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.stopTimers();
-    if (this.view() === 'waiting' && this.pairingId && this.deviceId) {
+    this.cancelPending();
+  }
+
+  /** The server only deletes a still-pending request, so this is safe in every view. */
+  private cancelPending() {
+    if (this.pairingId && this.deviceId) {
       void this.auth.pairingCancel(this.pairingId, this.deviceId).catch(() => undefined);
     }
+    this.pairingId = null;
   }
 
   async start() {
@@ -81,6 +89,8 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
         this.systemName() || undefined,
       );
       this.pairingId = pairingId;
+      // Left the page while the request was in flight.
+      if (this.destroyed) return this.cancelPending();
       this.secondsLeft.set(expiresIn);
       this.view.set('waiting');
       this.startCountdown();
@@ -91,7 +101,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   }
 
   private async poll() {
-    if (!this.pairingId || !this.deviceId) return;
+    if (this.destroyed || !this.pairingId || !this.deviceId) return;
     try {
       const res = await this.auth.pairingStatus(this.pairingId, this.deviceId);
       if (res.status === 'approved' && res.accessToken) {
@@ -146,6 +156,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
 
   retry() {
     this.stopTimers();
+    this.cancelPending();
     void this.start();
   }
 
