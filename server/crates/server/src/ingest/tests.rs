@@ -2989,7 +2989,7 @@ mod book_ingest {
         )
         .await;
         assert_eq!((s, &b["linked"]), (201, &json!(1)), "{b}");
-        assert_eq!(count(&c, "SELECT count(*) FROM wants").await, 2);
+        assert_eq!(count(&c, "SELECT count(*) FROM wants").await, 1);
         assert_eq!(
             count(
                 &c,
