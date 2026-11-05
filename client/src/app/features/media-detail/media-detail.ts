@@ -17,8 +17,6 @@ import {
   RelatedMedia,
   MediaCollection,
 } from '../../core/services/api/media.service';
-import { MediaDetailReleasePickerService } from './media-detail-release-picker.service';
-import { ReleaseSearchStreamService } from './release-search-stream.service';
 import { AuthService } from '../../core/services/auth.service';
 import { SpoilerService } from '../../core/services/spoiler.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
@@ -79,6 +77,7 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 import { ReleaseGrabController } from './release-grab-controller';
+import { WantsStore, aimedWants } from '../../core/acquisition/acquisition';
 import { MEDIA_SAVED_HOST } from '../../shared/components/detail-hero/detail-hero';
 import { LikeController } from '../../shared/utils/like-controller';
 import { AnalyzeController } from './analyze-controller';
@@ -147,8 +146,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
-  private readonly releasePickerApi = inject(MediaDetailReleasePickerService);
-  private readonly releaseStream = inject(ReleaseSearchStreamService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
   private readonly spoilers = inject(SpoilerService);
@@ -166,22 +163,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly tv = inject(TvService);
 
-  readonly grabs = new ReleaseGrabController(
-    {
-      media: () => this.media(),
-      focusedSeason: () => this.focusedSeason(),
-      focusedEpisode: () => this.focusedEpisode(),
-      movieModal: () => this.movieReleasesModal(),
-      episodeModal: () => this.episodeReleasesModal(),
-      seasonModal: () => this.seasonReleasesModal(),
-    },
-    {
-      stream: this.releaseStream,
-      api: this.releasePickerApi,
-      progress: this.downloadProgress,
-      translate: this.translate,
-    },
-  );
+  readonly grabs = inject(ReleaseGrabController);
+  private readonly wantsStore = inject(WantsStore);
   readonly like = new LikeController(
     {
       // A book or comic page owns its likes through the shared hero.
@@ -539,9 +522,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Series: show only episodes with a file on disk (persisted in localStorage) */
   readonly episodesHasFileOnly = signal(readEpisodesHasFileOnlyFromStorage());
 
-  readonly movieReleasesModal = viewChild<ReleasesModalComponent>('movieReleasesModal');
-  readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
-  readonly seasonReleasesModal = viewChild<ReleasesModalComponent>('seasonReleasesModal');
+  readonly releasesModal = viewChild<ReleasesModalComponent>('releasesModal');
+  private readonly grabsAttached = this.grabs.attach(
+    () => this.media(),
+    () => this.releasesModal(),
+  );
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
@@ -864,6 +849,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         languageProfileId: this.draftLanguageProfileId(),
       });
       this.media.set(updated);
+      void this.wantsStore.reload(updated.id);
       if (KIND_REGISTRY[updated.type].hasSeasons) this.syncActiveSeasonForSeriesFilter();
       this.draftQualityProfileId.set(updated.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
@@ -1269,7 +1255,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const c = this.episodeDrawerContext();
     const media = this.media();
     if (c && media) {
-      void this.grabs.loadEpisodeReleases(media.id, c.episode.id);
+      const wants = aimedWants({ level: 'item', wants: this.wantsStore.wantsOf(media.id) });
+      void this.grabs.search({ mediaId: media.id, kind: media.type, level: 'item', itemId: c.episode.id }, wants);
     }
   }
 

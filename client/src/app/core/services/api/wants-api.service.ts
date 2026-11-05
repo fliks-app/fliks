@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { MediaType } from '../../enums/media-type.enum';
+import type { MediaFamily } from '../../media-kinds';
 
 export type WantFamily = 'text' | 'audio';
 
@@ -13,8 +14,9 @@ export interface WantSpec {
 }
 
 // GET/PUT /api/media/:id/wants
-export interface Want extends WantSpec {
+export interface Want extends Omit<WantSpec, 'family'> {
   id: number;
+  family: MediaFamily;
   qualityProfileId: number | null;
   folderId: number | null;
   satisfied: boolean;

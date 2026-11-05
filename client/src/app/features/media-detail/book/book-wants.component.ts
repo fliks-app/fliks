@@ -1,8 +1,9 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { WantsApiService, type Want, type WantSpec } from '../../../core/services/api/wants-api.service';
+import { WantsApiService, type Want, type WantFamily, type WantSpec } from '../../../core/services/api/wants-api.service';
 import { WantsEditorComponent, wantKey } from '../../../shared/components/wants-editor/wants-editor';
 import { ToastService } from '../../../core/services/toast.service';
+import { WantsStore } from '../../../core/acquisition/acquisition';
 
 /** The formats and languages a work is wished in, and which of them are already owned. */
 @Component({
@@ -17,6 +18,7 @@ export class BookWantsComponent {
   private readonly api = inject(WantsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly store = inject(WantsStore);
 
   protected readonly saved = signal<Want[]>([]);
   protected readonly draft = signal<WantSpec[]>([]);
@@ -32,7 +34,10 @@ export class BookWantsComponent {
 
   private apply(wants: Want[]) {
     this.saved.set(wants);
-    this.draft.set(wants.map(({ family, language, qualityProfileId }) => ({ family, language, qualityProfileId })));
+    this.store.set(this.mediaId(), wants);
+    this.draft.set(
+      wants.map(({ family, language, qualityProfileId }) => ({ family: family as WantFamily, language, qualityProfileId })),
+    );
   }
 
   private async load(id: number) {

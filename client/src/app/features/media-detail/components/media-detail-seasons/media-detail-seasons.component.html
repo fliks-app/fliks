@@ -161,7 +161,7 @@
               type="button"
               class="dropdown-item text-white"
               [disabled]="seasonActionPending(item.actionId)"
-              (click)="item.handler()"
+              (click)="item.run?.()"
             >
               @if (seasonActionPending(item.actionId)) {
                 <span class="loading loading-spinner loading-sm"></span>

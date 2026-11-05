@@ -5,6 +5,22 @@
     <app-modal-header flush [title]="title()" />
 
     <div class="px-4 pt-4 sm:px-6 shrink-0">
+      @if (wants().length > 1) {
+        <div class="join mb-3 flex-wrap" role="group" [attr.aria-label]="'media_detail.releases_want' | translate">
+          @for (w of wants(); track w.id) {
+            <button
+              type="button"
+              class="btn btn-sm join-item"
+              [class.btn-primary]="isSelectedWant(w)"
+              [disabled]="loading()"
+              [attr.aria-pressed]="isSelectedWant(w)"
+              (click)="wantChange.emit(w)"
+            >
+              {{ wantLabel(w) }}
+            </button>
+          }
+        </div>
+      }
       @if (tabs().length) {
         <div
           role="tablist"

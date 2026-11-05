@@ -2,7 +2,7 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePencil } from '@lucide/angular';
+import { LucideEllipsisVertical, LucidePencil } from '@lucide/angular';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { ComicsApiService } from '../../../core/services/api/comics-api.service';
 import type { Media } from '../../../core/services/api/media.service';
@@ -10,6 +10,9 @@ import type { ComicDetail, ComicIssue, ComicIssuePatch } from '../../../core/ser
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TvService } from '../../../core/services/tv.service';
+import { CardActionsService } from '../../../core/services/card-actions.service';
+import { MediaActionsController } from '../../../shared/utils/media-actions-controller';
+import { openMediaMenu } from '../../../shared/utils/media-menu';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { ProviderAttributionComponent } from '../../../shared/components/provider-attribution/provider-attribution';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
@@ -28,6 +31,7 @@ import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
     TranslatePipe,
     DetailHeroComponent,
     ProviderAttributionComponent,
+    LucideEllipsisVertical,
     LucidePencil,
     ModalHeaderComponent,
     ModalFooterComponent,
@@ -70,6 +74,17 @@ export class ComicVolumeComponent {
     this.comic() ? this.translate.instant('comic.read_count', { read: this.readCount(), total: this.issues().length }) : null,
   );
   protected readonly actions = computed<MediaActionHandlers>(() => (this.canEdit() && this.comic() ? { 'media.edit': () => this.openVolume() } : {}));
+  private readonly cardActions = inject(CardActionsService);
+  private readonly activeIssue = signal<ComicIssue | null>(null);
+  private readonly issueActions = new MediaActionsController({
+    base: () => ({ mediaId: this.media().id, kind: 'comic', level: 'item', itemId: this.activeIssue()?.itemId }),
+    facts: () => ({
+      isAdmin: this.auth.hasPermission('settings.access'),
+      hasFiles: this.activeIssue()?.mediaFileId != null,
+      identified: true,
+    }),
+  });
+  protected readonly canAcquire = this.issueActions.available;
   protected readonly editingVolume = signal(false);
   protected readonly editingIssue = signal<ComicIssue | null>(null);
   protected readonly saving = signal(false);
@@ -83,6 +98,12 @@ export class ComicVolumeComponent {
   protected openVolume(): void {
     this.editingVolume.set(true);
     this.volumeDialog()?.nativeElement.showModal();
+  }
+
+  protected openIssueMenu(i: ComicIssue, anchor: HTMLElement): void {
+    this.activeIssue.set(i);
+    const title = this.translate.instant('comic.' + i.kind + '_number', { n: i.number });
+    openMediaMenu(this.cardActions, this.issueActions.rows(), anchor, { title, imageUrl: null });
   }
 
   protected openIssue(i: ComicIssue): void {

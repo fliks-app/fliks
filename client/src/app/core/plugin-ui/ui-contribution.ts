@@ -2,13 +2,15 @@ import type { MediaType } from '../enums/media-type.enum';
 /** UI-facing contribution types of the manifest's `ui.*` block, as the plugin host validates them
  *  (`server/docs/spec/plugins.md` rule 5); imported as `@fliks/plugin-ui`. */
 
-/** The six slots a contribution can render into. */
+/** The seven slots a contribution can render into: `media.actions` is the whole work, `media.group.actions` a season,
+ *  a volume or a disc, `media.item.actions` an episode, an issue or a track. */
 export type SlotId =
   | 'nav.main'
   | 'nav.acquisition'
   | 'settings.page'
   | 'media.actions'
-  | 'media.season.actions'
+  | 'media.group.actions'
+  | 'media.item.actions'
   | 'card.actions';
 
 /** Closed `when` vocabulary, evaluated with `.every()`; a leading "!" negates, an unknown predicate is false. */
@@ -20,6 +22,10 @@ export type WhenPredicateName =
   | 'isMonitored'
   | 'hasQualityProfile'
   | 'isEpisode'
+  /** The level the menu is built for: the work, a group (season, volume, disc) or an item (episode, issue, track). */
+  | 'level:work'
+  | 'level:group'
+  | 'level:item'
   /** False when the title has no metadata-provider id (tmdbId/tvdbId/imdbId all null). */
   | 'identified'
   | 'isTv'
@@ -164,24 +170,21 @@ export interface FormConfigPage extends ConfigPageBase {
 
 /** One search/grab pair the core release picker calls for a given context. */
 export interface ReleasePickerPair {
-  /** `GET`, answering an array of scored releases. */
+  /** `GET` taking `family`, `language`, `q` and `sid`, answering an array of scored releases. */
   search: string;
-  /** `POST`, taking `{downloadUrl, sourceTitle?, sourceId?}`. */
+  /** `POST` taking `{family, language, downloadUrl?, sourceTitle?, sourceId?, force?, infoUrl?}`. */
   grab: string;
 }
 
-export type ReleasePickerKind = 'movie' | 'series' | 'book' | 'comic' | 'album';
-/** `work` is the whole title, `group` a season, `item` an episode. */
+/** Open: a kind the core does not know needs no change here. */
+export type ReleasePickerKind = string;
+/** `work` is the whole title, `group` a season, a volume or a disc, `item` an episode, an issue or a track. */
 export type ReleasePickerLevel = 'work' | 'group' | 'item';
 
-/** Routes the core release picker calls per kind and level, relative to the plugin; `:id`, `:seasonId`,
- *  `:episodeId` are substituted. A level a plugin does not declare never opens the picker.
- *  A 6.x server sends `byKind`, and the three pairs when all three are declared; a 5.x server sends the three pairs only. */
+/** Routes the core release picker calls per kind and level, relative to the plugin; `:id`, `:groupId` (`item_groups.id`)
+ *  and `:itemId` (`items.id`) are substituted. A level a plugin does not declare never opens the picker. */
 export interface ReleasePickerRoutes {
-  byKind?: Partial<Record<ReleasePickerKind, Partial<Record<ReleasePickerLevel, ReleasePickerPair>>>>;
-  movie?: ReleasePickerPair;
-  season?: ReleasePickerPair;
-  episode?: ReleasePickerPair;
+  byKind: Record<ReleasePickerKind, Partial<Record<ReleasePickerLevel, ReleasePickerPair>>>;
 }
 
 /** daisyUI badge tones. Closed: core maps a name to a class and falls back to `ghost`,

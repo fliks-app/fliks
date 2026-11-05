@@ -4,27 +4,37 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MediaDetailReleasePickerService, resolveReleasePickerUrl } from './media-detail-release-picker.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
+import type { AcquisitionTarget } from '../../core/acquisition/acquisition';
 import type { PluginUiEntry } from '../../core/plugin-ui/plugin-ui-response';
 
+const target = (t: Partial<AcquisitionTarget> = {}): AcquisitionTarget => ({
+  mediaId: 7,
+  kind: 'movie',
+  level: 'work',
+  family: 'video',
+  language: null,
+  ...t,
+});
+
 describe('resolveReleasePickerUrl', () => {
-  it('substitutes :id for a movie route', () => {
-    expect(resolveReleasePickerUrl('fliks.acme', '/:id/releases', { id: 7 })).toBe('/api/plugins/fliks.acme/7/releases');
+  it('substitutes :id for a work route', () => {
+    expect(resolveReleasePickerUrl('fliks.acme', '/:id/releases', target())).toBe('/api/plugins/fliks.acme/7/releases');
   });
 
-  it('substitutes both :id and :seasonId for a season route', () => {
-    expect(resolveReleasePickerUrl('fliks.acme', '/:id/seasons/:seasonId/grab', { id: 7, seasonId: 3 })).toBe(
-      '/api/plugins/fliks.acme/7/seasons/3/grab',
+  it('substitutes :id and :groupId for a group route', () => {
+    expect(resolveReleasePickerUrl('fliks.acme', '/:id/groups/:groupId/grab', target({ groupId: 3 }))).toBe(
+      '/api/plugins/fliks.acme/7/groups/3/grab',
     );
   });
 
-  it('substitutes both :id and :episodeId for an episode route', () => {
-    expect(resolveReleasePickerUrl('fliks.acme', '/:id/episodes/:episodeId/releases', { id: 7, episodeId: 12 })).toBe(
-      '/api/plugins/fliks.acme/7/episodes/12/releases',
+  it('substitutes :id and :itemId for an item route', () => {
+    expect(resolveReleasePickerUrl('fliks.acme', '/:id/items/:itemId/releases', target({ itemId: 12 }))).toBe(
+      '/api/plugins/fliks.acme/7/items/12/releases',
     );
   });
 
   it('returns null — never a request — when a placeholder survives substitution', () => {
-    expect(resolveReleasePickerUrl('fliks.acme', '/:id/seasons/:seasonId/releases', { id: 7 })).toBeNull();
+    expect(resolveReleasePickerUrl('fliks.acme', '/:id/groups/:groupId/releases', target())).toBeNull();
   });
 });
 
@@ -32,9 +42,11 @@ const ROUTES = {
   byKind: {
     movie: { work: { search: '/:id/releases', grab: '/:id/grab' } },
     series: {
-      group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
-      item: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+      group: { search: '/:id/groups/:groupId/releases', grab: '/:id/groups/:groupId/grab' },
+      item: { search: '/:id/items/:itemId/releases', grab: '/:id/items/:itemId/grab' },
     },
+    book: { work: { search: '/:id/releases', grab: '/:id/grab' } },
+    comic: { item: { search: '/:id/items/:itemId/releases', grab: '/:id/items/:itemId/grab' } },
   },
 };
 
@@ -60,33 +72,59 @@ describe('MediaDetailReleasePickerService', () => {
 
   afterEach(() => http.verify());
 
-  it('builds the proxied movie search URL', async () => {
+  it('builds the proxied work search URL and sends the want aimed at', async () => {
     await install(ROUTES);
-    const promise = service.getMovieReleases(7);
-    http.expectOne('/api/plugins/fliks.acme/7/releases').flush([]);
+    const promise = service.search(target({ kind: 'book', family: 'audio', language: 'fr' }));
+    const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
+    expect(req.request.params.get('family')).toBe('audio');
+    expect(req.request.params.get('language')).toBe('fr');
+    req.flush([]);
     await promise;
   });
 
-  it('builds the proxied season grab URL and posts the release body', async () => {
+  it('omits language for an any-language want', async () => {
     await install(ROUTES);
-    const promise = service.grabSeason(7, 3, { downloadUrl: 'magnet:x' });
-    const req = http.expectOne('/api/plugins/fliks.acme/7/seasons/3/grab');
+    const promise = service.search(target());
+    const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
+    expect(req.request.params.has('language')).toBe(false);
+    req.flush([]);
+    await promise;
+  });
+
+  it('builds the proxied group grab URL and posts the want with the release body', async () => {
+    await install(ROUTES);
+    const promise = service.grab(target({ kind: 'series', level: 'group', groupId: 3, language: 'en' }), {
+      downloadUrl: 'magnet:x',
+    });
+    const req = http.expectOne('/api/plugins/fliks.acme/7/groups/3/grab');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ downloadUrl: 'magnet:x' });
+    expect(req.request.body).toEqual({ family: 'video', language: 'en', downloadUrl: 'magnet:x' });
     req.flush(null);
     await promise;
   });
 
-  it('builds the proxied episode search URL', async () => {
+  it('posts a null language for a grab-best on an any-language want', async () => {
     await install(ROUTES);
-    const promise = service.getEpisodeReleases(7, 12);
-    http.expectOne('/api/plugins/fliks.acme/7/episodes/12/releases').flush([]);
+    const promise = service.grab(target());
+    const req = http.expectOne('/api/plugins/fliks.acme/7/grab');
+    expect(req.request.body).toEqual({ family: 'video', language: null });
+    req.flush(null);
     await promise;
+  });
+
+  it('builds the proxied item search URL of a series and of a comic', async () => {
+    await install(ROUTES);
+    const episode = service.search(target({ kind: 'series', level: 'item', itemId: 12 }));
+    http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/items/12/releases').flush([]);
+    await episode;
+    const issue = service.search(target({ kind: 'comic', level: 'item', itemId: 5, family: 'image' }));
+    http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/items/5/releases').flush([]);
+    await issue;
   });
 
   it('sends the trimmed q param only when given one', async () => {
     await install(ROUTES);
-    const promise = service.getMovieReleases(7, '  1080p  ');
+    const promise = service.search(target(), '  1080p  ');
     const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
     expect(req.request.params.get('q')).toBe('1080p');
     req.flush([]);
@@ -95,38 +133,22 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('fires no request and rejects when no plugin declares a picker', async () => {
     await install(undefined);
-    await expect(service.getMovieReleases(7)).rejects.toThrow();
+    await expect(service.search(target())).rejects.toThrow();
   });
 
-  it('falls back to the movie, season and episode pairs of a server without byKind', async () => {
-    await install({
-      movie: { search: '/:id/releases', grab: '/:id/grab' },
-      season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
-      episode: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
-    });
-    const movie = service.getMovieReleases(7);
-    http.expectOne('/api/plugins/fliks.acme/7/releases').flush([]);
-    await movie;
-    const season = service.grabSeason(7, 3);
-    http.expectOne('/api/plugins/fliks.acme/7/seasons/3/grab').flush(null);
-    await season;
-    const episode = service.getEpisodeReleases(7, 12);
-    http.expectOne('/api/plugins/fliks.acme/7/episodes/12/releases').flush([]);
-    await episode;
-  });
-
-  it('fires no request and rejects for a level the plugin does not declare', async () => {
+  it('fires no request and rejects for a kind or a level the plugin does not declare', async () => {
     await install({ byKind: { movie: ROUTES.byKind.movie } });
-    await expect(service.getEpisodeReleases(7, 3)).rejects.toThrow();
+    await expect(service.search(target({ kind: 'series', level: 'item', itemId: 3 }))).rejects.toThrow();
+    await expect(service.search(target({ kind: 'comic', level: 'work', family: 'image' }))).rejects.toThrow();
   });
 
   it('fires no request and rejects when the declared route has an unresolvable placeholder', async () => {
     await install({
       byKind: {
         ...ROUTES.byKind,
-        series: { ...ROUTES.byKind.series, group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/:extra/grab' } },
+        series: { group: { search: '/:id/groups/:groupId/releases', grab: '/:id/groups/:groupId/:extra/grab' } },
       },
     });
-    await expect(service.grabSeason(7, 3)).rejects.toThrow();
+    await expect(service.grab(target({ kind: 'series', level: 'group', groupId: 3 }))).rejects.toThrow();
   });
 });

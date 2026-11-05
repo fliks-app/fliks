@@ -1199,6 +1199,8 @@
     "episode_video_label": "Vidéo : ",
     "ep_search_releases": "Releases",
     "ep_releases_title": "Releases de l'épisode",
+    "issue_releases_title": "Releases du numéro",
+    "releases_want": "Édition visée",
     "season_packs_title": "Packs de saison disponibles",
     "season_grab_ok": "release(s) envoyée(s) au client de téléchargement.",
     "season_grab_errors": "erreur(s)",

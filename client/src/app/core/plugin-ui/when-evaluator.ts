@@ -1,5 +1,5 @@
 import type { MediaType } from '../enums/media-type.enum';
-import { isMediaKind } from '../media-kinds';
+import { isMediaKind, type AcquisitionLevel } from '../media-kinds';
 
 /** Everything a `when` predicate can read; deliberately narrow, just the facts the closed vocabulary needs. */
 export interface WhenContext {
@@ -8,7 +8,10 @@ export interface WhenContext {
   mediaType?: MediaType;
   hasFiles?: boolean;
   isMonitored?: boolean;
+  /** The target has at least one want with a quality profile, whatever its kind. */
   hasQualityProfile?: boolean;
+  /** The level the menu is built for: the work, one of its groups (season, volume, disc) or one of its items. */
+  level?: AcquisitionLevel;
   isEpisode?: boolean;
   /** False when the title has no metadata-provider id: a refresh has nothing to refresh from. */
   identified?: boolean;
@@ -35,6 +38,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'hasFiles') return ctx.hasFiles ?? false;
   if (predicate === 'isMonitored') return ctx.isMonitored ?? false;
   if (predicate === 'hasQualityProfile') return ctx.hasQualityProfile ?? false;
+  if (predicate.startsWith('level:')) return ctx.level === predicate.slice('level:'.length);
   if (predicate === 'isEpisode') return ctx.isEpisode ?? false;
   if (predicate === 'identified') return ctx.identified ?? true;
   if (predicate === 'isTv') return ctx.isTv;

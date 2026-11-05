@@ -165,8 +165,8 @@ describe('PluginUiRegistryService', () => {
       byKind: {
         movie: { work: { search: '/:id/releases', grab: '/:id/grab' } },
         series: {
-          group: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
-          item: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+          group: { search: '/:id/groups/:groupId/releases', grab: '/:id/groups/:groupId/grab' },
+          item: { search: '/:id/items/:itemId/releases', grab: '/:id/items/:itemId/grab' },
         },
       },
     };

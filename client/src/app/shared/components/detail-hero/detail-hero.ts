@@ -1,5 +1,4 @@
 import { Component, InjectionToken, computed, inject, input, viewChild } from '@angular/core';
-import { Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideEllipsisVertical, LucideHeart, LucideListPlus } from '@lucide/angular';
 import { MediaAdminService } from '../../../core/services/media-admin.service';
@@ -15,13 +14,12 @@ import { CardActionsService } from '../../../core/services/card-actions.service'
 import { DeviceService } from '../../../core/services/device.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
-import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import { resolveMediaAction, type CoreMediaActionId, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
-import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
+import type { CoreMediaActionId, MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { CORE_MEDIA_ACTIONS } from '../media-info-header/core-media-actions';
 import { openMediaMenu } from '../../utils/media-menu';
+import { MediaActionsController } from '../../utils/media-actions-controller';
 import { hasProviderId } from '../../../core/utils/media-identity';
 import { HeroPosterComponent } from '../hero-poster/hero-poster';
 import { HeroProgressComponent } from '../hero-progress/hero-progress';
@@ -74,8 +72,6 @@ export class DetailHeroComponent {
   protected readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
   private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly cardActions = inject(CardActionsService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
@@ -132,35 +128,21 @@ export class DetailHeroComponent {
   private readonly rowOverrides = (r: { actionId?: string; labelKey: string }) => {
     if (r.actionId === 'media.toggle-like') return { labelKey: this.liked() ? 'media_detail.unlike' : 'media_detail.like' };
     if (r.actionId === 'media.edit-profiles' && this.mediaType() === 'book') return { labelKey: 'books_work.edit_profiles' };
-    return {};
+    return { disabled: this.actionsMenu.isDisabled(r.actionId) };
   };
 
-  private readonly menu = computed(() =>
-    resolveMenuContributions({
-      contributions: [
-        ...CORE_MEDIA_ACTIONS,
-        ...this.pluginUi.contributionsFor('media.actions'),
-        ...this.pluginUi.contributionsFor('card.actions'),
-      ],
-      ctx: {
-        isAdmin: this.auth.hasPermission('settings.access'),
-        hasPermission: (p) => this.auth.hasPermission(p),
-        mediaType: this.mediaType(),
-        identified: this.identified(),
-        isTv: this.tv.isTv(),
-        isTouch: this.device.isTouch(),
-        surface: 'detail',
-      },
-      guards: { 'core.recommend': () => !this.auth.sharingDisabled() },
-      resolveAction: (id) => resolveMediaAction(id, this.handlers()),
-      navigate: (path) => void this.router.navigate([path]),
-    }),
-  );
+  private readonly actionsMenu = new MediaActionsController({
+    base: () => ({ mediaId: this.mediaId(), kind: this.mediaType(), level: 'work' }),
+    facts: () => ({ isAdmin: this.auth.hasPermission('settings.access'), hasFiles: false, identified: this.identified() }),
+    core: CORE_MEDIA_ACTIONS,
+    handlers: () => this.handlers(),
+    guards: { 'core.recommend': () => !this.auth.sharingDisabled() },
+  });
 
   protected openMenu(anchor: HTMLElement): void {
     openMediaMenu(
       this.cardActions,
-      this.menu(),
+      this.actionsMenu.rows(),
       anchor,
       { title: this.title(), imageUrl: this.posterUrl() },
       this.rowOverrides,
