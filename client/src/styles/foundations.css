@@ -44,15 +44,14 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
 }
 
 /* Rounder corners for all DaisyUI components */
-:root, [data-theme] {
+:root,
+[data-theme] {
   /* Page padding — <main>, the topbars, and anything that bleeds out of them. */
   --page-p: 1rem;
   --radius-selector: 1rem;
   --radius-field: 1rem;
   --radius-box: 0.5rem;
-  --focus-ring:
-    0 0 0 2px var(--color-base-100, #1d232a),
-    0 0 0 4px var(--color-primary, #7a3ff2);
+  --focus-ring: 0 0 0 2px var(--color-base-100, #1d232a), 0 0 0 4px var(--color-primary, #7a3ff2);
 }
 
 /* Active menu item styled like the hover state. daisyUI's neutral default is
@@ -63,7 +62,10 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
 }
 
 /* Focus ring is the only cue, so drop daisyUI's border; selects use `:focus-visible` as they have no caret to show on tap. */
-.select:focus-visible, .input:focus, .input:focus-within, .textarea:focus {
+.select:focus-visible,
+.input:focus,
+.input:focus-within,
+.textarea:focus {
   outline-width: 1px;
   outline-offset: 0px;
   border-color: transparent;
@@ -164,8 +166,8 @@ html.native * {
 }
 html.native input,
 html.native textarea,
-html.native [contenteditable="true"],
-html.native [contenteditable=""],
+html.native [contenteditable='true'],
+html.native [contenteditable=''],
 html.native .select-text,
 html.native .select-text * {
   -webkit-user-select: text;
@@ -393,7 +395,9 @@ body.native.hero-page {
    controls bar when it comes up, mirroring the subtitle shift. */
 .player-floating-cue {
   --cue-bottom: 5rem;
-  right: calc(max(var(--ctrl-px, 1rem), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px));
+  right: calc(
+    max(var(--ctrl-px, 1rem), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)
+  );
   bottom: max(var(--cue-bottom), calc(var(--cue-bottom) + env(safe-area-inset-bottom)));
   transition: bottom 200ms ease;
 }
