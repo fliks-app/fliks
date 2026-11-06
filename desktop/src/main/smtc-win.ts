@@ -5,11 +5,12 @@ import type { NowPlayingAddon } from './now-playing';
 
 interface SmtcNative extends NowPlayingAddon {
   attach(hwnd: Buffer): void;
+  raise(): void;
 }
 
 /** The Windows System Media Transport Controls addon, bound to `hwnd` (the framed window). It is
  *  asarUnpack'd, so a packaged app has it under app.asar.unpacked. */
-export function loadSmtcAddon(hwnd: Buffer): NowPlayingAddon {
+export function loadSmtcAddon(hwnd: Buffer): NowPlayingAddon & { raise(): void } {
   const base = app.isPackaged ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked') : app.getAppPath();
   const addon = createRequire(__filename)(path.join(base, 'native', 'build', 'Release', 'fliks_smtc_win.node')) as SmtcNative;
   addon.attach(hwnd);
@@ -27,5 +28,6 @@ export function loadSmtcAddon(hwnd: Buffer): NowPlayingAddon {
     setNowPlaying: safe((i) => addon.setNowPlaying(i)),
     clearNowPlaying: safe(() => addon.clearNowPlaying()),
     onRemoteCommand: (cb) => addon.onRemoteCommand(cb),
+    raise: safe(() => addon.raise()),
   };
 }

@@ -225,6 +225,13 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     const { loadMacAddon } = await import('./mpv/mac-mpv-player');
     const { loadSmtcAddon } = await import('./smtc-win');
     const addon = process.platform === 'darwin' ? loadMacAddon() : loadSmtcAddon(session.windowHandle);
+    if ('raise' in addon) {
+      const raise = addon.raise;
+      raiseWindow = () => {
+        session.focus();
+        raise();
+      };
+    }
     session.onStop = await startNowPlaying(session.player, session.uiContents, addon);
   } catch (e) {
     console.error('[now-playing] unavailable', e);
