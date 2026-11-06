@@ -128,7 +128,7 @@ describe('cache.interceptor — requests in flight', () => {
   });
 });
 
-describe('cache.interceptor — connection', () => {
+describe('cache.interceptor: connection', () => {
   type Req = { result?: unknown; onsuccess?: () => void };
   const fakeDb = () => ({
     close: vi.fn(),
