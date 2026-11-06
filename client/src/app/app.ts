@@ -113,7 +113,7 @@ export class App implements OnInit, OnDestroy {
       document.documentElement.classList.add('native');
       document.body.classList.add('native');
 
-      listenOidcCallbacks((route) => void this.router.navigateByUrl(route), hasPending);
+      listenOidcCallbacks((route) => void this.router.navigateByUrl(route), hasPending, () => !!this.auth.user());
 
       // Hide the native splash (launchAutoHide:false) on the first NavigationEnd, once real content has rendered.
       this.router.events.pipe(

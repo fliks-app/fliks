@@ -87,21 +87,31 @@ describe('web-auth plugin', () => {
   describe('app-wide callback listener', () => {
     it('routes a callback of a pending state to /oidc/complete, whatever started it', async () => {
       const go = vi.fn();
-      listenOidcCallbacks(go, (s) => s === 's');
+      listenOidcCallbacks(go, (s) => s === 's', () => true);
       await vi.waitFor(() => expect(m.listeners['appUrlOpen']).toBeDefined());
       m.listeners['appUrlOpen']({ url: `${CB}?code=c&state=s` });
       m.listeners['appUrlOpen']({ url: `${CB}?error=idp&state=s` });
       expect(go.mock.calls).toEqual([['/oidc/complete?code=c&state=s'], ['/oidc/complete?error=idp&state=s']]);
     });
 
-    it('ignores a forged state, a stateless callback and a foreign URL', async () => {
+    it('ignores a forged state, a stateless callback and a foreign URL while signed in', async () => {
       const go = vi.fn();
-      listenOidcCallbacks(go, (s) => s === 's');
+      listenOidcCallbacks(go, (s) => s === 's', () => true);
       await vi.waitFor(() => expect(m.listeners['appUrlOpen']).toBeDefined());
       m.listeners['appUrlOpen']({ url: `${CB}?code=x&state=forged` });
       m.listeners['appUrlOpen']({ url: `${CB}?code=x` });
       m.listeners['appUrlOpen']({ url: 'https://fliks.test/x?state=s' });
       expect(go).not.toHaveBeenCalled();
+    });
+
+    it('shows the expired error for a forged or stateless callback when nobody is signed in', async () => {
+      const go = vi.fn();
+      listenOidcCallbacks(go, (s) => s === 's', () => false);
+      await vi.waitFor(() => expect(m.listeners['appUrlOpen']).toBeDefined());
+      m.listeners['appUrlOpen']({ url: `${CB}?code=x&state=forged` });
+      m.listeners['appUrlOpen']({ url: `${CB}?code=x` });
+      m.listeners['appUrlOpen']({ url: 'https://fliks.test/x?state=s' });
+      expect(go.mock.calls).toEqual([['/oidc/complete?code=x&state=forged'], ['/oidc/complete?code=x']]);
     });
   });
 

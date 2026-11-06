@@ -52,12 +52,18 @@ export async function webAuthOpen(url: string): Promise<string | null> {
   }
 }
 
-/** Sends every callback URL that carries a pending `state` to `/oidc/complete`; any other is ignored.
+/** Sends every callback URL to `/oidc/complete`: one that carries a pending `state` completes, any other
+ *  shows the expired error, unless an account is signed in, where it is ignored.
  *  Registered once at boot: Capacitor retains an `appUrlOpen` that arrived with no listener. */
-export function listenOidcCallbacks(go: (route: string) => void, isPending: (state: string) => boolean): void {
+export function listenOidcCallbacks(
+  go: (route: string) => void,
+  isPending: (state: string) => boolean,
+  signedIn: () => boolean,
+): void {
   void App.addListener('appUrlOpen', (e) => {
     const query = oidcCallbackQuery(e.url);
-    const state = query && new URLSearchParams(query).get('state');
-    if (query && state && isPending(state)) go(`${CALLBACK_PATH}?${query}`);
+    if (query === null) return;
+    const state = new URLSearchParams(query).get('state');
+    if ((state && isPending(state)) || !signedIn()) go(`${CALLBACK_PATH}?${query}`);
   });
 }
