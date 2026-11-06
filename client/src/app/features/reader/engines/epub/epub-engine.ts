@@ -30,7 +30,7 @@ import { EpubNotes } from './epub-notes';
 import { EpubPagination } from './epub-pagination';
 import { EpubSearch } from './epub-search';
 import { EpubSelectionComponent, type FrameSelection } from './epub-selection';
-import { destroyNavigator, provideFrameSelectors } from './frame-hardening';
+import { destroyNavigator } from './frame-hardening';
 import { allowedExternalLink } from './link-scheme';
 import { bookMinutesLeft, chapterAt, chapterMinutesLeft, formatMinutes } from './reader-estimates';
 import { provideReaderFonts, readerFontsDir } from './reader-fonts';
@@ -67,7 +67,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
   private readonly pageHost = viewChild.required<ElementRef<HTMLElement>>('pageHost');
   private readonly selectionBar = viewChild.required(EpubSelectionComponent);
   private readonly framed = new WeakSet<Window>();
-  private stopSelectors: (() => void) | null = null;
   private stopResize: (() => void) | null = null;
 
   readonly loading = computed(() => !this.book.ready());
@@ -125,7 +124,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
   ngOnDestroy(): void {
     this.book.dispose();
     this.stopResize?.();
-    this.stopSelectors?.();
     if (this.book.navigator) void destroyNavigator(this.book.navigator, this.pageHost().nativeElement);
     this.api.release(this.target().itemId);
   }
@@ -158,7 +156,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       this.pages.setOrder(publication.readingOrder.items.map((l) => l.href));
       void this.notes.load();
       this.watchSize(container);
-      this.stopSelectors = provideFrameSelectors(container);
       const nav = new EpubNavigator(
         container,
         publication,
