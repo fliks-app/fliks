@@ -306,7 +306,7 @@ export const routes: Routes = [
         path: 'requests',
         loadComponent: () =>
           import('./features/requests/requests').then((m) => m.RequestsComponent),
-        data: { titleKey: 'requests.title' },
+        data: { titleKey: 'requests.title', reuse: true },
       },
       {
         path: 'calendar',
