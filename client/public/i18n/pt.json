@@ -284,9 +284,6 @@
     "sessions": {
       "title": "Dispositivos com sessão iniciada",
       "intro": "Todos os dispositivos onde iniciou sessão. Terminar a sessão de um dispositivo encerra-a de imediato.",
-      "col_device": "Dispositivo",
-      "col_method": "Sessão iniciada com",
-      "col_last_seen": "Última atividade",
       "this_device": "Este dispositivo",
       "unknown_device": "Dispositivo desconhecido",
       "revoke": "Terminar sessão",
@@ -294,7 +291,8 @@
       "revoke_message": "A sessão do dispositivo termina de imediato e é preciso iniciá-la de novo.",
       "revoked": "Sessão do dispositivo terminada.",
       "method_password": "Palavra-passe",
-      "method_pairing": "Quick Connect"
+      "method_pairing": "Quick Connect",
+      "last_seen": "Última atividade: {{date}}"
     }
   },
   "account_settings": {

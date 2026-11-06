@@ -176,17 +176,18 @@ pub async fn revoke_other_sessions(
     keep: Option<i32>,
 ) -> Result<(), sqlx::Error> {
     let mut tx = db.begin().await?;
+    // Tokens first, as a refresh locks its token before the session.
     sqlx::query!(
-        r#"UPDATE sessions SET "revokedAt" = now()
-           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR id <> $2)"#,
+        r#"UPDATE refresh_tokens SET "revokedAt" = now()
+           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR "sessionId" <> $2)"#,
         user_id,
         keep
     )
     .execute(&mut *tx)
     .await?;
     sqlx::query!(
-        r#"UPDATE refresh_tokens SET "revokedAt" = now()
-           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR "sessionId" <> $2)"#,
+        r#"UPDATE sessions SET "revokedAt" = now()
+           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR id <> $2)"#,
         user_id,
         keep
     )

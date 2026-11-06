@@ -242,9 +242,9 @@ pub(crate) async fn login(
     let (user, role) = load_enabled(&st.db, row.id)
         .await?
         .ok_or_else(|| AppError::unauthorized("Account disabled"))?;
-    let mut conn = st.db.acquire().await?;
+    let mut tx = st.db.begin().await?;
     let refresh = db::issue(
-        &mut conn,
+        &mut tx,
         user.id,
         db::Origin::New("password"),
         user_agent(&headers),
@@ -252,7 +252,7 @@ pub(crate) async fn login(
         now,
     )
     .await?;
-    drop(conn);
+    tx.commit().await?;
     let access = st
         .jwt
         .sign_access(user.id, &user.username, refresh.session)?;
@@ -338,14 +338,6 @@ pub(crate) async fn logout(
     }
     let claims = logout_token(&headers).and_then(|t| st.jwt.verify(&t));
     if let Some(c) = claims {
-        // Without a refresh token, the access token's own session is the one that signs out.
-        if text("refreshToken").is_none()
-            && c.scope.is_none()
-            && let Some(sid) = c.sid
-            && let Err(e) = db::revoke_user_session(&st.db, c.sub, sid, Utc::now()).await
-        {
-            tracing::debug!(error = %e, "logout revoke failed");
-        }
         match text("targetId") {
             Some(target) => {
                 st.hub.drop_connections_for_target(c.sub, target);
@@ -400,6 +392,8 @@ pub(crate) async fn revoke_session(
 ) -> Result<StatusCode, AppError> {
     let id = id?.0;
     if db::revoke_user_session(&st.db, a.user.id, id, Utc::now()).await? {
+        // SSE is authenticated at connect only; the user's other devices reconnect with their own session.
+        st.hub.drop_connections_for_user(a.user.id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::not_found("Session not found"))

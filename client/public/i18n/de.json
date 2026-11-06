@@ -284,9 +284,6 @@
     "sessions": {
       "title": "Angemeldete Geräte",
       "intro": "Alle Geräte, auf denen du angemeldet bist. Ein Gerät abzumelden beendet seine Sitzung sofort.",
-      "col_device": "Gerät",
-      "col_method": "Angemeldet mit",
-      "col_last_seen": "Zuletzt aktiv",
       "this_device": "Dieses Gerät",
       "unknown_device": "Unbekanntes Gerät",
       "revoke": "Abmelden",
@@ -294,7 +291,8 @@
       "revoke_message": "Das Gerät wird sofort abgemeldet und muss sich neu anmelden.",
       "revoked": "Gerät abgemeldet.",
       "method_password": "Passwort",
-      "method_pairing": "Quick Connect"
+      "method_pairing": "Quick Connect",
+      "last_seen": "Zuletzt aktiv: {{date}}"
     }
   },
   "account_settings": {

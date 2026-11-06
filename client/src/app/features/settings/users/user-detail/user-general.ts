@@ -44,6 +44,10 @@ export class UserGeneralComponent implements OnInit {
   readonly canAssignRole = this.auth.hasPermission('roles.manage');
   /** Changing one's own password proves the current one; an admin resetting another user's does not. */
   readonly isSelf = computed(() => this.state.user()?.id === this.auth.user()?.id);
+  /** Not on one's own page, and only an admin signs out an admin. */
+  readonly canSignOutEverywhere = computed(
+    () => !this.isSelf() && (!this.state.user()?.isAdmin || !!this.auth.user()?.isAdmin),
+  );
 
   readonly saving = signal(false);
 

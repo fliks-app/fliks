@@ -69,43 +69,31 @@
         <h2 class="card-title text-base">{{ 'account.sessions.title' | translate }}</h2>
         <p class="text-sm text-base-content/60">{{ 'account.sessions.intro' | translate }}</p>
       </div>
-      <div class="overflow-x-auto scroll-ring-safe">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>{{ 'account.sessions.col_device' | translate }}</th>
-              <th>{{ 'account.sessions.col_method' | translate }}</th>
-              <th>{{ 'account.sessions.col_last_seen' | translate }}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (s of sessions(); track s.id) {
-              <tr>
-                <td class="truncate max-w-64" [attr.title]="s.userAgent">
-                  {{ s.userAgent || ('account.sessions.unknown_device' | translate) }}
-                  @if (s.current) {
-                    <span class="badge badge-primary badge-sm ml-2">{{ 'account.sessions.this_device' | translate }}</span>
-                  }
-                </td>
-                <td class="text-base-content/60">
-                  @if (s.method) {
-                    {{ 'account.sessions.method_' + s.method | translate }}
-                  }
-                </td>
-                <td class="whitespace-nowrap text-base-content/60">{{ s.lastSeenAt | date: 'short' }}</td>
-                <td class="text-right whitespace-nowrap">
-                  @if (!s.current) {
-                    <button type="button" class="btn btn-ghost btn-sm text-error" (click)="revoke(s)">
-                      {{ 'account.sessions.revoke' | translate }}
-                    </button>
-                  }
-                </td>
-              </tr>
+      <ul class="flex flex-col divide-y divide-base-200">
+        @for (s of sessions(); track s.id) {
+          <li class="flex items-center gap-3 py-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="truncate" [attr.title]="s.userAgent">{{ deviceLabel(s) }}</span>
+                @if (s.current) {
+                  <span class="badge badge-primary badge-sm shrink-0">{{ 'account.sessions.this_device' | translate }}</span>
+                }
+              </div>
+              <p class="text-sm text-base-content/60">
+                @if (s.method) {
+                  {{ 'account.sessions.method_' + s.method | translate }} ·
+                }
+                {{ 'account.sessions.last_seen' | translate: { date: (s.lastSeenAt | date: 'short') } }}
+              </p>
+            </div>
+            @if (!s.current) {
+              <button type="button" class="btn btn-ghost btn-sm text-error shrink-0" (click)="revoke(s)">
+                {{ 'account.sessions.revoke' | translate }}
+              </button>
             }
-          </tbody>
-        </table>
-      </div>
+          </li>
+        }
+      </ul>
     </div>
   </div>
 </div>

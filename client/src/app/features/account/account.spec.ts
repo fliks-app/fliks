@@ -21,7 +21,7 @@ const session = (id: number, current = false): AuthSession => ({
 });
 
 function setup(confirmed = true) {
-  const users = { changePassword: vi.fn(async () => ({})) };
+  const users = { update: vi.fn(async () => ({})) };
   const sessions = {
     list: vi.fn(async () => [session(1, true), session(2)]),
     revoke: vi.fn(async () => undefined),
@@ -54,14 +54,18 @@ describe('AccountComponent', () => {
     cmp.formPassword.set('new-password');
     cmp.formPasswordConfirm.set('new-password');
     await cmp.save();
-    expect(users.changePassword).toHaveBeenCalledWith(7, 'new-password', 'old-pass');
+    expect(users.update).toHaveBeenCalledWith(
+      7,
+      { password: 'new-password', currentPassword: 'old-pass' },
+      { skipErrorToast: true },
+    );
     expect(cmp.formCurrentPassword()).toBe('');
     await vi.waitFor(() => expect(sessions.list).toHaveBeenCalledTimes(2));
   });
 
   it('shows a wrong current password translated and keeps the form', async () => {
     const { users, toast, cmp } = setup();
-    users.changePassword.mockRejectedValueOnce(
+    users.update.mockRejectedValueOnce(
       new HttpErrorResponse({ status: 400, error: { message: 'Current password is incorrect' } }),
     );
     cmp.formPassword.set('new-password');

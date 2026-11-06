@@ -135,17 +135,6 @@ export class UsersApiService {
     return firstValueFrom(this.http.put<UserRow>(`/api/users/${id}`, body, { context }));
   }
 
-  /** The caller reports a failure itself, so a wrong current password reads translated. */
-  changePassword(id: number, password: string, currentPassword?: string) {
-    return firstValueFrom(
-      this.http.put<UserRow>(
-        `/api/users/${id}`,
-        { password, ...(currentPassword ? { currentPassword } : {}) },
-        { context: new HttpContext().set(SKIP_ERROR_TOAST, true) },
-      ),
-    );
-  }
-
   /** Revokes every session of the user, on every device. */
   signOutEverywhere(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/users/${id}/sessions`));

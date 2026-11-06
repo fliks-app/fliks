@@ -7,6 +7,7 @@ import { AuthSession, SessionsApiService } from '../../core/services/api/session
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
+import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
 @Component({
   selector: 'app-account',
@@ -49,7 +50,11 @@ export class AccountComponent implements OnInit {
 
     this.saving.set(true);
     try {
-      await this.api.changePassword(user.id, this.formPassword(), this.formCurrentPassword());
+      await this.api.update(
+        user.id,
+        { password: this.formPassword(), currentPassword: this.formCurrentPassword() || undefined },
+        { skipErrorToast: true },
+      );
       this.formCurrentPassword.set('');
       this.formPassword.set('');
       this.formPasswordConfirm.set('');
@@ -60,6 +65,13 @@ export class AccountComponent implements OnInit {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  deviceLabel(session: AuthSession): string {
+    const label = parseDeviceLabel(session.userAgent);
+    return label
+      ? this.translate.instant(label.key, label.params)
+      : this.translate.instant('account.sessions.unknown_device');
   }
 
   async revoke(session: AuthSession): Promise<void> {

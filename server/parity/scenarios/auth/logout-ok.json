@@ -95,7 +95,7 @@
       "expect": {
         "body": {
           "error": "Unauthorized",
-          "message": "Refresh token already rotated",
+          "message": "Invalid refresh token",
           "statusCode": 401
         },
         "status": 401

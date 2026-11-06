@@ -284,9 +284,6 @@
     "sessions": {
       "title": "Signed-in devices",
       "intro": "Every device where you are signed in. Signing one out ends its session at once.",
-      "col_device": "Device",
-      "col_method": "Signed in with",
-      "col_last_seen": "Last active",
       "this_device": "This device",
       "unknown_device": "Unknown device",
       "revoke": "Sign out",
@@ -294,7 +291,8 @@
       "revoke_message": "The device is signed out at once and has to sign in again.",
       "revoked": "Device signed out.",
       "method_password": "Password",
-      "method_pairing": "Quick Connect"
+      "method_pairing": "Quick Connect",
+      "last_seen": "Last active {{date}}"
     }
   },
   "account_settings": {

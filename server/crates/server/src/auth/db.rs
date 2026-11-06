@@ -249,15 +249,16 @@ pub async fn revoke_session(
     session_id: i32,
     now: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
+    // Tokens first: a refresh locks its token row before the session, so this order cannot deadlock.
     sqlx::query!(
-        r#"UPDATE sessions SET "revokedAt" = $2 WHERE id = $1 AND "revokedAt" IS NULL"#,
+        r#"UPDATE refresh_tokens SET "revokedAt" = $2 WHERE "sessionId" = $1 AND "revokedAt" IS NULL"#,
         session_id,
         now
     )
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        r#"UPDATE refresh_tokens SET "revokedAt" = $2 WHERE "sessionId" = $1 AND "revokedAt" IS NULL"#,
+        r#"UPDATE sessions SET "revokedAt" = $2 WHERE id = $1 AND "revokedAt" IS NULL"#,
         session_id,
         now
     )
@@ -274,16 +275,24 @@ pub async fn revoke_user_session(
     now: DateTime<Utc>,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let live = sqlx::query_scalar!(
-        r#"SELECT id FROM sessions WHERE id = $1 AND "userId" = $2 AND "revokedAt" IS NULL FOR UPDATE"#,
+    sqlx::query!(
+        r#"UPDATE refresh_tokens SET "revokedAt" = $3
+           WHERE "sessionId" = $1 AND "userId" = $2 AND "revokedAt" IS NULL"#,
         session_id,
-        user_id
+        user_id,
+        now
+    )
+    .execute(&mut *tx)
+    .await?;
+    let live = sqlx::query_scalar!(
+        r#"UPDATE sessions SET "revokedAt" = $3
+           WHERE id = $1 AND "userId" = $2 AND "revokedAt" IS NULL RETURNING id"#,
+        session_id,
+        user_id,
+        now
     )
     .fetch_optional(&mut *tx)
     .await?;
-    if live.is_some() {
-        revoke_session(&mut tx, session_id, now).await?;
-    }
     tx.commit().await?;
     Ok(live.is_some())
 }
@@ -297,7 +306,9 @@ pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sq
     .fetch_optional(db)
     .await?;
     if let Some(id) = session {
-        revoke_session(&mut *db.acquire().await?, id, now).await?;
+        let mut tx = db.begin().await?;
+        revoke_session(&mut tx, id, now).await?;
+        tx.commit().await?;
     }
     Ok(())
 }

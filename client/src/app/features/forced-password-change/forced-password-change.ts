@@ -40,7 +40,11 @@ export class ForcedPasswordChangeComponent {
     this.error.set('');
     try {
       const { current, password } = this.form.getRawValue();
-      await this.api.changePassword(user.id, password, current);
+      await this.api.update(
+        user.id,
+        { password, currentPassword: current || undefined },
+        { skipErrorToast: true },
+      );
       // Force-refresh /auth/me: backend clears `requirePasswordChange` and hydrateFromServer early-returns when a user is cached.
       await this.auth.refreshUser();
       void this.router.navigate(['/'], { replaceUrl: true });

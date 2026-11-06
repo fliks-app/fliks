@@ -284,9 +284,6 @@
     "sessions": {
       "title": "Dispositivos conectados",
       "intro": "Todos los dispositivos en los que has iniciado sesión. Cerrar la sesión de uno la termina al instante.",
-      "col_device": "Dispositivo",
-      "col_method": "Inicio de sesión con",
-      "col_last_seen": "Última actividad",
       "this_device": "Este dispositivo",
       "unknown_device": "Dispositivo desconocido",
       "revoke": "Cerrar sesión",
@@ -294,7 +291,8 @@
       "revoke_message": "El dispositivo se desconecta al instante y debe volver a iniciar sesión.",
       "revoked": "Sesión del dispositivo cerrada.",
       "method_password": "Contraseña",
-      "method_pairing": "Quick Connect"
+      "method_pairing": "Quick Connect",
+      "last_seen": "Última actividad: {{date}}"
     }
   },
   "account_settings": {

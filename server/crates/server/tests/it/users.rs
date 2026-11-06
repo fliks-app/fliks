@@ -436,15 +436,25 @@ async fn a_self_password_change_needs_the_current_password_and_an_admin_reset_do
                 .await
         }
     };
-    let (s, b) = put(&ta, json!({"password": "newpassword"})).await;
-    assert_eq!(
-        (s, &b["message"]),
-        (400, &json!("Current password is incorrect"))
-    );
+    for _ in 0..10 {
+        let (s, b) = put(&ta, json!({"password": "newpassword"})).await;
+        assert_eq!(
+            (s, &b["message"]),
+            (400, &json!("Current password is incorrect")),
+            "a missing current password is never counted"
+        );
+    }
     let wrong = json!({"password": "newpassword", "currentPassword": "nope-nope"});
-    assert_eq!(put(&ta, wrong).await.0, 400);
+    for _ in 0..5 {
+        assert_eq!(put(&ta, wrong.clone()).await.0, 400);
+    }
+    assert_eq!(put(&ta, wrong).await.0, 429, "wrong guesses are throttled");
     let right = json!({"password": "newpassword", "currentPassword": "oldpassword"});
-    assert_eq!(put(&ta, right).await.0, 200);
+    assert_eq!(
+        put(&ta, right).await.0,
+        429,
+        "even the right one while locked"
+    );
     let reset = json!({"password": "resetpassword"});
     assert_eq!(put(&admin, reset).await.0, 200);
 }

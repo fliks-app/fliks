@@ -648,20 +648,6 @@ async fn logout_cuts_the_access_token_and_the_refresh_token_of_its_session(pool:
         (s, e["message"].clone()),
         (401, json!("Invalid refresh token"))
     );
-    let h = auth_header(&second);
-    call(
-        &c,
-        "POST",
-        "/api/auth/logout",
-        &[("authorization", &h)],
-        None,
-    )
-    .await;
-    assert_eq!(
-        me(&second).await,
-        401,
-        "an access token alone signs out its session"
-    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -804,4 +790,56 @@ async fn a_pairing_claim_starts_a_pairing_session(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(method, "pairing");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_logout_without_a_refresh_token_leaves_the_session_usable(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let b = login(&c, "bob").await;
+    let h = auth_header(&b);
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        "/api/auth/logout",
+        &[("authorization", &h)],
+        Some(json!({"targetId": "dev#tab"})),
+    )
+    .await;
+    assert_eq!(s, 204);
+    let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
+    assert_eq!(s, 200, "the profile switch can resume it");
+    let rt = b["refreshToken"].as_str().unwrap();
+    let body = Some(json!({"refreshToken": rt}));
+    let (s, _, _) = call(&c, "POST", "/api/auth/refresh", &[], body).await;
+    assert_eq!(s, 201);
+}
+
+#[sqlx::test(migrations = false)]
+async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let a = login(&c, "bob").await;
+    login(&c, "bob").await;
+    let conn = c.st.hub.connect(id, Default::default());
+    assert!(c.st.hub.has_connection(&conn.id));
+    let ha = auth_header(&a);
+    let (_, _, l) = call(
+        &c,
+        "GET",
+        "/api/auth/sessions",
+        &[("authorization", &ha)],
+        None,
+    )
+    .await;
+    let other = l
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["current"] == json!(false))
+        .unwrap()["id"]
+        .clone();
+    let uri = format!("/api/auth/sessions/{other}");
+    call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
+    assert!(!c.st.hub.has_connection(&conn.id));
 }

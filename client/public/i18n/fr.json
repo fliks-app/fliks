@@ -284,9 +284,6 @@
     "sessions": {
       "title": "Appareils connectés",
       "intro": "Chaque appareil sur lequel vous êtes connecté. Déconnecter un appareil met fin à sa session immédiatement.",
-      "col_device": "Appareil",
-      "col_method": "Connexion par",
-      "col_last_seen": "Dernière activité",
       "this_device": "Cet appareil",
       "unknown_device": "Appareil inconnu",
       "revoke": "Déconnecter",
@@ -294,7 +291,8 @@
       "revoke_message": "L'appareil est déconnecté immédiatement et doit se reconnecter.",
       "revoked": "Appareil déconnecté.",
       "method_password": "Mot de passe",
-      "method_pairing": "Quick Connect"
+      "method_pairing": "Quick Connect",
+      "last_seen": "Dernière activité : {{date}}"
     }
   },
   "account_settings": {

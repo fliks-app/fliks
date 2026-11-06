@@ -231,6 +231,9 @@ pub async fn update(
     }
     if password_changed {
         db::revoke_other_sessions(&st.db, id, a.session.filter(|_| is_self)).await?;
+        if !is_self {
+            revoke_in_background(&st, id);
+        }
     }
     if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
         revoke_in_background(&st, id);
@@ -256,6 +259,10 @@ async fn check_current_password(
     .flatten() else {
         return Ok(());
     };
+    // A missing field is a client that does not know the rule yet, not a guess: it must not count.
+    let Some(given) = given else {
+        return Err(AppError::bad_request("Current password is incorrect"));
+    };
     let ip = crate::auth::client_ip(headers, peer.as_ref());
     if !st.login_throttle.attempt(ip, &a.user.username) {
         return Err(AppError::with_message(
@@ -263,7 +270,7 @@ async fn check_current_password(
             "Too many failed login attempts, try again later",
         ));
     }
-    let given = given.unwrap_or_default().to_owned();
+    let given = given.to_owned();
     let ok = tokio::task::spawn_blocking(move || bcrypt::verify(given, &stored))
         .await
         .map_err(|_| AppError::internal("Internal server error"))?
