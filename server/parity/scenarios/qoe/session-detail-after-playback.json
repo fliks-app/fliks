@@ -169,6 +169,7 @@
               "media": {
                 "mediaId": 1,
                 "mediaType": "movie",
+                "quality": "WEBDL-1080p",
                 "title": "Parity Movie 01"
               },
               "mediaFileId": 1,
@@ -252,6 +253,7 @@
           "media": {
             "mediaId": 1,
             "mediaType": "movie",
+            "quality": "WEBDL-1080p",
             "title": "Parity Movie 01"
           },
           "mediaFileId": 1,
