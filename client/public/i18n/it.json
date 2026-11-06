@@ -277,7 +277,25 @@
     "confirm_password": "Conferma la password",
     "password_hint": "Minimo 8 caratteri",
     "password_mismatch": "Le password non corrispondono",
-    "save_success": "Password modificata con successo"
+    "save_success": "Password modificata con successo",
+    "current_password": "Password attuale",
+    "current_password_wrong": "La password attuale non è corretta.",
+    "save_error": "Impossibile cambiare la password.",
+    "sessions": {
+      "title": "Dispositivi connessi",
+      "intro": "Tutti i dispositivi su cui hai effettuato l’accesso. Disconnettere un dispositivo termina subito la sua sessione.",
+      "col_device": "Dispositivo",
+      "col_method": "Accesso con",
+      "col_last_seen": "Ultima attività",
+      "this_device": "Questo dispositivo",
+      "unknown_device": "Dispositivo sconosciuto",
+      "revoke": "Disconnetti",
+      "revoke_title": "Disconnettere questo dispositivo?",
+      "revoke_message": "Il dispositivo viene disconnesso subito e deve accedere di nuovo.",
+      "revoked": "Dispositivo disconnesso.",
+      "method_password": "Password",
+      "method_pairing": "Quick Connect"
+    }
   },
   "account_settings": {
     "title": "Impostazioni dell'account",
@@ -792,7 +810,7 @@
     "confirm": "Conferma la password",
     "mismatch": "Le password non corrispondono.",
     "submit": "Salva",
-    "error": "Impossibile aggiornare la password."
+    "current_password": "Password attuale"
   },
   "select_user": {
     "title": "Chi sta guardando?",
@@ -2627,7 +2645,12 @@
       "cancel": "Annulla",
       "quotas": "Quote di richieste",
       "quotas_hint": "Richieste consentite per periodo, conteggiate finché sono in attesa o approvate. 0 significa illimitato.",
-      "quota_period_days": "Periodo (giorni)"
+      "quota_period_days": "Periodo (giorni)",
+      "sign_out_everywhere": "Disconnetti ovunque",
+      "sign_out_everywhere_hint": "Termina tutte le sessioni di questo utente su tutti i dispositivi. Dovrà accedere di nuovo.",
+      "sign_out_everywhere_title": "Disconnettere ovunque?",
+      "sign_out_everywhere_message": "{{name}} verrà disconnesso subito da tutti i dispositivi.",
+      "signed_out": "{{name}} è stato disconnesso da tutti i dispositivi."
     },
     "user_detail": {
       "not_found": "Utente non trovato.",

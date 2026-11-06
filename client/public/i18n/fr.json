@@ -277,7 +277,25 @@
     "confirm_password": "Confirmer le mot de passe",
     "password_hint": "8 caractères minimum",
     "password_mismatch": "Les mots de passe ne correspondent pas",
-    "save_success": "Mot de passe modifié avec succès"
+    "save_success": "Mot de passe modifié avec succès",
+    "current_password": "Mot de passe actuel",
+    "current_password_wrong": "Le mot de passe actuel est incorrect.",
+    "save_error": "Impossible de changer le mot de passe.",
+    "sessions": {
+      "title": "Appareils connectés",
+      "intro": "Chaque appareil sur lequel vous êtes connecté. Déconnecter un appareil met fin à sa session immédiatement.",
+      "col_device": "Appareil",
+      "col_method": "Connexion par",
+      "col_last_seen": "Dernière activité",
+      "this_device": "Cet appareil",
+      "unknown_device": "Appareil inconnu",
+      "revoke": "Déconnecter",
+      "revoke_title": "Déconnecter cet appareil ?",
+      "revoke_message": "L'appareil est déconnecté immédiatement et doit se reconnecter.",
+      "revoked": "Appareil déconnecté.",
+      "method_password": "Mot de passe",
+      "method_pairing": "Quick Connect"
+    }
   },
   "account_settings": {
     "title": "Paramètres du compte",
@@ -792,7 +810,7 @@
     "confirm": "Confirmer le mot de passe",
     "mismatch": "Les mots de passe ne correspondent pas.",
     "submit": "Enregistrer",
-    "error": "Impossible de mettre à jour le mot de passe."
+    "current_password": "Mot de passe actuel"
   },
   "select_user": {
     "title": "Qui regarde ?",
@@ -2627,7 +2645,12 @@
       "cancel": "Annuler",
       "quotas": "Quotas de demandes",
       "quotas_hint": "Demandes autorisées par période, comptées tant qu'elles sont en attente ou approuvées. 0 : illimité.",
-      "quota_period_days": "Période (jours)"
+      "quota_period_days": "Période (jours)",
+      "sign_out_everywhere": "Déconnecter partout",
+      "sign_out_everywhere_hint": "Met fin à toutes les sessions de cet utilisateur sur tous ses appareils. Il doit se reconnecter.",
+      "sign_out_everywhere_title": "Déconnecter partout ?",
+      "sign_out_everywhere_message": "{{name}} sera déconnecté de tous ses appareils immédiatement.",
+      "signed_out": "{{name}} a été déconnecté de tous ses appareils."
     },
     "user_detail": {
       "not_found": "Utilisateur introuvable.",
