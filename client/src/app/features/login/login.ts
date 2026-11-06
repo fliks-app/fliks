@@ -1,14 +1,15 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, computed } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, TranslatePipe],
+  imports: [ReactiveFormsModule, TranslatePipe, SsoButtonsComponent],
   templateUrl: './login.html',
 })
 export class LoginComponent {
@@ -21,7 +22,7 @@ export class LoginComponent {
 
   readonly isNative = Capacitor.isNativePlatform();
 
-  readonly error = signal('');
+  readonly error = signal(this.oidcErrorText(this.route.snapshot.queryParamMap.get('oidcError')));
   readonly loading = signal(false);
   /** False when the picker would be empty (roster hidden by the admin): it would bounce back here. */
   readonly canPickUser = signal(true);
@@ -38,11 +39,39 @@ export class LoginComponent {
     password: ['', Validators.required],
   });
 
+  /** Open once an administrator asked for the password form behind the SSO buttons. */
+  readonly adminSignIn = signal(false);
+  readonly sso = this.auth.ssoProviders;
+  /** With `passwordLogin = admins` the page leads with SSO and folds the form, unless no button can work here. */
+  readonly passwordFolded = computed(
+    () => this.auth.passwordLogin() === 'admins' && this.sso().length > 0 && !this.adminSignIn(),
+  );
+
   constructor() {
+    void this.startSso();
     void this.auth
       .listUsersPublic()
       .then((users) => this.canPickUser.set(users.length > 0 || this.auth.resumableSessions().length > 0))
       .catch(() => undefined);
+  }
+
+  /** `?sso=<id>` is the origin redirect of the SSO button; else the configured auto-launch. */
+  private async startSso(): Promise<void> {
+    const query = this.route.snapshot.queryParamMap;
+    const wanted = Number(query.get('sso'));
+    await this.auth.oidcInfo();
+    if (wanted) {
+      await this.auth.oidcBegin(wanted).catch(() => undefined);
+      return;
+    }
+    this.auth.oidcAutoLaunch(query.get('autoLaunch') === '0' || !!query.get('oidcError'));
+  }
+
+  private oidcErrorText(kind: string | null): string {
+    if (!kind) return '';
+    const key = `oidc.error.${kind}`;
+    const text = this.translate.instant(key);
+    return text === key ? this.translate.instant('oidc.error.idp') : text;
   }
 
   async onSubmit() {

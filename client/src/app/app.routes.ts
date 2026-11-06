@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { setupGuard } from './core/guards/setup.guard';
-import { adminGuard } from './core/guards/admin.guard';
+import { adminGuard, isAdminGuard } from './core/guards/admin.guard';
 import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
 import { noTvGuard } from './core/guards/no-tv.guard';
@@ -39,6 +39,11 @@ export const routes: Routes = [
     canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
+  },
+  {
+    path: 'oidc/complete',
+    loadComponent: () =>
+      import('./features/login/oidc-complete').then((m) => m.OidcCompleteComponent),
   },
   {
     path: 'quick-connect/:userId',
@@ -530,6 +535,7 @@ export const routes: Routes = [
           },
           { path: 'users', canActivate: [permissionGuard('users.manage')], loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
           { path: 'roles', canActivate: [permissionGuard('roles.manage')], loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
+          { path: 'sso', canActivate: [isAdminGuard], loadComponent: () => import('./features/settings/sso/sso').then((m) => m.SsoSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },
           { path: 'subtitles-activity', canActivate: [permissionGuard('media.read')], loadComponent: () => import('./features/settings/subtitles-activity/subtitles-activity').then((m) => m.SubtitlesActivityComponent) },
           {

@@ -34,11 +34,18 @@ export interface UserRow {
   seriesQuotaLimit?: number;
   bookQuotaLimit?: number;
   quotaPeriodDays?: number;
+  /** Linked SSO providers. */
+  identities?: { providerId: number; name: string }[];
+  /** Provider that manages the role, admin flag and libraries from groups, else null. */
+  accessManagedBy?: number | null;
+  /** False for an account that only signs in with SSO. */
+  hasPassword?: boolean;
 }
 
 export interface CreateUserBody {
   username: string;
-  password: string;
+  /** Optional: without one the account signs in with SSO (first login adopts it by verified email). */
+  password?: string;
   email?: string;
   roleId?: number;
   enabled?: boolean;

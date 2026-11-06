@@ -87,6 +87,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
     items: [
       { id: 'core.users', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.users', when: ['hasPermission:users.manage'], action: { kind: 'route', path: '/admin/settings/users' } },
       { id: 'core.roles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.roles', when: ['hasPermission:roles.manage'], action: { kind: 'route', path: '/admin/settings/roles' } },
+      { id: 'core.sso', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.sso', when: ['isAdmin'], action: { kind: 'route', path: '/admin/settings/sso' } },
     ],
   },
   {

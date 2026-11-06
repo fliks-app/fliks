@@ -118,10 +118,13 @@ describe('SettingsSectionsService', () => {
     expect(svc.sections()).toHaveLength(8);
   });
 
-  it('produces the identical section list for an admin and a non-admin holding the same permissions', () => {
-    const withAdmin = createService({ isAdmin: true }).sections();
-    const withoutAdmin = createService({ isAdmin: false, permissions: ALL_PERMISSIONS }).sections();
-    expect(withoutAdmin).toEqual(withAdmin);
+  it('gives an admin the same sections as a non-admin holding the same permissions, plus Single sign-on', () => {
+    const ids = (s: ReturnType<ReturnType<typeof createService>['sections']>) => s.flatMap((x) => x.items.map((i) => i.id));
+    const withAdmin = ids(createService({ isAdmin: true }).sections());
+    const withoutAdmin = ids(createService({ isAdmin: false, permissions: ALL_PERMISSIONS }).sections());
+    expect(withAdmin.filter((id) => id !== 'core.sso')).toEqual(withoutAdmin);
+    expect(withAdmin).toContain('core.sso');
+    expect(withoutAdmin).not.toContain('core.sso');
   });
 });
 

@@ -1,0 +1,298 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-2xl flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header
+      flush
+      [title]="(editing() ? 'settings.sso.editor_edit' : 'settings.sso.editor_create') | translate"
+    />
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.sso.field_name' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          data-testid="sso-name"
+          [ngModel]="name()"
+          (ngModelChange)="name.set($event)"
+        />
+        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_name_hint' | translate }}</span>
+      </label>
+
+      <div class="flex flex-col gap-2">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_issuer' | translate }}</span>
+          <input
+            type="url"
+            class="input input-bordered input-sm w-full"
+            data-testid="sso-issuer"
+            placeholder="https://idp.example.com/realms/home"
+            [disabled]="!!editing()"
+            [ngModel]="issuer()"
+            (ngModelChange)="issuer.set($event)"
+          />
+        </label>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            data-testid="sso-test"
+            [disabled]="!issuer().trim() || testing()"
+            (click)="test()"
+          >
+            @if (testing()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.sso.test' | translate }}
+          </button>
+        </div>
+        @if (testResult(); as r) {
+          @if (r.ok) {
+            <div role="alert" class="alert alert-success alert-soft flex-col items-start gap-1 text-sm" data-testid="sso-test-ok">
+              <span>{{ 'settings.sso.test_ok' | translate }}: {{ r.issuer }}</span>
+              <span>{{ 'settings.sso.test_algs' | translate }}: {{ r.algs.join(', ') }}</span>
+              <span>
+                {{ 'settings.sso.test_pkce' | translate }}: {{ (r.pkce ? 'common.yes' : 'common.no') | translate }}
+              </span>
+              <span>
+                {{ 'settings.sso.test_end_session' | translate }}:
+                {{ (r.endSession ? 'common.yes' : 'common.no') | translate }}
+              </span>
+              <span>
+                {{ 'settings.sso.test_backchannel' | translate }}:
+                {{ (r.backchannel ? 'common.yes' : 'common.no') | translate }}
+              </span>
+              @if (!r.pkce) {
+                <span class="text-warning">{{ 'settings.sso.test_no_pkce' | translate }}</span>
+              }
+            </div>
+          } @else {
+            <div role="alert" class="alert alert-error alert-soft text-sm" data-testid="sso-test-error">{{ r.error }}</div>
+          }
+        }
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_client_id' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            data-testid="sso-client-id"
+            [ngModel]="clientId()"
+            (ngModelChange)="clientId.set($event)"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_client_secret' | translate }}</span>
+          <input
+            type="password"
+            autocomplete="new-password"
+            class="input input-bordered input-sm w-full"
+            data-testid="sso-client-secret"
+            [placeholder]="editing()?.clientSecretSet ? '••••••••' : ''"
+            [ngModel]="clientSecret()"
+            (ngModelChange)="clientSecret.set($event)"
+          />
+          <span class="text-sm text-base-content/50">
+            {{ (editing()?.clientSecretSet ? 'settings.sso.secret_keep_hint' : 'settings.sso.secret_public_hint') | translate }}
+          </span>
+        </label>
+      </div>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.sso.field_ca' | translate }}</span>
+        <textarea
+          class="textarea textarea-bordered w-full font-mono text-sm"
+          rows="3"
+          placeholder="-----BEGIN CERTIFICATE-----"
+          [ngModel]="caPem()"
+          (ngModelChange)="caPem.set($event)"
+        ></textarea>
+        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_ca_hint' | translate }}</span>
+      </label>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_scope' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="scope()"
+            (ngModelChange)="scope.set($event)"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_prompt' | translate }}</span>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            [ngModel]="prompt()"
+            (ngModelChange)="prompt.set($event)"
+          >
+            @for (p of prompts; track p) {
+              <option [ngValue]="p">{{ 'settings.sso.prompt.' + (p || 'default') | translate }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_username_claim' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="usernameClaim()"
+            (ngModelChange)="usernameClaim.set($event)"
+          />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_groups_claim' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            placeholder="groups"
+            data-testid="sso-groups-claim"
+            [ngModel]="groupsClaim()"
+            (ngModelChange)="groupsClaim.set($event)"
+          />
+          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_groups_claim_hint' | translate }}</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_allowed_groups' | translate }}</span>
+          <textarea
+            class="textarea textarea-bordered w-full text-sm"
+            rows="3"
+            [ngModel]="allowedGroups()"
+            (ngModelChange)="allowedGroups.set($event)"
+          ></textarea>
+          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_allowed_groups_hint' | translate }}</span>
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.sso.field_admin_groups' | translate }}</span>
+          <textarea
+            class="textarea textarea-bordered w-full text-sm"
+            rows="3"
+            [ngModel]="adminGroups()"
+            (ngModelChange)="adminGroups.set($event)"
+          ></textarea>
+          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_admin_groups_hint' | translate }}</span>
+        </label>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <span class="label-text font-semibold">{{ 'settings.sso.role_mappings' | translate }}</span>
+        <p class="text-sm text-base-content/50">{{ 'settings.sso.role_mappings_hint' | translate }}</p>
+        @for (m of roleMappings(); track $index; let i = $index; let last = $last) {
+          <div class="flex items-center gap-2" data-testid="sso-mapping">
+            <input
+              type="text"
+              class="input input-bordered input-sm flex-1 min-w-0"
+              [attr.aria-label]="'settings.sso.mapping_group' | translate"
+              [ngModel]="m.group"
+              (ngModelChange)="setMapping(i, { group: $event })"
+            />
+            <select
+              appTvSelect
+              class="select select-bordered select-sm flex-1 min-w-0"
+              [attr.aria-label]="'settings.sso.mapping_role' | translate"
+              [ngModel]="m.roleId"
+              (ngModelChange)="setMapping(i, { roleId: $event })"
+            >
+              @for (role of roles(); track role.id) {
+                <option [ngValue]="role.id">{{ role.name }}</option>
+              }
+            </select>
+            <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === 0" (click)="moveMapping(i, i - 1)" [attr.aria-label]="'settings.sso.move_up' | translate">
+              <svg lucideArrowUp class="h-4 w-4"></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="last" (click)="moveMapping(i, i + 1)" [attr.aria-label]="'settings.sso.move_down' | translate">
+              <svg lucideArrowDown class="h-4 w-4"></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs btn-square" (click)="removeMapping(i)" [attr.aria-label]="'common.delete' | translate">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
+          </div>
+        }
+        <div>
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="sso-add-mapping" [disabled]="!roles().length" (click)="addMapping()">
+            {{ 'settings.sso.add_mapping' | translate }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label class="label cursor-pointer justify-start gap-3">
+          <input type="checkbox" class="toggle toggle-sm" [ngModel]="autoRegister()" (ngModelChange)="autoRegister.set($event)" />
+          <span class="label-text">{{ 'settings.sso.auto_register' | translate }}</span>
+        </label>
+        <p class="text-sm text-base-content/50">{{ 'settings.sso.auto_register_hint' | translate }}</p>
+        <label class="label cursor-pointer justify-start gap-3">
+          <input type="checkbox" class="toggle toggle-sm" [ngModel]="matchByEmail()" (ngModelChange)="matchByEmail.set($event)" />
+          <span class="label-text">{{ 'settings.sso.match_by_email' | translate }}</span>
+        </label>
+        <p class="text-sm text-base-content/50">{{ 'settings.sso.match_by_email_hint' | translate }}</p>
+        <label class="label cursor-pointer justify-start gap-3">
+          <input type="checkbox" class="toggle toggle-sm" [ngModel]="endSessionAtProvider()" (ngModelChange)="endSessionAtProvider.set($event)" />
+          <span class="label-text">{{ 'settings.sso.end_session' | translate }}</span>
+        </label>
+        <p class="text-sm text-base-content/50">{{ 'settings.sso.end_session_hint' | translate }}</p>
+      </div>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.sso.field_account_url' | translate }}</span>
+        <input
+          type="url"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="accountUrl()"
+          (ngModelChange)="accountUrl.set($event)"
+        />
+        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_account_url_hint' | translate }}</span>
+      </label>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle toggle-sm" data-testid="sso-enabled" [ngModel]="enabled()" (ngModelChange)="enabled.set($event)" />
+        <span class="label-text">{{ 'settings.sso.enabled' | translate }}</span>
+      </label>
+
+      <div class="flex flex-col gap-2" data-testid="sso-uris">
+        <span class="label-text font-semibold">{{ 'settings.sso.uris' | translate }}</span>
+        @if (uris(); as list) {
+          <p class="text-sm text-base-content/50">{{ 'settings.sso.uris_hint' | translate }}</p>
+          @for (u of list; track u.label) {
+            <div class="flex flex-col gap-1">
+              <span class="label-text">{{ u.label | translate }}</span>
+              <div class="flex items-center gap-2">
+                <input type="text" readonly class="input input-bordered input-sm w-full font-mono text-sm" [value]="u.value" />
+                <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="copy(u.value)" [attr.aria-label]="'common.copy' | translate">
+                  <svg lucideCopy class="h-4 w-4"></svg>
+                </button>
+              </div>
+            </div>
+          }
+        } @else {
+          <p class="text-sm text-base-content/50">
+            {{ (publicUrl() ? 'settings.sso.uris_after_save' : 'settings.sso.uris_need_public_url') | translate }}
+          </p>
+        }
+      </div>
+    </div>
+
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="close()" [disabled]="saving()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" data-testid="sso-save" (click)="save()" [disabled]="saving() || !canSave()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

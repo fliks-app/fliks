@@ -136,11 +136,11 @@ export class UsersSettingsComponent implements OnInit {
     try {
       const body: CreateUserBody = {
         username: this.formUsername().trim(),
-        password: this.formPassword(),
         roleId: this.canAssignRole ? (this.formRoleId() ?? undefined) : undefined,
         enabled: this.formEnabled(),
         libraryIds: [...this.formLibraryIds()],
       };
+      if (this.formPassword()) body.password = this.formPassword();
       if (this.formEmail().trim()) body.email = this.formEmail().trim();
       await this.api.create(body);
       this.closeEditor();

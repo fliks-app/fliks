@@ -18,6 +18,7 @@ import {
   LibrariesApiService,
   Library,
 } from '../../../../core/services/api/libraries-api.service';
+import { OidcApiService } from '../../../../core/services/api/oidc-api.service';
 import { UserDetailState } from './user-detail.state';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -34,6 +35,7 @@ const QUOTA_KEYS: QuotaKey[] = ['movieQuotaLimit', 'seriesQuotaLimit', 'bookQuot
 })
 export class UserGeneralComponent implements OnInit {
   private readonly api = inject(UsersApiService);
+  private readonly oidcApi = inject(OidcApiService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
   readonly state = inject(UserDetailState);
@@ -50,6 +52,12 @@ export class UserGeneralComponent implements OnInit {
   );
 
   readonly saving = signal(false);
+  /** Name of the provider that sets role, admin and libraries from groups, else null. */
+  readonly managedBy = computed(() => {
+    const user = this.state.user();
+    if (user?.accessManagedBy == null) return null;
+    return user.identities?.find((i) => i.providerId === user.accessManagedBy)?.name ?? '';
+  });
 
 
   readonly formUsername = signal('');
@@ -150,17 +158,32 @@ export class UserGeneralComponent implements OnInit {
     }
   }
 
+  async unlink(providerId: number) {
+    const user = this.state.user();
+    if (!user) return;
+    try {
+      await this.oidcApi.unlinkUser(user.id, providerId);
+      this.state.user.set({
+        ...user,
+        identities: (user.identities ?? []).filter((i) => i.providerId !== providerId),
+      });
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
   async save() {
     const user = this.state.user();
     if (!user) return;
     this.saving.set(true);
+    const managed = this.managedBy() !== null;
     const body: UpdateUserBody = {
       username: this.formUsername().trim() || undefined,
-      roleId: this.canAssignRole ? (this.formRoleId() ?? undefined) : undefined,
-      isAdmin: this.formIsAdmin(),
+      roleId: this.canAssignRole && !managed ? (this.formRoleId() ?? undefined) : undefined,
+      isAdmin: managed ? undefined : this.formIsAdmin(),
       enabled: this.formEnabled(),
       requirePasswordChange: this.formRequirePasswordChange(),
-      libraryIds: [...this.formLibraryIds()].sort((a, b) => a - b),
+      libraryIds: managed ? undefined : [...this.formLibraryIds()].sort((a, b) => a - b),
       ...this.changedQuotas(user),
     };
     if (this.formPassword()) {

@@ -8,7 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
@@ -16,6 +16,7 @@ import { restoreOpenerFocus } from '../../core/services/focusable.constants';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
+import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
 
@@ -28,12 +29,14 @@ import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lu
     LucideUserRoundPen,
     UserAvatarComponent,
     DefaultFocusDirective,
+    SsoButtonsComponent,
   ],
   templateUrl: './select-user.html',
 })
 export class SelectUserComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly toast = inject(ToastService);
@@ -91,6 +94,11 @@ export class SelectUserComponent {
 
   constructor() {
     void this.loadUsers();
+    void this.auth.oidcInfo().then(() => {
+      if (!this.auth.resumableSessions().length) {
+        this.auth.oidcAutoLaunch(this.route.snapshot.queryParamMap.get('autoLaunch') === '0');
+      }
+    });
     // Sheet lifecycle: focus the password button on open and register a back-dismiss callback.
     // The viewChild is null on the first tick (@if not yet materialised); rAF lands after Angular's commit pass.
     effect(() => {

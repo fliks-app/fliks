@@ -292,8 +292,14 @@
       "revoked": "Dispositivo disconnesso.",
       "method_password": "Password",
       "method_pairing": "Quick Connect",
+      "method_oidc": "Single sign-on",
       "last_seen": "Ultima attività: {{date}}"
-    }
+    },
+    "sso_title": "Single sign-on",
+    "sso_manage": "Gestisci il tuo account",
+    "sso_unlink": "Scollega",
+    "sso_link": "Collega {{name}}",
+    "sso_last_method": "È l'unico modo per accedere. Imposta una password per poterlo scollegare."
   },
   "account_settings": {
     "title": "Impostazioni dell'account",
@@ -789,7 +795,10 @@
     "password": "Password",
     "submit": "Accedi",
     "error": "Errore di connessione",
-    "back_to_picker": "Scegli un altro utente"
+    "back_to_picker": "Scegli un altro utente",
+    "sso_sign_in": "Accedi con {{name}}",
+    "admin_sign_in": "Accesso amministratore",
+    "or": "oppure"
   },
   "create_admin": {
     "title": "Crea l'amministratore",
@@ -2074,7 +2083,8 @@
       "plugins": "Plugins",
       "subtitles_activity": "Attività sottotitoli",
       "cleanup": "Pulizia",
-      "email": "Posta in uscita"
+      "email": "Posta in uscita",
+      "sso": "Single sign-on"
     },
     "engine": {
       "title": "Motore di streaming remoto",
@@ -2655,7 +2665,8 @@
       "sign_out_everywhere_hint": "Termina tutte le sessioni di questo utente su tutti i dispositivi. Dovrà accedere di nuovo.",
       "sign_out_everywhere_title": "Disconnettere ovunque?",
       "sign_out_everywhere_message": "{{name}} verrà disconnesso subito da tutti i dispositivi.",
-      "signed_out": "{{name}} è stato disconnesso da tutti i dispositivi."
+      "signed_out": "{{name}} è stato disconnesso da tutti i dispositivi.",
+      "password_optional_hint": "Facoltativa: senza password l'account accede con SSO."
     },
     "user_detail": {
       "not_found": "Utente non trovato.",
@@ -2692,7 +2703,11 @@
       "col_title": "Titolo",
       "col_type": "Tipo",
       "col_status": "Stato",
-      "col_date": "Data"
+      "col_date": "Data",
+      "no_password_sso": "Nessuna password, accede con SSO.",
+      "managed_by": "Ruolo, stato di amministratore e librerie sono gestiti da {{name}}.",
+      "sso_identities": "Provider di accesso collegati",
+      "sso_unlink": "Scollega"
     },
     "roles": {
       "title": "Ruoli",
@@ -3223,6 +3238,85 @@
       "test_hint": "Invia un breve messaggio all'indirizzo qui sotto.",
       "test_to": "Destinatario",
       "test_send": "Invia prova"
+    },
+    "sso": {
+      "title": "Single sign-on",
+      "subtitle": "Consenti agli utenti di accedere con un provider OpenID Connect.",
+      "providers": "Provider",
+      "add": "Aggiungi un provider",
+      "empty": "Nessun provider. Senza provider nessuno vede il pulsante SSO.",
+      "drag": "Trascina per riordinare",
+      "linked_users": "{{count}} collegati",
+      "load_error": "Impossibile caricare le impostazioni di single sign-on.",
+      "confirm_delete": "Eliminare il provider «{{name}}»? Gli account collegati perdono questo metodo di accesso e le sessioni terminano.",
+      "saved": "Salvato",
+      "policy": "Criteri di accesso",
+      "password_login": "Accesso con password",
+      "password_login_everyone": "Tutti",
+      "password_login_admins": "Solo amministratori",
+      "password_login_hint": "Gli amministratori mantengono sempre l'accesso con password. Gli altri utenti usano SSO o Quick Connect; le app meno recenti non possono più usare la password.",
+      "auto_launch": "Avvio automatico",
+      "auto_launch_none": "Nessuno",
+      "auto_launch_hint": "La pagina di accesso apre subito questo provider. Aggiungi ?autoLaunch=0 all'indirizzo per raggiungere il modulo password.",
+      "editor_create": "Aggiungi un provider",
+      "editor_edit": "Modifica il provider",
+      "field_name": "Nome",
+      "field_name_hint": "Mostrato sul pulsante: «Accedi con <nome>».",
+      "field_issuer": "URL dell'emittente",
+      "test": "Prova",
+      "test_ok": "Provider raggiungibile",
+      "test_algs": "Algoritmi di firma",
+      "test_pkce": "PKCE (S256)",
+      "test_end_session": "Disconnessione dal provider",
+      "test_backchannel": "Disconnessione back-channel",
+      "test_no_pkce": "Senza PKCE (S256) questo provider non può essere attivato.",
+      "test_failed": "Impossibile eseguire la prova.",
+      "field_client_id": "ID client",
+      "field_client_secret": "Segreto client",
+      "secret_keep_hint": "Un segreto è salvato. Lascia vuoto per mantenerlo.",
+      "secret_public_hint": "Lascia vuoto per un client pubblico.",
+      "field_ca": "Certificato CA",
+      "field_ca_hint": "Facoltativo, PEM. Per un provider dietro una autorità di certificazione privata.",
+      "field_scope": "Scope",
+      "field_prompt": "Prompt",
+      "prompt": {
+        "default": "Predefinito del provider",
+        "none": "none",
+        "login": "login",
+        "consent": "consent",
+        "select_account": "select_account"
+      },
+      "field_username_claim": "Claim del nome utente",
+      "field_groups_claim": "Claim dei gruppi",
+      "field_groups_claim_hint": "Percorso con punti, ad esempio groups o realm_access.roles. I gruppi qui sotto valgono solo se è impostato.",
+      "field_allowed_groups": "Gruppi consentiti",
+      "field_allowed_groups_hint": "Uno per riga. Vuoto consente a tutti; altrimenti accedono solo i membri.",
+      "field_admin_groups": "Gruppi amministratori",
+      "field_admin_groups_hint": "Uno per riga. I membri diventano amministratori, riapplicato a ogni accesso.",
+      "role_mappings": "Gruppo a ruolo",
+      "role_mappings_hint": "Vince la prima riga corrispondente e il suo ruolo viene riapplicato a ogni accesso. Senza corrispondenza vale il ruolo predefinito.",
+      "mapping_group": "Gruppo",
+      "mapping_role": "Ruolo",
+      "move_up": "Sposta su",
+      "move_down": "Sposta giù",
+      "add_mapping": "Aggiungi una corrispondenza",
+      "auto_register": "Crea gli account automaticamente",
+      "auto_register_hint": "Un primo accesso senza account ne crea uno con il ruolo predefinito.",
+      "match_by_email": "Associa gli account esistenti tramite e-mail verificata",
+      "match_by_email_hint": "Solo se il provider segna l'e-mail come verificata. Gli account amministratore non vengono mai adottati: si collegano dalla loro pagina account.",
+      "end_session": "Esci anche dal provider",
+      "end_session_hint": "Solo web. Disattivato per impostazione predefinita: uscire da Fliks lascia intatta la sessione del provider.",
+      "field_account_url": "URL di gestione dell'account",
+      "field_account_url_hint": "Facoltativo. Mostrato come «Gestisci il tuo account» nella pagina account.",
+      "enabled": "Attivato",
+      "uris": "Indirizzi da registrare presso il provider",
+      "uris_hint": "Costruiti a partire dall'URL pubblico del server.",
+      "uris_after_save": "Disponibili dopo aver salvato il provider.",
+      "uris_need_public_url": "Imposta prima l'URL pubblico nelle impostazioni generali.",
+      "uri_redirect": "URI di reindirizzamento",
+      "uri_backchannel": "URI di disconnessione back-channel",
+      "uri_logout": "URI di reindirizzamento dopo la disconnessione",
+      "copied": "Copiato"
     }
   },
   "roles": {
@@ -4449,5 +4543,19 @@
     "load_error": "Impossibile caricare l'elenco.",
     "empty": "Non si cerca nulla.",
     "more": "Mostra altro"
+  },
+  "oidc": {
+    "completing": "Accesso in corso...",
+    "error": {
+      "expired": "L'accesso è scaduto o non è stato avviato da questo dispositivo. Riprova.",
+      "idp": "Il provider di identità ha rifiutato l'accesso.",
+      "not_allowed": "Il tuo account non è autorizzato ad accedere qui.",
+      "no_account": "Nessun account corrisponde a questo accesso. Chiedi un account all'amministratore.",
+      "disabled": "Questo account è disattivato.",
+      "already_linked": "Questa identità è già collegata a un altro account.",
+      "pkce": "Questo provider non supporta PKCE (S256) e non può essere usato.",
+      "unavailable": "Il single sign-on non è disponibile su questo dispositivo."
+    },
+    "error_last_method": "È l'unico modo per accedere. Imposta una password prima di scollegarlo."
   }
 }
