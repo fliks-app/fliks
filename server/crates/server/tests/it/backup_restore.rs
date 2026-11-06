@@ -83,6 +83,24 @@ impl Scratch {
     }
 }
 
+/// The same callers, backing up `old`: a database from before the sessions table cannot
+/// authenticate anyone, so requests are served against `c`'s database with the env of `old`.
+fn backing_up(c: &Ctx, old: &Scratch, url: &str) -> Ctx {
+    let env = db_env(url, &old.name);
+    let st = AppState::new(
+        c.st.db.clone(),
+        Config::from_lookup(|k| env.get(k).cloned()),
+        SECRET,
+    );
+    Ctx {
+        app: app::router(st.clone(), None, "/nonexistent".into(), None),
+        st,
+        limited: c.limited.clone(),
+        admin: c.admin.clone(),
+        dir: c.dir.clone(),
+    }
+}
+
 struct Ctx {
     app: Router,
     st: AppState,
@@ -195,12 +213,16 @@ async fn backup_and_restore_on_a_scratch_database() {
         Some(sqlx::migrate!("../../migrations").migrations.len() - 1),
     )
     .await;
-    let (c, c_old) = (ctx(&scratch, &url).await, ctx(&old, &url).await);
+    let (c, c_old) = {
+        let c = ctx(&scratch, &url).await;
+        let c_old = backing_up(&c, &old, &url);
+        (c, c_old)
+    };
     let role = format!("plugin_s5sys_{}", fliks_server::config::random_hex(4));
     let body = tokio::spawn({
         let (url, role) = (url.clone(), role.clone());
         async move {
-            run(&c, &c_old, &scratch.pool, &role).await;
+            run(&c, &c_old, &scratch.pool, &old.pool, &role).await;
             (scratch, old, url)
         }
     })
@@ -225,7 +247,7 @@ async fn backup_and_restore_on_a_scratch_database() {
         .unwrap();
 }
 
-async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
+async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str) {
     // settings.access alone is not enough, and nothing exists yet.
     assert_eq!(
         call(c, "GET", "/api/system/backups", &c.limited, Value::Null)
@@ -544,7 +566,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
     let old_name = json_of(&b)["filename"].as_str().unwrap().to_owned();
     let total = sqlx::migrate!("../../migrations").migrations.len() as i64;
     let before: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations")
-        .fetch_one(&c_old.st.db)
+        .fetch_one(old_pool)
         .await
         .unwrap();
     assert_eq!(before, total - 1);

@@ -119,7 +119,7 @@ async fn token(pool: &PgPool, st: &AppState, name: &str, perms: &str, admin: boo
     .fetch_one(pool)
     .await
     .unwrap();
-    session::token(&st, id, name).await
+    session::token(st, id, name).await
 }
 
 async fn ctx(pool: PgPool) -> Ctx {

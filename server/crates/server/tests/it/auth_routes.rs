@@ -679,7 +679,7 @@ async fn refresh_keeps_the_session_and_a_reuse_revokes_it(pool: PgPool) {
     let claims = c.st.jwt.verify(r["accessToken"].as_str().unwrap()).unwrap();
     assert_eq!(claims.sid, sid);
     let (_, _, r2) = refresh(r["refreshToken"].as_str().unwrap().to_owned()).await;
-    assert_eq!(r2["accessToken"].is_string(), true);
+    assert!(r2["accessToken"].is_string());
     // Replaying the first token once its rotation grace is over is theft: past the grace, age it.
     sqlx::query(r#"UPDATE refresh_tokens SET "revokedAt" = now() - interval '1 minute' WHERE "tokenHash" = encode(sha256($1::bytea), 'hex')"#)
         .bind(rt.as_bytes())
