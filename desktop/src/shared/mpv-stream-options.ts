@@ -36,6 +36,7 @@ export const MPV_STREAM_OPTIONS: readonly (readonly [name: string, value: string
   // hls: the manifest is demuxer-opened.
   ['demuxer-lavf-o', RECONNECT],
   // Direct play: mpv's stream layer opens the URL, so this is the one that applies.
-  // rw_timeout (µs) fails a read on a connection dropped silently during a long pause, so it reconnects.
-  ['stream-lavf-o', `${RECONNECT},rw_timeout=10000000`],
+  // timeout (µs) fails a read on a connection dropped silently during a long pause, so it reconnects. Not
+  // rw_timeout: mpv sets the socket's `timeout` from --network-timeout (60 s), which overrides it.
+  ['stream-lavf-o', `${RECONNECT},timeout=10000000`],
 ];

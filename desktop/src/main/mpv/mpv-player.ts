@@ -18,7 +18,7 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
-import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
+import { mpvStreamOptions } from './stream-options';
 import { muteFilterCommands } from './edl-filter';
 import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadFileOptions } from './load-options';
@@ -163,7 +163,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       // The app publishes the OS media session itself; mpv's own would pause it behind the page's back.
       '--media-controls=no',
       // Buffering / reconnect tuning shared with the libmpv addons (see module).
-      ...MPV_STREAM_OPTIONS.map(([name, value]) => `--${name}=${value}`),
+      ...mpvStreamOptions().map(([name, value]) => `--${name}=${value}`),
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
