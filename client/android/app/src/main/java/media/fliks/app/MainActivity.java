@@ -59,6 +59,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RemoteNotificationPlugin.class);
         registerPlugin(SaveFilePlugin.class);
         registerPlugin(CalendarPlugin.class);
+        registerPlugin(WebAuthPlugin.class);
         super.onCreate(savedInstanceState);
         if (savedInstanceState == null) handleDownloadsIntent(getIntent());
 

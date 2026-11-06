@@ -1,10 +1,11 @@
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { registerPlugin } from '@capacitor/core';
 
 interface WebAuthPlugin {
-  /** The iOS auth sheet; resolves with the callback URL, rejects with code `canceled` when dismissed. */
-  start(o: { url: string; callbackScheme: string }): Promise<{ url: string }>;
+  /** The system auth sheet; resolves with the callback URL, rejects with code `canceled` when dismissed.
+   *  Android resolves `fallback` when its browser has no Auth Tab. */
+  start(o: { url: string; callbackScheme: string }): Promise<{ url?: string; fallback?: boolean }>;
 }
 const WebAuth = registerPlugin<WebAuthPlugin>('WebAuth');
 
@@ -23,16 +24,15 @@ export function oidcCallbackQuery(url: string): string | null {
   }
 }
 
-/** Sends the user through the system auth sheet. iOS resolves with the callback query; on Android
- *  the app-wide listener gets the callback, so this only resolves null when the tab closes without one. */
+/** Sends the user through the system auth sheet. It resolves with the callback query; on the Android Custom Tab
+ *  fallback the app-wide listener gets the callback, so this only resolves null when the tab closes without one. */
 export async function webAuthOpen(url: string): Promise<string | null> {
-  if (Capacitor.getPlatform() === 'ios') {
-    try {
-      return oidcCallbackQuery((await WebAuth.start({ url, callbackScheme: SCHEME })).url);
-    } catch (e) {
-      if ((e as { code?: string }).code === 'canceled') return null;
-      throw e;
-    }
+  try {
+    const r = await WebAuth.start({ url, callbackScheme: SCHEME });
+    if (!r.fallback) return oidcCallbackQuery(r.url ?? '');
+  } catch (e) {
+    if ((e as { code?: string }).code === 'canceled') return null;
+    throw e;
   }
   let finish!: () => void;
   const closed = new Promise<null>((resolve) => (finish = () => resolve(null)));

@@ -75,7 +75,20 @@ describe('web-auth plugin', () => {
   describe('Android', () => {
     beforeEach(() => (m.platform = 'android'));
 
-    it('only reports a cancel when the tab closes, and drops its listener', async () => {
+    it('resolves with the callback query of the Auth Tab, without opening the Custom Tab', async () => {
+      m.start.mockResolvedValue({ url: `${CB}?code=c&state=s` });
+      expect(await webAuthOpen('https://idp.test/auth')).toBe('code=c&state=s');
+      expect(m.open).not.toHaveBeenCalled();
+    });
+
+    it('resolves null when the Auth Tab is canceled', async () => {
+      m.start.mockRejectedValueOnce({ code: 'canceled' });
+      expect(await webAuthOpen('u')).toBeNull();
+      expect(m.open).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the Custom Tab and only reports a cancel when it closes, dropping its listener', async () => {
+      m.start.mockResolvedValue({ fallback: true });
       const p = webAuthOpen('https://idp.test/auth');
       await vi.waitFor(() => expect(m.open).toHaveBeenCalledWith({ url: 'https://idp.test/auth' }));
       expect(m.listeners['appUrlOpen']).toBeUndefined();
@@ -124,10 +137,10 @@ describe('web-auth plugin', () => {
       expect(oidcPlatform()).toMatchObject({ returnTo: 'app' });
     });
 
-    it('needs the Custom Tab plugin on Android', () => {
+    it('needs the WebAuth plugin on Android too', () => {
       m.platform = 'android';
       expect(oidcPlatform()).toBeNull();
-      m.plugins.add('Browser');
+      m.plugins.add('WebAuth');
       expect(oidcPlatform()).toMatchObject({ returnTo: 'app' });
     });
   });
