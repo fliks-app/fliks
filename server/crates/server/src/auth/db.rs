@@ -741,7 +741,7 @@ mod tests {
         assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
         assert!(matches!(
             rotate(&pool, &c.raw, late).await,
-            Refreshed::AlreadyRotated | Refreshed::Reuse
+            Refreshed::Invalid
         ));
         let live: i64 =
             sqlx::query_scalar(r#"SELECT count(*) FROM refresh_tokens WHERE "revokedAt" IS NULL"#)
