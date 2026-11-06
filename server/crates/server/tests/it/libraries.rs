@@ -1,4 +1,5 @@
 //! `/api/libraries/*` and the ACL helpers (`docs/spec/libraries.md`) through the real router on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, libraries, state::AppState};
 use serde_json::{Value, json};
@@ -33,7 +34,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        toks.push(st.jwt.sign_access(id, name).unwrap().token);
+        toks.push(session::token(&st, id, name).await);
     }
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let tmp = std::env::temp_dir().join(format!("fliks-lib-{}", uuid_like()));
@@ -268,6 +269,7 @@ async fn acl_helpers(pool: PgPool) {
                 user: u.0,
                 role: u.1,
                 scope: None,
+                session: None,
             }
         }
     };

@@ -1,4 +1,5 @@
 //! The book read routes (`books-api.md`): filters, sorts, the edition ACL, the watched rule, chapters, series, authors.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{collections, config::Config, media, persons, state::AppState};
 use serde_json::{Value, json};
@@ -67,9 +68,9 @@ async fn ctx(pool: PgPool) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        plain: st.jwt.sign_access(2, "plain").unwrap().token,
-        noperm: st.jwt.sign_access(3, "noperm").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        plain: session::token(&st, 2, "plain").await,
+        noperm: session::token(&st, 3, "noperm").await,
         app: media::router()
             .merge(collections::router())
             .merge(persons::router())

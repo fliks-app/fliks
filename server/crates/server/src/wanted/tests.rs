@@ -1,5 +1,6 @@
 //! Wants, follows, the wanted list and the follow refresh (`docs/spec/wants-follows.md`).
 use super::{refresh, refresh_follows};
+use crate::auth::testing as session;
 use crate::{
     media,
     metadata::books::tests::{Fake, anchor, state},
@@ -62,8 +63,8 @@ async fn ctx(pool: PgPool) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        reader: st.jwt.sign_access(2, "reader").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        reader: session::token(&st, 2, "reader").await,
         app: media::router()
             .merge(super::router())
             .with_state(st.clone()),

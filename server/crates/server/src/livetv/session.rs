@@ -558,7 +558,12 @@ pub async fn play(
     let opened = open(&st, id, &name, streams, &who, caps, device).await?;
     let token = st
         .jwt
-        .sign_live(a.user.id, &a.user.username, &opened.session_id)?
+        .sign_live(
+            a.user.id,
+            &a.user.username,
+            a.session()?,
+            &opened.session_id,
+        )?
         .token;
     let enc = crate::engine::enc(&token);
     Ok((

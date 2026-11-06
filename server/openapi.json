@@ -165,6 +165,28 @@
         }
       }
     },
+    "/api/auth/sessions": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "sessions",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/auth/sessions/{id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "revoke_session",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/auth/setup": {
       "get": {
         "tags": [
@@ -5167,6 +5189,18 @@
         "operationId": "remove",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/users/{id}/sessions": {
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "summary": "`DELETE /api/users/{id}/sessions`: signs the user out of every device.",
+        "operationId": "revoke_sessions",
+        "responses": {
+          "204": {}
         }
       }
     },

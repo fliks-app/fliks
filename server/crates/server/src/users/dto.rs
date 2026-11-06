@@ -41,6 +41,8 @@ pub struct UpdateUser {
     pub email: Option<Option<String>>,
     #[serde(default, deserialize_with = "non_null")]
     pub password: Option<String>,
+    #[serde(default, deserialize_with = "non_null")]
+    pub current_password: Option<String>,
     #[serde(default, deserialize_with = "nullable")]
     pub role_id: Option<Option<i32>>,
     #[serde(default, deserialize_with = "non_null")]

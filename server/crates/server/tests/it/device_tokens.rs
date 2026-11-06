@@ -1,4 +1,5 @@
 //! `/api/device-tokens`: lifecycle, ownership and the hash at rest on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_engine_core::api::ResolveCredentialSource::Basic;
 use fliks_server::{config::Config, device_tokens, state::AppState};
@@ -32,7 +33,7 @@ impl Ctx {
                 .fetch_one(&self.pool)
                 .await
                 .unwrap();
-        (id, self.st.jwt.sign_access(id, name).unwrap().token)
+        (id, session::token(&self.st, id, name).await)
     }
 
     async fn call(
@@ -275,7 +276,7 @@ async fn a_token_is_its_owners_alone_and_manages_nothing(pool: PgPool) {
     }
     let (_, list) = c.call("GET", "/api/device-tokens", &b, None).await;
     assert_eq!(list, json!([]));
-    let stream = c.st.jwt.sign_stream(1, "a").unwrap().token;
+    let stream = session::stream(&c.st, 1, "a").await;
     let (s, _) = c.call("GET", "/api/device-tokens", &stream, None).await;
     assert_eq!(s, 403, "a scoped token");
     let (s, _) = c.call("GET", "/api/device-tokens", "", None).await;

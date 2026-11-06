@@ -1,5 +1,6 @@
 //! Importer routes (`docs/spec/importers.md`) through the real router, against an in-process stub of
 //! Radarr, Sonarr and Seerr serving `fixtures/importers`.
+use crate::session;
 use axum::{
     Router,
     body::Body,
@@ -118,7 +119,7 @@ async fn token(pool: &PgPool, st: &AppState, name: &str, perms: &str, admin: boo
     .fetch_one(pool)
     .await
     .unwrap();
-    st.jwt.sign_access(id, name).unwrap().token
+    session::token(&st, id, name).await
 }
 
 async fn ctx(pool: PgPool) -> Ctx {

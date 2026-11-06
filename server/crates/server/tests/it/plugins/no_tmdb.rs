@@ -1,6 +1,7 @@
 //! A Fliks without TMDB (`provider-plugins.md` section 5.3): lists, search and requests with no TMDB provider,
 //! then with a third-party provider. The third-party cases need the fixture wasm, skipped without it.
 use super::harness::*;
+use crate::session;
 use serde_json::{Value, json};
 
 const NS: &str = "org.example.anime:aid";
@@ -241,7 +242,7 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
         .execute(&h.st.db)
         .await
         .unwrap();
-    let limited = h.st.jwt.sign_access(uid, "limited").unwrap().token;
+    let limited = session::token(&h.st, uid, "limited").await;
     let (st, _) = h
         .call(
             "POST",

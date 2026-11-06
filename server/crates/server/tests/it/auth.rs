@@ -1,4 +1,5 @@
 //! Extractor behaviour (`docs/spec/auth.md` section B) through a real router on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, extract::State, http::Request, routing::get};
 use fliks_domain::acl::{Action, Subject};
 use fliks_server::{
@@ -109,8 +110,8 @@ async fn token_sources_and_precedence(pool: PgPool) {
         user(&pool, "a", None, false, true).await,
         user(&pool, "b", None, false, true).await,
     );
-    let ta = st.jwt.sign_access(a, "a").unwrap().token;
-    let tb = st.jwt.sign_access(b, "b").unwrap().token;
+    let ta = session::token(&st, a, "a").await;
+    let tb = session::token(&st, b, "b").await;
     let app = app(&st);
     let ok = |id: i32| (200, id.to_string());
 
@@ -215,21 +216,17 @@ async fn token_and_user_validation(pool: PgPool) {
                 .0
         }
     };
-    assert_eq!(get(st.jwt.sign_access(id, "a").unwrap().token).await, 200);
-    assert_eq!(
-        get(st.jwt.sign_access(id, "renamed").unwrap().token).await,
-        200
-    );
-    assert_eq!(
-        get(st.jwt.sign_access(off, "off").unwrap().token).await,
-        401
-    );
-    assert_eq!(
-        get(st.jwt.sign_access(id + 1000, "ghost").unwrap().token).await,
-        401
-    );
+    assert_eq!(get(session::token(&st, id, "a").await).await, 200);
+    assert_eq!(get(session::token(&st, id, "renamed").await).await, 200);
+    assert_eq!(get(session::token(&st, off, "off").await).await, 401);
+    let sid = session::new(&st, id).await;
+    let ghost = st.jwt.sign_access(id + 1000, "ghost", sid).unwrap().token;
+    assert_eq!(get(ghost).await, 401);
     let other = fliks_server::auth_token::Jwt::new("another secret", 3600, 3600);
-    assert_eq!(get(other.sign_access(id, "a").unwrap().token).await, 401);
+    assert_eq!(
+        get(other.sign_access(id, "a", sid).unwrap().token).await,
+        401
+    );
     let expired = jsonwebtoken::encode(
         &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
         &json!({"sub": id, "exp": chrono::Utc::now().timestamp() - 5}),
@@ -237,8 +234,15 @@ async fn token_and_user_validation(pool: PgPool) {
     )
     .unwrap();
     assert_eq!(get(expired).await, 401);
+    let sidless = jsonwebtoken::encode(
+        &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+        &json!({"sub": id, "exp": chrono::Utc::now().timestamp() + 60}),
+        &jsonwebtoken::EncodingKey::from_secret(SECRET.as_bytes()),
+    )
+    .unwrap();
+    assert_eq!(get(sidless).await, 401, "a token without a session");
     // disabling or deleting applies on the next request
-    let t = st.jwt.sign_access(id, "a").unwrap().token;
+    let t = session::token(&st, id, "a").await;
     assert_eq!(get(t.clone()).await, 200);
     sqlx::query(r#"UPDATE users SET enabled = false WHERE id = $1"#)
         .bind(id)
@@ -265,7 +269,8 @@ async fn a_live_token_is_refused_by_every_extractor(pool: PgPool) {
     let st = state(pool.clone()).await;
     let id = user(&pool, "a", None, false, true).await;
     let app = app(&st);
-    let live = st.jwt.sign_live(id, "a", "sid-1").unwrap().token;
+    let sid = session::new(&st, id).await;
+    let live = st.jwt.sign_live(id, "a", sid, "sid-1").unwrap().token;
     assert_eq!(st.jwt.verify(&live).unwrap().live.as_deref(), Some("sid-1"));
     for uri in ["/who", "/stream", "/session", "/optional"] {
         let (s, _) = get_with(&app, uri, &[("authorization", &bearer(&live))]).await;
@@ -280,12 +285,50 @@ async fn a_live_token_is_refused_by_every_extractor(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_revoked_session_cuts_every_token_minted_on_it(pool: PgPool) {
+    let st = state(pool.clone()).await;
+    let id = user(&pool, "a", None, false, true).await;
+    let other = user(&pool, "b", None, false, true).await;
+    let app = app(&st);
+    let sid = session::new(&st, id).await;
+    let jwt = &st.jwt;
+    let tokens = [
+        jwt.sign_access(id, "a", sid).unwrap().token,
+        jwt.sign_stream(id, "a", sid).unwrap().token,
+        jwt.sign_stream_for(id, "a", sid, 7).unwrap().token,
+        jwt.sign_cast(id, "a", sid).unwrap().token,
+    ];
+    let status = |t: String| {
+        let app = app.clone();
+        async move {
+            get_with(&app, "/stream", &[("authorization", &bearer(&t))])
+                .await
+                .0
+        }
+    };
+    for t in &tokens {
+        assert_eq!(status(t.clone()).await, 200);
+    }
+    let theirs = session::new(&st, other).await;
+    let stolen = jwt.sign_access(id, "a", theirs).unwrap().token;
+    assert_eq!(status(stolen).await, 401, "a session of another user");
+    sqlx::query(r#"UPDATE sessions SET "revokedAt" = now() WHERE id = $1"#)
+        .bind(sid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for t in tokens {
+        assert_eq!(status(t).await, 401);
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn scoped_tokens_by_extractor(pool: PgPool) {
     let st = state(pool.clone()).await;
     let id = user(&pool, "a", None, false, true).await;
     let app = app(&st);
-    let full = st.jwt.sign_access(id, "a").unwrap().token;
-    let scoped = st.jwt.sign_stream(id, "a").unwrap().token;
+    let full = session::token(&st, id, "a").await;
+    let scoped = session::stream(&st, id, "a").await;
     let call = |uri: &'static str, t: &str| {
         let (app, t) = (app.clone(), bearer(t));
         async move { get_with(&app, uri, &[("authorization", &t)]).await }
@@ -327,7 +370,7 @@ async fn optional_is_anonymous_only_without_credentials(pool: PgPool) {
     let id = user(&pool, "a", None, false, true).await;
     let app = app(&st);
     assert_eq!(get_with(&app, "/optional", &[]).await, (200, "anon".into()));
-    let t = st.jwt.sign_access(id, "a").unwrap().token;
+    let t = session::token(&st, id, "a").await;
     assert_eq!(
         get_with(&app, "/optional", &[("authorization", &bearer(&t))]).await,
         (200, id.to_string())
@@ -356,7 +399,7 @@ async fn permissions_follow_role_admin_flag_and_missing_role(pool: PgPool) {
         (admin, 200),
         (broken, 403),
     ] {
-        let t = st.jwt.sign_access(id, "x").unwrap().token;
+        let t = session::token(&st, id, "x").await;
         let (s, body) = get_with(&app, "/users", &[("authorization", &bearer(&t))]).await;
         assert_eq!(s, want, "user {id}");
         if want == 403 {
@@ -367,7 +410,7 @@ async fn permissions_follow_role_admin_flag_and_missing_role(pool: PgPool) {
         }
     }
     // a role change applies on the next request
-    let t = st.jwt.sign_access(plain, "plain").unwrap().token;
+    let t = session::token(&st, plain, "plain").await;
     sqlx::query(r#"UPDATE roles SET permissions = '["users.manage"]' WHERE name = 'role-plain'"#)
         .execute(&pool)
         .await

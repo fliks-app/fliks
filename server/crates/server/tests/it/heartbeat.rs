@@ -1,5 +1,6 @@
 //! `PUT /api/playback/media/{mediaId}/state` (`docs/spec/heartbeat.md`): debounce, forced writes,
 //! response shapes, failure isolation, presence and the `remote.state` fan-out.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_engine_core::api::SessionKind;
 use fliks_server::{
@@ -113,7 +114,7 @@ async fn ctx_with(pool: PgPool, engine: Option<&str>) -> Ctx {
     .unwrap();
     give_item(&pool, media, file).await;
     Ctx {
-        token: st.jwt.sign_access(user, "u").unwrap().token,
+        token: session::token(&st, user, "u").await,
         app: playback::router().with_state(st.clone()),
         st,
         pool,
@@ -518,14 +519,9 @@ async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
     .await
     .unwrap();
     give_item(&c.pool, other_media, other_file).await;
-    let bound = |f: i32| {
-        c.st.jwt
-            .sign_stream_for(c.user, "u", f as u32)
-            .unwrap()
-            .token
-    };
-    let (own, foreign) = (bound(c.file), bound(other_file));
-    let unbound = c.st.jwt.sign_stream(c.user, "u").unwrap().token;
+    let own = session::stream_for(&c.st, c.user, "u", c.file as u32).await;
+    let foreign = session::stream_for(&c.st, c.user, "u", other_file as u32).await;
+    let unbound = session::stream(&c.st, c.user, "u").await;
     let body = |m: i32, f: i32| json!({"positionSeconds": 5, "mediaFileId": f, "mediaId": m});
 
     c.token = own.clone();

@@ -1,4 +1,5 @@
 //! `POST /api/system/events/ticket`: a single-use URL credential for `GET /api/system/events`.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, events, state::AppState};
 use serde_json::Value;
@@ -31,7 +32,7 @@ impl Ctx {
                 .fetch_one(&self.pool)
                 .await
                 .unwrap();
-        (id, self.st.jwt.sign_access(id, name).unwrap().token)
+        (id, session::token(&self.st, id, name).await)
     }
 
     async fn call(&self, method: &str, uri: &str, bearer: Option<&str>) -> (u16, Value) {
@@ -98,7 +99,7 @@ async fn a_ticket_that_is_unknown_or_of_a_disabled_user_is_refused(pool: PgPool)
 async fn minting_needs_a_session_token(pool: PgPool) {
     let c = ctx(pool).await;
     let (id, _) = c.user("ana").await;
-    let stream = c.st.jwt.sign_stream(id, "ana").unwrap().token;
+    let stream = session::stream(&c.st, id, "ana").await;
     let uri = "/api/system/events/ticket";
     assert_eq!(c.call("POST", uri, Some(&stream)).await.0, 403);
     assert_eq!(c.call("POST", uri, None).await.0, 401);

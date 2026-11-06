@@ -5,7 +5,7 @@ use super::{
 use crate::{
     http::{
         AppError,
-        auth::{Authed, UserRow},
+        auth::{Authed, UserRow, load_users},
         validate::{PathParams, ValidJson, int_param},
     },
     images::upload,
@@ -13,9 +13,9 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{FromRequest, Multipart, Request, State, multipart::MultipartRejection},
-    http::StatusCode,
-    routing::{get, post},
+    extract::{ConnectInfo, FromRequest, Multipart, Request, State, multipart::MultipartRejection},
+    http::{HeaderMap, StatusCode},
+    routing::{delete, get, post},
 };
 use fliks_domain::{
     acl::{Action, Subject},
@@ -23,6 +23,7 @@ use fliks_domain::{
 };
 use serde_json::Value;
 use sqlx::{PgPool, types::Json as Jsonb};
+use std::net::SocketAddr;
 
 const AVATAR_DIR: &str = "users";
 const MSG_ROLE_ASSIGN: &str = "Only users with roles.manage permission can assign a role";
@@ -40,6 +41,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/users/me/avatar", avatar)
         .route("/api/users/{id}", get(get_one).put(update).delete(remove))
         .route("/api/users/{id}/stats", get(stats))
+        .route("/api/users/{id}/sessions", delete(revoke_sessions))
 }
 
 fn forbidden() -> AppError {
@@ -165,9 +167,17 @@ pub async fn update(
 ) -> Result<Json<PublicUser>, AppError> {
     a.require(Action::Update, Subject::User)?;
     let id = int_param(&id)?;
+    let headers = req.headers().clone();
+    let peer = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0);
     let dto: UpdateUser = body(req).await?;
     dto.validate()?;
     let is_self = a.user.id == id;
+    if is_self && dto.password.is_some() {
+        check_current_password(&st, &a, dto.current_password.as_deref(), &headers, peer).await?;
+    }
 
     let mut tx = st.db.begin().await?;
     let target: UserRow = db::lock_user(&mut tx, id)
@@ -220,13 +230,71 @@ pub async fn update(
         st.hub.drop_connections_for_user(id);
     }
     if password_changed {
-        // The caller keeps working on its access token until it expires.
-        db::revoke_other_families(&st.db, id, None).await?;
+        db::revoke_other_sessions(&st.db, id, a.session.filter(|_| is_self)).await?;
     }
     if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
         revoke_in_background(&st, id);
     }
     public(&st.db, id).await
+}
+
+/// A self password change proves the current password when there is one; wrong guesses count in the
+/// login throttle under the username.
+async fn check_current_password(
+    st: &AppState,
+    a: &Authed,
+    given: Option<&str>,
+    headers: &HeaderMap,
+    peer: Option<SocketAddr>,
+) -> Result<(), AppError> {
+    let Some(stored) = sqlx::query_scalar!(
+        r#"SELECT "passwordHash" FROM users WHERE id = $1"#,
+        a.user.id
+    )
+    .fetch_optional(&st.db)
+    .await?
+    .flatten() else {
+        return Ok(());
+    };
+    let ip = crate::auth::client_ip(headers, peer.as_ref());
+    if !st.login_throttle.attempt(ip, &a.user.username) {
+        return Err(AppError::with_message(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many failed login attempts, try again later",
+        ));
+    }
+    let given = given.unwrap_or_default().to_owned();
+    let ok = tokio::task::spawn_blocking(move || bcrypt::verify(given, &stored))
+        .await
+        .map_err(|_| AppError::internal("Internal server error"))?
+        .unwrap_or(false);
+    if !ok {
+        return Err(AppError::bad_request("Current password is incorrect"));
+    }
+    st.login_throttle.clear(ip, &a.user.username);
+    Ok(())
+}
+
+/// `DELETE /api/users/{id}/sessions`: signs the user out of every device.
+#[utoipa::path(delete, path = "/api/users/{id}/sessions", responses((status = 204)))]
+pub async fn revoke_sessions(
+    State(st): State<AppState>,
+    a: Authed,
+    PathParams(id): PathParams<String>,
+) -> Result<StatusCode, AppError> {
+    a.require(Action::Manage, Subject::User)?;
+    let id = int_param(&id)?;
+    let (target, _) = load_users(&st.db, Some(id), false)
+        .await?
+        .pop()
+        .ok_or_else(|| not_found(id))?;
+    if target.is_admin && !a.user.is_admin {
+        return Err(forbidden());
+    }
+    db::revoke_other_sessions(&st.db, id, None).await?;
+    st.hub.drop_connections_for_user(id);
+    revoke_in_background(&st, id);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Who may change what on `target`, before any write.

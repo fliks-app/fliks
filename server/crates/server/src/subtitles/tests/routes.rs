@@ -1,5 +1,6 @@
 //! The subtitle routes through the real router, a provider stub, a fake engine and generated media.
 use super::*;
+use crate::auth::testing as session;
 use crate::{
     app,
     config::Config,
@@ -127,8 +128,8 @@ pub async fn ctx(pool: PgPool) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(admin, "admin").unwrap().token,
-        reader: st.jwt.sign_access(reader, "reader").unwrap().token,
+        admin: session::token(&st, admin, "admin").await,
+        reader: session::token(&st, reader, "reader").await,
         app,
         st,
         pool,

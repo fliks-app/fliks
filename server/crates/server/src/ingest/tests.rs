@@ -1,6 +1,7 @@
 //! Write-path safety (`ingest.md` V1-V19, `media-write.md` V1-V3): generated trees under
 //! `/tmp/fliks-parity/s5-ingest/tests`, a fake engine for the probes, a throwaway DB.
 use super::fsx;
+use crate::auth::testing as session;
 use crate::{
     app,
     config::Config,
@@ -251,7 +252,7 @@ async fn ctx_hello(
         .fetch_one(&pool)
         .await
         .unwrap();
-        toks.push(st.jwt.sign_access(id, name).unwrap().token);
+        toks.push(session::token(&st, id, name).await);
     }
     Ctx {
         app,

@@ -1,4 +1,5 @@
 //! `/api/media` read routes and the library ACL on a small fixture (the rest is parity).
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, media, state::AppState};
 use serde_json::{Value, json};
@@ -41,8 +42,8 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one'), (2, '/m/tw
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        plain: st.jwt.sign_access(2, "plain").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        plain: session::token(&st, 2, "plain").await,
         app: media::router().with_state(st.clone()),
         st,
     }

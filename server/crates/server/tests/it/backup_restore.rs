@@ -1,5 +1,6 @@
 //! Backup and restore through the real router on a scratch database (`docs/spec/system.md`, Vectors).
 //! Skipped without `DATABASE_URL`, `pg_dump` or `psql`; refuses to touch a database named `fliks`.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, db, state::AppState};
 use serde_json::{Value, json};
@@ -113,7 +114,7 @@ async fn ctx(s: &Scratch, url: &str) -> Ctx {
         .fetch_one(&s.pool)
         .await
         .unwrap();
-        toks.push(st.jwt.sign_access(id, name).unwrap().token);
+        toks.push(session::token(&st, id, name).await);
     }
     Ctx {
         app: app::router(st.clone(), None, "/nonexistent".into(), None),

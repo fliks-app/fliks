@@ -1,4 +1,5 @@
 //! `/api/playback/*` validation, watched toggles and the in-process top genres.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, playback, state::AppState};
 use serde_json::{Value, json};
@@ -32,7 +33,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        token: st.jwt.sign_access(user, "u").unwrap().token,
+        token: session::token(&st, user, "u").await,
         app: playback::router().with_state(st),
         pool,
         user,

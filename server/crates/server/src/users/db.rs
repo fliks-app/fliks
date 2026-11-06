@@ -169,20 +169,28 @@ pub async fn add_library_access(
     .map(drop)
 }
 
-/// Revoke every live refresh token of the user except the family of `keep` (a `refresh_tokens.id`).
-pub async fn revoke_other_families(
+/// Revokes every live session of the user except `keep`.
+pub async fn revoke_other_sessions(
     db: &PgPool,
     user_id: i32,
     keep: Option<i32>,
 ) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
     sqlx::query!(
-        r#"UPDATE refresh_tokens SET "revokedAt" = now()
-           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL
-                 OR "familyId" <> (SELECT "familyId" FROM refresh_tokens WHERE id = $2))"#,
+        r#"UPDATE sessions SET "revokedAt" = now()
+           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR id <> $2)"#,
         user_id,
         keep
     )
-    .execute(db)
-    .await
-    .map(drop)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        r#"UPDATE refresh_tokens SET "revokedAt" = now()
+           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR "sessionId" <> $2)"#,
+        user_id,
+        keep
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
 }

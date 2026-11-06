@@ -4,6 +4,7 @@ use super::{
     testkit::{Fake, RUNTIME, hello_body},
     *,
 };
+use crate::auth::testing as session;
 use crate::{app, config::Config, state::AppState};
 use axum::{Router, body::Body, extract::Request};
 use serde_json::{Value, json};
@@ -105,8 +106,10 @@ mod remote {
     async fn admin_and_plain(c: &Ctx) -> (String, String) {
         let a = user(&c.pool, "admin", true, true).await;
         let p = user(&c.pool, "plain", false, true).await;
-        let sign = |id, name| c.st.jwt.sign_access(id, name).unwrap().token;
-        (sign(a, "admin"), sign(p, "plain"))
+        (
+            session::token(&c.st, a, "admin").await,
+            session::token(&c.st, p, "plain").await,
+        )
     }
 
     async fn setting(pool: &PgPool, key: &str) -> Option<String> {
@@ -554,7 +557,7 @@ mod resolve {
         let mut users = vec![];
         for (name, admin) in [("member", false), ("outsider", false), ("admin", true)] {
             let id = user(p, name, admin, true).await;
-            users.push((id, c.st.jwt.sign_access(id, name).unwrap().token));
+            users.push((id, session::token(&c.st, id, name).await));
         }
         sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, $2)"#)
             .bind(users[0].0)
@@ -603,7 +606,7 @@ mod resolve {
     async fn allows_stream_with_every_credential_form(pool: PgPool) {
         let w = world(pool).await;
         let token = w.member.1.clone();
-        let scoped = w.c.st.jwt.sign_stream(w.member.0, "member").unwrap().token;
+        let scoped = session::stream(&w.c.st, w.member.0, "member").await;
         for (name, credential) in [
             ("bearer", format!("Bearer {token}")),
             ("bare ?token=", token.clone()),
@@ -629,8 +632,9 @@ mod resolve {
     async fn a_file_bound_stream_token_opens_only_its_file(pool: PgPool) {
         let w = world(pool).await;
         let jwt = &w.c.st.jwt;
+        let sid = session::new(&w.c.st, w.member.0).await;
         let bound = |file: i32| {
-            jwt.sign_stream_for(w.member.0, "member", file as u32)
+            jwt.sign_stream_for(w.member.0, "member", sid, file as u32)
                 .unwrap()
                 .token
         };
@@ -654,7 +658,7 @@ mod resolve {
             false
         );
         // Legacy unbound stream token and the access token still open any readable file.
-        let legacy = jwt.sign_stream(w.member.0, "member").unwrap().token;
+        let legacy = jwt.sign_stream(w.member.0, "member", sid).unwrap().token;
         assert_eq!(ask(legacy, w.file, "stream").await.1["allow"], true);
         assert_eq!(
             ask(w.member.1.clone(), w.file, "stream").await.1["allow"],
@@ -1051,10 +1055,11 @@ mod resolve {
     #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;
+        let sid = session::new(&w.c.st, w.member.0).await;
         let live =
             w.c.st
                 .jwt
-                .sign_live(w.member.0, "member", "sid-x")
+                .sign_live(w.member.0, "member", sid, "sid-x")
                 .unwrap()
                 .token;
         let ask = |media: Value, purpose: &str| {
@@ -1194,14 +1199,28 @@ mod resolve {
     async fn bad_users_and_bad_credentials_are_denied(pool: PgPool) {
         let w = world(pool).await;
         let off = user(&w.c.pool, "off", false, false).await;
-        let off_token = w.c.st.jwt.sign_access(off, "off").unwrap().token;
+        let off_token = session::token(&w.c.st, off, "off").await;
+        let sid = session::new(&w.c.st, w.member.0).await;
         let forged =
             crate::auth_token::Jwt::new("another-secret-of-32-bytes-or-more!!", 3600, 3600)
-                .sign_access(w.member.0, "member")
+                .sign_access(w.member.0, "member", sid)
                 .unwrap()
                 .token;
-        let gone = w.c.st.jwt.sign_access(999_999, "gone").unwrap().token;
+        let gone = w.c.st.jwt.sign_access(999_999, "gone", sid).unwrap().token;
+        let revoked = session::new(&w.c.st, w.member.0).await;
+        let on_revoked =
+            w.c.st
+                .jwt
+                .sign_stream(w.member.0, "member", revoked)
+                .unwrap()
+                .token;
+        sqlx::query(r#"UPDATE sessions SET "revokedAt" = now() WHERE id = $1"#)
+            .bind(revoked)
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
         for (name, credential) in [
+            ("a revoked session", format!("Bearer {on_revoked}")),
             ("a disabled user", format!("Bearer {off_token}")),
             ("an unknown user", format!("Bearer {gone}")),
             ("a forged token", format!("Bearer {forged}")),

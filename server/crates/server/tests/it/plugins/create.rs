@@ -1,6 +1,7 @@
 //! `media.resolveOrCreate` (`plugins.md` rule 57): scope gate, refusals and the title lock.
 use super::harness::*;
 use crate::fakes::Scripted;
+use crate::session;
 use fliks_domain::external_id::Namespace;
 use fliks_server::{
     config::Config,
@@ -276,7 +277,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
     .execute(&s.pool)
     .await
     .unwrap();
-    let token = st.jwt.sign_access(50, "req").unwrap().token;
+    let token = session::token(&st, 50, "req").await;
     let app = fliks_server::app::router(st.clone(), None, "/nonexistent".into(), None);
     let request = async {
         let req = Request::post("/api/requests")

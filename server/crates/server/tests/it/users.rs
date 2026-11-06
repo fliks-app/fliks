@@ -1,4 +1,5 @@
 //! `/api/users/*` authorisation, and side effects on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, state::AppState, users};
 use serde_json::{Value, json};
@@ -42,7 +43,7 @@ impl Ctx {
         .fetch_one(&self.pool)
         .await
         .unwrap();
-        (id, self.st.jwt.sign_access(id, name).unwrap().token)
+        (id, session::token(&self.st, id, name).await)
     }
 
     async fn call(
@@ -361,21 +362,23 @@ async fn create_defaults_and_conflict(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn password_change_revokes_every_session_and_share_disabled_tears_down(pool: PgPool) {
+async fn self_password_change_keeps_the_caller_and_revokes_the_others(pool: PgPool) {
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;
-    for (family, (hash, used)) in [("h1", "2026-01-01"), ("h2", "2026-02-01")]
-        .into_iter()
-        .enumerate()
-    {
+    let mine: i32 = sqlx::query_scalar(r#"SELECT id FROM sessions WHERE "userId" = $1"#)
+        .bind(a)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    for hash in ["h1", "h2"] {
+        let other = session::new(&c.st, a).await;
         sqlx::query(
-            r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "lastUsedAt", "familyId")
-               VALUES ($1, $2, now() + interval '1 day', $3::timestamptz, $4)"#,
+            r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "sessionId")
+               VALUES ($1, $2, now() + interval '1 day', $3)"#,
         )
         .bind(a)
         .bind(hash)
-        .bind(used)
-        .bind(family as i32)
+        .bind(other)
         .execute(&c.pool)
         .await
         .unwrap();
@@ -397,12 +400,74 @@ async fn password_change_revokes_every_session_and_share_disabled_tears_down(poo
         (s, &b["requirePasswordChange"], &b["shareDisabled"]),
         (200, &json!(false), &json!(true))
     );
-    let live: Vec<String> =
+    let live: Vec<i32> = sqlx::query_scalar(r#"SELECT id FROM sessions WHERE "revokedAt" IS NULL"#)
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(live, vec![mine]);
+    let tokens: Vec<String> =
         sqlx::query_scalar(r#"SELECT "tokenHash" FROM refresh_tokens WHERE "revokedAt" IS NULL"#)
             .fetch_all(&c.pool)
             .await
             .unwrap();
-    assert!(live.is_empty(), "{live:?}");
+    assert!(tokens.is_empty(), "{tokens:?}");
+    let (s, _) = c.call("GET", &format!("/api/users/{a}"), &ta, None).await;
+    assert_eq!(s, 200, "the caller's own token still works");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_self_password_change_needs_the_current_password_and_an_admin_reset_does_not(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (a, ta) = c.user("a", "[]", false).await;
+    let (_, admin) = c.user("root", "[]", true).await;
+    let hash = bcrypt::hash("oldpassword", 4).unwrap();
+    sqlx::query(r#"UPDATE users SET "passwordHash" = $2 WHERE id = $1"#)
+        .bind(a)
+        .bind(hash)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let put = |token: &str, body: Value| {
+        let (c, token) = (&c, token.to_owned());
+        async move {
+            c.call("PUT", &format!("/api/users/{a}"), &token, Some(body))
+                .await
+        }
+    };
+    let (s, b) = put(&ta, json!({"password": "newpassword"})).await;
+    assert_eq!(
+        (s, &b["message"]),
+        (400, &json!("Current password is incorrect"))
+    );
+    let wrong = json!({"password": "newpassword", "currentPassword": "nope-nope"});
+    assert_eq!(put(&ta, wrong).await.0, 400);
+    let right = json!({"password": "newpassword", "currentPassword": "oldpassword"});
+    assert_eq!(put(&ta, right).await.0, 200);
+    let reset = json!({"password": "resetpassword"});
+    assert_eq!(put(&admin, reset).await.0, 200);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_admin_signs_a_user_out_of_every_device(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (a, ta) = c.user("a", "[]", false).await;
+    let (_, mgr) = c.user("mgr", r#"["users.manage"]"#, false).await;
+    let (admin_id, admin) = c.user("root", "[]", true).await;
+    let uri = |id: i32| format!("/api/users/{id}/sessions");
+    assert_eq!(c.call("DELETE", &uri(admin_id), &mgr, None).await.0, 403);
+    assert_eq!(
+        c.call("GET", &format!("/api/users/{a}"), &ta, None).await.0,
+        200
+    );
+    assert_eq!(c.call("DELETE", &uri(a), &mgr, None).await.0, 204);
+    assert_eq!(
+        c.call("GET", &format!("/api/users/{a}"), &ta, None).await.0,
+        401
+    );
+    assert_eq!(c.call("DELETE", &uri(a), &ta, None).await.0, 401);
+    assert_eq!(c.call("DELETE", &uri(a + 99), &admin, None).await.0, 404);
 }
 
 #[sqlx::test(migrations = false)]

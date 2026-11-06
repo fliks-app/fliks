@@ -1,6 +1,7 @@
 //! `/api/requests/*` and the request lifecycle (`docs/spec/requests.md`) through the real router, with a fake
 //! TMDB provider, a loopback image host and a local listener for the webhook notifications.
 use crate::fakes::{Images, Scripted};
+use crate::session;
 use axum::{
     Json, Router,
     body::Body,
@@ -212,7 +213,7 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
             .await
             .unwrap();
         }
-        toks.push(st.jwt.sign_access(id, name).unwrap().token);
+        toks.push(session::token(&st, id, name).await);
     }
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     Ctx {

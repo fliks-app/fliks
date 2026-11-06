@@ -1,5 +1,6 @@
 //! Markers through the real router, a fake engine and a throwaway database.
 use super::{detect, *};
+use crate::auth::testing as session;
 use crate::{
     app,
     config::Config,
@@ -160,8 +161,8 @@ async fn ctx(pool: PgPool, intro_detect: bool) -> Ctx {
     let other_ep = episode(&pool, media[1].1, 1, "o1.mkv").await;
     let orphan_ep = episode(&pool, media[2].1, 1, "x1.mkv").await;
     Ctx {
-        admin: st.jwt.sign_access(admin, "admin").unwrap().token,
-        reader: st.jwt.sign_access(reader, "reader").unwrap().token,
+        admin: session::token(&st, admin, "admin").await,
+        reader: session::token(&st, reader, "reader").await,
         app,
         st,
         pool,

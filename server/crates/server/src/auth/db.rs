@@ -1,4 +1,4 @@
-//! Refresh-token and pairing queries. Every time rule takes `now`, so tests age rows without sleeping;
+//! Session, refresh-token and pairing queries. Every time rule takes `now`, so tests age rows without sleeping;
 //! rotation and the pairing claim run in one transaction over `SELECT ... FOR UPDATE`.
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
@@ -27,17 +27,25 @@ fn new_raw() -> String {
     URL_SAFE_NO_PAD.encode(buf)
 }
 
-/// A freshly issued refresh token: plaintext (shown once) and its expiry.
+/// A freshly issued refresh token: plaintext (shown once), its expiry and the session it belongs to.
 pub struct Issued {
     pub raw: String,
     pub expires_at: DateTime<Utc>,
+    pub session: i32,
 }
 
-/// `from` is the rotated token (id, family); `None` starts a new family (login, pairing).
+/// Where an issued refresh token comes from.
+pub enum Origin {
+    /// A new sign-in, recorded as a session of this `method`.
+    New(&'static str),
+    /// The rotation of a token (id) of a session (id).
+    Rotated { token: i32, session: i32 },
+}
+
 pub async fn issue(
     conn: &mut PgConnection,
     user_id: i32,
-    from: Option<(i32, i32)>,
+    from: Origin,
     user_agent: Option<&str>,
     ttl_days: i64,
     now: DateTime<Utc>,
@@ -45,12 +53,27 @@ pub async fn issue(
     let raw = new_raw();
     let expires_at = now + Duration::days(ttl_days);
     let ua: Option<String> = user_agent.map(|u| u.chars().take(255).collect());
+    let (session, parent) = match from {
+        Origin::New(method) => {
+            let id = sqlx::query_scalar!(
+                r#"INSERT INTO sessions ("userId", method, "userAgent", "createdAt", "lastSeenAt")
+                   VALUES ($1, $2, $3, $4, $4) RETURNING id"#,
+                user_id,
+                method,
+                ua,
+                now
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+            (id, None)
+        }
+        Origin::Rotated { token, session } => (session, Some(token)),
+    };
     sqlx::query!(
-        r#"WITH n AS (SELECT nextval(pg_get_serial_sequence('refresh_tokens', 'id'))::int AS id)
-           INSERT INTO refresh_tokens (id, "familyId", "parentId", "userId", "tokenHash", "expiresAt", "userAgent")
-           SELECT n.id, COALESCE($1::int, n.id), $2::int, $3, $4, $5, $6 FROM n"#,
-        from.map(|f| f.1),
-        from.map(|f| f.0),
+        r#"INSERT INTO refresh_tokens ("sessionId", "parentId", "userId", "tokenHash", "expiresAt", "userAgent")
+           VALUES ($1, $2, $3, $4, $5, $6)"#,
+        session,
+        parent,
         user_id,
         hash(&raw),
         expires_at,
@@ -58,7 +81,11 @@ pub async fn issue(
     )
     .execute(conn)
     .await?;
-    Ok(Issued { raw, expires_at })
+    Ok(Issued {
+        raw,
+        expires_at,
+        session,
+    })
 }
 
 pub enum Refreshed {
@@ -76,7 +103,7 @@ pub enum Refreshed {
 }
 
 /// `POST /auth/refresh` (rules 34-35): the presented token is consumed even when the account is disabled,
-/// and a reuse outside the grace revokes the token's family.
+/// a revoked session is refused, and a reuse outside the grace revokes the token's session.
 pub async fn refresh(
     db: &PgPool,
     raw: &str,
@@ -86,9 +113,11 @@ pub async fn refresh(
 ) -> Result<Refreshed, sqlx::Error> {
     let mut tx = db.begin().await?;
     let Some(t) = sqlx::query!(
-        r#"SELECT id, "userId" AS user_id, "familyId" AS family_id, "userAgent" AS user_agent,
-                  "revokedAt" AS revoked_at, "expiresAt" AS expires_at
-           FROM refresh_tokens WHERE "tokenHash" = $1 ORDER BY id LIMIT 1 FOR UPDATE"#,
+        r#"SELECT t.id, t."userId" AS user_id, t."sessionId" AS session_id, t."userAgent" AS user_agent,
+                  t."revokedAt" AS revoked_at, t."expiresAt" AS expires_at,
+                  s."revokedAt" IS NOT NULL AS "session_revoked!"
+           FROM refresh_tokens t JOIN sessions s ON s.id = t."sessionId"
+           WHERE t."tokenHash" = $1 ORDER BY t.id LIMIT 1 FOR UPDATE OF t"#,
         hash(raw)
     )
     .fetch_optional(&mut *tx)
@@ -100,12 +129,22 @@ pub async fn refresh(
         );
         return Ok(Refreshed::Invalid);
     };
+    if t.session_revoked {
+        tracing::info!(
+            user = t.user_id,
+            token = t.id,
+            session = t.session_id,
+            presented_user_agent = user_agent,
+            "refresh refused: session revoked"
+        );
+        return Ok(Refreshed::Invalid);
+    }
     if let Some(revoked) = t.revoked_at {
         if (now - revoked).num_milliseconds() <= REUSE_GRACE_MS {
             tracing::info!(
                 user = t.user_id,
                 token = t.id,
-                family = t.family_id,
+                session = t.session_id,
                 presented_user_agent = user_agent,
                 "refresh refused: rotated within the grace"
             );
@@ -123,7 +162,7 @@ pub async fn refresh(
             tracing::info!(
                 user = t.user_id,
                 token = t.id,
-                family = t.family_id,
+                session = t.session_id,
                 stored_user_agent = t.user_agent.as_deref(),
                 presented_user_agent = user_agent,
                 since_rotation_ms,
@@ -134,13 +173,13 @@ pub async fn refresh(
         tracing::warn!(
             user = t.user_id,
             token = t.id,
-            family = t.family_id,
+            session = t.session_id,
             stored_user_agent = t.user_agent.as_deref(),
             presented_user_agent = user_agent,
             since_rotation_ms,
-            "refresh token reuse: family revoked"
+            "refresh token reuse: session revoked"
         );
-        revoke_family(&mut tx, t.family_id, now).await?;
+        revoke_session(&mut tx, t.session_id, now).await?;
         tx.commit().await?;
         return Ok(Refreshed::Reuse);
     }
@@ -175,10 +214,21 @@ pub async fn refresh(
         tx.commit().await?;
         return Ok(Refreshed::Disabled);
     }
+    sqlx::query!(
+        r#"UPDATE sessions SET "lastSeenAt" = $2, "userAgent" = COALESCE($3, "userAgent") WHERE id = $1"#,
+        t.session_id,
+        now,
+        user_agent.map(|u| u.chars().take(255).collect::<String>())
+    )
+    .execute(&mut *tx)
+    .await?;
     let issued = issue(
         &mut tx,
         t.user_id,
-        Some((t.id, t.family_id)),
+        Origin::Rotated {
+            token: t.id,
+            session: t.session_id,
+        },
         user_agent,
         ttl_days,
         now,
@@ -192,14 +242,23 @@ pub async fn refresh(
     })
 }
 
-async fn revoke_family(
+/// Marks the session revoked and every live token of it, so its access, stream and cast tokens stop
+/// resolving at once; an already revoked session keeps its date.
+pub async fn revoke_session(
     conn: &mut PgConnection,
-    family_id: i32,
+    session_id: i32,
     now: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE refresh_tokens SET "revokedAt" = $2 WHERE "familyId" = $1 AND "revokedAt" IS NULL"#,
-        family_id,
+        r#"UPDATE sessions SET "revokedAt" = $2 WHERE id = $1 AND "revokedAt" IS NULL"#,
+        session_id,
+        now
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
+        r#"UPDATE refresh_tokens SET "revokedAt" = $2 WHERE "sessionId" = $1 AND "revokedAt" IS NULL"#,
+        session_id,
         now
     )
     .execute(conn)
@@ -207,24 +266,83 @@ async fn revoke_family(
     Ok(())
 }
 
-/// Logout: revoke one token by its plaintext; an unknown or already revoked one is a no-op.
-pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"UPDATE refresh_tokens SET "revokedAt" = $2 WHERE "tokenHash" = $1 AND "revokedAt" IS NULL"#,
-        hash(raw),
-        now
+/// Revokes a live session of `user_id`; false when it is not theirs or already revoked.
+pub async fn revoke_user_session(
+    db: &PgPool,
+    user_id: i32,
+    session_id: i32,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let live = sqlx::query_scalar!(
+        r#"SELECT id FROM sessions WHERE id = $1 AND "userId" = $2 AND "revokedAt" IS NULL FOR UPDATE"#,
+        session_id,
+        user_id
     )
-    .execute(db)
+    .fetch_optional(&mut *tx)
     .await?;
+    if live.is_some() {
+        revoke_session(&mut tx, session_id, now).await?;
+    }
+    tx.commit().await?;
+    Ok(live.is_some())
+}
+
+/// Logout: revokes the session of the presented refresh token; an unknown token is a no-op.
+pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sqlx::Error> {
+    let session = sqlx::query_scalar!(
+        r#"SELECT "sessionId" FROM refresh_tokens WHERE "tokenHash" = $1 ORDER BY id LIMIT 1"#,
+        hash(raw)
+    )
+    .fetch_optional(db)
+    .await?;
+    if let Some(id) = session {
+        revoke_session(&mut *db.acquire().await?, id, now).await?;
+    }
     Ok(())
 }
 
-/// Rows expired or revoked more than 30 days ago.
+pub struct SessionRow {
+    pub id: i32,
+    pub method: Option<String>,
+    pub user_agent: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+}
+
+/// The user's live sessions, most recently seen first; one whose refresh tokens all lapsed is gone.
+pub async fn list_sessions(
+    db: &PgPool,
+    user_id: i32,
+    now: DateTime<Utc>,
+) -> Result<Vec<SessionRow>, sqlx::Error> {
+    sqlx::query_as!(
+        SessionRow,
+        r#"SELECT s.id, s.method, s."userAgent" AS user_agent, s."createdAt" AS created_at,
+                  s."lastSeenAt" AS last_seen_at
+           FROM sessions s
+           WHERE s."userId" = $1 AND s."revokedAt" IS NULL
+             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t."sessionId" = s.id
+                         AND t."revokedAt" IS NULL AND t."expiresAt" > $2)
+           ORDER BY s."lastSeenAt" DESC, s.id DESC"#,
+        user_id,
+        now
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Token rows expired or revoked more than 30 days ago, then the sessions left without any token.
 pub async fn prune_refresh_tokens(db: &PgPool, now: DateTime<Utc>) -> Result<u64, sqlx::Error> {
     let cutoff = now - Duration::days(30);
     let r = sqlx::query!(
         r#"DELETE FROM refresh_tokens WHERE "expiresAt" < $1 OR ("revokedAt" IS NOT NULL AND "revokedAt" < $1)"#,
         cutoff
+    )
+    .execute(db)
+    .await?;
+    sqlx::query!(
+        r#"DELETE FROM sessions s WHERE NOT EXISTS (SELECT 1 FROM refresh_tokens t WHERE t."sessionId" = s.id)"#
     )
     .execute(db)
     .await?;
@@ -342,6 +460,7 @@ pub async fn pairing_status(
     db: &PgPool,
     public_id: &str,
     device_id: &str,
+    user_agent: Option<&str>,
     ttl_days: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<PairingStatus>, sqlx::Error> {
@@ -385,7 +504,15 @@ pub async fn pairing_status(
     )
     .execute(&mut *tx)
     .await?;
-    let issued = issue(&mut tx, approver, None, None, ttl_days, now).await?;
+    let issued = issue(
+        &mut tx,
+        approver,
+        Origin::New("pairing"),
+        user_agent,
+        ttl_days,
+        now,
+    )
+    .await?;
     tx.commit().await?;
     Ok(Some(PairingStatus::Claimed {
         user_id: approver,
@@ -525,7 +652,10 @@ mod tests {
 
     async fn token(pool: &PgPool, user: i32, now: DateTime<Utc>) -> String {
         let mut c = pool.acquire().await.unwrap();
-        issue(&mut c, user, None, None, 60, now).await.unwrap().raw
+        issue(&mut c, user, Origin::New("password"), None, 60, now)
+            .await
+            .unwrap()
+            .raw
     }
 
     async fn rotate(pool: &PgPool, raw: &str, now: DateTime<Utc>) -> Refreshed {
@@ -544,7 +674,7 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn rotation_grace_is_inclusive_then_reuse_revokes_the_family(pool: PgPool) {
+    async fn rotation_grace_is_inclusive_then_reuse_revokes_the_session(pool: PgPool) {
         let u = setup(&pool).await;
         let t0 = Utc::now();
         let a = token(&pool, u, t0).await;
@@ -560,7 +690,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(live, 2, "grace leaves the family alone");
+        assert_eq!(live, 2, "grace leaves the session alone");
         let late = edge + Duration::milliseconds(1);
         assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
         let live: i64 =
@@ -568,7 +698,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(live, 1, "only the other family survives");
+        assert_eq!(live, 1, "only the other session survives");
         assert!(matches!(
             rotate(&pool, "nope", late).await,
             Refreshed::Invalid
@@ -576,7 +706,7 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn reuse_revokes_only_its_own_family(pool: PgPool) {
+    async fn reuse_revokes_only_its_own_session(pool: PgPool) {
         let u = setup(&pool).await;
         let t0 = Utc::now();
         let a = token(&pool, u, t0).await;
@@ -667,6 +797,18 @@ mod tests {
     async fn prune_and_cleanup_use_their_cutoffs(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
+        let orphan: i32 =
+            sqlx::query_scalar(r#"INSERT INTO sessions ("userId") VALUES ($1) RETURNING id"#)
+                .bind(u)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let kept: i32 =
+            sqlx::query_scalar(r#"INSERT INTO sessions ("userId") VALUES ($1) RETURNING id"#)
+                .bind(u)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         for (exp, rev) in [
             (-31, None),
             (-1, None),
@@ -674,15 +816,61 @@ mod tests {
             (10, Some(-1)),
             (10, None),
         ] {
-            sqlx::query(r#"INSERT INTO refresh_tokens ("userId","tokenHash","expiresAt","revokedAt","familyId") VALUES ($1, md5(random()::text), $2, $3, 0)"#)
+            sqlx::query(r#"INSERT INTO refresh_tokens ("userId","tokenHash","expiresAt","revokedAt","sessionId") VALUES ($1, md5(random()::text), $2, $3, $4)"#)
                 .bind(u)
                 .bind(now + Duration::days(exp))
                 .bind(rev.map(|d| now + Duration::days(d)))
+                .bind(kept)
                 .execute(&pool)
                 .await
                 .unwrap();
         }
         assert_eq!(prune_refresh_tokens(&pool, now).await.unwrap(), 2);
+        let sessions: Vec<i32> = sqlx::query_scalar("SELECT id FROM sessions")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(sessions, vec![kept], "{orphan} had no token left");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn logout_revokes_the_session_and_its_refresh_is_invalid_past_the_grace(pool: PgPool) {
+        let u = setup(&pool).await;
+        let t0 = Utc::now();
+        let a = token(&pool, u, t0).await;
+        let b = token(&pool, u, t0).await;
+        let Refreshed::Ok { issued, .. } = rotate(&pool, &a, t0).await else {
+            panic!("rotation failed")
+        };
+        revoke(&pool, &issued.raw, t0).await.unwrap();
+        let late = t0 + Duration::milliseconds(REUSE_GRACE_MS + 1);
+        assert!(matches!(
+            rotate(&pool, &issued.raw, t0).await,
+            Refreshed::Invalid
+        ));
+        assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Invalid));
+        assert!(matches!(
+            rotate(&pool, &b, late).await,
+            Refreshed::Ok { .. }
+        ));
+        assert_eq!(list_sessions(&pool, u, late).await.unwrap().len(), 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_user_revokes_only_their_own_live_sessions(pool: PgPool) {
+        let u = setup(&pool).await;
+        let other: i32 =
+            sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ('v') RETURNING id"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let now = Utc::now();
+        token(&pool, u, now).await;
+        let id = list_sessions(&pool, u, now).await.unwrap()[0].id;
+        assert!(!revoke_user_session(&pool, other, id, now).await.unwrap());
+        assert!(revoke_user_session(&pool, u, id, now).await.unwrap());
+        assert!(!revoke_user_session(&pool, u, id, now).await.unwrap());
+        assert!(list_sessions(&pool, u, now).await.unwrap().is_empty());
     }
 
     async fn open(pool: &PgPool, u: i32, dev: &str, at: DateTime<Utc>) -> Opened {
@@ -739,7 +927,7 @@ mod tests {
         let st = |dev: &'static str, at| {
             let (pool, id) = (pool.clone(), id.clone());
             async move {
-                pairing_status(&pool, &id, dev, 60, at)
+                pairing_status(&pool, &id, dev, None, 60, at)
                     .await
                     .unwrap()
                     .unwrap()
@@ -770,7 +958,7 @@ mod tests {
         let (id, code) = created(open(&pool, u, "d", now).await);
         approve(&pool, &code, u, now).await.unwrap();
         let late = now + Duration::seconds(PAIRING_TTL_SECS + 1);
-        let s = pairing_status(&pool, &id, "d", 60, late)
+        let s = pairing_status(&pool, &id, "d", None, 60, late)
             .await
             .unwrap()
             .unwrap();
@@ -790,7 +978,7 @@ mod tests {
         approve(&pool, &code, u, now).await.unwrap();
         let claim = |pool: PgPool, id: String| {
             tokio::spawn(async move {
-                pairing_status(&pool, &id, "d", 60, now)
+                pairing_status(&pool, &id, "d", None, 60, now)
                     .await
                     .unwrap()
                     .unwrap()

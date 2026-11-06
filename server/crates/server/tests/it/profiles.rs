@@ -1,4 +1,5 @@
 //! `/api/profiles/*`, `/api/custom-formats/*`, `/api/quality-definitions/*` (`docs/spec/profiles.md`) through the real router.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, profiles, state::AppState};
 use serde_json::{Value, json};
@@ -41,7 +42,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        toks.push(st.jwt.sign_access(id, name).unwrap().token);
+        toks.push(session::token(&st, id, name).await);
     }
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     Ctx {

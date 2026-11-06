@@ -1,5 +1,6 @@
 //! Notification routes, senders (`docs/spec/notifications.md`) against a
 //! local mock receiver: no external network.
+use crate::session;
 use axum::{
     Router,
     body::Bytes,
@@ -78,7 +79,7 @@ async fn user(pool: &PgPool, st: &AppState, name: &str, admin: bool) -> String {
     .fetch_one(pool)
     .await
     .unwrap();
-    st.jwt.sign_access(id, name).unwrap().token
+    session::token(&st, id, name).await
 }
 
 async fn ctx(pool: PgPool) -> Ctx {

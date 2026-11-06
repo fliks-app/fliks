@@ -1,7 +1,7 @@
 //! Request authentication (`docs/spec/auth.md` section B): `Authed` and its variants.
 //!
 //! Every extractor reads the token from cookie `fliks_access`, else `Authorization: Bearer`, else `?token=`
-//! (first non-empty wins, no fall-through on a bad one), then loads the user and role on every request.
+//! (first non-empty wins, no fall-through on a bad one), then loads the user, role and live session on every request.
 use super::{
     AppError,
     cookies::{ACCESS_COOKIE, cookie_value},
@@ -103,11 +103,29 @@ pub async fn load_enabled(
     Ok(load_users(db, Some(id), true).await?.pop())
 }
 
+/// `load_enabled` for a token of session `sid`: `None` too when that session is revoked or not the user's.
+pub async fn load_session_user(
+    db: &PgPool,
+    id: i32,
+    sid: i32,
+) -> Result<Option<(UserRow, Option<RoleRow>)>, sqlx::Error> {
+    Ok(load_rows(db, Some(id), true, Some(sid)).await?.pop())
+}
+
 /// The users (all, or one by id) with their role, optionally only enabled ones, ordered by username.
 pub async fn load_users(
     db: impl sqlx::PgExecutor<'_>,
     id: Option<i32>,
     enabled_only: bool,
+) -> Result<Vec<(UserRow, Option<RoleRow>)>, sqlx::Error> {
+    load_rows(db, id, enabled_only, None).await
+}
+
+async fn load_rows(
+    db: impl sqlx::PgExecutor<'_>,
+    id: Option<i32>,
+    enabled_only: bool,
+    session: Option<i32>,
 ) -> Result<Vec<(UserRow, Option<RoleRow>)>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"SELECT
@@ -135,9 +153,12 @@ pub async fn load_users(
         r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
     FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
     WHERE ($1::int IS NULL OR u."id" = $1) AND (NOT $2 OR u."enabled")
+        AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM sessions s
+            WHERE s."id" = $3 AND s."userId" = u."id" AND s."revokedAt" IS NULL))
     ORDER BY u."username" ASC"#,
         id,
-        enabled_only
+        enabled_only,
+        session
     )
     .fetch_all(db)
     .await?;
@@ -197,10 +218,17 @@ pub struct Authed {
     pub role: Option<RoleRow>,
     pub perms: Permissions,
     pub scope: Option<TokenScope>,
+    /// The `sessions` row of the token; `None` for an owner resolved from a device token.
+    pub session: Option<i32>,
 }
 
 impl Authed {
-    fn new(user: UserRow, role: Option<RoleRow>, scope: Option<TokenScope>) -> Self {
+    fn new(
+        user: UserRow,
+        role: Option<RoleRow>,
+        scope: Option<TokenScope>,
+        session: Option<i32>,
+    ) -> Self {
         let perms = Permissions::from(
             role.as_ref().map_or(&[][..], |r| &r.permissions),
             user.is_admin,
@@ -210,7 +238,13 @@ impl Authed {
             role,
             perms,
             scope,
+            session,
         }
+    }
+
+    /// The session a token minted for this caller is bound to; a device-token owner has none.
+    pub fn session(&self) -> Result<i32, AppError> {
+        self.session.ok_or_else(unauthorized)
     }
 
     /// The user `id` as a request of theirs would load them, with no token scope; `None` when
@@ -218,7 +252,7 @@ impl Authed {
     pub async fn load(db: &PgPool, id: i32) -> Result<Option<Self>, sqlx::Error> {
         Ok(load_enabled(db, id)
             .await?
-            .map(|(user, role)| Self::new(user, role, None)))
+            .map(|(user, role)| Self::new(user, role, None, None)))
     }
 
     /// The handler's first line: 403 with the 4.x policy body unless the role grants it at class level.
@@ -310,10 +344,14 @@ async fn authenticate_bound(
         .verify(&token)
         .filter(|c| c.live.is_none())
         .ok_or_else(unauthorized)?;
-    let (user, role) = load_enabled(&state.db, claims.sub)
+    let sid = claims.sid.ok_or_else(unauthorized)?;
+    let (user, role) = load_session_user(&state.db, claims.sub, sid)
         .await?
         .ok_or_else(unauthorized)?;
-    Ok(Some((Authed::new(user, role, claims.scope), claims.mf)))
+    Ok(Some((
+        Authed::new(user, role, claims.scope, Some(sid)),
+        claims.mf,
+    )))
 }
 
 async fn required<S>(parts: &Parts, state: &S) -> Result<Authed, AppError>

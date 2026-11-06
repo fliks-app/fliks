@@ -1,5 +1,6 @@
 //! Book requests (`docs/spec/requests.md` rules 45-50) through the real routers over a fake Open Library.
 use super::Lifecycle;
+use crate::auth::testing as session;
 use crate::{
     media,
     metadata::books::tests::{anchor, state},
@@ -56,12 +57,11 @@ async fn slow_ctx(pool: PgPool, delay: Duration) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
-    let tok = |id, name| st.jwt.sign_access(id, name).unwrap().token;
     Ctx {
-        admin: tok(1, "admin"),
-        user: tok(2, "user"),
-        manager: tok(3, "manager"),
-        reader: tok(4, "reader"),
+        admin: session::token(&st, 1, "admin").await,
+        user: session::token(&st, 2, "user").await,
+        manager: session::token(&st, 3, "manager").await,
+        reader: session::token(&st, 4, "reader").await,
         app: media::router()
             .merge(super::router())
             .with_state(st.clone()),

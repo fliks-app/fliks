@@ -1,5 +1,6 @@
 //! `/api/social/*` and `/api/likes/*` rules that parity cannot show: the visibility matrix, the
 //! four SSE events and the atomic leave-social teardown (`docs/spec/social.md`).
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, events::Bus, state::AppState};
 use serde_json::{Value, json};
@@ -29,7 +30,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        tokens.push(st.jwt.sign_access(id, name).unwrap().token);
+        tokens.push(session::token(&st, id, name).await);
     }
     sqlx::query(r#"INSERT INTO libraries (name) VALUES ('l')"#)
         .execute(&pool)

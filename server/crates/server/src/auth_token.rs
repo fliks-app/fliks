@@ -20,11 +20,21 @@ pub enum TokenScope {
     Other,
 }
 
-/// What a token is bound to besides its user: a live viewer session or a media file.
-#[derive(Default)]
+/// What a token is bound to besides its user: its session, and a live viewer session or a media file.
 struct Bound<'a> {
+    sid: i32,
     live: Option<&'a str>,
     mf: Option<u32>,
+}
+
+impl Bound<'_> {
+    fn session(sid: i32) -> Self {
+        Self {
+            sid,
+            live: None,
+            mf: None,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -33,6 +43,7 @@ struct SignClaims<'a> {
     username: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     scope: Option<TokenScope>,
+    sid: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     live: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -46,6 +57,8 @@ struct SignClaims<'a> {
 pub struct Claims {
     pub sub: i32,
     pub scope: Option<TokenScope>,
+    /// The `sessions` row the token belongs to; a token without one is refused.
+    pub sid: Option<i32>,
     /// The live viewer session a token is bound to: it opens that data plane and nothing else.
     pub live: Option<String>,
     /// The media file a stream token opens on the data plane; absent on legacy tokens, which open any.
@@ -88,23 +101,23 @@ impl Jwt {
         }
     }
 
-    pub fn sign_access(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
+    pub fn sign_access(&self, user_id: i32, username: &str, sid: i32) -> Result<Signed, AppError> {
         self.sign(
             user_id,
             username,
             None,
             self.access_ttl_secs,
-            Bound::default(),
+            Bound::session(sid),
         )
     }
 
-    pub fn sign_stream(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
+    pub fn sign_stream(&self, user_id: i32, username: &str, sid: i32) -> Result<Signed, AppError> {
         self.sign(
             user_id,
             username,
             Some(TokenScope::Stream),
             self.stream_ttl_secs,
-            Bound::default(),
+            Bound::session(sid),
         )
     }
 
@@ -112,6 +125,7 @@ impl Jwt {
         &self,
         user_id: i32,
         username: &str,
+        sid: i32,
         media_file_id: u32,
     ) -> Result<Signed, AppError> {
         self.sign(
@@ -121,31 +135,37 @@ impl Jwt {
             self.stream_ttl_secs,
             Bound {
                 mf: Some(media_file_id),
-                ..Bound::default()
+                ..Bound::session(sid)
             },
         )
     }
 
-    pub fn sign_live(&self, user_id: i32, username: &str, sid: &str) -> Result<Signed, AppError> {
+    pub fn sign_live(
+        &self,
+        user_id: i32,
+        username: &str,
+        sid: i32,
+        viewer: &str,
+    ) -> Result<Signed, AppError> {
         self.sign(
             user_id,
             username,
             Some(TokenScope::Stream),
             LIVE_TTL_SECS,
             Bound {
-                live: Some(sid),
-                ..Bound::default()
+                live: Some(viewer),
+                ..Bound::session(sid)
             },
         )
     }
 
-    pub fn sign_cast(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
+    pub fn sign_cast(&self, user_id: i32, username: &str, sid: i32) -> Result<Signed, AppError> {
         self.sign(
             user_id,
             username,
             Some(TokenScope::Stream),
             CAST_TTL_SECS,
-            Bound::default(),
+            Bound::session(sid),
         )
     }
 
@@ -181,6 +201,7 @@ impl Jwt {
             sub,
             username,
             scope,
+            sid: bound.sid,
             live: bound.live,
             mf: bound.mf,
             iat,
@@ -350,9 +371,9 @@ mod tests {
     #[test]
     fn signed_access_token_round_trips_without_scope() {
         let j = jwt();
-        let s = j.sign_access(7, "ana").unwrap();
+        let s = j.sign_access(7, "ana", 3).unwrap();
         let c = j.verify(&s.token).unwrap();
-        assert_eq!((c.sub, c.scope, c.exp), (7, None, s.exp));
+        assert_eq!((c.sub, c.scope, c.exp, c.sid), (7, None, s.exp, Some(3)));
         let raw = jsonwebtoken::dangerous::insecure_decode::<serde_json::Value>(&s.token)
             .unwrap()
             .claims;
@@ -367,28 +388,36 @@ mod tests {
     #[test]
     fn stream_and_cast_tokens_carry_the_scope() {
         let j = jwt();
-        let (s, c) = (j.sign_stream(1, "a").unwrap(), j.sign_cast(1, "a").unwrap());
+        let (s, c) = (
+            j.sign_stream(1, "a", 2).unwrap(),
+            j.sign_cast(1, "a", 2).unwrap(),
+        );
         assert_eq!(j.verify(&s.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(j.verify(&c.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(c.exp - Utc::now().timestamp(), CAST_TTL_SECS as i64);
+        assert_eq!(j.verify(&c.token).unwrap().sid, Some(2));
     }
 
     #[test]
     fn a_file_bound_stream_token_carries_mf_and_a_legacy_one_does_not() {
         let j = jwt();
         let bound = j
-            .verify(&j.sign_stream_for(1, "a", 42).unwrap().token)
+            .verify(&j.sign_stream_for(1, "a", 2, 42).unwrap().token)
             .unwrap();
         assert_eq!(
             (bound.scope, bound.mf),
             (Some(TokenScope::Stream), Some(42))
         );
         assert_eq!(
-            j.verify(&j.sign_stream(1, "a").unwrap().token).unwrap().mf,
+            j.verify(&j.sign_stream(1, "a", 2).unwrap().token)
+                .unwrap()
+                .mf,
             None
         );
         assert_eq!(
-            j.verify(&j.sign_access(1, "a").unwrap().token).unwrap().mf,
+            j.verify(&j.sign_access(1, "a", 2).unwrap().token)
+                .unwrap()
+                .mf,
             None
         );
     }
@@ -454,7 +483,7 @@ mod tests {
     #[test]
     fn key_is_the_utf8_bytes_of_the_secret_not_hex_decoded() {
         let hex = "00ff00ff";
-        let t = Jwt::new(hex, 60, 60).sign_access(1, "a").unwrap().token;
+        let t = Jwt::new(hex, 60, 60).sign_access(1, "a", 1).unwrap().token;
         assert!(Jwt::new(hex, 60, 60).verify(&t).is_some());
         let decoded = String::from_utf8_lossy(&[0, 255, 0, 255]).into_owned();
         assert!(Jwt::new(&decoded, 60, 60).verify(&t).is_none());

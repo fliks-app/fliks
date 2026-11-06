@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refresh_tokens SET \"revokedAt\" = now()\n           WHERE \"userId\" = $1 AND \"revokedAt\" IS NULL AND ($2::int IS NULL OR \"sessionId\" <> $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e40b7baa18b43472e43e335d0ed485fb4c2d87474dd1bed7be986e97de37226"
+}

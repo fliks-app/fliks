@@ -1,6 +1,7 @@
 //! `/api/metadata/*` and `/api/persons/*` (`docs/spec/metadata.md`, `persons.md`) through the real router, a loopback
 //! stub for TMDB, TVDB and the image host, and a fresh database.
 use crate::fakes::{Images, Scripted};
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use fliks_server::{app, config::Config, state::AppState};
@@ -56,7 +57,7 @@ async fn ctx_with(pool: PgPool, tvdb_on: bool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        tokens.push((id, st.jwt.sign_access(id, name).unwrap().token));
+        tokens.push((id, session::token(&st, id, name).await));
     }
     // library 1 is readable by `reader`, library 2 is not
     sqlx::raw_sql(
