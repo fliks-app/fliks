@@ -31,6 +31,8 @@ export type CompositorAddon = {
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
   setFullscreen(enabled: boolean): void;
+  /** Asks the window manager to bring the window to the front (best effort on Wayland). */
+  raise(): void;
   setCursorVisible(visible: boolean): void;
   setCursorShape(shape: number): void;
   stop(): void;

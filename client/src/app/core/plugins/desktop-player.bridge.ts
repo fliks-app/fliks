@@ -1,3 +1,5 @@
+import type { OidcPages } from '../services/oidc';
+
 // Bridge to the Electron shell's embedded mpv player on `window.fliksDesktop`, consumed by DesktopEngine like NativePlayer.
 // Types mirror desktop/src/shared/contract.ts (separate build workspaces), so the shape is duplicated here.
 
@@ -141,6 +143,11 @@ export interface FliksDesktopApi {
   /** Opens an ICS in the OS default calendar app. Absent on older shells. */
   openCalendarEvent?(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
+  /** Loopback listener for the OIDC redirect; `pages` is what the browser tab shows. Absent on older shells. */
+  oidcListen?(pages: OidcPages): Promise<{ id: number; port: number }>;
+  /** The redirect's query string once it carries `state`; null on timeout or when listener `id` was cancelled or replaced. */
+  oidcWait?(id: number, state: string): Promise<string | null>;
+  oidcCancel?(id: number): Promise<void>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
 

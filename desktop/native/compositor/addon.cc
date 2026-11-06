@@ -118,6 +118,7 @@ struct GlState {
   std::string title = "Fliks";
   std::string iconPath;  // BMP loaded onto the window via SDL_SetWindowIcon
   std::atomic<bool> run{false};
+  std::atomic<bool> raiseRequest{false};
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
   std::atomic<int> cursorRequest{-1};  // -1 none, 0 hidden, 1 shown
   std::atomic<int> cursorShape{-1};    // -1 none, else an index into kCursors
@@ -556,6 +557,7 @@ void RenderThreadMain(GlState* s) {
           break;
       }
     }
+    if (s->raiseRequest.exchange(false, std::memory_order_acq_rel)) SDL_RaiseWindow(s->window);
     int fs = s->fsRequest.exchange(-1, std::memory_order_acq_rel);
     if (fs >= 0) SDL_SetWindowFullscreen(s->window, fs == 1);
     // The page's CSS cursor only covers the offscreen bitmap; the pointer the
@@ -902,6 +904,11 @@ Napi::Value SetFullscreen(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+Napi::Value Raise(const Napi::CallbackInfo& info) {
+  g_state.raiseRequest.store(true, std::memory_order_release);
+  return info.Env().Undefined();
+}
+
 Napi::Value SetCursorShape(const Napi::CallbackInfo& info) {
   int shape = info.Length() > 0 ? info[0].ToNumber().Int32Value() : 0;
   g_state.cursorShape.store(shape, std::memory_order_release);
@@ -980,6 +987,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("setFullscreen", Napi::Function::New(env, SetFullscreen));
   exports.Set("setCursorVisible", Napi::Function::New(env, SetCursorVisible));
+  exports.Set("raise", Napi::Function::New(env, Raise));
   exports.Set("setCursorShape", Napi::Function::New(env, SetCursorShape));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;

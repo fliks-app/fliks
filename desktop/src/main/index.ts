@@ -10,6 +10,7 @@ import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
+import { oidcCancel, oidcListen, oidcWait, type OidcPage, type OidcPages } from './oidc-loopback';
 import { IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
@@ -181,6 +182,8 @@ const CURSOR_SHAPES: Record<string, number> = {
 const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
+// Brings the window the user sees back to the front; set by the start path of each platform.
+let raiseWindow: (() => void) | null = null;
 // Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing, Windows SMTC).
 let setOsMediaSession: ((meta: DesktopMediaMetadata | null) => Promise<void>) | null = null;
 // The rate the page set on the player, for the same OS media session.
@@ -209,6 +212,10 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
   // so the renderer can't invoke an unregistered channel.
   registerPlayerIpc(session, ipcHooks);
+  raiseWindow = () => {
+    session.focus();
+    if (process.platform === 'darwin') app.focus({ steal: true });
+  };
   await session.start({
     rendererUrl: rendererUrl(haveApp),
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
@@ -277,6 +284,7 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
     },
   });
   echoRendererConsole(uiWin.webContents);
+  raiseWindow = () => uiWin?.focus();
   await uiWin.loadURL(rendererUrl(haveApp));
   send({ type: 'ready' });
 }
@@ -305,6 +313,18 @@ app.whenReady().then(async () => {
     systemName: systemName(),
     deviceName: deviceName(),
   }));
+
+  ipcMain.handle(IPC.oidcListen, (_e, pages: OidcPages) => {
+    const valid = (p: OidcPage) => typeof p?.title === 'string' && typeof p?.message === 'string';
+    if (!valid(pages?.done) || !valid(pages?.failed)) throw new Error('invalid pages');
+    return oidcListen(pages);
+  });
+  ipcMain.handle(IPC.oidcWait, async (_e, id: number, state: string) => {
+    const query = await oidcWait(id, state);
+    if (query) raiseWindow?.();
+    return query;
+  });
+  ipcMain.handle(IPC.oidcCancel, (_e, id: number) => oidcCancel(id));
 
   // The renderer's file name is ignored: the OS runs whatever extension it is given.
   ipcMain.handle(IPC.openCalendarEvent, async (_e, ics: unknown) => {
@@ -421,6 +441,7 @@ app.whenReady().then(async () => {
   });
   echoRendererConsole(uiWin.webContents);
 
+  raiseWindow = () => addon.raise();
   const player = new LinuxCompositorPlayer(addon, {
     width: WIDTH,
     height: HEIGHT,

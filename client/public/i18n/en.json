@@ -4550,6 +4550,12 @@
   },
   "oidc": {
     "completing": "Signing you in...",
+    "loopback": {
+      "title": "Back to Fliks",
+      "message": "You can close this tab and go back to Fliks.",
+      "failed_title": "Sign-in did not complete",
+      "failed_message": "Go back to Fliks to see why and try again."
+    },
     "error": {
       "expired": "The sign-in expired or did not start on this device.",
       "idp": "The identity provider refused the sign-in.",

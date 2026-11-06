@@ -4550,6 +4550,12 @@
   },
   "oidc": {
     "completing": "A iniciar sessão...",
+    "loopback": {
+      "title": "Voltar ao Fliks",
+      "message": "Você pode fechar esta aba e voltar ao Fliks.",
+      "failed_title": "Não foi possível iniciar a sessão",
+      "failed_message": "Volte ao Fliks para ver o motivo e tentar novamente."
+    },
     "error": {
       "expired": "O início de sessão expirou ou não começou neste dispositivo.",
       "idp": "O fornecedor de identidade recusou o início de sessão.",

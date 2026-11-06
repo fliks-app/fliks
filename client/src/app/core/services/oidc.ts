@@ -22,9 +22,22 @@ export const NO_OIDC: OidcInfo = { providers: [], autoLaunch: null, passwordLogi
 export type OidcReturn = { code: string; state: string } | { error: string };
 
 /** How one shell sends the user to the identity provider and gets the callback back. */
+export interface OidcPage {
+  title: string;
+  message: string;
+}
+
+/** What a loopback tab shows: after a callback with a code, and after one that carries an error. */
+export interface OidcPages {
+  done: OidcPage;
+  failed: OidcPage;
+}
+
 export interface OidcPlatform {
-  /** The `returnTo` the server accepts for this shell. */
-  returnTo: string;
+  /** The `returnTo` the server accepts for this shell; a shell that must listen first opens its listener here. */
+  returnTo: string | ((pages: () => OidcPages) => Promise<string>);
+  /** Called when `start` fails after `returnTo` resolved, to release what it opened. */
+  abort?(): void;
   /** Web leaves the page and resolves never; a shell resolves with the callback query string (`code`
    *  and `state`, or `error`), or null when the user gave up. */
   open(authorizeUrl: string): Promise<string | null>;
@@ -33,7 +46,25 @@ export interface OidcPlatform {
 /** The seam for the phone and desktop PRs: return their platform here once their bridge is present.
  *  Null hides every SSO button. */
 export function oidcPlatform(): OidcPlatform | null {
-  if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE || window.fliksDesktop) return null;
+  const desktop = window.fliksDesktop;
+  if (desktop) {
+    const { oidcListen, oidcWait, oidcCancel } = desktop;
+    if (!oidcListen || !oidcWait) return null;
+    let id = 0;
+    return {
+      returnTo: async (pages) => {
+        const listener = await oidcListen(pages());
+        id = listener.id;
+        return `http://127.0.0.1:${listener.port}/oidc`;
+      },
+      abort: () => void oidcCancel?.(id),
+      open: (authorizeUrl) => {
+        window.open(authorizeUrl, '_blank');
+        return oidcWait(id, new URL(authorizeUrl).searchParams.get('state') ?? '');
+      },
+    };
+  }
+  if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE) return null;
   // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
   if (!window.isSecureContext) return null;
   return {

@@ -4550,6 +4550,12 @@
   },
   "oidc": {
     "completing": "Anmeldung läuft...",
+    "loopback": {
+      "title": "Zurück zu Fliks",
+      "message": "Du kannst diesen Tab schließen und zu Fliks zurückkehren.",
+      "failed_title": "Die Anmeldung ist fehlgeschlagen",
+      "failed_message": "Gehen Sie zurück zu Fliks, um den Grund zu sehen und es erneut zu versuchen."
+    },
     "error": {
       "expired": "Die Anmeldung ist abgelaufen oder wurde nicht auf diesem Gerät gestartet.",
       "idp": "Der Identitätsanbieter hat die Anmeldung abgelehnt.",

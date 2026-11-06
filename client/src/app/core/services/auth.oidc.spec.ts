@@ -2,7 +2,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { of } from 'rxjs';
 import { AuthService } from './auth.service';
 import { DeviceService } from './device.service';
 import { lastProvider, noteOidcFailure, savePending, takePending, type OidcInfo } from './oidc';
@@ -40,6 +42,10 @@ describe('AuthService OpenID Connect', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([{ path: 'select-user', children: [] }]),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
         { provide: DeviceService, useValue: { isTv: tv, tvPlatform: signal('none') } },
       ],
     });
@@ -112,6 +118,68 @@ describe('AuthService OpenID Connect', () => {
       (await next('/api/auth/oidc/3/start')).flush({ authorizeUrl: 'https://idp/a', state: 's9' });
       await vi.waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
       http.expectNone('/api/auth/oidc/3/start');
+    });
+
+    describe('on the desktop shell', () => {
+      let open: ReturnType<typeof vi.fn>;
+      let oidcWait: ReturnType<typeof vi.fn>;
+      let oidcCancel: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        open = vi.fn();
+        vi.stubGlobal('open', open);
+        oidcWait = vi.fn().mockResolvedValue('error=idp&state=st3');
+        oidcCancel = vi.fn().mockResolvedValue(undefined);
+        vi.stubGlobal('fliksDesktop', {
+          oidcListen: vi.fn().mockResolvedValue({ id: 7, port: 49321 }),
+          oidcWait,
+          oidcCancel,
+        });
+      });
+
+      it('returns to the loopback listener and lands on /oidc/complete with the callback query', async () => {
+        const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+        const done = auth.oidcBegin(3);
+        const req = await next('/api/auth/oidc/3/start');
+        expect(req.request.body.returnTo).toBe('http://127.0.0.1:49321/oidc');
+        req.flush({ authorizeUrl: 'https://idp/a?state=st3&x=1', state: 'st3' });
+        await done;
+        expect(open).toHaveBeenCalledWith('https://idp/a?state=st3&x=1', '_blank');
+        expect(oidcWait).toHaveBeenCalledWith(7, 'st3');
+        expect(navigateByUrl).toHaveBeenCalledWith('/oidc/complete?error=idp&state=st3');
+      });
+
+      it('frees the buttons once the browser is open, and a new click replaces the wait', async () => {
+        let release!: (q: string | null) => void;
+        oidcWait.mockReturnValueOnce(new Promise((r) => (release = r)));
+        const first = auth.oidcBegin(3);
+        (await next('/api/auth/oidc/3/start')).flush({ authorizeUrl: 'https://idp/a?state=s1', state: 's1' });
+        await vi.waitFor(() => expect(oidcWait).toHaveBeenCalledWith(7, 's1'));
+        expect(auth.oidcBusy()).toBe(false);
+        const second = auth.oidcBegin(3);
+        release(null);
+        await first;
+        expect(auth.oidcBusy()).toBe(true);
+        expect(localStorage.getItem('fliks.oidcErrorAt')).toBeNull();
+        (await next('/api/auth/oidc/3/start')).flush({ authorizeUrl: 'https://idp/a?state=s2', state: 's2' });
+        vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+        await second;
+        expect(oidcWait).toHaveBeenLastCalledWith(7, 's2');
+      });
+
+      it('closes the listener when start fails', async () => {
+        const done = auth.oidcBegin(3, { silent: true }).catch(() => 'failed');
+        (await next('/api/auth/oidc/3/start')).flush(null, { status: 429, statusText: 'Too Many Requests' });
+        expect(await done).toBe('failed');
+        expect(oidcCancel).toHaveBeenCalledWith(7);
+        expect(open).not.toHaveBeenCalled();
+      });
+
+      it('hides the SSO buttons on a shell without the loopback bridge', async () => {
+        vi.stubGlobal('fliksDesktop', {});
+        await loadInfo(info());
+        expect(auth.ssoProviders()).toEqual([]);
+      });
     });
 
     it('asks for prompt=none on a silent re-run and a link on request', async () => {
