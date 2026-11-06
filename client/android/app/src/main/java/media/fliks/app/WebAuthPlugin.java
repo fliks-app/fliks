@@ -3,7 +3,6 @@ package media.fliks.app;
 import android.content.Intent;
 import android.net.Uri;
 
-import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.browser.auth.AuthTabIntent;
 import androidx.browser.customtabs.CustomTabsClient;
@@ -25,7 +24,7 @@ public class WebAuthPlugin extends Plugin {
 
     @Override
     public void load() {
-        launcher = AuthTabIntent.registerActivityResultLauncher((ComponentActivity) getActivity(), result -> {
+        launcher = AuthTabIntent.registerActivityResultLauncher(getActivity(), result -> {
             PluginCall call = pending;
             pending = null;
             if (call == null) {
@@ -56,8 +55,18 @@ public class WebAuthPlugin extends Plugin {
             call.resolve(new JSObject().put("fallback", true));
             return;
         }
-        if (pending != null) pending.reject("canceled", "canceled");
-        pending = call;
-        new AuthTabIntent.Builder().build().launch(launcher, Uri.parse(url), scheme);
+        getActivity().runOnUiThread(() -> {
+            if (pending != null) {
+                call.reject("busy");
+                return;
+            }
+            pending = call;
+            try {
+                new AuthTabIntent.Builder().build().launch(launcher, Uri.parse(url), scheme);
+            } catch (RuntimeException e) {
+                pending = null;
+                call.reject("Could not start the sign-in", e);
+            }
+        });
     }
 }

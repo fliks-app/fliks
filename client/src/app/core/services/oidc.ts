@@ -39,7 +39,7 @@ export interface OidcPlatform {
   /** Called when `start` fails after `returnTo` resolved, to release what it opened. */
   abort?(): void;
   /** Web leaves the page and resolves never; a shell resolves with the callback query string (`code`
-   *  and `state`, or `error`), or null when the user gave up (on Android the app listener gets the callback). */
+   *  and `state`, or `error`), or null when the user gave up (on the Android Custom Tab fallback the app listener gets the callback). */
   open(authorizeUrl: string): Promise<string | null>;
 }
 
