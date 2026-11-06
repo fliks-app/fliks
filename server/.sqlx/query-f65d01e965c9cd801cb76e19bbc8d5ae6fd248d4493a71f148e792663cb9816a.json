@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM pairing_requests\n               WHERE \"clientNet\" = $1 AND \"userId\" IS NULL AND status = 'pending' AND \"expiresAt\" >= $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f65d01e965c9cd801cb76e19bbc8d5ae6fd248d4493a71f148e792663cb9816a"
+}

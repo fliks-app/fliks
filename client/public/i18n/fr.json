@@ -831,7 +831,9 @@
     "expired": "La demande a expiré.",
     "error": "Une erreur est survenue.",
     "retry": "Réessayer",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "outdated": "Ce serveur doit être mis à jour pour que la connexion rapide fonctionne sans choisir d'utilisateur.",
+    "pick_user": "Choisir un utilisateur"
   },
   "pending_requests": {
     "title": "Demandes de connexion",
@@ -847,7 +849,11 @@
     "code_label": "Code affiché sur l'appareil",
     "code_hint": "L'appareil qui veut se connecter l'affiche.",
     "enter_code": "Saisir le code",
-    "wrong_code": "Aucune demande en attente n'a ce code."
+    "wrong_code": "Aucune demande en attente n'a ce code.",
+    "check": "Continuer",
+    "confirm_title": "Autoriser cette connexion ?",
+    "from_ip": "Adresse réseau : {{ip}}",
+    "too_many": "Trop de codes erronés. Réessayez plus tard."
   },
   "server_history": {
     "section_title": "Serveurs récents",

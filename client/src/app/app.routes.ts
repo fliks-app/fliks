@@ -35,6 +35,12 @@ export const routes: Routes = [
       import('./features/login/login').then((m) => m.LoginComponent),
   },
   {
+    path: 'quick-connect',
+    canActivate: [serverConfigGuard],
+    loadComponent: () =>
+      import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
+  },
+  {
     path: 'quick-connect/:userId',
     canActivate: [serverConfigGuard],
     loadComponent: () =>

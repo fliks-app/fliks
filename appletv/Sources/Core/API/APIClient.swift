@@ -216,7 +216,9 @@ final class APIClient {
             return try await raw(path, method: method, query: query, body: body, headers: headers, isRetry: true)
         }
         guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            // Validation errors answer a list of messages.
+            let rawMessage = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"]
+            let message = (rawMessage as? String) ?? (rawMessage as? [String])?.joined(separator: "; ")
             throw APIError.badStatus(http.statusCode, message: message)
         }
         return (data, http)

@@ -182,6 +182,10 @@ export class SelectUserComponent {
     void this.router.navigate(['/quick-connect', user.id]);
   }
 
+  goToQuickConnectAnyUser() {
+    void this.router.navigate(['/quick-connect']);
+  }
+
   goToOtherUser() {
     void this.router.navigate(['/login']);
   }

@@ -3,7 +3,7 @@ import Foundation
 /// App-wide navigation targets, pushed onto the single root `NavigationPath`.
 enum Route: Hashable {
     // Onboarding (P2)
-    case quickConnect(userId: Int, username: String)
+    case quickConnect(userId: Int?, username: String?)
     case login(username: String?)
 
     // Main shell. `.home` is unused for now — the shell's root content

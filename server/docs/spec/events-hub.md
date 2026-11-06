@@ -143,7 +143,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 29 | `seerr.import.started` | B | `{}` |
 | 30 | `seerr.import.completed` | B | `{users: number, usersCreated: number, imported: number, updated: number, skipped: number}` |
 | 31 | `seerr.import.failed` | B | `{error: string}` (`''` on audit-row failure) |
-| 32 | `pairing.requested` | U(target user) | `{userId: number, pairingId: string, deviceName: string, deviceId: string}` |
+| 32 | `pairing.requested` | U(hinted user, none without `userId`) | `{userId: number, pairingId: string, deviceName: string, deviceId: string}` |
 | 33 | `remote.command` | C (or polled-target queue) | `{cmdId: string, expiresAt: number (epoch ms, now+10 000), byTargetId: string|null, action: RemoteCommandAction, mediaId?: number, mediaType?: 'movie'|'series', mediaFileId?: number, episodeId?: number, positionSeconds?: number, level?: number, muted?: boolean, trackId?: string, subtitleId?: string|null}`; also carries whatever other validated request fields; JSON key order is the request's fields first, then `type`, `cmdId`, `expiresAt` (`byTargetId` keeps its request position when sent) |
 | 34 | `remote.state` | U(owner) + household hook (grantees of the device, admins) | `{targetId: string} & RemoteStatePayload`: `sessionId: string, mediaId: number|null, mediaFileId: number, episodeId: number|null (TS-optional, always sent), mediaTitle: string|null, episodeLabel: string|null, posterUrl: string|null, fanartUrl: string|null, positionSeconds: number, durationSeconds: number, state: 'playing'|'paused'|'buffering', volume: number|null, muted: boolean|null, supportsVolume: boolean, subtitleId: string|null, quality: string|null, qualities: {id: string, label: string, lowBandwidth?: boolean}[]|null, autoplayBlocked: boolean, hasNext: boolean, audioTrackIndex: number|null, subtitleTrackIndex: number|null, lastCmdId: string|null`; sent every heartbeat, ~10 s per playing session |
 | 35 | `remote.targets_changed` | U(owner) + household hook | `{}` |
@@ -164,7 +164,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 50 | `party.signal` | C (one member: the target) | `{partyId, from: {userId, deviceId}, kind: 'offer'|'answer'|'ice'|'bye', data: object}` (`watch-party.md`, Voice) |
 | 51 | `party.programme` | C (members) | `{partyId, rev, item: PartyItem|null}` (`watch-party.md`) |
 | 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, upvoterIds, downvoterIds}[]}` (`watch-party.md`, Proposals) |
-| 53 | `pairing.cancelled` | U(target user) | `{userId: number, pairingId: string}` |
+| 53 | `pairing.cancelled` | U(hinted user, none without `userId`) | `{userId: number, pairingId: string}` |
 
 Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 52 of the 53 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 53. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 

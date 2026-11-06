@@ -98,6 +98,14 @@ export interface PairingStatusResponse {
   refreshTokenExpiresAt?: number;
 }
 
+export interface PairingLookup {
+  pairingId: string;
+  deviceName: string;
+  systemName?: string;
+  clientIp?: string | null;
+  requestedAt: string;
+}
+
 export interface PendingRequest {
   pairingId: string;
   deviceId: string;
@@ -306,7 +314,7 @@ export class AuthService {
   // ── Pairing (quick connect) ──
 
   pairingRequest(
-    userId: number,
+    userId: number | null,
     deviceId: string,
     deviceName: string,
     systemName?: string,
@@ -314,7 +322,7 @@ export class AuthService {
     return firstValueFrom(
       this.http.post<{ pairingId: string; code: string; expiresIn: number }>(
         '/api/auth/pairing/request',
-        { userId, deviceName, systemName },
+        { ...(userId ? { userId } : {}), deviceName, systemName },
         { headers: { 'X-Device-Id': deviceId } },
       ),
     );
@@ -342,9 +350,17 @@ export class AuthService {
     return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
   }
 
-  pairingApprove(code: string): Promise<void> {
+  pairingLookup(code: string): Promise<PairingLookup> {
     return firstValueFrom(
-      this.http.post<void>('/api/auth/pairing/approve', { code }, {
+      this.http.post<PairingLookup>('/api/auth/pairing/lookup', { code }, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    );
+  }
+
+  pairingApprove(code: string, pairingId?: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>('/api/auth/pairing/approve', { code, pairingId }, {
         context: new HttpContext().set(SKIP_ERROR_TOAST, true),
       }),
     );

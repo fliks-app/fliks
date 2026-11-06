@@ -15,6 +15,7 @@ struct SelectUserView: View {
     @State private var notice: String?
     @State private var resuming: Int?
     @State private var openSheetFor: PublicUser?
+    @Namespace private var focusNamespace
 
     /// The server's roster plus the accounts stored here: the union is what
     /// keeps sign-in possible while the server is unreachable.
@@ -69,11 +70,18 @@ struct SelectUserView: View {
             }
 
             HStack(spacing: 32) {
+                if !needsSetup {
+                    Button(tr("select_user.quick_connect_any")) {
+                        path.append(Route.quickConnect(userId: nil, username: nil))
+                    }
+                    .prefersDefaultFocus(!loading && users.isEmpty, in: focusNamespace)
+                }
                 Button(tr("select_user.other_user")) { path.append(Route.login(username: nil)) }
                 Button(tr("select_user.change_server")) { server.clear() }
             }
         }
         .padding(60)
+        .focusScope(focusNamespace)
         .task { await load() }
         .sheet(item: $openSheetFor) { user in
             UserActionSheet(

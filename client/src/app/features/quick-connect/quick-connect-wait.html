@@ -36,6 +36,9 @@
           <button type="button" class="btn btn-primary" (click)="retry()">{{ 'quick_connect.retry' | translate }}</button>
           <button type="button" class="btn btn-ghost" (click)="cancel()">{{ 'quick_connect.cancel' | translate }}</button>
         </div>
+      } @else if (view() === 'outdated') {
+        <h1 class="card-title text-2xl text-error">{{ 'quick_connect.outdated' | translate }}</h1>
+        <button type="button" class="btn btn-primary mt-2" (click)="cancel()">{{ 'quick_connect.pick_user' | translate }}</button>
       } @else {
         <h1 class="card-title text-2xl text-error">{{ 'quick_connect.error' | translate }}</h1>
         <div class="flex gap-2 mt-2">

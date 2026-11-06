@@ -400,6 +400,97 @@ async fn pairing_flow(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn pairing_without_a_user_is_approved_by_whoever_types_the_code(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let dev = [("x-device-id", "tv")];
+    let req = json!({"deviceName": "TV", "systemName": "tvOS"});
+    let (s, _, r) = call(&c, "POST", "/api/auth/pairing/request", &dev, Some(req)).await;
+    assert_eq!(s, 201);
+    let (pid, code) = (
+        r["pairingId"].clone(),
+        r["code"].as_str().unwrap().to_owned(),
+    );
+    let bob = bearer(&c, id, "bob").await;
+    let auth = [("authorization", bob.as_str())];
+    let (s, _, l) = call(
+        &c,
+        "POST",
+        "/api/auth/pairing/lookup",
+        &auth,
+        Some(json!({"code": code})),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        (&l["pairingId"], &l["deviceName"], &l["systemName"]),
+        (&pid, &json!("TV"), &json!("tvOS"))
+    );
+    assert!(l["requestedAt"].is_string() && l.get("clientIp").is_some());
+    let (_, _, pending) = call(&c, "GET", "/api/auth/pairing/pending", &auth, None).await;
+    assert_eq!(
+        pending,
+        json!([]),
+        "an unhinted request is in nobody's list"
+    );
+    let approve = "/api/auth/pairing/approve";
+    for body in [
+        json!({"code": code}),
+        json!({"code": code, "pairingId": "x"}),
+    ] {
+        let (s, _, _) = call(&c, "POST", approve, &auth, Some(body)).await;
+        assert_eq!(s, 404, "an unhinted request needs the looked-up pairingId");
+    }
+    let body = json!({"code": code, "pairingId": pid.clone()});
+    let (s, _, _) = call(&c, "POST", approve, &auth, Some(body)).await;
+    assert_eq!(s, 204);
+    let status = format!(
+        "/api/auth/pairing/status?pairingId={}",
+        pid.as_str().unwrap()
+    );
+    let (_, _, st) = call(&c, "GET", &status, &dev, None).await;
+    let minted = format!("Bearer {}", st["accessToken"].as_str().unwrap());
+    let (_, _, me) = call(
+        &c,
+        "GET",
+        "/api/auth/me",
+        &[("authorization", &minted)],
+        None,
+    )
+    .await;
+    assert_eq!(me["id"], json!(id), "the claim mints for the approver");
+}
+
+#[sqlx::test(migrations = false)]
+async fn pairing_wrong_codes_are_throttled_per_user(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let bob = bearer(&c, id, "bob").await;
+    let auth = [("authorization", bob.as_str())];
+    let wrong = Some(json!({"code": "000000"}));
+    let dev = [("x-device-id", "tv")];
+    let (_, _, r) = call(
+        &c,
+        "POST",
+        "/api/auth/pairing/request",
+        &dev,
+        Some(json!({"deviceName": "TV"})),
+    )
+    .await;
+    let own = Some(json!({"code": r["code"]}));
+    for _ in 0..4 {
+        let (s, _, _) = call(&c, "POST", "/api/auth/pairing/lookup", &auth, wrong.clone()).await;
+        assert_eq!(s, 404);
+    }
+    let (s, _, _) = call(&c, "POST", "/api/auth/pairing/lookup", &auth, own).await;
+    assert_eq!(s, 200, "a hit does not reset the failures");
+    let (s, _, _) = call(&c, "POST", "/api/auth/pairing/lookup", &auth, wrong.clone()).await;
+    assert_eq!(s, 404);
+    let (s, _, _) = call(&c, "POST", "/api/auth/pairing/approve", &auth, wrong).await;
+    assert_eq!(s, 429, "lookup and approve share the counter");
+}
+
+#[sqlx::test(migrations = false)]
 async fn pairing_cancel_by_requesting_device(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = user(&pool, "bob", Some("[]"), false, true).await;

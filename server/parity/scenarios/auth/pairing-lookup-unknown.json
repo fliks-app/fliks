@@ -1,0 +1,26 @@
+{
+  "ignore": [
+    "$..code",
+    "$..pairingId"
+  ],
+  "name": "auth-pairing-lookup-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "code": "000000"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "No pending request with this code",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/lookup"
+    }
+  ]
+}

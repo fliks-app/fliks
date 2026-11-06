@@ -32,6 +32,8 @@ pub struct AppState {
     pub livetv: Arc<crate::livetv::Shared>,
     pub plugins: Arc<crate::plugins::Plugins>,
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
+    /// Wrong pairing codes per approver, apart from login so no username can collide with its key.
+    pub pairing_throttle: Arc<crate::auth::LoginThrottle>,
     pub sse_tickets: Arc<crate::events::Tickets>,
     /// Base URL of the Kobo store the proxy forwards to; only a test harness sets another.
     pub kobo_store: Arc<str>,
@@ -79,6 +81,7 @@ impl AppState {
             livetv: Arc::default(),
             plugins,
             login_throttle: Arc::default(),
+            pairing_throttle: Arc::default(),
             sse_tickets: Arc::default(),
             kobo_store: crate::kobo::STORE.into(),
             kepub_cache: None,
