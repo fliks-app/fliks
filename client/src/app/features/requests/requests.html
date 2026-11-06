@@ -3,7 +3,7 @@
     <h1 class="page-title">{{ 'requests.title' | translate }}</h1>
     <div class="flex flex-col sm:flex-row gap-2 sm:w-auto w-full">
       <select
-    appTvSelect
+        appTvSelect
         class="select select-bordered select-sm w-full sm:w-40"
         [ngModel]="kindFilter()"
         (ngModelChange)="onKindChange($event)"
@@ -13,7 +13,7 @@
         <option value="delete">{{ 'requests.kind_delete' | translate }}</option>
       </select>
       <select
-    appTvSelect
+        appTvSelect
         class="select select-bordered select-sm w-full sm:w-48"
         [ngModel]="statusFilter()"
         (ngModelChange)="onStatusChange($event)"
@@ -56,10 +56,14 @@
               [fanart]="row.fanartUrl ?? row.media?.fanartUrl ?? null"
               mode="backdrop"
             />
-            <div class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"></div>
+            <div
+              class="absolute inset-0 bg-gradient-to-b from-base-100/45 via-base-100/80 to-base-100"
+            ></div>
           </div>
 
-          @if (mobileActionsAvailable(row) || (row.status === 'declined' && row.declinedReason?.trim())) {
+          @if (
+            mobileActionsAvailable(row) || (row.status === 'declined' && row.declinedReason?.trim())
+          ) {
             <!-- Corner action cluster: primary buttons (sm-only) + kebab for the secondary ones; hidden on lg+ where the sidebar column owns every action. -->
             <div class="absolute top-2 right-2 z-20 lg:hidden flex items-center gap-1">
               @if (row.status === 'pending' && auth.hasPermission('requests.manage')) {
@@ -153,16 +157,17 @@
           >
             <div class="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
               <h2 class="text-lg font-semibold leading-snug line-clamp-2 m-0">
-                <a
-                  [routerLink]="mediaLink(row)"
-                  class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
-                >
-                  {{ row.title }}
-                </a>
+                <a [routerLink]="mediaLink(row)" class="after:absolute after:inset-0 after:z-10">{{
+                  row.title
+                }}</a>
               </h2>
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
-                <app-request-status-badge [request]="row" (badgeClick)="onBadgeClick(row)" />
+                <app-request-status-badge
+                  class="relative z-20"
+                  [request]="row"
+                  (badgeClick)="onBadgeClick(row)"
+                />
                 @if (row.kind === 'delete') {
                   <span class="badge badge-error badge-outline badge-sm gap-1">
                     <svg lucideTrash2 class="h-3 w-3 shrink-0"></svg>
@@ -177,7 +182,12 @@
               <div class="flex flex-col">
                 @if (kinds[row.mediaType].hasSeasons && row.seasons && row.seasons.length) {
                   <p class="text-sm text-base-content/70">
-                    <span class="text-base-content/50">{{ (row.seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
+                    <span class="text-base-content/50">{{
+                      (row.seasons!.length === 1
+                        ? 'requests.seasons_label_one'
+                        : 'requests.seasons_label_other'
+                      ) | translate
+                    }}</span>
                     {{ row.seasons.join(', ') }}
                   </p>
                 }
@@ -188,11 +198,13 @@
 
                 @if (auth.hasPermission('requests.manage')) {
                   <p class="text-sm text-base-content/70">
-                    <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+                    <span class="text-base-content/50">{{
+                      'requests.requested_by' | translate
+                    }}</span>
                     @if (auth.canManageUsers()) {
                       <a
                         [routerLink]="['/admin/users', row.user.id]"
-                        class="link link-hover link-primary font-medium"
+                        class="relative z-20 link link-hover link-primary font-medium"
                       >
                         {{ row.user.username }}
                       </a>
@@ -206,15 +218,19 @@
               <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
                 <p>
                   <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
-                  {{ row.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                  {{ row.createdAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}
                 </p>
                 @if (row.kind !== 'delete' && row.mediaType !== 'book') {
                   <p>
-                    <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
+                    <span class="text-base-content/50">{{
+                      'requests.quality_profile_label' | translate
+                    }}</span>
                     {{ qualityProfileDisplay(row.qualityProfileId) }}
                   </p>
                   <p>
-                    <span class="text-base-content/50">{{ 'requests.language_profile_label' | translate }}</span>
+                    <span class="text-base-content/50">{{
+                      'requests.language_profile_label' | translate
+                    }}</span>
                     {{ languageProfileDisplay(row.languageProfileId) }}
                   </p>
                 }
@@ -223,7 +239,7 @@
 
             @if (row.status === 'declined' && row.declinedReason?.trim()) {
               <div
-                class="flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="relative z-20 flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
@@ -247,7 +263,8 @@
 
             @if (row.status === 'pending') {
               <div
-                class="flex sm:hidden lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                [class]="auth.hasPermission('requests.manage') ? 'flex sm:hidden' : 'hidden'"
+                class="relative z-20 lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 @if (auth.hasPermission('requests.manage')) {
                   <button
@@ -268,7 +285,11 @@
                   </button>
                 }
                 @if (canEdit(row)) {
-                  <button type="button" class="hidden sm:inline-flex btn btn-ghost btn-sm" (click)="edit.open(row)">
+                  <button
+                    type="button"
+                    class="hidden sm:inline-flex btn btn-ghost btn-sm"
+                    (click)="edit.open(row)"
+                  >
                     {{ 'requests.edit' | translate }}
                   </button>
                 }
@@ -296,7 +317,7 @@
 
             @if (showOrphanDeleteColumn(row)) {
               <div
-                class="hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="relative z-20 hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
@@ -316,7 +337,12 @@
 
   @if (canLoadMore()) {
     <div class="flex justify-center">
-      <button type="button" class="btn btn-outline btn-sm" [disabled]="loading()" (click)="loadMore()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        [disabled]="loading()"
+        (click)="loadMore()"
+      >
         {{ 'requests.load_more' | translate }}
       </button>
     </div>
