@@ -4,6 +4,9 @@
   "steps": [
     {
       "as": "anon",
+      "body": {
+        "code": "000000"
+      },
       "expect": {
         "body": {
           "message": "Unauthorized",
@@ -12,7 +15,7 @@
         "status": 401
       },
       "method": "POST",
-      "path": "/api/auth/pairing/x/approve"
+      "path": "/api/auth/pairing/approve"
     }
   ]
 }

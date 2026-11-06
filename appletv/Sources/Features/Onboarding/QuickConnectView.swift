@@ -3,9 +3,8 @@ import UIKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-/// Quick-connect (code-less) pairing. No numeric code by design — approval
-/// happens on the user's phone, on the pending-requests screen. Polls every
-/// 2s until the server flips the pairing to approved/denied/expired.
+/// Quick-connect pairing: the user types the code shown here on a signed-in device.
+/// Polls every 2s until the server flips the pairing to approved/denied/expired.
 struct QuickConnectView: View {
     let userId: Int
     let username: String
@@ -17,6 +16,7 @@ struct QuickConnectView: View {
 
     @State private var viewState: ViewState = .starting
     @State private var pairingId: String?
+    @State private var code = ""
     @State private var secondsLeft = 0
     @State private var pollTask: Task<Void, Never>?
 
@@ -33,6 +33,11 @@ struct QuickConnectView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 700)
+                if !code.isEmpty {
+                    Text(code)
+                        .font(.system(size: 72, weight: .bold, design: .monospaced))
+                        .tracking(8)
+                }
                 if let qr = qrImage("\(server.url)/pending-requests") {
                     qr.interpolation(.none)
                         .resizable()
@@ -82,6 +87,7 @@ struct QuickConnectView: View {
                 systemName: "tvOS \(UIDevice.current.systemVersion)"
             )
             pairingId = res.pairingId
+            code = res.code.map { "\($0.prefix(3)) \($0.dropFirst(3))" } ?? ""
             secondsLeft = res.expiresIn
             viewState = .waiting
             pollTask = Task { await poll() }

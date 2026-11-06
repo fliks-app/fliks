@@ -4,6 +4,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -34,8 +35,10 @@ export class PendingRequestsComponent implements OnInit {
   readonly requests = signal<PendingRequest[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
-  /** pairingId currently being approved/denied — disables its buttons. */
+  /** pairingId being denied: disables its button. */
   readonly busy = signal<string | null>(null);
+  readonly code = signal('');
+  readonly approving = signal(false);
 
   /** Refreshes on a pairing event for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
   private readonly pairingSub = this.sse.pairingEvents.pipe(takeUntilDestroyed()).subscribe((ev) => {
@@ -59,16 +62,22 @@ export class PendingRequestsComponent implements OnInit {
     }
   }
 
-  async approve(req: PendingRequest) {
-    this.busy.set(req.pairingId);
+  async approve(event: Event) {
+    event.preventDefault();
+    if (this.approving() || !this.code().trim()) return;
+    this.approving.set(true);
     try {
-      await this.auth.pairingApprove(req.pairingId);
-      this.requests.set(this.requests().filter((r) => r.pairingId !== req.pairingId));
+      await this.auth.pairingApprove(this.code());
+      this.code.set('');
       this.toast.success(this.translate.instant('pending_requests.approved_toast'));
-    } catch {
-      this.toast.error(this.translate.instant('pending_requests.action_error'));
+      void this.refresh();
+    } catch (err) {
+      const key = err instanceof HttpErrorResponse && err.status === 404
+        ? 'pending_requests.wrong_code'
+        : 'pending_requests.action_error';
+      this.toast.error(this.translate.instant(key));
     } finally {
-      this.busy.set(null);
+      this.approving.set(false);
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO pairing_requests (\"publicId\", \"userId\", \"deviceId\", \"deviceName\", \"systemName\", status, \"expiresAt\")\n           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5) RETURNING \"publicId\"",
+  "query": "INSERT INTO pairing_requests (\"publicId\", \"userId\", \"deviceId\", \"deviceName\", \"systemName\", status, \"expiresAt\", code)\n               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6)\n               ON CONFLICT (\"userId\", code) WHERE status = 'pending' DO NOTHING\n               RETURNING \"publicId\"",
   "describe": {
     "columns": [
       {
@@ -21,12 +21,13 @@
         "Varchar",
         "Varchar",
         "Varchar",
-        "Timestamptz"
+        "Timestamptz",
+        "Varchar"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "255abfdf8d1bb84f13b7381d353a7b71e28228ed11e1a065a1947217c3318f11"
+  "hash": "07119c394546ba3f254dac815e677b08c0d7fba527cc7b81d75d7bc3747f9446"
 }

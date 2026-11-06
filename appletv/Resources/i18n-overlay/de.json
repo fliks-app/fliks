@@ -19,7 +19,7 @@
   "login.title": "Anmelden",
   "login.error": "Benutzername oder Passwort ungültig",
   "quick_connect.title": "Quick Connect",
-  "quick_connect.instructions": "Melde dich auf deinem Telefon als %@ an und bestätige diese Anfrage auf dem Bildschirm für ausstehende Anfragen.",
+  "quick_connect.instructions": "Melde dich auf deinem Telefon als %@ an und gib diesen Code auf dem Bildschirm für ausstehende Anfragen ein.",
   "quick_connect.expires_in": "Läuft in %d Min. ab",
   "quick_connect.denied": "Anfrage abgelehnt",
   "quick_connect.expired": "Anfrage abgelaufen",

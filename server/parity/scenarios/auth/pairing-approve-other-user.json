@@ -1,9 +1,10 @@
 {
   "capture": {
-    "pid": "$.steps[0].body.pairingId"
+    "code": "$.steps[0].body.code"
   },
   "ignore": [
-    "$..pairingId"
+    "$..pairingId",
+    "$..code"
   ],
   "name": "auth-pairing-approve-other-user",
   "seed": "base",
@@ -29,16 +30,19 @@
     },
     {
       "as": "other",
+      "body": {
+        "code": "{code}"
+      },
       "expect": {
         "body": {
           "error": "Not Found",
-          "message": "Pairing request not found",
+          "message": "No pending request with this code",
           "statusCode": 404
         },
         "status": 404
       },
       "method": "POST",
-      "path": "/api/auth/pairing/{pid}/approve"
+      "path": "/api/auth/pairing/approve"
     }
   ]
 }

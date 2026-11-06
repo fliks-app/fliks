@@ -808,7 +808,7 @@
   "quick_connect": {
     "starting": "Preparing the request…",
     "waiting_title": "Waiting for approval",
-    "waiting_subtitle": "Open Fliks on your phone and accept the request on the \"Login requests\" page.",
+    "waiting_subtitle": "Open Fliks on a signed-in phone or computer and enter this code on the \"Login requests\" page.",
     "device_name": "This device: {{name}}",
     "expires_in": "Expires in {{minutes}} min",
     "denied": "The request was denied.",
@@ -825,10 +825,13 @@
     "deny": "Deny",
     "approved_toast": "Login accepted",
     "requested_toast": "{{device}} wants to sign in",
-    "accept": "Accept",
     "denied_toast": "Request denied.",
     "load_error": "Unable to load pending requests.",
-    "action_error": "The action could not be completed."
+    "action_error": "The action could not be completed.",
+    "code_label": "Code shown on the device",
+    "code_hint": "The device that wants to sign in displays it.",
+    "enter_code": "Enter code",
+    "wrong_code": "No pending request has this code."
   },
   "server_history": {
     "section_title": "Recent servers",

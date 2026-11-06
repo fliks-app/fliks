@@ -35,6 +35,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
    *  line under the device name. Empty until resolved / on platforms without it. */
   readonly systemName = signal('');
   readonly secondsLeft = signal(0);
+  readonly code = signal('');
 
   readonly minutesLeft = computed(() => Math.max(0, Math.ceil(this.secondsLeft() / 60)));
 
@@ -43,6 +44,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   private pollHandle: ReturnType<typeof setTimeout> | null = null;
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private userId = 0;
+  private destroyed = false;
 
   ngOnInit(): void {
     const param = this.route.snapshot.paramMap.get('userId');
@@ -57,10 +59,16 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.stopTimers();
-    if (this.view() === 'waiting' && this.pairingId && this.deviceId) {
+    this.cancelPending();
+  }
+
+  private cancelPending() {
+    if (this.pairingId && this.deviceId) {
       void this.auth.pairingCancel(this.pairingId, this.deviceId).catch(() => undefined);
     }
+    this.pairingId = null;
   }
 
   async start() {
@@ -74,13 +82,17 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       // UA-derived model fallback when a native source provides it.
       const realName = this.systemInfo.deviceName();
       if (realName) this.deviceName.set(realName);
-      const { pairingId, expiresIn } = await this.auth.pairingRequest(
+      if (this.destroyed) return;
+      const { pairingId, code, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
         this.deviceName(),
         this.systemName() || undefined,
       );
       this.pairingId = pairingId;
+      this.code.set(`${code.slice(0, 3)} ${code.slice(3)}`);
+      // Left the page while the request was in flight.
+      if (this.destroyed) return this.cancelPending();
       this.secondsLeft.set(expiresIn);
       this.view.set('waiting');
       this.startCountdown();
@@ -91,9 +103,11 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   }
 
   private async poll() {
-    if (!this.pairingId || !this.deviceId) return;
+    if (this.destroyed || !this.pairingId || !this.deviceId) return;
     try {
       const res = await this.auth.pairingStatus(this.pairingId, this.deviceId);
+      if (this.destroyed) return;
+      if (res.status !== 'pending') this.pairingId = null;
       if (res.status === 'approved' && res.accessToken) {
         this.view.set('starting');
         await this.auth.loginWithToken(
@@ -124,6 +138,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.countdownHandle = setInterval(() => {
       const next = this.secondsLeft() - 1;
       if (next <= 0) {
+        this.pairingId = null;
         this.secondsLeft.set(0);
         this.view.set('expired');
         this.stopTimers();
@@ -146,6 +161,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
 
   retry() {
     this.stopTimers();
+    this.cancelPending();
     void this.start();
   }
 

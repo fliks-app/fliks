@@ -808,7 +808,7 @@
   "quick_connect": {
     "starting": "Preparando la solicitud…",
     "waiting_title": "Esperando validación",
-    "waiting_subtitle": "Abra Fliks en su teléfono y acepte la solicitud en la página «Solicitudes de conexión».",
+    "waiting_subtitle": "Abra Fliks en un teléfono u ordenador con sesión iniciada e introduzca este código en la página «Solicitudes de conexión».",
     "device_name": "Este dispositivo: {{name}}",
     "expires_in": "Caduca en {{minutes}} min",
     "denied": "La solicitud ha sido rechazada.",
@@ -825,10 +825,13 @@
     "deny": "Rechazar",
     "approved_toast": "Conexión aceptada",
     "requested_toast": "{{device}} quiere conectarse",
-    "accept": "Aceptar",
     "denied_toast": "Solicitud rechazada.",
     "load_error": "No se pueden cargar las solicitudes pendientes.",
-    "action_error": "La acción no se pudo completar."
+    "action_error": "La acción no se pudo completar.",
+    "code_label": "Código mostrado en el dispositivo",
+    "code_hint": "Lo muestra el dispositivo que quiere conectarse.",
+    "enter_code": "Introducir código",
+    "wrong_code": "Ninguna solicitud pendiente tiene este código."
   },
   "server_history": {
     "section_title": "Servidores recientes",

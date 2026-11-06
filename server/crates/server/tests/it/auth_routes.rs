@@ -340,6 +340,8 @@ async fn pairing_flow(pool: PgPool) {
     let (s, _, r) = call(&c, "POST", "/api/auth/pairing/request", &dev, Some(req)).await;
     assert_eq!((s, r["expiresIn"].clone()), (201, json!(600)));
     let pid = r["pairingId"].as_str().unwrap().to_owned();
+    let code = r["code"].as_str().unwrap().to_owned();
+    assert_eq!(code.len(), 6);
     let (_, _, st) = call(
         &c,
         "GET",
@@ -359,10 +361,33 @@ async fn pairing_flow(pool: PgPool) {
     )
     .await;
     assert_eq!(l[0]["pairingId"], json!(pid));
-    let approve = format!("/api/auth/pairing/{pid}/approve");
-    let (s, _, _) = call(&c, "POST", &approve, &[("authorization", &eve)], None).await;
-    assert_eq!(s, 404);
-    let (s, _, _) = call(&c, "POST", &approve, &[("authorization", &bob)], None).await;
+    assert!(
+        l[0].get("code").is_none(),
+        "the approver must read it off the device"
+    );
+    let approve = "/api/auth/pairing/approve";
+    let wrong = format!("{:06}", (code.parse::<u32>().unwrap() + 1) % 1_000_000);
+    let body = |k: &str| Some(json!({ "code": k }));
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        approve,
+        &[("authorization", &bob)],
+        body(&wrong),
+    )
+    .await;
+    assert_eq!(s, 404, "wrong code");
+    let (s, _, _) = call(&c, "POST", approve, &[("authorization", &eve)], body(&code)).await;
+    assert_eq!(s, 404, "another user's request");
+    let spaced = format!("{} {}", &code[..3], &code[3..]);
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        approve,
+        &[("authorization", &bob)],
+        body(&spaced),
+    )
+    .await;
     assert_eq!(s, 204);
     let status = format!("/api/auth/pairing/status?pairingId={pid}");
     let (_, _, st) = call(&c, "GET", &status, &[("x-device-id", "other")], None).await;

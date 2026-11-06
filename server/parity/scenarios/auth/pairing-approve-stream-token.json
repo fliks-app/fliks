@@ -1,12 +1,13 @@
 {
   "capture": {
-    "pid": "$.steps[1].body.pairingId",
+    "code": "$.steps[1].body.code",
     "st": "$.steps[0].body.streamToken"
   },
   "ignore": [
     "$.streamToken",
     "$.expiresAt",
-    "$..pairingId"
+    "$..pairingId",
+    "$..code"
   ],
   "name": "auth-pairing-approve-stream-token",
   "seed": "base",
@@ -40,6 +41,9 @@
     },
     {
       "as": "anon",
+      "body": {
+        "code": "{code}"
+      },
       "expect": {
         "body": {
           "message": "Unauthorized",
@@ -51,7 +55,7 @@
         "Authorization": "Bearer {st}"
       },
       "method": "POST",
-      "path": "/api/auth/pairing/{pid}/approve"
+      "path": "/api/auth/pairing/approve"
     }
   ]
 }

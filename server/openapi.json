@@ -77,6 +77,17 @@
         }
       }
     },
+    "/api/auth/pairing/approve": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_approve",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/auth/pairing/pending": {
       "get": {
         "tags": [
@@ -105,17 +116,6 @@
           "auth"
         ],
         "operationId": "pairing_status",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/auth/pairing/{id}/approve": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "operationId": "pairing_approve",
         "responses": {
           "200": {}
         }
