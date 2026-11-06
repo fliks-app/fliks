@@ -39,6 +39,7 @@
 		F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D1 /* NowPlayingController.swift */; };
 		F1000001AAAA0000000000E2 /* AirPlayPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */; };
 		F1000001AAAA0000000000F2 /* SaveFilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */; };
+		F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A01 /* WebAuthPlugin.swift */; };
 		F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C1 /* CalendarPlugin.swift */; };
 /* End PBXBuildFile section */
 
@@ -104,6 +105,7 @@
 		F1000001AAAA0000000000D1 /* NowPlayingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingController.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFilePlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000A01 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000C1 /* CalendarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -180,6 +182,7 @@
 				F1000001AAAA0000000000D1 /* NowPlayingController.swift */,
 				F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */,
 				F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */,
+				F1000001AAAA000000000A01 /* WebAuthPlugin.swift */,
 				F1000001AAAA0000000000C1 /* CalendarPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -396,6 +399,7 @@
 				F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */,
 				F1000001AAAA0000000000E2 /* AirPlayPlugin.swift in Sources */,
 				F1000001AAAA0000000000F2 /* SaveFilePlugin.swift in Sources */,
+				F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */,
 				F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

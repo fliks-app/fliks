@@ -40,6 +40,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(BackGesturePlugin())
         bridge?.registerPluginInstance(AirPlayPlugin())
         bridge?.registerPluginInstance(SaveFilePlugin())
+        bridge?.registerPluginInstance(WebAuthPlugin())
         bridge?.registerPluginInstance(CalendarPlugin())
     }
 

@@ -39,12 +39,18 @@ export interface OidcPlatform {
   /** Called when `start` fails after `returnTo` resolved, to release what it opened. */
   abort?(): void;
   /** Web leaves the page and resolves never; a shell resolves with the callback query string (`code`
-   *  and `state`, or `error`), or null when the user gave up. */
+   *  and `state`, or `error`), or null when the user gave up (on Android the app listener gets the callback). */
   open(authorizeUrl: string): Promise<string | null>;
 }
 
-/** The seam for the phone and desktop PRs: return their platform here once their bridge is present.
- *  Null hides every SSO button. */
+/** Whether this shell can run the sheet: the iOS plugin, or the Custom Tab plugin on Android (the app
+ *  plugin that receives the callback ships with every shell). */
+export function webAuthAvailable(): boolean {
+  return Capacitor.isPluginAvailable(Capacitor.getPlatform() === 'ios' ? 'WebAuth' : 'Browser');
+}
+
+/** The shell's way to the provider: a loopback listener on desktop, the system auth sheet on the phone
+ *  apps, a page redirect on the web. Null hides every SSO button; TVs are hidden through `TvService`. */
 export function oidcPlatform(): OidcPlatform | null {
   const desktop = window.fliksDesktop;
   if (desktop) {
@@ -64,7 +70,11 @@ export function oidcPlatform(): OidcPlatform | null {
       },
     };
   }
-  if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE) return null;
+  if (Capacitor.isNativePlatform()) {
+    if (!webAuthAvailable()) return null;
+    return { returnTo: 'app', open: (url) => import('../plugins/web-auth.plugin').then((m) => m.webAuthOpen(url)) };
+  }
+  if (IS_STANDALONE_BUNDLE) return null;
   // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
   if (!window.isSecureContext) return null;
   return {
@@ -137,6 +147,16 @@ export function savePending(p: PendingOidc): void {
     pendingStore().setItem(pendingKey(p.state), JSON.stringify(p));
   } catch {
     /* storage unavailable: the exchange will refuse the state */
+  }
+}
+
+/** Whether a live entry exists for `state`. */
+export function hasPending(state: string): boolean {
+  try {
+    const raw = pendingStore().getItem(pendingKey(state));
+    return !!raw && (JSON.parse(raw) as PendingOidc).expiresAt > Date.now();
+  } catch {
+    return false;
   }
 }
 

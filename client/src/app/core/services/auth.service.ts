@@ -20,6 +20,7 @@ import { TvService } from './tv.service';
 import {
   NO_OIDC,
   OidcError,
+  hasPending,
   oidcPlatform,
   newPkce,
   noteOidcFailure,
@@ -418,8 +419,12 @@ export class AuthService {
     // The user may close the provider tab: free the buttons so a new click replaces this wait.
     this._oidcBusy.set(false);
     const query = await waiting;
-    if (query) await this.router.navigateByUrl(`/oidc/complete?${query}`);
-    else if (run === this.oidcRun) noteOidcFailure();
+    if (query) {
+      await this.router.navigateByUrl(`/oidc/complete?${query}`);
+    } else if (run === this.oidcRun && hasPending(state)) {
+      takePending(state);
+      noteOidcFailure();
+    }
   }
 
   /** The provider's answer, from the callback fragment or a shell's auth sheet: signs in (or links)
