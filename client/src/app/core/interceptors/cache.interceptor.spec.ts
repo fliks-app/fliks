@@ -127,3 +127,24 @@ describe('cache.interceptor — requests in flight', () => {
     expect(next).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('cache.interceptor — connection', () => {
+  it('closes its connection when another page wipes the database, so a wipe never waits on it', async () => {
+    const db = { close: vi.fn(), onversionchange: null as (() => void) | null, transaction: () => { throw new Error('unused'); } };
+    const open = vi.fn(() => {
+      const req: { result?: unknown; onsuccess?: () => void } = {};
+      queueMicrotask(() => { req.result = db; req.onsuccess?.(); });
+      return req;
+    });
+    vi.stubGlobal('indexedDB', { open });
+    void clearRequestCache();
+
+    await invalidatePrefix('/api/media');
+    expect(open).toHaveBeenCalledTimes(1);
+    db.onversionchange?.();
+    expect(db.close).toHaveBeenCalled();
+
+    await invalidatePrefix('/api/media');
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+});

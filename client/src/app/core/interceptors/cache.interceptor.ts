@@ -74,7 +74,7 @@ let pruned = false;
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+  const opened: Promise<IDBDatabase> = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -86,14 +86,22 @@ function openDb(): Promise<IDBDatabase> {
         db.createObjectStore(INVALIDATIONS_STORE, { keyPath: 'prefix' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Another page's wipe or upgrade waits for this connection; closing lets it through.
+      req.result.onversionchange = () => {
+        req.result.close();
+        if (dbPromise === opened) dbPromise = null;
+      };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   }).then(async (db) => {
     await loadInvalidations(db);
     prune(db);
     return db;
   });
-  return dbPromise;
+  dbPromise = opened;
+  return opened;
 }
 
 function loadInvalidations(db: IDBDatabase): Promise<void> {
