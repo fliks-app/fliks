@@ -125,7 +125,7 @@
   <app-player-error-overlay
     [error]="error()"
     [diagnostics]="errorDiagnostics()"
-    [canRetry]="!videoStarted()"
+    [canRetry]="canRetry()"
     (retry)="onRetry()"
     (back)="onBack()"
   />

@@ -23,9 +23,7 @@ function createHost(overrides: Partial<CopyFallbackHost> = {}): CopyFallbackHost
     hasServerFeature: () => true,
     isReloadIdle: () => true,
     reloadStream: vi.fn(async () => {}),
-    hasError: () => false,
-    failWith: vi.fn(),
-    setRecovering: vi.fn(),
+    fail: vi.fn(),
     ...overrides,
   };
 }
@@ -98,7 +96,7 @@ describe('CopyFallbackController: one-shot-per-sid reload', () => {
     await flush();
     expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(42, { reason: 'remux_fallback' });
     expect(onRecovered).toHaveBeenCalledTimes(1);
-    expect(host.setRecovering).toHaveBeenLastCalledWith(false);
+    expect(host.fail).not.toHaveBeenCalled();
   });
 
   it('absorbs a second report of the same sid while the reload is in flight, keeping either onRecovered', async () => {
@@ -161,22 +159,7 @@ describe('CopyFallbackController: waitForReloadIdle', () => {
     }
 
     expect(host.reloadStream).not.toHaveBeenCalled();
-    expect(host.failWith).toHaveBeenCalledWith(expect.any(Error), { source: 'session' });
-  });
-
-  it('does not re-card over an error the caller already set', async () => {
-    const host = createHost({ isReloadIdle: () => false, hasError: () => true });
-    const controller = createController(host);
-
-    vi.useFakeTimers();
-    try {
-      controller.maybeFallback(UNDECODABLE, 0);
-      await vi.advanceTimersByTimeAsync(3_100);
-    } finally {
-      vi.useRealTimers();
-    }
-
-    expect(host.failWith).not.toHaveBeenCalled();
+    expect(host.fail).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it('proceeds once the guard lifts before the deadline', async () => {

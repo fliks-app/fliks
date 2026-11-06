@@ -68,28 +68,20 @@ describe('PlayerStateService buffering latch', () => {
   });
 });
 
-/**
- * fatalNoRetry survives setRecovering(true) (which only clears `error`), so a
- * stale flag from a previous undecodable failure must not keep blocking
- * checkStall's retries after a later recovery actually succeeds.
- */
-describe('PlayerStateService fatalNoRetry', () => {
-  it('clears once recovery resolves without reintroducing an error', () => {
-    const { service } = setup();
-    service.setError('boom', { source: 'shaka', code: 3016 });
-    expect(service.fatalNoRetry()).toBe(true);
-    service.setRecovering(true);
-    service.setRecovering(false);
-    expect(service.fatalNoRetry()).toBe(false);
+describe('PlayerStateService engine errors', () => {
+  it('reads an engine error as buffering and leaves the card to the recovery', () => {
+    const { service, state, fire } = setup();
+    state('playing');
+    fire('error', { source: 'media', code: 2, message: 'network' });
+    state('error');
+    expect(service.error()).toBeNull();
+    expect(service.buffering()).toBe(true);
   });
 
-  it('stays set when recovery re-fails with a new fatal error', () => {
+  it('cards an engine error on demand with its own message key', () => {
     const { service } = setup();
-    service.setError('boom', { source: 'shaka', code: 3016 });
-    service.setRecovering(true);
-    service.setError('boom again', { source: 'shaka', code: 3016 });
-    service.setRecovering(false);
-    expect(service.fatalNoRetry()).toBe(true);
+    service.failWithEngineError({ code: -1, message: 'AVPlay failed', errorKey: 'player.playback_error' });
+    expect(service.error()).toMatchObject({ source: 'engine', code: -1, message: 'AVPlay failed' });
   });
 });
 
@@ -211,6 +203,20 @@ describe('PlayerStateService engine reload', () => {
     fire('timeUpdate', { position: 120, duration: 300, buffered: 120 });
     expect(service.buffering()).toBe(true);
     fire('timeUpdate', { position: 121, duration: 300, buffered: 126 });
+    expect(service.buffering()).toBe(false);
+  });
+
+  it('lets playback clear the spinner after a reload left hanging is abandoned', () => {
+    const { service, state, fire } = setup();
+    state('playing');
+    const hung = service.beginReload();
+    service.reset();
+    state('playing');
+    state('buffering');
+    fire('timeUpdate', { position: 1, duration: 100, buffered: 20 });
+    expect(service.buffering()).toBe(false);
+    hung();
+    expect(service.reloading()).toBe(false);
     expect(service.buffering()).toBe(false);
   });
 

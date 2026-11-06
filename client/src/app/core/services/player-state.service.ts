@@ -1,11 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TranslateService } from '@ngx-translate/core';
-import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
+import { pausedFlagForState, type EngineEventMap, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
   classifyPlaybackError,
   isNetworkOrAbort,
-  isUndecodableError,
   userMessageKeyFor,
   type PlaybackError,
 } from './playback-engine/playback-error';
@@ -20,9 +19,10 @@ const VOLUME_KEY = 'player.volume';
 export class PlayerStateService {
   readonly loading = signal(true);
   readonly videoStarted = signal(false);
+  /** The error card: playback ended, every retry spent. Engine errors never set it; the recovery decides. */
   readonly error = signal<PlaybackError | null>(null);
-  /** Stream-level decode/format failure a fresh session can't fix (see {@link isUndecodableError}); stops the stall watchdog's recovery loop. */
-  readonly fatalNoRetry = signal(false);
+  /** A retry is running (reload, backoff, waiting for the network): the spinner stays up. */
+  readonly recovering = signal(false);
   readonly paused = signal(true);
   /** In flight until the engine reports `playing`, the viewer pauses or launch fails; engines report `paused`/`buffering` before playing. */
   readonly startingPlayback = signal(true);
@@ -61,9 +61,6 @@ export class PlayerStateService {
    *  reloaded stream landing on its start position, not frames flowing. */
   private static readonly MAX_PLAYBACK_STEP = 3;
 
-  /** Set while lost-session recovery reloads the engine; its transient fatal error then surfaces as buffering, not the error overlay. Owned by PlayerComponent. */
-  private recovering = false;
-
   /** Read at error time, not cached, so a mid-session play-method change is reflected. Registered once by PlayerComponent. */
   private dolbyVisionProbe: (() => boolean) | null = null;
 
@@ -98,20 +95,14 @@ export class PlayerStateService {
   }
 
   setRecovering(value: boolean): void {
-    this.recovering = value;
-    if (value) {
-      this.error.set(null);
-    } else if (!this.error()) {
-      // Recovered without a new error: drop the previous fatal classification.
-      this.fatalNoRetry.set(false);
-    }
+    this.recovering.set(value);
   }
 
   setDolbyVisionProbe(probe: (() => boolean) | null): void {
     this.dolbyVisionProbe = probe;
   }
 
-  /** Sets the error card from a translated line plus diagnostics; the only writer, so fatal-no-retry classification stays in one place. */
+  /** Sets the error card from a translated line plus diagnostics. */
   setError(
     userMessage: string,
     extra?: Partial<Omit<PlaybackError, 'userMessage'>>,
@@ -122,18 +113,17 @@ export class PlayerStateService {
       ...extra,
     };
     this.error.set(err);
-    this.fatalNoRetry.set(isUndecodableError(err));
   }
 
   /** Classify a caught error and set it as the error card; returns the translated line.
    *  `source` overrides classification for a synthetic (non-exception) failure. */
   failWith(
     e: unknown,
-    opts?: { dolbyVision?: boolean; source?: PlaybackError['source'] },
+    opts?: { dolbyVision?: boolean; source?: PlaybackError['source']; code?: number },
   ): string {
     const classified = classifyPlaybackError(e);
     const source = opts?.source ?? classified.source;
-    const code = classified.code;
+    const code = opts?.code ?? classified.code;
     const err = e as { category?: number; severity?: number; data?: unknown[]; message?: string } | null | undefined;
     // The server's reason (missing file, no root folder) says more than a generic line.
     const userMessage =
@@ -174,22 +164,13 @@ export class PlayerStateService {
         this.startingPlayback.set(false);
       }
       // Never latch while paused: the only clear path needs an advancing playhead, so the spinner would hide the play button.
-      const buffering =
-        (e.state === 'buffering' || (this.recovering && e.state === 'error')) &&
-        !this.paused();
+      // An engine error reads as buffering until the recovery retries or ends on the card.
+      const buffering = (e.state === 'buffering' || e.state === 'error') && !this.paused();
       // Anchor the playhead as buffering begins so the clear fires on real progress, not the jump from a seek into the stall.
       if (buffering && !this.buffering()) {
         this.lastBufferingPos = this.engine?.currentTime ?? this.lastBufferingPos;
       }
       this.buffering.set(buffering);
-      // Only a generic fallback: the `error` event (below) fires alongside
-      // this and already set the detailed PlaybackError, so don't clobber it.
-      if (e.state === 'error' && !this.recovering && !this.error()) {
-        this.error.set({
-          userMessage: this.translate.instant('player.playback_error'),
-          source: 'engine',
-        });
-      }
       // videoStarted is not flipped here: 'playing' fires on play(), before the first frame; PlayerComponent flips it on the engine 'firstFrame' event.
     });
 
@@ -215,38 +196,41 @@ export class PlayerStateService {
       this.lastBufferingPos = e.position;
     });
 
-    engine.on('error', (e) => {
-      if (this.recovering) {
-        this.buffering.set(true);
-        return;
-      }
+    engine.on('error', () => {
       this.startingPlayback.set(false);
-      const source = e.source ?? 'engine';
-      // A DV passthrough decode failure wins over everything (even a platform errorKey); otherwise the engine's i18n key, else a source/code/category message.
-      // The raw fields are kept for diagnostics regardless.
-      const dvFailure =
-        (this.dolbyVisionProbe?.() ?? false) &&
-        !isNetworkOrAbort({ source, code: e.code, category: e.category });
-      const userMessage = dvFailure
-        ? this.translate.instant('player.dolby_vision_decode_failed')
-        : e.errorKey
-          ? this.translate.instant(e.errorKey)
-          : this.translate.instant(
-              userMessageKeyFor({ source, code: e.code, category: e.category }),
-            );
-      this.setError(userMessage, {
-        source,
-        code: e.code,
-        category: e.category,
-        severity: e.severity,
-        data: e.data,
-        variant: e.variant,
-        message: e.message,
-      });
+      if (!this.paused()) this.buffering.set(true);
+    });
+  }
+
+  /** Sets the error card for an engine error event. */
+  failWithEngineError(e: EngineEventMap['error']): void {
+    const source = e.source ?? 'engine';
+    // A DV passthrough decode failure wins over everything (even a platform errorKey); otherwise the engine's i18n key, else a source/code/category message.
+    // The raw fields are kept for diagnostics regardless.
+    const dvFailure =
+      (this.dolbyVisionProbe?.() ?? false) &&
+      !isNetworkOrAbort({ source, code: e.code, category: e.category });
+    const userMessage = dvFailure
+      ? this.translate.instant('player.dolby_vision_decode_failed')
+      : e.errorKey
+        ? this.translate.instant(e.errorKey)
+        : this.translate.instant(
+            userMessageKeyFor({ source, code: e.code, category: e.category }),
+          );
+    this.setError(userMessage, {
+      source,
+      code: e.code,
+      category: e.category,
+      severity: e.severity,
+      data: e.data,
+      variant: e.variant,
+      message: e.message,
     });
   }
 
   private reloads = 0;
+  /** Bumped when reloads are abandoned: a reload left on a hung request must not end into the next one. */
+  private reloadEpoch = 0;
   /** An engine reload is in flight: the engine's state is the old stream's, not yet the one being loaded. */
   readonly reloading = signal(false);
 
@@ -254,22 +238,31 @@ export class PlayerStateService {
    *  them the viewer's choice, so the spinner holds, past the end of the load too, until playback resumes. Returns
    *  the end callback. */
   beginReload(): () => void {
+    const epoch = this.reloadEpoch;
     this.reloads++;
     this.reloading.set(true);
     this.buffering.set(true);
     return () => {
-      if (--this.reloads > 0) return;
+      if (epoch !== this.reloadEpoch || --this.reloads > 0) return;
       this.reloading.set(false);
       this.buffering.set(!this.paused());
     };
   }
 
+  /** Forgets every reload in flight; their late end callbacks do nothing. */
+  abandonReloads(): void {
+    this.reloads = 0;
+    this.reloadEpoch++;
+    this.reloading.set(false);
+  }
+
   /** Reset all signals for a new playback session. */
   reset(): void {
+    this.abandonReloads();
     this.loading.set(true);
     this.videoStarted.set(false);
     this.error.set(null);
-    this.fatalNoRetry.set(false);
+    this.recovering.set(false);
     this.paused.set(true);
     this.startingPlayback.set(true);
     this.currentTime.set(0);

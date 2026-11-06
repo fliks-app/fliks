@@ -14,9 +14,8 @@ export interface CopyFallbackHost {
   /** Sync snapshot of "no reload/recovery holds the engine right now". */
   isReloadIdle(): boolean;
   reloadStream(position: number, why: ReloadWhy): Promise<void>;
-  hasError(): boolean;
-  failWith(e: unknown, opts?: { source?: PlaybackError['source'] }): void;
-  setRecovering(recovering: boolean): void;
+  /** Ends playback on the error card. */
+  fail(e: unknown): void;
 }
 
 const DEVICE_PROFILE_EXTENSIONS_FEATURE = 'deviceProfileExtensions';
@@ -114,26 +113,16 @@ export class CopyFallbackController {
   /** The load path that reported the failure still holds its reload guard, so
    *  wait for it before reloading. Always cards on failure: the copy is gone. */
   private async runRemuxFallback(position: number, why: ReloadWhy): Promise<void> {
-    this.host.setRecovering(true);
     try {
       if (!(await this.waitForReloadIdle())) {
         console.warn('[player] remux fallback dropped: another reload is still running');
-        if (!this.host.hasError()) {
-          this.host.failWith(
-            new Error('remux fallback dropped: another reload is still running'),
-            { source: 'session' },
-          );
-        }
+        this.host.fail(new Error('remux fallback dropped: another reload is still running'));
         return;
       }
-      // A recovery that settled meanwhile lowered the veil.
-      this.host.setRecovering(true);
       await this.host.reloadStream(position, why);
       await this.remuxFallbackOnRecovered?.();
     } catch (e) {
-      if (!this.host.hasError()) this.host.failWith(e);
-    } finally {
-      this.host.setRecovering(false);
+      this.host.fail(e);
     }
   }
 

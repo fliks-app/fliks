@@ -1,6 +1,16 @@
-import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
+import type { EngineEventMap, PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
-import type { PlaybackError } from '../../core/services/playback-engine/playback-error';
+import { isUndecodableError, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+
+export type EngineError = EngineEventMap['error'];
+
+/** What ended playback: an engine error event, or a thrown error (a failed request or load). */
+export type PlaybackFailure =
+  | { engine: EngineError }
+  | { thrown?: unknown; source?: PlaybackError['source']; code?: number };
+
+/** Shaka's RECOVERABLE severity: the engine heals it itself. */
+const SEVERITY_RECOVERABLE = 1;
 
 /** What the controller needs from the player, so it never reaches into the component directly. */
 export interface RecoveryHost {
@@ -11,15 +21,20 @@ export interface RecoveryHost {
   hasMedia(): boolean;
   isPaused(): boolean;
   isLoading(): boolean;
-  fatalNoRetry(): boolean;
   /** A user reload (switch, episode swap, far seek) owns the engine. */
   reloadInFlight(): boolean;
   lastSeekAt(): number;
   /** Playhead to resume from: the engine's, else the last mirrored one. */
   resumePosition(): number;
   setRecovering(recovering: boolean): void;
+  /** The error card is up: playback ended and nothing retries any more. */
   hasError(): boolean;
-  failWith(e: unknown, opts?: { source?: PlaybackError['source'] }): void;
+  /** Puts up the error card for `failure`. */
+  showFailure(failure: PlaybackFailure): void;
+  /** Reloads with a fallback stream for an error the current copy can't play; false when none applies. */
+  tryFallback(e: EngineError): boolean;
+  /** Drops the hold of a reload left hanging, so the next load can clear the spinner. */
+  abandonReload(): void;
   /** Mint a fresh session and reload the engine at `pos`. */
   reloadSession(pos: number): Promise<unknown>;
   /** Refresh the stream token, then warm the live session; best effort. */
@@ -46,8 +61,9 @@ const RESUME_RETRY_MS = 5_000;
 /** A recovery that has played no frame this long after its first trigger ends on the error card. */
 const RECOVERY_DEADLINE_MS = 45_000;
 
-/** Stall watchdog, lost-session recovery with backoff, offline parking with one in-place retry, and the
- *  wake-gap resume. Driven by the player's 1 s tick. */
+/** The one owner of playback failures: stall watchdog, engine errors, lost-session recovery with backoff,
+ *  offline parking with one in-place retry, the wake-gap resume, and the error card once every retry is spent.
+ *  Driven by the player's 1 s tick. With the card up, nothing here retries again. */
 export class RecoveryController {
   /** Only one recovery at a time, so a slow one can't race the next heartbeat's `sessionLost`. */
   private recovering = false;
@@ -69,6 +85,8 @@ export class RecoveryController {
   private deadlineAt = 0;
   /** Bumped by a give-up, so a reload still in flight from before it is dropped when it settles. */
   private gen = 0;
+  /** The last failure seen in this episode: what the card shows if the retries run out without a newer one. */
+  private lastFailure: PlaybackFailure | null = null;
 
   /** Last playhead position and when seen: no advance for the stall timeout while playing reloads. */
   private lastProgressPos = 0;
@@ -138,7 +156,7 @@ export class RecoveryController {
   /** The player was frozen (sleep) or cut off and is back; the backend killed our encoder but knows the sid.
    *  Refresh the token, re-fetch the manifest at the playhead (respawns ffmpeg), beat once; no engine reload. */
   async resumeAfterGap(): Promise<void> {
-    if (this.host.isDestroyed() || !this.host.hasMedia()) return;
+    if (this.host.isDestroyed() || !this.host.hasMedia() || this.host.hasError()) return;
     if (this.host.isCasting()) return;
     if (!this.host.isOnline()) {
       this.resumeDue = true;
@@ -157,23 +175,16 @@ export class RecoveryController {
   /** Ticked once a second; detects a frozen playhead during intended playback and routes it through the
    *  lost-session recovery (re-mint sid + reload at position). */
   checkStall(): void {
-    if (this.host.isDestroyed()) return;
+    if (this.host.isDestroyed() || this.host.hasError()) return;
     if (this.deadlineAt && Date.now() >= this.deadlineAt) {
-      this.giveUp();
+      this.fail();
       return;
     }
     const engine = this.host.engine();
     if (!engine) return;
     if (this.host.isCasting()) return;
-    // Not playing (yet): keep the baseline fresh. A fatal-no-retry error also bails: a fresh sid can't fix a
-    // codec the browser rejects, so show the terminal error instead of flapping the card/spinner.
-    if (
-      this.host.isPaused() ||
-      this.host.isLoading() ||
-      this.host.fatalNoRetry() ||
-      this.recovering ||
-      this.host.reloadInFlight()
-    ) {
+    // Not playing (yet): keep the baseline fresh.
+    if (this.host.isPaused() || this.host.isLoading() || this.recovering || this.host.reloadInFlight()) {
       this.resetStallWatchdog();
       return;
     }
@@ -193,6 +204,7 @@ export class RecoveryController {
         this.confirmPending = false;
         this.attempts = 0;
         this.retriedInPlace = false;
+        this.lastFailure = null;
         engine.resetRecoveryGuard();
       }
       return;
@@ -206,6 +218,24 @@ export class RecoveryController {
     }
   }
 
+  /** An engine error is a retry trigger, never the card itself: a fallback stream for an undecodable copy, else
+   *  a recovery. Only an undecodable copy with no fallback left ends playback at once. */
+  onEngineError(e: EngineError): void {
+    if (this.host.isDestroyed() || this.host.hasError()) return;
+    if (e.severity === SEVERITY_RECOVERABLE) return;
+    this.lastFailure = { engine: e };
+    // The recovery's own reload reports its outcome.
+    if (this.recovering || this.retryTimer) return;
+    // The fallback waits for a load in flight itself.
+    if (this.host.tryFallback(e)) return;
+    if (this.host.isLoading() || this.host.reloadInFlight()) return;
+    if (isUndecodableError(e)) {
+      this.fail({ engine: e });
+      return;
+    }
+    void this.recoverFromLostSession('other');
+  }
+
   /** The carried `sid` is unknown to the backend or the playhead wedged: mint a fresh session and reload at the
    *  position, backing off up to the attempt cap. Skipped for Cast (receiver owns the session). */
   async recoverFromLostSession(
@@ -213,7 +243,7 @@ export class RecoveryController {
     frozenSince?: number,
     afterOffline = false,
   ): Promise<void> {
-    if (this.host.isDestroyed()) return;
+    if (this.host.isDestroyed() || this.host.hasError()) return;
     if (this.recovering) return;
     // A user reload (quality/audio switch, episode swap) owns the session, so a 410 or sessionLost inside it is
     // expected and recovering would race a second load; also clear any veil held across a backoff.
@@ -225,8 +255,7 @@ export class RecoveryController {
     }
     if (this.retryTimer) return; // a backoff retry is already queued
     if (this.attempts >= MAX_RECOVER_ATTEMPTS) {
-      // Exhausted: surface a terminal error card rather than leave a stuck spinner or stale overlay.
-      this.giveUp();
+      this.fail();
       return;
     }
     if (this.host.isCasting()) return;
@@ -285,11 +314,12 @@ export class RecoveryController {
       this.awaitConfirm();
     } catch (e) {
       if (gen !== this.gen) return;
+      this.lastFailure = { thrown: e };
       if (!this.host.isOnline()) {
         this.attempts -= 1;
         this.whenOnline ??= { reason };
       } else if (this.attempts >= MAX_RECOVER_ATTEMPTS) {
-        this.giveUp(e);
+        this.fail();
       } else {
         // Hold the recovering veil up across the backoff so the user sees a reconnect, not a flash of the
         // fatal overlay between attempts.
@@ -317,18 +347,22 @@ export class RecoveryController {
     this.confirmAt = Date.now();
   }
 
-  /** The terminal card means playback is over: an engine left loaded would keep buffering and play on behind
-   *  it once the network comes back. */
-  private giveUp(e?: unknown): void {
+  /** Ends playback on the error card: every retry stops, and the engine is unloaded so it can't play on behind
+   *  the card once the network comes back. Without a failure, the last one seen; with none, the network error
+   *  (status 0, as a request that got no response). */
+  fail(failure?: PlaybackFailure): void {
+    if (this.host.hasError()) return;
     this.gen += 1;
     this.recovering = false;
     this.deadlineAt = 0;
     this.whenOnline = null;
+    this.resumeDue = false;
     this.clearRetry();
     this.episode = null;
     this.host.setRecovering(false);
+    this.host.abandonReload();
     void this.host.engine()?.unload();
-    if (e !== undefined) this.host.failWith(e);
-    else if (!this.host.hasError()) this.host.failWith(undefined, { source: 'session' });
+    this.host.showFailure(failure ?? this.lastFailure ?? { source: 'session', code: 0 });
+    this.lastFailure = null;
   }
 }
