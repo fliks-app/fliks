@@ -5,7 +5,7 @@ import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
-import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { API_TIMEOUT_MS, SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import {
   BrowserDeviceProfileService,
   DeviceProfile,
@@ -495,8 +495,10 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
     download?: boolean,
-    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean },
+    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean; timeoutMs?: number },
   ): Promise<PlaybackInfoResponse> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, !!opts?.skipErrorToast);
+    if (opts?.timeoutMs) context.set(API_TIMEOUT_MS, opts.timeoutMs);
     const query = this.buildQuery({
       token: this.playbackToken ?? undefined,
       burnInSubtitleId: burnInSubtitleId || undefined,
@@ -513,7 +515,7 @@ export class StreamingApiService {
         deviceProfile,
         {
           headers: this.sseConnectionHeaders(),
-          context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts?.skipErrorToast),
+          context,
         },
       ),
     );
