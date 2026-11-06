@@ -3,6 +3,7 @@ use super::{
     db::{self, Summary, not_found},
     path,
 };
+use crate::http::json::{Patch, present};
 use crate::{
     http::{
         AppError,
@@ -21,7 +22,7 @@ use fliks_domain::{
     acl::{Action, Subject},
     media::{family::Family, kind::MediaKind},
 };
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool, QueryBuilder};
 use std::collections::HashSet;
@@ -42,13 +43,6 @@ struct CreateDto {
     merge_m4b_replace: Option<bool>,
     path: Option<String>,
     user_ids: Option<Vec<i32>>,
-}
-
-/// `None` = key absent, `Some(None)` = explicit `null`.
-type Patch<T> = Option<Option<T>>;
-
-fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Patch<T>, D::Error> {
-    Option::<T>::deserialize(d).map(Some)
 }
 
 #[derive(Deserialize)]

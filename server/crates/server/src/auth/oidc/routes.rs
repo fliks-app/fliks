@@ -337,10 +337,14 @@ async fn complete_claims(
     d: &super::Discovery,
     access: Option<&str>,
     claims: &mut Value,
+    linked: bool,
 ) -> Result<(), String> {
     let missing = |k: &str| super::claim_at(claims, k).is_none();
     let groups_missing = p.groups_claim.as_deref().is_some_and(missing);
     let unverified = p.match_by_email && missing("email_verified");
+    if linked && !groups_missing {
+        return Ok(());
+    }
     if !(groups_missing || missing(&p.username_claim) || missing("email") || unverified) {
         return Ok(());
     }
@@ -431,12 +435,19 @@ pub(crate) async fn exchange(
         Ok(c) => c,
         Err(e) => return Ok(idp(e)),
     };
+    let linked = match claims.get("sub").and_then(Value::as_str) {
+        Some(sub) => db::identity_user(&mut *st.db.acquire().await?, p.id, sub)
+            .await?
+            .is_some(),
+        None => false,
+    };
     if let Err(e) = complete_claims(
         &st.oidc,
         &p,
         &d,
         tokens.access_token.as_deref(),
         &mut claims,
+        linked,
     )
     .await
     {

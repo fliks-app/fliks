@@ -42,7 +42,7 @@ export class LoginComponent {
   });
 
   /** Open once an administrator asked for the password form behind the SSO buttons. */
-  readonly adminSignIn = signal(false);
+  readonly adminSignIn = signal(!!this.presetUsername);
   readonly sso = this.auth.ssoProviders;
   /** With `passwordLogin = admins` the page leads with SSO and folds the form, unless no button can work here. */
   readonly passwordFolded = computed(

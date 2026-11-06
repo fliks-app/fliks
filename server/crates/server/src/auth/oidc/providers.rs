@@ -1,6 +1,7 @@
 //! Provider administration (`docs/spec/oidc-providers.md`). Admins only: `settings.access` is
 //! grantable to a non-admin role, and these rows decide who can become an admin.
 use super::{Provider, cut_users, db};
+use crate::http::json::{Patch, present};
 use crate::{
     http::{
         AppError,
@@ -128,7 +129,7 @@ pub(crate) struct ProviderIn {
     issuer: String,
     client_id: String,
     #[serde(default, deserialize_with = "present")]
-    client_secret: Option<Option<String>>,
+    client_secret: Patch<String>,
     ca_pem: Option<String>,
     #[serde(default)]
     scope: Option<String>,
@@ -156,11 +157,6 @@ pub(crate) struct ProviderIn {
 
 fn yes() -> bool {
     true
-}
-
-/// Distinguishes an absent field (`None`) from an explicit `null` (`Some(None)`).
-fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
-    Option::<String>::deserialize(d).map(Some)
 }
 
 fn blank(s: Option<String>) -> Option<String> {

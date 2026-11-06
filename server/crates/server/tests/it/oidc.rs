@@ -930,6 +930,15 @@ async fn a_silent_run_takes_only_the_expected_users_linked_identity(pool: PgPool
     assert_eq!(users, 3);
     let (r, _) = c.begin_with(pid, json!({"expectUserId": ann}), None).await;
     assert_eq!(r.0, 400);
+    let body = json!({"prompt": "none", "expectUserId": 99999});
+    let f = c
+        .begin_with(pid, body, None)
+        .await
+        .1
+        .expect("unknown id starts");
+    let code = c.idp.issue(&f, json!({}), Signing::Key(0));
+    let r = c.exchange(&f, &code, &f.verifier, None).await;
+    assert_eq!(error(&r), (403, "login_required".into()));
 }
 
 #[sqlx::test(migrations = false)]
@@ -946,6 +955,8 @@ async fn a_userinfo_failure_is_fatal_whenever_userinfo_was_needed(pool: PgPool) 
     *c.idp.st.userinfo.lock().unwrap() = None;
     let r = c.login(pid, json!({"sub": "sub-2", "email": null})).await;
     assert_eq!(error(&r), (400, "idp".into()));
+    let linked = c.login(pid, json!({"email": null})).await;
+    assert_eq!(linked.0, 201);
 }
 
 #[sqlx::test(migrations = false)]

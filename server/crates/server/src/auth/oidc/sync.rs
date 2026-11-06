@@ -192,9 +192,8 @@ async fn provision(
     Err(Fail::Db(sqlx::Error::Protocol("no free username".into())))
 }
 
-/// The user a provider login is for: linked identity, else a verified-email match, else a new
-/// account, then the access the groups decide. A silent re-run (`expect`) takes only the linked
-/// identity of that user.
+/// The user a login is for: linked identity, else a verified-email match, else a new account.
+/// A silent re-run (`expect`) takes only that user's linked identity.
 pub async fn login_user(
     st: &AppState,
     p: &Provider,

@@ -95,7 +95,7 @@
             (ngModelChange)="clientSecret.set($event)"
           />
           <span class="text-sm text-base-content/50">
-            {{ (editing()?.clientSecretSet ? 'settings.sso.secret_keep_hint' : 'settings.sso.secret_public_hint') | translate }}
+            {{ (editing()?.clientSecretSet && !removeSecret() ? 'settings.sso.secret_keep_hint' : 'settings.sso.secret_public_hint') | translate }}
           </span>
           @if (editing()?.clientSecretSet) {
             <button
