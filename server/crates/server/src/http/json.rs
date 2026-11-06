@@ -33,6 +33,15 @@ pub mod iso_ms {
     }
 }
 
+/// `None` = key absent, `Some(None)` = explicit `null`.
+pub type Patch<T> = Option<Option<T>>;
+
+pub fn present<'de, D: serde::Deserializer<'de>, T: serde::Deserialize<'de>>(
+    d: D,
+) -> Result<Patch<T>, D::Error> {
+    <Option<T> as serde::Deserialize>::deserialize(d).map(Some)
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{DateTime, TimeZone, Utc};
@@ -62,13 +71,4 @@ mod tests {
         assert!(s.contains(r#""maybe":"2026-01-02T03:04:05.060Z""#));
         assert_eq!(serde_json::from_str::<T>(&s).unwrap(), t);
     }
-}
-
-/// `None` = key absent, `Some(None)` = explicit `null`.
-pub type Patch<T> = Option<Option<T>>;
-
-pub fn present<'de, D: serde::Deserializer<'de>, T: serde::Deserialize<'de>>(
-    d: D,
-) -> Result<Patch<T>, D::Error> {
-    <Option<T> as serde::Deserialize>::deserialize(d).map(Some)
 }
