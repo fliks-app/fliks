@@ -12,7 +12,7 @@ const TIMEOUT_MS = 10 * 60_000;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function pageHtml({ title, message }: OidcPage): string {
-  return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><body style="font-family:sans-serif;text-align:center;margin-top:20vh"><h1>${esc(title)}</h1><p>${esc(message)}</p>`;
+  return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><body style="font-family:sans-serif;text-align:center;margin-top:20vh"><h1>${esc(title)}</h1><p>${esc(message)}</p><script>setTimeout(() => window.close(), 3000)</script>`;
 }
 
 /** The tab after a callback with a code (the outcome is only known once the app exchanged it) and after one with an error. */
