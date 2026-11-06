@@ -90,6 +90,7 @@ function fakeEngine() {
     muted: false,
     volume: 1,
     resetRecoveryGuard: vi.fn(),
+    unload: vi.fn(async () => {}),
     load: vi.fn(async (url: string, startTime?: number, mimeType?: string) => {
       loadCalls.push({ url, startTime, mimeType });
     }),

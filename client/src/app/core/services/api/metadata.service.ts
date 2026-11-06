@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
-import { API_GET_TIMEOUT_MS, SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { API_TIMEOUT_MS, SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
@@ -202,7 +202,7 @@ export class MetadataService {
       if (value != null && value !== '') params = params.set(key, String(value));
     }
     // The server tries providers in turn, each allowed 10 s, until one answers hits.
-    const context = new HttpContext().set(API_GET_TIMEOUT_MS, 60_000);
+    const context = new HttpContext().set(API_TIMEOUT_MS, 60_000);
     return firstValueFrom(
       this.http.get<SearchHit[]>(`/api/metadata/search/${KIND_REGISTRY[kind].providerSegment}`, { params, context }),
     );

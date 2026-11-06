@@ -10,6 +10,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     retry: undefined as undefined | (() => Promise<boolean>),
   };
   let online = true;
+  let carded = false;
   const host: any = {
     engine: () => engine,
     isDestroyed: () => false,
@@ -18,13 +19,14 @@ function setup(overrides: Record<string, unknown> = {}) {
     hasMedia: () => true,
     isPaused: () => false,
     isLoading: () => false,
-    fatalNoRetry: () => false,
     reloadInFlight: () => false,
     lastSeekAt: () => 0,
     resumePosition: () => 100,
     setRecovering: vi.fn(),
-    hasError: () => false,
-    failWith: vi.fn(),
+    hasError: () => carded,
+    showFailure: vi.fn(() => (carded = true)),
+    tryFallback: vi.fn(() => false),
+    abandonReload: vi.fn(),
     reloadSession: vi.fn(async () => true),
     warmSession: vi.fn(async () => {}),
     beat: vi.fn(async () => {}),
@@ -94,17 +96,71 @@ describe('RecoveryController', () => {
     await vi.advanceTimersByTimeAsync(4_000);
     expect(host.reloadSession).toHaveBeenCalledTimes(3);
     expect(engine.unload).toHaveBeenCalled();
-    expect(host.failWith).toHaveBeenCalledTimes(1);
+    expect(host.showFailure).toHaveBeenCalledExactlyOnceWith({ thrown: new Error('gone') });
   });
 
-  it('with the attempts already spent, shows the session error and unloads', async () => {
-    const { ctl, host, engine } = setup({ reloadSession: vi.fn(async () => { throw new Error('gone'); }) });
+  it('with the card up, nothing retries any more', async () => {
+    const { ctl, host } = setup({ reloadSession: vi.fn(async () => { throw new Error('gone'); }) });
     await ctl.recoverFromLostSession('stall');
     await vi.advanceTimersByTimeAsync(6_000);
-    host.failWith.mockClear();
-    await ctl.recoverFromLostSession('stall');
-    expect(engine.unload).toHaveBeenCalled();
-    expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
+    host.reloadSession.mockClear();
+    await ctl.recoverFromLostSession('session_lost');
+    ctl.onEngineError({ code: 2, message: 'network', source: 'media' });
+    ctl.resetStallWatchdog();
+    vi.advanceTimersByTime(60_000);
+    ctl.checkStall();
+    ctl.markResumeDue();
+    ctl.tickClockWatch();
+    await flush();
+    expect(host.reloadSession).not.toHaveBeenCalled();
+    expect(host.beat).not.toHaveBeenCalled();
+    expect(host.showFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('a network error from the engine retries before any card', async () => {
+    const { ctl, host } = setup();
+    ctl.onEngineError({ code: 2, message: 'network', source: 'media' });
+    await flush();
+    expect(host.reloadSession).toHaveBeenCalledWith(100);
+    expect(host.showFailure).not.toHaveBeenCalled();
+  });
+
+  it('an undecodable copy goes to the fallback, and to the card only when none is left', async () => {
+    const decode = { code: 3, message: 'decode', source: 'media' as const };
+    const withFallback = setup({ tryFallback: vi.fn(() => true) });
+    withFallback.ctl.onEngineError(decode);
+    await flush();
+    expect(withFallback.host.showFailure).not.toHaveBeenCalled();
+    expect(withFallback.host.reloadSession).not.toHaveBeenCalled();
+
+    const { ctl, host } = setup();
+    ctl.onEngineError(decode);
+    await flush();
+    expect(host.reloadSession).not.toHaveBeenCalled();
+    expect(host.showFailure).toHaveBeenCalledExactlyOnceWith({ engine: decode });
+  });
+
+  it('an engine error during a reload is left to that reload; the card shows it once retries run out', async () => {
+    let fail!: (e: Error) => void;
+    const { ctl, host } = setup({
+      reloadSession: vi.fn(() => new Promise<void>((_, reject) => (fail = reject))),
+    });
+    void ctl.recoverFromLostSession('stall');
+    await flush();
+    const e = { code: 2, message: 'network', source: 'media' as const };
+    ctl.onEngineError(e);
+    expect(host.reloadSession).toHaveBeenCalledTimes(1);
+    fail(new Error('load failed'));
+    await flush();
+    expect(host.showFailure).not.toHaveBeenCalled();
+  });
+
+  it('ignores an error the engine reports as recoverable', async () => {
+    const { ctl, host } = setup();
+    ctl.onEngineError({ code: 1001, message: 'blip', source: 'shaka', category: 1, severity: 1 });
+    await flush();
+    expect(host.reloadSession).not.toHaveBeenCalled();
+    expect(host.showFailure).not.toHaveBeenCalled();
   });
 
   it('a reload that never plays ends on the error card at the deadline; its late settle is dropped', async () => {
@@ -116,12 +172,13 @@ describe('RecoveryController', () => {
     await flush();
     vi.advanceTimersByTime(44_000);
     ctl.checkStall();
-    expect(host.failWith).not.toHaveBeenCalled();
+    expect(host.showFailure).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1_000);
     ctl.checkStall();
     expect(engine.unload).toHaveBeenCalled();
-    expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
+    expect(host.abandonReload).toHaveBeenCalled();
+    expect(host.showFailure).toHaveBeenCalledWith({ source: 'session', code: 0 });
     expect(ctl.active).toBe(false);
 
     settle();
@@ -135,7 +192,7 @@ describe('RecoveryController', () => {
     await ctl.recoverFromLostSession('stall');
     vi.advanceTimersByTime(45_000);
     ctl.checkStall();
-    expect(host.failWith).toHaveBeenCalledWith(undefined, { source: 'session' });
+    expect(host.showFailure).toHaveBeenCalledWith({ source: 'session', code: 0 });
 
     setOnline(true);
     ctl.tickClockWatch();
@@ -148,7 +205,7 @@ describe('RecoveryController', () => {
     setOnline(false);
     for (let i = 0; i < 5; i++) await ctl.recoverFromLostSession('stall');
     expect(host.reloadSession).not.toHaveBeenCalled();
-    expect(host.failWith).not.toHaveBeenCalled();
+    expect(host.showFailure).not.toHaveBeenCalled();
 
     setOnline(true);
     ctl.armClock();

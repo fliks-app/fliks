@@ -8,7 +8,7 @@ import {
   type TranslationObject,
 } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
+import { API_TIMEOUT_MS, errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { NetworkService } from '../services/network.service';
 import { ToastService } from '../services/toast.service';
 import { SseService } from '../services/sse.service';
@@ -81,6 +81,25 @@ describe('errorInterceptor', () => {
       expect(req.cancelled).toBe(true);
       expect(network.connectivityDoubt()).toBe(1);
       expect(toast.toasts()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a POST only when it asks for a deadline', () => {
+    vi.useFakeTimers();
+    try {
+      let status: number | undefined;
+      const context = new HttpContext().set(API_TIMEOUT_MS, 5_000).set(SKIP_ERROR_TOAST, true);
+      client.post('/api/stream/1/playback-info', {}, { context }).subscribe({ error: (e) => (status = e.status) });
+      client.post('/api/other', {}).subscribe({ error: () => {} });
+      const bounded = http.expectOne('/api/stream/1/playback-info');
+      const open = http.expectOne('/api/other');
+      vi.advanceTimersByTime(5_000);
+      expect(status).toBe(0);
+      expect(bounded.cancelled).toBe(true);
+      expect(open.cancelled).toBe(false);
+      open.flush({});
     } finally {
       vi.useRealTimers();
     }

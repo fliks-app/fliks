@@ -46,7 +46,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
-import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+import { formatErrorDiagnostics, isNetworkOrAbort, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
 import {
@@ -92,6 +92,7 @@ interface AudioOption {
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
 const HEARTBEAT_MS = 10_000;
+const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
 
 
 interface PipPlugin {
@@ -389,6 +390,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
   readonly bufferedEnd = this.state.bufferedEnd;
+  /** A network failure can be retried once the link is back, even mid-playback. */
+  protected readonly canRetry = computed(() => {
+    const e = this.error();
+    return !this.videoStarted() || (!!e && isNetworkOrAbort(e));
+  });
   /** Spinner stands in for the video until first paint, except on a refused autoplay (ready, paused: show
    *  play). */
   readonly spinnerVisible = computed(
@@ -397,6 +403,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.error() &&
       (this.loading() ||
         this.buffering() ||
+        this.state.recovering() ||
         // Shaka can hold a starved playhead without ever reporting `buffering`.
         this.frozenSince() > 0 ||
         !this.videoStarted()),
@@ -470,8 +477,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     hasMedia: () => !!this.mediaFileId,
     isPaused: () => this.paused(),
     isLoading: () => this.state.loading(),
-    fatalNoRetry: () => this.state.fatalNoRetry(),
-    reloadInFlight: () => this.reloadingStream,
+    reloadInFlight: () => this.reloadingStream || this.reloadLoadPending,
     lastSeekAt: () => this.lastSeekAt,
     resumePosition: () => {
       // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay): use the mirrored position.
@@ -480,7 +486,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     },
     setRecovering: (on) => this.state.setRecovering(on),
     hasError: () => !!this.state.error(),
-    failWith: (e, opts) => this.state.failWith(e, opts),
+    showFailure: (f) => {
+      if ('engine' in f) this.state.failWithEngineError(f.engine);
+      else this.state.failWith(f.thrown, { dolbyVision: this.isDolbyVisionPassthrough(), source: f.source, code: f.code });
+    },
+    tryFallback: (e) =>
+      this.copyFallback.maybeFallback(
+        { source: e.source, code: e.code, message: e.message, audioCodec: e.audioCodec },
+        this.engine?.currentTime || this.state.currentTime() || 0,
+      ),
+    abandonReload: () => this.state.abandonReloads(),
     reloadSession: (pos) => this.refreshSidAndReload(pos, { preservePause: true, unmute: false }),
     warmSession: async () => {
       await this.authService.ensureStreamToken(this.mediaFileId);
@@ -807,14 +822,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   isReloadIdle(): boolean {
     return !this.reloadingStream && !this.firstLoadPending && !this.recovery.active;
   }
-  hasError(): boolean {
-    return !!this.state.error();
-  }
-  failWith(e: unknown, opts?: { source?: PlaybackError['source'] }): void {
-    this.state.failWith(e, opts);
-  }
-  setRecovering(recovering: boolean): void {
-    this.state.setRecovering(recovering);
+  fail(e: unknown): void {
+    this.recovery.fail({ thrown: e });
   }
 
   private readonly nowPlayingMeta = inject(NowPlayingMetadataService);
@@ -2177,7 +2186,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.completeEpisodeSwitchSetup();
     } catch (e: any) {
       if (this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, () => this.completeEpisodeSwitchSetup())) return;
-      this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
+      this.recovery.fail({ thrown: e });
     } finally {
       this.switchingItem = false;
       this.reloadingStream = false;
@@ -2514,7 +2523,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
-    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean },
+    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean; timeoutMs?: number },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
     const onScreen = fileId === this.mediaFileId;
@@ -2835,8 +2844,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!(await this.authService.ensureStreamToken(this.mediaFileId))) throw new Error('stream token unavailable');
   }
 
-  /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
-   *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
+  /** Wires the two ways a live session goes bad: `sessionExpired` (a backend 410) and `error`, both handed to the
+   *  recovery, which retries or ends on the card. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     // A frame on screen after a failure (a quality switch, a reload) means playback is back: the error panel goes.
     engine.on('firstFrame', () => this.state.error.set(null));
@@ -2846,16 +2855,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('externalPlaybackFailed', ({ reason }) => {
       void this.onExternalPlaybackFailed(reason);
     });
-    engine.on('error', (e) => {
-      if (this.reloadLoadPending || this.recovery.active) {
-        console.warn('[player] engine error dropped, a reload/recovery is already in flight', e);
-        return;
-      }
-      this.copyFallback.maybeFallback(
-        { source: e.source, code: e.code, message: e.message, audioCodec: e.audioCodec },
-        this.engine?.currentTime || this.state.currentTime() || 0,
-      );
-    });
+    engine.on('error', (e) => this.recovery.onEngineError(e));
   }
 
   /** A receiver that can't show HDR refuses an HDR-only master: renegotiate SDR once, then show the card rather
@@ -3000,7 +3000,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     } catch (e) {
       // No retry path after a handoff: surface a terminal error instead of a silently dead player.
-      if (!this.destroyed) this.state.failWith(e);
+      if (!this.destroyed) this.recovery.fail({ thrown: e });
     }
   }
 
@@ -3572,10 +3572,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.isNativeEngine() &&
         !this.isTizenEngine() &&
         !this.reloadReachedPlayback &&
-        !this.destroyed &&
-        !this.state.error()
+        !this.destroyed
       ) {
-        this.state.failWith(e);
+        this.recovery.fail({ thrown: e });
       }
       throw e;
     } finally {
@@ -3602,11 +3601,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async negotiateAndLoad(o: {
     negotiateAt?: number;
     replace?: { replaces?: string };
+    timeoutMs?: number;
     start: (pi: PlaybackInfoResponse) => { url?: number; load?: number };
     onLoaded: () => void;
   }): Promise<void> {
     const engine = this.engine!;
-    const pi = (this.playbackInfo = await this.negotiatePlayback(o.negotiateAt, {}, o.replace));
+    const pi = (this.playbackInfo = await this.negotiatePlayback(o.negotiateAt, {}, { ...o.replace, timeoutMs: o.timeoutMs }));
     this.adoptPlaybackInfo(pi);
     // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
     // load.
@@ -3645,6 +3645,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.negotiateAndLoad({
         negotiateAt: at,
         replace,
+        // A request sent on a keep-alive socket a NAT dropped never answers; the abort frees it for the retry.
+        timeoutMs: RELOAD_NEGOTIATE_TIMEOUT_MS,
         start: () => {
           engine.keepFrame = opts.restart;
           return { url: at, load: opts.restart || at > 0 ? at : undefined };

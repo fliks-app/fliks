@@ -12,7 +12,7 @@ import { pluginErrorMessage, translatedServerMessage } from '../utils/server-mes
 export const SKIP_ERROR_TOAST = new HttpContextToken(() => false);
 
 /** A black-holed link (VPN up, no route) never fails a request on its own. */
-export const API_GET_TIMEOUT_MS = new HttpContextToken(() => 15_000);
+export const API_TIMEOUT_MS = new HttpContextToken(() => 15_000);
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
@@ -20,12 +20,13 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const network = inject(NetworkService);
   // Resolved on error only: SseService reaches HttpClient through AuthService.
   const injector = inject(Injector);
-  const bounded = req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/');
+  const bounded =
+    (req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/')) || req.context.has(API_TIMEOUT_MS);
 
   return next(req).pipe(
     // `Sent` fires at once; the deadline covers the wait for the answer.
     filter((e) => !bounded || e.type !== HttpEventType.Sent),
-    bounded ? timeout(req.context.get(API_GET_TIMEOUT_MS)) : (src) => src,
+    bounded ? timeout(req.context.get(API_TIMEOUT_MS)) : (src) => src,
     catchError((caught: HttpErrorResponse | TimeoutError) => {
       const err =
         caught instanceof TimeoutError

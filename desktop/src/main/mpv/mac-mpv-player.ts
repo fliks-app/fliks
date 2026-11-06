@@ -20,7 +20,7 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
-import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
+import { mpvStreamOptions } from './stream-options';
 import { muteFilterCommands } from './edl-filter';
 import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
@@ -98,7 +98,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // Apply the shared streaming/reconnect tuning (all runtime-mutable, set
     // before the first load) so buffering + resume behaviour matches the other
     // backends from one source of truth.
-    for (const [name, value] of MPV_STREAM_OPTIONS) this.addon.setProperty(name, value);
+    for (const [name, value] of mpvStreamOptions()) this.addon.setProperty(name, value);
     return this;
   }
 

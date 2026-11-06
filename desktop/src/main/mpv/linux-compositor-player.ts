@@ -9,7 +9,7 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
-import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
+import { mpvStreamOptions } from './stream-options';
 import { muteFilterCommands } from './edl-filter';
 import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
@@ -56,7 +56,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   async start(): Promise<this> {
     this.addon.onEvent((json) => this.onAddonEvent(json));
     this.addon.start(this.window);
-    for (const [name, value] of MPV_STREAM_OPTIONS) this.addon.setProperty(name, value);
+    for (const [name, value] of mpvStreamOptions()) this.addon.setProperty(name, value);
     return this;
   }
 
