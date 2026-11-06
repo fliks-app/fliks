@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.id, s.method, s.\"userAgent\" AS user_agent, s.\"createdAt\" AS created_at,\n                  s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s\n           WHERE s.\"userId\" = $1 AND s.\"revokedAt\" IS NULL\n             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.\"sessionId\" = s.id\n                         AND t.\"revokedAt\" IS NULL AND t.\"expiresAt\" > $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
+  "query": "SELECT s.id, s.method, p.name AS \"provider_name?\", s.\"userAgent\" AS user_agent,\n                  s.\"createdAt\" AS created_at, s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s.\"providerId\"\n           WHERE s.\"userId\" = $1 AND s.\"revokedAt\" IS NULL\n             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.\"sessionId\" = s.id\n                         AND t.\"revokedAt\" IS NULL AND t.\"expiresAt\" > $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "provider_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "user_agent",
         "type_info": "Varchar",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "last_seen_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -68,10 +79,11 @@
     "nullable": [
       false,
       true,
+      false,
       true,
       false,
       false
     ]
   },
-  "hash": "52d3ace338389b662f4fb65204f04b23c37da9b3664975c9852be9b8faf5a99c"
+  "hash": "29e9c015365076039e99c23866e9c007a3989db390a0cabd4129a8f131dd4993"
 }

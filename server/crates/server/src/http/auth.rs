@@ -444,3 +444,19 @@ where
         }
     }
 }
+
+/// `SessionAuthed` for a handler that reads its body first and only then knows it needs a session.
+pub async fn session_from_headers(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<Authed, AppError> {
+    let (mut parts, ()) = axum::http::Request::new(()).into_parts();
+    parts.headers = headers.clone();
+    let a = authenticate(&parts, state)
+        .await?
+        .ok_or_else(unauthorized)?;
+    if a.scope.is_some() {
+        return Err(AppError::forbidden("session_token_required"));
+    }
+    Ok(a)
+}

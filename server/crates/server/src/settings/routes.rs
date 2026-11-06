@@ -89,6 +89,57 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     }
 }
 
+/// The two keys that decide who can sign in: admins only (`settings.access` can be granted to a
+/// non-admin role), `password_login` and `oidc_auto_launch` against the providers that exist.
+async fn check_sso_key(
+    st: &AppState,
+    authed: &Authed,
+    key: &str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    if key != "password_login" && key != "oidc_auto_launch" {
+        return Ok(());
+    }
+    if !authed.user.is_admin {
+        return Err(AppError::forbidden("Forbidden resource"));
+    }
+    let Some(v) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(());
+    };
+    if key == "password_login" {
+        if !["everyone", "admins"].contains(&v) {
+            return Err(AppError::bad_request(vec![
+                "password_login must be one of the following values: everyone, admins",
+            ]));
+        }
+        let enabled =
+            sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM oidc_providers WHERE enabled"#)
+                .fetch_one(&st.db)
+                .await
+                .map_err(db_err)?;
+        if v == "admins" && enabled == 0 {
+            return Err(AppError::conflict(
+                "Password login can be restricted to admins only with an enabled provider",
+            ));
+        }
+    } else {
+        let id: Option<i32> = v.parse().ok();
+        let known = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM oidc_providers WHERE id = $1 AND enabled) AS "known!""#,
+            id
+        )
+        .fetch_one(&st.db)
+        .await
+        .map_err(db_err)?;
+        if !known {
+            return Err(AppError::bad_request(vec![
+                "oidc_auto_launch must be empty or the id of an enabled provider",
+            ]));
+        }
+    }
+    Ok(())
+}
+
 /// Values the engine would reject with its whole config.
 fn validate(key: &str, value: &str) -> Result<(), AppError> {
     if key == "users_public_mode" && !["everyone", "lan", "hidden"].contains(&value) {
@@ -142,6 +193,13 @@ pub(crate) async fn put_one(
     if let Some(Some(v)) = &dto.value {
         validate(&key, v)?;
     }
+    check_sso_key(
+        &st,
+        &authed,
+        &key,
+        dto.value.as_ref().and_then(|v| v.as_deref()),
+    )
+    .await?;
     let incoming = match dto.value {
         None => Incoming::Absent,
         Some(None) => Incoming::Null,
@@ -182,6 +240,8 @@ pub(crate) async fn put_bulk(
         if !value.is_null() {
             validate(key, &db::pg_text(value))?;
         }
+        let text = (!value.is_null()).then(|| db::pg_text(value));
+        check_sso_key(&st, &authed, key, text.as_deref()).await?;
     }
     let secrets = Secrets::load(&st.db, data.keys().map(String::as_str))
         .await

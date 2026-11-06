@@ -1,0 +1,230 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, issuer, \"clientId\" AS client_id, \"clientSecret\" AS client_secret,\n                  \"caPem\" AS ca_pem, scope, prompt, \"usernameClaim\" AS username_claim,\n                  \"groupsClaim\" AS groups_claim, \"allowedGroups\" AS \"allowed_groups!\",\n                  \"adminGroups\" AS \"admin_groups!\", \"autoRegister\" AS auto_register,\n                  \"matchByEmail\" AS match_by_email, \"endSessionAtProvider\" AS end_session_at_provider,\n                  \"accountUrl\" AS account_url, enabled, position\n           FROM oidc_providers ORDER BY position, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "clientId"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "client_secret",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "clientSecret"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "ca_pem",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "caPem"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "prompt",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "prompt"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "username_claim",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "usernameClaim"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "groups_claim",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "groupsClaim"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "allowed_groups!",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "allowedGroups"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "admin_groups!",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "adminGroups"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "auto_register",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "autoRegister"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "match_by_email",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "matchByEmail"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "end_session_at_provider",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "endSessionAtProvider"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "account_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "accountUrl"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "position",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0e3fe1a8fcdf7df279003f1e968baee53a1e8b3682e6af4c5ae7abc4fcf72017"
+}

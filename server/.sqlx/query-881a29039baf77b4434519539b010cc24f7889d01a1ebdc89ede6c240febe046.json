@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"userId\" FROM user_identities WHERE \"providerId\" = $1 AND subject = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "userId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "userId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "881a29039baf77b4434519539b010cc24f7889d01a1ebdc89ede6c240febe046"
+}

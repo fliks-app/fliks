@@ -34,6 +34,8 @@ pub struct AppState {
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
     /// Wrong pairing codes per approver, apart from login so no username can collide with its key.
     pub pairing_throttle: Arc<crate::auth::LoginThrottle>,
+    /// OpenID Connect caches and outbound network; a test harness swaps the network.
+    pub oidc: Arc<crate::auth::oidc::Oidc>,
     pub sse_tickets: Arc<crate::events::Tickets>,
     /// Base URL of the Kobo store the proxy forwards to; only a test harness sets another.
     pub kobo_store: Arc<str>,
@@ -82,6 +84,7 @@ impl AppState {
             plugins,
             login_throttle: Arc::default(),
             pairing_throttle: Arc::default(),
+            oidc: Arc::default(),
             sse_tickets: Arc::default(),
             kobo_store: crate::kobo::STORE.into(),
             kepub_cache: None,

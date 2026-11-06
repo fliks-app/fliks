@@ -1,6 +1,7 @@
 //! Auth routes (`docs/spec/auth.md`): login, refresh, logout, register, me, pairing, stream tokens.
 mod db;
 mod jobs;
+pub mod oidc;
 mod password;
 mod routes;
 #[cfg(test)]

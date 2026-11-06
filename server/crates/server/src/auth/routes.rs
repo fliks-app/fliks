@@ -1,5 +1,7 @@
-use super::db::{self, Approval, Opened, PairingStatus, Refreshed};
-use super::net;
+use super::{
+    db::{self, Approval, Opened, PairingStatus, Refreshed},
+    net, oidc,
+};
 use crate::{
     auth_token::Signed,
     events::SseEvent,
@@ -39,6 +41,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/sessions", get(sessions))
         .route("/api/auth/sessions/{id}", delete(revoke_session))
         .route("/api/auth/register", post(register))
+        .merge(oidc::router())
         .route("/api/auth/setup", get(setup_status).post(setup))
         .route("/api/auth/me", get(me))
         .route("/api/auth/users-public", get(users_public))
@@ -214,7 +217,7 @@ pub(crate) async fn login(
     }
     let invalid = || AppError::unauthorized("Invalid credentials");
     let row = sqlx::query!(
-        r#"SELECT id, "passwordHash" AS hash, enabled FROM users WHERE username = $1"#,
+        r#"SELECT id, "passwordHash" AS hash, enabled, "isAdmin" AS is_admin FROM users WHERE username = $1"#,
         dto.username
     )
     .fetch_optional(&st.db)
@@ -233,23 +236,46 @@ pub(crate) async fn login(
     if !row.enabled {
         return Err(AppError::unauthorized("Account disabled"));
     }
+    if !row.is_admin && oidc::password_login_admins_only(&st.db).await? {
+        return Err(AppError::unauthorized("Password login is disabled"));
+    }
+    sign_in(&st, &headers, row.id, SessionKind::Password).await
+}
+
+/// How a session was opened.
+pub(crate) enum SessionKind {
+    Password,
+    Oidc(db::OidcSession),
+}
+
+/// Everything after the credentials are accepted: `lastLogin`, the session, the token pair and the cookie.
+pub(crate) async fn sign_in(
+    st: &AppState,
+    headers: &HeaderMap,
+    user_id: i32,
+    kind: SessionKind,
+) -> Result<Response, AppError> {
     let now = Utc::now();
     sqlx::query!(
         r#"UPDATE users SET "lastLogin" = $1 WHERE id = $2"#,
         now,
-        row.id
+        user_id
     )
     .execute(&st.db)
     .await?;
-    let (user, role) = load_enabled(&st.db, row.id)
+    let (user, role) = load_enabled(&st.db, user_id)
         .await?
         .ok_or_else(|| AppError::unauthorized("Account disabled"))?;
+    let origin = match kind {
+        SessionKind::Password => db::Origin::New("password"),
+        SessionKind::Oidc(o) => db::Origin::Oidc(o),
+    };
     let mut tx = st.db.begin().await?;
     let refresh = db::issue(
         &mut tx,
         user.id,
-        db::Origin::New("password"),
-        user_agent(&headers),
+        origin,
+        user_agent(headers),
         st.cfg.refresh_token_ttl_days,
         now,
     )
@@ -258,10 +284,10 @@ pub(crate) async fn login(
     let access = st
         .jwt
         .sign_access(user.id, &user.username, refresh.session)?;
-    let set = cookie(&headers, &st, &access.token);
+    let set = cookie(headers, st, &access.token);
     let body = LoginBody {
         pair: pair(access, refresh),
-        user: safe_user(&st, user, role).await,
+        user: safe_user(st, user, role).await,
     };
     Ok((StatusCode::CREATED, set, Json(body)).into_response())
 }
@@ -358,6 +384,8 @@ pub(crate) async fn logout(
 pub(crate) struct SessionItem {
     id: i32,
     method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider_name: Option<String>,
     user_agent: Option<String>,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
@@ -378,6 +406,7 @@ pub(crate) async fn sessions(
                 current: Some(r.id) == a.session,
                 id: r.id,
                 method: r.method,
+                provider_name: r.provider_name,
                 user_agent: r.user_agent,
                 created_at: r.created_at,
                 last_seen_at: r.last_seen_at,
@@ -432,26 +461,27 @@ pub(crate) async fn register(
     if exists.is_some() {
         return Err(taken());
     }
-    let role_id =
-        sqlx::query_scalar!(r#"SELECT id FROM roles WHERE "isDefault" = true ORDER BY id LIMIT 1"#)
-            .fetch_optional(&st.db)
-            .await?;
     let password = dto.password;
     let hash = super::hash_password(password).await?;
-    let id = sqlx::query_scalar!(
-        r#"INSERT INTO users (username, email, "passwordHash", "roleId", "isAdmin", "mediaServerType")
-           VALUES ($1, $2, $3, $4, false, 'local') RETURNING id"#,
-        dto.username,
-        dto.email,
-        hash,
-        role_id
+    let mut tx = st.db.begin().await?;
+    let id = crate::users::create_user(
+        &mut tx,
+        crate::users::NewUser {
+            username: dto.username,
+            email: dto.email,
+            password_hash: Some(hash),
+            role_id: None,
+            is_admin: false,
+            enabled: true,
+            library_ids: None,
+        },
     )
-    .fetch_one(&st.db)
     .await
     .map_err(|e| match e {
         sqlx::Error::Database(d) if d.is_unique_violation() => taken(),
         e => e.into(),
     })?;
+    tx.commit().await?;
     let (user, _) = load_enabled(&st.db, id).await?.ok_or_else(internal)?;
     // The saved entity has no loaded role: role/permissions follow `isAdmin` only (rule 37).
     Ok((StatusCode::CREATED, Json(safe_user(&st, user, None).await)).into_response())

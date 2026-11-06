@@ -6,7 +6,7 @@ mod bundled;
 mod create;
 mod harness;
 mod namespaces;
-mod net;
+pub(crate) mod net;
 mod no_tmdb;
 mod provider;
 mod provider_host;

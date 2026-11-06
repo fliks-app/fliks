@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_identities SET \"lastLoginAt\" = now(), email = COALESCE($3, email)\n           WHERE \"providerId\" = $1 AND subject = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c1fdad98836b85c3a64e8b5bfa3f271d29e565afaf1eee9020a168612a85e03f"
+}

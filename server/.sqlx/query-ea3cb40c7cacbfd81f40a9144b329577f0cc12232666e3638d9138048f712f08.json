@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (i.\"userId\") i.\"userId\" AS \"user_id!\", p.id AS \"provider_id!\"\n           FROM user_identities i JOIN oidc_providers p ON p.id = i.\"providerId\"\n           WHERE i.\"userId\" = ANY($1) AND p.enabled AND p.\"groupsClaim\" IS NOT NULL\n             AND (cardinality(p.\"adminGroups\") > 0\n                  OR EXISTS (SELECT 1 FROM oidc_role_mappings m WHERE m.\"providerId\" = p.id))\n           ORDER BY i.\"userId\", p.\"position\", p.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "userId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ea3cb40c7cacbfd81f40a9144b329577f0cc12232666e3638d9138048f712f08"
+}

@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2\n           RETURNING \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "providerId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "return_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "returnTo"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "link_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "linkUserId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "216825f906dc0a87827ba2b378d15be77decfad576860c5691b6beff31b87a97"
+}

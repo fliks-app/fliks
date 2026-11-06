@@ -1,4 +1,4 @@
-//! Boot-time loops: hourly pairing cleanup, daily refresh-token prune at 03:30 local.
+//! Boot-time loops: hourly pairing and sign-in-row cleanup, daily refresh-token prune at 03:30 local.
 use super::db;
 use chrono::{Duration as Span, Local, NaiveDateTime, Utc};
 use sqlx::PgPool;
@@ -15,6 +15,9 @@ pub fn spawn(db: PgPool) {
             tick.tick().await;
             if let Err(e) = db::cleanup_pairings(&pool, Utc::now()).await {
                 tracing::warn!(error = %e, "pairing cleanup failed");
+            }
+            if let Err(e) = super::oidc::cleanup_logins(&pool, Utc::now()).await {
+                tracing::warn!(error = %e, "oidc login cleanup failed");
             }
         }
     });

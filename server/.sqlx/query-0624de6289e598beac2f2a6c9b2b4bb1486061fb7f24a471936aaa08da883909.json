@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE oidc_providers SET name = $2, \"clientId\" = $3, \"clientSecret\" = COALESCE($4, \"clientSecret\"),\n               \"caPem\" = $5, scope = COALESCE($6, scope), prompt = $7,\n               \"usernameClaim\" = COALESCE($8, \"usernameClaim\"), \"groupsClaim\" = $9, \"allowedGroups\" = $10,\n               \"adminGroups\" = $11, \"autoRegister\" = $12, \"matchByEmail\" = $13, \"endSessionAtProvider\" = $14,\n               \"accountUrl\" = $15, enabled = $16, position = COALESCE($17, position), \"updatedAt\" = now()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Text",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0624de6289e598beac2f2a6c9b2b4bb1486061fb7f24a471936aaa08da883909"
+}
