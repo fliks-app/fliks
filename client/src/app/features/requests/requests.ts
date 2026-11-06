@@ -8,7 +8,6 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
-import { Subscription } from 'rxjs';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -28,7 +27,8 @@ import {
   LibrarySummary,
 } from '../../core/services/api/libraries-api.service';
 import { ToastService } from '../../core/services/toast.service';
-import { AppResumeService } from '../../core/services/app-resume.service';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { RequestPosterComponent } from './request-poster';
 import { RequestWantsComponent } from './request-wants/request-wants';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
@@ -76,11 +76,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
-  private readonly appResume = inject(AppResumeService);
+  private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly sse = inject(SseService);
   private readonly downloadProgress = inject(DownloadProgressService);
   readonly auth = inject(AuthService);
-  private resumeSub?: Subscription;
+  private static readonly SCROLL_KEY = 'requests';
+  /** Cached route: a return keeps the list and its scroll, then refetches the loaded rows. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => void this.refreshStatuses(),
+    scrollKey: RequestsComponent.SCROLL_KEY,
+  });
 
   /** When a download finishes, refetch so a monitored request flips to its
    *  downloaded state and the progress badge clears. */
@@ -129,12 +134,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   );
 
   async ngOnInit() {
+    this.scrollMemory.activate(RequestsComponent.SCROLL_KEY);
     this.reload();
-    // Native app-resume: this page only exists while it's the visible route
-    // (no route reuse), so an unguarded reload is always the on-screen one.
-    this.resumeSub = this.appResume.resume$.subscribe(() => {
-      this.reload();
-    });
     try {
       const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
@@ -148,7 +149,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.resumeSub?.unsubscribe();
+    this.scrollMemory.deactivate();
   }
 
   onStatusChange(value: string) {
