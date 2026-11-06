@@ -625,6 +625,11 @@ pub(crate) async fn pairing_request(
                 "Too many pending requests for this device",
             ));
         }
+        Opened::UserFull => {
+            return Err(AppError::bad_request(
+                "Too many pending requests for this account",
+            ));
+        }
     };
     st.hub.emit_to_user(
         dto.user_id,

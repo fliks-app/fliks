@@ -830,7 +830,8 @@
     "action_error": "A ação não pôde ser concluída.",
     "code_label": "Código mostrado no dispositivo",
     "code_hint": "É apresentado pelo dispositivo que quer ligar-se.",
-    "enter_code": "Introduzir código"
+    "enter_code": "Introduzir código",
+    "wrong_code": "Nenhum pedido pendente tem este código."
   },
   "server_history": {
     "section_title": "Servidores recentes",

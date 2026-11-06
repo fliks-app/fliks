@@ -333,6 +333,7 @@ export class AuthService {
     return firstValueFrom(
       this.http.post<void>(`/api/auth/pairing/${pairingId}/cancel`, {}, {
         headers: { 'X-Device-Id': deviceId },
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
       }),
     );
   }
@@ -342,7 +343,11 @@ export class AuthService {
   }
 
   pairingApprove(code: string): Promise<void> {
-    return firstValueFrom(this.http.post<void>('/api/auth/pairing/approve', { code }));
+    return firstValueFrom(
+      this.http.post<void>('/api/auth/pairing/approve', { code }, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    );
   }
 
   pairingDeny(pairingId: string): Promise<void> {

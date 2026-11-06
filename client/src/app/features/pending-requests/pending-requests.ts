@@ -4,8 +4,9 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -29,13 +30,12 @@ export class PendingRequestsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   private readonly sse = inject(SseService);
 
   readonly requests = signal<PendingRequest[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
-  /** pairingId currently being approved/denied — disables its buttons. */
+  /** pairingId being denied: disables its button. */
   readonly busy = signal<string | null>(null);
   readonly code = signal('');
   readonly approving = signal(false);
@@ -46,8 +46,6 @@ export class PendingRequestsComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    // The device's QR code carries its code.
-    this.code.set(this.route.snapshot.queryParamMap.get('code') ?? '');
     void this.refresh();
   }
 
@@ -64,7 +62,6 @@ export class PendingRequestsComponent implements OnInit {
     }
   }
 
-  /** A wrong code is toasted by the error interceptor with the server's message. */
   async approve(event: Event) {
     event.preventDefault();
     if (this.approving() || !this.code().trim()) return;
@@ -74,8 +71,11 @@ export class PendingRequestsComponent implements OnInit {
       this.code.set('');
       this.toast.success(this.translate.instant('pending_requests.approved_toast'));
       void this.refresh();
-    } catch {
-      // Toasted by the interceptor.
+    } catch (err) {
+      const key = err instanceof HttpErrorResponse && err.status === 404
+        ? 'pending_requests.wrong_code'
+        : 'pending_requests.action_error';
+      this.toast.error(this.translate.instant(key));
     } finally {
       this.approving.set(false);
     }

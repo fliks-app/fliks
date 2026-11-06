@@ -64,7 +64,6 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.cancelPending();
   }
 
-  /** The server only deletes a still-pending request, so this is safe in every view. */
   private cancelPending() {
     if (this.pairingId && this.deviceId) {
       void this.auth.pairingCancel(this.pairingId, this.deviceId).catch(() => undefined);
@@ -83,6 +82,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       // UA-derived model fallback when a native source provides it.
       const realName = this.systemInfo.deviceName();
       if (realName) this.deviceName.set(realName);
+      if (this.destroyed) return;
       const { pairingId, code, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
@@ -106,6 +106,8 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     if (this.destroyed || !this.pairingId || !this.deviceId) return;
     try {
       const res = await this.auth.pairingStatus(this.pairingId, this.deviceId);
+      if (this.destroyed) return;
+      if (res.status !== 'pending') this.pairingId = null;
       if (res.status === 'approved' && res.accessToken) {
         this.view.set('starting');
         await this.auth.loginWithToken(
@@ -136,6 +138,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.countdownHandle = setInterval(() => {
       const next = this.secondsLeft() - 1;
       if (next <= 0) {
+        this.pairingId = null;
         this.secondsLeft.set(0);
         this.view.set('expired');
         this.stopTimers();

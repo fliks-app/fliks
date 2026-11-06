@@ -11,6 +11,8 @@ pub const PAIRING_TTL_SECS: i64 = 600;
 /// `accessToken` sentinel between approval and the issuing device's claim.
 const APPROVED: &str = "__approved__";
 const MAX_PENDING_PER_DEVICE: i64 = 3;
+/// The device id is the caller's choice, so only this bounds a flood (and typo hits on a code).
+const MAX_PENDING_PER_USER: i64 = 10;
 
 pub fn hash(raw: &str) -> String {
     Sha256::digest(raw.as_bytes())
@@ -245,6 +247,7 @@ pub enum Opened {
     Created { id: String, code: String },
     NoUser,
     TooMany,
+    UserFull,
 }
 
 /// `pairing/request`. The per-device advisory lock makes the 3-pending cap hold under concurrency.
@@ -278,6 +281,21 @@ pub async fn open_pairing(
     if pending >= MAX_PENDING_PER_DEVICE {
         return Ok(Opened::TooMany);
     }
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock(hashtext('pairing-user'), $1)",
+        user_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    let for_user = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM pairing_requests WHERE "userId" = $1 AND status = 'pending'"#,
+        user_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if for_user >= MAX_PENDING_PER_USER {
+        return Ok(Opened::UserFull);
+    }
     // A code is unique among the user's pending requests, so approving by code picks exactly one.
     for _ in 0..10 {
         let code = new_code();
@@ -300,7 +318,7 @@ pub async fn open_pairing(
             return Ok(Opened::Created { id, code });
         }
     }
-    Ok(Opened::TooMany)
+    Ok(Opened::UserFull)
 }
 
 fn new_code() -> String {
@@ -698,6 +716,19 @@ mod tests {
             Opened::NoUser
         ));
         assert_eq!(cleanup_pairings(&pool, Utc::now()).await.unwrap(), 3);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn pairing_cap_per_user_ignores_the_device_id(pool: PgPool) {
+        let u = setup(&pool).await;
+        let now = Utc::now();
+        for i in 0..MAX_PENDING_PER_USER {
+            created(open(&pool, u, &format!("d{i}"), now).await);
+        }
+        assert!(matches!(
+            open(&pool, u, "fresh", now).await,
+            Opened::UserFull
+        ));
     }
 
     #[sqlx::test(migrations = false)]

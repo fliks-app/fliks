@@ -830,7 +830,8 @@
     "action_error": "L'azione non è andata a buon fine.",
     "code_label": "Codice mostrato sul dispositivo",
     "code_hint": "Lo mostra il dispositivo che vuole connettersi.",
-    "enter_code": "Inserisci codice"
+    "enter_code": "Inserisci codice",
+    "wrong_code": "Nessuna richiesta in sospeso ha questo codice."
   },
   "server_history": {
     "section_title": "Server recenti",

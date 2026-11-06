@@ -830,7 +830,8 @@
     "action_error": "L'action n'a pas pu aboutir.",
     "code_label": "Code affiché sur l'appareil",
     "code_hint": "L'appareil qui veut se connecter l'affiche.",
-    "enter_code": "Saisir le code"
+    "enter_code": "Saisir le code",
+    "wrong_code": "Aucune demande en attente n'a ce code."
   },
   "server_history": {
     "section_title": "Serveurs récents",

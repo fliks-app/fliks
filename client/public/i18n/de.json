@@ -830,7 +830,8 @@
     "action_error": "Die Aktion konnte nicht abgeschlossen werden.",
     "code_label": "Auf dem Gerät angezeigter Code",
     "code_hint": "Das Gerät, das sich verbinden möchte, zeigt ihn an.",
-    "enter_code": "Code eingeben"
+    "enter_code": "Code eingeben",
+    "wrong_code": "Keine ausstehende Anfrage hat diesen Code."
   },
   "server_history": {
     "section_title": "Zuletzt verwendete Server",

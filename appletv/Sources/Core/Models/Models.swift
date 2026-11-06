@@ -74,7 +74,8 @@ struct PublicUser: Codable, Identifiable, Hashable {
 
 struct PairingRequestResponse: Codable {
     let pairingId: String
-    let code: String
+    /// Absent from servers that predate approval by code.
+    let code: String?
     let expiresIn: Int
 }
 

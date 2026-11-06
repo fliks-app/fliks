@@ -830,7 +830,8 @@
     "action_error": "The action could not be completed.",
     "code_label": "Code shown on the device",
     "code_hint": "The device that wants to sign in displays it.",
-    "enter_code": "Enter code"
+    "enter_code": "Enter code",
+    "wrong_code": "No pending request has this code."
   },
   "server_history": {
     "section_title": "Recent servers",

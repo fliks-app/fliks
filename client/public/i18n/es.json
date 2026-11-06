@@ -830,7 +830,8 @@
     "action_error": "La acción no se pudo completar.",
     "code_label": "Código mostrado en el dispositivo",
     "code_hint": "Lo muestra el dispositivo que quiere conectarse.",
-    "enter_code": "Introducir código"
+    "enter_code": "Introducir código",
+    "wrong_code": "Ninguna solicitud pendiente tiene este código."
   },
   "server_history": {
     "section_title": "Servidores recientes",
