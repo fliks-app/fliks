@@ -44,12 +44,16 @@ export function chapterMarks(
   return marks.sort((a, b) => a.start - b.start);
 }
 
-/** The chapter a book progression falls in, for the scrubber's bubble. */
-export function chapterAt(marks: ChapterMark[], progression: number): ChapterMark | undefined {
+/** The last chapter begun at or before a book progression; none before the first. */
+export function chapterBefore(marks: ChapterMark[], progression: number): ChapterMark | undefined {
   let hit: ChapterMark | undefined;
   for (const m of marks) if (m.start <= progression + 1e-9) hit = m;
-  return hit ?? marks[0];
+  return hit;
 }
+
+/** The chapter a book progression falls in, for the scrubber's bubble. */
+export const chapterAt = (marks: ChapterMark[], progression: number): ChapterMark | undefined =>
+  chapterBefore(marks, progression) ?? marks[0];
 
 /** Hours and minutes of a duration in minutes. */
 export function formatMinutes(total: number): { h: number; m: number } {

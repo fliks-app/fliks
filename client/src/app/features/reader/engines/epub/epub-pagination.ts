@@ -35,14 +35,16 @@ export class EpubPagination {
   private run = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
+  /** A fixed-layout book has no scroll mode. */
+  private readonly scroll = computed(() => this.session.settings().scroll && !this.book.fixed);
   /** The screen on view; null until every chapter is laid out, or in scroll mode. */
   private readonly now = computed(() => {
     const loc = this.book.locator();
-    return loc && !this.session.settings().scroll
+    return loc && !this.scroll()
       ? pageAt(this.order(), this.counts(), pathOf(loc.href), loc.locations.progression ?? 0)
       : null;
   });
-  readonly total = computed(() => (this.session.settings().scroll ? null : pageCount(this.order(), this.counts())));
+  readonly total = computed(() => (this.scroll() ? null : pageCount(this.order(), this.counts())));
   readonly page = computed(() => (this.total() ? (this.now()?.page ?? null) : null));
   readonly left = computed(() => (this.total() ? (this.now()?.left ?? null) : null));
 
@@ -72,6 +74,10 @@ export class EpubPagination {
     this.run++;
     this.ready = false;
     if (this.timer) clearTimeout(this.timer);
+    if (this.book.fixed) {
+      this.counts.set(new Map(this.order().map((href) => [href, 1])));
+      return;
+    }
     const [w] = this.viewport();
     if (!this.book.publication || this.session.settings().scroll || !w) {
       this.counts.set(new Map());

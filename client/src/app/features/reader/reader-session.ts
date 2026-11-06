@@ -93,6 +93,13 @@ export class ReaderSession {
     const onPhone = (e: MediaQueryListEvent) => this.compact.set(e.matches);
     this.phoneQuery.addEventListener('change', onPhone);
     effect(() => this.settingsStore.savePanel({ tab: this.tab() }));
+    // Escape and back put the bars away before they leave the reader; an open panel is its own layer.
+    effect((onCleanup) => {
+      if (!this.chromeVisible() || this.panel()) return;
+      const hide = () => this.chrome.hide();
+      this.dismissStack.push(hide);
+      onCleanup(() => this.dismissStack.remove(hide));
+    });
     // Android system bar icons go dark over a light page; the reader's bars and the app are dark.
     if (Capacitor.isNativePlatform()) {
       effect(() => {
@@ -239,7 +246,14 @@ export class ReaderSession {
         break;
       case 'close':
         if (this.panel()) this.closePanel();
-        else if (!engine?.act('close')) this.close();
+        else if (!engine?.act('close') && !this.dismissChrome()) this.close();
+        break;
+      case 'left':
+      case 'right':
+        // Like the player's: while the bars are up, arrows belong to them, from the book's frames too.
+        if (this.chromeVisible() && !this.panel()) {
+          if (!document.activeElement?.closest('.rd-bar')) this.focusBar();
+        } else engine?.act(action);
         break;
       default:
         engine?.act(action);

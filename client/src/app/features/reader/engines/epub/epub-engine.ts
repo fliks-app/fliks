@@ -15,7 +15,7 @@ import {
 } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { EpubNavigator, EpubPreferences, type EpubNavigatorListeners } from '@readium/navigator';
-import { Layout, ReadingProgression, type Locator } from '@readium/shared';
+import { ReadingProgression, type Locator } from '@readium/shared';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ReaderApiService, type ReaderTarget } from '../../reader-api.service';
 import type { ReaderEngine, ReaderStatus, ReaderToc, ScrubPreview } from '../../reader-engine';
@@ -41,7 +41,7 @@ const MAX_SEGMENTS = 12;
 /** Stops of the progress bar, so a book of a few hundred positions still steps finely. */
 const STEPS = 1001;
 
-/** A reflowable EPUB, laid out by the Readium toolkit in frames under the reader's bars. */
+/** An EPUB, reflowable or fixed-layout, laid out by the Readium toolkit in frames under the reader's bars. */
 @Component({
   selector: 'app-epub-engine',
   imports: [EpubSelectionComponent],
@@ -129,7 +129,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
   }
 
   private async open(): Promise<void> {
-    let fixed = false;
     provideReaderFonts(document);
     try {
       const [{ publication, positions }, saved] = await Promise.all([
@@ -137,10 +136,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
         this.api.loadProgress(this.target()),
       ]);
       if (this.book.destroyed) return;
-      if (publication.metadata.effectiveLayout === Layout.fixed) {
-        fixed = true;
-        throw new Error('fixed layout');
-      }
       const container = this.pageHost().nativeElement;
       this.book.publication = publication;
       this.book.positions = positions;
@@ -184,7 +179,7 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       this.book.ready.set(true);
     } catch {
       if (this.book.destroyed) return;
-      this.toast.error(this.translate.instant(fixed ? 'reader.fixed_unsupported' : 'reader.open_failed'));
+      this.toast.error(this.translate.instant('reader.open_failed'));
       this.session.close();
     }
   }
