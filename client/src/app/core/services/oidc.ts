@@ -1,7 +1,6 @@
 /** Helpers of the OpenID Connect login flow (plan section 7.1): PKCE, the per-`state` pending
  *  entries and the platform seam. The calls themselves live in `AuthService`. */
 import { Capacitor } from '@capacitor/core';
-import { webAuthAvailable, webAuthOpen } from '../plugins/web-auth.plugin';
 import { IS_STANDALONE_BUNDLE } from '../utils/standalone-bundle';
 
 export interface OidcProvider {
@@ -44,6 +43,13 @@ export interface OidcPlatform {
   open(authorizeUrl: string): Promise<string | null>;
 }
 
+/** Whether this shell can run the sheet: the iOS plugin, or the Custom Tab and app-link plugins on Android. */
+export function webAuthAvailable(): boolean {
+  return Capacitor.getPlatform() === 'ios'
+    ? Capacitor.isPluginAvailable('WebAuth')
+    : Capacitor.isPluginAvailable('Browser') && Capacitor.isPluginAvailable('App');
+}
+
 /** The shell's way to the provider: a loopback listener on desktop, the system auth sheet on the phone
  *  apps, a page redirect on the web. Null hides every SSO button; TVs are hidden through `TvService`. */
 export function oidcPlatform(): OidcPlatform | null {
@@ -65,7 +71,10 @@ export function oidcPlatform(): OidcPlatform | null {
       },
     };
   }
-  if (Capacitor.isNativePlatform()) return webAuthAvailable() ? { returnTo: 'app', open: webAuthOpen } : null;
+  if (Capacitor.isNativePlatform()) {
+    if (!webAuthAvailable()) return null;
+    return { returnTo: 'app', open: (url) => import('../plugins/web-auth.plugin').then((m) => m.webAuthOpen(url)) };
+  }
   if (IS_STANDALONE_BUNDLE) return null;
   // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
   if (!window.isSecureContext) return null;

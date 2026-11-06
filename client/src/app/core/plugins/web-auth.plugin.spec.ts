@@ -1,4 +1,5 @@
-import { listenOidcCallbacks, oidcCallbackQuery, webAuthAvailable, webAuthOpen } from './web-auth.plugin';
+import { listenOidcCallbacks, oidcCallbackQuery, webAuthOpen } from './web-auth.plugin';
+import { webAuthAvailable } from '../services/oidc';
 import { oidcPlatform } from '../services/oidc';
 
 const m = vi.hoisted(() => ({

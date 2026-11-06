@@ -23,13 +23,6 @@ export function oidcCallbackQuery(url: string): string | null {
   }
 }
 
-/** Whether this shell can run the sheet: the iOS plugin, or the Custom Tab and app-link plugins on Android. */
-export function webAuthAvailable(): boolean {
-  return Capacitor.getPlatform() === 'ios'
-    ? Capacitor.isPluginAvailable('WebAuth')
-    : Capacitor.isPluginAvailable('Browser') && Capacitor.isPluginAvailable('App');
-}
-
 /** Sends the user through the system auth sheet. iOS resolves with the callback query; on Android
  *  the app-wide listener gets the callback, so this only resolves null when the tab closes without one. */
 export async function webAuthOpen(url: string): Promise<string | null> {
