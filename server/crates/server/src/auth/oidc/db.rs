@@ -106,23 +106,19 @@ pub const LOGIN_TTL: Duration = Duration::minutes(10);
 
 pub async fn insert_login(
     db: &PgPool,
-    provider: i32,
     state: &str,
-    nonce: &str,
-    return_to: &str,
-    link_user: Option<i32>,
-    expect_user: Option<i32>,
+    login: &Login,
     now: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"INSERT INTO oidc_logins ("providerId", state, nonce, "returnTo", "linkUserId", "expectUserId", "expiresAt")
            VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
-        provider,
+        login.provider_id,
         state,
-        nonce,
-        return_to,
-        link_user,
-        expect_user,
+        login.nonce,
+        login.return_to,
+        login.link_user_id,
+        login.expect_user_id,
         now + LOGIN_TTL
     )
     .execute(db)

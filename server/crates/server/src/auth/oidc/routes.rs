@@ -211,17 +211,14 @@ pub(crate) async fn start(
         ));
     }
     let (state, nonce) = (random(), random());
-    db::insert_login(
-        &st.db,
-        p.id,
-        &state,
-        &nonce,
-        &return_to.as_text(),
-        link_user,
-        dto.expect_user_id,
-        Utc::now(),
-    )
-    .await?;
+    let login = db::Login {
+        provider_id: p.id,
+        nonce,
+        return_to: return_to.as_text(),
+        link_user_id: link_user,
+        expect_user_id: dto.expect_user_id,
+    };
+    db::insert_login(&st.db, &state, &login, Utc::now()).await?;
     let mut url = reqwest::Url::parse(&d.authorization_endpoint).map_err(|_| unreachable_idp())?;
     {
         let mut q = url.query_pairs_mut();
@@ -233,7 +230,7 @@ pub(crate) async fn start(
             )
             .append_pair("scope", &p.scope)
             .append_pair("state", &state)
-            .append_pair("nonce", &nonce)
+            .append_pair("nonce", &login.nonce)
             .append_pair("code_challenge", &dto.challenge)
             .append_pair("code_challenge_method", "S256");
         if let Some(prompt) = dto.prompt.as_deref().or(p.prompt.as_deref()) {
