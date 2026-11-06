@@ -1,5 +1,5 @@
 import { Locator } from '@readium/shared';
-import { bookMinutesLeft, chapterAt, chapterMarks, chapterMinutesLeft } from './reader-estimates';
+import { bookMinutesLeft, chapterAt, chapterBefore, chapterMarks, chapterMinutesLeft } from './reader-estimates';
 
 const at = (href: string, position: number, total: number, progression = 0): Locator =>
   new Locator({
@@ -40,5 +40,7 @@ describe('reader estimates', () => {
     expect(marks.map((m) => m.title)).toEqual(['One', 'Two']);
     expect(chapterAt(marks, 0.3)?.title).toBe('One');
     expect(chapterAt(marks, 0.6)?.title).toBe('Two');
+    expect(chapterBefore(marks, 0.8)?.title).toBe('Two');
+    expect(chapterBefore(chapterMarks([{ href: 'b.xhtml', title: 'Two' }], positions), 0.1)).toBeUndefined();
   });
 });

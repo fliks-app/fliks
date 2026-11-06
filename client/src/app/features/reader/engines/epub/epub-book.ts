@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { DecorationStyleType, type EpubNavigator } from '@readium/navigator';
-import { Locator, type Link, type Publication } from '@readium/shared';
+import { Layout, Locator, type Link, type Publication } from '@readium/shared';
 import { ReaderSession } from '../../reader-session';
-import { chapterMarks, type ChapterMark } from './reader-estimates';
+import { chapterBefore, chapterMarks, type ChapterMark } from './reader-estimates';
 
 export interface TocRow {
   link: Link;
@@ -42,6 +42,10 @@ export class EpubBook {
   positions: Locator[] = [];
   host: HTMLElement | null = null;
   destroyed = false;
+
+  get fixed(): boolean {
+    return this.publication?.metadata.effectiveLayout === Layout.fixed;
+  }
   private flashTimer?: ReturnType<typeof setTimeout>;
 
   /** The navigator has shown its first page. */
@@ -51,10 +55,12 @@ export class EpubBook {
   readonly toc = signal<TocRow[]>([]);
   readonly marks = signal<ChapterMark[]>([]);
   private readonly currentHref = computed(() => pathOf(this.locator()?.href ?? ''));
-  /** The first entry of the chapter on screen; later ones for the same file are its sections. */
-  readonly currentRow = computed(() =>
-    this.toc().findIndex((row) => pathOf(row.link.href) === this.currentHref()),
-  );
+  /** The first entry of the chapter on screen; later ones for the same file are its sections.
+   *  A file the table of contents leaves out belongs to the chapter before it. */
+  readonly currentRow = computed(() => {
+    const own = this.toc().findIndex((row) => pathOf(row.link.href) === this.currentHref());
+    return own >= 0 ? own : (chapterBefore(this.marks(), this.totalProgression())?.row ?? -1);
+  });
   readonly chapterTitle = computed(() => this.toc()[this.currentRow()]?.title ?? '');
   readonly tocRows = computed(() => this.toc().map((r) => ({ href: r.link.href, title: r.title })));
 
