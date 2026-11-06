@@ -1,4 +1,5 @@
 //! `POST /api/cleanup/candidates/bulk` authorisation and per-item results (`docs/spec/cleanup.md` rule 32).
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
 use serde_json::{Value, json};
@@ -21,7 +22,7 @@ async fn ctx(pool: &PgPool) -> (Router, Vec<String>) {
         .fetch_one(pool)
         .await
         .unwrap();
-        tokens.push(st.jwt.sign_access(id, name).unwrap().token);
+        tokens.push(session::token(&st, id, name).await);
     }
     for q in [
         r#"INSERT INTO libraries (name) VALUES ('l')"#,
@@ -120,7 +121,7 @@ async fn candidates_recommendations_and_preview_follow_library_access(pool: PgPo
     ] {
         sqlx::query(q).execute(&pool).await.unwrap();
     }
-    let token = st.jwt.sign_access(1, "u").unwrap().token;
+    let token = session::token(&st, 1, "u").await;
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let titles = |rows: &Value| -> Vec<String> {
         rows.as_array()

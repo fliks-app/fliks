@@ -277,7 +277,23 @@
     "confirm_password": "Confirm password",
     "password_hint": "8 characters minimum",
     "password_mismatch": "Passwords do not match",
-    "save_success": "Password changed successfully"
+    "save_success": "Password changed successfully",
+    "current_password": "Current password",
+    "current_password_wrong": "The current password is incorrect.",
+    "save_error": "Unable to change the password.",
+    "sessions": {
+      "title": "Signed-in devices",
+      "intro": "Every device where you are signed in. Signing one out ends its session at once.",
+      "this_device": "This device",
+      "unknown_device": "Unknown device",
+      "revoke": "Sign out",
+      "revoke_title": "Sign out this device?",
+      "revoke_message": "The device is signed out at once and has to sign in again.",
+      "revoked": "Device signed out.",
+      "method_password": "Password",
+      "method_pairing": "Quick Connect",
+      "last_seen": "Last active {{date}}"
+    }
   },
   "account_settings": {
     "title": "Account settings",
@@ -792,7 +808,7 @@
     "confirm": "Confirm password",
     "mismatch": "Passwords do not match.",
     "submit": "Save",
-    "error": "Unable to update the password."
+    "current_password": "Current password"
   },
   "select_user": {
     "title": "Who's watching?",
@@ -2627,7 +2643,12 @@
       "cancel": "Cancel",
       "quotas": "Request quotas",
       "quotas_hint": "Requests allowed per period, counted while pending or approved. 0 means unlimited.",
-      "quota_period_days": "Period (days)"
+      "quota_period_days": "Period (days)",
+      "sign_out_everywhere": "Sign out everywhere",
+      "sign_out_everywhere_hint": "Ends every session of this user on all devices. They have to sign in again.",
+      "sign_out_everywhere_title": "Sign out everywhere?",
+      "sign_out_everywhere_message": "{{name}} will be signed out of every device at once.",
+      "signed_out": "{{name}} was signed out of every device."
     },
     "user_detail": {
       "not_found": "User not found.",

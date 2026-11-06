@@ -1,4 +1,5 @@
 //! Scratch databases, a tuned plugin host and the fixture components.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use ed25519_dalek::{Signer, SigningKey};
 use fliks_server::plugins::{Options, Plugins, archive, fetch::Fetcher, runtime::HostConfig};
@@ -255,7 +256,7 @@ pub async fn harness_with(
         .fetch_one(&s.pool)
         .await
         .unwrap();
-        tokens.push(st.jwt.sign_access(id, name).unwrap().token);
+        tokens.push(session::token(&st, id, name).await);
     }
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     H {

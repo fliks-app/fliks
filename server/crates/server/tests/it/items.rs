@@ -1,4 +1,5 @@
 //! Every route that creates a media gives it its `video` edition and, for a movie, its item.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, media, state::AppState};
 use serde_json::{Value, json};
@@ -57,7 +58,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m')"#,
     .execute(&pool)
     .await
     .unwrap();
-    let token = st.jwt.sign_access(1, "admin").unwrap().token;
+    let token = session::token(&st, 1, "admin").await;
     let app = media::router().with_state(st);
 
     let mut made = vec![];
@@ -354,7 +355,7 @@ async fn a_book_is_created_without_edition_or_item_and_keeps_its_kind(pool: PgPo
     .execute(&pool)
     .await
     .unwrap();
-    let token = st.jwt.sign_access(1, "admin").unwrap().token;
+    let token = session::token(&st, 1, "admin").await;
     let app = media::router().with_state(st);
 
     let mut made = vec![];

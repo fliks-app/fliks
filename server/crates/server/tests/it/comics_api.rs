@@ -1,4 +1,5 @@
 //! The comic read shapes (`comics.md`): the detail object, the list info, the counts, the model's CHECKs.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, media, state::AppState};
 use serde_json::{Value, json};
@@ -42,8 +43,8 @@ async fn ctx(pool: &PgPool) -> (Router, String, String) {
     .execute(pool)
     .await
     .unwrap();
-    let admin = st.jwt.sign_access(1, "admin").unwrap().token;
-    let plain = st.jwt.sign_access(2, "plain").unwrap().token;
+    let admin = session::token(&st, 1, "admin").await;
+    let plain = session::token(&st, 2, "plain").await;
     (
         media::router()
             .merge(fliks_server::social::router())

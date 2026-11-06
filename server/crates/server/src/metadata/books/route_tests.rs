@@ -1,5 +1,6 @@
 //! The book metadata routes against fake providers (`docs/spec/book-metadata.md` rules 18-25).
 use super::tests::{Fake, ISBN, anchor, state};
+use crate::auth::testing as session;
 use crate::{media, state::AppState};
 use axum::{Router, body::Body, http::Request};
 use fliks_domain::external_id::Namespace;
@@ -47,8 +48,8 @@ async fn ctx(pool: PgPool, fakes: Vec<Fake>) -> (Ctx, AppState) {
     .await
     .unwrap();
     let c = Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        reader: st.jwt.sign_access(2, "reader").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        reader: session::token(&st, 2, "reader").await,
         app: crate::metadata::router()
             .merge(media::router())
             .merge(crate::persons::router())

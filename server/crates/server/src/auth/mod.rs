@@ -3,6 +3,8 @@ mod db;
 mod jobs;
 mod password;
 mod routes;
+#[cfg(test)]
+pub(crate) mod testing;
 mod throttle;
 
 pub use jobs::spawn as spawn_jobs;

@@ -3,7 +3,7 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
-import { UsersApiService } from '../../core/services/api/users-api.service';
+import { UsersApiService, passwordErrorMessage } from '../../core/services/api/users-api.service';
 
 /** Mandatory password reset page for users flagged `requirePasswordChange`; no cancel path, and passwordChangeGuard bounces every other URL here. */
 @Component({
@@ -22,6 +22,7 @@ export class ForcedPasswordChangeComponent {
   readonly error = signal('');
 
   readonly form = this.fb.nonNullable.group({
+    current: [''],
     password: ['', [Validators.required, Validators.minLength(8)]],
     confirm: ['', [Validators.required]],
   });
@@ -38,12 +39,17 @@ export class ForcedPasswordChangeComponent {
     this.loading.set(true);
     this.error.set('');
     try {
-      await this.api.update(user.id, { password: this.form.getRawValue().password });
+      const { current, password } = this.form.getRawValue();
+      await this.api.update(
+        user.id,
+        { password, currentPassword: current || undefined },
+        { skipErrorToast: true },
+      );
       // Force-refresh /auth/me: backend clears `requirePasswordChange` and hydrateFromServer early-returns when a user is cached.
       await this.auth.refreshUser();
       void this.router.navigate(['/'], { replaceUrl: true });
-    } catch {
-      this.error.set(this.translate.instant('forced_password_change.error'));
+    } catch (err) {
+      this.error.set(passwordErrorMessage(err, this.translate));
     } finally {
       this.loading.set(false);
     }

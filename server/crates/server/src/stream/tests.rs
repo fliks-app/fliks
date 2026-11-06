@@ -4,6 +4,7 @@ use super::{
     preroll::Item,
     *,
 };
+use crate::auth::testing as session;
 use crate::{
     app,
     config::Config,
@@ -131,7 +132,7 @@ async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
     crate::media::items::attach(&pool, media, &[link])
         .await
         .unwrap();
-    let token = st.jwt.sign_access(user, "admin").unwrap().token;
+    let token = session::token(&st, user, "admin").await;
     Ctx {
         app,
         st,
@@ -698,7 +699,7 @@ async fn session_stop_checks_the_owner(pool: PgPool) {
             .fetch_one(&c.pool)
             .await
             .unwrap();
-    let other_token = c.st.jwt.sign_access(other, "other").unwrap().token;
+    let other_token = session::token(&c.st, other, "other").await;
     let sid = golden().0["sessionId"].as_str().unwrap().to_owned();
     let uri = format!("/api/stream/sessions/{sid}");
     info(&c, "").await;
@@ -887,7 +888,7 @@ async fn the_system_routes_need_settings_permissions(pool: PgPool) {
             .fetch_one(&c.pool)
             .await
             .unwrap();
-    let t = c.st.jwt.sign_access(plain, "plain").unwrap().token;
+    let t = session::token(&c.st, plain, "plain").await;
     for (m, u) in [
         ("GET", "/api/system/streams"),
         ("GET", "/api/system/transcode-cache"),
@@ -995,7 +996,7 @@ async fn viewer(c: &Ctx) -> String {
         .execute(&c.pool)
         .await
         .unwrap();
-    c.st.jwt.sign_access(viewer, "viewer").unwrap().token
+    session::token(&c.st, viewer, "viewer").await
 }
 
 async fn hide_edition(c: &Ctx) {

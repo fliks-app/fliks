@@ -4,7 +4,7 @@ use crate::{
     device_tokens,
     http::{
         AppError,
-        auth::{RoleRow, UserRow, load_enabled},
+        auth::{RoleRow, UserRow, load_enabled, load_session_user},
         cookies::{ACCESS_COOKIE, cookie_value},
         validate::ValidJson,
     },
@@ -293,8 +293,8 @@ impl Caller {
     }
 }
 
-/// Same rules as `Authed` (signature, expiry, user still enabled) except that a `scope` claim is accepted:
-/// players carry stream tokens in their URLs. A credential no JWT resolves may be a device token.
+/// Same rules as `Authed` (signature, expiry, enabled user, live session) except that a `scope` claim
+/// is accepted: players carry stream tokens in their URLs. A credential no JWT resolves may be a device token.
 async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>, AppError> {
     let claims = (req.credential_source != Some(ResolveCredentialSource::Basic))
         .then(|| token_of(&req.credential).and_then(|t| st.jwt.verify(&t)))
@@ -303,7 +303,10 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
         return device_user(st, req).await;
     };
     let (live, file) = (claims.live, claims.mf);
-    Ok(load_enabled(&st.db, claims.sub)
+    let Some(sid) = claims.sid else {
+        return Ok(None);
+    };
+    Ok(load_session_user(&st.db, claims.sub, sid)
         .await?
         .map(|(user, role)| Caller::of(user, role, live, file)))
 }

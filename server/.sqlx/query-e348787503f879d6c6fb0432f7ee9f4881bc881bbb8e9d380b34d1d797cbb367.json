@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sessions SET \"lastSeenAt\" = $2, \"userAgent\" = COALESCE($3, \"userAgent\") WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e348787503f879d6c6fb0432f7ee9f4881bc881bbb8e9d380b34d1d797cbb367"
+}

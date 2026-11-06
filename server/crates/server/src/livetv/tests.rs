@@ -1,6 +1,7 @@
 //! Live TV against a real database, a fake provider and a fake engine: the sync, the guide import, the
 //! session control plane and the resolver (ports of `livetv-session.service.spec.ts` and the sync specs).
 use super::{guide, session, sources, sync};
+use crate::auth::testing;
 use crate::sync::MutexExt;
 use crate::{
     app,
@@ -198,7 +199,7 @@ async fn viewer(c: &Ctx, name: &str, admin: bool) -> (i32, String) {
             .await
             .unwrap();
     }
-    (id, c.st.jwt.sign_access(id, name).unwrap().token)
+    (id, testing::token(&c.st, id, name).await)
 }
 
 async fn call(

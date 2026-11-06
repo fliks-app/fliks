@@ -1,4 +1,5 @@
 //! The comic page routes (`docs/spec/comics.md`, pages rules) on synthetic archives built here.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{comics, config::Config, state::AppState};
 use serde_json::Value;
@@ -128,11 +129,11 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        plain: st.jwt.sign_access(2, "plain").unwrap().token,
-        stream: st.jwt.sign_stream(2, "plain").unwrap().token,
-        bound1: st.jwt.sign_stream_for(2, "plain", 1).unwrap().token,
-        bound2: st.jwt.sign_stream_for(2, "plain", 2).unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        plain: session::token(&st, 2, "plain").await,
+        stream: session::stream(&st, 2, "plain").await,
+        bound1: session::stream_for(&st, 2, "plain", 1).await,
+        bound2: session::stream_for(&st, 2, "plain", 2).await,
         app: comics::router().with_state(st),
         _dir: dir,
     }

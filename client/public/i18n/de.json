@@ -277,7 +277,23 @@
     "confirm_password": "Passwort bestätigen",
     "password_hint": "Mindestens 8 Zeichen",
     "password_mismatch": "Die Passwörter stimmen nicht überein",
-    "save_success": "Passwort erfolgreich geändert"
+    "save_success": "Passwort erfolgreich geändert",
+    "current_password": "Aktuelles Passwort",
+    "current_password_wrong": "Das aktuelle Passwort ist falsch.",
+    "save_error": "Das Passwort konnte nicht geändert werden.",
+    "sessions": {
+      "title": "Angemeldete Geräte",
+      "intro": "Alle Geräte, auf denen du angemeldet bist. Ein Gerät abzumelden beendet seine Sitzung sofort.",
+      "this_device": "Dieses Gerät",
+      "unknown_device": "Unbekanntes Gerät",
+      "revoke": "Abmelden",
+      "revoke_title": "Dieses Gerät abmelden?",
+      "revoke_message": "Das Gerät wird sofort abgemeldet und muss sich neu anmelden.",
+      "revoked": "Gerät abgemeldet.",
+      "method_password": "Passwort",
+      "method_pairing": "Quick Connect",
+      "last_seen": "Zuletzt aktiv: {{date}}"
+    }
   },
   "account_settings": {
     "title": "Kontoeinstellungen",
@@ -792,7 +808,7 @@
     "confirm": "Passwort bestätigen",
     "mismatch": "Die Passwörter stimmen nicht überein.",
     "submit": "Speichern",
-    "error": "Das Passwort konnte nicht aktualisiert werden."
+    "current_password": "Aktuelles Passwort"
   },
   "select_user": {
     "title": "Wer schaut?",
@@ -2627,7 +2643,12 @@
       "cancel": "Abbrechen",
       "quotas": "Anfragekontingente",
       "quotas_hint": "Erlaubte Anfragen pro Zeitraum, gezählt solange sie ausstehen oder genehmigt sind. 0 bedeutet unbegrenzt.",
-      "quota_period_days": "Zeitraum (Tage)"
+      "quota_period_days": "Zeitraum (Tage)",
+      "sign_out_everywhere": "Überall abmelden",
+      "sign_out_everywhere_hint": "Beendet alle Sitzungen dieses Benutzers auf allen Geräten. Er muss sich neu anmelden.",
+      "sign_out_everywhere_title": "Überall abmelden?",
+      "sign_out_everywhere_message": "{{name}} wird sofort von allen Geräten abgemeldet.",
+      "signed_out": "{{name}} wurde von allen Geräten abgemeldet."
     },
     "user_detail": {
       "not_found": "Benutzer nicht gefunden.",

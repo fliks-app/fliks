@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   signal,
   inject,
   OnInit,
@@ -11,6 +12,7 @@ import {
   UsersApiService,
   UpdateUserBody,
   UserRow,
+  passwordErrorMessage,
 } from '../../../../core/services/api/users-api.service';
 import {
   LibrariesApiService,
@@ -19,6 +21,7 @@ import {
 import { UserDetailState } from './user-detail.state';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
 
 type QuotaKey = 'movieQuotaLimit' | 'seriesQuotaLimit' | 'bookQuotaLimit' | 'quotaPeriodDays';
@@ -36,12 +39,21 @@ export class UserGeneralComponent implements OnInit {
   readonly state = inject(UserDetailState);
   private readonly toast = inject(ToastService);
   /** Changing a role grants its permissions, so the server keeps it behind `roles.manage`. */
-  readonly canAssignRole = inject(AuthService).hasPermission('roles.manage');
+  private readonly auth = inject(AuthService);
+  private readonly confirmation = inject(ConfirmationService);
+  readonly canAssignRole = this.auth.hasPermission('roles.manage');
+  /** Changing one's own password proves the current one; an admin resetting another user's does not. */
+  readonly isSelf = computed(() => this.state.user()?.id === this.auth.user()?.id);
+  /** Not on one's own page, and only an admin signs out an admin. */
+  readonly canSignOutEverywhere = computed(
+    () => !this.isSelf() && (!this.state.user()?.isAdmin || !!this.auth.user()?.isAdmin),
+  );
 
   readonly saving = signal(false);
 
 
   readonly formUsername = signal('');
+  readonly formCurrentPassword = signal('');
   readonly formPassword = signal('');
   readonly formEmail = signal('');
   readonly formRoleId = signal<number | null>(null);
@@ -119,6 +131,25 @@ export class UserGeneralComponent implements OnInit {
     return this.formLibraryIds().has(id);
   }
 
+  /** Revokes every session of the user. */
+  async signOutEverywhere() {
+    const user = this.state.user();
+    if (!user) return;
+    const ok = await this.confirmation.confirm({
+      title: this.translate.instant('settings.users.sign_out_everywhere_title'),
+      message: this.translate.instant('settings.users.sign_out_everywhere_message', { name: user.username }),
+      confirmLabel: this.translate.instant('settings.users.sign_out_everywhere'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await this.api.signOutEverywhere(user.id);
+      this.toast.success(this.translate.instant('settings.users.signed_out', { name: user.username }));
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    }
+  }
+
   async save() {
     const user = this.state.user();
     if (!user) return;
@@ -132,14 +163,20 @@ export class UserGeneralComponent implements OnInit {
       libraryIds: [...this.formLibraryIds()].sort((a, b) => a - b),
       ...this.changedQuotas(user),
     };
-    if (this.formPassword()) body.password = this.formPassword();
+    if (this.formPassword()) {
+      body.password = this.formPassword();
+      if (this.isSelf() && this.formCurrentPassword()) body.currentPassword = this.formCurrentPassword();
+    }
+    const ownPassword = !!body.password && this.isSelf();
     try {
-      const updated = await this.api.update(user.id, body);
+      const updated = await this.api.update(user.id, body, { skipErrorToast: ownPassword });
       this.state.user.set(updated);
+      this.formCurrentPassword.set('');
       this.formPassword.set('');
       this.toast.success(this.translate.instant('settings.users.save_success'));
-    } catch {
-      // handled by global error interceptor
+    } catch (err) {
+      // The interceptor toasts every other failure; a wrong current password reads translated here.
+      if (ownPassword) this.toast.error(passwordErrorMessage(err, this.translate));
     } finally {
       this.saving.set(false);
     }

@@ -1,5 +1,6 @@
 //! Media-servers routes, Emby provider, dispatch and watch-history import (`docs/spec/media-servers.md`)
 //! against an in-process Emby stub serving `fixtures/media-servers/emby`.
+use crate::session;
 use axum::{
     Router,
     body::Body,
@@ -177,7 +178,7 @@ async fn user(pool: &PgPool, st: &AppState, name: &str, perms: &str, admin: bool
     .fetch_one(pool)
     .await
     .unwrap();
-    st.jwt.sign_access(id, name).unwrap().token
+    session::token(st, id, name).await
 }
 
 async fn ctx(pool: PgPool) -> Ctx {

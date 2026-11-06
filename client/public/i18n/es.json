@@ -277,7 +277,23 @@
     "confirm_password": "Confirmar la contraseña",
     "password_hint": "8 caracteres como mínimo",
     "password_mismatch": "Las contraseñas no coinciden",
-    "save_success": "Contraseña modificada correctamente"
+    "save_success": "Contraseña modificada correctamente",
+    "current_password": "Contraseña actual",
+    "current_password_wrong": "La contraseña actual es incorrecta.",
+    "save_error": "No se pudo cambiar la contraseña.",
+    "sessions": {
+      "title": "Dispositivos conectados",
+      "intro": "Todos los dispositivos en los que has iniciado sesión. Cerrar la sesión de uno la termina al instante.",
+      "this_device": "Este dispositivo",
+      "unknown_device": "Dispositivo desconocido",
+      "revoke": "Cerrar sesión",
+      "revoke_title": "¿Cerrar la sesión de este dispositivo?",
+      "revoke_message": "El dispositivo se desconecta al instante y debe volver a iniciar sesión.",
+      "revoked": "Sesión del dispositivo cerrada.",
+      "method_password": "Contraseña",
+      "method_pairing": "Quick Connect",
+      "last_seen": "Última actividad: {{date}}"
+    }
   },
   "account_settings": {
     "title": "Ajustes de la cuenta",
@@ -792,7 +808,7 @@
     "confirm": "Confirmar la contraseña",
     "mismatch": "Las contraseñas no coinciden.",
     "submit": "Guardar",
-    "error": "No se puede actualizar la contraseña."
+    "current_password": "Contraseña actual"
   },
   "select_user": {
     "title": "¿Quién está viendo?",
@@ -2627,7 +2643,12 @@
       "cancel": "Cancelar",
       "quotas": "Cuotas de solicitudes",
       "quotas_hint": "Solicitudes permitidas por período, contadas mientras estén pendientes o aprobadas. 0 significa ilimitado.",
-      "quota_period_days": "Período (días)"
+      "quota_period_days": "Período (días)",
+      "sign_out_everywhere": "Cerrar sesión en todas partes",
+      "sign_out_everywhere_hint": "Termina todas las sesiones de este usuario en todos sus dispositivos. Deberá volver a iniciar sesión.",
+      "sign_out_everywhere_title": "¿Cerrar sesión en todas partes?",
+      "sign_out_everywhere_message": "{{name}} se desconectará de todos sus dispositivos al instante.",
+      "signed_out": "{{name}} se desconectó de todos sus dispositivos."
     },
     "user_detail": {
       "not_found": "Usuario no encontrado.",

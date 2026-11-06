@@ -1,4 +1,5 @@
 //! Comic providers against a fake provider (`docs/spec/comics.md` rules 38-44).
+use crate::auth::testing as session;
 use crate::{
     config::Config,
     media,
@@ -197,8 +198,8 @@ async fn ctx_with(pool: PgPool, provider: Option<Arc<Fake>>, registered: bool) -
         .await
         .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        reader: st.jwt.sign_access(2, "reader").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        reader: session::token(&st, 2, "reader").await,
         app: crate::metadata::router()
             .merge(media::router())
             .with_state(st.clone()),

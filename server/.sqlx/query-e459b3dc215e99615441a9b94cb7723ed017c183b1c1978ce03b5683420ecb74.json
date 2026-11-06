@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sessions s WHERE NOT EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.\"sessionId\" = s.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e459b3dc215e99615441a9b94cb7723ed017c183b1c1978ce03b5683420ecb74"
+}

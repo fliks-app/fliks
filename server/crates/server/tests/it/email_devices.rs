@@ -1,4 +1,5 @@
 //! `/api/email-devices` and the send (`docs/spec/email-devices.md`), against a fake SMTP server.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, email, settings, state::AppState};
 use serde_json::{Value, json};
@@ -81,10 +82,10 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        a: st.jwt.sign_access(2, "a").unwrap().token,
-        b: st.jwt.sign_access(3, "b").unwrap().token,
-        c: st.jwt.sign_access(4, "c").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        a: session::token(&st, 2, "a").await,
+        b: session::token(&st, 3, "b").await,
+        c: session::token(&st, 4, "c").await,
         app: email::router().merge(settings::router()).with_state(st),
         pool,
         _dir: dir,

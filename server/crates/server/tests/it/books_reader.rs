@@ -1,5 +1,6 @@
 //! The EPUB reader routes (`docs/spec/books-reader.md`): manifest, positions and sanitised resources, on
 //! synthetic EPUBs built here.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{books, config::Config, state::AppState};
 use serde_json::Value;
@@ -150,9 +151,9 @@ async fn ctx(pool: PgPool, tag: &str, big: &[(&str, Vec<u8>)], big_manifest: &st
     .await
     .unwrap();
     Ctx {
-        admin: st.jwt.sign_access(1, "admin").unwrap().token,
-        plain: st.jwt.sign_access(2, "plain").unwrap().token,
-        noperm: st.jwt.sign_access(3, "noperm").unwrap().token,
+        admin: session::token(&st, 1, "admin").await,
+        plain: session::token(&st, 2, "plain").await,
+        noperm: session::token(&st, 3, "noperm").await,
         app: books::router().with_state(st),
         _dir: dir,
     }

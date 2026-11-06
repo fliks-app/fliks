@@ -1,7 +1,22 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
+import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { ProfileVisibility } from '../auth.service';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { serverMessage } from '../../utils/server-message';
+
+/** The server's English reply to a wrong `currentPassword`. */
+const CURRENT_PASSWORD_WRONG = 'Current password is incorrect';
+
+/** The toast text of a failed own-password change, `account.current_password_wrong` for a wrong current password. */
+export function passwordErrorMessage(err: unknown, translate: TranslateService): string {
+  const wrong =
+    err instanceof HttpErrorResponse && err.status === 400 && err.error?.message === CURRENT_PASSWORD_WRONG;
+  return wrong
+    ? translate.instant('account.current_password_wrong')
+    : serverMessage(err, translate, 'account.save_error');
+}
 
 export interface UserRow {
   id: number;
@@ -33,6 +48,8 @@ export interface CreateUserBody {
 export interface UpdateUserBody {
   username?: string;
   password?: string;
+  /** Required with `password` when changing one's own password. */
+  currentPassword?: string;
   roleId?: number;
   isAdmin?: boolean;
   enabled?: boolean;
@@ -113,8 +130,14 @@ export class UsersApiService {
     return firstValueFrom(this.http.get<UserRow>(`/api/users/${id}`));
   }
 
-  update(id: number, body: UpdateUserBody) {
-    return firstValueFrom(this.http.put<UserRow>(`/api/users/${id}`, body));
+  update(id: number, body: UpdateUserBody, opts?: { skipErrorToast?: boolean }) {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, opts?.skipErrorToast ?? false);
+    return firstValueFrom(this.http.put<UserRow>(`/api/users/${id}`, body, { context }));
+  }
+
+  /** Revokes every session of the user, on every device. */
+  signOutEverywhere(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/users/${id}/sessions`));
   }
 
   remove(id: number) {

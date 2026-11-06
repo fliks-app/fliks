@@ -277,7 +277,23 @@
     "confirm_password": "Confirmar a palavra-passe",
     "password_hint": "8 caracteres no mínimo",
     "password_mismatch": "As palavras-passe não coincidem",
-    "save_success": "Palavra-passe alterada com sucesso"
+    "save_success": "Palavra-passe alterada com sucesso",
+    "current_password": "Palavra-passe atual",
+    "current_password_wrong": "A palavra-passe atual está incorreta.",
+    "save_error": "Não foi possível alterar a palavra-passe.",
+    "sessions": {
+      "title": "Dispositivos com sessão iniciada",
+      "intro": "Todos os dispositivos onde iniciou sessão. Terminar a sessão de um dispositivo encerra-a de imediato.",
+      "this_device": "Este dispositivo",
+      "unknown_device": "Dispositivo desconhecido",
+      "revoke": "Terminar sessão",
+      "revoke_title": "Terminar a sessão deste dispositivo?",
+      "revoke_message": "A sessão do dispositivo termina de imediato e é preciso iniciá-la de novo.",
+      "revoked": "Sessão do dispositivo terminada.",
+      "method_password": "Palavra-passe",
+      "method_pairing": "Quick Connect",
+      "last_seen": "Última atividade: {{date}}"
+    }
   },
   "account_settings": {
     "title": "Definições da conta",
@@ -792,7 +808,7 @@
     "confirm": "Confirmar a palavra-passe",
     "mismatch": "As palavras-passe não coincidem.",
     "submit": "Guardar",
-    "error": "Não foi possível atualizar a palavra-passe."
+    "current_password": "Palavra-passe atual"
   },
   "select_user": {
     "title": "Quem está a ver?",
@@ -2627,7 +2643,12 @@
       "cancel": "Cancelar",
       "quotas": "Quotas de pedidos",
       "quotas_hint": "Pedidos permitidos por período, contados enquanto estiverem pendentes ou aprovados. 0 significa ilimitado.",
-      "quota_period_days": "Período (dias)"
+      "quota_period_days": "Período (dias)",
+      "sign_out_everywhere": "Terminar sessão em todo o lado",
+      "sign_out_everywhere_hint": "Termina todas as sessões deste utilizador em todos os dispositivos. Terá de iniciar sessão de novo.",
+      "sign_out_everywhere_title": "Terminar sessão em todo o lado?",
+      "sign_out_everywhere_message": "A sessão de {{name}} termina de imediato em todos os dispositivos.",
+      "signed_out": "A sessão de {{name}} foi terminada em todos os dispositivos."
     },
     "user_detail": {
       "not_found": "Utilizador não encontrado.",

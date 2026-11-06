@@ -1,4 +1,5 @@
 //! `/api/remote/*`: grants lifecycle and `canControl` outcomes on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, remote, state::AppState};
 use serde_json::{Value, json};
@@ -33,7 +34,7 @@ impl Ctx {
         .fetch_one(&self.pool)
         .await
         .unwrap();
-        (id, self.st.jwt.sign_access(id, name).unwrap().token)
+        (id, session::token(&self.st, id, name).await)
     }
 
     async fn call(

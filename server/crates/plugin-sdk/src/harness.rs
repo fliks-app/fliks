@@ -333,7 +333,18 @@ impl Harness {
         .fetch_one(&pool)
         .await
         .expect("the admin user");
-        let token = st.jwt.sign_access(uid, "admin").expect("a token").token;
+        let sid: i32 = sqlx::query_scalar(
+            r#"INSERT INTO sessions ("userId", method) VALUES ($1, 'password') RETURNING id"#,
+        )
+        .bind(uid)
+        .fetch_one(&pool)
+        .await
+        .expect("the admin session");
+        let token = st
+            .jwt
+            .sign_access(uid, "admin", sid)
+            .expect("a token")
+            .token;
         Some(Harness {
             st,
             pool,

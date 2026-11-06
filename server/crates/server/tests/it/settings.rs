@@ -1,4 +1,5 @@
 //! `/api/settings/*` and `/api/fs/browse` (`docs/spec/settings.md`) through the real router on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
 use serde_json::{Value, json};
@@ -29,7 +30,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        tokens.push(st.jwt.sign_access(id, name).unwrap().token);
+        tokens.push(session::token(&st, id, name).await);
     }
     let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     Ctx {

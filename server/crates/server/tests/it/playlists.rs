@@ -1,4 +1,5 @@
 //! `/api/playlists/*` authorisation matrix, reorder, add targets and auto-remove (`docs/spec/playlists.md`).
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, playlists, state::AppState};
 use serde_json::{Value, json};
@@ -27,7 +28,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .fetch_one(&pool)
         .await
         .unwrap();
-        tokens.push(st.jwt.sign_access(id, name).unwrap().token);
+        tokens.push(session::token(&st, id, name).await);
     }
     for q in [
         r#"INSERT INTO libraries (name) VALUES ('l')"#,

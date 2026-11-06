@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.method, s.\"userAgent\" AS user_agent, s.\"createdAt\" AS created_at,\n                  s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s\n           WHERE s.\"userId\" = $1 AND s.\"revokedAt\" IS NULL\n             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.\"sessionId\" = s.id\n                         AND t.\"revokedAt\" IS NULL AND t.\"expiresAt\" > $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "method",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "method"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_agent",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "userAgent"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "last_seen_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "lastSeenAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "52d3ace338389b662f4fb65204f04b23c37da9b3664975c9852be9b8faf5a99c"
+}

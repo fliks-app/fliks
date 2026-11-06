@@ -2,13 +2,13 @@
 
 Scope: users CRUD, stats and avatar storage. Authentication, CASL and error-body rules are in `auth.md` (cited as "auth rule N"); this file only adds what is specific to users.
 
-The update DTO has **26** fields (table in rule 20).
+The update DTO has **27** fields (table in rule 20).
 
 Out of scope: `/api/media-servers/*` is NOT served by this module (module `media-servers`).
 
 ## Routes
 
-8 routes. Class-level guards `JwtOrApiKeyGuard, PoliciesGuard` on all of them. `PublicUser` = rule 2. 401 for missing/invalid credentials on every route (auth rule 14). Declaration order matters for the router: `me/avatar` has 3 segments and cannot clash with `:id`; `GET /users/me` is NOT a route (it hits `:id` and fails the integer pipe with 400).
+9 routes. Class-level guards `JwtOrApiKeyGuard, PoliciesGuard` on all of them. `PublicUser` = rule 2. 401 for missing/invalid credentials on every route (auth rule 14). Declaration order matters for the router: `me/avatar` has 3 segments and cannot clash with `:id`; `GET /users/me` is NOT a route (it hits `:id` and fails the integer pipe with 400).
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
@@ -18,6 +18,7 @@ Out of scope: `/api/media-servers/*` is NOT served by this module (module `media
 | `PUT /api/users/:id` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `ability.can(Action.Update, User)` (class level: any authenticated user passes) | path `id`; body `UpdateUserDto` (rule 20) | `PublicUser` | 400; 404; 409 `Username already taken`; 403 (rules 14-18) | UPDATE `users`; library access replace; social teardown; SSE drop; engine revoke |
 | `DELETE /api/users/:id` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `ability.can(Action.Manage, User)` | path `id` | 200, no body | 404 `User #<id> not found` | DELETE `users` (FK cascades); engine revoke |
 | `GET /api/users/:id/stats` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `ability.can(Action.Manage, User)` | path `id` | `UserStats` (rule 28) | 404 `User #<id> not found` | none |
+| `DELETE /api/users/:id/sessions` | `Authed`; `ability.can(Action.Manage, User)`; an admin target needs an admin caller (bare 403) | path `id` | 204, no body | 404 `User #<id> not found` | revokes every session of the user (auth rule 66); SSE drop; engine revoke |
 | `POST /api/users/me/avatar` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `AnyAuthenticatedUser` | multipart, field `file`, <= 5 MiB, `image/jpeg` | 201, `PublicUser` | 400 `No image uploaded` / `Avatar must be a JPEG image` / `Unexpected field - <name>`; 413 `File too large`; 404 `User #<id> not found` | writes `<dataDir>/users/<id>.jpg`; `users.avatar` |
 | `DELETE /api/users/me/avatar` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `AnyAuthenticatedUser` | none | `PublicUser` | 404 `User #<id> not found` | removes avatar files; `users.avatar = NULL` |
 
@@ -52,7 +53,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
 14. Manager-only fields are `roleId`, `isAdmin`, `enabled`, `requirePasswordChange`. A non-manager (self) who sends ANY of them (`!== undefined`, even equal to the current value or `false`) gets 403 `Only users with users.manage permission can change role or enabled status` and nothing is persisted.
 15. `roleChanging = dto.roleId !== undefined && dto.roleId !== target.roleId` (`null` counts as a value; a `null` target role differs from any number). A manager who is `roleChanging` without `manage Role` gets 403 `Only users with roles.manage permission can change a role`; re-sending the current `roleId` is allowed.
 16. Manager block effects: `roleId` set (and the role relation set to `{id}` or `null`, which is why `roleId: null` clears the role), `isAdmin`, `enabled`, `requirePasswordChange` set when defined. Only an admin may set `isAdmin` (changing it) or modify an admin target (bare 403 otherwise); the last enabled admin cannot be deleted, disabled or demoted (409 `Cannot remove the last enabled admin`).
-17. `username`: if defined, another user with that exact username (case-sensitive) → 409 `Username already taken`, else set (self may rename; JWTs issued earlier stay valid, auth rule 9). `password`: `bcrypt12`; when `isSelf`, `requirePasswordChange` is cleared to `false` (a manager changing someone else's password leaves the flag as is). A password change revokes every refresh-token family of the target and drops its SSE connections (after commit); the caller's access token stays valid until `exp`. `email` set as given.
+17. `username`: if defined, another user with that exact username (case-sensitive) → 409 `Username already taken`, else set (self may rename; JWTs issued earlier stay valid, auth rule 9). `password`: `bcrypt12`; when `isSelf`, `requirePasswordChange` is cleared to `false` (a manager changing someone else's password leaves the flag as is). A password change revokes every session of the target except the caller's own when `isSelf` (auth rule 66) and drops its SSE connections (after commit). When `isSelf` and the user has a `passwordHash`, `currentPassword` is required and checked with bcrypt before anything else is written: a miss is 400 `Current password is incorrect`, counted by the login throttle under the username (429 past its limit); a missing `currentPassword` is the same 400 without counting; an admin or manager changing someone else's password does not need it. `email` set as given.
 18. `libraryIds` (replace-all): manager-only. For a non-manager the response is 403 `Only users with users.manage permission can change library access` and nothing from the request is persisted. The whole request is authorised first, so a 403 writes nothing; the writes run in one transaction. Manager: `DELETE FROM library_user_access WHERE "userId" = id`, then insert one row per id (nothing inserted for `[]`).
 19. The `<kind>QuotaLimit` keys and `quotaPeriodDays` need `users.manage` (bare 403 otherwise); preferences stay self-writable. A quota limit is stored as the user's `user_quotas(userId, kind, limit)` row, written in the update's transaction: `> 0` upserts the row, `0` deletes it (no row = unlimited). `bookQuotaLimit` joins them with the `book` kind (`books.md` rule 19) and `comicQuotaLimit` with the `comic` kind (`comics.md` rule 12).
 20. `UpdateUserDto` fields (26; every one optional; unknown keys 400; `null` passes validation, see rule 21). "Who": S = self may set, M = needs `users.manage`.
@@ -62,6 +63,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
     | `username` | string | S, M | rule 17 |
     | `email` | valid email | S, M | set |
     | `password` | string, length >= 8 | S, M | rule 17 |
+    | `currentPassword` | string; required with `password` when `isSelf` and a hash is stored | S | rule 17 |
     | `roleId` | number | M (+ `roles.manage` if changing) | rules 15, 16 |
     | `isAdmin` | bool | M | set; triggers engine revoke if changed |
     | `enabled` | bool | M | set; drop connections if changed; engine revoke if `false` |
@@ -93,7 +95,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
 
 24. Social teardown, once, when `dto.shareDisabled === true && target.shareDisabled !== true`, after the row is saved (statements quoted verbatim in SQL; no SSE event).
 25. SSE drop: when `roleChanging || enabledChanging` (`dto.enabled !== undefined && dto.enabled !== target.enabled`, so enabling also drops) call `dropConnectionsForUser(id)`: completes every SSE connection owned by the user and deletes their polled targets, then emits `remote.targets_changed` to the user if a polled target was dropped. It is also called from `remove` and for a password change, not for `isAdmin` or library changes.
-26. Engine revoke, fire-and-forget (never awaited, never changes the response): after update when `dto.enabled === false || roleChanging || adminChanging || dto.libraryIds !== undefined` (`adminChanging = dto.isAdmin !== undefined && dto.isAdmin !== target.isAdmin`; `enabled === false` fires even if already disabled; `libraryIds` fires even if unchanged), and after `remove`. Call: `POST /v1/revoke` body `{"ownerId": "<id as string>"}` on the engine, only when the engine's `hello.features` contains `revoke`; errors and non-2xx are logged and swallowed. Profile edits do not revoke. The engine client is called directly.
+26. Engine revoke, fire-and-forget (never awaited, never changes the response): after update when `dto.enabled === false || roleChanging || adminChanging || dto.libraryIds !== undefined`, or when a password is set on another user (`adminChanging = dto.isAdmin !== undefined && dto.isAdmin !== target.isAdmin`; `enabled === false` fires even if already disabled; `libraryIds` fires even if unchanged), and after `remove`. Call: `POST /v1/revoke` body `{"ownerId": "<id as string>"}` on the engine, only when the engine's `hello.features` contains `revoke`; errors and non-2xx are logged and swallowed. Profile edits do not revoke. The engine client is called directly.
 
 ### F. Delete
 

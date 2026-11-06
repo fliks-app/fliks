@@ -24,6 +24,20 @@
         />
       </label>
 
+      @if (isSelf()) {
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'account.current_password' | translate }}</span>
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full"
+            autocomplete="current-password"
+            [ngModel]="formCurrentPassword()"
+            (ngModelChange)="formCurrentPassword.set($event)"
+            placeholder="••••••••"
+          />
+        </label>
+      }
+
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.users.field_new_password' | translate }}</span>
         <input
@@ -143,6 +157,18 @@
       }
     </div>
 
+
+    @if (canSignOutEverywhere()) {
+    <div class="flex flex-col gap-1">
+      <span class="label-text font-semibold">{{ 'settings.users.sign_out_everywhere' | translate }}</span>
+      <p class="text-sm text-base-content/50">{{ 'settings.users.sign_out_everywhere_hint' | translate }}</p>
+      <div>
+        <button type="button" class="btn btn-outline btn-error btn-sm" (click)="signOutEverywhere()">
+          {{ 'settings.users.sign_out_everywhere' | translate }}
+        </button>
+      </div>
+    </div>
+    }
 
     <div class="card-actions justify-end">
       <button type="button" class="btn btn-primary btn-sm" (click)="save()" [disabled]="saving()">

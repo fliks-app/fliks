@@ -1,4 +1,5 @@
 //! `/api/parties` and `/api/time` (`docs/spec/watch-party.md`): access, invitations, stale intents, schedule.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{
     config::Config,
@@ -91,7 +92,7 @@ impl Ctx {
             .await
             .unwrap();
         }
-        (id, self.st.jwt.sign_access(id, name).unwrap().token)
+        (id, session::token(&self.st, id, name).await)
     }
 
     async fn follow(&self, from: i32, to: i32) {

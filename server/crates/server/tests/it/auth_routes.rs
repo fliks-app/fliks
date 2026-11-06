@@ -1,4 +1,5 @@
 //! `/api/auth/*` through the real router on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{auth, config::Config, state::AppState};
 use serde_json::{Value, json};
@@ -82,8 +83,8 @@ async fn call(
     )
 }
 
-fn bearer(c: &Ctx, id: i32, name: &str) -> String {
-    format!("Bearer {}", c.st.jwt.sign_access(id, name).unwrap().token)
+async fn bearer(c: &Ctx, id: i32, name: &str) -> String {
+    format!("Bearer {}", session::token(&c.st, id, name).await)
 }
 
 async fn login(c: &Ctx, name: &str) -> Value {
@@ -179,7 +180,7 @@ async fn register_requires_users_manage(pool: PgPool) {
     let body = json!({"username": "new", "password": "pw"});
     let (s, _, _) = call(&c, "POST", "/api/auth/register", &[], Some(body.clone())).await;
     assert_eq!(s, 401);
-    let h = bearer(&c, plain, "plain");
+    let h = bearer(&c, plain, "plain").await;
     let (s, _, _) = call(
         &c,
         "POST",
@@ -189,7 +190,7 @@ async fn register_requires_users_manage(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 403, "guard before validation");
-    let h = bearer(&c, mgr, "mgr");
+    let h = bearer(&c, mgr, "mgr").await;
     let (s, _, u) = call(
         &c,
         "POST",
@@ -217,7 +218,7 @@ async fn register_requires_users_manage(pool: PgPool) {
 async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = user(&pool, "bob", Some("[]"), false, true).await;
-    let h = bearer(&c, id, "bob");
+    let h = bearer(&c, id, "bob").await;
     let (s, _, u) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
     assert_eq!(
         (s, u["libraryIds"].clone(), u["features"].clone()),
@@ -229,7 +230,7 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
     );
     let (_, _, u) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
     assert!(u["lastLogin"].is_string());
-    let stream = format!("Bearer {}", c.st.jwt.sign_stream(id, "bob").unwrap().token);
+    let stream = format!("Bearer {}", session::stream(&c.st, id, "bob").await);
     for (m, p) in [
         ("GET", "/api/auth/me"),
         ("POST", "/api/auth/stream-token"),
@@ -351,7 +352,7 @@ async fn pairing_flow(pool: PgPool) {
     )
     .await;
     assert_eq!(st, json!({"status": "pending"}));
-    let (bob, eve) = (bearer(&c, id, "bob"), bearer(&c, other, "eve"));
+    let (bob, eve) = (bearer(&c, id, "bob").await, bearer(&c, other, "eve").await);
     let (_, _, l) = call(
         &c,
         "GET",
@@ -413,7 +414,7 @@ async fn pairing_cancel_by_requesting_device(pool: PgPool) {
     assert_eq!(s, 404, "another device's request");
     let (s, _, _) = call(&c, "POST", &cancel, &dev, None).await;
     assert_eq!(s, 204);
-    let bob = bearer(&c, id, "bob");
+    let bob = bearer(&c, id, "bob").await;
     let (_, _, l) = call(
         &c,
         "GET",
@@ -603,4 +604,242 @@ async fn users_public_modes(pool: PgPool) {
     assert_eq!(picker(&c, "100.100.1.1", None).await, roster);
     mode("hidden").await;
     assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
+}
+
+fn auth_header(b: &Value) -> String {
+    format!("Bearer {}", b["accessToken"].as_str().unwrap())
+}
+
+#[sqlx::test(migrations = false)]
+async fn logout_cuts_the_access_token_and_the_refresh_token_of_its_session(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let (first, second) = (login(&c, "bob").await, login(&c, "bob").await);
+    let me = |b: &Value| {
+        let h = auth_header(b);
+        let c = &c;
+        async move {
+            call(c, "GET", "/api/auth/me", &[("authorization", &h)], None)
+                .await
+                .0
+        }
+    };
+    assert_eq!(me(&first).await, 200);
+    let rt = first["refreshToken"].as_str().unwrap();
+    call(
+        &c,
+        "POST",
+        "/api/auth/logout",
+        &[],
+        Some(json!({"refreshToken": rt})),
+    )
+    .await;
+    assert_eq!(me(&first).await, 401);
+    assert_eq!(me(&second).await, 200, "another session is untouched");
+    let (s, _, e) = call(
+        &c,
+        "POST",
+        "/api/auth/refresh",
+        &[],
+        Some(json!({"refreshToken": rt})),
+    )
+    .await;
+    assert_eq!(
+        (s, e["message"].clone()),
+        (401, json!("Invalid refresh token"))
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn refresh_keeps_the_session_and_a_reuse_revokes_it(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let b = login(&c, "bob").await;
+    let sid =
+        c.st.jwt
+            .verify(b["accessToken"].as_str().unwrap())
+            .unwrap()
+            .sid;
+    assert!(sid.is_some());
+    let rt = b["refreshToken"].as_str().unwrap();
+    let refresh = |t: String| {
+        let c = &c;
+        async move {
+            call(
+                c,
+                "POST",
+                "/api/auth/refresh",
+                &[],
+                Some(json!({ "refreshToken": t })),
+            )
+            .await
+        }
+    };
+    let (_, _, r) = refresh(rt.to_owned()).await;
+    let claims = c.st.jwt.verify(r["accessToken"].as_str().unwrap()).unwrap();
+    assert_eq!(claims.sid, sid);
+    let (_, _, r2) = refresh(r["refreshToken"].as_str().unwrap().to_owned()).await;
+    assert!(r2["accessToken"].is_string());
+    // Replaying the first token once its rotation grace is over is theft: past the grace, age it.
+    sqlx::query(r#"UPDATE refresh_tokens SET "revokedAt" = now() - interval '1 minute' WHERE "tokenHash" = encode(sha256($1::bytea), 'hex')"#)
+        .bind(rt.as_bytes())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, _, e) = refresh(rt.to_owned()).await;
+    assert_eq!(
+        (s, e["message"].clone()),
+        (401, json!("Refresh token reuse detected"))
+    );
+    let h = auth_header(&r2);
+    let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
+    assert_eq!(
+        s, 401,
+        "the stolen chain's access token dies with the session"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn sessions_are_listed_and_revoked_by_their_owner_only(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    user(&pool, "eve", Some("[]"), false, true).await;
+    let (a, b, e) = (
+        login(&c, "bob").await,
+        login(&c, "bob").await,
+        login(&c, "eve").await,
+    );
+    let (ha, he) = (auth_header(&a), auth_header(&e));
+    let (s, _, l) = call(
+        &c,
+        "GET",
+        "/api/auth/sessions",
+        &[("authorization", &ha)],
+        None,
+    )
+    .await;
+    assert_eq!(s, 200);
+    let l = l.as_array().unwrap();
+    assert_eq!(l.len(), 2);
+    let current: Vec<_> = l.iter().filter(|x| x["current"] == json!(true)).collect();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0]["method"], "password");
+    let other = l.iter().find(|x| x["current"] == json!(false)).unwrap()["id"].clone();
+    let uri = format!("/api/auth/sessions/{other}");
+    let (s, _, _) = call(&c, "DELETE", &uri, &[("authorization", &he)], None).await;
+    assert_eq!(s, 404, "another user's session");
+    let (s, _, _) = call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
+    assert_eq!(s, 204);
+    let (s, _, _) = call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
+    assert_eq!(s, 404, "already revoked");
+    let hb = auth_header(&b);
+    let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &hb)], None).await;
+    assert_eq!(s, 401);
+    let (s, _, l) = call(
+        &c,
+        "GET",
+        "/api/auth/sessions",
+        &[("authorization", &ha)],
+        None,
+    )
+    .await;
+    assert_eq!((s, l.as_array().unwrap().len()), (200, 1));
+    let (s, _, _) = call(
+        &c,
+        "DELETE",
+        "/api/auth/sessions/nope",
+        &[("authorization", &ha)],
+        None,
+    )
+    .await;
+    assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_pairing_claim_starts_a_pairing_session(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let dev = [("x-device-id", "tv")];
+    let req = json!({"userId": id, "deviceName": "TV"});
+    let (_, _, r) = call(&c, "POST", "/api/auth/pairing/request", &dev, Some(req)).await;
+    let bob = bearer(&c, id, "bob").await;
+    let body = Some(json!({"code": r["code"]}));
+    call(
+        &c,
+        "POST",
+        "/api/auth/pairing/approve",
+        &[("authorization", &bob)],
+        body,
+    )
+    .await;
+    let status = format!(
+        "/api/auth/pairing/status?pairingId={}",
+        r["pairingId"].as_str().unwrap()
+    );
+    let (_, _, st) = call(&c, "GET", &status, &dev, None).await;
+    assert!(
+        c.st.jwt
+            .verify(st["accessToken"].as_str().unwrap())
+            .unwrap()
+            .sid
+            .is_some()
+    );
+    let method: String =
+        sqlx::query_scalar(r#"SELECT method FROM sessions ORDER BY id DESC LIMIT 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(method, "pairing");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_logout_without_a_refresh_token_leaves_the_session_usable(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let b = login(&c, "bob").await;
+    let h = auth_header(&b);
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        "/api/auth/logout",
+        &[("authorization", &h)],
+        Some(json!({"targetId": "dev#tab"})),
+    )
+    .await;
+    assert_eq!(s, 204);
+    let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
+    assert_eq!(s, 200, "the profile switch can resume it");
+    let rt = b["refreshToken"].as_str().unwrap();
+    let body = Some(json!({"refreshToken": rt}));
+    let (s, _, _) = call(&c, "POST", "/api/auth/refresh", &[], body).await;
+    assert_eq!(s, 201);
+}
+
+#[sqlx::test(migrations = false)]
+async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let a = login(&c, "bob").await;
+    login(&c, "bob").await;
+    let conn = c.st.hub.connect(id, Default::default());
+    assert!(c.st.hub.has_connection(&conn.id));
+    let ha = auth_header(&a);
+    let (_, _, l) = call(
+        &c,
+        "GET",
+        "/api/auth/sessions",
+        &[("authorization", &ha)],
+        None,
+    )
+    .await;
+    let other = l
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["current"] == json!(false))
+        .unwrap()["id"]
+        .clone();
+    let uri = format!("/api/auth/sessions/{other}");
+    call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
+    assert!(!c.st.hub.has_connection(&conn.id));
 }

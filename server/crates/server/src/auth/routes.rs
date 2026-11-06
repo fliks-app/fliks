@@ -4,7 +4,7 @@ use crate::{
     events::SseEvent,
     http::{
         AppError,
-        auth::{Authed, UserRow, load_enabled, logout_token},
+        auth::{Authed, SessionAuthed, UserRow, load_enabled, logout_token},
         cookies::{access_cookie, clear_cookie},
         json::iso_ms,
         validate::{PathParams, ValidJson, from_value},
@@ -16,7 +16,7 @@ use axum::{
     extract::{ConnectInfo, Extension, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::{
@@ -35,6 +35,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/login", post(login))
         .route("/api/auth/refresh", post(refresh))
         .route("/api/auth/logout", post(logout))
+        .route("/api/auth/sessions", get(sessions))
+        .route("/api/auth/sessions/{id}", delete(revoke_session))
         .route("/api/auth/register", post(register))
         .route("/api/auth/setup", get(setup_status).post(setup))
         .route("/api/auth/me", get(me))
@@ -240,18 +242,20 @@ pub(crate) async fn login(
     let (user, role) = load_enabled(&st.db, row.id)
         .await?
         .ok_or_else(|| AppError::unauthorized("Account disabled"))?;
-    let access = st.jwt.sign_access(user.id, &user.username)?;
-    let mut conn = st.db.acquire().await?;
+    let mut tx = st.db.begin().await?;
     let refresh = db::issue(
-        &mut conn,
+        &mut tx,
         user.id,
-        None,
+        db::Origin::New("password"),
         user_agent(&headers),
         st.cfg.refresh_token_ttl_days,
         now,
     )
     .await?;
-    drop(conn);
+    tx.commit().await?;
+    let access = st
+        .jwt
+        .sign_access(user.id, &user.username, refresh.session)?;
     let set = cookie(&headers, &st, &access.token);
     let body = LoginBody {
         pair: pair(access, refresh),
@@ -310,7 +314,7 @@ pub(crate) async fn refresh(
         Refreshed::Expired => return Err(AppError::unauthorized("Refresh token expired")),
         Refreshed::Disabled => return Err(AppError::unauthorized("Account disabled")),
     };
-    let access = st.jwt.sign_access(user_id, &username)?;
+    let access = st.jwt.sign_access(user_id, &username, issued.session)?;
     let set = cookie(&headers, &st, &access.token);
     Ok((StatusCode::CREATED, set, Json(pair(access, issued))).into_response())
 }
@@ -345,6 +349,55 @@ pub(crate) async fn logout(
         }
     }
     (StatusCode::NO_CONTENT, clear)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionItem {
+    id: i32,
+    method: Option<String>,
+    user_agent: Option<String>,
+    #[serde(with = "iso_ms")]
+    created_at: DateTime<Utc>,
+    #[serde(with = "iso_ms")]
+    last_seen_at: DateTime<Utc>,
+    current: bool,
+}
+
+#[utoipa::path(get, path = "/api/auth/sessions", responses((status = 200)))]
+pub(crate) async fn sessions(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+) -> Result<Json<Vec<SessionItem>>, AppError> {
+    let rows = db::list_sessions(&st.db, a.user.id, Utc::now()).await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| SessionItem {
+                current: Some(r.id) == a.session,
+                id: r.id,
+                method: r.method,
+                user_agent: r.user_agent,
+                created_at: r.created_at,
+                last_seen_at: r.last_seen_at,
+            })
+            .collect(),
+    ))
+}
+
+#[utoipa::path(delete, path = "/api/auth/sessions/{id}", responses((status = 204)))]
+pub(crate) async fn revoke_session(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Result<StatusCode, AppError> {
+    let id = id?.0;
+    if db::revoke_user_session(&st.db, a.user.id, id, Utc::now()).await? {
+        // SSE is authenticated at connect only; the user's other devices reconnect with their own session.
+        st.hub.drop_connections_for_user(a.user.id);
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::not_found("Session not found"))
+    }
 }
 
 #[derive(Deserialize)]
@@ -511,7 +564,10 @@ pub(crate) async fn cast_info(
     a: Authed,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let token = st.jwt.sign_cast(a.user.id, &a.user.username)?.token;
+    let token = st
+        .jwt
+        .sign_cast(a.user.id, &a.user.username, a.session()?)?
+        .token;
     let public = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'public_url'"#)
         .fetch_optional(&st.db)
         .await?
@@ -560,9 +616,12 @@ pub(crate) async fn stream_token(
             .map_err(|e| AppError::bad_request(format!("Invalid body: {e}")))?
             .media_file_id
     };
+    let sid = a.session()?;
     let token = match file {
-        Some(file) => st.jwt.sign_stream_for(a.user.id, &a.user.username, file)?,
-        None => st.jwt.sign_stream(a.user.id, &a.user.username)?,
+        Some(file) => st
+            .jwt
+            .sign_stream_for(a.user.id, &a.user.username, sid, file)?,
+        None => st.jwt.sign_stream(a.user.id, &a.user.username, sid)?,
     }
     .token;
     let expires_at = Utc::now().timestamp_millis() + (st.jwt.stream_ttl_secs as i64) * 1000;
@@ -664,6 +723,7 @@ pub(crate) async fn pairing_status(
         &st.db,
         id,
         device,
+        user_agent(&headers),
         st.cfg.refresh_token_ttl_days,
         Utc::now(),
     )
@@ -676,7 +736,7 @@ pub(crate) async fn pairing_status(
             username,
             issued,
         } => {
-            let access = st.jwt.sign_access(user_id, &username)?;
+            let access = st.jwt.sign_access(user_id, &username, issued.session)?;
             let set = cookie(&headers, &st, &access.token);
             let mut body = serde_json::to_value(pair(access, issued)).map_err(|_| internal())?;
             body["status"] = "approved".into();

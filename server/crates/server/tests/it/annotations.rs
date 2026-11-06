@@ -1,4 +1,5 @@
 //! Reader annotations (`docs/spec/annotations.md`).
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{annotations, config::Config, state::AppState};
 use serde_json::{Value, json};
@@ -26,10 +27,10 @@ async fn ctx(pool: PgPool) -> (Router, Vec<String>) {
     .await
     .unwrap();
     let st = AppState::new(pool, Config::from_lookup(|_| None), SECRET);
-    let tokens = [(1, "admin"), (2, "a"), (3, "b"), (4, "none")]
-        .iter()
-        .map(|(id, name)| st.jwt.sign_access(*id, name).unwrap().token)
-        .collect();
+    let mut tokens = vec![];
+    for (id, name) in [(1, "admin"), (2, "a"), (3, "b"), (4, "none")] {
+        tokens.push(session::token(&st, id, name).await);
+    }
     (annotations::router().with_state(st), tokens)
 }
 

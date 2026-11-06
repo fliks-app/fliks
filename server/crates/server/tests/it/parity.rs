@@ -882,27 +882,41 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     errs
 }
 
-/// Logs every actor of the current database in; seeds beyond `base` add actors (noread, settings,
-/// validator) and a missing one only matters to the scenarios that use it.
-/// The seed's actors only: logging in a user it lacks counts a failed login toward the throttle.
-async fn login_all(http: &Client, target: &str, db: &str) -> HashMap<String, String> {
-    let users = psql(&["-d", db, "-At", "-c", "SELECT username FROM users"], None);
+/// The target's `JWT_SECRET` in `run-all.sh`.
+const PARITY_SECRET: &str = "parity-secret";
+
+/// One session row per user (ids far above the serial's reach, so a scenario's own logins never collide)
+/// and an access token on it for every actor of the current database. Seeds beyond `base` add actors
+/// (noread, settings, validator). The rows go in after each reset, so no scenario starts from a login.
+fn sign_actors(db: &str) -> HashMap<String, String> {
+    let rows = psql(
+        &[
+            "-d",
+            db,
+            "-At",
+            "-F",
+            ",",
+            "-c",
+            r#"INSERT INTO sessions (id, "userId", method)
+               SELECT 1000000 + id, id, 'password' FROM users
+               RETURNING id, "userId", (SELECT username FROM users WHERE users.id = "userId")"#,
+        ],
+        None,
+    );
+    let jwt = fliks_server::auth_token::Jwt::new(PARITY_SECRET, 86_400, 86_400);
     let mut tokens = HashMap::new();
-    for a in ACTORS
-        .into_iter()
-        .filter(|a| users.lines().any(|u| u == *a))
-    {
-        let r = http
-            .post(format!("{target}/api/auth/login"))
-            .json(&json!({ "username": a, "password": format!("{a}-pass") }))
-            .send()
-            .await
-            .unwrap_or_else(|e| panic!("login {a}: {e}"));
-        let v: Value = r.json().await.unwrap_or_default();
-        let t = v["accessToken"]
-            .as_str()
-            .unwrap_or_else(|| panic!("login {a}: {v}"));
-        tokens.insert(a.to_string(), t.to_string());
+    for line in rows.lines() {
+        let mut f = line.split(',');
+        let (Some(sid), Some(uid), Some(name)) = (f.next(), f.next(), f.next()) else {
+            continue;
+        };
+        if ACTORS.contains(&name) {
+            let token = jwt
+                .sign_access(uid.parse().unwrap(), name, sid.parse().unwrap())
+                .expect("a token")
+                .token;
+            tokens.insert(name.to_string(), token);
+        }
     }
     tokens
 }
@@ -949,11 +963,10 @@ async fn parity() {
     }
     reset_db(&db, &template(&base_tpl, seeds.last().expect("seed")));
     let mut ctx = Ctx {
-        tokens: login_all(&http, &target, &db).await,
+        tokens: sign_actors(&db),
         http,
         target,
     };
-    let mut logged_in = seeds.last().cloned().unwrap_or_default();
 
     for f in selected {
         let mut sc: Value =
@@ -966,12 +979,7 @@ async fn parity() {
         let seed = sc["seed"].as_str().unwrap_or("base");
         await_idle(&ctx, &db, false).await;
         reset_db(&db, &template(&base_tpl, seed));
-        if seed != logged_in {
-            ctx.tokens = login_all(&ctx.http, &ctx.target, &db).await;
-            logged_in = seed.to_owned();
-            // the logins wrote refresh tokens: start the scenario from the pristine seed again
-            reset_db(&db, &template(&base_tpl, seed));
-        }
+        ctx.tokens = sign_actors(&db);
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");
         let steps = sc["steps"].clone();

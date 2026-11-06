@@ -36,6 +36,7 @@ mod remote;
 mod requests;
 mod roles;
 mod routes;
+mod session;
 mod settings;
 mod social;
 mod topology;

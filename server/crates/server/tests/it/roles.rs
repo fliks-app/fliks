@@ -1,4 +1,5 @@
 //! Roles routes (`docs/spec/roles.md`) through the real router on a fresh database.
+use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, roles, state::AppState};
 use serde_json::{Value, json};
@@ -43,7 +44,7 @@ async fn user(
     .fetch_one(pool)
     .await
     .unwrap();
-    st.jwt.sign_access(id, name).unwrap().token
+    session::token(st, id, name).await
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
