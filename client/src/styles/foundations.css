@@ -1,6 +1,11 @@
 /* `tv:` variant (body.tv): a 1080p TV reports innerWidth=960 (DPR 2), so width breakpoints would pack tablet columns. */
 @custom-variant tv (body.tv &);
 
+/* Touch browsers paint a box over every tapped link or button; the app draws its own pressed states. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* webOS reports `(hover: none)` despite its pointer remote; re-open hover there only, scoped to <html> since popover hosts reparent outside <body>. */
 @custom-variant hover {
   @media (hover: hover) {

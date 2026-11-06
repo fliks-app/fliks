@@ -153,16 +153,11 @@
           >
             <div class="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
               <h2 class="text-lg font-semibold leading-snug line-clamp-2 m-0">
-                <a
-                  [routerLink]="mediaLink(row)"
-                  class="link link-hover text-base-content hover:opacity-80 font-semibold text-left"
-                >
-                  {{ row.title }}
-                </a>
+                <a [routerLink]="mediaLink(row)" class="after:absolute after:inset-0 after:z-10">{{ row.title }}</a>
               </h2>
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
-                <app-request-status-badge [request]="row" (badgeClick)="onBadgeClick(row)" />
+                <app-request-status-badge class="relative z-20" [request]="row" (badgeClick)="onBadgeClick(row)" />
                 @if (row.kind === 'delete') {
                   <span class="badge badge-error badge-outline badge-sm gap-1">
                     <svg lucideTrash2 class="h-3 w-3 shrink-0"></svg>
@@ -192,7 +187,7 @@
                     @if (auth.canManageUsers()) {
                       <a
                         [routerLink]="['/admin/users', row.user.id]"
-                        class="link link-hover link-primary font-medium"
+                        class="relative z-20 link link-hover link-primary font-medium"
                       >
                         {{ row.user.username }}
                       </a>
@@ -223,7 +218,7 @@
 
             @if (row.status === 'declined' && row.declinedReason?.trim()) {
               <div
-                class="flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="relative z-20 flex sm:hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
@@ -247,7 +242,8 @@
 
             @if (row.status === 'pending') {
               <div
-                class="flex sm:hidden lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                [class]="auth.hasPermission('requests.manage') ? 'flex sm:hidden' : 'hidden'"
+                class="relative z-20 lg:flex flex-wrap items-center lg:items-end lg:justify-end content-start gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 @if (auth.hasPermission('requests.manage')) {
                   <button
@@ -296,7 +292,7 @@
 
             @if (showOrphanDeleteColumn(row)) {
               <div
-                class="hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
+                class="relative z-20 hidden lg:flex flex-wrap items-center justify-end gap-1 shrink-0 lg:border-s lg:border-base-200 lg:ps-4 lg:min-w-[min(100%,12rem)]"
               >
                 <button
                   type="button"
