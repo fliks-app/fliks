@@ -82,8 +82,13 @@ export class SelectUserComponent {
     () => this.users().find((u) => this.hasSession(u))?.id ?? this.users()[0]?.id ?? null,
   );
 
-  /** Password button, focused when the sheet opens; `data-tv-modal` already traps D-pad navigation (see `tv-spatial-nav.service.ts`). */
-  private readonly passwordBtn = viewChild<ElementRef<HTMLButtonElement>>('passwordBtn');
+  /** Sheet body, whose first enabled button is focused when it opens; `data-tv-modal` already traps D-pad navigation (see `tv-spatial-nav.service.ts`). */
+  private readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
+
+  /** Under `admins` the sheet leads with SSO and folds the password behind an administrator button. */
+  readonly adminsOnly = computed(
+    () => this.auth.passwordLogin() === 'admins' && this.auth.ssoProviders().length > 0,
+  );
 
   /** Stable identity so the callback pushed on the dismiss stack can be `remove()`-d even if `closeSheet` fires repeatedly. */
   private readonly dismissCallback = () => this.closeSheet();
@@ -99,7 +104,7 @@ export class SelectUserComponent {
         this.auth.oidcAutoLaunch(this.route.snapshot.queryParamMap.get('autoLaunch') === '0');
       }
     });
-    // Sheet lifecycle: focus the password button on open and register a back-dismiss callback.
+    // Sheet lifecycle: focus the first button on open and register a back-dismiss callback.
     // The viewChild is null on the first tick (@if not yet materialised); rAF lands after Angular's commit pass.
     effect(() => {
       const open = this.openSheetFor() !== null;
@@ -118,7 +123,7 @@ export class SelectUserComponent {
         return;
       }
       requestAnimationFrame(() => {
-        this.passwordBtn()?.nativeElement.focus({ preventScroll: true });
+        this.sheet()?.nativeElement.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true });
       });
     });
 

@@ -89,6 +89,7 @@
             autocomplete="new-password"
             class="input input-bordered input-sm w-full"
             data-testid="sso-client-secret"
+            [disabled]="removeSecret()"
             [placeholder]="editing()?.clientSecretSet ? '••••••••' : ''"
             [ngModel]="clientSecret()"
             (ngModelChange)="clientSecret.set($event)"
@@ -96,6 +97,16 @@
           <span class="text-sm text-base-content/50">
             {{ (editing()?.clientSecretSet ? 'settings.sso.secret_keep_hint' : 'settings.sso.secret_public_hint') | translate }}
           </span>
+          @if (editing()?.clientSecretSet) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm self-start"
+              data-testid="sso-remove-secret"
+              (click)="removeSecret.set(!removeSecret())"
+            >
+              {{ (removeSecret() ? 'settings.sso.secret_keep' : 'settings.sso.secret_remove') | translate }}
+            </button>
+          }
         </label>
       </div>
 

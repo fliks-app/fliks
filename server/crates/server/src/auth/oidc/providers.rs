@@ -127,7 +127,8 @@ pub(crate) struct ProviderIn {
     name: String,
     issuer: String,
     client_id: String,
-    client_secret: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    client_secret: Option<Option<String>>,
     ca_pem: Option<String>,
     #[serde(default)]
     scope: Option<String>,
@@ -155,6 +156,11 @@ pub(crate) struct ProviderIn {
 
 fn yes() -> bool {
     true
+}
+
+/// Distinguishes an absent field (`None`) from an explicit `null` (`Some(None)`).
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(d).map(Some)
 }
 
 fn blank(s: Option<String>) -> Option<String> {
@@ -320,7 +326,7 @@ pub(crate) async fn create(
 ) -> Result<(StatusCode, Json<ProviderOut>), AppError> {
     admin(&a)?;
     dto.validate()?;
-    let secret = blank(dto.client_secret.take());
+    let secret = blank(dto.client_secret.take().flatten());
     if dto.enabled {
         check_enable(&st, &dto, dto.ca_pem.as_deref()).await?;
     }
@@ -380,7 +386,8 @@ pub(crate) async fn update(
     admin(&a)?;
     let id = int_param(&id)?;
     dto.validate()?;
-    let secret = blank(dto.client_secret.take());
+    let clear_secret = matches!(dto.client_secret, Some(None));
+    let secret = blank(dto.client_secret.take().flatten());
     // The issuer is the identity of every linked account, so a new issuer is a new provider.
     let known = db::get(&st.db, id)
         .await?
@@ -404,7 +411,7 @@ pub(crate) async fn update(
         keep_one_provider(&mut tx, id).await?;
     }
     sqlx::query!(
-        r#"UPDATE oidc_providers SET name = $2, "clientId" = $3, "clientSecret" = COALESCE($4, "clientSecret"),
+        r#"UPDATE oidc_providers SET name = $2, "clientId" = $3, "clientSecret" = CASE WHEN $18 THEN NULL ELSE COALESCE($4, "clientSecret") END,
                "caPem" = $5, scope = COALESCE($6, scope), prompt = $7,
                "usernameClaim" = COALESCE($8, "usernameClaim"), "groupsClaim" = $9, "allowedGroups" = $10,
                "adminGroups" = $11, "autoRegister" = $12, "matchByEmail" = $13, "endSessionAtProvider" = $14,
@@ -426,7 +433,8 @@ pub(crate) async fn update(
         dto.end_session_at_provider,
         dto.account_url,
         dto.enabled,
-        dto.position
+        dto.position,
+        clear_secret
     )
     .execute(&mut *tx)
     .await?;

@@ -53,6 +53,7 @@ export class SsoProviderEditorComponent {
   readonly issuer = signal('');
   readonly clientId = signal('');
   readonly clientSecret = signal('');
+  readonly removeSecret = signal(false);
   readonly caPem = signal('');
   readonly scope = signal('openid profile email');
   readonly prompt = signal<OidcPrompt | ''>('');
@@ -88,6 +89,7 @@ export class SsoProviderEditorComponent {
     this.issuer.set(row?.issuer ?? '');
     this.clientId.set(row?.clientId ?? '');
     this.clientSecret.set('');
+    this.removeSecret.set(false);
     this.caPem.set(row?.caPem ?? '');
     this.scope.set(row?.scope ?? 'openid profile email');
     this.prompt.set(row?.prompt ?? '');
@@ -161,7 +163,7 @@ export class SsoProviderEditorComponent {
       name: this.name().trim(),
       issuer: this.issuer().trim(),
       clientId: this.clientId().trim(),
-      clientSecret: this.clientSecret(),
+      clientSecret: this.removeSecret() ? null : this.clientSecret(),
       caPem: this.caPem().trim() || null,
       scope: this.scope().trim(),
       prompt: this.prompt() || null,

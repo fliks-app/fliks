@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id\n           FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2",
+  "query": "SELECT \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id,\n                  \"expectUserId\" AS expect_user_id\n           FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "linkUserId"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "expect_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "expectUserId"
+          }
+        }
       }
     ],
     "parameters": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "6f53a3be97de6b6794b4b94b9e8df6c2196a18e543afe486779ba5d5d4ae355b"
+  "hash": "58c8b8efe82e3baf2f23e2e7b2e698463e0c55f57b66ce8f410dcc1ffe6013b6"
 }

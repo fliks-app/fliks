@@ -348,7 +348,7 @@ export class AuthService {
 
   /** Sends the browser to the provider. When the page was reached through another host name than
    *  `public_url`, it moves there first: the callback returns to that origin, where the verifier must live. */
-  async oidcSignIn(providerId: number, opts: { link?: boolean; silent?: boolean } = {}): Promise<void> {
+  async oidcSignIn(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
     const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
     if (this.cookieAuth && origin && origin !== location.origin && !opts.link) {
       location.assign(`${origin}/login?sso=${providerId}`);
@@ -357,7 +357,7 @@ export class AuthService {
     await this.oidcBegin(providerId, opts);
   }
 
-  async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean } = {}): Promise<void> {
+  async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
     if (this._oidcBusy()) return;
     this._oidcBusy.set(true);
     try {
@@ -367,7 +367,7 @@ export class AuthService {
     }
   }
 
-  private async oidcStart(providerId: number, opts: { link?: boolean; silent?: boolean }): Promise<void> {
+  private async oidcStart(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number }): Promise<void> {
     const platform = oidcPlatform();
     if (!platform) throw new OidcError('unavailable');
     const { verifier, challenge } = await newPkce();
@@ -379,6 +379,7 @@ export class AuthService {
           returnTo: platform.returnTo,
           ...(opts.link ? { link: true } : {}),
           ...(opts.silent ? { prompt: 'none' } : {}),
+          ...(opts.silent && opts.expectUserId !== undefined ? { expectUserId: opts.expectUserId } : {}),
         },
         { context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent) },
       ),
@@ -450,17 +451,18 @@ export class AuthService {
   }
 
   /** The provider to re-run silently after its 30-day session cap ended this one. */
-  private async silentRerunProvider(err: unknown): Promise<number | null> {
+  private async silentRerunProvider(err: unknown): Promise<{ providerId: number; userId: number } | null> {
     const e = err instanceof HttpErrorResponse ? err : null;
     const message = (e?.error as { message?: unknown } | null)?.message;
-    if (!this.cookieAuth || e?.status !== 401 || message !== 'Refresh token expired') return null;
+    if (e?.status !== 401 || message !== 'Refresh token expired') return null;
     if (this.tv.isTv() || !oidcPlatform() || recentOidcFailure()) return null;
     const userId = this.sessions.active()?.user.id;
     if (userId === undefined) return null;
     // The verifier lives in the origin that started the flow, which must be the one the callback returns to.
     const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
-    if (origin && origin !== location.origin) return null;
-    return lastProvider(this.serverConfig.serverUrl(), userId);
+    if (this.cookieAuth && origin && origin !== location.origin) return null;
+    const providerId = lastProvider(this.serverConfig.serverUrl(), userId);
+    return providerId === null ? null : { providerId, userId };
   }
 
   /** The provider's logout page for a session that came from one with end-session enabled. */
@@ -769,7 +771,7 @@ export class AuthService {
       }
       const rerun = await this.silentRerunProvider(err);
       await this.dropActiveSession('refresh refused', err, false);
-      if (rerun !== null) this.oidcBegin(rerun, { silent: true }).catch(() => noteOidcFailure());
+      if (rerun) this.oidcBegin(rerun.providerId, { silent: true, expectUserId: rerun.userId }).catch(() => noteOidcFailure());
       return false;
     }
   }

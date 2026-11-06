@@ -127,6 +127,7 @@ pub(crate) struct StartDto {
     #[serde(default)]
     link: bool,
     prompt: Option<String>,
+    expect_user_id: Option<i32>,
 }
 
 fn peer_ip(
@@ -181,6 +182,9 @@ pub(crate) async fn start(
     if dto.prompt.as_deref().is_some_and(|p| p != "none") {
         errs.push("prompt must be none".to_owned());
     }
+    if dto.expect_user_id.is_some() && (dto.prompt.is_none() || dto.link) {
+        errs.push("expectUserId needs prompt none and no link".to_owned());
+    }
     let (Some(return_to), true) = (return_to, errs.is_empty()) else {
         return Err(AppError::bad_request(errs));
     };
@@ -214,6 +218,7 @@ pub(crate) async fn start(
         &nonce,
         &return_to.as_text(),
         link_user,
+        dto.expect_user_id,
         Utc::now(),
     )
     .await?;
@@ -335,7 +340,8 @@ async fn complete_claims(
 ) -> Result<(), String> {
     let missing = |k: &str| super::claim_at(claims, k).is_none();
     let groups_missing = p.groups_claim.as_deref().is_some_and(missing);
-    if !(groups_missing || missing(&p.username_claim) || missing("email")) {
+    let unverified = p.match_by_email && missing("email_verified");
+    if !(groups_missing || missing(&p.username_claim) || missing("email") || unverified) {
         return Ok(());
     }
     if d.userinfo_endpoint.is_none() {
@@ -365,8 +371,7 @@ async fn complete_claims(
             Ok(())
         }
         Ok(_) => Err("invalid userinfo".into()),
-        Err(e) if groups_missing => Err(e),
-        Err(_) => Ok(()),
+        Err(e) => Err(e),
     }
 }
 
@@ -452,7 +457,7 @@ pub(crate) async fn exchange(
             Err(f) => into(f),
         };
     }
-    let signed = match sync::login_user(&st, &p, &prof).await {
+    let signed = match sync::login_user(&st, &p, &prof, row.expect_user_id).await {
         Ok(s) => s,
         Err(f) => return into(f),
     };

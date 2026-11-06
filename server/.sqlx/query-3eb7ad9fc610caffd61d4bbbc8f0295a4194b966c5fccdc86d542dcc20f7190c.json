@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2\n           RETURNING \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id",
+  "query": "DELETE FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2\n           RETURNING \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id,\n                     \"expectUserId\" AS expect_user_id",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "linkUserId"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "expect_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "expectUserId"
+          }
+        }
       }
     ],
     "parameters": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "216825f906dc0a87827ba2b378d15be77decfad576860c5691b6beff31b87a97"
+  "hash": "3eb7ad9fc610caffd61d4bbbc8f0295a4194b966c5fccdc86d542dcc20f7190c"
 }

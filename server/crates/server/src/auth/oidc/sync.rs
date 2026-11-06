@@ -16,6 +16,7 @@ pub enum Kind {
     Disabled,
     AlreadyLinked,
     Pkce,
+    LoginRequired,
 }
 
 impl Kind {
@@ -28,12 +29,15 @@ impl Kind {
             Kind::Disabled => "disabled",
             Kind::AlreadyLinked => "already_linked",
             Kind::Pkce => "pkce",
+            Kind::LoginRequired => "login_required",
         }
     }
 
     pub fn status(self) -> StatusCode {
         match self {
-            Kind::NotAllowed | Kind::NoAccount | Kind::Disabled => StatusCode::FORBIDDEN,
+            Kind::NotAllowed | Kind::NoAccount | Kind::Disabled | Kind::LoginRequired => {
+                StatusCode::FORBIDDEN
+            }
             Kind::AlreadyLinked => StatusCode::CONFLICT,
             Kind::Expired | Kind::Idp | Kind::Pkce => StatusCode::BAD_REQUEST,
         }
@@ -189,8 +193,14 @@ async fn provision(
 }
 
 /// The user a provider login is for: linked identity, else a verified-email match, else a new
-/// account, then the access the groups decide.
-pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<Signed, Fail> {
+/// account, then the access the groups decide. A silent re-run (`expect`) takes only the linked
+/// identity of that user.
+pub async fn login_user(
+    st: &AppState,
+    p: &Provider,
+    prof: &Profile,
+    expect: Option<i32>,
+) -> Result<Signed, Fail> {
     if !allowed(p, prof) {
         return Err(Kind::NotAllowed.into());
     }
@@ -211,6 +221,7 @@ pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<S
     let plan = plan(&mut tx, p, &prof.groups).await?;
     let known = match db::identity_user(&mut tx, p.id, &prof.sub).await? {
         Some(u) => Some(u),
+        None if expect.is_some() => None,
         None => match prof
             .email
             .as_deref()
@@ -227,6 +238,9 @@ pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<S
             None => None,
         },
     };
+    if expect.is_some_and(|e| known != Some(e)) {
+        return Err(Kind::LoginRequired.into());
+    }
     let (user_id, access_changed) = match known {
         Some(id) => {
             let enabled = sqlx::query_scalar!(r#"SELECT enabled FROM users WHERE id = $1"#, id)

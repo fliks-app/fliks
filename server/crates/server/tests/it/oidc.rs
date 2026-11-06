@@ -897,6 +897,58 @@ async fn a_silent_run_never_overrides_a_login_or_consent_prompt(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_silent_run_takes_only_the_expected_users_linked_identity(pool: PgPool) {
+    let c = ctx(pool).await;
+    let pid = c
+        .provider(json!({"autoRegister": true, "matchByEmail": true}))
+        .await;
+    let ann = c.login(pid, json!({})).await.2["user"]["id"]
+        .as_i64()
+        .unwrap();
+    c.user("placeholder", Some("p@example.test"), false).await;
+    let silent = |sub: &'static str, email: &'static str| {
+        let c = &c;
+        async move {
+            let body = json!({"prompt": "none", "expectUserId": ann});
+            let f = c.begin_with(pid, body, None).await.1.expect("start");
+            let patch = json!({"sub": sub, "email": email});
+            let code = c.idp.issue(&f, patch, Signing::Key(0));
+            c.exchange(&f, &code, &f.verifier, None).await
+        }
+    };
+    let r = silent("sub-1", "ann@example.test").await;
+    assert_eq!((r.0, r.2["user"]["id"].as_i64()), (201, Some(ann)));
+    for (sub, email) in [("sub-2", "x@example.test"), ("sub-3", "p@example.test")] {
+        let r = silent(sub, email).await;
+        assert_eq!(error(&r), (403, "login_required".into()));
+        c.unthrottle();
+    }
+    let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(users, 3);
+    let (r, _) = c.begin_with(pid, json!({"expectUserId": ann}), None).await;
+    assert_eq!(r.0, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_userinfo_failure_is_fatal_whenever_userinfo_was_needed(pool: PgPool) {
+    let c = ctx(pool).await;
+    let pid = c.provider(json!({"matchByEmail": true})).await;
+    let patch = json!({"email_verified": null});
+    assert_eq!(
+        error(&c.login(pid, patch.clone()).await),
+        (400, "idp".into())
+    );
+    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "sub-1", "email_verified": true}));
+    assert_eq!(c.login(pid, patch).await.0, 201);
+    *c.idp.st.userinfo.lock().unwrap() = None;
+    let r = c.login(pid, json!({"sub": "sub-2", "email": null})).await;
+    assert_eq!(error(&r), (400, "idp".into()));
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_self_set_email_does_not_hand_over_an_account(pool: PgPool) {
     let c = ctx(pool).await;
     let pid = c
@@ -1066,12 +1118,17 @@ async fn a_username_clash_adds_a_counter(pool: PgPool) {
     let c = ctx(pool).await;
     c.user("Ann", None, false).await;
     let pid = c.provider(json!({})).await;
-    let (_, _, a) = c.login(pid, json!({"sub": "s-a", "email": null})).await;
-    let (_, _, b) = c.login(pid, json!({"sub": "s-b", "email": null})).await;
+    let (_, _, a) = c
+        .login(pid, json!({"sub": "s-a", "email": "a@example.test"}))
+        .await;
+    let (_, _, b) = c
+        .login(pid, json!({"sub": "s-b", "email": "b@example.test"}))
+        .await;
     assert_eq!(
         (a["user"]["username"].clone(), b["user"]["username"].clone()),
         (json!("ann-2"), json!("ann-3"))
     );
+    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "s-c"}));
     let (_, _, nameless) = c
         .login(
             pid,
@@ -1759,6 +1816,9 @@ async fn providers_never_return_the_secret_and_keep_it_on_a_blank_write(pool: Pg
     assert_eq!(secret().await.as_deref(), Some("rotated"));
     let (_, _, list) = c.admin("GET", "/api/oidc-providers", None).await;
     assert!(!list.to_string().contains("rotated"));
+    let cleared = c.put_provider(pid, json!({"clientSecret": null})).await;
+    assert_eq!(cleared.2["clientSecretSet"], false);
+    assert_eq!(secret().await, None);
     let moved = c
         .put_provider(pid, json!({"issuer": "https://other.test", "position": 7}))
         .await

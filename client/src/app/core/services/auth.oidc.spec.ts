@@ -252,7 +252,22 @@ describe('AuthService OpenID Connect', () => {
       const refreshed = auth.refreshAccessToken();
       (await next('/api/auth/refresh')).flush({ message: 'Refresh token expired' }, expired);
       expect(await refreshed).toBe(false);
-      expect((await next('/api/auth/oidc/3/start')).request.body.prompt).toBe('none');
+      const body = (await next('/api/auth/oidc/3/start')).request.body;
+      expect(body).toMatchObject({ prompt: 'none', expectUserId: 5 });
+    });
+
+    it('re-runs on a standalone shell too, bound to the same user', async () => {
+      (auth as unknown as { cookieAuth: boolean }).cookieAuth = false;
+      await loadInfo(info({ origin: 'https://public.test' }));
+      pending();
+      const done = auth.oidcReturned({ code: 'c', state: 'st' });
+      (await next('/api/auth/oidc/exchange')).flush(loginBody);
+      await done;
+      const refreshed = auth.refreshAccessToken();
+      (await next('/api/auth/refresh')).flush({ message: 'Refresh token expired' }, expired);
+      expect(await refreshed).toBe(false);
+      const body = (await next('/api/auth/oidc/3/start')).request.body;
+      expect(body).toMatchObject({ prompt: 'none', expectUserId: 5 });
     });
 
     it('skips the silent run on a host that is not the public origin, and says so', async () => {

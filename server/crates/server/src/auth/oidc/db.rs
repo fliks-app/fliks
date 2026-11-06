@@ -99,6 +99,7 @@ pub struct Login {
     pub nonce: String,
     pub return_to: String,
     pub link_user_id: Option<i32>,
+    pub expect_user_id: Option<i32>,
 }
 
 pub const LOGIN_TTL: Duration = Duration::minutes(10);
@@ -110,16 +111,18 @@ pub async fn insert_login(
     nonce: &str,
     return_to: &str,
     link_user: Option<i32>,
+    expect_user: Option<i32>,
     now: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"INSERT INTO oidc_logins ("providerId", state, nonce, "returnTo", "linkUserId", "expiresAt")
-           VALUES ($1, $2, $3, $4, $5, $6)"#,
+        r#"INSERT INTO oidc_logins ("providerId", state, nonce, "returnTo", "linkUserId", "expectUserId", "expiresAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
         provider,
         state,
         nonce,
         return_to,
         link_user,
+        expect_user,
         now + LOGIN_TTL
     )
     .execute(db)
@@ -135,7 +138,8 @@ pub async fn peek_login(
 ) -> Result<Option<Login>, sqlx::Error> {
     sqlx::query_as!(
         Login,
-        r#"SELECT "providerId" AS provider_id, nonce, "returnTo" AS return_to, "linkUserId" AS link_user_id
+        r#"SELECT "providerId" AS provider_id, nonce, "returnTo" AS return_to, "linkUserId" AS link_user_id,
+                  "expectUserId" AS expect_user_id
            FROM oidc_logins WHERE state = $1 AND "expiresAt" > $2"#,
         state,
         now
@@ -153,7 +157,8 @@ pub async fn claim_login(
     sqlx::query_as!(
         Login,
         r#"DELETE FROM oidc_logins WHERE state = $1 AND "expiresAt" > $2
-           RETURNING "providerId" AS provider_id, nonce, "returnTo" AS return_to, "linkUserId" AS link_user_id"#,
+           RETURNING "providerId" AS provider_id, nonce, "returnTo" AS return_to, "linkUserId" AS link_user_id,
+                     "expectUserId" AS expect_user_id"#,
         state,
         now
     )

@@ -49,11 +49,13 @@ CREATE TABLE "oidc_logins" (
   "nonce" text NOT NULL,
   "returnTo" text NOT NULL,
   "linkUserId" integer REFERENCES "users"("id") ON DELETE CASCADE,
+  "expectUserId" integer REFERENCES "users"("id") ON DELETE CASCADE,
   "expiresAt" timestamptz NOT NULL,
   "createdAt" timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX "IDX_oidc_logins_providerId" ON "oidc_logins" ("providerId");
 CREATE INDEX "IDX_oidc_logins_linkUserId" ON "oidc_logins" ("linkUserId");
+CREATE INDEX "IDX_oidc_logins_expectUserId" ON "oidc_logins" ("expectUserId");
 
 ALTER TABLE "sessions"
   ADD COLUMN "providerId" integer REFERENCES "oidc_providers"("id") ON DELETE CASCADE,

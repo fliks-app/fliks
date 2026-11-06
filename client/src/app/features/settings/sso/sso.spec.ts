@@ -121,6 +121,16 @@ describe('SsoProviderEditorComponent', () => {
     expect(body.clientSecret).toBe('');
   });
 
+  it('removes the stored secret with an explicit null', async () => {
+    const { api, cmp, el, fixture } = setup();
+    cmp.open(row(1));
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="sso-remove-secret"]') as HTMLButtonElement).click();
+    await cmp.save();
+    const [, body] = api.update.mock.calls[0] as unknown as [number, { clientSecret: string | null }];
+    expect(body.clientSecret).toBeNull();
+  });
+
   it('builds the three URIs from the public URL once the provider has an id', () => {
     const { cmp } = setup('https://fliks.test/');
     cmp.open(null);
