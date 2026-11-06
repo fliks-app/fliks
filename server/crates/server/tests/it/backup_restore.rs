@@ -554,6 +554,10 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
     );
 
     // A dump from one migration back restores into today's database, at today's schema
+    sqlx::query(r#"INSERT INTO users (id, username, "isAdmin") VALUES (1, 'admin', true)"#)
+        .execute(old_pool)
+        .await
+        .unwrap();
     let (s, _, b) = call(
         c_old,
         "POST",
@@ -601,12 +605,18 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
     .unwrap();
     assert!(!stale);
 
+    // The restore replaced every row, sessions included: the dump predates them, so everyone is signed out
+    let (s, _, _) = call(c, "GET", "/api/system/backups", &c.admin, Value::Null).await;
+    assert_eq!(s, 401);
+    let sid = session::new(&c.st, 1).await;
+    let admin = c.st.jwt.sign_access(1, "admin", sid).unwrap().token;
+
     // delete: 200, then 404
     let (s, _, b) = call(
         c,
         "DELETE",
         &format!("/api/system/backups/{name}"),
-        &c.admin,
+        &admin,
         Value::Null,
     )
     .await;
@@ -616,7 +626,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
             c,
             "DELETE",
             &format!("/api/system/backups/{name}"),
-            &c.admin,
+            &admin,
             Value::Null
         )
         .await
