@@ -175,6 +175,9 @@ export class AuthService {
   private _streamTokensInFlight = new Map<number, Promise<string | null>>();
   private readonly _sessionEpoch = signal(0);
   private readonly _oidc = signal<OidcInfo>(NO_OIDC);
+  private readonly _oidcBusy = signal(false);
+  /** A sign-in is in flight: the SSO buttons wait, so two starts cannot overlap. */
+  readonly oidcBusy = this._oidcBusy.asReadonly();
 
   /** Providers whose button this shell can complete: none on a TV or a shell without an auth bridge. */
   readonly ssoProviders = computed(() =>
@@ -355,6 +358,16 @@ export class AuthService {
   }
 
   async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean } = {}): Promise<void> {
+    if (this._oidcBusy()) return;
+    this._oidcBusy.set(true);
+    try {
+      await this.oidcStart(providerId, opts);
+    } finally {
+      this._oidcBusy.set(false);
+    }
+  }
+
+  private async oidcStart(providerId: number, opts: { link?: boolean; silent?: boolean }): Promise<void> {
     const platform = oidcPlatform();
     if (!platform) throw new OidcError('unavailable');
     const { verifier, challenge } = await newPkce();
@@ -380,13 +393,9 @@ export class AuthService {
       expiresAt: Date.now() + OIDC_TTL_MS,
     });
     noteOidcLaunch();
-    const back = await platform.open(authorizeUrl);
-    if (!back) {
-      noteOidcFailure();
-      return;
-    }
-    const res = await this.oidcReturned(back);
-    if (!res.ok) throw new OidcError(res.kind, res.pending);
+    const query = await platform.open(authorizeUrl);
+    if (query) await this.router.navigateByUrl(`/oidc/complete?${query}`);
+    else noteOidcFailure();
   }
 
   /** The provider's answer, from the callback fragment or a shell's auth sheet: signs in (or links)

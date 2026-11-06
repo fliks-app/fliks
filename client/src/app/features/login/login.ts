@@ -1,4 +1,5 @@
 import { Component, signal, inject, computed } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -23,7 +24,7 @@ export class LoginComponent {
 
   readonly isNative = Capacitor.isNativePlatform();
 
-  readonly error = signal(oidcErrorText(this.translate, this.route.snapshot.queryParamMap.get('oidcError')));
+  readonly error = signal('');
   readonly loading = signal(false);
   /** False when the picker would be empty (roster hidden by the admin): it would bounce back here. */
   readonly canPickUser = signal(true);
@@ -49,15 +50,17 @@ export class LoginComponent {
   );
 
   constructor() {
-    // The message is shown once: keep `oidcError` (and the provider's logout `state`) out of the history entry.
-    const q = this.route.snapshot.queryParamMap;
-    if (q.get('oidcError') || q.get('state')) {
+    // The route is reused when a failed sign-in lands here again, so the error is read from the stream.
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((q) => {
+      if (!q.get('oidcError') && !q.get('state')) return;
+      if (q.get('oidcError')) this.error.set(oidcErrorText(this.translate, q.get('oidcError')));
+      // The message is shown once: keep `oidcError` (and the provider's logout `state`) out of the history entry.
       void this.router.navigate([], {
         queryParams: { oidcError: null, state: null },
         queryParamsHandling: 'merge',
         replaceUrl: true,
       });
-    }
+    });
     void this.startSso();
     void this.auth
       .listUsersPublic()

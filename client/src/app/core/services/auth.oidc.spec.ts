@@ -8,6 +8,7 @@ import { DeviceService } from './device.service';
 import { lastProvider, noteOidcFailure, savePending, takePending, type OidcInfo } from './oidc';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const info = (over: Partial<OidcInfo> = {}): OidcInfo => ({
   providers: [{ id: 3, name: 'Authentik' }],
   autoLaunch: null,
@@ -20,6 +21,7 @@ const loginBody = { user: { id: 5, username: 'ada', permissions: [], isAdmin: fa
 describe('AuthService OpenID Connect', () => {
   let auth: AuthService;
   let http: HttpTestingController;
+  const next = (url: string) => vi.waitFor(() => http.expectOne(url));
   let assign: ReturnType<typeof vi.fn>;
   let replace: ReturnType<typeof vi.fn>;
   let tv: ReturnType<typeof signal<boolean>>;
@@ -92,16 +94,24 @@ describe('AuthService OpenID Connect', () => {
   describe('begin', () => {
     it('stores the verifier under the state, then leaves for the provider', async () => {
       void auth.oidcBegin(3);
-      await settle();
-      const req = http.expectOne('/api/auth/oidc/3/start');
+      const req = await next('/api/auth/oidc/3/start');
       expect(req.request.body.returnTo).toBe('web');
       expect(req.request.body.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
       req.flush({ authorizeUrl: 'https://idp/authorize?x=1', state: 'st1' });
-      await settle();
+      await vi.waitFor(() => expect(replace).toHaveBeenCalled());
       const stored = JSON.parse(sessionStorage.getItem('fliks.oidc.st1')!);
       expect(stored).toMatchObject({ providerId: 3, link: false, silent: false });
       expect(stored.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(replace).toHaveBeenCalledWith('https://idp/authorize?x=1');
+    });
+
+    it('ignores a second start while one is in flight', async () => {
+      void auth.oidcBegin(3);
+      void auth.oidcBegin(3);
+      expect(auth.oidcBusy()).toBe(true);
+      (await next('/api/auth/oidc/3/start')).flush({ authorizeUrl: 'https://idp/a', state: 's9' });
+      await vi.waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+      http.expectNone('/api/auth/oidc/3/start');
     });
 
     it('asks for prompt=none on a silent re-run and a link on request', async () => {
@@ -122,8 +132,7 @@ describe('AuthService OpenID Connect', () => {
     it('exchanges with the stored verifier, then starts the session', async () => {
       pending();
       const done = auth.oidcReturned({ code: 'c', state: 'st' });
-      await settle();
-      const req = http.expectOne('/api/auth/oidc/exchange');
+      const req = await next('/api/auth/oidc/exchange');
       expect(req.request.body).toEqual({ state: 'st', code: 'c', verifier: 'ver' });
       req.flush(loginBody);
       expect(await done).toMatchObject({ ok: true });
@@ -136,8 +145,7 @@ describe('AuthService OpenID Connect', () => {
     it('turns a refusal into its error kind', async () => {
       pending();
       const done = auth.oidcReturned({ code: 'c', state: 'st' });
-      await settle();
-      http.expectOne('/api/auth/oidc/exchange').flush({ error: 'no_account' }, { status: 403, statusText: 'Forbidden' });
+      (await next('/api/auth/oidc/exchange')).flush({ error: 'no_account' }, { status: 403, statusText: 'Forbidden' });
       expect(await done).toMatchObject({ ok: false, kind: 'no_account' });
       expect(auth.user()).toBeNull();
     });
@@ -145,10 +153,8 @@ describe('AuthService OpenID Connect', () => {
     it('refreshes the profile after a link instead of signing in', async () => {
       pending({ link: true });
       const done = auth.oidcReturned({ code: 'c', state: 'st' });
-      await settle();
-      http.expectOne('/api/auth/oidc/exchange').flush(null, { status: 204, statusText: 'No Content' });
-      await settle();
-      http.expectOne('/api/auth/me').flush({ ...loginBody.user });
+      (await next('/api/auth/oidc/exchange')).flush(null, { status: 204, statusText: 'No Content' });
+      (await next('/api/auth/me')).flush({ ...loginBody.user });
       expect(await done).toMatchObject({ ok: true });
       expect(lastProvider('', 5)).toBeNull();
     });
@@ -178,8 +184,7 @@ describe('AuthService OpenID Connect', () => {
       await loadInfo(info());
       pending();
       const done = auth.oidcReturned({ code: 'c', state: 'st' });
-      await settle();
-      http.expectOne('/api/auth/oidc/exchange').flush(loginBody);
+      (await next('/api/auth/oidc/exchange')).flush(loginBody);
       await done;
       expect(lastProvider('', 5)).toBe(3);
       expect(lastProvider('', 6)).toBeNull();
@@ -238,19 +243,16 @@ describe('AuthService OpenID Connect', () => {
       await loadInfo(info());
       pending();
       const done = auth.oidcReturned({ code: 'c', state: 'st' });
-      await settle();
-      http.expectOne('/api/auth/oidc/exchange').flush(loginBody);
+      (await next('/api/auth/oidc/exchange')).flush(loginBody);
       await done;
     }
 
     it('re-runs the last provider silently after "Refresh token expired"', async () => {
       await signedInViaProvider();
       const refreshed = auth.refreshAccessToken();
-      await settle();
-      http.expectOne('/api/auth/refresh').flush({ message: 'Refresh token expired' }, expired);
+      (await next('/api/auth/refresh')).flush({ message: 'Refresh token expired' }, expired);
       expect(await refreshed).toBe(false);
-      await settle();
-      expect(http.expectOne('/api/auth/oidc/3/start').request.body.prompt).toBe('none');
+      expect((await next('/api/auth/oidc/3/start')).request.body.prompt).toBe('none');
     });
 
     it('skips the silent run on a host that is not the public origin, and says so', async () => {
@@ -258,8 +260,7 @@ describe('AuthService OpenID Connect', () => {
       await loadInfo(info({ origin: 'https://public.test' }));
       expect(auth.ssoOtherOrigin()).toBe(true);
       const refreshed = auth.refreshAccessToken();
-      await settle();
-      http.expectOne('/api/auth/refresh').flush({ message: 'Refresh token expired' }, expired);
+      (await next('/api/auth/refresh')).flush({ message: 'Refresh token expired' }, expired);
       await refreshed;
       await settle();
       http.expectNone('/api/auth/oidc/3/start');
@@ -268,8 +269,7 @@ describe('AuthService OpenID Connect', () => {
     it('does not re-run after another kind of refusal, or right after a failure', async () => {
       await signedInViaProvider();
       const refreshed = auth.refreshAccessToken();
-      await settle();
-      http.expectOne('/api/auth/refresh').flush({ message: 'Invalid refresh token' }, expired);
+      (await next('/api/auth/refresh')).flush({ message: 'Invalid refresh token' }, expired);
       await refreshed;
       await settle();
       http.expectNone('/api/auth/oidc/3/start');
@@ -279,12 +279,10 @@ describe('AuthService OpenID Connect', () => {
   it('forgets the provider after a password login', async () => {
     pending();
     const done = auth.oidcReturned({ code: 'c', state: 'st' });
-    await settle();
-    http.expectOne('/api/auth/oidc/exchange').flush(loginBody);
+    (await next('/api/auth/oidc/exchange')).flush(loginBody);
     await done;
     const login = auth.login('ada', 'pw');
-    await settle();
-    http.expectOne('/api/auth/login').flush(loginBody);
+    (await next('/api/auth/login')).flush(loginBody);
     await login;
     expect(lastProvider('', 5)).toBeNull();
   });

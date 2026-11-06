@@ -21,16 +21,17 @@ export const NO_OIDC: OidcInfo = { providers: [], autoLaunch: null, passwordLogi
 /** What the callback hands back: the IdP's `code` and our `state`, or an error kind. */
 export type OidcReturn = { code: string; state: string } | { error: string };
 
-/** How one shell sends the user to the identity provider and gets `code` and `state` back. */
+/** How one shell sends the user to the identity provider and gets the callback back. */
 export interface OidcPlatform {
   /** The `returnTo` the server accepts for this shell. */
   returnTo: string;
-  /** Web leaves the page and resolves never; shells with an auth sheet resolve with the result. */
-  open(authorizeUrl: string): Promise<OidcReturn | null>;
+  /** Web leaves the page and resolves never; a shell resolves with the callback query string (`code`
+   *  and `state`, or `error`), or null when the user gave up. */
+  open(authorizeUrl: string): Promise<string | null>;
 }
 
-/** The seam for the phone and desktop PRs: return their platform here (a Capacitor auth plugin,
- *  the desktop loopback bridge) once their bridge is present. Null hides every SSO button. */
+/** The seam for the phone and desktop PRs: return their platform here once their bridge is present.
+ *  Null hides every SSO button. */
 export function oidcPlatform(): OidcPlatform | null {
   if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE || window.fliksDesktop) return null;
   // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
@@ -40,7 +41,8 @@ export function oidcPlatform(): OidcPlatform | null {
     open: (authorizeUrl) => {
       // replace, so the browser's back button from the provider page does not re-run an automatic start.
       location.replace(authorizeUrl);
-      return new Promise(() => undefined);
+      // Resolves only when the browser restores this page from its back-forward cache.
+      return new Promise((resolve) => addEventListener('pageshow', (e) => e.persisted && resolve(null), { once: true }));
     },
   };
 }
@@ -58,10 +60,7 @@ export async function newPkce(): Promise<{ verifier: string; challenge: string }
 
 /** A refused or failed sign-in; `kind` is a server error kind (`expired`, `idp`, `not_allowed`...). */
 export class OidcError extends Error {
-  constructor(
-    readonly kind: string,
-    readonly pending: PendingOidc | null = null,
-  ) {
+  constructor(readonly kind: string) {
     super(kind);
   }
 }

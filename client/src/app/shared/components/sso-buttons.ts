@@ -11,6 +11,7 @@ import { AuthService } from '../../core/services/auth.service';
 export class SsoButtonsComponent {
   private readonly auth = inject(AuthService);
   readonly providers = this.auth.ssoProviders;
+  readonly busy = this.auth.oidcBusy;
 
   /** A failed start (throttled, provider gone) is already toasted by the interceptor. */
   async signIn(id: number): Promise<void> {
