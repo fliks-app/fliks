@@ -197,8 +197,8 @@ describe('AuthService OpenID Connect', () => {
     it('starts in place when already on the public origin', async () => {
       await loadInfo(info({ origin: 'https://fliks.test' }));
       void auth.oidcSignIn(3);
-      await settle();
-      http.expectOne('/api/auth/oidc/3/start').flush({ authorizeUrl: 'https://idp/a', state: 's3' });
+      const req = await vi.waitFor(() => http.expectOne('/api/auth/oidc/3/start'));
+      req.flush({ authorizeUrl: 'https://idp/a', state: 's3' });
     });
   });
 
