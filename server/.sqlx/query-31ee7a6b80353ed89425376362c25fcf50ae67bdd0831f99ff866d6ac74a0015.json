@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO oidc_providers (name, issuer, \"clientId\", \"clientSecret\", \"caPem\", scope, prompt,\n               \"usernameClaim\", \"groupsClaim\", \"allowedGroups\", \"adminGroups\", \"autoRegister\", \"matchByEmail\",\n               \"endSessionAtProvider\", \"accountUrl\", enabled, position)\n           VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'openid profile email'), $7,\n               COALESCE($8, 'preferred_username'), $9, $10, $11, $12, $13, $14, $15, $16, $17)\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Text",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "31ee7a6b80353ed89425376362c25fcf50ae67bdd0831f99ff866d6ac74a0015"
+}

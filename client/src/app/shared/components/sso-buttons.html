@@ -1,0 +1,5 @@
+@for (p of providers(); track p.id) {
+  <button type="button" class="btn btn-outline w-full" data-testid="sso-button" [disabled]="busy()" (click)="signIn(p.id)">
+    {{ 'login.sso_sign_in' | translate: { name: p.name } }}
+  </button>
+}

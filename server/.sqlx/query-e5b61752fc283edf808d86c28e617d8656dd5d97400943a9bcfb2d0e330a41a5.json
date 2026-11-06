@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.\"userId\" AS user_id, i.\"providerId\" AS provider_id, p.name\n           FROM user_identities i JOIN oidc_providers p ON p.id = i.\"providerId\"\n           WHERE i.\"userId\" = ANY($1) ORDER BY p.\"position\", p.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "userId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "providerId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_providers",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e5b61752fc283edf808d86c28e617d8656dd5d97400943a9bcfb2d0e330a41a5"
+}

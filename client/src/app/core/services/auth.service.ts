@@ -15,6 +15,25 @@ import { IS_STANDALONE_BUNDLE, restartApp } from '../utils/standalone-bundle';
 import { holdsPermission } from '../permissions';
 import { grantSatisfies, parsePluginGrant } from '../utils/plugin-grant';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { TvService } from './tv.service';
+import {
+  NO_OIDC,
+  OidcError,
+  oidcPlatform,
+  newPkce,
+  noteOidcFailure,
+  noteOidcLaunch,
+  clearOidcLaunch,
+  recentOidcFailure,
+  lastProvider,
+  rememberProvider,
+  savePending,
+  takePending,
+  OIDC_TTL_MS,
+  type OidcInfo,
+  type OidcReturn,
+  type PendingOidc,
+} from './oidc';
 
 export interface User {
   id: number;
@@ -133,6 +152,7 @@ export class AuthService {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
   private readonly sessions = inject(SessionStoreService);
+  private readonly tv = inject(TvService);
 
   /** Web authenticates with one origin-wide cookie, read by the backend BEFORE
    *  the Bearer header: only the active session is signed in at a time. */
@@ -154,6 +174,21 @@ export class AuthService {
   private _streamTokens = new Map<number, { token: string; expiresAt: number }>();
   private _streamTokensInFlight = new Map<number, Promise<string | null>>();
   private readonly _sessionEpoch = signal(0);
+  private readonly _oidc = signal<OidcInfo>(NO_OIDC);
+  private readonly _oidcBusy = signal(false);
+  /** A sign-in is in flight: the SSO buttons wait, so two starts cannot overlap. */
+  readonly oidcBusy = this._oidcBusy.asReadonly();
+
+  /** Providers whose button this shell can complete: none on a TV or a shell without an auth bridge. */
+  readonly ssoProviders = computed(() =>
+    oidcPlatform() && !this.tv.isTv() ? this._oidc().providers : [],
+  );
+  readonly passwordLogin = computed(() => this._oidc().passwordLogin);
+  /** The page was reached through another host name than `public_url`: a link started here could not come back to it. */
+  readonly ssoOtherOrigin = computed(() => {
+    const origin = this._oidc().origin;
+    return this.cookieAuth && !!origin && origin !== location.origin;
+  });
 
   constructor() {
     // Another tab switched account, so the cookie under this one changed too:
@@ -273,6 +308,13 @@ export class AuthService {
     const res = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
+    await this.finishLogin(res);
+    rememberProvider(this.serverConfig.serverUrl(), res.user.id, null);
+    return res;
+  }
+
+  /** What every successful login does with its `LoginBody`. */
+  private async finishLogin(res: LoginResponse): Promise<void> {
     const user = this.adoptLiveUser(res.user);
     await this.startSession(user, {
       accessToken: res.accessToken ?? null,
@@ -286,7 +328,156 @@ export class AuthService {
         username: res.user.username,
       });
     }
-    return res;
+  }
+
+  // ── OpenID Connect ──
+
+  /** The providers and login policy of the server; an older server (404) has none. */
+  async oidcInfo(): Promise<OidcInfo> {
+    try {
+      const info = await firstValueFrom(
+        this.http.get<OidcInfo>('/api/auth/oidc', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
+      );
+      this._oidc.set(info);
+      return info;
+    } catch {
+      this._oidc.set(NO_OIDC);
+      return NO_OIDC;
+    }
+  }
+
+  /** Sends the browser to the provider. When the page was reached through another host name than
+   *  `public_url`, it moves there first: the callback returns to that origin, where the verifier must live. */
+  async oidcSignIn(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
+    const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
+    if (this.cookieAuth && origin && origin !== location.origin && !opts.link) {
+      location.assign(`${origin}/login?sso=${providerId}`);
+      return;
+    }
+    await this.oidcBegin(providerId, opts);
+  }
+
+  async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
+    if (this._oidcBusy()) return;
+    this._oidcBusy.set(true);
+    try {
+      await this.oidcStart(providerId, opts);
+    } finally {
+      this._oidcBusy.set(false);
+    }
+  }
+
+  private async oidcStart(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number }): Promise<void> {
+    const platform = oidcPlatform();
+    if (!platform) throw new OidcError('unavailable');
+    const { verifier, challenge } = await newPkce();
+    const { authorizeUrl, state } = await firstValueFrom(
+      this.http.post<{ authorizeUrl: string; state: string }>(
+        `/api/auth/oidc/${providerId}/start`,
+        {
+          challenge,
+          returnTo: platform.returnTo,
+          ...(opts.link ? { link: true } : {}),
+          ...(opts.silent ? { prompt: 'none' } : {}),
+          ...(opts.silent && opts.expectUserId !== undefined ? { expectUserId: opts.expectUserId } : {}),
+        },
+        { context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent) },
+      ),
+    );
+    savePending({
+      serverUrl: this.serverConfig.serverUrl(),
+      providerId,
+      state,
+      verifier,
+      link: !!opts.link,
+      silent: !!opts.silent,
+      expiresAt: Date.now() + OIDC_TTL_MS,
+    });
+    noteOidcLaunch();
+    const query = await platform.open(authorizeUrl);
+    if (query) await this.router.navigateByUrl(`/oidc/complete?${query}`);
+    else noteOidcFailure();
+  }
+
+  /** The provider's answer, from the callback fragment or a shell's auth sheet: signs in (or links)
+   *  when this client started `state`, refuses it otherwise. */
+  async oidcReturned(
+    back: OidcReturn,
+    state?: string,
+  ): Promise<{ ok: true; pending: PendingOidc } | { ok: false; kind: string; pending: PendingOidc | null }> {
+    clearOidcLaunch();
+    const key = 'error' in back ? state : back.state;
+    const pending = key ? takePending(key) : null;
+    if ('error' in back) {
+      noteOidcFailure();
+      return { ok: false, kind: back.error, pending };
+    }
+    if (!pending || pending.serverUrl !== this.serverConfig.serverUrl()) {
+      noteOidcFailure();
+      return { ok: false, kind: 'expired', pending: null };
+    }
+    try {
+      await this.oidcComplete(back.code, pending);
+      return { ok: true, pending };
+    } catch (err) {
+      noteOidcFailure();
+      const kind = (err as { error?: { error?: unknown } })?.error?.error;
+      return { ok: false, kind: typeof kind === 'string' ? kind : 'idp', pending };
+    }
+  }
+
+  private async oidcComplete(code: string, pending: PendingOidc): Promise<void> {
+    const body = { state: pending.state, code, verifier: pending.verifier };
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    if (pending.link) {
+      await firstValueFrom(this.http.post<void>('/api/auth/oidc/exchange', body, { context }));
+      await this.refreshUser();
+      return;
+    }
+    await this.serverCache.clearAll();
+    const res = await firstValueFrom(this.http.post<LoginResponse>('/api/auth/oidc/exchange', body, { context }));
+    await this.finishLogin(res);
+    rememberProvider(this.serverConfig.serverUrl(), res.user.id, pending.providerId);
+  }
+
+  /** Starts the configured provider at once (after `oidcInfo()`); false when something says to show the login page instead. */
+  oidcAutoLaunch(suppressed: boolean): boolean {
+    if (suppressed || this.tv.isTv() || !oidcPlatform() || recentOidcFailure()) return false;
+    const info = this._oidc();
+    const id = info.autoLaunch;
+    if (id === null || !info.providers.some((p) => p.id === id)) return false;
+    this.oidcSignIn(id).catch(() => noteOidcFailure());
+    return true;
+  }
+
+  /** The provider to re-run silently after its 30-day session cap ended this one. */
+  private async silentRerunProvider(err: unknown): Promise<{ providerId: number; userId: number } | null> {
+    const e = err instanceof HttpErrorResponse ? err : null;
+    const message = (e?.error as { message?: unknown } | null)?.message;
+    if (e?.status !== 401 || message !== 'Refresh token expired') return null;
+    if (this.tv.isTv() || !oidcPlatform() || recentOidcFailure()) return null;
+    const userId = this.sessions.active()?.user.id;
+    if (userId === undefined) return null;
+    // The verifier lives in the origin that started the flow, which must be the one the callback returns to.
+    const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
+    if (this.cookieAuth && origin && origin !== location.origin) return null;
+    const providerId = lastProvider(this.serverConfig.serverUrl(), userId);
+    return providerId === null ? null : { providerId, userId };
+  }
+
+  /** The provider's logout page for a session that came from one with end-session enabled. */
+  private async oidcEndSessionUrl(): Promise<string | null> {
+    if (!this.cookieAuth) return null;
+    try {
+      const res = await firstValueFrom(
+        this.http.post<{ url?: string } | null>('/api/auth/oidc/end-session', {}, {
+          context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+        }),
+      );
+      return res?.url ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Pre-login user picker — see PublicUserSummary. */
@@ -578,7 +769,9 @@ export class AuthService {
         }
         return true;
       }
-      await this.dropActiveSession('refresh refused', err);
+      const rerun = await this.silentRerunProvider(err);
+      await this.dropActiveSession('refresh refused', err, false);
+      if (rerun) this.oidcBegin(rerun.providerId, { silent: true, expectUserId: rerun.userId }).catch(() => noteOidcFailure());
       return false;
     }
   }
@@ -715,13 +908,14 @@ export class AuthService {
       },
       error: (err: unknown) => {
         const status = (err as { status?: number })?.status ?? 0;
-        if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err);
+        if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err, false);
       },
     });
   }
 
   async logout(): Promise<void> {
     const refresh = this._refreshToken;
+    const endSessionUrl = await this.oidcEndSessionUrl();
     try {
       await firstValueFrom(
         this.http.post('/api/auth/logout', {
@@ -732,7 +926,10 @@ export class AuthService {
         }),
       );
     } finally {
-      await this.dropActiveSession('user logout');
+      const userId = this.sessions.active()?.user.id;
+      if (userId !== undefined) rememberProvider(this.serverConfig.serverUrl(), userId, null);
+      await this.dropActiveSession('user logout', undefined, false);
+      if (endSessionUrl) location.assign(endSessionUrl);
     }
   }
 
@@ -764,13 +961,16 @@ export class AuthService {
 
   /** Forget the signed-in session locally and send the user back to the picker.
    *  Used by logout and by a terminal credential rejection. */
-  private async dropActiveSession(reason: string, err?: unknown): Promise<void> {
+  private async dropActiveSession(reason: string, err?: unknown, autoLaunch = true): Promise<void> {
     noteLogout(reason, err);
     const active = this.sessions.active();
     if (active) await this.sessions.remove(active.serverUrl, active.user.id);
     this.clearInMemorySession();
     await this.serverCache.clearAll();
-    void this.router.navigate(['/select-user'], { replaceUrl: true });
+    void this.router.navigate(['/select-user'], {
+      replaceUrl: true,
+      queryParams: autoLaunch ? undefined : { autoLaunch: 0 },
+    });
   }
 
   private adoptSessionTokens(

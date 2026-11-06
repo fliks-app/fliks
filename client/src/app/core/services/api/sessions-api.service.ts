@@ -6,6 +6,8 @@ export interface AuthSession {
   id: number;
   /** How it signed in; null for a session that predates the record. */
   method: string | null;
+  /** The provider of an `oidc` session. */
+  providerName?: string | null;
   userAgent: string | null;
   createdAt: string;
   lastSeenAt: string;

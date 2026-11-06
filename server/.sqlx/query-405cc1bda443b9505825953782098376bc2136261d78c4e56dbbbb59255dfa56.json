@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"userId\" AS user_id FROM sessions\n           WHERE \"providerId\" = $1 AND \"revokedAt\" IS NULL\n             AND (sid = $2 OR ((sid IS NULL OR $2::text IS NULL) AND subject = $3))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "userId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "405cc1bda443b9505825953782098376bc2136261d78c4e56dbbbb59255dfa56"
+}

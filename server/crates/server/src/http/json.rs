@@ -33,6 +33,15 @@ pub mod iso_ms {
     }
 }
 
+/// `None` = key absent, `Some(None)` = explicit `null`.
+pub type Patch<T> = Option<Option<T>>;
+
+pub fn present<'de, D: serde::Deserializer<'de>, T: serde::Deserialize<'de>>(
+    d: D,
+) -> Result<Patch<T>, D::Error> {
+    <Option<T> as serde::Deserialize>::deserialize(d).map(Some)
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{DateTime, TimeZone, Utc};

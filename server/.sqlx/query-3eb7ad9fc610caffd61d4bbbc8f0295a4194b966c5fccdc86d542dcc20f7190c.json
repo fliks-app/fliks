@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2\n           RETURNING \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id,\n                     \"expectUserId\" AS expect_user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "providerId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "return_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "returnTo"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "link_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "linkUserId"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expect_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "expectUserId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "3eb7ad9fc610caffd61d4bbbc8f0295a4194b966c5fccdc86d542dcc20f7190c"
+}

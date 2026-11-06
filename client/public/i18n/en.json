@@ -292,8 +292,15 @@
       "revoked": "Device signed out.",
       "method_password": "Password",
       "method_pairing": "Quick Connect",
+      "method_oidc": "Single sign-on",
       "last_seen": "Last active {{date}}"
-    }
+    },
+    "sso_title": "Single sign-on",
+    "sso_manage": "Manage your account",
+    "sso_unlink": "Unlink",
+    "sso_link": "Link {{name}}",
+    "sso_last_method": "This is your only way to sign in. Set a password to be able to unlink it.",
+    "sso_link_origin": "Linking works from the address set as the public URL of the server."
   },
   "account_settings": {
     "title": "Account settings",
@@ -789,7 +796,10 @@
     "password": "Password",
     "submit": "Log in",
     "error": "Login error",
-    "back_to_picker": "Choose another user"
+    "back_to_picker": "Choose another user",
+    "sso_sign_in": "Sign in with {{name}}",
+    "admin_sign_in": "Administrator sign-in",
+    "or": "or"
   },
   "create_admin": {
     "title": "Create the administrator",
@@ -2074,7 +2084,8 @@
       "subtitles_activity": "Subtitle activity",
       "cleanup": "Cleanup",
       "metadata": "Metadata",
-      "email": "Outgoing mail"
+      "email": "Outgoing mail",
+      "sso": "Single sign-on"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -2655,7 +2666,8 @@
       "sign_out_everywhere_hint": "Ends every session of this user on all devices. They have to sign in again.",
       "sign_out_everywhere_title": "Sign out everywhere?",
       "sign_out_everywhere_message": "{{name}} will be signed out of every device at once.",
-      "signed_out": "{{name}} was signed out of every device."
+      "signed_out": "{{name}} was signed out of every device.",
+      "password_optional_hint": "Optional: without a password the account signs in with SSO."
     },
     "user_detail": {
       "not_found": "User not found.",
@@ -2692,7 +2704,11 @@
       "col_title": "Title",
       "col_type": "Type",
       "col_status": "Status",
-      "col_date": "Date"
+      "col_date": "Date",
+      "no_password_sso": "No password, signs in with SSO.",
+      "managed_by": "Role, administrator status and libraries are managed by {{name}}.",
+      "sso_identities": "Linked sign-in providers",
+      "sso_unlink": "Unlink"
     },
     "roles": {
       "title": "Roles",
@@ -3223,6 +3239,88 @@
       "test_hint": "Mails a short message to the address below.",
       "test_to": "Send to",
       "test_send": "Send test"
+    },
+    "sso": {
+      "title": "Single sign-on",
+      "subtitle": "Let users sign in with an OpenID Connect provider.",
+      "providers": "Providers",
+      "add": "Add a provider",
+      "empty": "No provider yet. Without one, nobody sees an SSO button.",
+      "drag": "Drag to reorder",
+      "linked_users": "{{count}} linked",
+      "load_error": "Could not load the single sign-on settings.",
+      "confirm_delete": "Delete the provider \"{{name}}\"? Its linked accounts lose this sign-in method and its sessions end.",
+      "saved": "Saved",
+      "policy": "Sign-in policy",
+      "password_login": "Password login",
+      "password_login_everyone": "Everyone",
+      "password_login_admins": "Administrators only",
+      "password_login_hint": "Administrators always keep password login. Other users then sign in with SSO or Quick Connect; older apps cannot use a password anymore.",
+      "auto_launch": "Auto-launch",
+      "auto_launch_none": "None",
+      "auto_launch_hint": "The login page opens this provider at once and folds the administrator password form. An address ending in ?autoLaunch=0 skips it.",
+      "editor_create": "Add a provider",
+      "editor_edit": "Edit the provider",
+      "field_name": "Name",
+      "field_name_hint": "Shown on the button: \"Sign in with <name>\".",
+      "field_issuer": "Issuer URL",
+      "test": "Test",
+      "test_ok": "Provider reachable",
+      "test_algs": "Signing algorithms",
+      "test_pkce": "PKCE (S256)",
+      "test_end_session": "Logout at the provider",
+      "test_backchannel": "Back-channel logout",
+      "test_no_pkce": "A provider that does not enforce PKCE cannot be enabled.",
+      "test_failed": "The test could not run.",
+      "field_client_id": "Client ID",
+      "field_client_secret": "Client secret",
+      "secret_keep_hint": "A secret is stored. A blank field keeps it.",
+      "secret_remove": "Remove secret",
+      "secret_keep": "Keep secret",
+      "secret_public_hint": "A blank field is a public client.",
+      "field_ca": "CA certificate",
+      "field_ca_hint": "Optional, PEM. For a provider behind a private certificate authority.",
+      "field_scope": "Scope",
+      "field_prompt": "Prompt",
+      "prompt": {
+        "default": "Provider default",
+        "none": "none",
+        "login": "login",
+        "consent": "consent",
+        "select_account": "select_account"
+      },
+      "field_username_claim": "Username claim",
+      "field_groups_claim": "Groups claim",
+      "field_groups_claim_hint": "Dotted path, for example groups or realm_access.roles. Groups below only apply when it is set.",
+      "field_allowed_groups": "Allowed groups",
+      "field_allowed_groups_hint": "One per line. Empty allows everyone; otherwise only members can sign in.",
+      "field_admin_groups": "Administrator groups",
+      "field_admin_groups_hint": "One per line. Members become administrators, re-applied at every sign-in.",
+      "role_mappings": "Group to role",
+      "role_mappings_hint": "The first matching row wins and its role is re-applied at every sign-in. Without a match the default role applies.",
+      "mapping_group": "Group",
+      "mapping_role": "Role",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "add_mapping": "Add a mapping",
+      "auto_register": "Create accounts automatically",
+      "auto_register_hint": "A first sign-in without an account creates one with the default role.",
+      "match_by_email": "Match existing accounts by verified email",
+      "match_by_email_hint": "Adopts only accounts an administrator created without a password that never signed in, when the provider marks the email as verified. Other accounts link from their account page.",
+      "end_session": "Sign out at the provider too",
+      "end_session_hint": "Web only. Off by default: signing out of Fliks leaves the provider session alone.",
+      "field_account_url": "Account management URL",
+      "field_account_url_hint": "Optional. Shown as \"Manage your account\" on the account page.",
+      "enabled": "Enabled",
+      "uris": "Addresses to register at the provider",
+      "uris_hint": "Built from the public URL of the server.",
+      "uris_after_save": "Available once the provider is saved.",
+      "uris_need_public_url": "The public URL is set in General settings.",
+      "uri_redirect": "Redirect URI",
+      "uri_backchannel": "Back-channel logout URI",
+      "uri_logout": "Post-logout redirect URI",
+      "copied": "Copied",
+      "insecure_context": "Single sign-on needs the server to be reached over https. Over plain http the sign-in buttons stay hidden."
     }
   },
   "roles": {
@@ -4449,5 +4547,19 @@
     "load_error": "Unable to load the wanted list.",
     "empty": "Nothing is wanted.",
     "more": "Show more"
+  },
+  "oidc": {
+    "completing": "Signing you in...",
+    "error": {
+      "expired": "The sign-in expired or did not start on this device.",
+      "idp": "The identity provider refused the sign-in.",
+      "not_allowed": "Your account is not allowed to sign in here.",
+      "no_account": "No account matches this sign-in. If you already have an account, sign in with it and link this provider from your account page; otherwise ask your administrator.",
+      "disabled": "This account is disabled.",
+      "already_linked": "This identity is already linked to another account.",
+      "pkce": "This provider is not set up for a safe sign-in, so it cannot be used.",
+      "unavailable": "Single sign-on is not available on this device."
+    },
+    "error_last_method": "This is your only way to sign in. Set a password before unlinking it."
   }
 }

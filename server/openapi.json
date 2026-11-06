@@ -77,6 +77,94 @@
         }
       }
     },
+    "/api/auth/oidc": {
+      "get": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "info",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/auth/oidc/end-session": {
+      "post": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "end_session",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/auth/oidc/exchange": {
+      "post": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "exchange",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/auth/oidc/identities": {
+      "get": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "identities",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/auth/oidc/identities/{provider_id}": {
+      "delete": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "unlink",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/auth/oidc/{id}/backchannel-logout": {
+      "post": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "backchannel_logout",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/auth/oidc/{id}/callback": {
+      "get": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "callback",
+        "responses": {
+          "302": {}
+        }
+      }
+    },
+    "/api/auth/oidc/{id}/start": {
+      "post": {
+        "tags": [
+          "auth::oidc::routes"
+        ],
+        "operationId": "start",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/auth/pairing/approve": {
       "post": {
         "tags": [
@@ -2655,6 +2743,57 @@
         }
       }
     },
+    "/api/oidc-providers": {
+      "get": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/oidc-providers/test": {
+      "post": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "test",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/oidc-providers/{id}": {
+      "put": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/opds": {
       "get": {
         "tags": [
@@ -5200,6 +5339,17 @@
         "operationId": "remove",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/users/{id}/oidc/{provider_id}": {
+      "delete": {
+        "tags": [
+          "auth::oidc::providers"
+        ],
+        "operationId": "unlink_user",
+        "responses": {
+          "204": {}
         }
       }
     },

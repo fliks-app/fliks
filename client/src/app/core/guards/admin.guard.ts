@@ -18,3 +18,16 @@ export const adminGuard: CanActivateFn = () => {
     }),
   );
 };
+
+/** Server admins only: `settings.access` is grantable to a role, and these pages decide who can become admin. */
+export const isAdminGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  return auth.ensureAuthenticated().pipe(
+    map((ok) => {
+      if (!ok) return router.createUrlTree(['/login']);
+      return auth.user()?.isAdmin ? true : router.createUrlTree(['/']);
+    }),
+  );
+};

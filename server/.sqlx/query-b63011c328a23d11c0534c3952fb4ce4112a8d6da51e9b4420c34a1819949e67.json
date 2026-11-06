@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refresh_tokens SET \"revokedAt\" = COALESCE(\"revokedAt\", now())\n           WHERE \"sessionId\" IN (SELECT id FROM sessions WHERE \"providerId\" = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b63011c328a23d11c0534c3952fb4ce4112a8d6da51e9b4420c34a1819949e67"
+}

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sessions (\"userId\", method, \"userAgent\", \"createdAt\", \"lastSeenAt\",\n                                         \"providerId\", subject, sid, \"idToken\")\n                   VALUES ($1, 'oidc', $2, $3, $3, $4, $5, $6, $7) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Timestamptz",
+        "Int4",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "392f9fe96e8af3a08669a949e7f753fe2c02484d9a04f671de6f632d7559de88"
+}

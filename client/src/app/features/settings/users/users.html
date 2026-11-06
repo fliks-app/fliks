@@ -100,6 +100,9 @@
           (ngModelChange)="formPassword.set($event)"
           placeholder="••••••••"
         />
+        @if (hasProviders()) {
+          <span class="text-sm text-base-content/50">{{ 'settings.users.password_optional_hint' | translate }}</span>
+        }
       </label>
 
       <label class="form-control w-full">
@@ -155,7 +158,7 @@
       <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
         {{ 'settings.users.cancel' | translate }}
       </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving() || (!hasProviders() && !formPassword())">
         @if (saving()) {
           <span class="loading loading-spinner loading-sm"></span>
         }

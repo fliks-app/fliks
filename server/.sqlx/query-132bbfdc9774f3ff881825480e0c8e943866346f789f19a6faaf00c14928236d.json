@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.id, t.\"userId\" AS user_id, t.\"sessionId\" AS session_id, t.\"userAgent\" AS user_agent,\n                  t.\"revokedAt\" AS revoked_at, t.\"expiresAt\" AS expires_at,\n                  s.\"revokedAt\" IS NOT NULL AS \"session_revoked!\"\n           FROM refresh_tokens t JOIN sessions s ON s.id = t.\"sessionId\"\n           WHERE t.\"tokenHash\" = $1 ORDER BY t.id LIMIT 1 FOR UPDATE OF t",
+  "query": "SELECT t.id, t.\"userId\" AS user_id, t.\"sessionId\" AS session_id, t.\"userAgent\" AS user_agent,\n                  t.\"revokedAt\" AS revoked_at, t.\"expiresAt\" AS expires_at,\n                  s.\"revokedAt\" IS NOT NULL AS \"session_revoked!\", s.method, s.\"createdAt\" AS session_created_at\n           FROM refresh_tokens t JOIN sessions s ON s.id = t.\"sessionId\"\n           WHERE t.\"tokenHash\" = $1 ORDER BY t.id LIMIT 1 FOR UPDATE OF t",
   "describe": {
     "columns": [
       {
@@ -74,6 +74,28 @@
         "name": "session_revoked!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "method",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "method"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "session_created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "createdAt"
+          }
+        }
       }
     ],
     "parameters": {
@@ -88,8 +110,10 @@
       true,
       true,
       false,
-      null
+      null,
+      true,
+      false
     ]
   },
-  "hash": "6e321407bd09329672e8ec724c94ad683066823b9c44626535cca041fa956bd9"
+  "hash": "132bbfdc9774f3ff881825480e0c8e943866346f789f19a6faaf00c14928236d"
 }

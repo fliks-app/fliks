@@ -65,7 +65,11 @@ export class UsersSettingsComponent implements OnInit {
   readonly formEnabled = signal(true);
   readonly formLibraryIds = signal<Set<number>>(new Set());
 
+  /** A password is optional only when an enabled provider can sign the user in. */
+  readonly hasProviders = signal(false);
+
   ngOnInit() {
+    void this.auth.oidcInfo().then((info) => this.hasProviders.set(info.providers.length > 0));
     this.reloadAll();
   }
 
@@ -136,11 +140,11 @@ export class UsersSettingsComponent implements OnInit {
     try {
       const body: CreateUserBody = {
         username: this.formUsername().trim(),
-        password: this.formPassword(),
         roleId: this.canAssignRole ? (this.formRoleId() ?? undefined) : undefined,
         enabled: this.formEnabled(),
         libraryIds: [...this.formLibraryIds()],
       };
+      if (this.formPassword()) body.password = this.formPassword();
       if (this.formEmail().trim()) body.email = this.formEmail().trim();
       await this.api.create(body);
       this.closeEditor();

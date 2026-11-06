@@ -134,15 +134,20 @@ function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entrie
 const ALL_PERMISSIONS = ['users.manage', 'roles.manage', 'media.read'];
 
 describe('AdminShellComponent — sidebar characterisation', () => {
-  // An admin and a non-admin holding the same permissions see the same sidebar: entries gate on
-  // the permission their own pages need, never on isAdmin.
-  it.each([['admin', true], ['non-admin', false]] as const)(
-    'renders the unchanged 8-section, 24-link sidebar for a %s context',
-    (_label, isAdmin) => {
-      const fixture = createFixture({ isAdmin, permissions: ALL_PERMISSIONS });
-      expect(readSidebar(fixture)).toEqual(BASELINE_SIDEBAR);
-    },
-  );
+  // Entries gate on the permission their own pages need; the one exception is Single sign-on, admin only.
+  it('renders the unchanged 8-section sidebar for a non-admin holding every permission', () => {
+    const fixture = createFixture({ isAdmin: false, permissions: ALL_PERMISSIONS });
+    expect(readSidebar(fixture)).toEqual(BASELINE_SIDEBAR);
+  });
+
+  it('adds Single sign-on, and only that, for an admin', () => {
+    const expected = BASELINE_SIDEBAR.map((s) =>
+      s.label === 'admin.section_users'
+        ? { ...s, links: [...s.links, { label: 'settings.nav.sso', href: '/admin/settings/sso' }] }
+        : s,
+    );
+    expect(readSidebar(createFixture({ isAdmin: true, permissions: ALL_PERMISSIONS }))).toEqual(expected);
+  });
 
   it('hides the pages a viewer\'s permissions cannot open, and the section left empty', () => {
     const sections = readSidebar(createFixture({ permissions: [] }));

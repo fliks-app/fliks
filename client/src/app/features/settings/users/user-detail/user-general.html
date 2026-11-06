@@ -48,7 +48,9 @@
           placeholder="••••••••"
         />
         <div class="label">
-          <span class="label-text-alt text-base-content/50">{{ 'settings.users.password_hint' | translate }}</span>
+          <span class="label-text-alt text-base-content/50">
+            {{ (state.user()?.hasPassword === false ? 'settings.user_detail.no_password_sso' : 'settings.users.password_hint') | translate }}
+          </span>
         </div>
       </label>
 
@@ -57,7 +59,7 @@
         <select
     appTvSelect
           class="select select-bordered select-sm w-full"
-          [disabled]="!canAssignRole"
+          [disabled]="!canAssignRole || managedBy() !== null"
           [ngModel]="formRoleId()"
           (ngModelChange)="formRoleId.set($event)"
         >
@@ -83,6 +85,7 @@
         <input
           type="checkbox"
           class="toggle toggle-sm toggle-error"
+          [disabled]="managedBy() !== null"
           [ngModel]="formIsAdmin()"
           (ngModelChange)="formIsAdmin.set($event)"
         />
@@ -100,6 +103,26 @@
       </label>
 
     </div>
+
+    @if (managedBy() !== null) {
+      <p class="text-sm text-base-content/60" data-testid="user-managed-by">
+        {{ 'settings.user_detail.managed_by' | translate: { name: managedBy() } }}
+      </p>
+    }
+
+    @if (state.user()?.identities?.length) {
+      <div class="flex flex-col gap-2" data-testid="user-identities">
+        <span class="label-text font-semibold">{{ 'settings.user_detail.sso_identities' | translate }}</span>
+        @for (i of state.user()!.identities; track i.providerId) {
+          <div class="flex items-center gap-3">
+            <span class="flex-1 text-sm">{{ i.name }}</span>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="user-unlink" (click)="unlink(i.providerId)">
+              {{ 'settings.user_detail.sso_unlink' | translate }}
+            </button>
+          </div>
+        }
+      </div>
+    }
 
     <!-- Request quotas: requests per period and kind, counted while pending or approved. -->
     <div class="flex flex-col gap-2" data-testid="user-quotas">
@@ -144,6 +167,7 @@
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm"
+                [disabled]="managedBy() !== null"
                 [checked]="isLibrarySelected(lib.id)"
                 (change)="toggleLibrary(lib.id, $any($event.target).checked)"
               />

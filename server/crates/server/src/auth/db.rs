@@ -7,6 +7,8 @@ use sqlx::{PgConnection, PgPool};
 
 /// A rotated token is answered "already rotated" this long, then it counts as theft (`auth.md` rule 34).
 const REUSE_GRACE_MS: i64 = 30_000;
+/// An `oidc` session is refused a refresh this long after its sign-in, however often it rotated.
+pub const OIDC_SESSION_DAYS: i64 = 30;
 pub const PAIRING_TTL_SECS: i64 = 600;
 /// `accessToken` sentinel between approval and the issuing device's claim.
 const APPROVED: &str = "__approved__";
@@ -41,8 +43,19 @@ pub struct Issued {
 pub enum Origin {
     /// A new sign-in, recorded as a session of this `method`.
     New(&'static str),
+    /// A new sign-in at an OpenID Connect provider.
+    Oidc(OidcSession),
     /// The rotation of a token (id) of a session (id).
     Rotated { token: i32, session: i32 },
+}
+
+/// What a session keeps of its provider login: the logout matches on `subject` and `sid`, the
+/// RP-initiated logout sends `id_token`.
+pub struct OidcSession {
+    pub provider_id: i32,
+    pub subject: String,
+    pub sid: Option<String>,
+    pub id_token: Option<String>,
 }
 
 pub async fn issue(
@@ -65,6 +78,23 @@ pub async fn issue(
                 method,
                 ua,
                 now
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+            (id, None)
+        }
+        Origin::Oidc(o) => {
+            let id = sqlx::query_scalar!(
+                r#"INSERT INTO sessions ("userId", method, "userAgent", "createdAt", "lastSeenAt",
+                                         "providerId", subject, sid, "idToken")
+                   VALUES ($1, 'oidc', $2, $3, $3, $4, $5, $6, $7) RETURNING id"#,
+                user_id,
+                ua,
+                now,
+                o.provider_id,
+                o.subject,
+                o.sid,
+                o.id_token
             )
             .fetch_one(&mut *conn)
             .await?;
@@ -118,7 +148,7 @@ pub async fn refresh(
     let Some(t) = sqlx::query!(
         r#"SELECT t.id, t."userId" AS user_id, t."sessionId" AS session_id, t."userAgent" AS user_agent,
                   t."revokedAt" AS revoked_at, t."expiresAt" AS expires_at,
-                  s."revokedAt" IS NOT NULL AS "session_revoked!"
+                  s."revokedAt" IS NOT NULL AS "session_revoked!", s.method, s."createdAt" AS session_created_at
            FROM refresh_tokens t JOIN sessions s ON s.id = t."sessionId"
            WHERE t."tokenHash" = $1 ORDER BY t.id LIMIT 1 FOR UPDATE OF t"#,
         hash(raw)
@@ -192,6 +222,16 @@ pub async fn refresh(
             token = t.id,
             presented_user_agent = user_agent,
             "refresh refused: expired"
+        );
+        return Ok(Refreshed::Expired);
+    }
+    if t.method.as_deref() == Some("oidc")
+        && now - t.session_created_at > Duration::days(OIDC_SESSION_DAYS)
+    {
+        tracing::info!(
+            user = t.user_id,
+            session = t.session_id,
+            "refresh refused: oidc session past its absolute lifetime"
         );
         return Ok(Refreshed::Expired);
     }
@@ -319,6 +359,7 @@ pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sq
 pub struct SessionRow {
     pub id: i32,
     pub method: Option<String>,
+    pub provider_name: Option<String>,
     pub user_agent: Option<String>,
     pub created_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
@@ -332,9 +373,9 @@ pub async fn list_sessions(
 ) -> Result<Vec<SessionRow>, sqlx::Error> {
     sqlx::query_as!(
         SessionRow,
-        r#"SELECT s.id, s.method, s."userAgent" AS user_agent, s."createdAt" AS created_at,
-                  s."lastSeenAt" AS last_seen_at
-           FROM sessions s
+        r#"SELECT s.id, s.method, p.name AS "provider_name?", s."userAgent" AS user_agent,
+                  s."createdAt" AS created_at, s."lastSeenAt" AS last_seen_at
+           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s."providerId"
            WHERE s."userId" = $1 AND s."revokedAt" IS NULL
              AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t."sessionId" = s.id
                          AND t."revokedAt" IS NULL AND t."expiresAt" > $2)

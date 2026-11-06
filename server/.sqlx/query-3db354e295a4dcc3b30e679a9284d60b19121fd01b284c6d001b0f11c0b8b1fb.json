@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.id FROM users u WHERE lower(u.email) = lower($1) AND NOT u.\"isAdmin\"\n             AND u.\"passwordHash\" IS NULL AND u.\"lastLogin\" IS NULL\n             AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.\"userId\" = u.id)\n           ORDER BY u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3db354e295a4dcc3b30e679a9284d60b19121fd01b284c6d001b0f11c0b8b1fb"
+}

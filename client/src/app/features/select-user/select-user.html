@@ -46,6 +46,9 @@
     }
 
     <div class="flex flex-col items-center gap-2">
+      <div class="flex w-full max-w-xs flex-col gap-2" (click)="$event.stopPropagation()">
+        <app-sso-buttons />
+      </div>
       <div class="flex flex-wrap justify-center gap-2">
         <button
           type="button"
@@ -72,16 +75,28 @@
   @if (selectedUser(); as selected) {
     <div class="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-4" (click)="closeSheet()">
       <div data-tv-modal class="card bg-base-100 w-full max-w-sm shadow-xl" (click)="$event.stopPropagation()">
-        <div class="card-body gap-2">
+        <div #sheet class="card-body gap-2">
           <div class="text-center font-semibold mb-2">{{ selected.username }}</div>
-          <button #passwordBtn type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(selected)">
-            <svg lucideKeyRound class="h-5 w-5"></svg>
-            {{ 'select_user.use_password' | translate }}
-          </button>
-          <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(selected)">
-            <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
-            {{ 'select_user.use_quick_connect' | translate }}
-          </button>
+          @if (adminsOnly()) {
+            <app-sso-buttons />
+            <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(selected)">
+              <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
+              {{ 'select_user.use_quick_connect' | translate }}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="admin-sign-in" (click)="goToPasswordLogin(selected)">
+              {{ 'login.admin_sign_in' | translate }}
+            </button>
+          } @else {
+            <button type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(selected)">
+              <svg lucideKeyRound class="h-5 w-5"></svg>
+              {{ 'select_user.use_password' | translate }}
+            </button>
+            <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(selected)">
+              <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
+              {{ 'select_user.use_quick_connect' | translate }}
+            </button>
+            <app-sso-buttons />
+          }
           <button type="button" class="btn btn-ghost btn-sm" (click)="closeSheet()">
             {{ 'common.cancel' | translate }}
           </button>

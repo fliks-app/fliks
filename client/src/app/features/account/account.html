@@ -1,9 +1,55 @@
 <div class="flex flex-col gap-6">
   <h1 class="text-2xl font-bold">{{ 'account_settings.nav.password' | translate }}</h1>
+  @if (identities().length || linkable().length || linkBlocked()) {
+    <div class="card bg-base-100 border border-base-200" data-testid="account-sso">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-base">{{ 'account.sso_title' | translate }}</h2>
+        @for (i of identities(); track i.providerId) {
+          <div class="flex flex-wrap items-center gap-3" data-testid="account-identity">
+            <span class="flex flex-1 min-w-0 flex-col">
+              <span class="font-medium truncate">{{ i.name }}</span>
+              @if (i.email) {
+                <span class="text-sm text-base-content/50 truncate">{{ i.email }}</span>
+              }
+            </span>
+            @if (i.accountUrl) {
+              <a class="link link-hover text-sm" [href]="i.accountUrl" target="_blank" rel="noopener noreferrer">
+                {{ 'account.sso_manage' | translate }}
+              </a>
+            }
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              data-testid="account-unlink"
+              [disabled]="lastMethod()"
+              (click)="unlink(i.providerId)"
+            >
+              {{ 'account.sso_unlink' | translate }}
+            </button>
+          </div>
+        }
+        @if (lastMethod()) {
+          <p class="text-sm text-base-content/50">{{ 'account.sso_last_method' | translate }}</p>
+        }
+        @if (linkBlocked()) {
+          <p class="text-sm text-base-content/50" data-testid="account-link-origin">{{ 'account.sso_link_origin' | translate }}</p>
+        }
+        @for (p of linkable(); track p.id) {
+          <div>
+            <button type="button" class="btn btn-outline btn-sm" data-testid="account-link" [disabled]="linking() !== null" (click)="link(p.id)">
+              {{ 'account.sso_link' | translate: { name: p.name } }}
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+  }
+  @if (!passwordHidden()) {
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
       <h2 class="card-title text-base">{{ 'account.change_password' | translate }}</h2>
 
+      @if (hasPassword()) {
       <label class="form-control w-full sm:max-w-xs">
         <span class="label-text">{{ 'account.current_password' | translate }}</span>
         <input
@@ -15,6 +61,7 @@
           placeholder="••••••••"
         />
       </label>
+      }
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label class="form-control w-full">
@@ -62,6 +109,7 @@
       </div>
     </div>
   </div>
+  }
 
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
@@ -80,7 +128,9 @@
                 }
               </div>
               <p class="text-sm text-base-content/60">
-                @if (s.method) {
+                @if (s.providerName) {
+                  {{ s.providerName }} ·
+                } @else if (s.method) {
                   {{ 'account.sessions.method_' + s.method | translate }} ·
                 }
                 {{ 'account.sessions.last_seen' | translate: { date: (s.lastSeenAt | date: 'short') } }}

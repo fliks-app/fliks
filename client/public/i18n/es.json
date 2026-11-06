@@ -292,8 +292,15 @@
       "revoked": "Sesión del dispositivo cerrada.",
       "method_password": "Contraseña",
       "method_pairing": "Quick Connect",
+      "method_oidc": "Inicio de sesión único",
       "last_seen": "Última actividad: {{date}}"
-    }
+    },
+    "sso_title": "Inicio de sesión único",
+    "sso_manage": "Gestionar tu cuenta",
+    "sso_unlink": "Desvincular",
+    "sso_link": "Vincular {{name}}",
+    "sso_last_method": "Es tu única forma de iniciar sesión. Define una contraseña para poder desvincularla.",
+    "sso_link_origin": "La vinculación funciona desde la dirección definida como URL pública del servidor."
   },
   "account_settings": {
     "title": "Ajustes de la cuenta",
@@ -789,7 +796,10 @@
     "password": "Contraseña",
     "submit": "Iniciar sesión",
     "error": "Error de conexión",
-    "back_to_picker": "Elegir otro usuario"
+    "back_to_picker": "Elegir otro usuario",
+    "sso_sign_in": "Iniciar sesión con {{name}}",
+    "admin_sign_in": "Acceso de administrador",
+    "or": "o"
   },
   "create_admin": {
     "title": "Crear el administrador",
@@ -2074,7 +2084,8 @@
       "plugins": "Plugins",
       "subtitles_activity": "Actividad de subtítulos",
       "cleanup": "Limpieza",
-      "email": "Correo saliente"
+      "email": "Correo saliente",
+      "sso": "Inicio de sesión único"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -2655,7 +2666,8 @@
       "sign_out_everywhere_hint": "Termina todas las sesiones de este usuario en todos sus dispositivos. Deberá volver a iniciar sesión.",
       "sign_out_everywhere_title": "¿Cerrar sesión en todas partes?",
       "sign_out_everywhere_message": "{{name}} se desconectará de todos sus dispositivos al instante.",
-      "signed_out": "{{name}} se desconectó de todos sus dispositivos."
+      "signed_out": "{{name}} se desconectó de todos sus dispositivos.",
+      "password_optional_hint": "Opcional: sin contraseña, la cuenta inicia sesión con SSO."
     },
     "user_detail": {
       "not_found": "Usuario no encontrado.",
@@ -2692,7 +2704,11 @@
       "col_title": "Título",
       "col_type": "Tipo",
       "col_status": "Estado",
-      "col_date": "Fecha"
+      "col_date": "Fecha",
+      "no_password_sso": "Sin contraseña, inicia sesión con SSO.",
+      "managed_by": "El rol, el estado de administrador y las bibliotecas los gestiona {{name}}.",
+      "sso_identities": "Proveedores de inicio de sesión vinculados",
+      "sso_unlink": "Desvincular"
     },
     "roles": {
       "title": "Roles",
@@ -3223,6 +3239,88 @@
       "test_hint": "Envía un mensaje breve a la dirección de abajo.",
       "test_to": "Destinatario",
       "test_send": "Enviar prueba"
+    },
+    "sso": {
+      "title": "Inicio de sesión único",
+      "subtitle": "Permite que los usuarios inicien sesión con un proveedor OpenID Connect.",
+      "providers": "Proveedores",
+      "add": "Añadir un proveedor",
+      "empty": "Aún no hay proveedores. Sin ninguno, nadie ve un botón SSO.",
+      "drag": "Arrastrar para reordenar",
+      "linked_users": "{{count}} vinculado(s)",
+      "load_error": "No se pudieron cargar los ajustes de inicio de sesión único.",
+      "confirm_delete": "¿Eliminar el proveedor «{{name}}»? Las cuentas vinculadas pierden este método de inicio de sesión y sus sesiones terminan.",
+      "saved": "Guardado",
+      "policy": "Política de inicio de sesión",
+      "password_login": "Inicio de sesión con contraseña",
+      "password_login_everyone": "Todos",
+      "password_login_admins": "Solo administradores",
+      "password_login_hint": "Los administradores siempre conservan el inicio de sesión con contraseña. Los demás usuarios usan SSO o Quick Connect; las apps antiguas ya no pueden usar contraseña.",
+      "auto_launch": "Inicio automático",
+      "auto_launch_none": "Ninguno",
+      "auto_launch_hint": "La página de inicio de sesión abre este proveedor de inmediato y pliega el formulario de contraseña de administrador. Una dirección que termina en ?autoLaunch=0 lo evita.",
+      "editor_create": "Añadir un proveedor",
+      "editor_edit": "Editar el proveedor",
+      "field_name": "Nombre",
+      "field_name_hint": "Se muestra en el botón: «Iniciar sesión con <nombre>».",
+      "field_issuer": "URL del emisor",
+      "test": "Probar",
+      "test_ok": "Proveedor accesible",
+      "test_algs": "Algoritmos de firma",
+      "test_pkce": "PKCE (S256)",
+      "test_end_session": "Cierre de sesión en el proveedor",
+      "test_backchannel": "Cierre de sesión back-channel",
+      "test_no_pkce": "Un proveedor que no exige PKCE no se puede activar.",
+      "test_failed": "No se pudo ejecutar la prueba.",
+      "field_client_id": "ID de cliente",
+      "field_client_secret": "Secreto de cliente",
+      "secret_keep_hint": "Hay un secreto guardado. Un campo vacío lo conserva.",
+      "secret_remove": "Quitar el secreto",
+      "secret_keep": "Conservar el secreto",
+      "secret_public_hint": "Un campo vacío es un cliente público.",
+      "field_ca": "Certificado de la CA",
+      "field_ca_hint": "Opcional, PEM. Para un proveedor tras una autoridad de certificación privada.",
+      "field_scope": "Scope",
+      "field_prompt": "Prompt",
+      "prompt": {
+        "default": "Predeterminado del proveedor",
+        "none": "none",
+        "login": "login",
+        "consent": "consent",
+        "select_account": "select_account"
+      },
+      "field_username_claim": "Claim del nombre de usuario",
+      "field_groups_claim": "Claim de grupos",
+      "field_groups_claim_hint": "Ruta con puntos, por ejemplo groups o realm_access.roles. Los grupos de abajo solo se aplican si está definida.",
+      "field_allowed_groups": "Grupos permitidos",
+      "field_allowed_groups_hint": "Uno por línea. Vacío permite a todos; si no, solo los miembros pueden iniciar sesión.",
+      "field_admin_groups": "Grupos de administradores",
+      "field_admin_groups_hint": "Uno por línea. Los miembros pasan a ser administradores, se reaplica en cada inicio de sesión.",
+      "role_mappings": "Grupo a rol",
+      "role_mappings_hint": "Gana la primera fila coincidente y su rol se reaplica en cada inicio de sesión. Sin coincidencia se aplica el rol predeterminado.",
+      "mapping_group": "Grupo",
+      "mapping_role": "Rol",
+      "move_up": "Subir",
+      "move_down": "Bajar",
+      "add_mapping": "Añadir una asignación",
+      "auto_register": "Crear cuentas automáticamente",
+      "auto_register_hint": "Un primer inicio de sesión sin cuenta crea una con el rol predeterminado.",
+      "match_by_email": "Asociar cuentas existentes por correo verificado",
+      "match_by_email_hint": "Solo adopta cuentas que un administrador creó sin contraseña y que nunca iniciaron sesión, cuando el proveedor marca el correo como verificado. Las demás cuentas se vinculan desde su página de cuenta.",
+      "end_session": "Cerrar también la sesión en el proveedor",
+      "end_session_hint": "Solo web. Desactivado por defecto: cerrar sesión en Fliks no toca la sesión del proveedor.",
+      "field_account_url": "URL de gestión de la cuenta",
+      "field_account_url_hint": "Opcional. Se muestra como «Gestionar tu cuenta» en la página de cuenta.",
+      "enabled": "Activado",
+      "uris": "Direcciones que registrar en el proveedor",
+      "uris_hint": "Construidas a partir de la URL pública del servidor.",
+      "uris_after_save": "Disponibles una vez guardado el proveedor.",
+      "uris_need_public_url": "La URL pública se define en los ajustes generales.",
+      "uri_redirect": "URI de redirección",
+      "uri_backchannel": "URI de cierre de sesión back-channel",
+      "uri_logout": "URI de redirección tras cerrar sesión",
+      "copied": "Copiado",
+      "insecure_context": "El inicio de sesión único necesita acceder al servidor por https. Con http simple los botones quedan ocultos."
     }
   },
   "roles": {
@@ -4449,5 +4547,19 @@
     "load_error": "No se pudo cargar la lista.",
     "empty": "No se busca nada.",
     "more": "Mostrar más"
+  },
+  "oidc": {
+    "completing": "Iniciando sesión...",
+    "error": {
+      "expired": "El inicio de sesión caducó o no empezó en este dispositivo.",
+      "idp": "El proveedor de identidad rechazó el inicio de sesión.",
+      "not_allowed": "Tu cuenta no tiene permiso para iniciar sesión aquí.",
+      "no_account": "Ninguna cuenta coincide con este inicio de sesión. Si ya tienes una cuenta, inicia sesión con ella y vincula este proveedor desde la página de tu cuenta; si no, pide una a tu administrador.",
+      "disabled": "Esta cuenta está desactivada.",
+      "already_linked": "Esta identidad ya está vinculada a otra cuenta.",
+      "pkce": "Este proveedor no está configurado para un inicio de sesión seguro y no se puede usar.",
+      "unavailable": "El inicio de sesión único no está disponible en este dispositivo."
+    },
+    "error_last_method": "Es tu única forma de iniciar sesión. Define una contraseña antes de desvincularla."
   }
 }

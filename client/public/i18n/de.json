@@ -292,8 +292,15 @@
       "revoked": "Gerät abgemeldet.",
       "method_password": "Passwort",
       "method_pairing": "Quick Connect",
+      "method_oidc": "Single Sign-on",
       "last_seen": "Zuletzt aktiv: {{date}}"
-    }
+    },
+    "sso_title": "Single Sign-on",
+    "sso_manage": "Dein Konto verwalten",
+    "sso_unlink": "Trennen",
+    "sso_link": "{{name}} verknüpfen",
+    "sso_last_method": "Das ist deine einzige Anmeldemethode. Lege ein Passwort fest, um die Verknüpfung lösen zu können.",
+    "sso_link_origin": "Das Verknüpfen funktioniert über die als öffentliche URL des Servers festgelegte Adresse."
   },
   "account_settings": {
     "title": "Kontoeinstellungen",
@@ -789,7 +796,10 @@
     "password": "Passwort",
     "submit": "Anmelden",
     "error": "Anmeldefehler",
-    "back_to_picker": "Anderen Benutzer wählen"
+    "back_to_picker": "Anderen Benutzer wählen",
+    "sso_sign_in": "Mit {{name}} anmelden",
+    "admin_sign_in": "Administrator-Anmeldung",
+    "or": "oder"
   },
   "create_admin": {
     "title": "Administrator anlegen",
@@ -2074,7 +2084,8 @@
       "plugins": "Plugins",
       "subtitles_activity": "Untertitel-Aktivität",
       "cleanup": "Bereinigung",
-      "email": "E-Mail-Versand"
+      "email": "E-Mail-Versand",
+      "sso": "Single Sign-on"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -2655,7 +2666,8 @@
       "sign_out_everywhere_hint": "Beendet alle Sitzungen dieses Benutzers auf allen Geräten. Er muss sich neu anmelden.",
       "sign_out_everywhere_title": "Überall abmelden?",
       "sign_out_everywhere_message": "{{name}} wird sofort von allen Geräten abgemeldet.",
-      "signed_out": "{{name}} wurde von allen Geräten abgemeldet."
+      "signed_out": "{{name}} wurde von allen Geräten abgemeldet.",
+      "password_optional_hint": "Optional: Ohne Passwort meldet sich das Konto per SSO an."
     },
     "user_detail": {
       "not_found": "Benutzer nicht gefunden.",
@@ -2692,7 +2704,11 @@
       "col_title": "Titel",
       "col_type": "Typ",
       "col_status": "Status",
-      "col_date": "Datum"
+      "col_date": "Datum",
+      "no_password_sso": "Kein Passwort, meldet sich per SSO an.",
+      "managed_by": "Rolle, Administratorstatus und Bibliotheken werden von {{name}} verwaltet.",
+      "sso_identities": "Verknüpfte Anmeldeanbieter",
+      "sso_unlink": "Trennen"
     },
     "roles": {
       "title": "Rollen",
@@ -3223,6 +3239,88 @@
       "test_hint": "Sendet eine kurze Nachricht an die Adresse unten.",
       "test_to": "Empfänger",
       "test_send": "Test senden"
+    },
+    "sso": {
+      "title": "Single Sign-on",
+      "subtitle": "Erlaube Benutzern die Anmeldung über einen OpenID-Connect-Anbieter.",
+      "providers": "Anbieter",
+      "add": "Anbieter hinzufügen",
+      "empty": "Noch kein Anbieter. Ohne Anbieter sieht niemand eine SSO-Schaltfläche.",
+      "drag": "Zum Sortieren ziehen",
+      "linked_users": "{{count}} verknüpft",
+      "load_error": "Die Single-Sign-on-Einstellungen konnten nicht geladen werden.",
+      "confirm_delete": "Anbieter „{{name}}“ löschen? Verknüpfte Konten verlieren diese Anmeldemethode und die Sitzungen enden.",
+      "saved": "Gespeichert",
+      "policy": "Anmelderichtlinie",
+      "password_login": "Anmeldung per Passwort",
+      "password_login_everyone": "Alle",
+      "password_login_admins": "Nur Administratoren",
+      "password_login_hint": "Administratoren behalten immer die Anmeldung per Passwort. Andere Benutzer melden sich per SSO oder Quick Connect an; ältere Apps können kein Passwort mehr verwenden.",
+      "auto_launch": "Automatischer Start",
+      "auto_launch_none": "Keiner",
+      "auto_launch_hint": "Die Anmeldeseite öffnet diesen Anbieter sofort und klappt das Administrator-Passwortformular ein. Eine Adresse mit ?autoLaunch=0 am Ende überspringt das.",
+      "editor_create": "Anbieter hinzufügen",
+      "editor_edit": "Anbieter bearbeiten",
+      "field_name": "Name",
+      "field_name_hint": "Auf der Schaltfläche angezeigt: „Mit <Name> anmelden“.",
+      "field_issuer": "Issuer-URL",
+      "test": "Testen",
+      "test_ok": "Anbieter erreichbar",
+      "test_algs": "Signaturalgorithmen",
+      "test_pkce": "PKCE (S256)",
+      "test_end_session": "Abmeldung beim Anbieter",
+      "test_backchannel": "Back-Channel-Abmeldung",
+      "test_no_pkce": "Ein Anbieter ohne erzwungenes PKCE kann nicht aktiviert werden.",
+      "test_failed": "Der Test konnte nicht ausgeführt werden.",
+      "field_client_id": "Client-ID",
+      "field_client_secret": "Client-Secret",
+      "secret_keep_hint": "Ein Geheimnis ist gespeichert. Ein leeres Feld behält es.",
+      "secret_remove": "Geheimnis entfernen",
+      "secret_keep": "Geheimnis behalten",
+      "secret_public_hint": "Ein leeres Feld steht für einen öffentlichen Client.",
+      "field_ca": "CA-Zertifikat",
+      "field_ca_hint": "Optional, PEM. Für einen Anbieter hinter einer privaten Zertifizierungsstelle.",
+      "field_scope": "Scope",
+      "field_prompt": "Prompt",
+      "prompt": {
+        "default": "Standard des Anbieters",
+        "none": "none",
+        "login": "login",
+        "consent": "consent",
+        "select_account": "select_account"
+      },
+      "field_username_claim": "Claim für den Benutzernamen",
+      "field_groups_claim": "Claim für Gruppen",
+      "field_groups_claim_hint": "Pfad mit Punkten, zum Beispiel groups oder realm_access.roles. Die Gruppen unten gelten nur, wenn er gesetzt ist.",
+      "field_allowed_groups": "Erlaubte Gruppen",
+      "field_allowed_groups_hint": "Eine pro Zeile. Leer erlaubt alle; sonst können sich nur Mitglieder anmelden.",
+      "field_admin_groups": "Administratorgruppen",
+      "field_admin_groups_hint": "Eine pro Zeile. Mitglieder werden Administratoren, bei jeder Anmeldung neu angewendet.",
+      "role_mappings": "Gruppe zu Rolle",
+      "role_mappings_hint": "Die erste passende Zeile gewinnt und ihre Rolle wird bei jeder Anmeldung neu angewendet. Ohne Treffer gilt die Standardrolle.",
+      "mapping_group": "Gruppe",
+      "mapping_role": "Rolle",
+      "move_up": "Nach oben",
+      "move_down": "Nach unten",
+      "add_mapping": "Zuordnung hinzufügen",
+      "auto_register": "Konten automatisch erstellen",
+      "auto_register_hint": "Eine erste Anmeldung ohne Konto legt eines mit der Standardrolle an.",
+      "match_by_email": "Bestehende Konten per verifizierter E-Mail zuordnen",
+      "match_by_email_hint": "Übernimmt nur Konten, die ein Administrator ohne Passwort angelegt hat und die sich nie angemeldet haben, wenn der Anbieter die E-Mail als bestätigt meldet. Andere Konten verknüpfen sich auf ihrer Kontoseite.",
+      "end_session": "Auch beim Anbieter abmelden",
+      "end_session_hint": "Nur im Web. Standardmäßig aus: Das Abmelden von Fliks lässt die Sitzung beim Anbieter unberührt.",
+      "field_account_url": "URL der Kontoverwaltung",
+      "field_account_url_hint": "Optional. Auf der Kontoseite als „Dein Konto verwalten“ angezeigt.",
+      "enabled": "Aktiviert",
+      "uris": "Beim Anbieter zu registrierende Adressen",
+      "uris_hint": "Aus der öffentlichen URL des Servers gebildet.",
+      "uris_after_save": "Verfügbar, sobald der Anbieter gespeichert ist.",
+      "uris_need_public_url": "Die öffentliche URL wird in den allgemeinen Einstellungen festgelegt.",
+      "uri_redirect": "Redirect-URI",
+      "uri_backchannel": "Back-Channel-Abmelde-URI",
+      "uri_logout": "Redirect-URI nach der Abmeldung",
+      "copied": "Kopiert",
+      "insecure_context": "Single Sign-on braucht den Zugriff auf den Server über https. Über einfaches http bleiben die Anmeldeschaltflächen verborgen."
     }
   },
   "roles": {
@@ -4449,5 +4547,19 @@
     "load_error": "Die Liste konnte nicht geladen werden.",
     "empty": "Nichts wird gesucht.",
     "more": "Mehr anzeigen"
+  },
+  "oidc": {
+    "completing": "Anmeldung läuft...",
+    "error": {
+      "expired": "Die Anmeldung ist abgelaufen oder wurde nicht auf diesem Gerät gestartet.",
+      "idp": "Der Identitätsanbieter hat die Anmeldung abgelehnt.",
+      "not_allowed": "Dein Konto darf sich hier nicht anmelden.",
+      "no_account": "Kein Konto passt zu dieser Anmeldung. Wenn du schon ein Konto hast, melde dich damit an und verknüpfe diesen Anbieter auf deiner Kontoseite; sonst frag deinen Administrator.",
+      "disabled": "Dieses Konto ist deaktiviert.",
+      "already_linked": "Diese Identität ist bereits mit einem anderen Konto verknüpft.",
+      "pkce": "Dieser Anbieter ist nicht für eine sichere Anmeldung eingerichtet und kann nicht verwendet werden.",
+      "unavailable": "Single Sign-on ist auf diesem Gerät nicht verfügbar."
+    },
+    "error_last_method": "Das ist deine einzige Anmeldemethode. Lege ein Passwort fest, bevor du die Verknüpfung löst."
   }
 }

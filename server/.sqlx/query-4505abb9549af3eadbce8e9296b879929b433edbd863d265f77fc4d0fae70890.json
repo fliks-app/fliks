@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET \"roleId\" = $2, \"updatedAt\" = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4505abb9549af3eadbce8e9296b879929b433edbd863d265f77fc4d0fae70890"
+}

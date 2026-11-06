@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT \"userId\" FROM sessions WHERE \"providerId\" = $1 AND \"revokedAt\" IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "userId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "userId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d6ab875fe9417743b7454d6399b6adb37f5c2a45731bb9cb91333c745b382dbb"
+}

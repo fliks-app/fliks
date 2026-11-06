@@ -8,7 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
@@ -16,6 +16,7 @@ import { restoreOpenerFocus } from '../../core/services/focusable.constants';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
+import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
 
@@ -28,12 +29,14 @@ import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lu
     LucideUserRoundPen,
     UserAvatarComponent,
     DefaultFocusDirective,
+    SsoButtonsComponent,
   ],
   templateUrl: './select-user.html',
 })
 export class SelectUserComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly toast = inject(ToastService);
@@ -79,8 +82,13 @@ export class SelectUserComponent {
     () => this.users().find((u) => this.hasSession(u))?.id ?? this.users()[0]?.id ?? null,
   );
 
-  /** Password button, focused when the sheet opens; `data-tv-modal` already traps D-pad navigation (see `tv-spatial-nav.service.ts`). */
-  private readonly passwordBtn = viewChild<ElementRef<HTMLButtonElement>>('passwordBtn');
+  /** Sheet body, whose first enabled button is focused when it opens; `data-tv-modal` already traps D-pad navigation (see `tv-spatial-nav.service.ts`). */
+  private readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
+
+  /** Under `admins` the sheet leads with SSO and folds the password behind an administrator button. */
+  readonly adminsOnly = computed(
+    () => this.auth.passwordLogin() === 'admins' && this.auth.ssoProviders().length > 0,
+  );
 
   /** Stable identity so the callback pushed on the dismiss stack can be `remove()`-d even if `closeSheet` fires repeatedly. */
   private readonly dismissCallback = () => this.closeSheet();
@@ -91,7 +99,12 @@ export class SelectUserComponent {
 
   constructor() {
     void this.loadUsers();
-    // Sheet lifecycle: focus the password button on open and register a back-dismiss callback.
+    void this.auth.oidcInfo().then(() => {
+      if (!this.auth.resumableSessions().length) {
+        this.auth.oidcAutoLaunch(this.route.snapshot.queryParamMap.get('autoLaunch') === '0');
+      }
+    });
+    // Sheet lifecycle: focus the first button on open and register a back-dismiss callback.
     // The viewChild is null on the first tick (@if not yet materialised); rAF lands after Angular's commit pass.
     effect(() => {
       const open = this.openSheetFor() !== null;
@@ -110,7 +123,7 @@ export class SelectUserComponent {
         return;
       }
       requestAnimationFrame(() => {
-        this.passwordBtn()?.nativeElement.focus({ preventScroll: true });
+        this.sheet()?.nativeElement.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true });
       });
     });
 
@@ -129,7 +142,13 @@ export class SelectUserComponent {
     try {
       this.serverUsers.set(await this.auth.listUsersPublic());
       // A hidden roster (admin setting) leaves nothing to pick: go straight to typing a username.
-      if (!this.users().length) void this.router.navigate(['/login'], { replaceUrl: true });
+      if (!this.users().length) {
+        const autoLaunch = this.route.snapshot.queryParamMap.get('autoLaunch');
+        void this.router.navigate(['/login'], {
+          replaceUrl: true,
+          queryParams: autoLaunch === '0' ? { autoLaunch: 0 } : undefined,
+        });
+      }
     } catch {
       this.unreachable.set(true);
     } finally {
@@ -175,7 +194,7 @@ export class SelectUserComponent {
   }
 
   goToPasswordLogin(user: PublicUserSummary) {
-    void this.router.navigate(['/login'], { queryParams: { username: user.username } });
+    void this.router.navigate(['/login'], { queryParams: { username: user.username, autoLaunch: 0 } });
   }
 
   goToQuickConnect(user: PublicUserSummary) {
@@ -187,7 +206,7 @@ export class SelectUserComponent {
   }
 
   goToOtherUser() {
-    void this.router.navigate(['/login']);
+    void this.router.navigate(['/login'], { queryParams: { autoLaunch: 0 } });
   }
 
   /** Stored sessions — including the current one — survive: /setup is where the

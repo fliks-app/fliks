@@ -13,6 +13,14 @@
         </div>
       }
 
+      @if (passwordFolded()) {
+        <div class="flex flex-col gap-2">
+          <app-sso-buttons />
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="admin-sign-in" (click)="adminSignIn.set(true)">
+            {{ 'login.admin_sign_in' | translate }}
+          </button>
+        </div>
+      } @else {
       <form [formGroup]="form" (ngSubmit)="onSubmit()">
         <fieldset class="fieldset">
           <label class="fieldset-label" for="username">{{ 'login.username' | translate }}</label>
@@ -50,6 +58,14 @@
           </button>
         </div>
       </form>
+
+      @if (sso().length) {
+        <div class="divider my-2 text-sm text-base-content/50">{{ 'login.or' | translate }}</div>
+        <div class="flex flex-col gap-2">
+          <app-sso-buttons />
+        </div>
+      }
+      }
 
       @if (canPickUser()) {
         <button class="btn btn-ghost btn-sm w-full mt-2" (click)="goToSelectUser()">

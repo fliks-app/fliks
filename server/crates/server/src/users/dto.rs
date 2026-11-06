@@ -15,11 +15,20 @@ fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     Option::<T>::deserialize(d).map(Some)
 }
 
+/// Absent and `null` are both `None`.
+fn nullable_flat<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<Option<T>, D::Error> {
+    Option::<T>::deserialize(d)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CreateUser {
     pub username: String,
-    pub password: String,
+    /// Absent or null: the user has no password and signs in with SSO.
+    #[serde(default, deserialize_with = "nullable_flat")]
+    pub password: Option<String>,
     #[serde(default, deserialize_with = "nullable")]
     pub email: Option<Option<String>>,
     #[serde(default, deserialize_with = "nullable")]
@@ -123,7 +132,12 @@ const PASSWORD: &str = "password must be longer than or equal to 8 characters";
 impl CreateUser {
     pub fn validate(&self) -> Result<(), AppError> {
         check_all(vec![
-            (self.password.chars().count() >= 8, PASSWORD),
+            (
+                self.password
+                    .as_ref()
+                    .is_none_or(|p| p.chars().count() >= 8),
+                PASSWORD,
+            ),
             (
                 self.email
                     .as_ref()

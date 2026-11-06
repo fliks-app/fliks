@@ -5,6 +5,7 @@ import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthSession, SessionsApiService } from '../../core/services/api/sessions-api.service';
+import { OidcApiService } from '../../core/services/api/oidc-api.service';
 import { UsersApiService, passwordErrorMessage } from '../../core/services/api/users-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -36,7 +37,17 @@ function setup(confirmed = true) {
       }),
       { provide: UsersApiService, useValue: users },
       { provide: SessionsApiService, useValue: sessions },
-      { provide: AuthService, useValue: { user: () => ({ id: 7 }) } },
+      {
+        provide: AuthService,
+        useValue: {
+          user: () => ({ id: 7, isAdmin: false }),
+          oidcInfo: vi.fn(async () => undefined),
+          ssoProviders: () => [],
+          ssoOtherOrigin: () => false,
+          passwordLogin: () => 'everyone',
+        },
+      },
+      { provide: OidcApiService, useValue: { identities: vi.fn(async () => ({ hasPassword: true, identities: [] })) } },
       { provide: ConfirmationService, useValue: { confirm: async () => confirmed } },
       { provide: ToastService, useValue: toast },
     ],

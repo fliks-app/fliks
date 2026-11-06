@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"providerId\" AS provider_id, nonce, \"returnTo\" AS return_to, \"linkUserId\" AS link_user_id,\n                  \"expectUserId\" AS expect_user_id\n           FROM oidc_logins WHERE state = $1 AND \"expiresAt\" > $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "providerId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "return_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "returnTo"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "link_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "linkUserId"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expect_user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_logins",
+            "name": "expectUserId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "58c8b8efe82e3baf2f23e2e7b2e698463e0c55f57b66ce8f410dcc1ffe6013b6"
+}

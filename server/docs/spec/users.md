@@ -43,9 +43,9 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
 
 8. `POST /users` order: duplicate `username` (exact match) → 409 `Username already taken`; then, if `roleId !== undefined` (even `null`) and the requester lacks `manage Role` (`roles.manage` or `manage:all`) → 403 `Only users with roles.manage permission can assign a role`; then role resolution; then insert; then library access; then respond `findOne(newId)`.
 9. Role resolution: if `roleId` is truthy look the role up by id; if it is falsy or not found, silently fall back to the role with `isDefault = true` (`roleId` becomes that role's id, or stays unset/NULL when there is no default role).
-10. Insert values: `username`, `passwordHash = bcrypt12(password)`, `email` (as given, may be undefined), `roleId`, `isAdmin = dto.isAdmin ?? false`, `enabled = dto.enabled ?? true`; every other column takes its default. Only an admin (`isAdmin` caller) may create with `isAdmin: true`, else bare 403.
+10. Insert values: `username`, `passwordHash = bcrypt12(password)` (NULL without one), `email` (as given, may be undefined), `roleId`, `isAdmin = dto.isAdmin ?? false`, `enabled = dto.enabled ?? true`; every other column takes its default. Only an admin (`isAdmin` caller) may create with `isAdmin: true`, else bare 403.
 11. Initial library access: `dto.libraryIds` when present (even `[]`), else the resolved role's `defaultLibraryIds` (empty when no role); one `library_user_access` row per id. Not transactional: an unknown library id fails the insert after the user row exists (500).
-12. `CreateUserDto`: `username` string (empty allowed); `password` string, length >= 8; `email?` valid email; `roleId?` number (any JSON number); `isAdmin?` bool; `enabled?` bool; `libraryIds?` int[]. All unknown keys 400.
+12. `CreateUserDto`: `username` string (empty allowed); `password?` string, length >= 8 (absent or `null`: the user has no password and signs in with SSO, `auth.md` rule 68); `email?` valid email; `roleId?` number (any JSON number); `isAdmin?` bool; `enabled?` bool; `libraryIds?` int[]. All unknown keys 400.
 
 ### D. Update (`PUT /users/:id`)
 
@@ -63,6 +63,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
     | `username` | string | S, M | rule 17 |
     | `email` | valid email | S, M | set |
     | `password` | string, length >= 8 | S, M | rule 17 |
+    | `identities`, `accessManagedBy`, `hasPassword` | additive read keys of `PublicUser`: `[{providerId, name}]`, the provider whose groups decide the role, admin flag or libraries (else null), `passwordHash IS NOT NULL` | R | auth rules 73 to 75 |
     | `currentPassword` | string; required with `password` when `isSelf` and a hash is stored | S | rule 17 |
     | `roleId` | number | M (+ `roles.manage` if changing) | rules 15, 16 |
     | `isAdmin` | bool | M | set; triggers engine revoke if changed |

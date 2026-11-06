@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { OidcApiService, OidcIdentity } from '../../core/services/api/oidc-api.service';
 import { UsersApiService, passwordErrorMessage } from '../../core/services/api/users-api.service';
 import { AuthSession, SessionsApiService } from '../../core/services/api/sessions-api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -21,6 +22,7 @@ export class AccountComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly oidcApi = inject(OidcApiService);
 
   readonly saving = signal(false);
   readonly formCurrentPassword = signal('');
@@ -32,8 +34,57 @@ export class AccountComponent implements OnInit {
     () => !!this.formPasswordConfirm() && this.formPassword() !== this.formPasswordConfirm(),
   );
 
-  ngOnInit(): void {
+  readonly identities = signal<OidcIdentity[]>([]);
+  readonly hasPassword = signal(true);
+  readonly linking = signal<number | null>(null);
+  /** With password login restricted to admins, a non-admin has no use for a password. */
+  readonly passwordHidden = computed(
+    () => this.auth.passwordLogin() === 'admins' && !this.auth.user()?.isAdmin,
+  );
+  /** Providers this shell can complete and the user is not linked to yet. */
+  private readonly unlinked = computed(() => {
+    const linked = new Set(this.identities().map((i) => i.providerId));
+    return this.auth.ssoProviders().filter((p) => !linked.has(p.id));
+  });
+  /** A link started from another host name could not come back to this session. */
+  readonly linkBlocked = computed(() => this.auth.ssoOtherOrigin() && this.unlinked().length > 0);
+  readonly linkable = computed(() => (this.auth.ssoOtherOrigin() ? [] : this.unlinked()));
+  readonly lastMethod = computed(() => this.identities().length === 1 && !this.hasPassword());
+
+  async ngOnInit() {
     void this.loadSessions();
+    await this.auth.oidcInfo();
+    await this.loadIdentities();
+  }
+
+  private async loadIdentities() {
+    try {
+      const res = await this.oidcApi.identities();
+      this.identities.set(res.identities);
+      this.hasPassword.set(res.hasPassword);
+    } catch {
+      this.identities.set([]);
+    }
+  }
+
+  async link(providerId: number) {
+    this.linking.set(providerId);
+    try {
+      await this.auth.oidcSignIn(providerId, { link: true });
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.linking.set(null);
+    }
+  }
+
+  async unlink(providerId: number) {
+    try {
+      await this.oidcApi.unlink(providerId);
+      await this.loadIdentities();
+    } catch {
+      // handled by global error interceptor
+    }
   }
 
   private async loadSessions(): Promise<void> {
@@ -60,6 +111,7 @@ export class AccountComponent implements OnInit {
       this.formPasswordConfirm.set('');
       this.toast.success(this.translate.instant('account.save_success'));
       void this.loadSessions();
+      void this.loadIdentities();
     } catch (err) {
       this.toast.error(passwordErrorMessage(err, this.translate));
     } finally {

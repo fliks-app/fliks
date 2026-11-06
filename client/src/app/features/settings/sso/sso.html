@@ -1,0 +1,124 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="flex flex-col gap-6">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.sso.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.sso.subtitle' | translate }}</p>
+    </div>
+
+    @if (insecure) {
+      <div role="alert" class="alert alert-warning" data-testid="sso-insecure">
+        {{ 'settings.sso.insecure_context' | translate }}
+      </div>
+    }
+
+    <section class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <div class="flex items-center justify-between gap-4">
+          <h2 class="card-title text-base">{{ 'settings.sso.providers' | translate }}</h2>
+          <button type="button" class="btn btn-primary btn-sm" data-testid="sso-add" (click)="openEditor(null)">
+            {{ 'settings.sso.add' | translate }}
+          </button>
+        </div>
+
+        @if (!providers().length) {
+          <p class="text-sm text-base-content/60">{{ 'settings.sso.empty' | translate }}</p>
+        }
+        <div
+          cdkDropList
+          (cdkDropListDropped)="reorder($event.previousIndex, $event.currentIndex)"
+          class="flex flex-col gap-2"
+        >
+          @for (p of providers(); track p.id; let i = $index) {
+            <div
+              cdkDrag
+              [cdkDragDisabled]="tv.isTv() || reordering()"
+              class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+              data-testid="sso-provider"
+            >
+              <div *cdkDragPlaceholder class="h-[3.25rem] w-full rounded-lg bg-base-300"></div>
+              @if (!tv.isTv()) {
+                <button
+                  type="button"
+                  cdkDragHandle
+                  class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                  [attr.aria-label]="'settings.sso.drag' | translate"
+                >
+                  <svg lucideGripVertical class="h-4 w-4"></svg>
+                </button>
+              }
+              <span class="flex flex-1 min-w-0 flex-col">
+                <span class="font-medium truncate">{{ p.name }}</span>
+                <span class="text-sm text-base-content/50 truncate">{{ p.issuer }}</span>
+              </span>
+              <span class="text-sm text-base-content/60 whitespace-nowrap" data-testid="sso-linked">
+                {{ 'settings.sso.linked_users' | translate: { count: p.linkedUsers } }}
+              </span>
+              <app-enabled-switch
+                [enabled]="p.enabled"
+                [busy]="togglingId() === p.id"
+                (toggle)="toggle(p)"
+              />
+              <button type="button" class="btn btn-ghost btn-xs btn-square" (click)="openEditor(p)" [attr.aria-label]="'common.edit' | translate">
+                <svg lucidePencil class="h-4 w-4"></svg>
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs btn-square text-error" (click)="remove(p)" [attr.aria-label]="'common.delete' | translate">
+                <svg lucideTrash2 class="h-4 w-4"></svg>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.sso.policy' | translate }}</h2>
+
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.sso.password_login' | translate }}</span>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            data-testid="sso-password-login"
+            [ngModel]="passwordLogin()"
+            (ngModelChange)="passwordLogin.set($event)"
+          >
+            <option value="everyone">{{ 'settings.sso.password_login_everyone' | translate }}</option>
+            <option value="admins">{{ 'settings.sso.password_login_admins' | translate }}</option>
+          </select>
+          <span class="text-sm text-base-content/50">{{ 'settings.sso.password_login_hint' | translate }}</span>
+        </label>
+
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.sso.auto_launch' | translate }}</span>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            data-testid="sso-auto-launch"
+            [ngModel]="autoLaunch()"
+            (ngModelChange)="autoLaunch.set($event)"
+          >
+            <option value="">{{ 'settings.sso.auto_launch_none' | translate }}</option>
+            @for (p of providers(); track p.id) {
+              <option [value]="'' + p.id">{{ p.name }}</option>
+            }
+          </select>
+          <span class="text-sm text-base-content/50">{{ 'settings.sso.auto_launch_hint' | translate }}</span>
+        </label>
+
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary btn-sm" data-testid="sso-save-policy" (click)="savePolicy()" [disabled]="savingPolicy()">
+            @if (savingPolicy()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
+<app-sso-provider-editor [roles]="roles()" [publicUrl]="publicUrl()" (saved)="reload()" />

@@ -292,8 +292,15 @@
       "revoked": "Appareil déconnecté.",
       "method_password": "Mot de passe",
       "method_pairing": "Quick Connect",
+      "method_oidc": "Authentification unique",
       "last_seen": "Dernière activité : {{date}}"
-    }
+    },
+    "sso_title": "Authentification unique",
+    "sso_manage": "Gérer votre compte",
+    "sso_unlink": "Délier",
+    "sso_link": "Lier {{name}}",
+    "sso_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe pour pouvoir le délier.",
+    "sso_link_origin": "La liaison fonctionne depuis l'adresse réglée comme URL publique du serveur."
   },
   "account_settings": {
     "title": "Paramètres du compte",
@@ -789,7 +796,10 @@
     "password": "Mot de passe",
     "submit": "Se connecter",
     "error": "Erreur de connexion",
-    "back_to_picker": "Choisir un autre utilisateur"
+    "back_to_picker": "Choisir un autre utilisateur",
+    "sso_sign_in": "Se connecter avec {{name}}",
+    "admin_sign_in": "Connexion administrateur",
+    "or": "ou"
   },
   "create_admin": {
     "title": "Créer l'administrateur",
@@ -2074,7 +2084,8 @@
       "plugins": "Plugins",
       "subtitles_activity": "Activité des sous-titres",
       "cleanup": "Nettoyage",
-      "email": "Envoi d'e-mails"
+      "email": "Envoi d'e-mails",
+      "sso": "Authentification unique"
     },
     "engine": {
       "title": "Moteur de streaming distant",
@@ -2655,7 +2666,8 @@
       "sign_out_everywhere_hint": "Met fin à toutes les sessions de cet utilisateur sur tous ses appareils. Il doit se reconnecter.",
       "sign_out_everywhere_title": "Déconnecter partout ?",
       "sign_out_everywhere_message": "{{name}} sera déconnecté de tous ses appareils immédiatement.",
-      "signed_out": "{{name}} a été déconnecté de tous ses appareils."
+      "signed_out": "{{name}} a été déconnecté de tous ses appareils.",
+      "password_optional_hint": "Facultatif : sans mot de passe, le compte se connecte par SSO."
     },
     "user_detail": {
       "not_found": "Utilisateur introuvable.",
@@ -2692,7 +2704,11 @@
       "col_title": "Titre",
       "col_type": "Type",
       "col_status": "Statut",
-      "col_date": "Date"
+      "col_date": "Date",
+      "no_password_sso": "Pas de mot de passe, se connecte par SSO.",
+      "managed_by": "Le rôle, le statut d'administrateur et les bibliothèques sont gérés par {{name}}.",
+      "sso_identities": "Fournisseurs de connexion liés",
+      "sso_unlink": "Délier"
     },
     "roles": {
       "title": "Rôles",
@@ -3223,6 +3239,88 @@
       "test_hint": "Envoie un court message à l'adresse ci-dessous.",
       "test_to": "Destinataire",
       "test_send": "Envoyer le test"
+    },
+    "sso": {
+      "title": "Authentification unique",
+      "subtitle": "Permettez aux utilisateurs de se connecter avec un fournisseur OpenID Connect.",
+      "providers": "Fournisseurs",
+      "add": "Ajouter un fournisseur",
+      "empty": "Aucun fournisseur. Sans fournisseur, personne ne voit de bouton SSO.",
+      "drag": "Glisser pour réordonner",
+      "linked_users": "{{count}} lié(s)",
+      "load_error": "Impossible de charger les réglages d'authentification unique.",
+      "confirm_delete": "Supprimer le fournisseur « {{name}} » ? Ses comptes liés perdent ce mode de connexion et ses sessions se terminent.",
+      "saved": "Enregistré",
+      "policy": "Politique de connexion",
+      "password_login": "Connexion par mot de passe",
+      "password_login_everyone": "Tout le monde",
+      "password_login_admins": "Administrateurs uniquement",
+      "password_login_hint": "Les administrateurs gardent toujours la connexion par mot de passe. Les autres utilisateurs passent par le SSO ou Quick Connect ; les anciennes applications ne peuvent plus utiliser de mot de passe.",
+      "auto_launch": "Lancement automatique",
+      "auto_launch_none": "Aucun",
+      "auto_launch_hint": "La page de connexion ouvre ce fournisseur aussitôt et replie le formulaire de mot de passe administrateur. Une adresse terminée par ?autoLaunch=0 l'évite.",
+      "editor_create": "Ajouter un fournisseur",
+      "editor_edit": "Modifier le fournisseur",
+      "field_name": "Nom",
+      "field_name_hint": "Affiché sur le bouton : « Se connecter avec <nom> ».",
+      "field_issuer": "URL de l'émetteur",
+      "test": "Tester",
+      "test_ok": "Fournisseur joignable",
+      "test_algs": "Algorithmes de signature",
+      "test_pkce": "PKCE (S256)",
+      "test_end_session": "Déconnexion chez le fournisseur",
+      "test_backchannel": "Déconnexion back-channel",
+      "test_no_pkce": "Un fournisseur qui n'impose pas PKCE ne peut pas être activé.",
+      "test_failed": "Le test n'a pas pu s'exécuter.",
+      "field_client_id": "ID client",
+      "field_client_secret": "Secret client",
+      "secret_keep_hint": "Un secret est enregistré. Un champ vide le conserve.",
+      "secret_remove": "Retirer le secret",
+      "secret_keep": "Conserver le secret",
+      "secret_public_hint": "Un champ vide correspond à un client public.",
+      "field_ca": "Certificat de l'autorité (CA)",
+      "field_ca_hint": "Facultatif, au format PEM. Pour un fournisseur derrière une autorité de certification privée.",
+      "field_scope": "Scope",
+      "field_prompt": "Prompt",
+      "prompt": {
+        "default": "Par défaut du fournisseur",
+        "none": "none",
+        "login": "login",
+        "consent": "consent",
+        "select_account": "select_account"
+      },
+      "field_username_claim": "Claim du nom d'utilisateur",
+      "field_groups_claim": "Claim des groupes",
+      "field_groups_claim_hint": "Chemin à points, par exemple groups ou realm_access.roles. Les groupes ci-dessous ne s'appliquent que s'il est défini.",
+      "field_allowed_groups": "Groupes autorisés",
+      "field_allowed_groups_hint": "Un par ligne. Vide : tout le monde est autorisé ; sinon seuls les membres peuvent se connecter.",
+      "field_admin_groups": "Groupes administrateurs",
+      "field_admin_groups_hint": "Un par ligne. Les membres deviennent administrateurs, à chaque connexion.",
+      "role_mappings": "Groupe vers rôle",
+      "role_mappings_hint": "La première ligne correspondante l'emporte et son rôle est réappliqué à chaque connexion. Sans correspondance, le rôle par défaut s'applique.",
+      "mapping_group": "Groupe",
+      "mapping_role": "Rôle",
+      "move_up": "Monter",
+      "move_down": "Descendre",
+      "add_mapping": "Ajouter une correspondance",
+      "auto_register": "Créer les comptes automatiquement",
+      "auto_register_hint": "Une première connexion sans compte en crée un avec le rôle par défaut.",
+      "match_by_email": "Associer les comptes existants par e-mail vérifié",
+      "match_by_email_hint": "Reprend uniquement les comptes créés par un administrateur sans mot de passe et jamais connectés, quand le fournisseur marque l'e-mail comme vérifié. Les autres comptes se lient depuis leur page de compte.",
+      "end_session": "Se déconnecter aussi chez le fournisseur",
+      "end_session_hint": "Web uniquement. Désactivé par défaut : se déconnecter de Fliks laisse la session du fournisseur intacte.",
+      "field_account_url": "URL de gestion du compte",
+      "field_account_url_hint": "Facultatif. Affiché comme « Gérer votre compte » sur la page de compte.",
+      "enabled": "Activé",
+      "uris": "Adresses à enregistrer chez le fournisseur",
+      "uris_hint": "Construites à partir de l'URL publique du serveur.",
+      "uris_after_save": "Disponibles une fois le fournisseur enregistré.",
+      "uris_need_public_url": "L'URL publique se règle dans les paramètres généraux.",
+      "uri_redirect": "URI de redirection",
+      "uri_backchannel": "URI de déconnexion back-channel",
+      "uri_logout": "URI de redirection après déconnexion",
+      "copied": "Copié",
+      "insecure_context": "L'authentification unique demande d'accéder au serveur en https. En http simple, les boutons de connexion restent masqués."
     }
   },
   "roles": {
@@ -4449,5 +4547,19 @@
     "load_error": "Impossible de charger la liste.",
     "empty": "Rien n'est recherché.",
     "more": "Afficher plus"
+  },
+  "oidc": {
+    "completing": "Connexion en cours...",
+    "error": {
+      "expired": "La connexion a expiré ou n'a pas démarré sur cet appareil.",
+      "idp": "Le fournisseur d'identité a refusé la connexion.",
+      "not_allowed": "Votre compte n'est pas autorisé à se connecter ici.",
+      "no_account": "Aucun compte ne correspond à cette connexion. Si vous avez déjà un compte, connectez-vous avec puis liez ce fournisseur depuis la page de votre compte ; sinon, demandez un compte à votre administrateur.",
+      "disabled": "Ce compte est désactivé.",
+      "already_linked": "Cette identité est déjà liée à un autre compte.",
+      "pkce": "Ce fournisseur n'est pas configuré pour une connexion sûre, il ne peut pas être utilisé.",
+      "unavailable": "L'authentification unique n'est pas disponible sur cet appareil."
+    },
+    "error_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe avant de le délier."
   }
 }

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO oidc_logins (\"providerId\", state, nonce, \"returnTo\", \"linkUserId\", \"expectUserId\", \"expiresAt\")\n           VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2518bf8e2609acbff96543d4929f14bece529a8ddedecfdc0f9b5ef02c20a2c7"
+}

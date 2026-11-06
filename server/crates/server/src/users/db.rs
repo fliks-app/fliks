@@ -16,6 +16,17 @@ pub struct PublicUser {
     pub role: Option<String>,
     pub permissions: Vec<String>,
     pub library_ids: Vec<i32>,
+    pub identities: Vec<Identity>,
+    /// The provider whose groups decide this user's role, admin flag or libraries.
+    pub access_managed_by: Option<i32>,
+    pub has_password: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Identity {
+    pub provider_id: i32,
+    pub name: String,
 }
 
 fn public((user, role): (UserRow, Option<RoleRow>), library_ids: Vec<i32>) -> PublicUser {
@@ -31,7 +42,57 @@ fn public((user, role): (UserRow, Option<RoleRow>), library_ids: Vec<i32>) -> Pu
         permissions,
         library_ids,
         user,
+        identities: vec![],
+        access_managed_by: None,
+        has_password: true,
     }
+}
+
+/// Fills the SSO fields of `users` with three queries, whatever their number.
+async fn with_sso(db: &PgPool, users: &mut [PublicUser]) -> Result<(), sqlx::Error> {
+    let ids: Vec<i32> = users.iter().map(|u| u.user.id).collect();
+    let linked = sqlx::query!(
+        r#"SELECT i."userId" AS user_id, i."providerId" AS provider_id, p.name
+           FROM user_identities i JOIN oidc_providers p ON p.id = i."providerId"
+           WHERE i."userId" = ANY($1) ORDER BY p."position", p.id"#,
+        &ids
+    )
+    .fetch_all(db)
+    .await?;
+    let managed = sqlx::query!(
+        r#"SELECT DISTINCT ON (i."userId") i."userId" AS "user_id!", p.id AS "provider_id!"
+           FROM user_identities i JOIN oidc_providers p ON p.id = i."providerId"
+           WHERE i."userId" = ANY($1) AND p.enabled AND p."groupsClaim" IS NOT NULL
+             AND (cardinality(p."adminGroups") > 0
+                  OR EXISTS (SELECT 1 FROM oidc_role_mappings m WHERE m."providerId" = p.id))
+           ORDER BY i."userId", p."position", p.id"#,
+        &ids
+    )
+    .fetch_all(db)
+    .await?;
+    let no_password = sqlx::query_scalar!(
+        r#"SELECT id AS "id!" FROM users WHERE id = ANY($1) AND "passwordHash" IS NULL"#,
+        &ids
+    )
+    .fetch_all(db)
+    .await?;
+    for u in users {
+        let id = u.user.id;
+        u.identities = linked
+            .iter()
+            .filter(|l| l.user_id == id)
+            .map(|l| Identity {
+                provider_id: l.provider_id,
+                name: l.name.clone(),
+            })
+            .collect();
+        u.access_managed_by = managed
+            .iter()
+            .find(|m| m.user_id == id)
+            .map(|m| m.provider_id);
+        u.has_password = !no_password.contains(&id);
+    }
+    Ok(())
 }
 
 pub async fn list(db: &PgPool) -> Result<Vec<PublicUser>, sqlx::Error> {
@@ -47,13 +108,15 @@ pub async fn list(db: &PgPool) -> Result<Vec<PublicUser>, sqlx::Error> {
     for a in access {
         by_user.entry(a.user_id).or_default().push(a.library_id);
     }
-    Ok(rows
+    let mut out: Vec<PublicUser> = rows
         .into_iter()
         .map(|row| {
             let libs = by_user.remove(&row.0.id).unwrap_or_default();
             public(row, libs)
         })
-        .collect())
+        .collect();
+    with_sso(db, &mut out).await?;
+    Ok(out)
 }
 
 pub async fn find_one(db: &PgPool, id: i32) -> Result<Option<PublicUser>, sqlx::Error> {
@@ -66,7 +129,105 @@ pub async fn find_one(db: &PgPool, id: i32) -> Result<Option<PublicUser>, sqlx::
     )
     .fetch_all(db)
     .await?;
-    Ok(Some(public(row, ids)))
+    let mut one = [public(row, ids)];
+    with_sso(db, &mut one).await?;
+    let [user] = one;
+    Ok(Some(user))
+}
+
+/// What `create_user` inserts: a `None` hash is a user with no password (signs in with SSO).
+pub struct NewUser {
+    pub username: String,
+    pub email: Option<String>,
+    pub password_hash: Option<String>,
+    /// A falsy or unknown role falls back to the default one.
+    pub role_id: Option<i32>,
+    pub is_admin: bool,
+    pub enabled: bool,
+    /// `None`: the role's default libraries.
+    pub library_ids: Option<Vec<i32>>,
+}
+
+/// The one way a user row is created: role, row, then libraries.
+pub async fn create_user(c: &mut PgConnection, u: NewUser) -> Result<i32, sqlx::Error> {
+    let wanted = u.role_id.filter(|r| *r != 0);
+    let role = sqlx::query_scalar!(
+        r#"SELECT "id" FROM roles WHERE "id" = $1 OR ($1::int IS NULL AND "isDefault")
+           ORDER BY ("id" = $1) DESC LIMIT 1"#,
+        wanted
+    )
+    .fetch_optional(&mut *c)
+    .await?;
+    let role = match role {
+        Some(r) => Some(r),
+        None => {
+            sqlx::query_scalar!(r#"SELECT "id" FROM roles WHERE "isDefault" LIMIT 1"#)
+                .fetch_optional(&mut *c)
+                .await?
+        }
+    };
+    let id = sqlx::query_scalar!(
+        r#"INSERT INTO users (username, "passwordHash", email, "roleId", "isAdmin", enabled)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"#,
+        u.username,
+        u.password_hash,
+        u.email,
+        role,
+        u.is_admin,
+        u.enabled
+    )
+    .fetch_one(&mut *c)
+    .await?;
+    let libraries = match (u.library_ids, role) {
+        (Some(ids), _) => ids,
+        (None, Some(r)) => default_libraries(c, r).await?,
+        (None, None) => vec![],
+    };
+    add_library_access(c, id, &libraries).await?;
+    Ok(id)
+}
+
+pub async fn default_libraries(c: &mut PgConnection, role: i32) -> Result<Vec<i32>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT "libraryId" FROM role_default_libraries WHERE "roleId" = $1 ORDER BY "libraryId""#,
+        role
+    )
+    .fetch_all(c)
+    .await
+}
+
+/// The access columns of a user: each `Some` part is written.
+#[derive(Default)]
+pub struct Access {
+    pub role_id: Option<Option<i32>>,
+    pub is_admin: Option<bool>,
+    pub library_ids: Option<Vec<i32>>,
+}
+
+/// Role, admin flag and library access, the parts `PUT /api/users` and the SSO sync share.
+pub async fn apply_access(c: &mut PgConnection, id: i32, a: Access) -> Result<(), sqlx::Error> {
+    if let Some(role) = a.role_id {
+        sqlx::query!(
+            r#"UPDATE users SET "roleId" = $2, "updatedAt" = now() WHERE id = $1"#,
+            id,
+            role
+        )
+        .execute(&mut *c)
+        .await?;
+    }
+    if let Some(admin) = a.is_admin {
+        sqlx::query!(
+            r#"UPDATE users SET "isAdmin" = $2, "updatedAt" = now() WHERE id = $1"#,
+            id,
+            admin
+        )
+        .execute(&mut *c)
+        .await?;
+    }
+    if let Some(ids) = a.library_ids {
+        replace_library_access(c, id, &ids).await?;
+    }
+    Ok(())
 }
 
 pub fn not_found(id: i32) -> AppError {

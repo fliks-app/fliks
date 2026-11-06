@@ -38,6 +38,11 @@ impl LoginThrottle {
     /// Counts an attempt and says whether it may run: check and count are one locked step, so a
     /// burst cannot pass the limit together. A success calls `clear`.
     pub fn attempt(&self, ip: Option<IpAddr>, username: &str) -> bool {
+        self.attempt_with(ip, username, MAX_FAILS)
+    }
+
+    /// `attempt` with its own limit per window.
+    pub fn attempt_with(&self, ip: Option<IpAddr>, username: &str, max: u32) -> bool {
         let mut m = self.fails.lock_clean();
         let k = key(ip, username);
         if !m.contains_key(&k) && m.len() >= MAX_KEYS {
@@ -56,7 +61,7 @@ impl LoginThrottle {
         if e.1.elapsed() >= WINDOW {
             *e = (0, Instant::now());
         }
-        if e.0 >= MAX_FAILS {
+        if e.0 >= max {
             return false;
         }
         e.0 += 1;

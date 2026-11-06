@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO oidc_role_mappings (\"providerId\", \"group\", \"roleId\", position) VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6a9d649e3ec7e40aa9e7292bffb1a0f8122e3a90e7c45a2a4ba54a30de83f7d4"
+}

@@ -95,51 +95,23 @@ pub async fn create(
     if dto.is_admin == Some(true) && !a.user.is_admin {
         return Err(forbidden());
     }
-    // A falsy or unknown roleId falls back to the default role.
-    let wanted = dto.role_id.flatten().filter(|r| *r != 0);
-    let role = sqlx::query_scalar!(
-        r#"SELECT "id" FROM roles WHERE "id" = $1 OR ($1::int IS NULL AND "isDefault")
-           ORDER BY ("id" = $1) DESC LIMIT 1"#,
-        wanted
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-    let role = match role {
-        Some(r) => Some(r),
-        None => {
-            sqlx::query_scalar!(r#"SELECT "id" FROM roles WHERE "isDefault" LIMIT 1"#)
-                .fetch_optional(&mut *tx)
-                .await?
-        }
+    let password_hash = match dto.password {
+        Some(p) => Some(crate::auth::hash_password(p).await?),
+        None => None,
     };
-    let password = crate::auth::hash_password(dto.password).await?;
-    let id = sqlx::query_scalar!(
-        r#"INSERT INTO users (username, "passwordHash", email, "roleId", "isAdmin", enabled)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"#,
-        dto.username,
-        password,
-        dto.email.flatten(),
-        role,
-        dto.is_admin.unwrap_or(false),
-        dto.enabled.unwrap_or(true)
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    let libraries = match dto.library_ids {
-        Some(ids) => ids,
-        None => match role {
-            Some(r) => {
-                sqlx::query_scalar!(
-                    r#"SELECT "libraryId" FROM role_default_libraries WHERE "roleId" = $1 ORDER BY "libraryId""#,
-                    r
-                )
-                .fetch_all(&mut *tx)
-                .await?
-            }
-            None => vec![],
+    let id = db::create_user(
+        &mut tx,
+        db::NewUser {
+            username: dto.username,
+            email: dto.email.flatten(),
+            password_hash,
+            role_id: dto.role_id.flatten(),
+            is_admin: dto.is_admin.unwrap_or(false),
+            enabled: dto.enabled.unwrap_or(true),
+            library_ids: dto.library_ids,
         },
-    };
-    db::add_library_access(&mut tx, id, &libraries).await?;
+    )
+    .await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, public(&st.db, id).await?))
 }
@@ -221,9 +193,11 @@ pub async fn update(
     if dto.share_disabled == Some(true) && !target.share_disabled {
         crate::social::leave_social(&mut tx, id).await?;
     }
-    if let Some(ids) = &dto.library_ids {
-        db::replace_library_access(&mut tx, id, ids).await?;
-    }
+    let access = db::Access {
+        library_ids: dto.library_ids.clone(),
+        ..Default::default()
+    };
+    db::apply_access(&mut tx, id, access).await?;
     tx.commit().await?;
 
     if role_changing || enabled_changing || password_changed {

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"group\" AS grp, \"roleId\" AS role_id FROM oidc_role_mappings\n           WHERE \"providerId\" = $1 ORDER BY position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grp",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oidc_role_mappings",
+            "name": "group"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "role_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oidc_role_mappings",
+            "name": "roleId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "69365e655a4552ff0a2016c99e9800fa9911238b6d84939559efabe21344b1c5"
+}

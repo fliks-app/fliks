@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"passwordHash\" AS hash, enabled FROM users WHERE username = $1",
+  "query": "SELECT id, \"passwordHash\" AS hash, enabled, \"isAdmin\" AS is_admin FROM users WHERE username = $1",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "enabled"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "is_admin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "isAdmin"
+          }
+        }
       }
     ],
     "parameters": {
@@ -45,8 +56,9 @@
     "nullable": [
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "d5be3f8fb000eccfb382aa793a5fb2c867eadf485f37a861070096c8496c0e8a"
+  "hash": "8c01af0d1a82fc44d1e58d270bee2d4b607633ec3986f0d627cbe84e8e7c72f7"
 }
