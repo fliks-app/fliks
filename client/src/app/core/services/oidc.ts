@@ -43,10 +43,10 @@ export interface OidcPlatform {
   open(authorizeUrl: string): Promise<string | null>;
 }
 
-/** Whether this shell can run the sheet: the iOS plugin, or the Custom Tab plugin on Android (the app
- *  plugin that receives the callback ships with every shell). */
+/** Whether this shell can run the sheet: the native WebAuth plugin (Android falls back to the Browser
+ *  plugin's Custom Tab when the system has no Auth Tab). */
 export function webAuthAvailable(): boolean {
-  return Capacitor.isPluginAvailable(Capacitor.getPlatform() === 'ios' ? 'WebAuth' : 'Browser');
+  return Capacitor.isPluginAvailable('WebAuth');
 }
 
 /** The shell's way to the provider: a loopback listener on desktop, the system auth sheet on the phone
