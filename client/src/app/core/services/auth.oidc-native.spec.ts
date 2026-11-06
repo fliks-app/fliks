@@ -15,8 +15,6 @@ vi.mock('@capacitor/core', () => ({
 vi.mock('@capacitor/browser', () => ({ Browser: {} }));
 vi.mock('@capacitor/app', () => ({ App: {} }));
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 describe('AuthService OpenID Connect on a phone shell', () => {
   let auth: AuthService;
   let http: HttpTestingController;
@@ -42,8 +40,7 @@ describe('AuthService OpenID Connect on a phone shell', () => {
 
   const begin = async (): Promise<Promise<void>> => {
     const done = auth.oidcBegin(3);
-    await settle();
-    const req = http.expectOne('/api/auth/oidc/3/start');
+    const req = await vi.waitFor(() => http.expectOne('/api/auth/oidc/3/start'));
     expect(req.request.body.returnTo).toBe('app');
     req.flush({ authorizeUrl: 'https://idp/a', state: 'st' });
     return done;
