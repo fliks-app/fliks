@@ -59,4 +59,12 @@ export class ReaderScrubberComponent {
   protected onSeek(e: Event): void {
     this.s.seek(this.valueOf(e));
   }
+
+  /** Left and right turn one page: the bar's stops are finer than a page and its scale isn't the page count. */
+  protected onKey(e: KeyboardEvent): void {
+    const side = e.key === 'ArrowLeft' ? 'left' : e.key === 'ArrowRight' ? 'right' : null;
+    if (!side || e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    this.engine()?.act(side);
+  }
 }

@@ -20,6 +20,7 @@
   }
   <input
     type="range"
+    data-tv-skip-spatial
     min="0"
     step="1"
     [max]="max()"
@@ -28,6 +29,7 @@
     [value]="s.shownProgression() * max()"
     (input)="onScrub($event)"
     (change)="onSeek($event)"
+    (keydown)="onKey($event)"
   />
   <div class="rd-track" aria-hidden="true">
     @for (seg of segments(); track seg.start) {
