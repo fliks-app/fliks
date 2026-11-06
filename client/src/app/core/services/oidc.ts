@@ -1,6 +1,7 @@
 /** Helpers of the OpenID Connect login flow (plan section 7.1): PKCE, the per-`state` pending
  *  entries and the platform seam. The calls themselves live in `AuthService`. */
 import { Capacitor } from '@capacitor/core';
+import { webAuthAvailable, webAuthOpen } from '../plugins/web-auth.plugin';
 import { IS_STANDALONE_BUNDLE } from '../utils/standalone-bundle';
 
 export interface OidcProvider {
@@ -43,8 +44,8 @@ export interface OidcPlatform {
   open(authorizeUrl: string): Promise<string | null>;
 }
 
-/** The seam for the phone and desktop PRs: return their platform here once their bridge is present.
- *  Null hides every SSO button. */
+/** The shell's way to the provider: a loopback listener on desktop, the system auth sheet on the phone
+ *  apps, a page redirect on the web. Null hides every SSO button; TVs are hidden through `TvService`. */
 export function oidcPlatform(): OidcPlatform | null {
   const desktop = window.fliksDesktop;
   if (desktop) {
@@ -64,7 +65,8 @@ export function oidcPlatform(): OidcPlatform | null {
       },
     };
   }
-  if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE) return null;
+  if (Capacitor.isNativePlatform()) return webAuthAvailable() ? { returnTo: 'app', open: webAuthOpen } : null;
+  if (IS_STANDALONE_BUNDLE) return null;
   // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
   if (!window.isSecureContext) return null;
   return {

@@ -4,6 +4,7 @@ import { filter, take } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
+import { launchCallbackRoute } from './core/plugins/web-auth.plugin';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
 import { PartySync } from './core/services/party/party-sync';
@@ -110,6 +111,8 @@ export class App implements OnInit, OnDestroy {
       // On <html> too: overlays are reparented under <html>, out of reach of body-scoped selectors.
       document.documentElement.classList.add('native');
       document.body.classList.add('native');
+
+      launchCallbackRoute().then((route) => { if (route) this.router.navigateByUrl(route); }, () => undefined);
 
       // Hide the native splash (launchAutoHide:false) on the first NavigationEnd, once real content has rendered.
       this.router.events.pipe(
