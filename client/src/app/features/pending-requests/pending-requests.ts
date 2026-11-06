@@ -101,8 +101,10 @@ export class PendingRequestsComponent implements OnInit {
 
   private toastFailure(err: unknown) {
     const status = err instanceof HttpErrorResponse ? err.status : 0;
+    const expired = status === 400 && (err as HttpErrorResponse).error?.message === 'Pairing request expired';
     const key =
       status === 404 ? 'pending_requests.wrong_code'
+      : expired ? 'pending_requests.expired'
       : status === 429 ? 'pending_requests.too_many'
       : 'pending_requests.action_error';
     this.toast.error(this.translate.instant(key));

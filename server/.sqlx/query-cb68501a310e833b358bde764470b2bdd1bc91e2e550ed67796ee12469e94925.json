@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"expiresAt\" AS expires_at FROM pairing_requests\n           WHERE code = $1 AND status = 'pending'\n             AND (\"userId\" = $2 OR (\"userId\" IS NULL AND \"publicId\" = $3)) FOR UPDATE",
+  "query": "SELECT id, \"expiresAt\" AS expires_at FROM pairing_requests\n           WHERE code = $1 AND status = 'pending'\n             AND (\"userId\" = $2 OR \"userId\" IS NULL) AND ($3::text IS NULL OR \"publicId\" = $3)\n             AND (\"userId\" IS NOT NULL OR $3::text IS NOT NULL) FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -38,5 +38,5 @@
       false
     ]
   },
-  "hash": "ac50632bd3aabc332925da26b930582b8f0f230cd59c9ff4ebd92f1d42d48b1c"
+  "hash": "cb68501a310e833b358bde764470b2bdd1bc91e2e550ed67796ee12469e94925"
 }

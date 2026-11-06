@@ -617,8 +617,8 @@ pub enum Approval {
 }
 
 /// `pairing/approve`: the code shown on the requesting device, among the pending requests the caller
-/// may approve: hinted to them (code only), or unhinted and named by the `pairing_id` that `lookup`
-/// returned.
+/// may approve: hinted to them, or unhinted; an unhinted one needs the `pairing_id` that `lookup`
+/// returned, and a sent `pairing_id` must match either way.
 pub async fn approve(
     db: &PgPool,
     code: &str,
@@ -630,7 +630,8 @@ pub async fn approve(
     let Some(p) = sqlx::query!(
         r#"SELECT id, "expiresAt" AS expires_at FROM pairing_requests
            WHERE code = $1 AND status = 'pending'
-             AND ("userId" = $2 OR ("userId" IS NULL AND "publicId" = $3)) FOR UPDATE"#,
+             AND ("userId" = $2 OR "userId" IS NULL) AND ($3::text IS NULL OR "publicId" = $3)
+             AND ("userId" IS NOT NULL OR $3::text IS NOT NULL) FOR UPDATE"#,
         code,
         user_id,
         pairing_id
@@ -1133,6 +1134,12 @@ mod tests {
         ));
         assert!(matches!(
             approve(&pool, &free, Some("wrong"), v, now).await.unwrap(),
+            Approval::NotFound
+        ));
+        assert!(matches!(
+            approve(&pool, &hinted, Some("wrong"), u, now)
+                .await
+                .unwrap(),
             Approval::NotFound
         ));
         assert!(matches!(

@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -39,7 +40,7 @@ function setup() {
   });
   const fixture = TestBed.createComponent(PendingRequestsComponent);
   fixture.detectChanges();
-  return { auth, cmp: fixture.componentInstance };
+  return { auth, cmp: fixture.componentInstance, toast: TestBed.inject(ToastService) };
 }
 
 describe('PendingRequestsComponent: code confirmation', () => {
@@ -61,5 +62,16 @@ describe('PendingRequestsComponent: code confirmation', () => {
     cmp.cancelLookup();
     await cmp.approve();
     expect(cmp.found()).toBeNull();
+  });
+
+  it('names an expired request when the approve is refused as expired', async () => {
+    const { auth, cmp, toast } = setup();
+    auth.pairingApprove.mockRejectedValue(
+      new HttpErrorResponse({ status: 400, error: { message: 'Pairing request expired' } }),
+    );
+    cmp.code.set('123456');
+    await cmp.lookup(new Event('submit'));
+    await cmp.approve();
+    expect(toast.error).toHaveBeenCalledWith('pending_requests.expired');
   });
 });
