@@ -194,7 +194,8 @@ pub fn options(
         })),
         fetch: Fetcher::default(),
         keys,
-        ready_wait: Duration::from_secs(15),
+        // boot() returns at this bound with slow starts unsettled; tests assert settled statuses.
+        ready_wait: Duration::from_secs(300),
     }
 }
 
