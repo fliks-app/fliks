@@ -1,7 +1,7 @@
 import { EpubNavigator, FramePoolManager, type EpubNavigatorListeners, type IEpubPreferences } from '@readium/navigator';
 import type { Locator, Publication } from '@readium/shared';
 import { provideReaderFonts, readerFontsDir } from './reader-fonts';
-import { destroyNavigator, provideFrameSelectors } from './frame-hardening';
+import { destroyNavigator } from './frame-hardening';
 
 /** Screens per reading-order resource, by href, for one layout. */
 export type ScreenCounts = ReadonlyMap<string, number>;
@@ -146,7 +146,6 @@ export async function paginate(p: Pagination): Promise<boolean> {
   container.style.height = '100%';
   wrapper.appendChild(container);
   document.body.appendChild(wrapper);
-  const stopSelectors = provideFrameSelectors(container);
   const listeners: Partial<EpubNavigatorListeners> = { frameLoaded: (wnd) => provideReaderFonts(wnd.document) };
   const nav = new EpubNavigator(container, p.publication, listeners as EpubNavigatorListeners, p.positions, undefined, {
     preferences: p.prefs,
@@ -176,7 +175,6 @@ export async function paginate(p: Pagination): Promise<boolean> {
     }
     return exact;
   } finally {
-    stopSelectors();
     await destroyNavigator(nav, container).catch(() => undefined);
     wrapper.remove();
   }
