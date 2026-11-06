@@ -6,13 +6,14 @@ import CoreImage.CIFilterBuiltins
 /// Quick-connect pairing: the user types the code shown here on a signed-in device.
 /// Polls every 2s until the server flips the pairing to approved/denied/expired.
 struct QuickConnectView: View {
-    let userId: Int
-    let username: String
+    let userId: Int?
+    let username: String?
 
     @Environment(AuthService.self) private var auth
     @Environment(ServerStore.self) private var server
+    @Environment(\.dismiss) private var dismiss
 
-    private enum ViewState: Equatable { case starting, waiting, denied, expired, error }
+    private enum ViewState: Equatable { case starting, waiting, denied, expired, error, outdated }
 
     @State private var viewState: ViewState = .starting
     @State private var pairingId: String?
@@ -28,7 +29,7 @@ struct QuickConnectView: View {
 
             case .waiting:
                 Text(tr("quick_connect.title")).font(.system(size: 44, weight: .bold))
-                Text(tr("quick_connect.instructions", username))
+                Text(username.map { tr("quick_connect.instructions", $0) } ?? tr("quick_connect.instructions_any"))
                     .font(.title3)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -58,6 +59,14 @@ struct QuickConnectView: View {
             case .expired:
                 Text(tr("quick_connect.expired")).font(.title2)
                 Button(tr("common.retry")) { Task { await start() } }
+                    .buttonStyle(.borderedProminent)
+
+            case .outdated:
+                Text(tr("quick_connect.outdated"))
+                    .font(.title2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 700)
+                Button(tr("quick_connect.pick_user")) { dismiss() }
                     .buttonStyle(.borderedProminent)
 
             case .error:
@@ -91,6 +100,9 @@ struct QuickConnectView: View {
             secondsLeft = res.expiresIn
             viewState = .waiting
             pollTask = Task { await poll() }
+        } catch APIError.badStatus(400, let message) where userId == nil && message?.contains("userId") == true {
+            // An older server rejects the missing `userId`; the caps answer other messages.
+            viewState = .outdated
         } catch {
             viewState = .error
         }

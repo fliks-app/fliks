@@ -831,7 +831,9 @@
     "expired": "O pedido expirou.",
     "error": "Ocorreu um erro.",
     "retry": "Tentar novamente",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "outdated": "Este servidor precisa de ser atualizado para que a ligação rápida funcione sem escolher um utilizador.",
+    "pick_user": "Escolher um utilizador"
   },
   "pending_requests": {
     "title": "Pedidos de ligação",
@@ -847,7 +849,12 @@
     "code_label": "Código mostrado no dispositivo",
     "code_hint": "É apresentado pelo dispositivo que quer ligar-se.",
     "enter_code": "Introduzir código",
-    "wrong_code": "Nenhum pedido pendente tem este código."
+    "wrong_code": "Nenhum pedido pendente tem este código. Verifique o código no dispositivo ou comece de novo nele.",
+    "expired": "Este pedido expirou. Comece de novo no dispositivo.",
+    "check": "Continuar",
+    "confirm_title": "Aprovar este início de sessão?",
+    "from_ip": "Endereço de rede: {{ip}}",
+    "too_many": "Demasiados códigos errados. Tente novamente mais tarde."
   },
   "server_history": {
     "section_title": "Servidores recentes",

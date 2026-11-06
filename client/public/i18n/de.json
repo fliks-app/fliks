@@ -831,7 +831,9 @@
     "expired": "Die Anfrage ist abgelaufen.",
     "error": "Ein Fehler ist aufgetreten.",
     "retry": "Erneut versuchen",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "outdated": "Dieser Server muss aktualisiert werden, damit die Schnellverbindung ohne Benutzerauswahl funktioniert.",
+    "pick_user": "Benutzer auswählen"
   },
   "pending_requests": {
     "title": "Verbindungsanfragen",
@@ -847,7 +849,12 @@
     "code_label": "Auf dem Gerät angezeigter Code",
     "code_hint": "Das Gerät, das sich verbinden möchte, zeigt ihn an.",
     "enter_code": "Code eingeben",
-    "wrong_code": "Keine ausstehende Anfrage hat diesen Code."
+    "wrong_code": "Keine ausstehende Anfrage hat diesen Code. Prüfe den Code auf dem Gerät oder starte dort neu.",
+    "expired": "Diese Anfrage ist abgelaufen. Starte sie auf dem Gerät neu.",
+    "check": "Weiter",
+    "confirm_title": "Diese Anmeldung genehmigen?",
+    "from_ip": "Netzwerkadresse: {{ip}}",
+    "too_many": "Zu viele falsche Codes. Versuchen Sie es später erneut."
   },
   "server_history": {
     "section_title": "Zuletzt verwendete Server",

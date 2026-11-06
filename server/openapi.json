@@ -88,6 +88,17 @@
         }
       }
     },
+    "/api/auth/pairing/lookup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_lookup",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/auth/pairing/pending": {
       "get": {
         "tags": [

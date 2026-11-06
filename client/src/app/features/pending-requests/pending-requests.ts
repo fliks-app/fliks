@@ -8,7 +8,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { AuthService, PendingRequest } from '../../core/services/auth.service';
+import { AuthService, PairingLookup, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
 import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorSmartphone } from '@lucide/angular';
@@ -39,6 +39,8 @@ export class PendingRequestsComponent implements OnInit {
   readonly busy = signal<string | null>(null);
   readonly code = signal('');
   readonly approving = signal(false);
+  /** The request the typed code names, shown for confirmation before it is approved. */
+  readonly found = signal<{ code: string; req: PairingLookup } | null>(null);
 
   /** Refreshes on a pairing event for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
   private readonly pairingSub = this.sse.pairingEvents.pipe(takeUntilDestroyed()).subscribe((ev) => {
@@ -62,23 +64,50 @@ export class PendingRequestsComponent implements OnInit {
     }
   }
 
-  async approve(event: Event) {
+  async lookup(event: Event) {
     event.preventDefault();
-    if (this.approving() || !this.code().trim()) return;
+    const code = this.code().trim();
+    if (this.approving() || !code) return;
     this.approving.set(true);
     try {
-      await this.auth.pairingApprove(this.code());
+      this.found.set({ code, req: await this.auth.pairingLookup(code) });
+    } catch (err) {
+      this.toastFailure(err);
+    } finally {
+      this.approving.set(false);
+    }
+  }
+
+  async approve() {
+    const found = this.found();
+    if (this.approving() || !found) return;
+    this.approving.set(true);
+    try {
+      await this.auth.pairingApprove(found.code, found.req.pairingId);
+      this.found.set(null);
       this.code.set('');
       this.toast.success(this.translate.instant('pending_requests.approved_toast'));
       void this.refresh();
     } catch (err) {
-      const key = err instanceof HttpErrorResponse && err.status === 404
-        ? 'pending_requests.wrong_code'
-        : 'pending_requests.action_error';
-      this.toast.error(this.translate.instant(key));
+      this.toastFailure(err);
     } finally {
       this.approving.set(false);
     }
+  }
+
+  cancelLookup() {
+    this.found.set(null);
+  }
+
+  private toastFailure(err: unknown) {
+    const status = err instanceof HttpErrorResponse ? err.status : 0;
+    const expired = status === 400 && (err as HttpErrorResponse).error?.message === 'Pairing request expired';
+    const key =
+      status === 404 ? 'pending_requests.wrong_code'
+      : expired ? 'pending_requests.expired'
+      : status === 429 ? 'pending_requests.too_many'
+      : 'pending_requests.action_error';
+    this.toast.error(this.translate.instant(key));
   }
 
   async deny(req: PendingRequest) {

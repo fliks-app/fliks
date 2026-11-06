@@ -7,6 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -15,7 +16,7 @@ import { getDeviceName, getOrCreateDeviceId } from '../../core/utils/device-info
 
 const POLL_INTERVAL_MS = 2000;
 
-type View = 'starting' | 'waiting' | 'denied' | 'expired' | 'error';
+type View = 'starting' | 'waiting' | 'denied' | 'expired' | 'error' | 'outdated';
 
 @Component({
   selector: 'app-quick-connect-wait',
@@ -49,7 +50,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const param = this.route.snapshot.paramMap.get('userId');
     this.userId = param ? Number(param) : 0;
-    if (!this.userId) {
+    if (param && !this.userId) {
       void this.router.navigate(['/select-user']);
       return;
     }
@@ -84,7 +85,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       if (realName) this.deviceName.set(realName);
       if (this.destroyed) return;
       const { pairingId, code, expiresIn } = await this.auth.pairingRequest(
-        this.userId,
+        this.userId || null,
         this.deviceId,
         this.deviceName(),
         this.systemName() || undefined,
@@ -97,8 +98,14 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       this.view.set('waiting');
       this.startCountdown();
       this.poll();
-    } catch {
-      this.view.set('error');
+    } catch (err) {
+      // A server without userless requests rejects the missing `userId`.
+      const outdated =
+        !this.userId &&
+        err instanceof HttpErrorResponse &&
+        err.status === 400 &&
+        JSON.stringify(err.error).includes('userId');
+      this.view.set(outdated ? 'outdated' : 'error');
     }
   }
 

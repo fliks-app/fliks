@@ -17,8 +17,8 @@ pub struct LoginThrottle {
 }
 
 /// An IPv6 client owns a whole /64, so it is keyed by that prefix.
-fn key(ip: Option<IpAddr>, username: &str) -> Key {
-    let net = match ip.map(|a| a.to_canonical()) {
+pub fn net(ip: Option<IpAddr>) -> String {
+    match ip.map(|a| a.to_canonical()) {
         Some(IpAddr::V6(v6)) => {
             format!(
                 "{}/64",
@@ -27,8 +27,11 @@ fn key(ip: Option<IpAddr>, username: &str) -> Key {
         }
         Some(v4) => v4.to_string(),
         None => String::new(),
-    };
-    (net, username.to_lowercase())
+    }
+}
+
+fn key(ip: Option<IpAddr>, username: &str) -> Key {
+    (net(ip), username.to_lowercase())
 }
 
 impl LoginThrottle {
@@ -60,6 +63,14 @@ impl LoginThrottle {
         true
     }
 
+    /// Gives back one attempt that turned out not to be a failure; unlike `clear` it cannot reset
+    /// a counter an attacker fed with failures.
+    pub fn refund(&self, ip: Option<IpAddr>, username: &str) {
+        if let Some(e) = self.fails.lock_clean().get_mut(&key(ip, username)) {
+            e.0 = e.0.saturating_sub(1);
+        }
+    }
+
     pub fn clear(&self, ip: Option<IpAddr>, username: &str) {
         self.fails.lock_clean().remove(&key(ip, username));
     }
@@ -84,6 +95,20 @@ mod tests {
         assert!(t.attempt(ip("1.1.1.1"), "alice"));
         t.clear(ip("1.1.1.1"), "bob");
         assert!(t.attempt(ip("1.1.1.1"), "bob"));
+    }
+
+    #[test]
+    fn a_refund_gives_back_one_attempt_and_never_resets_the_rest() {
+        let t = LoginThrottle::default();
+        for _ in 0..MAX_FAILS {
+            assert!(t.attempt(ip("1.1.1.1"), "bob"));
+        }
+        t.refund(ip("1.1.1.1"), "bob");
+        assert!(t.attempt(ip("1.1.1.1"), "bob"));
+        assert!(
+            !t.attempt(ip("1.1.1.1"), "bob"),
+            "four failures stayed counted"
+        );
     }
 
     #[test]

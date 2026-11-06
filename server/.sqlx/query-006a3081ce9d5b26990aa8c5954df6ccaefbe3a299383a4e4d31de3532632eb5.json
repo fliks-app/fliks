@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"publicId\" AS public_id, \"deviceName\" AS device_name, \"systemName\" AS system_name,\n                  \"clientIp\" AS client_ip, \"createdAt\" AS created_at\n           FROM pairing_requests\n           WHERE code = $1 AND (\"userId\" = $2 OR \"userId\" IS NULL) AND status = 'pending'\n             AND \"expiresAt\" >= $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "publicId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "device_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "deviceName"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "system_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "systemName"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_ip",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "clientIp"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "createdAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "006a3081ce9d5b26990aa8c5954df6ccaefbe3a299383a4e4d31de3532632eb5"
+}

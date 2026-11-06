@@ -11,8 +11,11 @@ pub const PAIRING_TTL_SECS: i64 = 600;
 /// `accessToken` sentinel between approval and the issuing device's claim.
 const APPROVED: &str = "__approved__";
 const MAX_PENDING_PER_DEVICE: i64 = 3;
-/// The device id is the caller's choice, so only this bounds a flood (and typo hits on a code).
 const MAX_PENDING_PER_USER: i64 = 10;
+/// Unhinted requests only: the device id is the caller's choice, so the client network and the
+/// global ceiling bound a flood.
+const MAX_PENDING_PER_NET: i64 = 5;
+const MAX_PENDING: i64 = 1000;
 
 pub fn hash(raw: &str) -> String {
     Sha256::digest(raw.as_bytes())
@@ -377,68 +380,116 @@ pub enum Opened {
     NoUser,
     TooMany,
     UserFull,
+    NetFull,
+    Full,
 }
 
-/// `pairing/request`. The per-device advisory lock makes the 3-pending cap hold under concurrency.
+/// `pairing/request`. The device, user and network advisory locks make their caps hold under
+/// concurrency (the global ceiling is approximate); expired rows do not count. `user_id` is the
+/// optional hint: only that user may approve.
+#[allow(clippy::too_many_arguments)]
 pub async fn open_pairing(
     db: &PgPool,
-    user_id: i32,
+    user_id: Option<i32>,
+    client_ip: Option<&str>,
+    client_net: &str,
     device_id: &str,
     device_name: &str,
     system_name: Option<&str>,
     now: DateTime<Utc>,
 ) -> Result<Opened, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let exists = sqlx::query_scalar!(
-        r#"SELECT 1 AS "one!" FROM users WHERE id = $1 AND enabled = true"#,
-        user_id
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-    if exists.is_none() {
-        return Ok(Opened::NoUser);
-    }
-    sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", device_id)
-        .execute(&mut *tx)
+    if let Some(user_id) = user_id {
+        let exists = sqlx::query_scalar!(
+            r#"SELECT 1 AS "one!" FROM users WHERE id = $1 AND enabled = true"#,
+            user_id
+        )
+        .fetch_optional(&mut *tx)
         .await?;
-    let pending = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM pairing_requests WHERE "deviceId" = $1 AND status = 'pending'"#,
+        if exists.is_none() {
+            return Ok(Opened::NoUser);
+        }
+    }
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock(hashtext('pairing-device'), hashtext($1))",
         device_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    let pending = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM pairing_requests
+           WHERE "deviceId" = $1 AND status = 'pending' AND "expiresAt" >= $2"#,
+        device_id,
+        now
     )
     .fetch_one(&mut *tx)
     .await?;
     if pending >= MAX_PENDING_PER_DEVICE {
         return Ok(Opened::TooMany);
     }
-    sqlx::query!(
-        "SELECT pg_advisory_xact_lock(hashtext('pairing-user'), $1)",
-        user_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    let for_user = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM pairing_requests WHERE "userId" = $1 AND status = 'pending'"#,
-        user_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    if for_user >= MAX_PENDING_PER_USER {
-        return Ok(Opened::UserFull);
+    if let Some(user_id) = user_id {
+        sqlx::query!(
+            "SELECT pg_advisory_xact_lock(hashtext('pairing-user'), $1)",
+            user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        let for_user = sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM pairing_requests
+               WHERE "userId" = $1 AND status = 'pending' AND "expiresAt" >= $2"#,
+            user_id,
+            now
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if for_user >= MAX_PENDING_PER_USER {
+            return Ok(Opened::UserFull);
+        }
+    } else {
+        sqlx::query!(
+            "SELECT pg_advisory_xact_lock(hashtext('pairing-net'), hashtext($1))",
+            client_net
+        )
+        .execute(&mut *tx)
+        .await?;
+        let for_net = sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM pairing_requests
+               WHERE "clientNet" = $1 AND "userId" IS NULL AND status = 'pending' AND "expiresAt" >= $2"#,
+            client_net,
+            now
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if for_net >= MAX_PENDING_PER_NET {
+            return Ok(Opened::NetFull);
+        }
+        let total = sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM pairing_requests
+               WHERE "userId" IS NULL AND status = 'pending' AND "expiresAt" >= $1"#,
+            now
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if total >= MAX_PENDING {
+            return Ok(Opened::Full);
+        }
     }
-    // A code is unique among the user's pending requests, so approving by code picks exactly one.
+    // A code is unique among all pending requests, so approving by code picks exactly one.
     for _ in 0..10 {
         let code = new_code();
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt", code)
-               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6)
-               ON CONFLICT ("userId", code) WHERE status = 'pending' DO NOTHING
+            r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt", code, "clientIp", "clientNet")
+               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6, $7, $8)
+               ON CONFLICT (code) WHERE status = 'pending' DO NOTHING
                RETURNING "publicId""#,
             user_id,
             device_id,
             device_name,
             system_name,
             now + Duration::seconds(PAIRING_TTL_SECS),
-            code
+            code,
+            client_ip,
+            client_net
         )
         .fetch_optional(&mut *tx)
         .await?;
@@ -447,7 +498,7 @@ pub async fn open_pairing(
             return Ok(Opened::Created { id, code });
         }
     }
-    Ok(Opened::UserFull)
+    Ok(Opened::Full)
 }
 
 fn new_code() -> String {
@@ -565,19 +616,25 @@ pub enum Approval {
     Approved,
 }
 
-/// `pairing/approve`: the code shown on the requesting device, among the caller's own pending requests.
+/// `pairing/approve`: the code shown on the requesting device, among the pending requests the caller
+/// may approve: hinted to them, or unhinted; an unhinted one needs the `pairing_id` that `lookup`
+/// returned, and a sent `pairing_id` must match either way.
 pub async fn approve(
     db: &PgPool,
     code: &str,
+    pairing_id: Option<&str>,
     user_id: i32,
     now: DateTime<Utc>,
 ) -> Result<Approval, sqlx::Error> {
     let mut tx = db.begin().await?;
     let Some(p) = sqlx::query!(
         r#"SELECT id, "expiresAt" AS expires_at FROM pairing_requests
-           WHERE code = $1 AND "userId" = $2 AND status = 'pending' FOR UPDATE"#,
+           WHERE code = $1 AND status = 'pending'
+             AND ("userId" = $2 OR "userId" IS NULL) AND ($3::text IS NULL OR "publicId" = $3)
+             AND ("userId" IS NOT NULL OR $3::text IS NOT NULL) FOR UPDATE"#,
         code,
-        user_id
+        user_id,
+        pairing_id
     )
     .fetch_optional(&mut *tx)
     .await?
@@ -606,6 +663,36 @@ pub async fn approve(
     Ok(Approval::Approved)
 }
 
+pub struct PairingLookup {
+    pub public_id: String,
+    pub device_name: String,
+    pub system_name: Option<String>,
+    pub client_ip: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// `pairing/lookup`: what `approve` would approve for this code, without changing anything.
+pub async fn lookup(
+    db: &PgPool,
+    code: &str,
+    user_id: i32,
+    now: DateTime<Utc>,
+) -> Result<Option<PairingLookup>, sqlx::Error> {
+    sqlx::query_as!(
+        PairingLookup,
+        r#"SELECT "publicId" AS public_id, "deviceName" AS device_name, "systemName" AS system_name,
+                  "clientIp" AS client_ip, "createdAt" AS created_at
+           FROM pairing_requests
+           WHERE code = $1 AND ("userId" = $2 OR "userId" IS NULL) AND status = 'pending'
+             AND "expiresAt" >= $3"#,
+        code,
+        user_id,
+        now
+    )
+    .fetch_optional(db)
+    .await
+}
+
 /// `pairing/:id/deny`: false when the row is not the caller's; a non-pending row is left as is.
 pub async fn deny(db: &PgPool, public_id: &str, user_id: i32) -> Result<bool, sqlx::Error> {
     let mut tx = db.begin().await?;
@@ -632,12 +719,12 @@ pub async fn deny(db: &PgPool, public_id: &str, user_id: i32) -> Result<bool, sq
     Ok(true)
 }
 
-/// The requesting device withdraws its own pending request; returns the target user.
+/// The requesting device withdraws its own pending request; returns the hinted user, if any.
 pub async fn cancel(
     db: &PgPool,
     public_id: &str,
     device_id: &str,
-) -> Result<Option<i32>, sqlx::Error> {
+) -> Result<Option<Option<i32>>, sqlx::Error> {
     sqlx::query_scalar(
         r#"DELETE FROM pairing_requests
            WHERE "publicId" = $1 AND "deviceId" = $2 AND status = 'pending'
@@ -885,7 +972,19 @@ mod tests {
     }
 
     async fn open(pool: &PgPool, u: i32, dev: &str, at: DateTime<Utc>) -> Opened {
-        open_pairing(pool, u, dev, "TV", None, at).await.unwrap()
+        open_from(pool, Some(u), dev, "n", at).await
+    }
+
+    async fn open_from(
+        pool: &PgPool,
+        u: Option<i32>,
+        dev: &str,
+        net: &str,
+        at: DateTime<Utc>,
+    ) -> Opened {
+        open_pairing(pool, u, None, net, dev, "TV", None, at)
+            .await
+            .unwrap()
     }
 
     fn created(o: Opened) -> (String, String) {
@@ -896,11 +995,18 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn pairing_cap_counts_unflipped_expired_rows(pool: PgPool) {
+    async fn pairing_caps_ignore_expired_rows(pool: PgPool) {
         let u = setup(&pool).await;
         let old = Utc::now() - Duration::hours(2);
         for _ in 0..3 {
             created(open(&pool, u, "d", old).await);
+        }
+        assert!(matches!(
+            open(&pool, u, "d", Utc::now()).await,
+            Opened::Created { .. }
+        ));
+        for _ in 0..2 {
+            created(open(&pool, u, "d", Utc::now()).await);
         }
         assert!(matches!(
             open(&pool, u, "d", Utc::now()).await,
@@ -918,7 +1024,25 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn pairing_cap_per_user_ignores_the_device_id(pool: PgPool) {
+    async fn pairing_cap_per_network_counts_unhinted_rows_only(pool: PgPool) {
+        let u = setup(&pool).await;
+        let now = Utc::now();
+        for i in 0..MAX_PENDING_PER_NET {
+            created(open_from(&pool, None, &format!("d{i}"), "n", now).await);
+        }
+        assert!(matches!(
+            open_from(&pool, None, "fresh", "n", now).await,
+            Opened::NetFull
+        ));
+        assert!(matches!(
+            open_from(&pool, None, "fresh", "other", now).await,
+            Opened::Created { .. }
+        ));
+        created(open_from(&pool, Some(u), "hinted", "n", now).await);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn pairing_cap_per_user_applies_to_hinted_rows(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
         for i in 0..MAX_PENDING_PER_USER {
@@ -928,6 +1052,105 @@ mod tests {
             open(&pool, u, "fresh", now).await,
             Opened::UserFull
         ));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn pairing_global_cap(pool: PgPool) {
+        setup(&pool).await;
+        sqlx::query(
+            r#"INSERT INTO pairing_requests ("publicId","deviceId","deviceName",status,"expiresAt",code,"clientNet")
+               SELECT g::text, g::text, 'TV', 'pending', now() + interval '1 hour', lpad(g::text, 6, '0'), g::text
+               FROM generate_series(1, $1) g"#,
+        )
+        .bind(MAX_PENDING)
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(matches!(
+            open_from(&pool, None, "d", "n", Utc::now()).await,
+            Opened::Full
+        ));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn codes_are_unique_across_pending_users_and_free_once_settled(pool: PgPool) {
+        let u = setup(&pool).await;
+        let sql = r#"INSERT INTO pairing_requests ("publicId","userId","deviceId","deviceName",status,"expiresAt",code)
+                     VALUES ($1, $2, 'd', 'TV', 'pending', now() + interval '1 hour', '123456')"#;
+        sqlx::query(sql)
+            .bind("a")
+            .bind(u)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            sqlx::query(sql)
+                .bind("b")
+                .bind(None::<i32>)
+                .execute(&pool)
+                .await
+                .is_err()
+        );
+        sqlx::query("UPDATE pairing_requests SET status = 'denied'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(sql)
+            .bind("c")
+            .bind(None::<i32>)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn hinted_rows_approve_only_for_their_user_and_unhinted_for_anyone(pool: PgPool) {
+        let u = setup(&pool).await;
+        let v: i32 =
+            sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ('v') RETURNING id"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let now = Utc::now();
+        let (_, hinted) = created(open(&pool, u, "d", now).await);
+        let (id, free) = created(open_from(&pool, None, "e", "n", now).await);
+        assert!(lookup(&pool, &hinted, v, now).await.unwrap().is_none());
+        assert!(lookup(&pool, &hinted, u, now).await.unwrap().is_some());
+        assert!(matches!(
+            approve(&pool, &hinted, None, v, now).await.unwrap(),
+            Approval::NotFound
+        ));
+        assert_eq!(
+            lookup(&pool, &free, v, now)
+                .await
+                .unwrap()
+                .unwrap()
+                .public_id,
+            id
+        );
+        assert!(matches!(
+            approve(&pool, &free, None, v, now).await.unwrap(),
+            Approval::NotFound
+        ));
+        assert!(matches!(
+            approve(&pool, &free, Some("wrong"), v, now).await.unwrap(),
+            Approval::NotFound
+        ));
+        assert!(matches!(
+            approve(&pool, &hinted, Some("wrong"), u, now)
+                .await
+                .unwrap(),
+            Approval::NotFound
+        ));
+        assert!(matches!(
+            approve(&pool, &free, Some(&id), v, now).await.unwrap(),
+            Approval::Approved
+        ));
+        let claimed = pairing_status(&pool, &id, "e", None, 60, now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(claimed, PairingStatus::Claimed { user_id, .. } if user_id == v));
     }
 
     #[sqlx::test(migrations = false)]
@@ -946,15 +1169,15 @@ mod tests {
         };
         assert!(matches!(st("d", now).await, PairingStatus::Status(s) if s == "pending"));
         assert!(matches!(
-            approve(&pool, &code, u + 1, now).await.unwrap(),
+            approve(&pool, &code, None, u + 1, now).await.unwrap(),
             Approval::NotFound
         ));
         assert!(matches!(
-            approve(&pool, &code, u, now).await.unwrap(),
+            approve(&pool, &code, None, u, now).await.unwrap(),
             Approval::Approved
         ));
         assert!(matches!(
-            approve(&pool, &code, u, now).await.unwrap(),
+            approve(&pool, &code, None, u, now).await.unwrap(),
             Approval::NotFound
         ));
         assert!(matches!(st("other", now).await, PairingStatus::Status(s) if s == "approved"));
@@ -967,7 +1190,7 @@ mod tests {
         let u = setup(&pool).await;
         let now = Utc::now();
         let (id, code) = created(open(&pool, u, "d", now).await);
-        approve(&pool, &code, u, now).await.unwrap();
+        approve(&pool, &code, None, u, now).await.unwrap();
         let late = now + Duration::seconds(PAIRING_TTL_SECS + 1);
         let s = pairing_status(&pool, &id, "d", None, 60, late)
             .await
@@ -986,7 +1209,7 @@ mod tests {
         let u = setup(&pool).await;
         let now = Utc::now();
         let (id, code) = created(open(&pool, u, "d", now).await);
-        approve(&pool, &code, u, now).await.unwrap();
+        approve(&pool, &code, None, u, now).await.unwrap();
         let claim = |pool: PgPool, id: String| {
             tokio::spawn(async move {
                 pairing_status(&pool, &id, "d", None, 60, now)
@@ -1010,11 +1233,11 @@ mod tests {
         let (_, code) = created(open(&pool, u, "d", t0).await);
         let late = t0 + Duration::seconds(PAIRING_TTL_SECS + 1);
         assert!(matches!(
-            approve(&pool, &code, u, late).await.unwrap(),
+            approve(&pool, &code, None, u, late).await.unwrap(),
             Approval::Expired
         ));
         assert!(matches!(
-            approve(&pool, &code, u, late).await.unwrap(),
+            approve(&pool, &code, None, u, late).await.unwrap(),
             Approval::NotFound
         ));
         let (id2, _) = created(open(&pool, u, "e", t0).await);

@@ -831,7 +831,9 @@
     "expired": "The request has expired.",
     "error": "An error occurred.",
     "retry": "Retry",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "outdated": "This server needs an update before Quick Connect works without choosing a user.",
+    "pick_user": "Choose a user"
   },
   "pending_requests": {
     "title": "Login requests",
@@ -847,7 +849,12 @@
     "code_label": "Code shown on the device",
     "code_hint": "The device that wants to sign in displays it.",
     "enter_code": "Enter code",
-    "wrong_code": "No pending request has this code."
+    "wrong_code": "No pending request has this code. Check the code on the device, or start again there.",
+    "expired": "This request expired. Start again on the device.",
+    "check": "Continue",
+    "confirm_title": "Approve this sign-in?",
+    "from_ip": "Network address: {{ip}}",
+    "too_many": "Too many wrong codes. Try again later."
   },
   "server_history": {
     "section_title": "Recent servers",

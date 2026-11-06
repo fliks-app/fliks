@@ -233,8 +233,9 @@ import Foundation
 
     /// TV-side request. The access token this pairing eventually mints is
     /// only ever handed back to a status poll carrying this same device id.
-    func requestPairing(userId: Int, deviceName: String, systemName: String?) async throws -> PairingRequestResponse {
-        struct Body: Encodable { let userId: Int; let deviceName: String; let systemName: String? }
+    func requestPairing(userId: Int?, deviceName: String, systemName: String?) async throws -> PairingRequestResponse {
+        // Optional encodes by omission: no `userId` key without a picked user.
+        struct Body: Encodable { let userId: Int?; let deviceName: String; let systemName: String? }
         return try await api.post(
             "/api/auth/pairing/request",
             body: Body(userId: userId, deviceName: deviceName, systemName: systemName),

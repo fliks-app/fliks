@@ -1,0 +1,62 @@
+{
+  "capture": {
+    "code": "$.steps[0].body.code",
+    "pid": "$.steps[0].body.pairingId"
+  },
+  "ignore": [
+    "$..accessToken",
+    "$..accessTokenExpiresAt",
+    "$..code",
+    "$..pairingId",
+    "$..refreshToken",
+    "$..refreshTokenExpiresAt"
+  ],
+  "name": "auth-pairing-approve-no-user-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceName": "Living room TV",
+        "systemName": "tvOS"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600
+        },
+        "status": 201
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/request"
+    },
+    {
+      "as": "other",
+      "body": {
+        "code": "{code}",
+        "pairingId": "{pid}"
+      },
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/approve"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "status": "approved"
+        },
+        "status": 200
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "GET",
+      "path": "/api/auth/pairing/status?pairingId={pid}"
+    }
+  ]
+}

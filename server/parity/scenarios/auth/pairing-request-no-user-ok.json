@@ -1,0 +1,28 @@
+{
+  "ignore": [
+    "$..code",
+    "$..pairingId"
+  ],
+  "name": "auth-pairing-request-no-user-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceName": "Living room TV",
+        "systemName": "tvOS"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600
+        },
+        "status": 201
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/request"
+    }
+  ]
+}

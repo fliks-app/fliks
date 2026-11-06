@@ -1,4 +1,5 @@
 use super::db::{self, Approval, Opened, PairingStatus, Refreshed};
+use super::net;
 use crate::{
     auth_token::Signed,
     events::SseEvent,
@@ -46,6 +47,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/pairing/request", post(pairing_request))
         .route("/api/auth/pairing/status", get(pairing_status))
         .route("/api/auth/pairing/pending", get(pairing_pending))
+        .route("/api/auth/pairing/lookup", post(pairing_lookup))
         .route("/api/auth/pairing/approve", post(pairing_approve))
         .route("/api/auth/pairing/{id}/deny", post(pairing_deny))
         .route("/api/auth/pairing/{id}/cancel", post(pairing_cancel))
@@ -635,7 +637,7 @@ pub(crate) async fn stream_token(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub(crate) struct PairingRequestDto {
-    user_id: i32,
+    user_id: Option<i32>,
     device_name: String,
     system_name: Option<String>,
 }
@@ -650,6 +652,7 @@ fn device_id(h: &HeaderMap) -> Result<&str, AppError> {
 #[utoipa::path(post, path = "/api/auth/pairing/request", responses((status = 200)))]
 pub(crate) async fn pairing_request(
     State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     ValidJson(dto): ValidJson<PairingRequestDto>,
 ) -> Result<Response, AppError> {
@@ -667,9 +670,12 @@ pub(crate) async fn pairing_request(
     }
     check(errs)?;
     let device = device_id(&headers)?;
+    let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
     let opened = db::open_pairing(
         &st.db,
         dto.user_id,
+        ip.map(|a| a.to_string()).as_deref(),
+        &net(ip),
         device,
         &dto.device_name,
         dto.system_name.as_deref(),
@@ -689,16 +695,24 @@ pub(crate) async fn pairing_request(
                 "Too many pending requests for this account",
             ));
         }
+        Opened::NetFull => {
+            return Err(AppError::bad_request(
+                "Too many pending requests for this network",
+            ));
+        }
+        Opened::Full => return Err(AppError::bad_request("Too many pending requests")),
     };
-    st.hub.emit_to_user(
-        dto.user_id,
-        SseEvent::PairingRequested {
-            user_id: dto.user_id.into(),
-            pairing_id: id.clone(),
-            device_name: dto.device_name.clone(),
-            device_id: device.to_owned(),
-        },
-    );
+    if let Some(user_id) = dto.user_id {
+        st.hub.emit_to_user(
+            user_id,
+            SseEvent::PairingRequested {
+                user_id: user_id.into(),
+                pairing_id: id.clone(),
+                device_name: dto.device_name.clone(),
+                device_id: device.to_owned(),
+            },
+        );
+    }
     Ok((
         StatusCode::CREATED,
         Json(json!({"pairingId": id, "code": code, "expiresIn": db::PAIRING_TTL_SECS})),
@@ -780,18 +794,91 @@ pub(crate) async fn pairing_pending(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct PairingCodeDto {
+    code: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub(crate) struct PairingApproveDto {
     code: String,
+    /// The `pairingId` `lookup` returned: required for an unhinted request.
+    pairing_id: Option<String>,
+}
+
+/// Digits of the typed code; every attempt counts, a hit is refunded by the caller.
+fn throttled_code(
+    st: &AppState,
+    peer: &Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: &HeaderMap,
+    user_id: i32,
+    code: &str,
+) -> Result<(Option<IpAddr>, String, String), AppError> {
+    let ip = client_ip(headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    let key = format!("pairing:{user_id}");
+    if !st.pairing_throttle.attempt(ip, &key) {
+        return Err(AppError::with_message(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many failed attempts, try again later",
+        ));
+    }
+    Ok((ip, key, code.chars().filter(char::is_ascii_digit).collect()))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PairingLookup {
+    pairing_id: String,
+    device_name: String,
+    system_name: Option<String>,
+    client_ip: Option<String>,
+    #[serde(with = "iso_ms")]
+    requested_at: DateTime<Utc>,
+}
+
+#[utoipa::path(post, path = "/api/auth/pairing/lookup", responses((status = 200)))]
+pub(crate) async fn pairing_lookup(
+    State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
+    a: Authed,
+    ValidJson(dto): ValidJson<PairingCodeDto>,
+) -> Result<Json<PairingLookup>, AppError> {
+    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code)?;
+    let p = db::lookup(&st.db, &code, a.user.id, Utc::now())
+        .await?
+        .ok_or_else(|| AppError::not_found("No pending request with this code"))?;
+    st.pairing_throttle.refund(ip, &key);
+    Ok(Json(PairingLookup {
+        pairing_id: p.public_id,
+        device_name: p.device_name,
+        system_name: p.system_name,
+        client_ip: p.client_ip,
+        requested_at: p.created_at,
+    }))
 }
 
 #[utoipa::path(post, path = "/api/auth/pairing/approve", responses((status = 204)))]
 pub(crate) async fn pairing_approve(
     State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
     a: Authed,
     ValidJson(dto): ValidJson<PairingApproveDto>,
 ) -> Result<StatusCode, AppError> {
-    let code: String = dto.code.chars().filter(char::is_ascii_digit).collect();
-    match db::approve(&st.db, &code, a.user.id, Utc::now()).await? {
+    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code)?;
+    let approval = db::approve(
+        &st.db,
+        &code,
+        dto.pairing_id.as_deref(),
+        a.user.id,
+        Utc::now(),
+    )
+    .await?;
+    if !matches!(approval, Approval::NotFound) {
+        st.pairing_throttle.refund(ip, &key);
+    }
+    match approval {
         Approval::Approved => Ok(StatusCode::NO_CONTENT),
         Approval::NotFound => Err(AppError::not_found("No pending request with this code")),
         Approval::Expired => Err(AppError::bad_request("Pairing request expired")),
@@ -821,13 +908,15 @@ pub(crate) async fn pairing_cancel(
     let user_id = db::cancel(&st.db, &id, device)
         .await?
         .ok_or_else(|| AppError::not_found("Pairing request not found"))?;
-    st.hub.emit_to_user(
-        user_id,
-        SseEvent::PairingCancelled {
-            user_id: user_id.into(),
-            pairing_id: id,
-        },
-    );
+    if let Some(user_id) = user_id {
+        st.hub.emit_to_user(
+            user_id,
+            SseEvent::PairingCancelled {
+                user_id: user_id.into(),
+                pairing_id: id,
+            },
+        );
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM pairing_requests\n               WHERE \"userId\" IS NULL AND status = 'pending' AND \"expiresAt\" >= $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "92e349801d4c33b0af5b92acf51a2fbc10ff2beff86aded81b6db35ae4cd6c7d"
+}

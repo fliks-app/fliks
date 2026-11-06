@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"n!\" FROM pairing_requests WHERE \"userId\" = $1 AND status = 'pending'",
+  "query": "SELECT count(*) AS \"n!\" FROM pairing_requests\n           WHERE \"deviceId\" = $1 AND status = 'pending' AND \"expiresAt\" >= $2",
   "describe": {
     "columns": [
       {
@@ -12,12 +12,13 @@
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Text",
+        "Timestamptz"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "0800af711f2f12284b9d547a9e87ee48bfe5d3b49d06719b5ff04306da988392"
+  "hash": "8f8f91ebaee8fc2432a756e60540993f9b50e245bbdd222a0766a93dabf3e8e0"
 }

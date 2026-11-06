@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO pairing_requests (\"publicId\", \"userId\", \"deviceId\", \"deviceName\", \"systemName\", status, \"expiresAt\", code, \"clientIp\", \"clientNet\")\n               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6, $7, $8)\n               ON CONFLICT (code) WHERE status = 'pending' DO NOTHING\n               RETURNING \"publicId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publicId",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "publicId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Timestamptz",
+        "Varchar",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "655698397df63ca161be3f0a758b5dde25c60bb4b00ea0f96d471b27145ec4af"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pg_advisory_xact_lock(hashtext($1))",
+  "query": "SELECT pg_advisory_xact_lock(hashtext('pairing-net'), hashtext($1))",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       null
     ]
   },
-  "hash": "4c93380abebe4682f280bc3cc0add2878746496a25db7ea50d857658c49a931f"
+  "hash": "7536a9d86eef89c6c31ed190ab73ed58769d2cc27eaca1be56237434e0ec67ca"
 }

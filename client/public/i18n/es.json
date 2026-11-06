@@ -831,7 +831,9 @@
     "expired": "La solicitud ha caducado.",
     "error": "Se ha producido un error.",
     "retry": "Reintentar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "outdated": "Este servidor necesita una actualización para que la conexión rápida funcione sin elegir usuario.",
+    "pick_user": "Elegir un usuario"
   },
   "pending_requests": {
     "title": "Solicitudes de conexión",
@@ -847,7 +849,12 @@
     "code_label": "Código mostrado en el dispositivo",
     "code_hint": "Lo muestra el dispositivo que quiere conectarse.",
     "enter_code": "Introducir código",
-    "wrong_code": "Ninguna solicitud pendiente tiene este código."
+    "wrong_code": "Ninguna solicitud pendiente tiene este código. Comprueba el código en el dispositivo o empieza de nuevo allí.",
+    "expired": "Esta solicitud ha caducado. Empieza de nuevo en el dispositivo.",
+    "check": "Continuar",
+    "confirm_title": "¿Aprobar este inicio de sesión?",
+    "from_ip": "Dirección de red: {{ip}}",
+    "too_many": "Demasiados códigos incorrectos. Inténtalo más tarde."
   },
   "server_history": {
     "section_title": "Servidores recientes",

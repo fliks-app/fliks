@@ -171,3 +171,30 @@ describe('AuthService.hasPermission', () => {
     expect(as({ isAdmin: true }).hasPermission('parties.create')).toBe(true);
   });
 });
+
+describe('AuthService.pairingRequest', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function body(userId: number | null) {
+    const post = vi.fn((..._args: unknown[]) => of({ pairingId: 'p', code: '123456', expiresIn: 600 }));
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        { provide: SessionStoreService, useValue: { active: () => null } },
+      ],
+    });
+    return TestBed.inject(AuthService)
+      .pairingRequest(userId, 'dev', 'TV')
+      .then(() => post.mock.calls[0]![1] as Record<string, unknown>);
+  }
+
+  it('sends the picked user and omits the key when none was picked', async () => {
+    expect(await body(7)).toMatchObject({ userId: 7 });
+    TestBed.resetTestingModule();
+    expect(await body(null)).not.toHaveProperty('userId');
+  });
+});
