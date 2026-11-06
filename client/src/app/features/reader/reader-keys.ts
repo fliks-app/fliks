@@ -12,10 +12,12 @@ interface KeyBinding {
 }
 
 const TEXT_FIELDS = ['input', 'textarea', 'select'];
-/** Enter and Space belong to a focused control; the other keys to a focused text field or slider. */
+const ARROWS = [37, 39];
+/** Enter and Space belong to a focused control, arrows to a panel too; the other keys to a focused text field. */
 const typed = (keyCode: number, extra: { shift?: boolean } = {}): KeyCombo => ({
   keyCode,
-  suppressOnInteractiveElement: keyCode === 13 || keyCode === 32 ? true : TEXT_FIELDS,
+  suppressOnInteractiveElement:
+    keyCode === 13 || keyCode === 32 ? true : ARROWS.includes(keyCode) ? [...TEXT_FIELDS, '.rd-panel *'] : TEXT_FIELDS,
   ...extra,
 });
 

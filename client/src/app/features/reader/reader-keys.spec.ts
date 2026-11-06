@@ -33,11 +33,14 @@ describe('readerKeyAction', () => {
     expect(readerKeyAction(key(65))).toBeNull();
   });
 
-  it('leaves Enter and Space to a focused control and letters and arrows to text fields', () => {
+  it('leaves Enter and Space to a focused control, arrows to a panel and every key to text fields', () => {
     const combos = readerKeyBindings().flatMap((b) => b.keyCombos);
     const of = (code: number) => combos.filter((c) => c.keyCode === code);
     for (const c of [...of(13), ...of(32)]) expect(c.suppressOnInteractiveElement).toBe(true);
-    for (const c of combos.filter((x) => ![13, 32].includes(x.keyCode))) {
+    for (const c of [...of(37), ...of(39)]) {
+      expect(c.suppressOnInteractiveElement).toEqual(['input', 'textarea', 'select', '.rd-panel *']);
+    }
+    for (const c of combos.filter((x) => ![13, 32, 37, 39].includes(x.keyCode))) {
       expect(c.suppressOnInteractiveElement).toEqual(['input', 'textarea', 'select']);
     }
   });
