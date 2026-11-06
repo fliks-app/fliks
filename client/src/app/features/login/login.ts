@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from '../../core/services/auth.service';
+import { oidcErrorText } from '../../core/services/oidc';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
 
@@ -22,7 +23,7 @@ export class LoginComponent {
 
   readonly isNative = Capacitor.isNativePlatform();
 
-  readonly error = signal(this.oidcErrorText(this.route.snapshot.queryParamMap.get('oidcError')));
+  readonly error = signal(oidcErrorText(this.translate, this.route.snapshot.queryParamMap.get('oidcError')));
   readonly loading = signal(false);
   /** False when the picker would be empty (roster hidden by the admin): it would bounce back here. */
   readonly canPickUser = signal(true);
@@ -48,6 +49,15 @@ export class LoginComponent {
   );
 
   constructor() {
+    // The message is shown once: keep `oidcError` (and the provider's logout `state`) out of the history entry.
+    const q = this.route.snapshot.queryParamMap;
+    if (q.get('oidcError') || q.get('state')) {
+      void this.router.navigate([], {
+        queryParams: { oidcError: null, state: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    }
     void this.startSso();
     void this.auth
       .listUsersPublic()
@@ -61,17 +71,12 @@ export class LoginComponent {
     const wanted = Number(query.get('sso'));
     await this.auth.oidcInfo();
     if (wanted) {
+      // Out of the history entry, so coming back from the provider page does not start it again.
+      await this.router.navigate([], { queryParams: { sso: null }, queryParamsHandling: 'merge', replaceUrl: true });
       await this.auth.oidcBegin(wanted).catch(() => undefined);
       return;
     }
     this.auth.oidcAutoLaunch(query.get('autoLaunch') === '0' || !!query.get('oidcError'));
-  }
-
-  private oidcErrorText(kind: string | null): string {
-    if (!kind) return '';
-    const key = `oidc.error.${kind}`;
-    const text = this.translate.instant(key);
-    return text === key ? this.translate.instant('oidc.error.idp') : text;
   }
 
   async onSubmit() {

@@ -299,7 +299,8 @@
     "sso_manage": "Gestionar tu cuenta",
     "sso_unlink": "Desvincular",
     "sso_link": "Vincular {{name}}",
-    "sso_last_method": "Es tu única forma de iniciar sesión. Define una contraseña para poder desvincularla."
+    "sso_last_method": "Es tu única forma de iniciar sesión. Define una contraseña para poder desvincularla.",
+    "sso_link_origin": "La vinculación funciona desde la dirección definida como URL pública del servidor."
   },
   "account_settings": {
     "title": "Ajustes de la cuenta",
@@ -3257,7 +3258,7 @@
       "password_login_hint": "Los administradores siempre conservan el inicio de sesión con contraseña. Los demás usuarios usan SSO o Quick Connect; las apps antiguas ya no pueden usar contraseña.",
       "auto_launch": "Inicio automático",
       "auto_launch_none": "Ninguno",
-      "auto_launch_hint": "La página de inicio de sesión abre este proveedor al instante. Añade ?autoLaunch=0 a la dirección para acceder al formulario de contraseña.",
+      "auto_launch_hint": "La página de inicio de sesión abre este proveedor de inmediato y pliega el formulario de contraseña de administrador. Una dirección que termina en ?autoLaunch=0 lo evita.",
       "editor_create": "Añadir un proveedor",
       "editor_edit": "Editar el proveedor",
       "field_name": "Nombre",
@@ -3269,12 +3270,12 @@
       "test_pkce": "PKCE (S256)",
       "test_end_session": "Cierre de sesión en el proveedor",
       "test_backchannel": "Cierre de sesión back-channel",
-      "test_no_pkce": "Sin PKCE (S256) este proveedor no se puede activar.",
+      "test_no_pkce": "Un proveedor que no exige PKCE no se puede activar.",
       "test_failed": "No se pudo ejecutar la prueba.",
       "field_client_id": "ID de cliente",
       "field_client_secret": "Secreto de cliente",
-      "secret_keep_hint": "Hay un secreto guardado. Déjalo vacío para conservarlo.",
-      "secret_public_hint": "Déjalo vacío para un cliente público.",
+      "secret_keep_hint": "Hay un secreto guardado. Un campo vacío lo conserva.",
+      "secret_public_hint": "Un campo vacío es un cliente público.",
       "field_ca": "Certificado de la CA",
       "field_ca_hint": "Opcional, PEM. Para un proveedor tras una autoridad de certificación privada.",
       "field_scope": "Scope",
@@ -3303,7 +3304,7 @@
       "auto_register": "Crear cuentas automáticamente",
       "auto_register_hint": "Un primer inicio de sesión sin cuenta crea una con el rol predeterminado.",
       "match_by_email": "Asociar cuentas existentes por correo verificado",
-      "match_by_email_hint": "Solo si el proveedor marca el correo como verificado. Las cuentas de administrador nunca se adoptan: se vinculan desde su página de cuenta.",
+      "match_by_email_hint": "Solo adopta cuentas que un administrador creó sin contraseña y que nunca iniciaron sesión, cuando el proveedor marca el correo como verificado. Las demás cuentas se vinculan desde su página de cuenta.",
       "end_session": "Cerrar también la sesión en el proveedor",
       "end_session_hint": "Solo web. Desactivado por defecto: cerrar sesión en Fliks no toca la sesión del proveedor.",
       "field_account_url": "URL de gestión de la cuenta",
@@ -3312,11 +3313,12 @@
       "uris": "Direcciones que registrar en el proveedor",
       "uris_hint": "Construidas a partir de la URL pública del servidor.",
       "uris_after_save": "Disponibles una vez guardado el proveedor.",
-      "uris_need_public_url": "Define primero la URL pública en los ajustes generales.",
+      "uris_need_public_url": "La URL pública se define en los ajustes generales.",
       "uri_redirect": "URI de redirección",
       "uri_backchannel": "URI de cierre de sesión back-channel",
       "uri_logout": "URI de redirección tras cerrar sesión",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "insecure_context": "El inicio de sesión único necesita acceder al servidor por https. Con http simple los botones quedan ocultos."
     }
   },
   "roles": {
@@ -4547,13 +4549,13 @@
   "oidc": {
     "completing": "Iniciando sesión...",
     "error": {
-      "expired": "El inicio de sesión caducó o no se inició desde este dispositivo. Inténtalo de nuevo.",
+      "expired": "El inicio de sesión caducó o no empezó en este dispositivo.",
       "idp": "El proveedor de identidad rechazó el inicio de sesión.",
       "not_allowed": "Tu cuenta no tiene permiso para iniciar sesión aquí.",
       "no_account": "Ninguna cuenta coincide con este inicio de sesión. Pide una cuenta a tu administrador.",
       "disabled": "Esta cuenta está desactivada.",
       "already_linked": "Esta identidad ya está vinculada a otra cuenta.",
-      "pkce": "Este proveedor no admite PKCE (S256), por lo que no se puede usar.",
+      "pkce": "Este proveedor no está configurado para un inicio de sesión seguro y no se puede usar.",
       "unavailable": "El inicio de sesión único no está disponible en este dispositivo."
     },
     "error_last_method": "Es tu única forma de iniciar sesión. Define una contraseña antes de desvincularla."

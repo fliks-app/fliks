@@ -34,8 +34,10 @@ export interface OidcProviderRow {
 }
 
 /** Body of POST and PUT; `clientSecret` blank keeps the stored one, `issuer` is ignored on PUT. */
-export type OidcProviderBody = Omit<OidcProviderRow, 'id' | 'clientSecretSet' | 'linkedUsers'> & {
+export type OidcProviderBody = Omit<OidcProviderRow, 'id' | 'clientSecretSet' | 'linkedUsers' | 'position'> & {
   clientSecret: string;
+  /** Absent keeps the position (create: after the last). */
+  position?: number;
 };
 
 export type OidcTestResult =

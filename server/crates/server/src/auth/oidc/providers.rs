@@ -381,6 +381,14 @@ pub(crate) async fn update(
     let id = int_param(&id)?;
     dto.validate()?;
     let secret = blank(dto.client_secret.take());
+    // The issuer is the identity of every linked account, so a new issuer is a new provider.
+    let known = db::get(&st.db, id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Provider not found"))?;
+    dto.issuer = known.issuer.clone();
+    if dto.enabled && !known.enabled {
+        check_enable(&st, &dto, dto.ca_pem.as_deref()).await?;
+    }
     let mut tx = st.db.begin().await?;
     sqlx::query_scalar!(
         r#"SELECT id FROM oidc_providers WHERE id = $1 FOR UPDATE"#,
@@ -392,11 +400,6 @@ pub(crate) async fn update(
     let before = db::get(&mut *tx, id)
         .await?
         .ok_or_else(|| AppError::not_found("Provider not found"))?;
-    // The issuer is the identity of every linked account, so a new issuer is a new provider.
-    dto.issuer = before.issuer.clone();
-    if dto.enabled && !before.enabled {
-        check_enable(&st, &dto, dto.ca_pem.as_deref()).await?;
-    }
     if !dto.enabled && before.enabled {
         keep_one_provider(&mut tx, id).await?;
     }

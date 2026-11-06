@@ -82,7 +82,7 @@ describe('SsoProviderEditorComponent', () => {
     cmp.name.set(' Authentik ');
     cmp.issuer.set('https://idp.test');
     cmp.clientId.set('cid');
-    cmp.allowedGroups.set('family, friends\nkids');
+    cmp.allowedGroups.set('family\nfriends\nkids');
     cmp.adminGroups.set('');
     cmp.addMapping();
     cmp.setMapping(0, { group: ' kids ', roleId: 2 });
@@ -106,7 +106,6 @@ describe('SsoProviderEditorComponent', () => {
       endSessionAtProvider: false,
       accountUrl: null,
       enabled: true,
-      position: 0,
     });
   });
 
@@ -195,6 +194,18 @@ describe('SsoSettingsComponent', () => {
     expect(api.update).toHaveBeenCalledTimes(2);
     expect(api.update).toHaveBeenCalledWith(1, expect.objectContaining({ position: 1, clientSecret: '' }));
     expect(api.update).toHaveBeenCalledWith(2, expect.objectContaining({ position: 0 }));
+  });
+
+  it('reloads the list when a reorder fails, and ignores a second drag meanwhile', async () => {
+    const { api, cmp } = setup();
+    await vi.waitFor(() => expect(cmp.loading()).toBe(false));
+    api.update.mockRejectedValueOnce(new Error('boom'));
+    const first = cmp.reorder(0, 1);
+    expect(cmp.reordering()).toBe(true);
+    await cmp.reorder(1, 0);
+    await first;
+    expect(cmp.reordering()).toBe(false);
+    expect(api.list).toHaveBeenCalledTimes(2);
   });
 
   it('saves the two global settings together', async () => {

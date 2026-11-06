@@ -33,10 +33,13 @@ export interface OidcPlatform {
  *  the desktop loopback bridge) once their bridge is present. Null hides every SSO button. */
 export function oidcPlatform(): OidcPlatform | null {
   if (Capacitor.isNativePlatform() || IS_STANDALONE_BUNDLE || window.fliksDesktop) return null;
+  // Web Crypto's digest is secure-context only: over plain http the PKCE challenge cannot be made.
+  if (!window.isSecureContext) return null;
   return {
     returnTo: 'web',
     open: (authorizeUrl) => {
-      location.assign(authorizeUrl);
+      // replace, so the browser's back button from the provider page does not re-run an automatic start.
+      location.replace(authorizeUrl);
       return new Promise(() => undefined);
     },
   };
@@ -83,8 +86,24 @@ function pendingStore(): Storage {
 
 const pendingKey = (state: string) => `fliks.oidc.${state}`;
 
+/** Entries nobody came back for pile up in localStorage on a shell: drop the expired ones. */
+function purgeExpired(store: Storage): void {
+  for (let i = store.length - 1; i >= 0; i--) {
+    const key = store.key(i);
+    if (!key?.startsWith('fliks.oidc.') || key === ERROR_AT_KEY || key === LAST_PROVIDER_KEY) continue;
+    try {
+      if ((JSON.parse(store.getItem(key) ?? '{}') as { expiresAt?: number }).expiresAt! <= Date.now()) {
+        store.removeItem(key);
+      }
+    } catch {
+      store.removeItem(key);
+    }
+  }
+}
+
 export function savePending(p: PendingOidc): void {
   try {
+    purgeExpired(pendingStore());
     pendingStore().setItem(pendingKey(p.state), JSON.stringify(p));
   } catch {
     /* storage unavailable: the exchange will refuse the state */
@@ -116,15 +135,17 @@ function readMap(): Record<string, number> {
   }
 }
 
-/** The provider the last login on this server went through, null after a password login. */
-export function lastProvider(serverUrl: string): number | null {
-  return readMap()[serverUrl] ?? null;
+const accountKey = (serverUrl: string, userId: number) => `${serverUrl}::${userId}`;
+
+/** The provider the last login of this account went through, null after a password login. */
+export function lastProvider(serverUrl: string, userId: number): number | null {
+  return readMap()[accountKey(serverUrl, userId)] ?? null;
 }
 
-export function rememberProvider(serverUrl: string, providerId: number | null): void {
+export function rememberProvider(serverUrl: string, userId: number, providerId: number | null): void {
   const map = readMap();
-  if (providerId === null) delete map[serverUrl];
-  else map[serverUrl] = providerId;
+  if (providerId === null) delete map[accountKey(serverUrl, userId)];
+  else map[accountKey(serverUrl, userId)] = providerId;
   try {
     localStorage.setItem(LAST_PROVIDER_KEY, JSON.stringify(map));
   } catch {
@@ -132,7 +153,8 @@ export function rememberProvider(serverUrl: string, providerId: number | null): 
   }
 }
 
-/** An error or a cancel stops auto-launch and the silent re-run for a minute. */
+/** An error or a cancel stops auto-launch and the silent re-run for a minute, and so does a launch
+ *  nobody came back from: the browser's back button from the provider page must not start it again. */
 export function noteOidcFailure(): void {
   try {
     localStorage.setItem(ERROR_AT_KEY, String(Date.now()));
@@ -141,10 +163,37 @@ export function noteOidcFailure(): void {
   }
 }
 
+const LAUNCH_AT_KEY = 'fliks.oidcLaunchAt';
+
+export function noteOidcLaunch(): void {
+  try {
+    localStorage.setItem(LAUNCH_AT_KEY, String(Date.now()));
+  } catch {
+    /* best effort */
+  }
+}
+
+export function clearOidcLaunch(): void {
+  try {
+    localStorage.removeItem(LAUNCH_AT_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
 export function recentOidcFailure(): boolean {
   try {
-    return Date.now() - Number(localStorage.getItem(ERROR_AT_KEY) ?? 0) < LOOP_GUARD_MS;
+    const since = (key: string) => Date.now() - Number(localStorage.getItem(key) ?? 0);
+    return since(ERROR_AT_KEY) < LOOP_GUARD_MS || since(LAUNCH_AT_KEY) < LOOP_GUARD_MS;
   } catch {
     return false;
   }
+}
+
+/** The translated text of a server refusal kind; an unknown kind reads as the generic provider error. */
+export function oidcErrorText(translate: { instant(key: string): string }, kind: string | null): string {
+  if (!kind) return '';
+  const key = `oidc.error.${kind}`;
+  const text = translate.instant(key);
+  return text === key ? translate.instant('oidc.error.idp') : text;
 }

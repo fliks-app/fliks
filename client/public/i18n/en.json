@@ -299,7 +299,8 @@
     "sso_manage": "Manage your account",
     "sso_unlink": "Unlink",
     "sso_link": "Link {{name}}",
-    "sso_last_method": "This is your only way to sign in. Set a password to be able to unlink it."
+    "sso_last_method": "This is your only way to sign in. Set a password to be able to unlink it.",
+    "sso_link_origin": "Linking works from the address set as the public URL of the server."
   },
   "account_settings": {
     "title": "Account settings",
@@ -3257,7 +3258,7 @@
       "password_login_hint": "Administrators always keep password login. Other users then sign in with SSO or Quick Connect; older apps cannot use a password anymore.",
       "auto_launch": "Auto-launch",
       "auto_launch_none": "None",
-      "auto_launch_hint": "The login page opens this provider at once. Add ?autoLaunch=0 to the address to reach the password form.",
+      "auto_launch_hint": "The login page opens this provider at once and folds the administrator password form. An address ending in ?autoLaunch=0 skips it.",
       "editor_create": "Add a provider",
       "editor_edit": "Edit the provider",
       "field_name": "Name",
@@ -3269,12 +3270,12 @@
       "test_pkce": "PKCE (S256)",
       "test_end_session": "Logout at the provider",
       "test_backchannel": "Back-channel logout",
-      "test_no_pkce": "Without PKCE (S256) this provider cannot be enabled.",
+      "test_no_pkce": "A provider that does not enforce PKCE cannot be enabled.",
       "test_failed": "The test could not run.",
       "field_client_id": "Client ID",
       "field_client_secret": "Client secret",
-      "secret_keep_hint": "A secret is stored. Leave blank to keep it.",
-      "secret_public_hint": "Leave blank for a public client.",
+      "secret_keep_hint": "A secret is stored. A blank field keeps it.",
+      "secret_public_hint": "A blank field is a public client.",
       "field_ca": "CA certificate",
       "field_ca_hint": "Optional, PEM. For a provider behind a private certificate authority.",
       "field_scope": "Scope",
@@ -3303,7 +3304,7 @@
       "auto_register": "Create accounts automatically",
       "auto_register_hint": "A first sign-in without an account creates one with the default role.",
       "match_by_email": "Match existing accounts by verified email",
-      "match_by_email_hint": "Only when the provider marks the email as verified. Administrator accounts are never adopted: they link from their account page.",
+      "match_by_email_hint": "Adopts only accounts an administrator created without a password that never signed in, when the provider marks the email as verified. Other accounts link from their account page.",
       "end_session": "Sign out at the provider too",
       "end_session_hint": "Web only. Off by default: signing out of Fliks leaves the provider session alone.",
       "field_account_url": "Account management URL",
@@ -3312,11 +3313,12 @@
       "uris": "Addresses to register at the provider",
       "uris_hint": "Built from the public URL of the server.",
       "uris_after_save": "Available once the provider is saved.",
-      "uris_need_public_url": "Set the public URL in General settings first.",
+      "uris_need_public_url": "The public URL is set in General settings.",
       "uri_redirect": "Redirect URI",
       "uri_backchannel": "Back-channel logout URI",
       "uri_logout": "Post-logout redirect URI",
-      "copied": "Copied"
+      "copied": "Copied",
+      "insecure_context": "Single sign-on needs the server to be reached over https. Over plain http the sign-in buttons stay hidden."
     }
   },
   "roles": {
@@ -4547,13 +4549,13 @@
   "oidc": {
     "completing": "Signing you in...",
     "error": {
-      "expired": "The sign-in expired or was not started from this device. Try again.",
+      "expired": "The sign-in expired or did not start on this device.",
       "idp": "The identity provider refused the sign-in.",
       "not_allowed": "Your account is not allowed to sign in here.",
       "no_account": "No account matches this sign-in. Ask your administrator for an account.",
       "disabled": "This account is disabled.",
       "already_linked": "This identity is already linked to another account.",
-      "pkce": "This provider does not support PKCE (S256), so it cannot be used.",
+      "pkce": "This provider is not set up for a safe sign-in, so it cannot be used.",
       "unavailable": "Single sign-on is not available on this device."
     },
     "error_last_method": "This is your only way to sign in. Set a password before unlinking it."

@@ -50,7 +50,9 @@ export class SsoSettingsComponent implements OnInit {
   readonly tv = inject(TvService);
 
   readonly loading = signal(true);
-  readonly error = signal('');
+  readonly reordering = signal(false);
+  /** SSO needs Web Crypto, which browsers expose on https and localhost only. */
+  readonly insecure = !window.isSecureContext;
   readonly providers = signal<OidcProviderRow[]>([]);
   readonly roles = signal<RoleRow[]>([]);
   readonly publicUrl = signal('');
@@ -72,7 +74,7 @@ export class SsoSettingsComponent implements OnInit {
       this.passwordLogin.set(all['password_login'] === 'admins' ? 'admins' : 'everyone');
       this.autoLaunch.set(all['oidc_auto_launch'] ?? '');
     } catch {
-      this.error.set(this.translate.instant('settings.sso.load_error'));
+      // Errors are surfaced by the global HTTP interceptor.
     } finally {
       this.loading.set(false);
     }
@@ -111,16 +113,20 @@ export class SsoSettingsComponent implements OnInit {
 
   async reorder(from: number, to: number): Promise<void> {
     const list = [...this.providers()];
-    if (from === to || to < 0 || to >= list.length) return;
+    if (this.reordering() || from === to || to < 0 || to >= list.length) return;
     moveItemInArray(list, from, to);
     const previous = this.providers();
     this.providers.set(list.map((p, i) => ({ ...p, position: i })));
+    this.reordering.set(true);
     try {
       await Promise.all(
         list.flatMap((p, i) => (p.position === i ? [] : [this.api.update(p.id, bodyOf(p, { position: i }))])),
       );
     } catch {
       this.providers.set(previous);
+      await this.reload();
+    } finally {
+      this.reordering.set(false);
     }
   }
 

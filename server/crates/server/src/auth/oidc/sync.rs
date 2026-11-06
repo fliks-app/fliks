@@ -1,5 +1,5 @@
 //! From provider claims to a Fliks user: account resolution, provisioning and the access synced
-//! from groups (`docs/spec/auth.md` rules J).
+//! from groups (`docs/spec/auth.md`, OpenID Connect).
 use super::{Provider, db, groups_at, username_base};
 use crate::{state::AppState, users};
 use axum::http::StatusCode;
@@ -199,6 +199,15 @@ pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<S
         .bind(format!("oidc:{}:{}", p.id, prof.sub))
         .execute(&mut *tx)
         .await?;
+    let enabled = sqlx::query_scalar!(
+        r#"SELECT enabled FROM oidc_providers WHERE id = $1 FOR SHARE"#,
+        p.id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if enabled != Some(true) {
+        return Err(Kind::Expired.into());
+    }
     let plan = plan(&mut tx, p, &prof.groups).await?;
     let known = match db::identity_user(&mut tx, p.id, &prof.sub).await? {
         Some(u) => Some(u),
@@ -207,10 +216,7 @@ pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<S
             .as_deref()
             .filter(|_| p.match_by_email && prof.email_verified)
         {
-            Some(email) => match db::adoptable_by_email(&mut tx, p.id, email)
-                .await?
-                .as_slice()
-            {
+            Some(email) => match db::adoptable_by_email(&mut tx, email).await?.as_slice() {
                 [only] => {
                     db::insert_identity(&mut tx, *only, p.id, &prof.sub, prof.email.as_deref())
                         .await?;
@@ -248,6 +254,9 @@ pub async fn login_user(st: &AppState, p: &Provider, prof: &Profile) -> Result<S
 
 /// Writes the planned parts; the last enabled admin is never demoted. True when something changed.
 async fn apply(c: &mut PgConnection, id: i32, mut plan: Plan) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(r#"SELECT id FROM users WHERE id = $1 FOR UPDATE"#, id)
+        .fetch_one(&mut *c)
+        .await?;
     let before = db::current_access(&mut *c, id).await?;
     if plan.is_admin == Some(false) && before.1 && users::is_last_enabled_admin(&mut *c, id).await?
     {

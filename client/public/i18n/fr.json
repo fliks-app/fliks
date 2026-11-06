@@ -299,7 +299,8 @@
     "sso_manage": "Gérer votre compte",
     "sso_unlink": "Délier",
     "sso_link": "Lier {{name}}",
-    "sso_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe pour pouvoir le délier."
+    "sso_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe pour pouvoir le délier.",
+    "sso_link_origin": "La liaison fonctionne depuis l'adresse réglée comme URL publique du serveur."
   },
   "account_settings": {
     "title": "Paramètres du compte",
@@ -3257,7 +3258,7 @@
       "password_login_hint": "Les administrateurs gardent toujours la connexion par mot de passe. Les autres utilisateurs passent par le SSO ou Quick Connect ; les anciennes applications ne peuvent plus utiliser de mot de passe.",
       "auto_launch": "Lancement automatique",
       "auto_launch_none": "Aucun",
-      "auto_launch_hint": "La page de connexion ouvre ce fournisseur immédiatement. Ajoutez ?autoLaunch=0 à l'adresse pour accéder au formulaire de mot de passe.",
+      "auto_launch_hint": "La page de connexion ouvre ce fournisseur aussitôt et replie le formulaire de mot de passe administrateur. Une adresse terminée par ?autoLaunch=0 l'évite.",
       "editor_create": "Ajouter un fournisseur",
       "editor_edit": "Modifier le fournisseur",
       "field_name": "Nom",
@@ -3269,12 +3270,12 @@
       "test_pkce": "PKCE (S256)",
       "test_end_session": "Déconnexion chez le fournisseur",
       "test_backchannel": "Déconnexion back-channel",
-      "test_no_pkce": "Sans PKCE (S256), ce fournisseur ne peut pas être activé.",
+      "test_no_pkce": "Un fournisseur qui n'impose pas PKCE ne peut pas être activé.",
       "test_failed": "Le test n'a pas pu s'exécuter.",
       "field_client_id": "ID client",
       "field_client_secret": "Secret client",
-      "secret_keep_hint": "Un secret est enregistré. Laissez vide pour le conserver.",
-      "secret_public_hint": "Laissez vide pour un client public.",
+      "secret_keep_hint": "Un secret est enregistré. Un champ vide le conserve.",
+      "secret_public_hint": "Un champ vide correspond à un client public.",
       "field_ca": "Certificat de l'autorité (CA)",
       "field_ca_hint": "Facultatif, au format PEM. Pour un fournisseur derrière une autorité de certification privée.",
       "field_scope": "Scope",
@@ -3303,7 +3304,7 @@
       "auto_register": "Créer les comptes automatiquement",
       "auto_register_hint": "Une première connexion sans compte en crée un avec le rôle par défaut.",
       "match_by_email": "Associer les comptes existants par e-mail vérifié",
-      "match_by_email_hint": "Seulement si le fournisseur indique l'e-mail comme vérifié. Les comptes administrateurs ne sont jamais adoptés : ils se lient depuis leur page de compte.",
+      "match_by_email_hint": "Reprend uniquement les comptes créés par un administrateur sans mot de passe et jamais connectés, quand le fournisseur marque l'e-mail comme vérifié. Les autres comptes se lient depuis leur page de compte.",
       "end_session": "Se déconnecter aussi chez le fournisseur",
       "end_session_hint": "Web uniquement. Désactivé par défaut : se déconnecter de Fliks laisse la session du fournisseur intacte.",
       "field_account_url": "URL de gestion du compte",
@@ -3312,11 +3313,12 @@
       "uris": "Adresses à enregistrer chez le fournisseur",
       "uris_hint": "Construites à partir de l'URL publique du serveur.",
       "uris_after_save": "Disponibles une fois le fournisseur enregistré.",
-      "uris_need_public_url": "Définissez d'abord l'URL publique dans les réglages généraux.",
+      "uris_need_public_url": "L'URL publique se règle dans les paramètres généraux.",
       "uri_redirect": "URI de redirection",
       "uri_backchannel": "URI de déconnexion back-channel",
       "uri_logout": "URI de redirection après déconnexion",
-      "copied": "Copié"
+      "copied": "Copié",
+      "insecure_context": "L'authentification unique demande d'accéder au serveur en https. En http simple, les boutons de connexion restent masqués."
     }
   },
   "roles": {
@@ -4547,13 +4549,13 @@
   "oidc": {
     "completing": "Connexion en cours...",
     "error": {
-      "expired": "La connexion a expiré ou n'a pas été lancée depuis cet appareil. Réessayez.",
+      "expired": "La connexion a expiré ou n'a pas démarré sur cet appareil.",
       "idp": "Le fournisseur d'identité a refusé la connexion.",
       "not_allowed": "Votre compte n'est pas autorisé à se connecter ici.",
       "no_account": "Aucun compte ne correspond à cette connexion. Demandez un compte à votre administrateur.",
       "disabled": "Ce compte est désactivé.",
       "already_linked": "Cette identité est déjà liée à un autre compte.",
-      "pkce": "Ce fournisseur ne prend pas en charge PKCE (S256), il ne peut pas être utilisé.",
+      "pkce": "Ce fournisseur n'est pas configuré pour une connexion sûre, il ne peut pas être utilisé.",
       "unavailable": "L'authentification unique n'est pas disponible sur cet appareil."
     },
     "error_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe avant de le délier."

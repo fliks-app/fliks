@@ -223,17 +223,17 @@ pub async fn touch_identity(
     .map(drop)
 }
 
-/// The users a verified email may be adopted by: not admins, not yet linked to this provider.
+/// The users a verified email may be adopted by: accounts an admin created for SSO (no password, never
+/// signed in, no identity), since `users.email` is self-set and proves nothing.
 pub async fn adoptable_by_email(
     c: &mut PgConnection,
-    provider: i32,
     email: &str,
 ) -> Result<Vec<i32>, sqlx::Error> {
     sqlx::query_scalar!(
-        r#"SELECT u.id FROM users u WHERE lower(u.email) = lower($2) AND NOT u."isAdmin"
-             AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i."userId" = u.id AND i."providerId" = $1)
+        r#"SELECT u.id FROM users u WHERE lower(u.email) = lower($1) AND NOT u."isAdmin"
+             AND u."passwordHash" IS NULL AND u."lastLogin" IS NULL
+             AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i."userId" = u.id)
            ORDER BY u.id"#,
-        provider,
         email
     )
     .fetch_all(c)
@@ -300,7 +300,7 @@ pub async fn revoke_provider_sessions(db: &PgPool, provider: i32) -> Result<Vec<
     revoke_ids(db, rows.into_iter().map(|r| (r.id, r.user_id)).collect()).await
 }
 
-/// Back-channel logout: the provider's sessions with this `sid`, else with this subject.
+/// Back-channel logout: the provider's sessions with this `sid`, and those without one that have this subject.
 pub async fn revoke_logged_out(
     db: &PgPool,
     provider: i32,
@@ -310,7 +310,7 @@ pub async fn revoke_logged_out(
     let rows = sqlx::query!(
         r#"SELECT id, "userId" AS user_id FROM sessions
            WHERE "providerId" = $1 AND "revokedAt" IS NULL
-             AND (($2::text IS NOT NULL AND sid = $2) OR ($2::text IS NULL AND subject = $3))"#,
+             AND (sid = $2 OR ((sid IS NULL OR $2::text IS NULL) AND subject = $3))"#,
         provider,
         sid,
         subject

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id FROM sessions\n           WHERE \"providerId\" = $1 AND \"revokedAt\" IS NULL\n             AND (($2::text IS NOT NULL AND sid = $2) OR ($2::text IS NULL AND subject = $3))",
+  "query": "SELECT id, \"userId\" AS user_id FROM sessions\n           WHERE \"providerId\" = $1 AND \"revokedAt\" IS NULL\n             AND (sid = $2 OR ((sid IS NULL OR $2::text IS NULL) AND subject = $3))",
   "describe": {
     "columns": [
       {
@@ -38,5 +38,5 @@
       false
     ]
   },
-  "hash": "3a70fcd432b39b3892c55e3e30d839d0c4d99b6dd8ff02ee195154d2faa208b7"
+  "hash": "405cc1bda443b9505825953782098376bc2136261d78c4e56dbbbb59255dfa56"
 }

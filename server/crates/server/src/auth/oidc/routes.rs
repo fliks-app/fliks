@@ -1,4 +1,4 @@
-//! The sign-in flow (`docs/spec/auth.md` section J): start, callback, exchange, logout, identities.
+//! The sign-in flow (`docs/spec/auth.md`): start, callback, exchange, logout, identities.
 use super::{
     Oidc, ReturnTo, cut_users, db,
     sync::{self, Fail, Kind},
@@ -47,6 +47,8 @@ pub fn router() -> Router<AppState> {
 
 /// The login throttle key of the start route: every start of a network counts, a success clears.
 const THROTTLE_KEY: &str = "oidc:";
+/// Starts per network and 15 minutes: a household behind one address signs in several times.
+const START_LIMIT: u32 = 30;
 
 fn random() -> String {
     let mut b = [0u8; 32];
@@ -161,7 +163,7 @@ pub(crate) async fn start(
         .ok_or_else(|| AppError::bare(StatusCode::NOT_FOUND))?;
     if !st
         .login_throttle
-        .attempt(peer_ip(&peer, &headers), THROTTLE_KEY)
+        .attempt_with(peer_ip(&peer, &headers), THROTTLE_KEY, START_LIMIT)
     {
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,
@@ -182,6 +184,11 @@ pub(crate) async fn start(
     let (Some(return_to), true) = (return_to, errs.is_empty()) else {
         return Err(AppError::bad_request(errs));
     };
+    // A silent run must not override an admin's `login` or `consent`: the client falls back to the login page.
+    let silent = dto.prompt.is_some();
+    if silent && !matches!(p.prompt.as_deref(), None | Some("select_account")) {
+        return Err(AppError::conflict("Silent sign-in is not available"));
+    }
     let link_user = if dto.link {
         Some(session_from_headers(&headers, &st).await?.user.id)
     } else {
@@ -279,8 +286,11 @@ pub(crate) async fn callback(
     else {
         return Ok(fail(rt, Kind::Expired));
     };
-    if q.get("iss").is_some_and(|iss| *iss != p.issuer) {
-        return Ok(fail(rt, Kind::Expired));
+    let iss_required = st.oidc.discover(&p).await.is_ok_and(|d| d.iss_param);
+    match q.get("iss") {
+        Some(iss) if *iss != p.issuer => return Ok(fail(rt, Kind::Expired)),
+        None if iss_required => return Ok(fail(rt, Kind::Expired)),
+        _ => {}
     }
     match q
         .get("code")
@@ -325,10 +335,15 @@ async fn complete_claims(
 ) -> Result<(), String> {
     let missing = |k: &str| super::claim_at(claims, k).is_none();
     let groups_missing = p.groups_claim.as_deref().is_some_and(missing);
-    if !(groups_missing || missing(&p.username_claim) || missing("email"))
-        || d.userinfo_endpoint.is_none()
-    {
+    if !(groups_missing || missing(&p.username_claim) || missing("email")) {
         return Ok(());
+    }
+    if d.userinfo_endpoint.is_none() {
+        return if groups_missing {
+            Err("groups claim missing and no userinfo endpoint".into())
+        } else {
+            Ok(())
+        };
     }
     let Some(access) = access else {
         return if groups_missing {
@@ -379,7 +394,7 @@ pub(crate) async fn exchange(
         return Ok(refusal(Kind::Expired));
     };
     if !p.enabled {
-        return Ok(refusal(Kind::Disabled));
+        return Ok(refusal(Kind::Expired));
     }
     if !is_verifier(&dto.verifier) || dto.code.is_empty() || dto.code.len() > 4096 {
         return Ok(refusal(Kind::Idp));
@@ -597,6 +612,7 @@ pub(crate) async fn identities(
     )
     .fetch_one(&st.db)
     .await?;
+    let has_password = has_password && password_usable(&st, &a).await?;
     let identities: Vec<IdentityOut> = rows
         .into_iter()
         .map(|r| IdentityOut {
@@ -610,6 +626,11 @@ pub(crate) async fn identities(
     Ok(Json(
         json!({"hasPassword": has_password, "identities": identities}),
     ))
+}
+
+/// A stored password is a way in unless `password_login` is `admins` and the caller is not one.
+async fn password_usable(st: &AppState, a: &crate::http::auth::Authed) -> Result<bool, AppError> {
+    Ok(a.user.is_admin || !db::password_login_admins_only(&st.db).await?)
 }
 
 #[utoipa::path(delete, path = "/api/auth/oidc/identities/{provider_id}", responses((status = 204)))]
@@ -631,6 +652,7 @@ pub(crate) async fn unlink(
     )
     .fetch_one(&mut *tx)
     .await?;
+    let has_password = has_password && password_usable(&st, &a).await?;
     if count == 1 && !has_password {
         return Err(AppError::bad_request("oidc.error_last_method"));
     }

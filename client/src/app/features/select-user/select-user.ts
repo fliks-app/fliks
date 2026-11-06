@@ -137,7 +137,13 @@ export class SelectUserComponent {
     try {
       this.serverUsers.set(await this.auth.listUsersPublic());
       // A hidden roster (admin setting) leaves nothing to pick: go straight to typing a username.
-      if (!this.users().length) void this.router.navigate(['/login'], { replaceUrl: true });
+      if (!this.users().length) {
+        const autoLaunch = this.route.snapshot.queryParamMap.get('autoLaunch');
+        void this.router.navigate(['/login'], {
+          replaceUrl: true,
+          queryParams: autoLaunch === '0' ? { autoLaunch: 0 } : undefined,
+        });
+      }
     } catch {
       this.unreachable.set(true);
     } finally {
@@ -183,7 +189,7 @@ export class SelectUserComponent {
   }
 
   goToPasswordLogin(user: PublicUserSummary) {
-    void this.router.navigate(['/login'], { queryParams: { username: user.username } });
+    void this.router.navigate(['/login'], { queryParams: { username: user.username, autoLaunch: 0 } });
   }
 
   goToQuickConnect(user: PublicUserSummary) {
@@ -195,7 +201,7 @@ export class SelectUserComponent {
   }
 
   goToOtherUser() {
-    void this.router.navigate(['/login']);
+    void this.router.navigate(['/login'], { queryParams: { autoLaunch: 0 } });
   }
 
   /** Stored sessions — including the current one — survive: /setup is where the

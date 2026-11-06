@@ -16,7 +16,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 
-const lines = (v: string): string[] => v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+const lines = (v: string): string[] => v.split('\n').map((s) => s.trim()).filter(Boolean);
 
 @Component({
   selector: 'app-sso-provider-editor',
@@ -67,7 +67,7 @@ export class SsoProviderEditorComponent {
   readonly accountUrl = signal('');
   readonly enabled = signal(true);
 
-  readonly prompts: (OidcPrompt | '')[] = ['', 'none', 'login', 'consent', 'select_account'];
+  readonly prompts: (OidcPrompt | '')[] = ['', 'login', 'consent', 'select_account'];
 
   /** The three URIs to register at the provider; null until the provider has an id and `public_url` is set. */
   readonly uris = computed(() => {
@@ -141,8 +141,13 @@ export class SsoProviderEditorComponent {
   }
 
   async copy(value: string): Promise<void> {
-    await navigator.clipboard.writeText(value);
-    this.toast.success(this.translate.instant('settings.sso.copied'));
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      this.toast.success(this.translate.instant('settings.sso.copied'));
+    } catch {
+      // Clipboard denied: the value stays readable in its field.
+    }
   }
 
   readonly canSave = computed(
@@ -170,7 +175,6 @@ export class SsoProviderEditorComponent {
       endSessionAtProvider: this.endSessionAtProvider(),
       accountUrl: this.accountUrl().trim() || null,
       enabled: this.enabled(),
-      position: row?.position ?? 0,
     };
     this.saving.set(true);
     try {

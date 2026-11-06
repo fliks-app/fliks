@@ -7,8 +7,10 @@
       <p class="text-sm text-base-content/60 mt-1">{{ 'settings.sso.subtitle' | translate }}</p>
     </div>
 
-    @if (error()) {
-      <div role="alert" class="alert alert-error">{{ error() }}</div>
+    @if (insecure) {
+      <div role="alert" class="alert alert-warning" data-testid="sso-insecure">
+        {{ 'settings.sso.insecure_context' | translate }}
+      </div>
     }
 
     <section class="card bg-base-100 border border-base-200">
@@ -31,7 +33,7 @@
           @for (p of providers(); track p.id; let i = $index) {
             <div
               cdkDrag
-              [cdkDragDisabled]="tv.isTv()"
+              [cdkDragDisabled]="tv.isTv() || reordering()"
               class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
               data-testid="sso-provider"
             >

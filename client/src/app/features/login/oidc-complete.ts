@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { oidcErrorText } from '../../core/services/oidc';
 import { ToastService } from '../../core/services/toast.service';
 
 /** Landing page of the provider callback: `code` and `state` (or `error`) arrive in the fragment. */
@@ -32,8 +33,13 @@ export class OidcCompleteComponent implements OnInit {
       await this.router.navigate([res.pending.link ? '/account' : '/'], { replaceUrl: true });
       return;
     }
+    // Back from the app to the provider's page and on to a spent state: the sign-in already worked.
+    if (res.kind === 'expired' && !res.pending?.link && this.auth.user()) {
+      await this.router.navigate(['/'], { replaceUrl: true });
+      return;
+    }
     if (res.pending?.link) {
-      this.toast.error(this.errorText(res.kind));
+      this.toast.error(oidcErrorText(this.translate, res.kind));
       await this.router.navigate(['/account'], { replaceUrl: true });
       return;
     }
@@ -41,11 +47,5 @@ export class OidcCompleteComponent implements OnInit {
       replaceUrl: true,
       queryParams: { autoLaunch: 0, ...(res.pending?.silent ? {} : { oidcError: res.kind }) },
     });
-  }
-
-  private errorText(kind: string): string {
-    const key = `oidc.error.${kind}`;
-    const text = this.translate.instant(key);
-    return text === key ? this.translate.instant('oidc.error.idp') : text;
   }
 }

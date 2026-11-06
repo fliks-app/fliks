@@ -858,10 +858,81 @@ async fn return_targets_are_a_closed_set(pool: PgPool) {
 async fn start_is_throttled_per_network_and_a_success_clears_it(pool: PgPool) {
     let c = ctx(pool).await;
     let pid = c.provider(json!({})).await;
-    for _ in 0..5 {
+    for _ in 0..29 {
+        assert_eq!(c.begin_with(pid, json!({}), None).await.0.0, 201);
+    }
+    assert_eq!(
+        c.login(pid, json!({})).await.0,
+        201,
+        "the 30th start, then a success"
+    );
+    for _ in 0..30 {
         assert_eq!(c.begin_with(pid, json!({}), None).await.0.0, 201);
     }
     assert_eq!(c.begin_with(pid, json!({}), None).await.0.0, 429);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_silent_run_never_overrides_a_login_or_consent_prompt(pool: PgPool) {
+    let c = ctx(pool).await;
+    let strict = c.provider(json!({"prompt": "login"})).await;
+    let (r, _) = c.begin_with(strict, json!({"prompt": "none"}), None).await;
+    assert_eq!(r.0, 409);
+    let (r, _) = c.begin_with(strict, json!({}), None).await;
+    assert!(
+        r.2["authorizeUrl"]
+            .as_str()
+            .unwrap()
+            .contains("prompt=login")
+    );
+    let soft = c
+        .provider(json!({"name": "S", "prompt": "select_account"}))
+        .await;
+    let (r, _) = c.begin_with(soft, json!({"prompt": "none"}), None).await;
+    let url = r.2["authorizeUrl"].as_str().unwrap().to_owned();
+    assert!(
+        url.contains("prompt=none") && !url.contains("select_account"),
+        "{url}"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_self_set_email_does_not_hand_over_an_account(pool: PgPool) {
+    let c = ctx(pool).await;
+    let pid = c
+        .provider(json!({"matchByEmail": true, "autoRegister": false}))
+        .await;
+    let hash = bcrypt::hash("pw", 4).unwrap();
+    sqlx::query(r#"INSERT INTO users (username, email, "passwordHash") VALUES ('mallory', 'ann@example.test', $1)"#)
+        .bind(hash)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        error(&c.login(pid, json!({})).await),
+        (403, "no_account".into())
+    );
+    sqlx::query(
+        r#"UPDATE users SET "passwordHash" = NULL, "lastLogin" = now() WHERE username = 'mallory'"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        error(&c.login(pid, json!({})).await),
+        (403, "no_account".into()),
+        "a user who signed in"
+    );
+    sqlx::query(r#"UPDATE users SET "lastLogin" = NULL WHERE username = 'mallory'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, _, b) = c.login(pid, json!({})).await;
+    assert_eq!(
+        (s, b["user"]["username"].clone()),
+        (201, json!("mallory")),
+        "an admin-made placeholder"
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -1220,6 +1291,32 @@ async fn linking_needs_a_session_and_the_right_owner(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_password_that_policy_forbids_is_not_a_second_method(pool: PgPool) {
+    let c = ctx(pool).await;
+    let pid = c.provider(json!({"autoRegister": false})).await;
+    let bob = c.pw_user("bob", false).await;
+    let t = c.token_of(bob, "bob").await;
+    assert_eq!(c.link(pid, &t, "sub-9").await.0, 204);
+    assert_eq!(c.setting("password_login", "admins").await.0, 200);
+    let (s, _, e) = c
+        .call(
+            "DELETE",
+            &format!("/api/auth/oidc/identities/{pid}"),
+            Some(&t),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (s, e["message"].clone()),
+        (400, json!("oidc.error_last_method"))
+    );
+    let (_, _, ids) = c
+        .call("GET", "/api/auth/oidc/identities", Some(&t), None)
+        .await;
+    assert_eq!(ids["hasPassword"], false);
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_last_sign_in_method_cannot_be_unlinked(pool: PgPool) {
     let c = ctx(pool).await;
     let pid = c.provider(json!({})).await;
@@ -1307,6 +1404,7 @@ async fn every_id_token_check_refuses(pool: PgPool) {
         ("no exp", json!({"exp": null}), Signing::Key(0)),
         ("wrong nonce", json!({"nonce": "nope"}), Signing::Key(0)),
         ("no nonce", json!({"nonce": null}), Signing::Key(0)),
+        ("no iat", json!({"iat": null}), Signing::Key(0)),
         ("no subject", json!({"sub": null}), Signing::Key(0)),
         ("alg none", json!({}), Signing::None),
         ("HS256", json!({}), Signing::Hs256),

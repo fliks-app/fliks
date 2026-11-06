@@ -163,10 +163,8 @@ export class UserGeneralComponent implements OnInit {
     if (!user) return;
     try {
       await this.oidcApi.unlinkUser(user.id, providerId);
-      this.state.user.set({
-        ...user,
-        identities: (user.identities ?? []).filter((i) => i.providerId !== providerId),
-      });
+      // The managed state follows the identity: take the server's view.
+      this.state.user.set(await this.api.get(user.id));
     } catch {
       // handled by global error interceptor
     }

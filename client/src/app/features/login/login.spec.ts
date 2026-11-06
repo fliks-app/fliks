@@ -32,9 +32,10 @@ function setup(opts: { query?: Record<string, string>; providers?: { id: number;
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: new Map(Object.entries(opts.query ?? {})) } } },
     ],
   });
+  const router = TestBed.inject(Router) as unknown as { navigate: ReturnType<typeof vi.fn> };
   const fixture = TestBed.createComponent(LoginComponent);
   fixture.detectChanges();
-  return { auth, fixture, el: fixture.nativeElement as HTMLElement };
+  return { auth, router, fixture, el: fixture.nativeElement as HTMLElement };
 }
 
 describe('LoginComponent SSO', () => {
@@ -67,6 +68,17 @@ describe('LoginComponent SSO', () => {
     const { auth } = setup({ query: { sso: '4' } });
     await vi.waitFor(() => expect(auth.oidcBegin).toHaveBeenCalledWith(4));
     expect(auth.oidcAutoLaunch).not.toHaveBeenCalled();
+  });
+
+  it('strips ?sso= from the history entry before starting', async () => {
+    const { router } = setup({ query: { sso: '4' } });
+    await vi.waitFor(() =>
+      expect(router.navigate).toHaveBeenCalledWith([], {
+        queryParams: { sso: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      }),
+    );
   });
 
   it('asks for auto-launch, suppressed by ?autoLaunch=0', async () => {

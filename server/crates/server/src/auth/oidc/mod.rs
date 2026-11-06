@@ -1,4 +1,4 @@
-//! OpenID Connect relying party (`docs/spec/auth.md` section J): discovery and JWKS caches, the
+//! OpenID Connect relying party (`docs/spec/auth.md`): discovery and JWKS caches, the
 //! guarded outbound calls, token exchange and the ID and logout token checks.
 mod db;
 pub(crate) mod providers;
@@ -34,6 +34,7 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const BODY_CAP: usize = 256 << 10;
 const CACHE_TTL: Duration = Duration::from_secs(3600);
 const JWKS_REFETCH: Duration = Duration::from_secs(60);
+const FAIL_TTL: Duration = Duration::from_secs(30);
 const LEEWAY: u64 = 60;
 /// What a provider may sign its tokens with; `none` and `HS*` never.
 const ALGS: [Algorithm; 9] = [
@@ -67,12 +68,16 @@ pub struct Discovery {
     pub auth_methods: Vec<String>,
     pub pkce: bool,
     pub backchannel: bool,
+    /// The provider sends `iss` on the authorization response (RFC 9207).
+    pub iss_param: bool,
 }
 
 struct Entry {
     discovery: Arc<Discovery>,
     at: Instant,
-    jwks: Option<(Arc<JwkSet>, Instant)>,
+    jwks: Option<Arc<JwkSet>>,
+    /// The last key set fetch started, so an unauthenticated flood of unknown `kid`s cannot amplify.
+    jwks_at: Option<Instant>,
 }
 
 /// The caches and the network every provider call goes through.
@@ -80,6 +85,7 @@ pub struct Oidc {
     net: Arc<dyn Net>,
     refetch: Duration,
     cache: Mutex<HashMap<i32, Entry>>,
+    failed: Mutex<HashMap<i32, (Instant, Fail)>>,
 }
 
 impl Default for Oidc {
@@ -149,6 +155,7 @@ impl Oidc {
             net,
             refetch: JWKS_REFETCH,
             cache: Mutex::default(),
+            failed: Mutex::default(),
         }
     }
 
@@ -161,6 +168,10 @@ impl Oidc {
     /// Forgets a provider's discovery and keys: its row changed or is gone.
     pub fn invalidate(&self, id: i32) {
         self.cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&id);
+        self.failed
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&id);
@@ -291,17 +302,33 @@ impl Oidc {
             if let Some(e) = c.get(&p.id).filter(|e| e.at.elapsed() < CACHE_TTL) {
                 return Ok(e.discovery.clone());
             }
+            if let Some((at, why)) = self
+                .failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&p.id)
+                && at.elapsed() < FAIL_TTL
+            {
+                return Err(why.clone());
+            }
         }
-        let d = Arc::new(
-            self.discover_uncached(&p.issuer, p.ca_pem.as_deref())
-                .await?,
-        );
+        let d = match self.discover_uncached(&p.issuer, p.ca_pem.as_deref()).await {
+            Ok(d) => Arc::new(d),
+            Err(e) => {
+                self.failed
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(p.id, (Instant::now(), e.clone()));
+                return Err(e);
+            }
+        };
         self.cache.lock().unwrap_or_else(|e| e.into_inner()).insert(
             p.id,
             Entry {
                 discovery: d.clone(),
                 at: Instant::now(),
                 jwks: None,
+                jwks_at: None,
             },
         );
         Ok(d)
@@ -309,27 +336,37 @@ impl Oidc {
 
     /// The provider's key set; `force` refetches, at most once a minute.
     async fn jwks(&self, p: &Provider, d: &Discovery, force: bool) -> Result<Arc<JwkSet>, Fail> {
-        {
-            let c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some((set, at)) = c.get(&p.id).and_then(|e| e.jwks.as_ref()) {
-                let fresh = at.elapsed() < if force { self.refetch } else { CACHE_TTL };
-                if fresh {
-                    return Ok(set.clone());
-                }
+        let stale = {
+            let mut c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(e) = c.get_mut(&p.id) else {
+                return Err("no discovery".into());
+            };
+            let gap = if force { self.refetch } else { CACHE_TTL };
+            if let Some(set) = &e.jwks
+                && e.jwks_at.is_some_and(|at| at.elapsed() < gap)
+            {
+                return Ok(set.clone());
             }
-        }
-        let doc = self
-            .get_json(&d.jwks_uri, p.ca_pem.as_deref(), None)
-            .await?;
-        let set: Arc<JwkSet> =
-            Arc::new(serde_json::from_value(doc).map_err(|_| "invalid jwks".to_owned())?);
+            if force && e.jwks_at.is_some_and(|at| at.elapsed() < self.refetch) {
+                return Err("keys fetched too recently".into());
+            }
+            e.jwks_at = Some(Instant::now());
+            e.jwks.clone()
+        };
+        let fetched = self.get_json(&d.jwks_uri, p.ca_pem.as_deref(), None).await;
+        let set: Arc<JwkSet> = match fetched
+            .and_then(|doc| serde_json::from_value(doc).map_err(|_| "invalid jwks".to_owned()))
+        {
+            Ok(s) => Arc::new(s),
+            Err(e) => return stale.ok_or(e),
+        };
         if let Some(e) = self
             .cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get_mut(&p.id)
         {
-            e.jwks = Some((set.clone(), Instant::now()));
+            e.jwks = Some(set.clone());
         }
         Ok(set)
     }
@@ -385,6 +422,9 @@ impl Oidc {
             .is_none_or(str::is_empty)
         {
             return Err("no subject".into());
+        }
+        if claims.get("iat").and_then(Value::as_u64).is_none() {
+            return Err("no iat".into());
         }
         Ok(claims)
     }
@@ -542,6 +582,10 @@ fn parse_discovery(issuer: &str, doc: &Value) -> Option<Discovery> {
             .unwrap_or_else(|| vec!["client_secret_basic".into()]),
         pkce: strings("code_challenge_methods_supported")
             .is_some_and(|m| m.iter().any(|x| x == "S256")),
+        iss_param: doc
+            .get("authorization_response_iss_parameter_supported")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         backchannel: doc
             .get("backchannel_logout_supported")
             .and_then(Value::as_bool)

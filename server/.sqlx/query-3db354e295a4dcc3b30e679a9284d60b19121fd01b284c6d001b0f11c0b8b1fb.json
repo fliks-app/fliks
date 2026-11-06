@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id FROM users u WHERE lower(u.email) = lower($2) AND NOT u.\"isAdmin\"\n             AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.\"userId\" = u.id AND i.\"providerId\" = $1)\n           ORDER BY u.id",
+  "query": "SELECT u.id FROM users u WHERE lower(u.email) = lower($1) AND NOT u.\"isAdmin\"\n             AND u.\"passwordHash\" IS NULL AND u.\"lastLogin\" IS NULL\n             AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.\"userId\" = u.id)\n           ORDER BY u.id",
   "describe": {
     "columns": [
       {
@@ -17,7 +17,6 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
         "Text"
       ]
     },
@@ -25,5 +24,5 @@
       false
     ]
   },
-  "hash": "3f9770d98fd24a4cfb76c4e17ef0132e9b677b85f0e93f515a384d6c8c7f9958"
+  "hash": "3db354e295a4dcc3b30e679a9284d60b19121fd01b284c6d001b0f11c0b8b1fb"
 }

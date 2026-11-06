@@ -8,7 +8,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { OidcCompleteComponent } from './oidc-complete';
 
-async function run(fragment: string, result: unknown) {
+async function run(fragment: string, result: unknown, user: unknown = null) {
   const oidcReturned = vi.fn(async () => result);
   const navigate = vi.fn(async () => true);
   const error = vi.fn();
@@ -19,7 +19,7 @@ async function run(fragment: string, result: unknown) {
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: AuthService, useValue: { oidcReturned } },
+      { provide: AuthService, useValue: { oidcReturned, user: () => user } },
       { provide: Router, useValue: { navigate } },
       { provide: ToastService, useValue: { error } },
       { provide: ActivatedRoute, useValue: { snapshot: { fragment, queryParamMap: new Map() } } },
@@ -30,6 +30,11 @@ async function run(fragment: string, result: unknown) {
 }
 
 describe('OidcCompleteComponent', () => {
+  it('goes home when a spent state comes back while already signed in', async () => {
+    const { navigate } = await run('error=expired&state=s', { ok: false, kind: 'expired', pending: null }, { id: 1 });
+    expect(navigate).toHaveBeenCalledWith(['/'], { replaceUrl: true });
+  });
+
   it('completes with the code and state of the fragment, then goes home', async () => {
     const { oidcReturned, navigate } = await run('code=abc&state=xyz', { ok: true, pending: { link: false } });
     expect(oidcReturned).toHaveBeenCalledWith({ code: 'abc', state: 'xyz' });

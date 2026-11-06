@@ -65,7 +65,11 @@ export class UsersSettingsComponent implements OnInit {
   readonly formEnabled = signal(true);
   readonly formLibraryIds = signal<Set<number>>(new Set());
 
+  /** A password is optional only when an enabled provider can sign the user in. */
+  readonly hasProviders = signal(false);
+
   ngOnInit() {
+    void this.auth.oidcInfo().then((info) => this.hasProviders.set(info.providers.length > 0));
     this.reloadAll();
   }
 

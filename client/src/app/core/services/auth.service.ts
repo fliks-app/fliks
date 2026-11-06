@@ -22,6 +22,8 @@ import {
   oidcPlatform,
   newPkce,
   noteOidcFailure,
+  noteOidcLaunch,
+  clearOidcLaunch,
   recentOidcFailure,
   lastProvider,
   rememberProvider,
@@ -179,6 +181,11 @@ export class AuthService {
     oidcPlatform() && !this.tv.isTv() ? this._oidc().providers : [],
   );
   readonly passwordLogin = computed(() => this._oidc().passwordLogin);
+  /** The page was reached through another host name than `public_url`: a link started here could not come back to it. */
+  readonly ssoOtherOrigin = computed(() => {
+    const origin = this._oidc().origin;
+    return this.cookieAuth && !!origin && origin !== location.origin;
+  });
 
   constructor() {
     // Another tab switched account, so the cookie under this one changed too:
@@ -299,7 +306,7 @@ export class AuthService {
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
     await this.finishLogin(res);
-    rememberProvider(this.serverConfig.serverUrl(), null);
+    rememberProvider(this.serverConfig.serverUrl(), res.user.id, null);
     return res;
   }
 
@@ -372,6 +379,7 @@ export class AuthService {
       silent: !!opts.silent,
       expiresAt: Date.now() + OIDC_TTL_MS,
     });
+    noteOidcLaunch();
     const back = await platform.open(authorizeUrl);
     if (!back) {
       noteOidcFailure();
@@ -387,6 +395,7 @@ export class AuthService {
     back: OidcReturn,
     state?: string,
   ): Promise<{ ok: true; pending: PendingOidc } | { ok: false; kind: string; pending: PendingOidc | null }> {
+    clearOidcLaunch();
     const key = 'error' in back ? state : back.state;
     const pending = key ? takePending(key) : null;
     if ('error' in back) {
@@ -418,7 +427,7 @@ export class AuthService {
     await this.serverCache.clearAll();
     const res = await firstValueFrom(this.http.post<LoginResponse>('/api/auth/oidc/exchange', body, { context }));
     await this.finishLogin(res);
-    rememberProvider(this.serverConfig.serverUrl(), pending.providerId);
+    rememberProvider(this.serverConfig.serverUrl(), res.user.id, pending.providerId);
   }
 
   /** Starts the configured provider at once (after `oidcInfo()`); false when something says to show the login page instead. */
@@ -432,17 +441,22 @@ export class AuthService {
   }
 
   /** The provider to re-run silently after its 30-day session cap ended this one. */
-  private silentRerunProvider(err: unknown): number | null {
+  private async silentRerunProvider(err: unknown): Promise<number | null> {
     const e = err instanceof HttpErrorResponse ? err : null;
     const message = (e?.error as { message?: unknown } | null)?.message;
     if (!this.cookieAuth || e?.status !== 401 || message !== 'Refresh token expired') return null;
     if (this.tv.isTv() || !oidcPlatform() || recentOidcFailure()) return null;
-    return lastProvider(this.serverConfig.serverUrl());
+    const userId = this.sessions.active()?.user.id;
+    if (userId === undefined) return null;
+    // The verifier lives in the origin that started the flow, which must be the one the callback returns to.
+    const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
+    if (origin && origin !== location.origin) return null;
+    return lastProvider(this.serverConfig.serverUrl(), userId);
   }
 
   /** The provider's logout page for a session that came from one with end-session enabled. */
   private async oidcEndSessionUrl(): Promise<string | null> {
-    if (!this.cookieAuth || lastProvider(this.serverConfig.serverUrl()) === null) return null;
+    if (!this.cookieAuth) return null;
     try {
       const res = await firstValueFrom(
         this.http.post<{ url?: string } | null>('/api/auth/oidc/end-session', {}, {
@@ -744,8 +758,8 @@ export class AuthService {
         }
         return true;
       }
-      const rerun = this.silentRerunProvider(err);
-      await this.dropActiveSession('refresh refused', err);
+      const rerun = await this.silentRerunProvider(err);
+      await this.dropActiveSession('refresh refused', err, false);
       if (rerun !== null) this.oidcBegin(rerun, { silent: true }).catch(() => noteOidcFailure());
       return false;
     }
@@ -883,7 +897,7 @@ export class AuthService {
       },
       error: (err: unknown) => {
         const status = (err as { status?: number })?.status ?? 0;
-        if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err);
+        if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err, false);
       },
     });
   }
@@ -901,7 +915,8 @@ export class AuthService {
         }),
       );
     } finally {
-      rememberProvider(this.serverConfig.serverUrl(), null);
+      const userId = this.sessions.active()?.user.id;
+      if (userId !== undefined) rememberProvider(this.serverConfig.serverUrl(), userId, null);
       await this.dropActiveSession('user logout', undefined, false);
       if (endSessionUrl) location.assign(endSessionUrl);
     }

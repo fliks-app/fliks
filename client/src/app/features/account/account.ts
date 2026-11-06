@@ -42,10 +42,13 @@ export class AccountComponent implements OnInit {
     () => this.auth.passwordLogin() === 'admins' && !this.auth.user()?.isAdmin,
   );
   /** Providers this shell can complete and the user is not linked to yet. */
-  readonly linkable = computed(() => {
+  private readonly unlinked = computed(() => {
     const linked = new Set(this.identities().map((i) => i.providerId));
     return this.auth.ssoProviders().filter((p) => !linked.has(p.id));
   });
+  /** A link started from another host name could not come back to this session. */
+  readonly linkBlocked = computed(() => this.auth.ssoOtherOrigin() && this.unlinked().length > 0);
+  readonly linkable = computed(() => (this.auth.ssoOtherOrigin() ? [] : this.unlinked()));
   readonly lastMethod = computed(() => this.identities().length === 1 && !this.hasPassword());
 
   async ngOnInit() {

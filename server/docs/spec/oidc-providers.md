@@ -1,6 +1,6 @@
 # Spec: OpenID Connect providers
 
-Provider administration for single sign-on (`auth.md` rules 68 to 85 hold the sign-in flow). Every route needs `Authed` with `isAdmin`: `settings.access` is grantable to a non-admin role and these rows decide who can become an admin, so a non-admin (any role) gets 403 `Forbidden resource`.
+Provider administration for single sign-on (`auth.md` rules 68 to 86 hold the sign-in flow). Every route needs `Authed` with `isAdmin`: `settings.access` is grantable to a non-admin role and these rows decide who can become an admin, so a non-admin (any role) gets 403 `Forbidden resource`.
 
 ## Routes
 
