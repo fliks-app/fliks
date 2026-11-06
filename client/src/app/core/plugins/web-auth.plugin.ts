@@ -1,7 +1,6 @@
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import type { OidcReturn } from '../services/oidc';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface WebAuthPlugin {
   /** The iOS auth sheet; resolves with the callback URL, rejects with code `canceled` when dismissed. */
@@ -14,18 +13,14 @@ const CALLBACK_PATH = '/oidc/complete';
 /** Android may report the tab closing just before the callback intent arrives. */
 const FINISH_GRACE_MS = 500;
 
-/** `code` and `state`, or an error kind, from the callback URL; null for any other URL. */
-export function parseOidcCallback(url: string): OidcReturn | null {
-  let u: URL;
+/** The callback's query string (`code`, `state` or `error` as sent); null for any other URL. */
+export function oidcCallbackQuery(url: string): string | null {
   try {
-    u = new URL(url);
+    const u = new URL(url);
+    return u.protocol === `${SCHEME}:` && u.pathname === CALLBACK_PATH ? u.search.slice(1) : null;
   } catch {
     return null;
   }
-  if (u.protocol !== `${SCHEME}:` || u.pathname !== CALLBACK_PATH) return null;
-  const [code, state, error] = ['code', 'state', 'error'].map((k) => u.searchParams.get(k));
-  if (error || !code || !state) return { error: error ?? 'expired' };
-  return { code, state };
 }
 
 /** Whether this shell can run the sheet: the iOS plugin, or the Custom Tab and app-link plugins on Android. */
@@ -35,36 +30,34 @@ export function webAuthAvailable(): boolean {
     : Capacitor.isPluginAvailable('Browser') && Capacitor.isPluginAvailable('App');
 }
 
-/** Sends the user through the system auth sheet; null when they dismiss it. */
-export async function webAuthOpen(url: string): Promise<OidcReturn | null> {
+/** Sends the user through the system auth sheet. iOS resolves with the callback query; on Android
+ *  the app-wide listener gets the callback, so this only resolves null when the tab closes without one. */
+export async function webAuthOpen(url: string): Promise<string | null> {
   if (Capacitor.getPlatform() === 'ios') {
     try {
-      return parseOidcCallback((await WebAuth.start({ url, callbackScheme: SCHEME })).url);
+      return oidcCallbackQuery((await WebAuth.start({ url, callbackScheme: SCHEME })).url);
     } catch (e) {
       if ((e as { code?: string }).code === 'canceled') return null;
       throw e;
     }
   }
-  let finish!: (r: OidcReturn | null) => void;
-  const result = new Promise<OidcReturn | null>((resolve) => (finish = resolve));
-  const handles: PluginListenerHandle[] = await Promise.all([
-    App.addListener('appUrlOpen', (e) => {
-      const r = parseOidcCallback(e.url);
-      if (r) finish(r);
-    }),
-    Browser.addListener('browserFinished', () => setTimeout(() => finish(null), FINISH_GRACE_MS)),
-  ]);
+  let finish!: () => void;
+  const closed = new Promise<null>((resolve) => (finish = () => resolve(null)));
+  const handle = await Browser.addListener('browserFinished', () => setTimeout(finish, FINISH_GRACE_MS));
   try {
     await Browser.open({ url });
-    return await result;
+    return await closed;
   } finally {
-    await Promise.all(handles.map((h) => h.remove()));
+    await handle.remove();
   }
 }
 
-/** The in-app `/oidc/complete` URL for the callback that cold-started the app (Android killed the process while the tab was up); null when it launched any other way. */
-export async function launchCallbackRoute(): Promise<string | null> {
-  const launch = await App.getLaunchUrl();
-  if (!launch || !parseOidcCallback(launch.url)) return null;
-  return `${CALLBACK_PATH}${new URL(launch.url).search}`;
+/** Sends every callback URL that carries a pending `state` to `/oidc/complete`; any other is ignored.
+ *  Registered once at boot: Capacitor retains an `appUrlOpen` that arrived with no listener. */
+export function listenOidcCallbacks(go: (route: string) => void, isPending: (state: string) => boolean): void {
+  void App.addListener('appUrlOpen', (e) => {
+    const query = oidcCallbackQuery(e.url);
+    const state = query && new URLSearchParams(query).get('state');
+    if (query && state && isPending(state)) go(`${CALLBACK_PATH}?${query}`);
+  });
 }

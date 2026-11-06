@@ -1,4 +1,4 @@
-import { launchCallbackRoute, parseOidcCallback, webAuthAvailable, webAuthOpen } from './web-auth.plugin';
+import { listenOidcCallbacks, oidcCallbackQuery, webAuthAvailable, webAuthOpen } from './web-auth.plugin';
 import { oidcPlatform } from '../services/oidc';
 
 const m = vi.hoisted(() => ({
@@ -6,7 +6,6 @@ const m = vi.hoisted(() => ({
   plugins: new Set<string>(),
   start: vi.fn(),
   open: vi.fn(),
-  launchUrl: vi.fn(),
   listeners: {} as Record<string, (e: unknown) => void>,
   removed: [] as string[],
 }));
@@ -30,7 +29,6 @@ vi.mock('@capacitor/browser', () => ({
 }));
 vi.mock('@capacitor/app', () => ({
   App: {
-    getLaunchUrl: m.launchUrl,
     addListener: async (n: string, fn: (e: unknown) => void) => {
       m.listeners[n] = fn;
       return { remove: async () => void m.removed.push(n) };
@@ -46,24 +44,22 @@ describe('web-auth plugin', () => {
     m.plugins = new Set();
     m.start.mockReset();
     m.open.mockReset().mockResolvedValue(undefined);
-    m.launchUrl.mockReset();
     m.listeners = {};
     m.removed = [];
   });
 
-  it('parses a code, an error, and ignores other URLs', () => {
-    expect(parseOidcCallback(`${CB}?code=c&state=s`)).toEqual({ code: 'c', state: 's' });
-    expect(parseOidcCallback(`${CB}?error=idp&state=s`)).toEqual({ error: 'idp' });
-    expect(parseOidcCallback(`${CB}?state=s`)).toEqual({ error: 'expired' });
-    expect(parseOidcCallback('media.fliks.app:/other?code=c&state=s')).toBeNull();
-    expect(parseOidcCallback('https://x.test/oidc/complete?code=c&state=s')).toBeNull();
-    expect(parseOidcCallback('not a url')).toBeNull();
+  it('extracts the callback query and ignores other URLs', () => {
+    expect(oidcCallbackQuery(`${CB}?code=c&state=s`)).toBe('code=c&state=s');
+    expect(oidcCallbackQuery(`${CB}?error=idp&state=s`)).toBe('error=idp&state=s');
+    expect(oidcCallbackQuery('media.fliks.app:/other?code=c&state=s')).toBeNull();
+    expect(oidcCallbackQuery('https://x.test/oidc/complete?code=c&state=s')).toBeNull();
+    expect(oidcCallbackQuery('not a url')).toBeNull();
   });
 
   describe('iOS', () => {
-    it('resolves with the callback of the auth sheet', async () => {
+    it('resolves with the callback query of the auth sheet', async () => {
       m.start.mockResolvedValue({ url: `${CB}?code=c&state=s` });
-      expect(await webAuthOpen('https://idp.test/auth')).toEqual({ code: 'c', state: 's' });
+      expect(await webAuthOpen('https://idp.test/auth')).toBe('code=c&state=s');
       expect(m.start).toHaveBeenCalledWith({ url: 'https://idp.test/auth', callbackScheme: 'media.fliks.app' });
     });
 
@@ -78,28 +74,34 @@ describe('web-auth plugin', () => {
   describe('Android', () => {
     beforeEach(() => (m.platform = 'android'));
 
-    it('resolves on appUrlOpen for the callback and drops its listeners', async () => {
+    it('only reports a cancel when the tab closes, and drops its listener', async () => {
       const p = webAuthOpen('https://idp.test/auth');
       await vi.waitFor(() => expect(m.open).toHaveBeenCalledWith({ url: 'https://idp.test/auth' }));
-      m.listeners['appUrlOpen']({ url: 'media.fliks.app:/elsewhere?code=x&state=y' });
-      m.listeners['appUrlOpen']({ url: `${CB}?code=c&state=s` });
-      expect(await p).toEqual({ code: 'c', state: 's' });
-      expect(m.removed.sort()).toEqual(['appUrlOpen', 'browserFinished']);
-    });
-
-    it('resolves null when the tab closes without a callback', async () => {
-      const p = webAuthOpen('u');
-      await vi.waitFor(() => expect(m.open).toHaveBeenCalled());
+      expect(m.listeners['appUrlOpen']).toBeUndefined();
       m.listeners['browserFinished']({});
       expect(await p).toBeNull();
+      expect(m.removed).toEqual(['browserFinished']);
+    });
+  });
+
+  describe('app-wide callback listener', () => {
+    it('routes a callback of a pending state to /oidc/complete, whatever started it', async () => {
+      const go = vi.fn();
+      listenOidcCallbacks(go, (s) => s === 's');
+      await vi.waitFor(() => expect(m.listeners['appUrlOpen']).toBeDefined());
+      m.listeners['appUrlOpen']({ url: `${CB}?code=c&state=s` });
+      m.listeners['appUrlOpen']({ url: `${CB}?error=idp&state=s` });
+      expect(go.mock.calls).toEqual([['/oidc/complete?code=c&state=s'], ['/oidc/complete?error=idp&state=s']]);
     });
 
-    it('lets a callback that follows the tab closing win', async () => {
-      const p = webAuthOpen('u');
-      await vi.waitFor(() => expect(m.open).toHaveBeenCalled());
-      m.listeners['browserFinished']({});
-      m.listeners['appUrlOpen']({ url: `${CB}?code=c&state=s` });
-      expect(await p).toEqual({ code: 'c', state: 's' });
+    it('ignores a forged state, a stateless callback and a foreign URL', async () => {
+      const go = vi.fn();
+      listenOidcCallbacks(go, (s) => s === 's');
+      await vi.waitFor(() => expect(m.listeners['appUrlOpen']).toBeDefined());
+      m.listeners['appUrlOpen']({ url: `${CB}?code=x&state=forged` });
+      m.listeners['appUrlOpen']({ url: `${CB}?code=x` });
+      m.listeners['appUrlOpen']({ url: 'https://fliks.test/x?state=s' });
+      expect(go).not.toHaveBeenCalled();
     });
   });
 
@@ -117,20 +119,6 @@ describe('web-auth plugin', () => {
       expect(oidcPlatform()).toBeNull();
       m.plugins.add('App');
       expect(oidcPlatform()).toMatchObject({ returnTo: 'app' });
-    });
-  });
-
-  describe('cold start', () => {
-    it('routes the launch callback to /oidc/complete with its query', async () => {
-      m.launchUrl.mockResolvedValue({ url: `${CB}?code=c&state=s` });
-      expect(await launchCallbackRoute()).toBe('/oidc/complete?code=c&state=s');
-    });
-
-    it('ignores a normal launch and a foreign URL', async () => {
-      m.launchUrl.mockResolvedValueOnce(undefined);
-      expect(await launchCallbackRoute()).toBeNull();
-      m.launchUrl.mockResolvedValueOnce({ url: 'https://fliks.test/x' });
-      expect(await launchCallbackRoute()).toBeNull();
     });
   });
 });

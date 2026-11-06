@@ -40,7 +40,7 @@ export interface OidcPlatform {
   /** Called when `start` fails after `returnTo` resolved, to release what it opened. */
   abort?(): void;
   /** Web leaves the page and resolves never; a shell resolves with the callback query string (`code`
-   *  and `state`, or `error`), or null when the user gave up. */
+   *  and `state`, or `error`), or null when the user gave up (on Android the app listener gets the callback). */
   open(authorizeUrl: string): Promise<string | null>;
 }
 
@@ -139,6 +139,16 @@ export function savePending(p: PendingOidc): void {
     pendingStore().setItem(pendingKey(p.state), JSON.stringify(p));
   } catch {
     /* storage unavailable: the exchange will refuse the state */
+  }
+}
+
+/** Whether a live entry exists for `state`. */
+export function hasPending(state: string): boolean {
+  try {
+    const raw = pendingStore().getItem(pendingKey(state));
+    return !!raw && (JSON.parse(raw) as PendingOidc).expiresAt > Date.now();
+  } catch {
+    return false;
   }
 }
 

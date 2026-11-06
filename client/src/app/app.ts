@@ -4,7 +4,8 @@ import { filter, take } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { Immersive } from './core/plugins/immersive.plugin';
 import { App as CapApp } from '@capacitor/app';
-import { launchCallbackRoute } from './core/plugins/web-auth.plugin';
+import { listenOidcCallbacks } from './core/plugins/web-auth.plugin';
+import { hasPending } from './core/services/oidc';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
 import { PartySync } from './core/services/party/party-sync';
@@ -112,7 +113,7 @@ export class App implements OnInit, OnDestroy {
       document.documentElement.classList.add('native');
       document.body.classList.add('native');
 
-      launchCallbackRoute().then((route) => { if (route) this.router.navigateByUrl(route); }, () => undefined);
+      listenOidcCallbacks((route) => void this.router.navigateByUrl(route), hasPending);
 
       // Hide the native splash (launchAutoHide:false) on the first NavigationEnd, once real content has rendered.
       this.router.events.pipe(
