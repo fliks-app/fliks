@@ -4550,6 +4550,12 @@
   },
   "oidc": {
     "completing": "Accesso in corso...",
+    "loopback": {
+      "title": "Torna a Fliks",
+      "message": "Puoi chiudere questa scheda e tornare a Fliks.",
+      "failed_title": "Accesso non completato",
+      "failed_message": "Torna a Fliks per vedere il motivo e riprovare."
+    },
     "error": {
       "expired": "L'accesso è scaduto o non è partito su questo dispositivo.",
       "idp": "Il provider di identità ha rifiutato l'accesso.",

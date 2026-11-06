@@ -163,6 +163,10 @@ export const IPC = {
   openCalendarEvent: 'system:openCalendarEvent',
   /** Runtime playback capabilities (e.g. Dolby Vision reshape support). */
   getPlayerCapabilities: 'player:getCapabilities',
+  /** Loopback listener for the OIDC redirect (see `oidc-loopback.ts`). */
+  oidcListen: 'oidc:listen',
+  oidcWait: 'oidc:wait',
+  oidcCancel: 'oidc:cancel',
   /** main → renderer (one channel, discriminated by DesktopEvent.type). */
   event: 'player:event',
 } as const;
@@ -318,6 +322,12 @@ export interface FliksDesktopApi {
   getSystemInfo(): Promise<DesktopSystemInfo>;
   openCalendarEvent(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
+  /** Opens a loopback listener for the OIDC redirect; `pages` is what the browser tab shows: `done` after a callback with a code, `failed` after one with an error. */
+  oidcListen(pages: { done: { title: string; message: string }; failed: { title: string; message: string } }): Promise<{ id: number; port: number }>;
+  /** The redirect's query string (`code` and `state`, or `error`) once it carries `state`; other states are refused. Null on timeout or when listener `id` was cancelled or replaced. */
+  oidcWait(id: number, state: string): Promise<string | null>;
+  /** Closes listener `id`. */
+  oidcCancel(id: number): Promise<void>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
 

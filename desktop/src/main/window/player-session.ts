@@ -288,6 +288,14 @@ export class PlayerSession {
   }
 
   /** The page's contents, for what the main process injects into it or fetches as it. */
+  /** Brings the framed window back to the front, e.g. after the browser step of an SSO sign-in. */
+  focus(): void {
+    if (this.frameWin.isDestroyed()) return;
+    if (this.frameWin.isMinimized()) this.frameWin.restore();
+    this.frameWin.show();
+    this.frameWin.focus();
+  }
+
   get uiContents(): Electron.WebContents {
     return this.uiWin.webContents;
   }

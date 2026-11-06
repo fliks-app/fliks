@@ -55,6 +55,9 @@ const api: FliksDesktopApi = {
   getSystemInfo: () => ipcRenderer.invoke(IPC.getSystemInfo),
   openCalendarEvent: (ics: string, fileName: string) => ipcRenderer.invoke(IPC.openCalendarEvent, ics, fileName),
   getPlayerCapabilities: () => ipcRenderer.invoke(IPC.getPlayerCapabilities),
+  oidcListen: (pages) => ipcRenderer.invoke(IPC.oidcListen, pages),
+  oidcWait: (id, state) => ipcRenderer.invoke(IPC.oidcWait, id, state),
+  oidcCancel: (id) => ipcRenderer.invoke(IPC.oidcCancel, id),
   on: (handler: (event: DesktopEvent) => void) => {
     const listener = (_e: unknown, event: DesktopEvent) => handler(event);
     ipcRenderer.on(IPC.event, listener);

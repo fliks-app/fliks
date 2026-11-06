@@ -21,6 +21,7 @@ using namespace winrt::Windows::Storage::Streams;
 namespace {
 
 SystemMediaTransportControls g_smtc{nullptr};
+HWND g_hwnd = nullptr;
 Napi::ThreadSafeFunction g_commandFn;
 bool g_commandFnReady = false;
 
@@ -66,6 +67,7 @@ Napi::Value Attach(const Napi::CallbackInfo& info) {
   }
   Napi::Buffer<uint8_t> b = info[0].As<Napi::Buffer<uint8_t>>();
   HWND hwnd = *reinterpret_cast<HWND*>(b.Data());
+  g_hwnd = hwnd;
   auto interop = get_activation_factory<SystemMediaTransportControls, ISystemMediaTransportControlsInterop>();
   check_hresult(interop->GetForWindow(hwnd, guid_of<SystemMediaTransportControls>(), put_abi(g_smtc)));
   g_smtc.ButtonPressed([](auto&&, SystemMediaTransportControlsButtonPressedEventArgs const& a) {
@@ -180,11 +182,26 @@ Napi::Value ClearNowPlaying(const Napi::CallbackInfo& info) {
   });
 }
 
+// raise(): brings the attached window to the front. Windows refuses the foreground to a background
+// process, so share the foreground thread's input state for the call.
+Napi::Value Raise(const Napi::CallbackInfo& info) {
+  if (!g_hwnd) return info.Env().Undefined();
+  DWORD fg = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+  DWORD me = GetCurrentThreadId();
+  bool attached = fg && fg != me && AttachThreadInput(me, fg, TRUE);
+  if (IsIconic(g_hwnd)) ShowWindow(g_hwnd, SW_RESTORE);
+  SetForegroundWindow(g_hwnd);
+  BringWindowToTop(g_hwnd);
+  if (attached) AttachThreadInput(me, fg, FALSE);
+  return info.Env().Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("attach", Napi::Function::New(env, Attach));
   exports.Set("onRemoteCommand", Napi::Function::New(env, OnRemoteCommand));
   exports.Set("setNowPlaying", Napi::Function::New(env, SetNowPlaying));
   exports.Set("clearNowPlaying", Napi::Function::New(env, ClearNowPlaying));
+  exports.Set("raise", Napi::Function::New(env, Raise));
   return exports;
 }
 

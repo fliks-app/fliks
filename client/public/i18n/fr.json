@@ -4550,6 +4550,12 @@
   },
   "oidc": {
     "completing": "Connexion en cours...",
+    "loopback": {
+      "title": "Retour à Fliks",
+      "message": "Vous pouvez fermer cet onglet et retourner dans Fliks.",
+      "failed_title": "La connexion n'a pas abouti",
+      "failed_message": "Retournez dans Fliks pour voir pourquoi et réessayer."
+    },
     "error": {
       "expired": "La connexion a expiré ou n'a pas démarré sur cet appareil.",
       "idp": "Le fournisseur d'identité a refusé la connexion.",

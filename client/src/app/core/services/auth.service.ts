@@ -1,6 +1,7 @@
-import { Injectable, signal, computed, inject, untracked } from '@angular/core';
+import { Injectable, Injector, signal, computed, inject, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { TranslateService } from '@ngx-translate/core';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
 import { currentTargetId } from './remote-target-id';
@@ -149,6 +150,7 @@ function secondsToMs(seconds: number | undefined): number | null {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly injector = inject(Injector);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
   private readonly sessions = inject(SessionStoreService);
@@ -176,6 +178,8 @@ export class AuthService {
   private readonly _sessionEpoch = signal(0);
   private readonly _oidc = signal<OidcInfo>(NO_OIDC);
   private readonly _oidcBusy = signal(false);
+  /** Numbers the sign-in attempts, so a replaced one neither frees the buttons nor counts as a failure. */
+  private oidcRun = 0;
   /** A sign-in is in flight: the SSO buttons wait, so two starts cannot overlap. */
   readonly oidcBusy = this._oidcBusy.asReadonly();
 
@@ -360,30 +364,46 @@ export class AuthService {
   async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
     if (this._oidcBusy()) return;
     this._oidcBusy.set(true);
+    const run = ++this.oidcRun;
     try {
-      await this.oidcStart(providerId, opts);
+      await this.oidcStart(providerId, opts, run);
     } finally {
-      this._oidcBusy.set(false);
+      if (run === this.oidcRun) this._oidcBusy.set(false);
     }
   }
 
-  private async oidcStart(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number }): Promise<void> {
+  private async oidcStart(
+    providerId: number,
+    opts: { link?: boolean; silent?: boolean; expectUserId?: number },
+    run: number,
+  ): Promise<void> {
     const platform = oidcPlatform();
     if (!platform) throw new OidcError('unavailable');
     const { verifier, challenge } = await newPkce();
+    const returnTo =
+      typeof platform.returnTo === 'string'
+        ? platform.returnTo
+        : await platform.returnTo(() => {
+            const t = this.injector.get(TranslateService);
+            const page = (prefix: string) => ({ title: t.instant(`oidc.loopback.${prefix}title`), message: t.instant(`oidc.loopback.${prefix}message`) });
+            return { done: page(''), failed: page('failed_') };
+          });
     const { authorizeUrl, state } = await firstValueFrom(
       this.http.post<{ authorizeUrl: string; state: string }>(
         `/api/auth/oidc/${providerId}/start`,
         {
           challenge,
-          returnTo: platform.returnTo,
+          returnTo,
           ...(opts.link ? { link: true } : {}),
           ...(opts.silent ? { prompt: 'none' } : {}),
           ...(opts.silent && opts.expectUserId !== undefined ? { expectUserId: opts.expectUserId } : {}),
         },
         { context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent) },
       ),
-    );
+    ).catch((err) => {
+      platform.abort?.();
+      throw err;
+    });
     savePending({
       serverUrl: this.serverConfig.serverUrl(),
       providerId,
@@ -394,9 +414,12 @@ export class AuthService {
       expiresAt: Date.now() + OIDC_TTL_MS,
     });
     noteOidcLaunch();
-    const query = await platform.open(authorizeUrl);
+    const waiting = platform.open(authorizeUrl);
+    // The user may close the provider tab: free the buttons so a new click replaces this wait.
+    this._oidcBusy.set(false);
+    const query = await waiting;
     if (query) await this.router.navigateByUrl(`/oidc/complete?${query}`);
-    else noteOidcFailure();
+    else if (run === this.oidcRun) noteOidcFailure();
   }
 
   /** The provider's answer, from the callback fragment or a shell's auth sheet: signs in (or links)
