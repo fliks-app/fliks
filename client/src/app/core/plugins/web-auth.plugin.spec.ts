@@ -124,11 +124,10 @@ describe('web-auth plugin', () => {
       expect(oidcPlatform()).toMatchObject({ returnTo: 'app' });
     });
 
-    it('needs the Custom Tab and app plugins on Android', () => {
+    it('needs the Custom Tab plugin on Android', () => {
       m.platform = 'android';
-      m.plugins.add('Browser');
       expect(oidcPlatform()).toBeNull();
-      m.plugins.add('App');
+      m.plugins.add('Browser');
       expect(oidcPlatform()).toMatchObject({ returnTo: 'app' });
     });
   });
