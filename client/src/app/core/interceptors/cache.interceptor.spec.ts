@@ -65,9 +65,9 @@ describe('cache.interceptor — read plan', () => {
   const entry = (url: string, ageMs: number): CacheEntry => ({ url, body: [], timestamp: Date.now() - ageMs });
 
   // The stubbed open never settles: only the synchronous, in-memory half of each call runs.
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
-    void clearRequestCache();
+    await clearRequestCache();
   });
 
   it('serves a fresh entry and revalidates an expired one in background', () => {
@@ -98,9 +98,9 @@ describe('cache.interceptor — read plan', () => {
 describe('cache.interceptor — requests in flight', () => {
   const get = new HttpRequest('GET', '/api/playlists');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
-    void clearRequestCache();
+    await clearRequestCache();
   });
 
   it('shares one request between identical reads, and sends a new one once it landed', () => {
@@ -125,5 +125,102 @@ describe('cache.interceptor — requests in flight', () => {
     void invalidatePrefix('/api/playlists');
     cacheInterceptor(get, next).subscribe();
     expect(next).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cache.interceptor: connection', () => {
+  type Req = { result?: unknown; onsuccess?: () => void };
+  const fakeDb = () => ({
+    close: vi.fn(),
+    onversionchange: null as (() => void) | null,
+    transaction: () => {
+      throw new Error('unused');
+    },
+  });
+  const never = () => vi.fn(() => ({}));
+
+  afterEach(() => vi.useRealTimers());
+
+  it('closes itself when another page wipes the database, and reopens on the next read', async () => {
+    const db = fakeDb();
+    const open = vi.fn(() => {
+      const req: Req = {};
+      queueMicrotask(() => {
+        req.result = db;
+        req.onsuccess?.();
+      });
+      return req;
+    });
+    vi.stubGlobal('indexedDB', { open });
+    await clearRequestCache();
+
+    await invalidatePrefix('/api/media');
+    expect(open).toHaveBeenCalledTimes(1);
+    db.onversionchange?.();
+    expect(db.close).toHaveBeenCalled();
+
+    await invalidatePrefix('/api/media');
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('forgets in-flight reads when another page wipes the database', async () => {
+    const db = fakeDb();
+    const open = vi.fn(() => {
+      const req: Req = {};
+      queueMicrotask(() => {
+        req.result = db;
+        req.onsuccess?.();
+      });
+      return req;
+    });
+    vi.stubGlobal('indexedDB', { open });
+    await clearRequestCache();
+    await invalidatePrefix('/api/media');
+
+    const get = new HttpRequest('GET', '/api/playlists');
+    const next = vi.fn(() => new Subject<HttpResponse<unknown>>());
+    cacheInterceptor(get, next).subscribe();
+    db.onversionchange?.();
+    cacheInterceptor(get, next).subscribe();
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('wipes without waiting for an open that never settles', async () => {
+    vi.stubGlobal('indexedDB', { open: never(), deleteDatabase: vi.fn(() => ({})) });
+    vi.useFakeTimers();
+    void invalidatePrefix('/api/media');
+
+    const wiped = clearRequestCache();
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(wiped).resolves.toBeUndefined();
+  });
+
+  it('reads from the network once the open exceeds its bound', async () => {
+    vi.stubGlobal('indexedDB', { open: never() });
+    vi.useFakeTimers();
+    await clearRequestCache();
+
+    const next = vi.fn(() => of(new HttpResponse({ status: 200, body: [1] })));
+    const bodies: unknown[] = [];
+    cacheInterceptor(new HttpRequest('GET', '/api/libraries/mine'), next).subscribe((e) =>
+      bodies.push((e as HttpResponse<unknown>).body),
+    );
+    expect(next).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(bodies).toEqual([[1]]);
+  });
+
+  it('closes an open that lands after a wipe replaced it', async () => {
+    const db = fakeDb();
+    const req: Req = {};
+    vi.stubGlobal('indexedDB', { open: vi.fn(() => req), deleteDatabase: vi.fn(() => ({})) });
+    await clearRequestCache();
+
+    void invalidatePrefix('/api/media');
+    void clearRequestCache();
+    req.result = db;
+    req.onsuccess?.();
+    expect(db.close).toHaveBeenCalled();
   });
 });

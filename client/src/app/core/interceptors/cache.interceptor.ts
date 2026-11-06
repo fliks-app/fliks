@@ -63,6 +63,10 @@ interface Invalidation {
 // ── IndexedDB helpers ──
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+/** The open connection, kept synchronously so a wipe can close it without awaiting an open that may never settle. */
+let db: IDBDatabase | null = null;
+/** Bounds an open queued behind another page's pending delete, so reads fall back to the network. */
+const OPEN_TIMEOUT_MS = 2000;
 
 /** Bumped by every wipe. Entries are keyed by path alone, so a response in
  *  flight for the previous account must not land in the new one's cache. */
@@ -74,32 +78,66 @@ let pruned = false;
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+  const opened: Promise<IDBDatabase> = new Promise<IDBDatabase>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('cache open timed out')), OPEN_TIMEOUT_MS);
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      const db = req.result;
-      const responses = db.objectStoreNames.contains(STORE_NAME)
+      const upgraded = req.result;
+      const responses = upgraded.objectStoreNames.contains(STORE_NAME)
         ? req.transaction!.objectStore(STORE_NAME)
-        : db.createObjectStore(STORE_NAME, { keyPath: 'url' });
+        : upgraded.createObjectStore(STORE_NAME, { keyPath: 'url' });
       if (!responses.indexNames.contains('timestamp')) responses.createIndex('timestamp', 'timestamp');
-      if (!db.objectStoreNames.contains(INVALIDATIONS_STORE)) {
-        db.createObjectStore(INVALIDATIONS_STORE, { keyPath: 'prefix' });
+      if (!upgraded.objectStoreNames.contains(INVALIDATIONS_STORE)) {
+        upgraded.createObjectStore(INVALIDATIONS_STORE, { keyPath: 'prefix' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  }).then(async (db) => {
-    await loadInvalidations(db);
-    prune(db);
-    return db;
+    req.onsuccess = () => {
+      clearTimeout(timer);
+      const conn = req.result;
+      // A wipe or a timeout replaced this open while it was queued: nobody will close it but us.
+      if (dbPromise !== opened) {
+        conn.close();
+        reject(new Error('cache open superseded'));
+        return;
+      }
+      // Another page's wipe or upgrade waits for this connection; closing lets it through.
+      conn.onversionchange = () => {
+        conn.close();
+        if (db === conn) db = null;
+        if (dbPromise === opened) dbPromise = null;
+        forgetState();
+      };
+      db = conn;
+      resolve(conn);
+    };
+    req.onerror = () => {
+      clearTimeout(timer);
+      reject(req.error);
+    };
+  }).then(async (conn) => {
+    await loadInvalidations(conn);
+    prune(conn);
+    return conn;
   });
-  return dbPromise;
+  opened.catch(() => {
+    if (dbPromise === opened) dbPromise = null;
+  });
+  dbPromise = opened;
+  return opened;
 }
 
-function loadInvalidations(db: IDBDatabase): Promise<void> {
+/** What a wipe invalidates in memory: late responses of the previous contents and their marks. */
+function forgetState(): void {
+  cacheGeneration++;
+  invalidations = new Map();
+  inFlight.clear();
+  pruned = false;
+}
+
+function loadInvalidations(conn: IDBDatabase): Promise<void> {
   return new Promise((resolve) => {
     try {
-      const req = db.transaction(INVALIDATIONS_STORE, 'readonly').objectStore(INVALIDATIONS_STORE).getAll();
+      const req = conn.transaction(INVALIDATIONS_STORE, 'readonly').objectStore(INVALIDATIONS_STORE).getAll();
       req.onsuccess = () => {
         for (const { prefix, at } of req.result as Invalidation[]) {
           invalidations.set(prefix, Math.max(at, invalidations.get(prefix) ?? 0));
@@ -114,11 +152,11 @@ function loadInvalidations(db: IDBDatabase): Promise<void> {
 }
 
 /** Drops the oldest entries past MAX_ENTRIES, then the invalidations older than every entry left. */
-function prune(db: IDBDatabase): void {
+function prune(conn: IDBDatabase): void {
   if (pruned) return;
-  pruned = true;
   try {
-    const tx = db.transaction([STORE_NAME, INVALIDATIONS_STORE], 'readwrite');
+    const tx = conn.transaction([STORE_NAME, INVALIDATIONS_STORE], 'readwrite');
+    pruned = true;
     const store = tx.objectStore(STORE_NAME);
     const byAge = store.index('timestamp');
     const countReq = store.count();
@@ -144,42 +182,30 @@ function prune(db: IDBDatabase): void {
   } catch { /* ignore */ }
 }
 
-/** Wipe the IDB store, closing the module-level connection first so `deleteDatabase` can't hang `blocked`; bounded so it never gates a login spinner. */
+/** Wipe the IDB store, closing our connection first so `deleteDatabase` isn't blocked by it; never waits on an open, and bounded so it never gates a login spinner. */
 export function clearRequestCache(): Promise<void> {
-  cacheGeneration++;
-  invalidations = new Map();
-  inFlight.clear();
-  const closeExisting = dbPromise
-    ? dbPromise
-        .then((db) => {
-          try { db.close(); } catch { /* ignore */ }
-        })
-        .catch(() => {
-          /* the open itself failed — nothing to close */
-        })
-    : Promise.resolve();
+  forgetState();
+  try { db?.close(); } catch { /* ignore */ }
+  db = null;
   dbPromise = null;
-  pruned = false;
-  return closeExisting.then(() => {
-    return new Promise<void>((resolve) => {
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      try {
-        const req = indexedDB.deleteDatabase(DB_NAME);
-        req.onsuccess = done;
-        req.onerror = done;
-        req.onblocked = done;
-      } catch {
-        done();
-        return;
-      }
-      // Safety net: some Capacitor WebViews fire no event when another process holds a connection; stragglers are overwritten on next put().
-      setTimeout(done, 500);
-    });
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    try {
+      const req = indexedDB.deleteDatabase(DB_NAME);
+      req.onsuccess = done;
+      req.onerror = done;
+      req.onblocked = done;
+    } catch {
+      done();
+      return;
+    }
+    // Safety net: some Capacitor WebViews fire no event when another process holds a connection; stragglers are overwritten on next put().
+    setTimeout(done, 500);
   });
 }
 
