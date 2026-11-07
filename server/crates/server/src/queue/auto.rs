@@ -66,36 +66,57 @@ pub async fn schedule_verify(st: &AppState) -> sqlx::Result<usize> {
     Ok(ids.len())
 }
 
+/// Files per review pass; the next pass continues after the last one reviewed.
+const REVIEW_BATCH: i64 = 200;
+
 /// New files of the optimizing libraries without an optimize job, and the hard-linked ones `settled()`
-/// marked `shared` (no age limit): looked at again, whatever the pass before decided.
-pub async fn review_new(st: &AppState) -> sqlx::Result<usize> {
+/// marked `shared`: looked at again, whatever the pass before decided. One batch after `after`; returns
+/// the last id seen, `None` once the end is reached.
+pub async fn review_new(st: &AppState, after: i32) -> sqlx::Result<(usize, Option<i32>)> {
     let ids: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f JOIN media m ON m.id = f."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
-           WHERE l."optimizeNewFiles" AND f."createdAt" >= l."optimizeNewFilesSince" AND (
+           WHERE f.id > $3 AND l."optimizeNewFiles" AND f."createdAt" >= l."optimizeNewFilesSince" AND (
              (f."createdAt" > now() - make_interval(days => $1)
               AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.kind = 'optimize'))
              OR (EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.state = 'skipped'
                            AND j.error->>'class' = 'shared')
                  AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.kind = 'optimize'
                                    AND NOT (j.state = 'skipped' AND j.error->>'class' = 'shared'))))
-           ORDER BY f.id"#,
+           ORDER BY f.id LIMIT $2"#,
     )
     .bind(REVIEW_DAYS)
+    .bind(REVIEW_BATCH)
+    .bind(after)
     .fetch_all(&st.db)
     .await?;
+    let last = (ids.len() as i64 == REVIEW_BATCH)
+        .then(|| ids.last().copied())
+        .flatten();
+    let mut cache = enqueue::Cache::new();
     let mut queued = 0;
     for id in ids {
-        if enqueue::queue_new(st, id).await?.outcome == enqueue::Outcome::Queued {
+        if enqueue::queue_new_cached(st, id, &mut cache).await?.outcome == enqueue::Outcome::Queued
+        {
             queued += 1;
         }
     }
-    Ok(queued)
+    Ok((queued, last))
 }
 
+/// The hourly sweep, in its own task: review batches until the end, then the scheduled verification.
 pub async fn hourly(st: &AppState) {
-    if let Err(e) = review_new(st).await {
-        tracing::warn!("new files review failed: {e}");
+    let mut after = 0;
+    loop {
+        match review_new(st, after).await {
+            Ok((_, Some(last))) => after = last,
+            Ok((_, None)) => break,
+            Err(e) => {
+                tracing::warn!("new files review failed: {e}");
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     }
     if let Err(e) = schedule_verify(st).await {
         tracing::warn!("scheduled verification failed: {e}");

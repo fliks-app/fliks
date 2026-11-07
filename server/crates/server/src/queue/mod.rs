@@ -140,6 +140,7 @@ impl Shared {
 /// Recovery of `committing` jobs at boot, the lease sweep, the commits, the cleanup and the trash purge.
 pub fn spawn(st: &AppState) {
     watch::spawn(st);
+    let st2 = st.clone();
     let st = st.clone();
     tokio::spawn(async move {
         recover::recover(&st, 0.0).await;
@@ -162,9 +163,16 @@ pub fn spawn(st: &AppState) {
                 recover::recover(&st, 120.0).await;
             }
             if n.is_multiple_of(240) {
-                auto::hourly(&st).await;
                 trash::purge(&st.db).await;
             }
+        }
+    });
+    let st = st2;
+    tokio::spawn(async move {
+        let mut hour = tokio::time::interval(Duration::from_secs(3600));
+        loop {
+            hour.tick().await;
+            auto::hourly(&st).await;
         }
     });
 }

@@ -201,7 +201,7 @@ pub async fn queue_files(
 ) -> sqlx::Result<Vec<Queued>> {
     let mut out = Vec::with_capacity(ids.len());
     for &id in ids {
-        out.push(queue_one(st, id, force, priority, false).await?);
+        out.push(queue_one(st, id, force, priority, false, None).await?);
     }
     st.queue.wake.notify_waiters();
     st.hub.emit(SseEvent::OptimizeQueueChanged {});
@@ -210,7 +210,14 @@ pub async fn queue_files(
 
 /// A new file of a library that optimizes them: queued now, to start once it is `min_age_days` old.
 pub async fn queue_new(st: &AppState, id: i32) -> sqlx::Result<Queued> {
-    let q = queue_one(st, id, false, 0, true).await?;
+    queue_new_cached(st, id, &mut Cache::new()).await
+}
+
+/// Each library's `Context`, loaded once for a pass over many files.
+pub type Cache = std::collections::HashMap<i32, Option<select::Context>>;
+
+pub async fn queue_new_cached(st: &AppState, id: i32, cache: &mut Cache) -> sqlx::Result<Queued> {
+    let q = queue_one(st, id, false, 0, true, Some(cache)).await?;
     if q.outcome == Outcome::Shared {
         record_shared(st, id).await?;
     }
@@ -241,6 +248,7 @@ async fn queue_one(
     force: bool,
     priority: i32,
     new_file: bool,
+    cache: Option<&mut Cache>,
 ) -> sqlx::Result<Queued> {
     let library: Option<i32> = sqlx::query_scalar(
         r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId"
@@ -255,7 +263,17 @@ async fn queue_one(
     let Some(library) = library else {
         return Ok(done(id, Outcome::Missing));
     };
-    let Some(mut ctx) = context(st, library).await else {
+    let loaded = match cache {
+        Some(c) => match c.get(&library) {
+            Some(x) => x.clone(),
+            None => c
+                .entry(library)
+                .or_insert(context(st, library).await)
+                .clone(),
+        },
+        None => context(st, library).await,
+    };
+    let Some(mut ctx) = loaded else {
         return Ok(done(id, Outcome::NothingToDo));
     };
     ctx.force = force;

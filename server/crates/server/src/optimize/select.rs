@@ -12,6 +12,7 @@ use sqlx::{PgPool, Row};
 use std::collections::{BTreeMap, HashSet};
 
 /// Everything a library's comparison needs besides the files, loaded once.
+#[derive(Clone)]
 pub struct Context {
     pub profile: Profile,
     pub allow_rename: bool,
