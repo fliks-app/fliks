@@ -111,7 +111,8 @@ struct SearchView: View {
             let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: params)
             // Drop a stale response superseded by a newer query/filter change.
             guard q == query.trimmingCharacters(in: .whitespacesAndNewlines), type == typeFilter else { return }
-            results = page == 1 ? res.data : results + res.data
+            let data = res.data.filter(\.type.isPlayable)
+            results = page == 1 ? data : results + data
             total = res.total
             self.page = page
             loadError = false

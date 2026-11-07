@@ -127,7 +127,8 @@ struct LibraryView: View {
         if let typeFilter { query["type"] = typeFilter.rawValue }
         do {
             let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
-            items = reset ? res.data : items + res.data
+            let data = res.data.filter(\.type.isPlayable)
+            items = reset ? data : items + data
             total = res.total
             state = .loaded
             backdrop.seed(res.data.first?.fanartUrl)
