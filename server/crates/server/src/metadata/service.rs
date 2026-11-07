@@ -668,6 +668,16 @@ async fn resolve_provider(
     {
         return Ok((Namespace::TMDB, ext));
     }
+    for p in st
+        .metadata
+        .serving(m.kind)
+        .into_iter()
+        .filter(|p| p.core().is_none())
+    {
+        if let Some(ext) = external_id_for(st, m, p, lang, prio).await? {
+            return Ok((p, ext));
+        }
+    }
     Err(AppError::bad_request(
         "No provider ID available for this media",
     ))

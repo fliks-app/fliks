@@ -7,7 +7,7 @@ use super::{
     gate,
 };
 use crate::media::{
-    details::{set_release_dates, set_tmdb_collection},
+    details::{drop_details, set_release_dates, set_tmdb_collection},
     field_sources::merge_field_sources,
     items,
 };
@@ -215,10 +215,14 @@ pub(crate) async fn apply_seasons(
     st: &AppState,
     media_id: i32,
     seasons: &[SeasonDetails],
+    reset: bool,
 ) -> Result<i64, AppError> {
     let before: i64 = count_episodes(st, media_id).await?;
     let mut tx = st.db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media_id).await?;
+    if reset {
+        clear_season_values(&mut tx, media_id).await?;
+    }
     let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;
@@ -289,7 +293,7 @@ pub async fn refresh_series_episodes(
     prio: Priority,
 ) -> Result<i64, AppError> {
     let seasons = service::seasons_for_media(st, media.id, prio).await?;
-    apply_seasons(st, media.id, &seasons).await
+    apply_seasons(st, media.id, &seasons, false).await
 }
 
 /// `refreshMetadata` (rule 53).
@@ -299,10 +303,31 @@ pub async fn refresh_metadata(
     defer_kick: bool,
     prio: Priority,
 ) -> Result<Found, AppError> {
+    refresh_metadata_with(st, id, defer_kick, prio, false).await
+}
+
+async fn refresh_metadata_with(
+    st: &AppState,
+    id: i32,
+    defer_kick: bool,
+    prio: Priority,
+    reset: bool,
+) -> Result<Found, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let found = service::for_media(st, id, prio).await?;
+    let found = match service::for_media(st, id, prio).await {
+        Ok(f) => f,
+        Err(e) => {
+            if reset {
+                // The old identity's values are wrong for the new title: leave them empty.
+                let mut tx = st.db.begin().await?;
+                clear_provider_values(&mut tx, &media).await?;
+                tx.commit().await?;
+            }
+            return Err(e);
+        }
+    };
     let d = &found.details;
     let free = |f: Field| !found.locked.contains(&f);
     let mut fields = Fields::from_map(media.media_type, d.raw.as_object().unwrap_or(&Map::new()));
@@ -310,6 +335,9 @@ pub async fn refresh_metadata(
         fields.original_title = fields.title.clone();
     }
     let mut tx = st.db.begin().await?;
+    if reset {
+        clear_media_values(&mut tx, id).await?;
+    }
     apply(&mut tx, id, &fields).await?;
     set_release_dates(
         &mut tx,
@@ -348,7 +376,17 @@ pub async fn refresh_metadata(
     download_media_images(st, id, d, &found.locked).await;
     service::persist_credits(st, id, media.media_type, found.provider.0, d, &found.locked).await?;
     if media.has_seasons() {
-        let inserted = apply_seasons(st, id, &found.seasons).await?;
+        let inserted = match apply_seasons(st, id, &found.seasons, reset).await {
+            Ok(n) => n,
+            Err(e) => {
+                if reset {
+                    let mut tx = st.db.begin().await?;
+                    clear_season_values(&mut tx, id).await?;
+                    tx.commit().await?;
+                }
+                return Err(e);
+            }
+        };
         if inserted > 0 && !defer_kick {
             st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
                 media_ids: vec![i64::from(id)],
@@ -392,6 +430,18 @@ pub(crate) async fn refresh_any(
     defer_kick: bool,
     prio: Priority,
 ) -> Result<Option<Found>, AppError> {
+    refresh_any_with(st, media, defer_kick, prio, false).await
+}
+
+/// `reset`: the identity changed, so the provider-written values of the old one are cleared as the
+/// new ones are written.
+async fn refresh_any_with(
+    st: &AppState,
+    media: &MediaRow,
+    defer_kick: bool,
+    prio: Priority,
+    reset: bool,
+) -> Result<Option<Found>, AppError> {
     let id = media.id;
     match media.media_type {
         MediaKind::Comic => {
@@ -409,17 +459,19 @@ pub(crate) async fn refresh_any(
             merge_unmatched(st, id).await?;
         }
         _ => {
-            return Ok(Some(refresh_metadata(st, id, defer_kick, prio).await?));
+            return Ok(Some(
+                refresh_metadata_with(st, id, defer_kick, prio, reset).await?,
+            ));
         }
     }
     Ok(None)
 }
 
-async fn finish_identify(st: &AppState, id: i32) -> Result<String, AppError> {
+async fn finish_identify(st: &AppState, id: i32, changed: bool) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if let Some(found) = refresh_any(st, &media, true, Priority::Interactive).await?
+    if let Some(found) = refresh_any_with(st, &media, true, Priority::Interactive, changed).await?
         && media.has_seasons()
     {
         drop_absent(st, id, &found).await?;
@@ -540,6 +592,7 @@ pub async fn identify(
         return Err(already_running());
     }
     let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
+    let mut changed = false;
     let applied = async {
         match (media.media_type, pin) {
             (MediaKind::Book, Some((ns, value))) => {
@@ -550,7 +603,9 @@ pub async fn identify(
                     "Provide the id of a book provider (provider and externalId) to identify this media against",
                 ));
             }
-            (_, pin) => apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?,
+            (_, pin) => {
+                changed = apply_identity(&st, &media, (tmdb, tvdb, imdb), pin, provider).await?
+            }
         }
         entity_or_404(&st, &a, id).await
     };
@@ -570,10 +625,93 @@ pub async fn identify(
         .upsert_running(&key, "Identify", Some(subj), None, None, None);
     let st2 = st.clone();
     tokio::spawn(async move {
-        let r = finish_identify(&st2, id).await;
+        let r = finish_identify(&st2, id, changed).await;
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(body)))
+}
+
+/// A new identity starts empty: what the old one's providers wrote goes, so the refresh COALESCE
+/// cannot keep it. Locked and hand-edited fields, and the title and status, stay.
+async fn clear_provider_values(c: &mut PgConnection, media: &MediaRow) -> Result<(), AppError> {
+    clear_media_values(c, media.id).await?;
+    if media.has_seasons() {
+        clear_season_values(c, media.id).await?;
+    }
+    Ok(())
+}
+
+async fn clear_media_values(c: &mut PgConnection, id: i32) -> Result<(), AppError> {
+    let fields: Vec<String> = sqlx::query_scalar(
+        r#"DELETE FROM media_field_sources
+           WHERE "mediaId" = $1 AND NOT locked AND provider IS NOT NULL AND provider <> $2
+           RETURNING field"#,
+    )
+    .bind(id)
+    .bind(Namespace::FILE.as_str())
+    .fetch_all(&mut *c)
+    .await?;
+    let sourced = |f: Field| fields.iter().any(|n| n == f.as_str());
+    let columns = [
+        (Field::OriginalTitle, r#""originalTitle""#),
+        (Field::Overview, "overview"),
+        (Field::Year, "year"),
+        (Field::PosterUrl, r#""posterUrl""#),
+        (
+            Field::FanartUrl,
+            r#""fanartUrl" = NULL, "additionalFanartUrls""#,
+        ),
+        (Field::LogoUrl, r#""logoUrl""#),
+        (Field::Rating, "rating"),
+        (Field::Genres, "genres"),
+        (Field::Runtime, "runtime"),
+        (Field::AlternativeTitles, r#""alternativeTitles""#),
+    ];
+    let set: Vec<String> = columns
+        .into_iter()
+        .filter(|(f, _)| sourced(*f))
+        .map(|(_, col)| format!("{col} = NULL"))
+        .collect();
+    if !set.is_empty() {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE media SET {} WHERE id = $1",
+            set.join(", ")
+        )))
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+    }
+    if sourced(Field::ReleaseDates) {
+        sqlx::query(
+            r#"DELETE FROM media_release_dates WHERE "mediaId" = $1 AND "editionId" IS NULL"#,
+        )
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+    }
+    if sourced(Field::Details) {
+        drop_details(c, id).await?;
+    }
+    Ok(())
+}
+
+async fn clear_season_values(c: &mut PgConnection, id: i32) -> Result<(), AppError> {
+    sqlx::query(
+        r#"UPDATE item_groups SET overview = NULL, "airDate" = NULL, "posterUrl" = NULL
+           WHERE "mediaId" = $1"#,
+    )
+    .bind(id)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
+        r#"UPDATE items SET title = NULL, overview = NULL, "airDate" = NULL, runtime = NULL,
+             "stillUrl" = NULL
+           WHERE "mediaId" = $1"#,
+    )
+    .bind(id)
+    .execute(&mut *c)
+    .await?;
+    Ok(())
 }
 
 async fn apply_identity(
@@ -582,7 +720,7 @@ async fn apply_identity(
     (tmdb, tvdb, imdb): (Option<i32>, Option<i32>, Option<String>),
     pin: Option<(Namespace, String)>,
     provider: Option<Option<String>>,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     if pin.is_none()
         && tmdb.is_none()
         && tvdb.is_none()
@@ -595,6 +733,7 @@ async fn apply_identity(
     let ids = Ids { tmdb, tvdb, imdb };
     let known = st.namespaces();
     let mut tx = st.db.begin().await?;
+    let before = identity(&mut tx, media.id).await?;
     for (p, v) in ids.entries() {
         let Some(v) = v.filter(|_| p.is_unique()) else {
             continue;
@@ -659,9 +798,33 @@ async fn apply_identity(
     )
     .execute(&mut *tx)
     .await?;
+    let changed = identity(&mut tx, media.id).await? != before;
     tx.commit().await?;
-    Ok(())
+    Ok(changed)
 }
+
+/// The ids, the media pin and the season pins that make up a media's identity.
+async fn identity(c: &mut PgConnection, id: i32) -> Result<Identity, AppError> {
+    let ids = external_ids::refs(&mut *c, id)
+        .await?
+        .into_iter()
+        .map(|e| (e.provider, e.value))
+        .collect();
+    let pin = sqlx::query_scalar(r#"SELECT "preferredProvider" FROM media WHERE id = $1"#)
+        .bind(id)
+        .fetch_optional(&mut *c)
+        .await?
+        .flatten();
+    let seasons = sqlx::query_scalar(
+        r#"SELECT "preferredProvider" FROM item_groups WHERE "mediaId" = $1 ORDER BY id"#,
+    )
+    .bind(id)
+    .fetch_all(&mut *c)
+    .await?;
+    Ok((ids, pin, seasons))
+}
+
+type Identity = (Vec<(String, String)>, Option<String>, Vec<Option<String>>);
 
 /// `POST /api/media/:id/refresh` (rule 52): `metadata.started` goes out before the claim.
 #[utoipa::path(post, path = "/api/media/{id}/refresh", responses((status = 201)))]

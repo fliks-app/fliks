@@ -336,3 +336,39 @@ async fn a_plugin_title_is_identified_by_its_namespace_and_deleted_through_a_req
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_media_holding_only_a_plugin_id_refreshes_from_that_provider() {
+    let Some(w) = wasm("fixture_provider") else {
+        return;
+    };
+    let Some(s) = Scratch::create("notmdbrefresh").await else {
+        return;
+    };
+    let h = harness(&s, "notmdbrefresh", |_| {}).await;
+    allow_unsigned(&h).await;
+    series_library(&h).await;
+    let r = h
+        .install(&pack(&template("fixture-provider"), "0.1.0", &w, None))
+        .await;
+    assert_eq!(r["status"], "active", "{r}");
+    held(&h, 201, &[(NS, "1")]).await;
+    let (st, r) = h
+        .call("POST", "/api/media/201/refresh", Some(&h.admin), None)
+        .await;
+    assert_eq!(st, 201, "{r}");
+    let mut title = String::new();
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        title = sqlx::query_scalar("SELECT title FROM media WHERE id = 201")
+            .fetch_one(&h.st.db)
+            .await
+            .unwrap();
+        if title == "Sample" {
+            break;
+        }
+    }
+    assert_eq!(title, "Sample");
+    h.finish().await;
+    s.finish().await;
+}

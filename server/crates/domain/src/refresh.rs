@@ -13,11 +13,6 @@ pub struct Row<'a> {
     pub refreshed_at: Option<DateTime<Utc>>,
 }
 
-/// True when at least one provider id is set (`hasProviderId`).
-pub fn identified(tmdb: Option<i32>, tvdb: Option<i32>, imdb: Option<&str>) -> bool {
-    tmdb.is_some() || tvdb.is_some() || imdb.is_some_and(|s| !s.is_empty())
-}
-
 /// A movie out for over a year, or an ended series, is settled: refreshed weekly instead of every night.
 pub fn is_due<Z: TimeZone>(m: &Row, now: DateTime<Utc>, tz: &Z) -> bool {
     let released = || {
@@ -204,14 +199,5 @@ mod tests {
             Some(at("2026-07-15T23:59:59Z"))
         ));
         assert!(!ok(Some("p"), Some("o"), false, Some(before)));
-    }
-
-    #[test]
-    fn identified_needs_a_provider_id() {
-        assert!(identified(Some(1), None, None));
-        assert!(identified(None, Some(1), None));
-        assert!(identified(None, None, Some("tt1")));
-        assert!(!identified(None, None, Some("")));
-        assert!(!identified(None, None, None));
     }
 }

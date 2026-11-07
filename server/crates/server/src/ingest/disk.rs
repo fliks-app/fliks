@@ -271,17 +271,18 @@ async fn scan_under(
         let name = file_name(abs);
         let abs_s = abs.to_string_lossy().into_owned();
         let nums = parse_episode_numbers(&name, Some(&abs_s));
-        let series = nums.is_some() || is_special_file(&abs_s);
+        let rel = fsx::rel_under(root_p, abs).unwrap_or_default();
+        let series = nums.is_some() || is_special_file(&rel);
         let media_type = if series {
             MediaKind::Series
         } else {
             MediaKind::Movie
         };
         if !types.contains(&media_type) {
+            tracing::info!("OrphanScan: {abs_s} skipped, the library takes no {media_type:?}");
             continue;
         }
         let q = parse_release_quality(&name).quality;
-        let rel = fsx::rel_under(root_p, abs).unwrap_or_default();
         let segs: Vec<&str> = rel.split('/').collect();
         let folder = if segs.len() > 1 {
             segs[0].to_owned()
@@ -754,7 +755,7 @@ fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a
     let norm = |s: &str| -> String {
         s.to_lowercase()
             .chars()
-            .filter(char::is_ascii_alphanumeric)
+            .filter(|c| c.is_alphanumeric())
             .collect()
     };
     let wanted = norm(title);
@@ -765,7 +766,7 @@ fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a
             0
         } else if t == wanted {
             50
-        } else if t.starts_with(&wanted) || wanted.starts_with(&t) {
+        } else if !t.is_empty() && (t.starts_with(&wanted) || wanted.starts_with(&t)) {
             20
         } else {
             0
@@ -998,6 +999,17 @@ mod tests {
         assert_eq!(pick("Alpha", None), Some((json!("Alpha"), json!(1999))));
         assert_eq!(pick("Gamma", None), Some((json!("Alpha Two"), json!(2001))));
         assert_eq!(best_hit(&[], "Alpha", None), None);
+    }
+
+    #[test]
+    fn a_non_ascii_title_is_not_an_empty_prefix_of_everything() {
+        let hits = [
+            json!({"title": "千と千尋の神隠し", "year": 2001}),
+            json!({"title": "Spirited Away", "year": 2001}),
+        ];
+        let pick = |t| best_hit(&hits, t, None).map(|v| v["title"].clone());
+        assert_eq!(pick("Spirited"), Some(json!("Spirited Away")));
+        assert_eq!(pick("千と千尋の神隠し"), Some(json!("千と千尋の神隠し")));
     }
 
     #[test]

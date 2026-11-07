@@ -79,17 +79,11 @@ struct MediaRow {
     refreshed_at: Option<DateTime<Utc>>,
     poster: Option<String>,
     overview: Option<String>,
-    tmdb: Option<i32>,
-    tvdb: Option<i32>,
-    imdb: Option<String>,
+    identified: bool,
     no_seasons: bool,
 }
 
 impl MediaRow {
-    fn identified(&self) -> bool {
-        refresh::identified(self.tmdb, self.tvdb, self.imdb.as_deref())
-    }
-
     fn subject(&self) -> Subject {
         Subject::media(self.id, &self.title, Some(self.kind))
     }
@@ -99,20 +93,16 @@ async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
     let all: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT m.id, m.title, m."type" AS kind, m.status::text AS status, dates.release_date,
                   m.year, m."metadataRefreshedAt" AS refreshed_at, m."posterUrl" AS poster, m.overview,
-                  ids.tmdb AS tmdb, ids.tvdb AS tvdb, ids.imdb AS imdb,
+                  EXISTS (SELECT 1 FROM media_external_ids x WHERE x."mediaId" = m.id) AS identified,
                   (m."type" = ANY($1) AND NOT EXISTS (SELECT 1 FROM item_groups s WHERE s."mediaId" = m.id)) AS no_seasons
-           FROM media m {} {} ORDER BY m.id"#,
-        crate::media::external_ids::ids_join("m"),
+           FROM media m {} ORDER BY m.id"#,
         crate::media::details::dates_join("m")
     )))
     .bind(MediaKind::seasonal_names())
     .fetch_all(db)
     .await?;
     let total = all.len();
-    Ok((
-        all.into_iter().filter(MediaRow::identified).collect(),
-        total,
-    ))
+    Ok((all.into_iter().filter(|m| m.identified).collect(), total))
 }
 
 async fn refresh_metadata(st: &AppState) -> Outcome {
@@ -513,5 +503,30 @@ impl Drop for ActivityRows {
         self.ids
             .iter()
             .for_each(|id| self.hub.activity().remove(id));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn a_plugin_id_alone_makes_a_media_identified(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO media (id, title, "type") VALUES (1, 'a', 'movie'), (2, 'b', 'movie');
+               INSERT INTO provider_namespaces (name, "pluginId", "idPattern", "case", label)
+                 VALUES ('org.live:a', 'org.live', '^[0-9]+$', 'preserve', 'A');
+               INSERT INTO media_external_ids ("mediaId", kind, provider, value)
+                 VALUES (1, 'movie', 'org.live:a', '7');"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let (rows, total) = identified_media(&db).await.unwrap();
+        assert_eq!(
+            (rows.iter().map(|m| m.id).collect::<Vec<_>>(), total),
+            (vec![1], 2)
+        );
     }
 }

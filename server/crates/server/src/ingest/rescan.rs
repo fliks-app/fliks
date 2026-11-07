@@ -291,6 +291,7 @@ pub async fn rescan_files(
         crate::media_servers::dispatch_detached(st, "library.rescan");
     }
     if slots_created
+        && crate::media::external_ids::any(&st.db, media_id).await?
         && let Err(e) =
             crate::media::write::refresh_series_episodes(st, &media, Priority::Background).await
     {
@@ -417,6 +418,13 @@ async fn walk_media(
                     w.files.push(p);
                 }
             }
+        }
+        // An empty or unlistable root may be an unmounted share: trust the walk only when it lists an entry.
+        if !rows.is_empty() && w.files.is_empty() {
+            w.complete = match tokio::fs::read_dir(dir).await {
+                Ok(mut e) => matches!(e.next_entry().await, Ok(Some(_))),
+                Err(_) => false,
+            };
         }
     }
     Ok(w)

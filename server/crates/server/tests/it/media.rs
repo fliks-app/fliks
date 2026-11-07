@@ -442,3 +442,105 @@ async fn identify_keeps_the_namespace_an_explicit_provider_names(pool: PgPool) {
         ]
     );
 }
+
+const OLD_VALUES: &str = r#"UPDATE media SET overview = 'old', rating = 7.5, runtime = 100, year = 1999,
+         "originalTitle" = 'kept' WHERE id = 1;
+       INSERT INTO movie_details ("mediaId", tagline) VALUES (1, 'old tagline');
+       INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'digital', '2000-01-01');
+       INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES
+         (1, 'overview', 'tmdb', false), (1, 'rating', 'tmdb', true),
+         (1, 'details', 'tmdb', false), (1, 'releaseDates', 'tmdb', false),
+         (1, 'year', NULL, false), (1, 'runtime', 'file', false);"#;
+
+type Kept = (
+    Option<String>,
+    Option<f64>,
+    Option<i32>,
+    Option<i32>,
+    Option<String>,
+    i64,
+);
+
+/// Identifies media 1 against TVDB 5 (no provider is configured, so the refresh fails), waits for
+/// the detached task to settle and reads what is left.
+async fn identify_then_read(pool: PgPool, held_id: bool) -> Kept {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(OLD_VALUES).execute(&pool).await.unwrap();
+    if held_id {
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (1, 'movie', 'tvdb', '5')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let (status, _) = c
+        .send(
+            "POST",
+            &c.admin,
+            "/api/media/1/identify",
+            Some(json!({"tvdbId": 5})),
+        )
+        .await;
+    assert_eq!(status, 201);
+    for _ in 0..100 {
+        if c.st.hub.activity().list(1, 100).total == 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        c.st.hub.activity().list(1, 100).total,
+        0,
+        "the identify task settled"
+    );
+    type Row = (
+        Option<String>,
+        Option<f64>,
+        Option<i32>,
+        Option<i32>,
+        Option<String>,
+    );
+    let (a, b, d, e, f): Row = sqlx::query_as(
+        r#"SELECT overview, rating, runtime, year, "originalTitle" FROM media WHERE id = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT count(*) FROM movie_details WHERE "mediaId" = 1)
+                + (SELECT count(*) FROM media_release_dates WHERE "mediaId" = 1)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    (a, b, d, e, f, left)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failed_identify_clears_the_old_identity_but_keeps_locks_and_hand_edits(pool: PgPool) {
+    assert_eq!(
+        identify_then_read(pool, false).await,
+        (
+            None,
+            Some(7.5),
+            Some(100),
+            Some(1999),
+            Some("kept".into()),
+            0
+        )
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn identifying_with_the_same_id_clears_nothing(pool: PgPool) {
+    assert_eq!(
+        identify_then_read(pool, true).await,
+        (
+            Some("old".into()),
+            Some(7.5),
+            Some(100),
+            Some(1999),
+            Some("kept".into()),
+            2
+        )
+    );
+}
