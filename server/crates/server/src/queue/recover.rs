@@ -194,6 +194,7 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
+    reinsert_ocr_rows(st, job, file_id, &r).await?;
     commit::sync_rows(st, file_id, &r.source, &r.companions, None).await?;
     sqlx::query(
         r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now()), "updatedAt" = now()
@@ -203,5 +204,49 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The OCR subtitle rows the commit removed come back with their SRTs, at the restored paths.
+async fn reinsert_ocr_rows(
+    st: &AppState,
+    job: &Job,
+    file_id: i32,
+    r: &Restore,
+) -> Result<(), String> {
+    let Some(rows) = job.result.get("ocrRows").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let f = commit::file_row(st, file_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the file is gone")?;
+    for entry in rows {
+        let (Some(trashed), Some(mut row)) = (
+            entry.get("trashed").and_then(Value::as_str),
+            entry.get("row").cloned(),
+        ) else {
+            continue;
+        };
+        let Some((_, back)) = r
+            .companions
+            .iter()
+            .find(|(from, _)| from == Path::new(trashed))
+        else {
+            continue;
+        };
+        let Some(rel) = crate::ingest::fsx::rel_under(Path::new(&f.folder), back) else {
+            continue;
+        };
+        row["filePath"] = json!(rel);
+        sqlx::query(
+            "INSERT INTO subtitle_files SELECT * FROM jsonb_populate_record(NULL::subtitle_files, $1::jsonb)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(row)
+        .execute(&st.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }

@@ -220,6 +220,15 @@ async fn ocr_subtitles_of_the_plan_go_with_the_commit(pool: PgPool) {
         srt.exists() && !trashed.exists(),
         "a restore brings it back"
     );
+    assert_eq!(
+        row(
+            &w,
+            "SELECT count(*) n FROM subtitle_files WHERE \"providerType\" = 'ocr'"
+        )
+        .await["n"],
+        1,
+        "and its row"
+    );
 }
 
 #[sqlx::test(migrations = false)]
