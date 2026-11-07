@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.0.2](https://github.com/fliks-app/fliks/compare/v6.0.1...v6.0.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **server:** quiet slow-statement warnings during migrations ([#2457](https://github.com/fliks-app/fliks/issues/2457)) ([6c3f37d](https://github.com/fliks-app/fliks/commit/6c3f37da48423986d4595c4e804eb08d0da6ffdc))
+* **setup:** use localhost:4848 as the example server address ([#2459](https://github.com/fliks-app/fliks/issues/2459)) ([04ad84f](https://github.com/fliks-app/fliks/commit/04ad84f86abec22cc16ae4db6dfb18383cb7d136))
+
 ## [6.0.1](https://github.com/fliks-app/fliks/compare/v6.0.0...v6.0.1) (2026-11-07)
 
 
