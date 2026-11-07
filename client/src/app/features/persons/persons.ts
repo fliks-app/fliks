@@ -18,6 +18,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideUsers } from '@lucide/angular';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
@@ -25,7 +26,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [TvSelectDirective, 
+  imports: [TranslatePluralPipe, TvSelectDirective, 
     CachedSrcDirective,FormsModule, TranslatePipe, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
   templateUrl: './persons.html',
 })

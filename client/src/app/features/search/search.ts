@@ -16,6 +16,7 @@ import { FormsModule } from '@angular/forms';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import type { CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
@@ -51,7 +52,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
   selector: 'app-search',
-  imports: [DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
+  imports: [TranslatePluralPipe, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })

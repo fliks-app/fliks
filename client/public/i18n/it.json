@@ -2193,7 +2193,7 @@
       "auto_generate_sprites_on_import": "Genera le miniature di navigazione all'import",
       "auto_generate_sprites_on_import_hint": "Una passata di decodifica per file. Disattivalo su un server poco potente e avvia l'attività manualmente.",
       "section_kobo": "Kobo",
-      "kobo_store_proxy": "Kobo store proxy",
+      "kobo_store_proxy": "Proxy dello store Kobo",
       "kobo_store_proxy_hint": "Consente alla sincronizzazione Kobo di inoltrare allo store Kobo le richieste che non gestisce. Disattivato per impostazione predefinita: allora nulla esce dal server.",
       "saved": "Impostazioni salvate.",
       "save_error": "Impossibile salvare.",
@@ -4130,7 +4130,9 @@
     "reschedule_title": "Riprogramma la sessione",
     "reschedule_message": "Nuova data per \"{{name}}\": {{when}}. Confermare?",
     "regenerate_title": "Crea un nuovo link",
-    "regenerate_message": "Il link di invito attuale smetterà di funzionare. Chi ha solo quello perderà l'accesso."
+    "regenerate_message": "Il link di invito attuale smetterà di funzionare. Chi ha solo quello perderà l'accesso.",
+    "error_invalid_cover": "Questa immagine non è valida per la programmazione attuale.",
+    "error_invalid_data": "Dati del segnale non validi"
   },
   "media_picker": {
     "title_add": "Aggiungi un titolo",
@@ -4406,23 +4408,14 @@
     "authors_all": "Tutti gli autori"
   },
   "books_people": {
-    "series_title": "Serie",
     "next_up": "Prossimo",
     "continue": "Continua",
     "missing_position": "Manca il volume {{position}}",
     "no_entries": "Nessuna voce",
-    "authors": "Autori",
-    "narrators": "Narratori",
-    "works": "Opere",
-    "series": "Serie",
     "standalone": "Altre opere",
-    "in_library": "Nella libreria",
     "bibliography": "Altre opere di questo autore",
     "add": "Aggiungi",
-    "no_works": "Nessuna opera nella libreria",
-    "back": "Indietro",
-    "work_count": "{{count}} opere",
-    "empty": "Nessuna persona"
+    "no_works": "Nessuna opera nella libreria"
   },
   "books_search": {
     "filter_books": "Libri",
@@ -4435,7 +4428,6 @@
     "preview_error": "Impossibile caricare questo libro.",
     "unofficial": "Alcuni dati provengono da fonti non ufficiali.",
     "open_in_library": "Apri nella tua libreria",
-    "folder": "Cartella",
     "series": "Serie",
     "publisher": "Editore",
     "published": "Pubblicazione",
@@ -4475,15 +4467,12 @@
     "row_series": "In {{series}}",
     "row_author": "Altro di {{author}}",
     "sources": "Fonti",
-    "source_edition": "Edizione",
     "relink": "Ricollega",
     "unlink": "Scollega",
     "link": "Collega",
     "provider": "Provider",
     "value": "Identificativo",
     "edition": "Edizione",
-    "cancel": "Annulla",
-    "save": "Salva",
     "sources_hint": "Collegare un identificativo aggiorna i metadati da quella fonte.",
     "send_to": "Invia a…",
     "send_queued": "Invio a {{name}}",

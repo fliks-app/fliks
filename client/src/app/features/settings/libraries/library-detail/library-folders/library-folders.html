@@ -50,7 +50,7 @@
                   <span class="badge badge-error badge-sm shrink-0">{{ 'settings.libraries.inaccessible' | translate }}</span>
                 }
               </div>
-              <p class="text-xs text-base-content/60 mt-0.5">
+              <p class="text-sm text-base-content/60 mt-0.5">
                 @if (folder.disk.accessible) {
                   {{ 'settings.libraries.folder_space' | translate: {
                     free: formatBytes(folder.disk.freeSpace),
@@ -141,7 +141,7 @@
             @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
             {{ 'settings.libraries.folder_remove_media' | translate }}
           </button>
-          <span class="text-xs text-base-content/60">{{ 'settings.libraries.folder_remove_media_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.libraries.folder_remove_media_hint' | translate }}</span>
         </div>
       </div>
     }

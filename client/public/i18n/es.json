@@ -2193,7 +2193,7 @@
       "auto_generate_sprites_on_import": "Generar las miniaturas de navegación al importar",
       "auto_generate_sprites_on_import_hint": "Una pasada de decodificación por archivo. Desactívalo en un servidor de baja potencia y lanza la tarea manualmente.",
       "section_kobo": "Kobo",
-      "kobo_store_proxy": "Kobo store proxy",
+      "kobo_store_proxy": "Proxy de la tienda Kobo",
       "kobo_store_proxy_hint": "Permite que la sincronización Kobo reenvíe a la tienda Kobo las peticiones que no atiende. Desactivado por defecto: nada sale entonces del servidor.",
       "saved": "Ajustes guardados.",
       "save_error": "No se puede guardar.",
@@ -4130,7 +4130,9 @@
     "reschedule_title": "Reprogramar la sesión",
     "reschedule_message": "Nueva fecha para \"{{name}}\": {{when}}. ¿Confirmar?",
     "regenerate_title": "Crear un enlace nuevo",
-    "regenerate_message": "El enlace de invitación actual dejará de funcionar. Quien solo tenga ese enlace perderá el acceso."
+    "regenerate_message": "El enlace de invitación actual dejará de funcionar. Quien solo tenga ese enlace perderá el acceso.",
+    "error_invalid_cover": "Esta imagen no es válida para la programación actual.",
+    "error_invalid_data": "Datos de señal no válidos"
   },
   "media_picker": {
     "title_add": "Añadir un título",
@@ -4406,23 +4408,14 @@
     "authors_all": "Todos los autores"
   },
   "books_people": {
-    "series_title": "Serie",
     "next_up": "A continuación",
     "continue": "Continuar",
     "missing_position": "Falta el volumen {{position}}",
     "no_entries": "Sin entradas",
-    "authors": "Autores",
-    "narrators": "Narradores",
-    "works": "Obras",
-    "series": "Series",
     "standalone": "Otras obras",
-    "in_library": "En la biblioteca",
     "bibliography": "Más de este autor",
     "add": "Añadir",
-    "no_works": "Ninguna obra en la biblioteca",
-    "back": "Volver",
-    "work_count": "{{count}} obras",
-    "empty": "Ninguna persona"
+    "no_works": "Ninguna obra en la biblioteca"
   },
   "books_search": {
     "filter_books": "Libros",
@@ -4435,7 +4428,6 @@
     "preview_error": "No se pudo cargar este libro.",
     "unofficial": "Algunos datos proceden de fuentes no oficiales.",
     "open_in_library": "Abrir en tu biblioteca",
-    "folder": "Carpeta",
     "series": "Serie",
     "publisher": "Editorial",
     "published": "Publicación",
@@ -4475,15 +4467,12 @@
     "row_series": "En {{series}}",
     "row_author": "Más de {{author}}",
     "sources": "Fuentes",
-    "source_edition": "Edición",
     "relink": "Volver a vincular",
     "unlink": "Desvincular",
     "link": "Vincular",
     "provider": "Proveedor",
     "value": "Identificador",
     "edition": "Edición",
-    "cancel": "Cancelar",
-    "save": "Guardar",
     "sources_hint": "Vincular un identificador actualiza los metadatos desde esa fuente.",
     "send_to": "Enviar a…",
     "send_queued": "Enviando a {{name}}",

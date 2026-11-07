@@ -95,7 +95,7 @@
               @if (e.durationSeconds) {
                 <span class="text-base-content/60">{{ duration(e.durationSeconds) }}</span>
               } @else if (e.pageCount) {
-                <span class="text-base-content/60">{{ ('books_search.pages_' + (e.pageCount === 1 ? 'one' : 'other')) | translate: { count: e.pageCount } }}</span>
+                <span class="text-base-content/60">{{ 'books_search.pages' | translatePlural: e.pageCount }}</span>
               }
               @if (e.narrators.length) {
                 <span class="text-base-content/60">{{ 'books_search.narrated_by' | translate: { names: e.narrators.join(', ') } }}</span>

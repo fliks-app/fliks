@@ -1,7 +1,6 @@
-/* Two pages meet at the gutter: the left one hugs the right edge of its half, the right one the left edge. */
-.comic-stage { outline-offset: -2px; }
 .comic-spread { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: center; }
 .comic-spread img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+/* The gutter: the left page hugs the right edge of its half, the right page the left edge. */
 .comic-pair img { flex: 1 1 0; min-width: 0; max-width: 50%; }
 .comic-pair img:first-child { object-position: right center; }
 .comic-pair img:last-child { object-position: left center; }

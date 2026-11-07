@@ -1,5 +1,5 @@
 @if (linked().length || unofficial()) {
-  <div class="mt-2 flex flex-col gap-1 text-xs text-base-content/60" data-testid="attribution">
+  <div class="mt-2 flex flex-col gap-1 text-sm text-base-content/60" data-testid="attribution">
     @for (p of linked(); track p.provider) {
       <a class="link link-hover w-fit" [href]="p.url" target="_blank" rel="noopener noreferrer" data-testid="attribution-link">
         {{ 'attribution.data_from' | translate: { name: p.name } }}
