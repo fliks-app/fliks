@@ -1910,6 +1910,20 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_rescan_after_a_merge_keeps_the_m4b_and_the_parts_in_one_work(pool: PgPool) {
+        let c = merging_ctx(pool).await;
+        let m = merge_setup(&c, true, 1).await;
+        books::merge::run(&c.st, m).await.unwrap();
+        let all = [
+            "Orfaline/01.mp3",
+            "Orfaline/02.mp3",
+            "Orfaline/Orfaline.m4b",
+        ];
+        books::register(&c.st, m, &placed(&c, &all)).await.unwrap();
+        assert_eq!(parts(&c, m).await.len(), 3);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_verified_merge_is_a_new_version_and_the_parts_stay(pool: PgPool) {
         let c = merging_ctx(pool).await;
         let m = merge_setup(&c, true, 1).await;

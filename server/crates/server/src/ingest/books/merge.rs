@@ -62,6 +62,16 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
         if parts.len() > MAX_PARTS {
             return None;
         }
+        // Two parts with one trailing number are two books interleaved: never merge, never delete.
+        let mut numbers: Vec<String> = parts.iter().map(|p| trailing_number(&p.rel)).collect();
+        numbers.sort();
+        if numbers.windows(2).any(|w| !w[0].is_empty() && w[0] == w[1]) {
+            tracing::warn!(
+                "m4b merge skipped: two parts share a part number ({})",
+                parts[0].rel
+            );
+            return None;
+        }
         let dir = |p: &Part| work_dir(&p.rel.replace('\\', "/"));
         parts
             .iter()
@@ -78,6 +88,25 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
             .then_some(parts)
             .filter(|parts| !skip.contains(&fingerprint(parts)))
     })
+}
+
+/// The digits ending the file stem (disc folders aside), empty when there are none.
+fn trailing_number(rel: &str) -> String {
+    let rel = rel.replace('\\', "/");
+    let name = rel.rsplit('/').next().unwrap_or(&rel);
+    let stem = name.rfind('.').map_or(name, |d| &name[..d]);
+    let n = stem.len() - stem.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+    let digits = &stem[stem.len() - n..];
+    let disc = rel
+        .rsplit('/')
+        .nth(1)
+        .filter(|d| d.to_lowercase().starts_with("cd") || d.to_lowercase().starts_with("dis"))
+        .unwrap_or("");
+    if digits.is_empty() {
+        String::new()
+    } else {
+        format!("{disc}/{}", digits.trim_start_matches('0'))
+    }
 }
 
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
@@ -123,15 +152,20 @@ fn file_stem(title: &str) -> Option<String> {
 }
 
 /// `<work folder>/<name>[ (<language>)].m4b` beside the parts, disc folders off; the name is the nearest folder
-/// that is not a format name, else the title.
-pub fn output_rel(first: &str, title: &str, language: Option<&str>) -> Option<String> {
+/// that is not a format name, else the title. A work not anchored to its folder shares it, so it takes the title.
+pub fn output_rel(
+    first: &str,
+    title: &str,
+    language: Option<&str>,
+    anchored: bool,
+) -> Option<String> {
     let dir = work_dir(&first.replace('\\', "/"));
     if dir.is_empty() {
         return None;
     }
     let name = dir
         .rsplit('/')
-        .find(|s| !GENERIC.contains(&s.to_lowercase().as_str()))
+        .find(|s| anchored && !GENERIC.contains(&s.to_lowercase().as_str()))
         .map(str::to_owned)
         .or_else(|| file_stem(title))?;
     let lang = language.map(|l| format!(" ({l})")).unwrap_or_default();
@@ -573,8 +607,11 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
         .any(|r| r.edition != edition)
         .then(|| parts[0].language.as_deref())
         .flatten();
-    let mut out_rel =
-        output_rel(&parts[0].rel, &title, named).ok_or("no folder to write the m4b in")?;
+    let anchored = super::anchored(&st.db, media)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut out_rel = output_rel(&parts[0].rel, &title, named, anchored)
+        .ok_or("no folder to write the m4b in")?;
     if let Some((p, job)) = prior
         .as_ref()
         .and_then(|p| p.job_id.as_deref().map(|j| (p, j)))
@@ -1305,6 +1342,20 @@ mod tests {
     }
 
     #[test]
+    fn two_parts_with_one_number_are_never_merged() {
+        let rows = [
+            part(1, 0, "T/A - 01.mp3", "mp3"),
+            part(2, 0, "T/B - 01.mp3", "mp3"),
+        ];
+        assert!(pick(&rows, &[]).is_none());
+        let discs = [
+            part(1, 0, "T/CD1/01.mp3", "mp3"),
+            part(2, 0, "T/CD2/01.mp3", "mp3"),
+        ];
+        assert_eq!(pick(&discs, &[]).unwrap().len(), 2);
+    }
+
+    #[test]
     fn a_merge_never_spans_two_editions() {
         let mut fr = [part(3, 0, "T/c.mp3", "mp3"), part(4, 0, "T/d.mp3", "mp3")];
         fr.iter_mut().for_each(|p| {
@@ -1370,14 +1421,18 @@ mod tests {
 
     #[test]
     fn the_output_sits_in_the_work_folder_named_after_it() {
-        let rel = |p: &str| output_rel(p, "A/Title", None);
+        let rel = |p: &str| output_rel(p, "A/Title", None, true);
         assert_eq!(rel("A/T/CD1/01.mp3").as_deref(), Some("A/T/T.m4b"));
         assert_eq!(rel("T/01.mp3").as_deref(), Some("T/T.m4b"));
         assert_eq!(rel("Book/MP3/01.mp3").as_deref(), Some("Book/MP3/Book.m4b"));
         assert_eq!(rel("MP3/01.mp3").as_deref(), Some("MP3/A_Title.m4b"));
         assert_eq!(rel("01.mp3"), None);
         assert_eq!(
-            output_rel("T/01.mp3", "A/Title", Some("fr")).as_deref(),
+            output_rel("Auteur/01.mp3", "A/Title", None, false).as_deref(),
+            Some("Auteur/A_Title.m4b")
+        );
+        assert_eq!(
+            output_rel("T/01.mp3", "A/Title", Some("fr"), true).as_deref(),
             Some("T/T (fr).m4b")
         );
     }

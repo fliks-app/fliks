@@ -29,7 +29,7 @@ pub async fn read(db: &PgPool, ids: &[i32], acl: &[i32]) -> Result<Vec<Entry>, s
       WHERE c."mediaId" = m.id AND c.role = 'author' AND c."editionId" IS NULL), '[]'::jsonb),
   'editions', COALESCE((SELECT jsonb_agg(jsonb_build_object('language', e.language, 'publisher', e.publisher,
       'files', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'path', f."relativePath", 'size', f.size)
-          ORDER BY ip.version DESC, ip.position, f.id)
+          ORDER BY (lower(f."relativePath") LIKE '%.epub') DESC, ip.version DESC, ip.position, f.id)
         FROM items i JOIN item_parts ip ON ip."itemId" = i.id JOIN media_files f ON f.id = ip."mediaFileId"
         WHERE i."editionId" = e.id AND i."groupId" IS NULL
           AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)

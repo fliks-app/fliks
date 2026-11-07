@@ -85,19 +85,30 @@ fn stem_key(path: &str) -> String {
         .collect()
 }
 
-/// The title part of an audio file name, before its part number: files of one book share it, and
-/// a bare or generic name (`01`, `Track 02`, `01 - Intro`) is empty.
-fn audio_key(path: &str) -> String {
-    let stem = split_language(path.rsplit('/').next().unwrap_or(path)).0;
-    let head = stem
-        .split(|c: char| c.is_ascii_digit())
-        .next()
-        .unwrap_or(stem);
-    let key: String = head
-        .chars()
+fn norm(s: &str) -> String {
+    s.chars()
         .filter(|c| c.is_alphanumeric())
         .flat_map(char::to_lowercase)
-        .collect();
+        .collect()
+}
+
+/// What tells the books of a folder apart: an `m4b` is its whole stem (empty when it is the folder's
+/// name), a part is its stem before its last number (empty for a bare or generic one).
+fn audio_key(path: &str, format: &str, dir: &str) -> String {
+    let stem = split_language(path.rsplit('/').next().unwrap_or(path)).0;
+    if format == "m4b" {
+        let key = norm(stem);
+        return if key == norm(dir.rsplit('/').next().unwrap_or(dir)) {
+            String::new()
+        } else {
+            key
+        };
+    }
+    let Some(n) = stem.rfind(|c: char| c.is_ascii_digit()) else {
+        return String::new();
+    };
+    let head = stem[..=n].trim_end_matches(|c: char| c.is_ascii_digit());
+    let key = norm(head);
     let generic = [
         "track", "part", "partie", "chapter", "chapitre", "piste", "disc", "cd",
     ];
@@ -163,6 +174,18 @@ pub fn group(paths: &[String]) -> Vec<Work> {
     let text_in = |works: &BTreeMap<(String, String), Acc>, dir: &str| -> Vec<(String, String)> {
         works.keys().filter(|(d, _)| d == dir).cloned().collect()
     };
+    let mut titles: BTreeMap<&str, std::collections::BTreeSet<String>> = BTreeMap::new();
+    for (dir, p, format) in &loose_audio {
+        let k = audio_key(p, format, dir);
+        if !k.is_empty() {
+            titles.entry(dir).or_default().insert(k);
+        }
+    }
+    let several: Vec<String> = titles
+        .into_iter()
+        .filter(|(_, k)| k.len() > 1)
+        .map(|(d, _)| d.to_owned())
+        .collect();
     for (dir, p, format) in loose_audio {
         let key = if dir.is_empty() {
             let stem = stem_key(&p);
@@ -174,8 +197,8 @@ pub fn group(paths: &[String]) -> Vec<Work> {
         } else {
             match text_in(&works, &dir).as_slice() {
                 [only] => only.clone(),
-                _ => match audio_key(&p) {
-                    k if k.is_empty() => (dir.clone(), String::new()),
+                _ => match audio_key(&p, &format, &dir) {
+                    k if k.is_empty() || !several.contains(&dir) => (dir.clone(), String::new()),
                     k => (dir.clone(), format!("\u{0}{k}")),
                 },
             }
@@ -277,7 +300,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 13);
+        assert_eq!(cases.len(), 20);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()
