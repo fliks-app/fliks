@@ -144,6 +144,9 @@ async fn run(st: &AppState, placeholder: i32, source: &Row, automatic: bool) {
             }
         }
     }
+    if let Some(file) = source.media_file_id {
+        st.queue.note_ocr_ended(file);
+    }
 }
 
 async fn try_run(

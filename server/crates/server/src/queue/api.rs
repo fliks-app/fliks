@@ -163,7 +163,7 @@ pub async fn list_jobs(
              (j.kind = 'optimize' AND j.state = 'done' AND j.result #>> '{journal,backup}' IS NOT NULL
               AND NOT (j.result ? 'trashPurgedAt') AND NOT (j.result ? 'restore')) AS restorable
            FROM jobs j LEFT JOIN media_files f ON f.id = j."mediaFileId" LEFT JOIN media m ON m.id = f."mediaId"
-           WHERE NOT (j.state = 'skipped' AND j.error->>'class' = 'shared')
+           WHERE NOT (j.state = 'skipped' AND j.error->>'class' IN ('shared', 'ocr_pending'))
              AND ($1::text IS NULL OR j.state = $1) AND ($3::int IS NULL OR m."libraryId" = $3)
              AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            ORDER BY CASE WHEN $1 = 'queued' THEN j.priority END DESC, CASE WHEN $1 = 'queued' THEN j.id END,

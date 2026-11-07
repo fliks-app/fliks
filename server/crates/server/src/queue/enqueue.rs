@@ -201,7 +201,11 @@ pub async fn queue_files(
 ) -> sqlx::Result<Vec<Queued>> {
     let mut out = Vec::with_capacity(ids.len());
     for &id in ids {
-        out.push(queue_one(st, id, force, priority, false, None).await?);
+        let q = queue_one(st, id, force, priority, false, None).await?;
+        if q.outcome == Outcome::OcrPending {
+            record_marker(st, id, "ocr_pending").await?;
+        }
+        out.push(q);
     }
     st.queue.wake.notify_waiters();
     super::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
@@ -218,8 +222,10 @@ pub type Cache = std::collections::HashMap<i32, Option<select::Context>>;
 
 pub async fn queue_new_cached(st: &AppState, id: i32, cache: &mut Cache) -> sqlx::Result<Queued> {
     let q = queue_one(st, id, false, 0, true, Some(cache)).await?;
-    if q.outcome == Outcome::Shared {
-        record_shared(st, id).await?;
+    match q.outcome {
+        Outcome::Shared => record_marker(st, id, "shared").await?,
+        Outcome::OcrPending => record_marker(st, id, "ocr_pending").await?,
+        _ => {}
     }
     if q.outcome == Outcome::Queued {
         st.queue.wake.notify_waiters();
@@ -228,18 +234,36 @@ pub async fn queue_new_cached(st: &AppState, id: i32, cache: &mut Cache) -> sqlx
     Ok(q)
 }
 
-/// A `skipped` marker of class `shared`, once per file: the review pass looks at those files again.
-async fn record_shared(st: &AppState, id: i32) -> sqlx::Result<()> {
+/// A `skipped` marker of a class, once per file: `shared` files are looked at again by the review
+/// pass, `ocr_pending` ones are queued when their OCR ends.
+async fn record_marker(st: &AppState, id: i32, class: &str) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state, error, "finishedAt")
-           SELECT 'optimize', $1, '{}'::jsonb, 'shared', 'skipped', '{"class": "shared"}'::jsonb, now()
+           SELECT 'optimize', $1, '{}'::jsonb, $2, 'skipped', jsonb_build_object('class', $2::text), now()
            WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE "mediaFileId" = $1 AND state = 'skipped'
-                               AND error->>'class' = 'shared')"#,
+                               AND error->>'class' = $2)"#,
     )
     .bind(id)
+    .bind(class)
     .execute(&st.db)
     .await?;
     Ok(())
+}
+
+/// The OCR of a file's tracks ended (done or failed): a file that waited for it is queued now.
+pub async fn after_ocr(st: &AppState, file: i32) {
+    let waited = sqlx::query_scalar::<_, i64>(
+        r#"DELETE FROM jobs WHERE "mediaFileId" = $1 AND state = 'skipped' AND error->>'class' = 'ocr_pending'
+           RETURNING id"#,
+    )
+    .bind(file)
+    .fetch_all(&st.db)
+    .await;
+    if waited.is_ok_and(|w| !w.is_empty())
+        && let Err(e) = queue_files(st, &[file], false, 0).await
+    {
+        tracing::warn!(file, "queueing after the OCR failed: {e}");
+    }
 }
 
 async fn queue_one(
@@ -402,7 +426,7 @@ pub(super) async fn insert_job(
 pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
     let row = sqlx::query(
         r#"SELECT "inPath", "inSize", "inMtimeMs" FROM jobs WHERE id = $1 AND state IN ('failed', 'skipped')
-             AND COALESCE(error->>'class', '') <> 'shared'"#,
+             AND COALESCE(error->>'class', '') NOT IN ('shared', 'ocr_pending')"#,
     )
     .bind(id)
     .fetch_optional(&st.db)

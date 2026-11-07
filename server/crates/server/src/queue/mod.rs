@@ -57,6 +57,9 @@ pub struct Shared {
     /// Woken after a backup restore, so `committing` jobs are reviewed at once.
     pub recover: Notify,
     downloads: Mutex<HashMap<i32, Instant>>,
+    /// Files whose OCR just ended; their queueing runs in the queue's own task.
+    ocr_ended: Mutex<Vec<i32>>,
+    ocr_wake: Notify,
 }
 
 /// A `download` resolve younger than this may be a client still reading the file.
@@ -91,6 +94,11 @@ impl Shared {
             })
             .map(|(_, w)| w.clone())
             .collect()
+    }
+
+    pub fn note_ocr_ended(&self, file: i32) {
+        self.ocr_ended.lock_clean().push(file);
+        self.ocr_wake.notify_one();
     }
 
     pub fn note_download(&self, file: i32) {
@@ -208,6 +216,16 @@ pub fn spawn(st: &AppState) {
             }
             if n.is_multiple_of(240) {
                 trash::purge(&st.db).await;
+            }
+        }
+    });
+    let st3 = st2.clone();
+    tokio::spawn(async move {
+        loop {
+            st3.queue.ocr_wake.notified().await;
+            let files = std::mem::take(&mut *st3.queue.ocr_ended.lock_clean());
+            for f in files {
+                enqueue::after_ocr(&st3, f).await;
             }
         }
     });

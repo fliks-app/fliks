@@ -79,7 +79,18 @@ pub async fn analyze(
                   lp."audioLanguages", lp."subtitleLanguages",
                   EXISTS (SELECT 1 FROM playback_qoe_sessions q
                           WHERE q."mediaFileId" = mf.id AND q."startedAt" > now() - interval '30 days'
-                            AND q."transcodeReasons" <> '[]'::jsonb) AS transcoded
+                            AND q."transcodeReasons" <> '[]'::jsonb) AS transcoded,
+                  COALESCE((SELECT array_agg(DISTINCT o."sourceStreamIndex") FROM subtitle_files o
+                            WHERE o."mediaFileId" = mf.id AND o."providerType" = 'ocr' AND o.status = 'failed'
+                              AND o."sourceStreamIndex" IS NOT NULL
+                              AND NOT EXISTS (SELECT 1 FROM subtitle_files n WHERE n."mediaFileId" = mf.id
+                                AND n."providerType" = 'ocr' AND n."sourceStreamIndex" = o."sourceStreamIndex"
+                                AND n.id > o.id)), '{}') AS ocr_failed,
+                  EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.kind = 'optimize'
+                            AND j.state IN ('done', 'skipped') AND j.result ? 'copyReason'
+                            AND (j."outSize" = mf.size OR j."inSize" = mf.size)
+                            AND j.payload #>> '{plan,codec}' IS NOT DISTINCT FROM $4::text
+                            AND COALESCE((j.payload #>> '{plan,minSavingsPct}')::float8, -1) = $5::float8) AS video_copied
            FROM media_files mf
            JOIN media m ON m.id = mf."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
@@ -101,6 +112,8 @@ pub async fn analyze(
     .bind(library_id)
     .bind(only)
     .bind(PROBE_VERSION)
+    .bind(ctx.target.map(|t| t.as_str().to_owned()))
+    .bind(f64::from(ctx.profile.guards.min_savings_pct))
     .fetch(db);
     let env = ctx.env();
     while let Some(r) = rows.try_next().await? {
@@ -124,6 +137,11 @@ pub async fn analyze(
             profile_subtitles: items("subtitleLanguages"),
         };
         let path: String = r.try_get("relativePath")?;
+        let ocr_failed: Vec<u32> = r
+            .try_get::<Vec<i32>, _>("ocr_failed")?
+            .into_iter()
+            .map(|i| i as u32)
+            .collect();
         let file = File {
             relative_path: &path,
             info: &info,
@@ -131,6 +149,8 @@ pub async fn analyze(
             age_days: r.try_get::<f64, _>("age_days")? as i64,
             languages: &languages,
             transcoded_recently: r.try_get("transcoded")?,
+            ocr_failed: &ocr_failed,
+            video_copied: r.try_get("video_copied")?,
         };
         visit(Candidate {
             media_file_id: r.try_get("id")?,
