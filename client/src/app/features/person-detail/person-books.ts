@@ -43,6 +43,8 @@ export class PersonBooksComponent {
     try {
       const works = await this.api.personWorks(id, role);
       if (current()) this.works.set(works);
+    } catch (e) {
+      if (current()) throw e;
     } finally {
       if (current()) this.loading.set(false);
     }

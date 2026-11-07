@@ -11,36 +11,37 @@ pub async fn carry_poster(st: &AppState, from: i32, into: i32) {
     let old = Target::media(from, Variant::Poster);
     let target = Target::media(into, Variant::Poster);
     let prefix = format!("{}%", old.api_path());
-    let stored =
-        sqlx::query_scalar::<_, bool>(r#"SELECT "posterUrl" LIKE $2 FROM media WHERE id = $1"#)
-            .bind(into)
-            .bind(&prefix)
-            .fetch_optional(&st.db)
-            .await;
-    if !matches!(stored, Ok(Some(true))) {
+    let stored = sqlx::query_scalar::<_, bool>(
+        r#"SELECT COALESCE("posterUrl" LIKE $2, false) FROM media WHERE id = $1"#,
+    )
+    .bind(into)
+    .bind(&prefix)
+    .fetch_optional(&st.db)
+    .await;
+    if matches!(stored, Ok(Some(false) | None)) {
         return;
     }
-    let Some(url) = st
-        .images
-        .store_from_disk(&old.file(st.images.root(), Size::Full), &target)
-        .await
-    else {
-        return;
+    let url = match stored {
+        Ok(_) => {
+            st.images
+                .store_from_disk(&old.file(st.images.root(), Size::Full), &target)
+                .await
+        }
+        Err(_) => None,
     };
-    if let Err(e) =
+    // A dangling url would block the next cover write, which only fills a NULL poster.
+    let res =
         sqlx::query(r#"UPDATE media SET "posterUrl" = $2 WHERE id = $1 AND "posterUrl" LIKE $3"#)
             .bind(into)
-            .bind(url)
+            .bind(&url)
             .bind(prefix)
             .execute(&st.db)
-            .await
-    {
-        tracing::warn!("poster of book #{into}: {e}");
+            .await;
+    if url.is_none() || res.is_err() {
+        tracing::warn!("poster of book #{into} not carried from #{from}");
     }
 }
 
-/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
-/// `orphans::release`s the result once its transaction commits.
 pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<Refs> {
     let (a, b) = (from.min(into), from.max(into));
     sqlx::query!(
