@@ -18,6 +18,7 @@ struct LibraryView: View {
     @State private var fetched = 0
     @State private var total = 0
     @State private var page = 1
+    @State private var generation = 0
     @State private var isLoadingMore = false
     @State private var sortBy = "title"
     @State private var sortOrder = "ASC"
@@ -112,15 +113,17 @@ struct LibraryView: View {
         library = libs.first { $0.id == libraryId }
     }
 
-    private func load(reset: Bool) async {
+    private func load(reset: Bool, page start: Int = 1) async {
         if reset {
+            generation += 1
             state = .loading
             page = 1
             items = []
             fetched = 0
         }
+        let gen = generation
         let (sort, order, type) = (sortBy, sortOrder, typeFilter)
-        var next = page
+        var next = reset ? 1 : start
         while true {
             var query = [
                 "libraryId": String(libraryId),
@@ -132,8 +135,7 @@ struct LibraryView: View {
             if let type { query["type"] = type.rawValue }
             do {
                 let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
-                // Drop a response superseded by a sort or type change.
-                guard (sort, order, type) == (sortBy, sortOrder, typeFilter) else { return }
+                guard gen == generation else { return }
                 let data = res.data.filter(\.type.isPlayable)
                 items += data
                 total = res.total
@@ -146,7 +148,7 @@ struct LibraryView: View {
                 }
                 state = .loaded
             } catch {
-                if reset { state = .failed }
+                if reset, gen == generation { state = .failed }
             }
             return
         }
@@ -158,9 +160,8 @@ struct LibraryView: View {
     private func loadMore() {
         guard !isLoadingMore, fetched < total else { return }
         isLoadingMore = true
-        page += 1
         Task {
-            await load(reset: false)
+            await load(reset: false, page: page + 1)
             isLoadingMore = false
         }
     }
