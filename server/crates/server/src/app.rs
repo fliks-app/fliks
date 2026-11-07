@@ -222,6 +222,14 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         libraries::folders::remove,
         libraries::access_get,
         libraries::access_put,
+        crate::optimize::presets,
+        crate::optimize::list,
+        crate::optimize::get_one,
+        crate::optimize::create,
+        crate::optimize::update,
+        crate::optimize::remove,
+        crate::optimize::preview,
+        crate::optimize::summary,
         images::without_variant,
         images::with_variant,
         media::find,
@@ -500,6 +508,7 @@ fn api() -> Router<AppState> {
         .merge(crate::comics::router())
         .merge(crate::opds::router())
         .merge(libraries::router())
+        .merge(crate::optimize::router())
         .merge(images::router())
         .merge(media::router())
         .merge(notifications::router())

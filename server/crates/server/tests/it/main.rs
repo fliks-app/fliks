@@ -27,6 +27,7 @@ mod migrations;
 mod notifications;
 mod oidc;
 mod opds;
+mod optimize;
 mod parity;
 mod party;
 mod playback;
