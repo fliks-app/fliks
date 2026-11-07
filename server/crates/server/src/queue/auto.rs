@@ -11,7 +11,6 @@ use serde_json::json;
 const VERIFY_PRIORITY: i32 = -10;
 /// New files are reviewed again for this long (hard-linked ones become ours once the seeding ends).
 const REVIEW_DAYS: i32 = 30;
-const REVIEW_BATCH: i64 = 500;
 
 /// Queues a full read and software decode of each file; the worker reports `corrupt` or `damaged`.
 pub async fn queue_verify(st: &AppState, ids: &[i32], priority: i32) -> sqlx::Result<Vec<Queued>> {
@@ -67,18 +66,22 @@ pub async fn schedule_verify(st: &AppState) -> sqlx::Result<usize> {
     Ok(ids.len())
 }
 
-/// New files of the optimizing libraries that never had a job: the ones `settled()` left (hard-linked
-/// while seeding, an OCR or a rescan pending) are looked at again.
+/// New files of the optimizing libraries without an optimize job, and the hard-linked ones `settled()`
+/// marked `shared` (no age limit): looked at again, whatever the pass before decided.
 pub async fn review_new(st: &AppState) -> sqlx::Result<usize> {
     let ids: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f JOIN media m ON m.id = f."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
-           WHERE l."optimizeNewFiles" AND f."createdAt" > now() - make_interval(days => $1)
-             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id)
-           ORDER BY f.id LIMIT $2"#,
+           WHERE l."optimizeNewFiles" AND (
+             (f."createdAt" > now() - make_interval(days => $1)
+              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.kind = 'optimize'))
+             OR (EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.state = 'skipped'
+                           AND j.error->>'class' = 'shared')
+                 AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.kind = 'optimize'
+                                   AND NOT (j.state = 'skipped' AND j.error->>'class' = 'shared'))))
+           ORDER BY f.id"#,
     )
     .bind(REVIEW_DAYS)
-    .bind(REVIEW_BATCH)
     .fetch_all(&st.db)
     .await?;
     let mut queued = 0;
