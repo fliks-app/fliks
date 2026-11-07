@@ -177,8 +177,9 @@ pub async fn attach_with(
             };
             match holder.filter(|h| *h != media && edition.is_some() && same_library) {
                 Some(holder) => {
-                    absorb(&mut tx, media, holder).await?;
+                    let held = absorb(&mut tx, media, holder).await?;
                     tx.commit().await?;
+                    crate::media::write::orphans::release(st, held);
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
                 None => {

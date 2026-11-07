@@ -44,7 +44,9 @@ export class PersonBooksComponent {
     } finally {
       this.loading.set(false);
     }
-    // The bibliography lists an author's works: a narrator view has none.
-    if (role === 'author') this.credits.set(await this.api.personBibliography(id));
+    // The bibliography lists an author's works: a narrator view has none. A provider outage shows none.
+    if (role !== 'author') return;
+    const credits = await this.api.personBibliography(id).catch(() => []);
+    if (id === this.personId() && role === this.role()) this.credits.set(credits);
   }
 }

@@ -1,8 +1,10 @@
 //! Folds a duplicate book into the work that already holds its id.
+use crate::media::write::orphans::{self, Refs};
 use sqlx::PgConnection;
 
-/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`.
-pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<()> {
+/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
+/// `orphans::release`s the result once its transaction commits.
+pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<Refs> {
     let (a, b) = (from.min(into), from.max(into));
     sqlx::query!(
         "SELECT id FROM media WHERE id IN ($1, $2) ORDER BY id FOR UPDATE",
@@ -115,10 +117,11 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .execute(&mut *c)
     .await?;
+    let held = orphans::refs_of(c, from).await?;
     sqlx::query!("DELETE FROM media WHERE id = $1", from)
         .execute(&mut *c)
         .await?;
-    Ok(())
+    Ok(held)
 }
 
 #[cfg(test)]

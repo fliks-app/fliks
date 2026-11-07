@@ -452,6 +452,7 @@ async fn insert_unanchored(
         .execute(&mut *tx)
         .await?;
     let authors = people(record, "authors");
+    super::orphans::hold(&mut tx).await?;
     replace_credits(&mut tx, id, None, "author", None, &authors).await?;
     tx.commit().await?;
     announce(
