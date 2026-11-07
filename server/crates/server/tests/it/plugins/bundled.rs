@@ -198,3 +198,27 @@ async fn an_unverified_package_with_a_bundled_id_stays_manual() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_embedded_archive_loads_against_this_core() {
+    let Some(s) = Scratch::create("bundled_all").await else {
+        return;
+    };
+    let h = harness(&s, "bundled_all", |_| {}).await;
+    h.st.plugins.boot().await;
+    for (id, version, _) in fliks_server::plugins::bundled::ARCHIVES {
+        let p = packages::find(&s.pool, id)
+            .await
+            .unwrap()
+            .unwrap_or_else(|| panic!("{id} {version} was not installed"));
+        assert!(
+            !p.status_reason
+                .as_deref()
+                .is_some_and(|r| r.starts_with("incompatible-api")),
+            "{id} {version} does not load: {:?}",
+            p.status_reason
+        );
+    }
+    h.finish().await;
+    s.finish().await;
+}

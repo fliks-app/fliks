@@ -783,9 +783,6 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
     if let Some(Some(l)) = library {
         assert_can_use_library(st, a, l).await?;
     }
-    if let Some(w) = &dto.wants {
-        set_wants(st, &row, w).await?;
-    }
     assert_exist(
         st,
         quality.flatten(),
@@ -793,6 +790,9 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         library.flatten().filter(|l| *l != 0),
     )
     .await?;
+    if let Some(w) = &dto.wants {
+        set_wants(st, &row, w).await?;
+    }
     if !db::patch(&st.db, id, quality, language, library.map(some_id)).await? {
         return Err(AppError::forbidden("Only pending requests can be updated"));
     }

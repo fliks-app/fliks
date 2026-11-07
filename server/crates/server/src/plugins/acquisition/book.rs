@@ -30,7 +30,13 @@ impl WantRow {
         match &self.qp_items {
             Some(v) => serde_json::from_value::<Vec<QualityProfileItem>>(v.clone())
                 .map(|i| build_allowed_quality_ids(&i))
-                .unwrap_or_default(),
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        "quality profile {:?}: corrupt items, read as empty: {e}",
+                        self.qp_id
+                    );
+                    BTreeSet::new()
+                }),
             None => default_allowed(self.family()).into_iter().collect(),
         }
     }

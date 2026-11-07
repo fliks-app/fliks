@@ -38,9 +38,10 @@ async fn fetched(
         .scene_mapping(&tvdb.to_string(), p)
         .await
         .map_err(|e| e.to_string())?;
-    pairs
-        .map(|entries| SceneMap { entries })
-        .ok_or_else(|| "the provider has no mapping for it".to_owned())
+    // No mapping is an answer: an empty map, stored in place of any earlier one.
+    Ok(SceneMap {
+        entries: pairs.unwrap_or_default(),
+    })
 }
 
 /// `None` when the series has no row; `Some(None)` when its mapping is not fetched yet.
@@ -74,7 +75,7 @@ async fn applied(db: &PgPool, media_id: i32, map: SceneMap) -> sqlx::Result<Mapp
     .fetch_all(db)
     .await?;
     let library: BTreeMap<i64, i64> = counts.into_iter().map(|(s, n)| (s.into(), n)).collect();
-    Ok(if map.fits(&library) {
+    Ok(if !map.entries.is_empty() && map.fits(&library) {
         Mapping::Mapped(map)
     } else {
         Mapping::Unmapped
@@ -138,7 +139,7 @@ pub async fn for_media(st: &AppState, media_id: i32) -> sqlx::Result<Mapping> {
     }
 }
 
-/// A fetched mapping replaces the stored one; a failure leaves it as it was.
+/// A fetched mapping (possibly empty) replaces the stored one; a failure leaves it as it was.
 async fn keep_or_store(db: &PgPool, tvdb: i32, fetched: Result<SceneMap, String>) {
     let map = match fetched {
         Ok(m) => m,
@@ -306,18 +307,34 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn refresh_keeps_the_stored_mapping_when_the_provider_has_none(db: PgPool) {
+    async fn refresh_replaces_the_stored_mapping_when_the_provider_has_none(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         series(&db, &[(1, 10), (2, 7), (3, 8)]).await;
         store(&db, Some(fixture())).await;
         let s = stub(&["70668", "375921", "x"], false);
         refresh(&with_provider(&db, &s)).await.unwrap();
-        assert_eq!(stored(&db, TVDB).await.unwrap(), Some(Some(fixture())));
+        assert_eq!(
+            stored(&db, TVDB).await.unwrap(),
+            Some(Some(SceneMap::default()))
+        );
+        assert_eq!(stored_mapping(&db, 1).await.unwrap(), Mapping::Unmapped);
         let listed: i64 = sqlx::query_scalar("SELECT count(*) FROM scene_mappings")
             .fetch_one(&db)
             .await
             .unwrap();
         assert_eq!(listed, 2, "every valid listed id has a row");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_listed_series_with_no_mapping_is_unmapped_not_unknown(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        series(&db, &[(1, 10), (2, 7), (3, 8)]).await;
+        store(&db, None).await;
+        let s = stub(&[], false);
+        let st = with_provider(&db, &s);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Unmapped);
+        assert_eq!(for_media(&st, 1).await.unwrap(), Mapping::Unmapped);
+        assert_eq!(s.mapping_calls.load(Ordering::SeqCst), 1, "answered once");
     }
 
     #[sqlx::test(migrations = false)]

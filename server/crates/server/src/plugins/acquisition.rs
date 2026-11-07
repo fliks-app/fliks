@@ -86,17 +86,25 @@ impl MediaRow {
             .filter_map(|v| v.as_str().map(str::to_owned))
             .collect()
     }
+    /// A profile column as a list; a corrupt one is logged and reads empty.
+    fn profile_json<T: serde::de::DeserializeOwned>(
+        &self,
+        v: &Option<Value>,
+        what: &str,
+    ) -> Vec<T> {
+        let Some(v) = v else { return vec![] };
+        serde_json::from_value(v.clone()).unwrap_or_else(|e| {
+            tracing::warn!(
+                "media {} (quality profile {:?}): corrupt {what} profile, read as empty: {e}",
+                self.id,
+                self.qp_id
+            );
+            vec![]
+        })
+    }
     fn allowed(&self) -> (BTreeSet<u32>, BTreeSet<u32>) {
-        let items: Vec<QualityProfileItem> = self
-            .qp_items
-            .clone()
-            .and_then(|v| serde_json::from_value(v).ok())
-            .unwrap_or_default();
-        let langs: Vec<AudioLanguageItem> = self
-            .lp_audio
-            .clone()
-            .and_then(|v| serde_json::from_value(v).ok())
-            .unwrap_or_default();
+        let items: Vec<QualityProfileItem> = self.profile_json(&self.qp_items, "quality");
+        let langs: Vec<AudioLanguageItem> = self.profile_json(&self.lp_audio, "language");
         (
             build_allowed_quality_ids(&items),
             allowed_audio_language_ids(&langs),
