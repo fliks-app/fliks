@@ -79,7 +79,7 @@
             }
             <div class="text-sm text-base-content/60">{{ formatRelative(req.requestedAt) }}</div>
             @if (req.legacyClient) {
-              <div class="text-sm text-warning" data-testid="pairing-update-device">{{ 'pending_requests.update_device' | translate }}</div>
+              <div class="text-sm text-warning" data-testid="pairing-update-device">{{ 'pending_requests.update_device' | translate: { device: req.deviceName } }}</div>
             }
           </div>
           <div class="flex gap-2 shrink-0">
