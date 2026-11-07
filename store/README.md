@@ -107,12 +107,19 @@ files are the original JPEGs, copied untouched rather than re-encoded.
 | iPhone 6.9" screenshots | `screenshots/<locale>/iphone-69/NN-*.jpg` | exactly 1320×2868 or 2868×1320, 1 to 10 |
 | iPhone 6.5" screenshots | `screenshots/<locale>/iphone-65/NN-*.jpg` | exactly 1242×2688 or 2688×1242, 1 to 10 |
 | iPad 13" screenshots | `screenshots/<locale>/ipad-13/NN-*.jpg` | exactly 2064×2752 or 2752×2064, 1 to 10 |
+| Creative asset: Header | `creative-asset-5244x2950.png` | 5244×2950 PNG (universal 16:9), or 3840×1646 |
 
 PNG or JPEG, RGB, **no alpha**, and the pixel dimensions are exact — there is no
 tolerance. 6.9" is the only required iPhone size and Apple scales it down for the
 rest; 6.5" is optional and only worth filling when the framing deserves its own
 capture. No icon here: App Store Connect reads the 1024×1024 marketing icon from
 the app bundle's asset catalog.
+
+The creative asset is the product page header (iOS 27 and later). Apple's
+universal template keeps key art inside a 1402×962 safe area at (1921, 660); the
+rest is cropped per device. It is the brand logo, rendered with headless Chrome,
+over the tvOS App Store icon's background layer. The Search Results slot stays
+empty on purpose: App Store search then shows the screenshots instead.
 
 ### Screenshots
 
