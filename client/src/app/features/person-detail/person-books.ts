@@ -37,16 +37,18 @@ export class PersonBooksComponent {
   }
 
   private async load(id: number, role: 'author' | 'narrator') {
+    const current = () => id === this.personId() && role === this.role();
     this.loading.set(true);
     this.credits.set([]);
     try {
-      this.works.set(await this.api.personWorks(id, role));
+      const works = await this.api.personWorks(id, role);
+      if (current()) this.works.set(works);
     } finally {
-      this.loading.set(false);
+      if (current()) this.loading.set(false);
     }
     // The bibliography lists an author's works: a narrator view has none. A provider outage shows none.
     if (role !== 'author') return;
     const credits = await this.api.personBibliography(id).catch(() => []);
-    if (id === this.personId() && role === this.role()) this.credits.set(credits);
+    if (current()) this.credits.set(credits);
   }
 }

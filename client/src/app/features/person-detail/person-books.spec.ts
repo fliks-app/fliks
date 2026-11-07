@@ -77,14 +77,13 @@ describe('PersonBooksComponent', () => {
     fixture.componentRef.setInput('personId', 1);
     fixture.componentRef.setInput('role', 'author');
     fixture.detectChanges();
-    http.expectOne((r) => r.url === '/api/persons/1/works').flush(personWorksFixture);
-    await new Promise((r) => setTimeout(r));
-    const slow = http.expectOne('/api/persons/1/bibliography');
+    const slowWorks = http.expectOne((r) => r.url === '/api/persons/1/works');
     fixture.componentRef.setInput('personId', 2);
     fixture.detectChanges();
-    slow.flush([bookSearchResultFixture]);
+    slowWorks.flush({ ...personWorksFixture, standalone: [] });
     await new Promise((r) => setTimeout(r));
-    expect(fixture.componentInstance.missing()).toEqual([]);
+    expect(fixture.componentInstance.works()).toBeNull();
+    http.expectNone('/api/persons/1/bibliography');
     http.expectOne((r) => r.url === '/api/persons/2/works').flush(personWorksFixture);
     await new Promise((r) => setTimeout(r));
     http.expectOne('/api/persons/2/bibliography').flush('down', { status: 503, statusText: 'Unavailable' });

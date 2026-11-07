@@ -1,6 +1,43 @@
 //! Folds a duplicate book into the work that already holds its id.
-use crate::media::write::orphans::{self, Refs};
+use crate::{
+    images::paths::{Size, Target, Variant},
+    media::write::orphans::{self, Refs},
+    state::AppState,
+};
 use sqlx::PgConnection;
+
+/// Copies `into`'s poster out of `from`'s image folder when it points there, before that folder is cleaned.
+pub async fn carry_poster(st: &AppState, from: i32, into: i32) {
+    let old = Target::media(from, Variant::Poster);
+    let target = Target::media(into, Variant::Poster);
+    let prefix = format!("{}%", old.api_path());
+    let stored =
+        sqlx::query_scalar::<_, bool>(r#"SELECT "posterUrl" LIKE $2 FROM media WHERE id = $1"#)
+            .bind(into)
+            .bind(&prefix)
+            .fetch_optional(&st.db)
+            .await;
+    if !matches!(stored, Ok(Some(true))) {
+        return;
+    }
+    let Some(url) = st
+        .images
+        .store_from_disk(&old.file(st.images.root(), Size::Full), &target)
+        .await
+    else {
+        return;
+    };
+    if let Err(e) =
+        sqlx::query(r#"UPDATE media SET "posterUrl" = $2 WHERE id = $1 AND "posterUrl" LIKE $3"#)
+            .bind(into)
+            .bind(url)
+            .bind(prefix)
+            .execute(&st.db)
+            .await
+    {
+        tracing::warn!("poster of book #{into}: {e}");
+    }
+}
 
 /// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
 /// `orphans::release`s the result once its transaction commits.
