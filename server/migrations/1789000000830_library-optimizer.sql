@@ -11,6 +11,8 @@ ALTER TABLE "libraries"
   ADD COLUMN "optimizeNewFiles" boolean NOT NULL DEFAULT false,
   ADD COLUMN "allowRename" boolean NOT NULL DEFAULT false;
 
+CREATE INDEX "IDX_libraries_optimize_profile" ON "libraries" ("optimizeProfileId");
+
 CREATE TABLE "jobs" (
   "id" bigserial PRIMARY KEY,
   "kind" text NOT NULL CHECK ("kind" IN ('optimize', 'verify')),
@@ -46,6 +48,7 @@ CREATE TABLE "jobs" (
 
 CREATE UNIQUE INDEX "UQ_jobs_active_file" ON "jobs" ("mediaFileId")
   WHERE "mediaFileId" IS NOT NULL AND "state" IN ('queued', 'leased', 'staged', 'committing');
+CREATE INDEX "IDX_jobs_media_file" ON "jobs" ("mediaFileId");
 CREATE INDEX "IDX_jobs_take" ON "jobs" ("priority" DESC, "id") WHERE "state" = 'queued';
 CREATE INDEX "IDX_jobs_lease" ON "jobs" ("leaseUntil") WHERE "state" = 'leased';
 
