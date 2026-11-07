@@ -61,4 +61,34 @@ describe('PersonBooksComponent', () => {
     expect(fixture.componentInstance.missing()).toEqual([]);
     http.verify();
   });
+
+  it('shows no missing works when the bibliography fails, and drops a reply for a previous person', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(PersonBooksComponent);
+    fixture.componentRef.setInput('personId', 1);
+    fixture.componentRef.setInput('role', 'author');
+    fixture.detectChanges();
+    const slowWorks = http.expectOne((r) => r.url === '/api/persons/1/works');
+    fixture.componentRef.setInput('personId', 2);
+    fixture.detectChanges();
+    slowWorks.flush({ ...personWorksFixture, standalone: [] });
+    await new Promise((r) => setTimeout(r));
+    expect(fixture.componentInstance.works()).toBeNull();
+    http.expectNone('/api/persons/1/bibliography');
+    http.expectOne((r) => r.url === '/api/persons/2/works').flush(personWorksFixture);
+    await new Promise((r) => setTimeout(r));
+    http.expectOne('/api/persons/2/bibliography').flush('down', { status: 503, statusText: 'Unavailable' });
+    await new Promise((r) => setTimeout(r));
+    expect(fixture.componentInstance.missing()).toEqual([]);
+    http.verify();
+  });
 });

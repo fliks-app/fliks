@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import type { Media } from './media.service';
 import type {
   BookChapter, BookImportBody, BookPreview, BookSearchResult, BookSourceDelete, BookSourcePut,
@@ -37,7 +38,9 @@ export class BooksApiService {
   }
 
   personBibliography(id: number) {
-    return firstValueFrom(this.http.get<BookSearchResult[]>(`/api/persons/${id}/bibliography`));
+    return firstValueFrom(this.http.get<BookSearchResult[]>(`/api/persons/${id}/bibliography`, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }));
   }
 
   preview(provider: string, externalId: string) {

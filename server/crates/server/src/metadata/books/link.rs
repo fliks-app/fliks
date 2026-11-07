@@ -1,7 +1,7 @@
 //! Writes what a `BookMatch` says (`docs/spec/book-metadata.md` rules 10-17).
 use super::{
     ANCHOR,
-    absorb::absorb,
+    absorb::{absorb, carry_poster},
     identify::BookMatch,
     merge::{self, Records},
     people, text, work_id,
@@ -177,8 +177,10 @@ pub async fn attach_with(
             };
             match holder.filter(|h| *h != media && edition.is_some() && same_library) {
                 Some(holder) => {
-                    absorb(&mut tx, media, holder).await?;
+                    let held = absorb(&mut tx, media, holder).await?;
                     tx.commit().await?;
+                    carry_poster(st, media, holder).await;
+                    crate::media::write::orphans::release(st, held);
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
                 None => {

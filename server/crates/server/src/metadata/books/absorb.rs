@@ -1,8 +1,50 @@
 //! Folds a duplicate book into the work that already holds its id.
+use crate::{
+    images::paths::{Size, Target, Variant},
+    media::write::orphans::{self, Refs},
+    state::AppState,
+};
 use sqlx::PgConnection;
 
-/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`.
-pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<()> {
+/// Copies `into`'s poster out of `from`'s image folder when it points there, before that folder is cleaned.
+pub async fn carry_poster(st: &AppState, from: i32, into: i32) {
+    let old = Target::media(from, Variant::Poster);
+    let target = Target::media(into, Variant::Poster);
+    let prefix = format!("{}%", old.api_path());
+    let stored = sqlx::query_scalar::<_, bool>(
+        r#"SELECT COALESCE("posterUrl" LIKE $2, false) FROM media WHERE id = $1"#,
+    )
+    .bind(into)
+    .bind(&prefix)
+    .fetch_optional(&st.db)
+    .await;
+    if matches!(stored, Ok(Some(false) | None)) {
+        return;
+    }
+    let url = match stored {
+        Ok(_) => {
+            st.images
+                .store_from_disk(&old.file(st.images.root(), Size::Full), &target)
+                .await
+        }
+        Err(_) => None,
+    };
+    // A dangling url would block the next cover write, which only fills a NULL poster.
+    let res =
+        sqlx::query(r#"UPDATE media SET "posterUrl" = $2 WHERE id = $1 AND "posterUrl" LIKE $3"#)
+            .bind(into)
+            .bind(&url)
+            .bind(prefix)
+            .execute(&st.db)
+            .await;
+    if url.is_none() || res.is_err() {
+        tracing::warn!("poster of book #{into} not carried from #{from}");
+    }
+}
+
+/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
+/// `orphans::release`s the result once its transaction commits.
+pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<Refs> {
     let (a, b) = (from.min(into), from.max(into));
     sqlx::query!(
         "SELECT id FROM media WHERE id IN ($1, $2) ORDER BY id FOR UPDATE",
@@ -115,10 +157,11 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .execute(&mut *c)
     .await?;
+    let held = orphans::refs_of(c, from).await?;
     sqlx::query!("DELETE FROM media WHERE id = $1", from)
         .execute(&mut *c)
         .await?;
-    Ok(())
+    Ok(held)
 }
 
 #[cfg(test)]

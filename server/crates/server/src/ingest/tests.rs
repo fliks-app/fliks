@@ -1171,6 +1171,55 @@ async fn a_deleted_media_takes_only_what_nothing_else_holds(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_merged_book_leaves_no_orphan_and_keeps_its_poster(pool: PgPool) {
+    let c = ctx(pool).await;
+    let db = &c.st.db;
+    let (from, into) = (1, 2);
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, type, "posterUrl") VALUES
+             (1, 'Dup', 'book', '/api/images/media/1/poster?v=x'), (2, 'Held', 'book', NULL);
+           INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'text');
+           INSERT INTO persons (id, name) VALUES (1, 'Work'), (2, 'Edition');
+           INSERT INTO media_credits ("mediaId", "personId", role) VALUES (1, 1, 'author');
+           INSERT INTO media_credits ("mediaId", "editionId", "personId", role)
+             VALUES (1, 1, 2, 'narrator');"#,
+    )
+    .execute(db)
+    .await
+    .unwrap();
+    let data = c.dir.join("data");
+    let mut jpg = vec![];
+    image::RgbImage::new(4, 4)
+        .write_to(
+            &mut std::io::Cursor::new(&mut jpg),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
+    touch(&data.join("media/1/poster.jpg"), &jpg);
+    let mut tx = db.begin().await.unwrap();
+    let refs = crate::metadata::books::absorb::absorb(&mut tx, from, into)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    crate::metadata::books::absorb::carry_poster(&c.st, from, into).await;
+    crate::media::write::orphans::clean(&c.st, &refs)
+        .await
+        .unwrap();
+    let persons: Vec<i32> = sqlx::query_scalar("SELECT id FROM persons ORDER BY id")
+        .fetch_all(db)
+        .await
+        .unwrap();
+    assert_eq!(persons, [2]);
+    assert!(!data.join("media/1").exists());
+    assert!(data.join("media/2/poster.jpg").exists());
+    let url: Option<String> = sqlx::query_scalar(r#"SELECT "posterUrl" FROM media WHERE id = 2"#)
+        .fetch_one(db)
+        .await
+        .unwrap();
+    assert!(url.is_some_and(|u| u.starts_with("/api/images/media/2/poster")));
+}
+
+#[sqlx::test(migrations = false)]
 async fn write_routes_apply_the_library_acl(pool: PgPool) {
     let c = ctx(pool).await;
     let l = library(&c, "M", &c.dir.join("movies"), r#"["movie"]"#).await;
