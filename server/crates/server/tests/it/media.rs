@@ -442,3 +442,54 @@ async fn identify_keeps_the_namespace_an_explicit_provider_names(pool: PgPool) {
         ]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn identify_drops_what_the_old_identity_wrote_but_keeps_locks_and_hand_edits(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"UPDATE media SET overview = 'old', rating = 7.5, runtime = 100, year = 1999,
+             "originalTitle" = 'kept' WHERE id = 1;
+           INSERT INTO movie_details ("mediaId", tagline) VALUES (1, 'old tagline');
+           INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'digital', '2000-01-01');
+           INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES
+             (1, 'overview', 'tmdb', false), (1, 'rating', 'tmdb', true),
+             (1, 'details', 'tmdb', false), (1, 'releaseDates', 'tmdb', false),
+             (1, 'year', NULL, false), (1, 'runtime', 'file', false);"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, _) = c
+        .send(
+            "POST",
+            &c.admin,
+            "/api/media/1/identify",
+            Some(json!({"tvdbId": 5})),
+        )
+        .await;
+    assert_eq!(status, 201);
+    let row: (
+        Option<String>,
+        Option<f64>,
+        Option<i32>,
+        Option<i32>,
+        Option<String>,
+    ) = sqlx::query_as(
+        r#"SELECT overview, rating, runtime, year, "originalTitle" FROM media WHERE id = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        (None, Some(7.5), Some(100), Some(1999), Some("kept".into()))
+    );
+    let left: i64 = sqlx::query_scalar(
+        r#"SELECT (SELECT count(*) FROM movie_details WHERE "mediaId" = 1)
+                + (SELECT count(*) FROM media_release_dates WHERE "mediaId" = 1)"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+}

@@ -668,6 +668,18 @@ async fn resolve_provider(
     {
         return Ok((Namespace::TMDB, ext));
     }
+    let plugin_ids: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT provider, value FROM media_external_ids
+           WHERE "mediaId" = $1 AND provider LIKE '%:%' ORDER BY provider"#,
+    )
+    .bind(m.id)
+    .fetch_all(&st.db)
+    .await?;
+    for (p, v) in plugin_ids {
+        if let Some(ns) = Namespace::parse(&p).filter(|n| st.metadata.available(*n)) {
+            return Ok((ns, v));
+        }
+    }
     Err(AppError::bad_request(
         "No provider ID available for this media",
     ))

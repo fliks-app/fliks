@@ -7,7 +7,7 @@ use super::{
     gate,
 };
 use crate::media::{
-    details::{set_release_dates, set_tmdb_collection},
+    details::{drop_details, set_release_dates, set_tmdb_collection},
     field_sources::merge_field_sources,
     items,
 };
@@ -576,6 +576,78 @@ pub async fn identify(
     Ok((StatusCode::CREATED, Json(body)))
 }
 
+/// A new identity starts empty: what the old one's providers wrote goes, so the refresh COALESCE
+/// cannot keep it. Locked and hand-edited fields, and the title and status, stay.
+async fn clear_provider_values(c: &mut PgConnection, media: &MediaRow) -> Result<(), AppError> {
+    let id = media.id;
+    let fields: Vec<String> = sqlx::query_scalar(
+        r#"DELETE FROM media_field_sources
+           WHERE "mediaId" = $1 AND NOT locked AND provider IS NOT NULL AND provider <> $2
+           RETURNING field"#,
+    )
+    .bind(id)
+    .bind(Namespace::FILE.as_str())
+    .fetch_all(&mut *c)
+    .await?;
+    let sourced = |f: Field| fields.iter().any(|n| n == f.as_str());
+    let columns = [
+        (Field::OriginalTitle, r#""originalTitle""#),
+        (Field::Overview, "overview"),
+        (Field::Year, "year"),
+        (Field::PosterUrl, r#""posterUrl""#),
+        (
+            Field::FanartUrl,
+            r#""fanartUrl" = NULL, "additionalFanartUrls""#,
+        ),
+        (Field::LogoUrl, r#""logoUrl""#),
+        (Field::Rating, "rating"),
+        (Field::Genres, "genres"),
+        (Field::Runtime, "runtime"),
+        (Field::AlternativeTitles, r#""alternativeTitles""#),
+    ];
+    let set: Vec<String> = columns
+        .into_iter()
+        .filter(|(f, _)| sourced(*f))
+        .map(|(_, col)| format!("{col} = NULL"))
+        .collect();
+    if !set.is_empty() {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE media SET {} WHERE id = $1",
+            set.join(", ")
+        )))
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+    }
+    if sourced(Field::ReleaseDates) {
+        sqlx::query(
+            r#"DELETE FROM media_release_dates WHERE "mediaId" = $1 AND "editionId" IS NULL"#,
+        )
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+    }
+    if sourced(Field::Details) {
+        drop_details(c, id).await?;
+    }
+    if media.has_seasons() {
+        sqlx::query(
+            r#"UPDATE item_groups SET overview = NULL, "airDate" = NULL WHERE "mediaId" = $1"#,
+        )
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+        sqlx::query(
+            r#"UPDATE items SET title = NULL, overview = NULL, "airDate" = NULL, runtime = NULL
+               WHERE "mediaId" = $1"#,
+        )
+        .bind(id)
+        .execute(&mut *c)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn apply_identity(
     st: &AppState,
     media: &MediaRow,
@@ -649,6 +721,7 @@ async fn apply_identity(
             known.label(*p)
         )));
     }
+    clear_provider_values(&mut tx, media).await?;
     sqlx::query!(
         r#"UPDATE media SET "preferredProvider" = CASE WHEN $2 THEN $3
              WHEN "preferredProvider" LIKE '%:%' THEN NULL ELSE "preferredProvider" END

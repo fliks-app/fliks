@@ -1308,6 +1308,24 @@ async fn rescan_visits_every_folder_and_skips_an_offline_one(pool: PgPool) {
     assert_eq!(rows(&c).await.len(), 2);
 }
 
+#[sqlx::test(migrations = false)]
+async fn rescan_keeps_root_level_rows_when_the_root_is_empty(pool: PgPool) {
+    let c = ctx(pool).await;
+    let root = c.dir.join("movies");
+    let l = library(&c, "M", &root, r#"["movie"]"#).await;
+    let m = media(&c, l, "A", "movie").await;
+    sqlx::query(r#"UPDATE media SET "folderName" = '' WHERE id = $1"#)
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    file_row(&c, m, "A.mkv").await;
+    let r = rescan(&c, m).await.unwrap();
+    assert_eq!(r.removed, 0);
+    touch(&root.join("Other.mkv"), b"o");
+    assert_eq!(rescan(&c, m).await.unwrap().removed, 1);
+}
+
 mod book_ingest {
     use super::*;
     use crate::ingest::{
@@ -2904,6 +2922,24 @@ mod book_ingest {
             show["fileIds"],
             json!([{"provider": "tmdb", "externalId": "4242"}])
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_orphan_scan_ignores_the_library_path_when_it_looks_for_specials(pool: PgPool) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("Special Forces (2011)/films");
+        let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+        touch(&lib.join("Plain Film (2001)/Plain Film (2001).mkv"), b"x");
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            json!({}),
+        )
+        .await;
+        assert_eq!(s, 201);
+        assert_eq!(b["groups"][0]["mediaType"], "movie");
     }
 
     #[sqlx::test(migrations = false)]
