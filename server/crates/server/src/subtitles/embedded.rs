@@ -5,7 +5,6 @@ use super::{
 };
 use crate::{ingest::fsx, state::AppState};
 use fliks_domain::language::normalize_language_code;
-use std::collections::HashSet;
 
 /// Refreshes the embedded rows of one file; a probe that failed keeps the stored ones.
 pub async fn detect_and_store(
@@ -55,26 +54,6 @@ async fn detect(
         );
         return Ok(vec![]);
     };
-    let skip: HashSet<i32> = if crate::settings::setting_value(&st.db, "subtitle_ocr_delete_source")
-        .await
-        .map_err(sql)?
-        .as_deref()
-        == Some("true")
-    {
-        sqlx::query_scalar::<_, Option<i32>>(
-            r#"SELECT "sourceStreamIndex" FROM subtitle_files
-               WHERE "mediaFileId" = $1 AND "providerType" = 'ocr' AND status = 'downloaded'"#,
-        )
-        .bind(file_id)
-        .fetch_all(&st.db)
-        .await
-        .map_err(sql)?
-        .into_iter()
-        .flatten()
-        .collect()
-    } else {
-        HashSet::new()
-    };
     let mut tx = st.db.begin().await.map_err(sql)?;
     let removed = sqlx::query(
         r#"DELETE FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'embedded'"#,
@@ -85,11 +64,7 @@ async fn detect(
     .map_err(sql)?
     .rows_affected();
     let mut ids = vec![];
-    for s in info
-        .subtitles
-        .iter()
-        .filter(|s| !(s.is_image_based && skip.contains(&(s.stream_index as i32))))
-    {
+    for s in &info.subtitles {
         let n = New {
             media_id,
             media_file_id: file_id,

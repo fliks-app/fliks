@@ -233,21 +233,5 @@ async fn try_run(
         return Err("the subtitle was removed during the run".into());
     }
     tracing::info!("OCR end (ok) - sub #{placeholder} -> {rel}");
-    if super::service::flag_on(st, "subtitle_ocr_delete_source")
-        .await
-        .map_err(|e| e.text())?
-    {
-        if let Err(e) = sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
-            .bind(source.id)
-            .execute(&st.db)
-            .await
-        {
-            tracing::warn!("OCR source subtitle #{} not removed: {e}", source.id);
-        }
-        tracing::info!(
-            "OCR: removed source image subtitle #{} after extraction",
-            source.id
-        );
-    }
     Ok(media.title.clone())
 }

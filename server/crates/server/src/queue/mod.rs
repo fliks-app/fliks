@@ -4,7 +4,9 @@ pub(crate) mod api;
 mod auth;
 mod cleanup;
 pub mod commit;
+pub(crate) mod control;
 mod enqueue;
+mod estimate;
 pub mod ocr;
 pub mod recover;
 pub(crate) mod routes;
@@ -13,9 +15,14 @@ mod store;
 mod swap;
 mod tokens;
 mod trash;
+mod watch;
 mod words;
 
-use crate::{state::AppState, sync::MutexExt};
+use crate::{
+    optimize::codec::{Capabilities, Target},
+    state::AppState,
+    sync::MutexExt,
+};
 use fliks_engine_core::api::WorkerDevice;
 use std::{
     collections::HashMap,
@@ -26,6 +33,7 @@ use tokio::sync::Notify;
 
 pub use api::router;
 pub use auth::{Principal, WorkerAuth};
+pub use estimate::{PerLevelOpt, speeds};
 pub use routes::worker_router;
 pub use store::boot;
 
@@ -72,6 +80,53 @@ impl Shared {
             .is_some_and(|t| t.elapsed() < DOWNLOAD_HOLD)
     }
 
+    /// What the registered workers can encode; the main engine decodes AV1 in hardware when a local worker device does.
+    pub fn capabilities(&self) -> Capabilities {
+        let g = self.workers.lock_clean();
+        let mut encodable = Vec::new();
+        for t in [Target::Hevc, Target::Av1] {
+            let any = g.values().any(|w| {
+                w.devices.iter().any(|d| {
+                    routes::codecs_of(&d.encoders)
+                        .iter()
+                        .any(|c| c == t.as_str())
+                })
+            });
+            if any {
+                encodable.push(t);
+            }
+        }
+        let hw = ["cuvid", "nvdec", "qsv", "vaapi", "amf", "videotoolbox"];
+        let main_decodes_av1_hw = g
+            .values()
+            .filter(|w| w.principal == Principal::Local)
+            .any(|w| {
+                w.devices.iter().any(|d| {
+                    d.decoders.iter().any(|n| {
+                        let n = n.to_lowercase();
+                        n.contains("av1") && hw.iter().any(|h| n.contains(h))
+                    })
+                })
+            });
+        Capabilities {
+            encodable,
+            main_decodes_av1_hw,
+        }
+    }
+
+    /// Codecs some registered device encodes in hardware.
+    pub fn hardware_codecs(&self) -> Vec<String> {
+        let g = self.workers.lock_clean();
+        let mut out: Vec<String> = g
+            .values()
+            .flat_map(|w| w.devices.iter())
+            .flat_map(|d| routes::codec_split(&d.encoders).0)
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
     pub fn workers(&self) -> Vec<(String, Worker)> {
         let g = self.workers.lock_clean();
         let mut v: Vec<_> = g.iter().map(|(k, w)| (k.clone(), w.clone())).collect();
@@ -82,6 +137,7 @@ impl Shared {
 
 /// Recovery of `committing` jobs at boot, the lease sweep, the commits, the cleanup and the trash purge.
 pub fn spawn(st: &AppState) {
+    watch::spawn(st);
     let st = st.clone();
     tokio::spawn(async move {
         recover::recover(&st, 0.0).await;

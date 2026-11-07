@@ -1228,6 +1228,18 @@
         }
       }
     },
+    "/api/libraries/{id}/optimize/queue": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "summary": "Queues every file of the library that differs from its profile; the queueing continues in the background.",
+        "operationId": "queue_library",
+        "responses": {
+          "202": {}
+        }
+      }
+    },
     "/api/libraries/{id}/optimize/summary": {
       "get": {
         "tags": [
@@ -2981,12 +2993,49 @@
         }
       }
     },
+    "/api/optimize/jobs/cancel": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "summary": "Cancels the jobs that still can be; a `committing` or finished one is left alone.",
+        "operationId": "cancel_many",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/jobs/priority": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "summary": "Moves queued jobs to the front, in the order given.",
+        "operationId": "prioritize",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/optimize/jobs/{id}/cancel": {
       "post": {
         "tags": [
           "crate::queue::api"
         ],
         "operationId": "cancel",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/optimize/jobs/{id}/restore": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "summary": "Brings the original back; the optimized file takes its place in the trash or `.orig`.",
+        "operationId": "restore",
         "responses": {
           "200": {},
           "409": {}
@@ -3062,6 +3111,40 @@
         "operationId": "remove",
         "responses": {
           "204": {}
+        }
+      }
+    },
+    "/api/optimize/queue": {
+      "get": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/queue/pause": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "summary": "No new lease; running jobs finish.",
+        "operationId": "pause",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/queue/resume": {
+      "post": {
+        "tags": [
+          "crate::queue::control"
+        ],
+        "operationId": "resume",
+        "responses": {
+          "200": {}
         }
       }
     },

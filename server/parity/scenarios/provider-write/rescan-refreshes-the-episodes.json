@@ -89,6 +89,7 @@
                   {
                     "channelLayout": "mono",
                     "channels": 1,
+                    "hasStatisticsTags": false,
                     "codec": "aac",
                     "endSeconds": 2.023,
                     "isDefault": false,
@@ -104,12 +105,13 @@
                 "formatBitRate": 108286,
                 "formatName": "matroska,webm",
                 "formatStartSeconds": 0,
-                "schemaVersion": 5,
+                "schemaVersion": 7,
                 "subtitles": [],
                 "video": [
                   {
                     "avgFrameRate": "24/1",
                     "bitDepth": 8,
+                    "hasStatisticsTags": false,
                     "codec": "h264",
                     "colorRange": "tv",
                     "cropStable": false,

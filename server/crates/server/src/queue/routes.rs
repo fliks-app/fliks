@@ -1,6 +1,7 @@
 //! `/engine/workers/hello` and `/engine/jobs/*` (`PROTOCOL.md`, "Worker protocol").
 use super::{Principal, Worker, WorkerAuth, settings, store, tokens};
 use crate::{
+    events::SseEvent,
     http::{
         AppError,
         validate::{PathParams, ValidJson},
@@ -28,6 +29,15 @@ pub fn worker_router() -> Router<AppState> {
         .route("/engine/jobs/lease", post(lease))
         .route("/engine/jobs/{id}/heartbeat", post(heartbeat))
         .route("/engine/jobs/{id}/result", post(result))
+}
+
+/// The codecs a device encodes in hardware and in software (`lib*` encoders).
+pub(super) fn codec_split(encoders: &[String]) -> (Vec<String>, Vec<String>) {
+    let (sw, hw): (Vec<String>, Vec<String>) = encoders
+        .iter()
+        .cloned()
+        .partition(|e| e.to_lowercase().starts_with("lib"));
+    (codecs_of(&hw), codecs_of(&sw))
 }
 
 /// The video codecs an encoder list can produce, as the codec names a plan carries.
@@ -84,12 +94,15 @@ pub async fn hello(
         },
     );
     st.queue.wake.notify_waiters();
+    let conf = settings::load(&st.db).await.map_err(db)?;
     Ok(Json(WorkerHelloResponse {
         settings: WorkerSettings {
             lease_s: store::LEASE_S,
             heartbeat_s: store::HEARTBEAT_S,
             long_poll_s: store::LONG_POLL_S,
             upload_chunk_bytes: UPLOAD_CHUNK_BYTES,
+            cpu_weight: Some(conf.cpu_weight),
+            gpu_playback_before_pause: Some(conf.gpu_playback_before_pause),
         },
         abandon: abandon
             .into_iter()
@@ -139,11 +152,20 @@ pub async fn lease(
         let mut woken = std::pin::pin!(st.queue.wake.notified());
         woken.as_mut().enable();
         let conf = settings::load(&st.db).await.map_err(db)?;
-        if local && conf.open_now() {
+        if local && !conf.paused && conf.open_now() {
+            let (hw, sw) = codec_split(&device.encoders);
+            let anywhere = st.queue.hardware_codecs();
+            let fallback: Vec<String> = sw
+                .iter()
+                .filter(|c| !anywhere.contains(c))
+                .cloned()
+                .collect();
             let want = store::Want {
                 key: &key,
                 device: &device.id,
-                codecs: &codecs_of(&device.encoders),
+                hw: &hw,
+                sw: &sw,
+                fallback: &fallback,
                 max_jobs: conf.max_jobs(&device.id, device.max_jobs),
                 local,
             };
@@ -183,6 +205,11 @@ pub async fn heartbeat(
     .await
     .map_err(db)?
     .ok_or_else(conflict)?;
+    st.hub.emit(SseEvent::OptimizeJobProgress {
+        job_id: id,
+        progress: req.progress.into(),
+        paused: req.paused,
+    });
     Ok(Json(JobHeartbeatResponse {
         lease_until: beat.lease_until.timestamp_millis() as f64,
         cancel: beat.cancel,

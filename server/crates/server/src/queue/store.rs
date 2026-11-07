@@ -55,8 +55,11 @@ pub async fn release_token(pool: &PgPool, token_id: i32) -> sqlx::Result<u64> {
 pub struct Want<'a> {
     pub key: &'a str,
     pub device: &'a str,
-    /// Video codecs the device can encode.
-    pub codecs: &'a [String],
+    /// Codecs the device encodes in hardware, in software, and the software ones no registered device
+    /// encodes in hardware (a hardware-planned job falls back to those only).
+    pub hw: &'a [String],
+    pub sw: &'a [String],
+    pub fallback: &'a [String],
     pub max_jobs: u32,
     /// The worker reads the library by path; only then can the server check the target disk.
     pub local: bool,
@@ -126,10 +129,14 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let rows = sqlx::query(
         r#"SELECT id, kind, "inPath", "inSize" FROM jobs
            WHERE state = 'queued' AND "notBefore" <= now()
-             AND (payload #>> '{plan,codec}' IS NULL OR payload #>> '{plan,codec}' = ANY($1))
+             AND (payload #>> '{plan,codec}' IS NULL OR CASE
+                    WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)
+                    ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)
            ORDER BY priority DESC, id LIMIT 16 FOR UPDATE SKIP LOCKED"#,
     )
-    .bind(w.codecs)
+    .bind(w.hw)
+    .bind(w.sw)
+    .bind(w.fallback)
     .fetch_all(&mut *tx)
     .await?;
     let mut trash: Option<i64> = None;
@@ -383,7 +390,7 @@ pub async fn succeed(
     sqlx::query(
         r#"UPDATE jobs SET state = $2, progress = 1, "outSize" = $3, "outSha256" = $4, result = $5,
              "leaseUntil" = NULL, "finishedAt" = CASE WHEN $2 = 'done' THEN now() END,
-             "updatedAt" = now() WHERE id = $1"#,
+             "encodedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
     )
     .bind(id)
     .bind(state)

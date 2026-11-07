@@ -29,7 +29,10 @@
           "livetv.account_expired",
           "livetv.adult_guard_failed",
           "media.leaving_soon",
-          "media.cleaned_up"
+          "media.cleaned_up",
+          "optimize.completed",
+          "optimize.failed",
+          "health.corrupt"
         ],
         "status": 200
       },

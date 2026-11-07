@@ -15,7 +15,7 @@ use crate::{
     },
     state::AppState,
 };
-use fliks_engine_core::api::{JobPriority, MediaInfo};
+use fliks_engine_core::api::{JobPriority, MediaInfo, OptimizeContainer, OptimizePlan};
 use serde_json::{Value, json};
 use sqlx::Row;
 use std::{
@@ -238,12 +238,16 @@ fn stat_checks(j: &Job, abs: &Path, staged: &Path) -> Result<(), String> {
     }
 }
 
+fn plan_of(payload: &Value) -> Option<OptimizePlan> {
+    serde_json::from_value(payload.get("plan")?.clone()).ok()
+}
+
 /// The plan's container extension, for the renaming.
 fn container_ext(j: &Job) -> &'static str {
-    match j.payload.pointer("/plan/container").and_then(Value::as_str) {
-        Some("mkv") => "mkv",
-        Some("mp4") => "mp4",
-        _ => "",
+    match plan_of(&j.payload).and_then(|p| p.container) {
+        Some(OptimizeContainer::Mkv) => "mkv",
+        Some(OptimizeContainer::Mp4) => "mp4",
+        None => "",
     }
 }
 
@@ -634,10 +638,9 @@ async fn extra_paths(st: &AppState, job: i64) -> Vec<String> {
         .await
         .ok()
         .flatten();
-    v.and_then(|v| v.pointer("/plan/extraSubtitles").cloned())
-        .and_then(|v| serde_json::from_value::<Vec<Value>>(v).ok())
+    v.and_then(|v| plan_of(&v))
         .into_iter()
-        .flatten()
-        .filter_map(|e| e.get("path")?.as_str().map(str::to_owned))
+        .flat_map(|p| p.extra_subtitles)
+        .map(|e| e.path)
         .collect()
 }
