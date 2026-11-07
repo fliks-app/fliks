@@ -236,6 +236,24 @@ async fn entries_carry_acquisition_links_and_hide_what_is_hidden(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn every_text_format_of_an_edition_gets_an_acquisition_link(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo")
+             VALUES (7, 10, 1, 'a.pdf', 5, 'PDF', '{}');
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (1, 7, 10, 1, 0);"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let r = c.get("/api/opds/libraries/1").await.body;
+    assert!(
+        r.contains(r#"href="/api/stream/1?download=1" type="application/epub+zip" title="EPUB""#)
+    );
+    assert!(r.contains(r#"href="/api/stream/7?download=1" type="application/pdf" title="PDF""#));
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_hidden_collection_reads_like_a_missing_one(pool: PgPool) {
     let c = ctx(pool).await;
     for kind in ["libraries", "authors", "series"] {

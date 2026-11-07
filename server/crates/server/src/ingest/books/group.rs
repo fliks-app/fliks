@@ -85,6 +85,29 @@ fn stem_key(path: &str) -> String {
         .collect()
 }
 
+/// The title part of an audio file name, before its part number: files of one book share it, and
+/// a bare or generic name (`01`, `Track 02`, `01 - Intro`) is empty.
+fn audio_key(path: &str) -> String {
+    let stem = split_language(path.rsplit('/').next().unwrap_or(path)).0;
+    let head = stem
+        .split(|c: char| c.is_ascii_digit())
+        .next()
+        .unwrap_or(stem);
+    let key: String = head
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    let generic = [
+        "track", "part", "partie", "chapter", "chapitre", "piste", "disc", "cd",
+    ];
+    if generic.contains(&key.as_str()) {
+        String::new()
+    } else {
+        key
+    }
+}
+
 /// Digit runs compare as numbers, so `2` sorts before `10`.
 fn natural(s: &str) -> Vec<(u64, String)> {
     let mut out = vec![];
@@ -116,7 +139,7 @@ struct Acc {
 
 /// The works of `paths`, relative to one folder root and `/`-separated.
 pub fn group(paths: &[String]) -> Vec<Work> {
-    // Key: (dir, stem key) for text and for a root audio file, (dir, "") for the audio of a folder.
+    // Key: (dir, stem key) for text and for a root audio file, (dir, "") for the bare-numbered audio of a folder, (dir, "\0" + title) for the titled one.
     let mut works: BTreeMap<(String, String), Acc> = BTreeMap::new();
     let mut loose_audio: Vec<(String, String, String)> = vec![];
     for p in paths {
@@ -151,7 +174,10 @@ pub fn group(paths: &[String]) -> Vec<Work> {
         } else {
             match text_in(&works, &dir).as_slice() {
                 [only] => only.clone(),
-                _ => (dir.clone(), String::new()),
+                _ => match audio_key(&p) {
+                    k if k.is_empty() => (dir.clone(), String::new()),
+                    k => (dir.clone(), format!("\u{0}{k}")),
+                },
             }
         };
         works
@@ -251,7 +277,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 9);
+        assert_eq!(cases.len(), 13);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()

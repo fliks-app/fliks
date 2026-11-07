@@ -445,10 +445,15 @@ async fn person(
     let found = match by_id {
         Some(id) => Some(id),
         None => {
-            // A person holding another id of the same provider is someone else.
+            // A person holding another id of the same provider is someone else, and so is a
+            // person known only from films or series.
             sqlx::query_scalar!(
                 r#"SELECT p.id FROM persons p
                    WHERE name_key(p.name) = name_key($1)
+                     AND (NOT EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c."mediaId"
+                                       WHERE c."personId" = p.id AND m.type IN ('movie', 'series'))
+                          OR EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c."mediaId"
+                                      WHERE c."personId" = p.id AND m.type IN ('book', 'comic')))
                      AND NOT EXISTS (SELECT 1 FROM person_external_ids x
                                       WHERE x."personId" = p.id AND x.provider = $2 AND x.value <> $3)
                    ORDER BY p.id LIMIT 1"#,
@@ -677,4 +682,30 @@ async fn collection(
         .await?;
     }
     Ok(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    #[sqlx::test(migrations = false)]
+    async fn an_id_less_credit_skips_persons_known_only_from_video(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+               INSERT INTO persons (id, name) VALUES (1, 'Jane Doe'), (2, 'Mia Roe'), (3, 'Eve Poe');
+               INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+                 (1, 'Film', 'movie', 1, 'f'), (2, 'Book', 'book', 1, 'b');
+               INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES
+                 (1, 1, 'actor', 0), (1, 2, 'actor', 0), (2, 2, 'author', 0);"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut c = pool.acquire().await.unwrap();
+        assert_eq!(person(&mut c, None, "Doe Jane", None).await.unwrap(), 4);
+        assert_eq!(person(&mut c, None, "Roe, Mia", None).await.unwrap(), 2);
+        assert_eq!(person(&mut c, None, "Poe Eve", None).await.unwrap(), 3);
+    }
 }
