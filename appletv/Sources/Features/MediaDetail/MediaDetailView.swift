@@ -162,6 +162,7 @@ struct MediaDetailView: View {
     /// loaded here) — add it if the plain header target reads wrong once
     /// watched-tracking lands on this screen.
     private func playTarget(_ media: Media) -> PlayTarget? {
+        guard media.type.isPlayable else { return nil }
         if !media.type.hasChildren {
             guard let fileId = resumeInfo?.mediaFileId ?? media.files?.first(where: { $0.episodeId == nil })?.id else {
                 return nil

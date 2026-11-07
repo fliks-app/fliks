@@ -246,7 +246,8 @@ private struct RecommendationsRow: View {
             state = next
             backdrop.seed(next.items.first?.media.fanartUrl)
         }) {
-            try await APIClient.shared.get("/api/playback/recommendations")
+            let items: [RecommendationItem] = try await APIClient.shared.get("/api/playback/recommendations")
+            return items.filter(\.media.type.isPlayable)
         }
     }
 }
@@ -309,7 +310,8 @@ private struct RecentlyAddedRow: View {
             state = next
             backdrop.seed(next.items.first?.fanartUrl)
         }) {
-            try await APIClient.shared.get("/api/media/recently-added", query: query)
+            let items: [Media] = try await APIClient.shared.get("/api/media/recently-added", query: query)
+            return items.filter(\.type.isPlayable)
         }
     }
 }

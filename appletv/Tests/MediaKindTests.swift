@@ -8,6 +8,10 @@ final class MediaKindTests: XCTestCase {
         XCTAssertEqual(String(data: try JSONEncoder().encode(kinds), encoding: .utf8), #"["movie","series","book","album"]"#)
     }
 
+    func testOnlyMoviesAndSeriesArePlayable() {
+        XCTAssertEqual([MediaKind.movie, .series, .book, .comic, .unknown("x")].map(\.isPlayable), [true, true, false, false, false])
+    }
+
     func testOnlySeriesHasChildren() {
         XCTAssertEqual([MediaKind.movie, .series, .book, .comic, .unknown("x")].map(\.hasChildren), [false, true, false, false, false])
     }

@@ -96,6 +96,8 @@ struct Library: Codable, Identifiable, Hashable {
     let icon: String?
     let color: String?
     let mediaTypes: [MediaKind]
+
+    var isPlayable: Bool { mediaTypes.contains(where: \.isPlayable) }
 }
 
 // MARK: - Media file / stream info

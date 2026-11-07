@@ -160,7 +160,7 @@ struct PartyMediaPicker: View {
             guard !Task.isCancelled else { return }
             let res: Paginated<Media>? = try? await APIClient.shared.get("/api/media", query: ["q": q, "page": "1", "limit": "30"])
             guard !Task.isCancelled else { return }
-            results = res?.data ?? []
+            results = (res?.data ?? []).filter(\.type.isPlayable)
         }
     }
 }

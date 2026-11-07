@@ -75,7 +75,7 @@ struct HomeView: View {
         let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
         await revalidateZone("libraries", apply: { librariesState = $0 }) {
             let libraries: [Library] = try await APIClient.shared.get("/api/libraries/mine")
-            return libraries.filter { !hidden.contains($0.id) }
+            return libraries.filter { !hidden.contains($0.id) && $0.isPlayable }
         }
     }
 }

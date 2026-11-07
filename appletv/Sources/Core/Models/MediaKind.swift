@@ -38,6 +38,14 @@ enum MediaKind: Hashable, Codable {
         try c.encode(rawValue)
     }
 
+    /// The app can play it; books, comics and future kinds need a reader it doesn't have.
+    var isPlayable: Bool {
+        switch self {
+        case .movie, .series: true
+        case .book, .comic, .unknown: false
+        }
+    }
+
     /// The kind is made of seasons and episodes.
     var hasChildren: Bool {
         switch self {

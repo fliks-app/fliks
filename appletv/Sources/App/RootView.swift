@@ -274,7 +274,7 @@ struct Sidebar: View {
     private func loadLibraries() async {
         let all: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
         let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
-        libraries = all.filter { !hidden.contains($0.id) }
+        libraries = all.filter { !hidden.contains($0.id) && $0.isPlayable }
     }
 }
 

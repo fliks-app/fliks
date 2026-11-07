@@ -15,8 +15,10 @@ struct LibraryView: View {
 
     @State private var state: LoadState = .loading
     @State private var items: [Media] = []
+    @State private var fetched = 0
     @State private var total = 0
     @State private var page = 1
+    @State private var generation = 0
     @State private var isLoadingMore = false
     @State private var sortBy = "title"
     @State private var sortOrder = "ASC"
@@ -111,28 +113,44 @@ struct LibraryView: View {
         library = libs.first { $0.id == libraryId }
     }
 
-    private func load(reset: Bool) async {
+    private func load(reset: Bool, page start: Int = 1) async {
         if reset {
+            generation += 1
             state = .loading
             page = 1
             items = []
+            fetched = 0
         }
-        var query = [
-            "libraryId": String(libraryId),
-            "sortBy": sortBy,
-            "sortOrder": sortOrder,
-            "page": String(page),
-            "limit": String(pageSize),
-        ]
-        if let typeFilter { query["type"] = typeFilter.rawValue }
-        do {
-            let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
-            items = reset ? res.data : items + res.data
-            total = res.total
-            state = .loaded
-            backdrop.seed(res.data.first?.fanartUrl)
-        } catch {
-            if reset { state = .failed }
+        let gen = generation
+        let (sort, order, type) = (sortBy, sortOrder, typeFilter)
+        var next = reset ? 1 : start
+        while true {
+            var query = [
+                "libraryId": String(libraryId),
+                "sortBy": sort,
+                "sortOrder": order,
+                "page": String(next),
+                "limit": String(pageSize),
+            ]
+            if let type { query["type"] = type.rawValue }
+            do {
+                let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
+                guard gen == generation else { return }
+                let data = res.data.filter(\.type.isPlayable)
+                items += data
+                total = res.total
+                fetched += res.data.count
+                page = next
+                backdrop.seed(items.first?.fanartUrl)
+                if data.isEmpty, !res.data.isEmpty, fetched < total {
+                    next += 1
+                    continue
+                }
+                state = .loaded
+            } catch {
+                if reset, gen == generation { state = .failed }
+            }
+            return
         }
     }
 
@@ -140,11 +158,10 @@ struct LibraryView: View {
     /// `onReachEnd` calls `ContentGrid` fires per near-end item in one layout
     /// pass collapse into a single page fetch.
     private func loadMore() {
-        guard !isLoadingMore, items.count < total else { return }
+        guard !isLoadingMore, fetched < total else { return }
         isLoadingMore = true
-        page += 1
         Task {
-            await load(reset: false)
+            await load(reset: false, page: page + 1)
             isLoadingMore = false
         }
     }
