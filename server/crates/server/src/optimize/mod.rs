@@ -8,7 +8,10 @@ mod routes;
 pub mod select;
 
 use crate::state::AppState;
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 pub use routes::*;
 
@@ -26,5 +29,9 @@ pub fn router() -> Router<AppState> {
                 .delete(routes::remove),
         )
         .route("/api/libraries/{id}/optimize/preview", get(routes::preview))
+        .route(
+            "/api/libraries/{id}/optimize/preview/file",
+            post(routes::preview_file),
+        )
         .route("/api/libraries/{id}/optimize/summary", get(routes::summary))
 }
