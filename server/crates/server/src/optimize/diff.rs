@@ -120,6 +120,8 @@ pub enum Change {
         stream_index: u32,
     },
     StatisticsTags,
+    /// The global title is the release name or the file name.
+    ClearTitle,
     /// The declared duration is wrong: remux.
     SegmentDuration,
     Hvc1,
@@ -341,6 +343,10 @@ impl Diff {
                     true
                 }
                 Change::StatisticsTags | Change::SegmentDuration => true,
+                Change::ClearTitle => {
+                    plan.clear_title = true;
+                    true
+                }
                 Change::Reorder { .. } | Change::Flags { .. } | Change::Rename => false,
             };
         }
@@ -780,17 +786,34 @@ impl Builder<'_> {
         let stale = info
             .video
             .iter()
-            .any(|v| v.has_statistics_tags != Some(true))
+            .any(|v| v.has_statistics_tags == Some(false))
             || info
                 .audio
                 .iter()
-                .any(|a| a.has_statistics_tags != Some(true))
+                .any(|a| a.has_statistics_tags == Some(false))
             || info
                 .subtitles
                 .iter()
-                .any(|s| s.has_statistics_tags != Some(true));
+                .any(|s| s.has_statistics_tags == Some(false));
         if stale && is_mkv(info, path) {
             self.changes.push(Change::StatisticsTags);
+        }
+        let stem = path.rsplit('/').next().unwrap_or("");
+        let stem = stem.rsplit_once('.').map_or(stem, |(s, _)| s);
+        if info
+            .tags
+            .as_ref()
+            .and_then(|t| t.title.as_deref())
+            .is_some_and(|t| {
+                let r = parse_release_attributes(t);
+                t == stem
+                    || r.resolution > 0
+                    || r.video_codec.is_some()
+                    || r.source.is_some()
+                    || r.release_group.is_some()
+            })
+        {
+            self.changes.push(Change::ClearTitle);
         }
         // A Matroska whose declared duration is off the latest stream end: a remux writes it right.
         let end = info
@@ -1266,7 +1289,7 @@ mod tests {
     #[test]
     fn missing_statistics_tags_and_a_wrong_duration_are_found_in_matroska() {
         let mut i = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
-        i.video[0].has_statistics_tags = None;
+        i.video[0].has_statistics_tags = Some(false);
         let d = diff(run(Preset::Balanced, "a.mkv", &i, Some("en")));
         assert!(d.changes.contains(&Change::StatisticsTags));
         let p = d
@@ -1281,6 +1304,25 @@ mod tests {
             (d.level, &d.changes[..]),
             (LevelOut::Remux, &[Change::SegmentDuration][..])
         );
+    }
+
+    #[test]
+    fn a_release_name_as_global_title_is_cleared() {
+        let mut i = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
+        i.tags = Some(fliks_engine_core::api::MediaTags {
+            title: Some("Movie.2020.1080p.BluRay.x264-GRP".into()),
+            ..Default::default()
+        });
+        let d = diff(run(Preset::Balanced, "a.mkv", &i, Some("en")));
+        assert_eq!(
+            (d.level, &d.changes[..]),
+            (LevelOut::Metadata, &[Change::ClearTitle][..])
+        );
+        i.tags.as_mut().unwrap().title = Some("A Real Title".into());
+        assert!(matches!(
+            run(Preset::Balanced, "a.mkv", &i, Some("en")),
+            Outcome::Conform { .. }
+        ));
     }
 
     #[test]
