@@ -1,10 +1,8 @@
 //! Files into works, editions and versions (`docs/spec/book-ingest.md` rules 1-4). Pure.
-use fliks_domain::{
-    books::filename::parse_path,
-    media::{AUDIO_EXTS, TEXT_EXTS, family::Family},
-};
+use fliks_domain::media::{AUDIO_EXTS, TEXT_EXTS, family::Family};
+use regex::Regex;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 /// The family and format (extension without the dot) of a book file name.
 pub fn classify(name: &str) -> Option<(Family, String)> {
@@ -92,23 +90,64 @@ fn norm(s: &str) -> String {
         .collect()
 }
 
+static DISC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:cd|disc|disk|disque)\s*0*(\d+)\b").unwrap());
+static NOISE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\(?\b(?:cd|disc|disk|disque)\s*\d+\b\)?|\bof\s+\d+\b").unwrap()
+});
+
+fn stem_of(path: &str) -> &str {
+    split_language(path.rsplit('/').next().unwrap_or(path)).0
+}
+
+fn last_digits(s: &str) -> Option<(usize, u32)> {
+    let end = s.rfind(|c: char| c.is_ascii_digit())? + 1;
+    let start = s[..end]
+        .trim_end_matches(|c: char| c.is_ascii_digit())
+        .len();
+    Some((start, s[start..end].parse().unwrap_or(u32::MAX)))
+}
+
+/// The disc and part number of an audio file: the disc from a `CD1` folder or a `Disc 1` in the name,
+/// the part the last number of the name once the disc and ` of N` are off. Orders parts and guards merges.
+pub(super) fn part_numbers(path: &str) -> (Option<u32>, Option<u32>) {
+    let stem = stem_of(path);
+    let mut segs: Vec<&str> = path.split('/').collect();
+    segs.pop();
+    let folder = segs.iter().rev().take_while(|s| is_disc(s)).find_map(|s| {
+        s.trim_start_matches(|c: char| !c.is_ascii_digit())
+            .trim()
+            .parse::<u32>()
+            .ok()
+    });
+    let disc = folder.or_else(|| DISC.captures(stem)?[1].parse().ok());
+    let number = last_digits(&NOISE.replace_all(stem, " ")).map(|(_, n)| n);
+    (disc, number)
+}
+
+/// The folder name a merged m4b is named after: the nearest one that is not a format name.
+fn book_folder(dir: &str) -> &str {
+    dir.rsplit('/')
+        .find(|s| !super::merge::GENERIC.contains(&s.to_lowercase().as_str()))
+        .unwrap_or("")
+}
+
 /// What tells the books of a folder apart: an `m4b` is its whole stem (empty when it is the folder's
 /// name), a part is its stem before its last number (empty for a bare or generic one).
 fn audio_key(path: &str, format: &str, dir: &str) -> String {
-    let stem = split_language(path.rsplit('/').next().unwrap_or(path)).0;
     if format == "m4b" {
-        let key = norm(stem);
-        return if key == norm(dir.rsplit('/').next().unwrap_or(dir)) {
+        let key = norm(stem_of(path));
+        return if key == norm(book_folder(dir)) {
             String::new()
         } else {
             key
         };
     }
-    let Some(n) = stem.rfind(|c: char| c.is_ascii_digit()) else {
+    let stem = NOISE.replace_all(stem_of(path), " ");
+    let Some((start, _)) = last_digits(&stem) else {
         return String::new();
     };
-    let head = stem[..=n].trim_end_matches(|c: char| c.is_ascii_digit());
-    let key = norm(head);
+    let key = norm(&stem[..start]);
     let generic = [
         "track", "part", "partie", "chapter", "chapitre", "piste", "disc", "cd",
     ];
@@ -171,8 +210,9 @@ pub fn group(paths: &[String]) -> Vec<Work> {
             _ => loose_audio.push((dir, p.clone(), format)),
         }
     }
-    let text_in = |works: &BTreeMap<(String, String), Acc>, dir: &str| -> Vec<(String, String)> {
-        works.keys().filter(|(d, _)| d == dir).cloned().collect()
+    let texts: Vec<(String, String)> = works.keys().cloned().collect();
+    let text_in = |dir: &str| -> Vec<(String, String)> {
+        texts.iter().filter(|(d, _)| d == dir).cloned().collect()
     };
     let mut titles: BTreeMap<&str, std::collections::BTreeSet<String>> = BTreeMap::new();
     for (dir, p, format) in &loose_audio {
@@ -195,7 +235,7 @@ pub fn group(paths: &[String]) -> Vec<Work> {
                 (dir.clone(), format!("\u{0}{}", p.to_lowercase()))
             }
         } else {
-            match text_in(&works, &dir).as_slice() {
+            match text_in(&dir).as_slice() {
                 [only] => only.clone(),
                 _ => match audio_key(&p, &format, &dir) {
                     k if k.is_empty() || !several.contains(&dir) => (dir.clone(), String::new()),
@@ -249,10 +289,10 @@ fn finish(a: Acc) -> Work {
         .collect();
     for (format, mut files) in by_format {
         files.sort_by_key(|p| {
-            let part = parse_path(p).part;
+            let (disc, number) = part_numbers(p);
             (
-                part.as_ref().and_then(|x| x.disc).unwrap_or(u32::MAX),
-                part.as_ref().and_then(|x| x.number).unwrap_or(u32::MAX),
+                disc.unwrap_or(u32::MAX),
+                number.unwrap_or(u32::MAX),
                 natural(p),
             )
         });
@@ -300,7 +340,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 20);
+        assert_eq!(cases.len(), 24);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()

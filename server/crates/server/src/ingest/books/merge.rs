@@ -1,5 +1,9 @@
 //! Optional merge of a multi-file audio version into one m4b (`book-ingest.md` rule 18).
-use super::{Placed, group::work_dir, register_to};
+use super::{
+    Placed,
+    group::{part_numbers, work_dir},
+    register_to,
+};
 use crate::{
     engine::EngineError,
     ingest::{
@@ -62,12 +66,18 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
         if parts.len() > MAX_PARTS {
             return None;
         }
-        // Two parts with one trailing number are two books interleaved: never merge, never delete.
-        let mut numbers: Vec<String> = parts.iter().map(|p| trailing_number(&p.rel)).collect();
-        numbers.sort();
-        if numbers.windows(2).any(|w| !w[0].is_empty() && w[0] == w[1]) {
+        // Two parts with one (disc, part) number, or one without, are two books interleaved.
+        let mut nums: Vec<_> = parts
+            .iter()
+            .map(|p| part_numbers(&p.rel.replace('\\', "/")))
+            .collect();
+        let numbered = nums.iter().filter(|n| n.1.is_some()).count();
+        nums.sort();
+        if (numbered > 0 && numbered < nums.len())
+            || nums.windows(2).any(|w| w[0].1.is_some() && w[0] == w[1])
+        {
             tracing::warn!(
-                "m4b merge skipped: two parts share a part number ({})",
+                "m4b merge skipped: the part numbers of {} do not tell its parts apart",
                 parts[0].rel
             );
             return None;
@@ -90,25 +100,6 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
     })
 }
 
-/// The digits ending the file stem (disc folders aside), empty when there are none.
-fn trailing_number(rel: &str) -> String {
-    let rel = rel.replace('\\', "/");
-    let name = rel.rsplit('/').next().unwrap_or(&rel);
-    let stem = name.rfind('.').map_or(name, |d| &name[..d]);
-    let n = stem.len() - stem.trim_end_matches(|c: char| c.is_ascii_digit()).len();
-    let digits = &stem[stem.len() - n..];
-    let disc = rel
-        .rsplit('/')
-        .nth(1)
-        .filter(|d| d.to_lowercase().starts_with("cd") || d.to_lowercase().starts_with("dis"))
-        .unwrap_or("");
-    if digits.is_empty() {
-        String::new()
-    } else {
-        format!("{disc}/{}", digits.trim_start_matches('0'))
-    }
-}
-
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
 pub fn fingerprint(parts: &[Part]) -> String {
     parts
@@ -124,7 +115,7 @@ pub fn fingerprint(parts: &[Part]) -> String {
 }
 
 /// Folder names that say a format, not a book.
-const GENERIC: [&str; 9] = [
+pub(super) const GENERIC: [&str; 9] = [
     "mp3",
     "m4a",
     "flac",
