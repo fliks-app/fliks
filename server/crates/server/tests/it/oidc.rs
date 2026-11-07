@@ -632,9 +632,13 @@ impl Ctx {
     }
 
     /// Links `sub` to the user holding `auth`, through the whole flow.
-    async fn link(&self, pid: i32, auth: &str, sub: &str) -> Res {
+    async fn link(&self, pid: i32, auth: &str, sub: &str, password: &str) -> Res {
         let (res, f) = self
-            .begin_with(pid, json!({"link": true}), Some(auth))
+            .begin_with(
+                pid,
+                json!({"link": true, "currentPassword": password}),
+                Some(auth),
+            )
             .await;
         let f = f.unwrap_or_else(|| panic!("start: {res:?}"));
         let code = self.idp.issue(&f, json!({"sub": sub}), Signing::Key(0));
@@ -1322,7 +1326,7 @@ async fn linking_needs_a_session_and_the_right_owner(pool: PgPool) {
         401
     );
 
-    let r = c.link(pid, &bt, "sub-9").await;
+    let r = c.link(pid, &bt, "sub-9", "bob-pass").await;
     assert_eq!(r.0, 204, "{:?}", r.2);
     let (_, _, ids) = c
         .call("GET", "/api/auth/oidc/identities", Some(&bt), None)
@@ -1335,10 +1339,16 @@ async fn linking_needs_a_session_and_the_right_owner(pool: PgPool) {
         (json!(true), json!(pid))
     );
     assert_eq!(
-        error(&c.link(pid, &ct, "sub-9").await),
+        error(&c.link(pid, &ct, "sub-9", "carol-pass").await),
         (409, "already_linked".into())
     );
-    let (_, f) = c.begin_with(pid, json!({"link": true}), Some(&bt)).await;
+    let (_, f) = c
+        .begin_with(
+            pid,
+            json!({"link": true, "currentPassword": "bob-pass"}),
+            Some(&bt),
+        )
+        .await;
     let f = f.unwrap();
     let code = c.idp.issue(&f, json!({"sub": "sub-10"}), Signing::Key(0));
     assert_eq!(
@@ -1359,12 +1369,40 @@ async fn linking_needs_a_session_and_the_right_owner(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn linking_needs_the_password_or_a_recent_sign_in(pool: PgPool) {
+    let c = ctx(pool).await;
+    let pid = c.provider(json!({"autoRegister": false})).await;
+    let bob = c.pw_user("bob", false).await;
+    let bt = c.token_of(bob, "bob").await;
+    let link = json!({"link": true});
+    assert_eq!(c.begin_with(pid, link.clone(), Some(&bt)).await.0.0, 400);
+    let wrong = json!({"link": true, "currentPassword": "nope-nope"});
+    assert_eq!(c.begin_with(pid, wrong, Some(&bt)).await.0.0, 400);
+
+    let sso: i32 =
+        sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ('sso') RETURNING id"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    let st = c.token_of(sso, "sso").await;
+    assert_eq!(c.begin_with(pid, link.clone(), Some(&st)).await.0.0, 201);
+    sqlx::query(
+        r#"UPDATE sessions SET "createdAt" = now() - interval '1 hour' WHERE "userId" = $1"#,
+    )
+    .bind(sso)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.begin_with(pid, link, Some(&st)).await.0.0, 403);
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_password_that_policy_forbids_is_not_a_second_method(pool: PgPool) {
     let c = ctx(pool).await;
     let pid = c.provider(json!({"autoRegister": false})).await;
     let bob = c.pw_user("bob", false).await;
     let t = c.token_of(bob, "bob").await;
-    assert_eq!(c.link(pid, &t, "sub-9").await.0, 204);
+    assert_eq!(c.link(pid, &t, "sub-9", "bob-pass").await.0, 204);
     assert_eq!(c.setting("password_login", "admins").await.0, 200);
     let (s, _, e) = c
         .call(

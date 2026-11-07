@@ -353,6 +353,7 @@ pub enum SseEvent {
         pairing_id: String,
         device_name: String,
         device_id: String,
+        legacy_client: bool,
     },
     #[serde(rename = "pairing.cancelled")]
     PairingCancelled { user_id: i64, pairing_id: String },
@@ -678,7 +679,7 @@ mod tests {
             json!({"type":"seerr.import.started"}),
             json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4}),
             json!({"type":"seerr.import.failed","error":"e"}),
-            json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d"}),
+            json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d","legacyClient":false}),
             json!({"type":"pairing.cancelled","userId":1,"pairingId":"p"}),
             json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q","paused":true}),
             json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,

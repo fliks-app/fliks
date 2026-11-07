@@ -128,6 +128,8 @@ pub(crate) struct StartDto {
     link: bool,
     prompt: Option<String>,
     expect_user_id: Option<i32>,
+    /// Proof of ownership for `link`: the account's current password, if it has one.
+    current_password: Option<String>,
 }
 
 fn peer_ip(
@@ -194,7 +196,17 @@ pub(crate) async fn start(
         return Err(AppError::conflict("Silent sign-in is not available"));
     }
     let link_user = if dto.link {
-        Some(session_from_headers(&headers, &st).await?.user.id)
+        let a = session_from_headers(&headers, &st).await?;
+        let peer = peer.as_ref().map(|Extension(ConnectInfo(a))| *a);
+        crate::users::check_current_password(
+            &st,
+            &a,
+            dto.current_password.as_deref(),
+            &headers,
+            peer,
+        )
+        .await?;
+        Some(a.user.id)
     } else {
         None
     };

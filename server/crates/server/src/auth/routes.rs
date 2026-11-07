@@ -338,7 +338,10 @@ pub(crate) async fn refresh(
         Refreshed::AlreadyRotated => {
             return Err(AppError::unauthorized("Refresh token already rotated"));
         }
-        Refreshed::Reuse => return Err(AppError::unauthorized("Refresh token reuse detected")),
+        Refreshed::Reuse { session } => {
+            st.hub.drop_connections_for_session(session);
+            return Err(AppError::unauthorized("Refresh token reuse detected"));
+        }
         Refreshed::Expired => return Err(AppError::unauthorized("Refresh token expired")),
         Refreshed::Disabled => return Err(AppError::unauthorized("Account disabled")),
     };
@@ -359,10 +362,12 @@ pub(crate) async fn logout(
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
     };
-    if let Some(raw) = text("refreshToken")
-        && let Err(e) = db::revoke(&st.db, raw, Utc::now()).await
-    {
-        tracing::debug!(error = %e, "logout revoke failed");
+    if let Some(raw) = text("refreshToken") {
+        match db::revoke(&st.db, raw, Utc::now()).await {
+            Ok(Some(session)) => st.hub.drop_connections_for_session(session),
+            Ok(None) => {}
+            Err(e) => tracing::debug!(error = %e, "logout revoke failed"),
+        }
     }
     let claims = logout_token(&headers).and_then(|t| st.jwt.verify(&t));
     if let Some(c) = claims {
@@ -423,8 +428,7 @@ pub(crate) async fn revoke_session(
 ) -> Result<StatusCode, AppError> {
     let id = id?.0;
     if db::revoke_user_session(&st.db, a.user.id, id, Utc::now()).await? {
-        // SSE is authenticated at connect only; the user's other devices reconnect with their own session.
-        st.hub.drop_connections_for_user(a.user.id);
+        st.hub.drop_connections_for_session(id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::not_found("Session not found"))
@@ -701,6 +705,8 @@ pub(crate) async fn pairing_request(
     check(errs)?;
     let device = device_id(&headers)?;
     let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    // Clients that show the code say so; older ones never display it, so the approver cannot be given it.
+    let legacy = !headers.contains_key("x-fliks-pairing-code");
     let opened = db::open_pairing(
         &st.db,
         dto.user_id,
@@ -709,6 +715,7 @@ pub(crate) async fn pairing_request(
         device,
         &dto.device_name,
         dto.system_name.as_deref(),
+        legacy,
         Utc::now(),
     )
     .await?;
@@ -740,6 +747,7 @@ pub(crate) async fn pairing_request(
                 pairing_id: id.clone(),
                 device_name: dto.device_name.clone(),
                 device_id: device.to_owned(),
+                legacy_client: legacy,
             },
         );
     }
@@ -796,6 +804,7 @@ pub(crate) struct Pending {
     device_id: String,
     device_name: String,
     system_name: Option<String>,
+    legacy_client: bool,
     #[serde(with = "iso_ms")]
     requested_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
@@ -815,6 +824,7 @@ pub(crate) async fn pairing_pending(
                 device_id: p.device_id,
                 device_name: p.device_name,
                 system_name: p.system_name,
+                legacy_client: p.legacy_client,
                 requested_at: p.created_at,
                 expires_at: p.expires_at,
             })

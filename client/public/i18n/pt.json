@@ -300,7 +300,10 @@
     "sso_unlink": "Desassociar",
     "sso_link": "Associar {{name}}",
     "sso_last_method": "É a sua única forma de iniciar sessão. Defina uma palavra-passe para a poder desassociar.",
-    "sso_link_origin": "A ligação funciona a partir do endereço definido como URL público do servidor."
+    "sso_link_origin": "A ligação funciona a partir do endereço definido como URL público do servidor.",
+    "sso_link_password": "Palavra-passe atual, para confirmar que é você",
+    "recent_sign_in_required": "Inicie sessão novamente para fazer isto e tente de novo.",
+    "sign_in_again": "Iniciar sessão novamente"
   },
   "account_settings": {
     "title": "Definições da conta",
@@ -864,7 +867,8 @@
     "check": "Continuar",
     "confirm_title": "Aprovar este início de sessão?",
     "from_ip": "Endereço de rede: {{ip}}",
-    "too_many": "Demasiados códigos errados. Tente novamente mais tarde."
+    "too_many": "Demasiados códigos errados. Tente novamente mais tarde.",
+    "update_device": "{{device}}: Este dispositivo usa uma versão antiga da aplicação e não consegue mostrar um código. Atualize a aplicação nele e tente novamente."
   },
   "server_history": {
     "section_title": "Servidores recentes",

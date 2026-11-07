@@ -300,7 +300,10 @@
     "sso_unlink": "Délier",
     "sso_link": "Lier {{name}}",
     "sso_last_method": "C'est votre seul moyen de connexion. Définissez un mot de passe pour pouvoir le délier.",
-    "sso_link_origin": "La liaison fonctionne depuis l'adresse réglée comme URL publique du serveur."
+    "sso_link_origin": "La liaison fonctionne depuis l'adresse réglée comme URL publique du serveur.",
+    "sso_link_password": "Mot de passe actuel, pour confirmer que c'est vous",
+    "recent_sign_in_required": "Reconnectez-vous pour faire cela, puis réessayez.",
+    "sign_in_again": "Se reconnecter"
   },
   "account_settings": {
     "title": "Paramètres du compte",
@@ -864,7 +867,8 @@
     "check": "Continuer",
     "confirm_title": "Autoriser cette connexion ?",
     "from_ip": "Adresse réseau : {{ip}}",
-    "too_many": "Trop de codes erronés. Réessayez plus tard."
+    "too_many": "Trop de codes erronés. Réessayez plus tard.",
+    "update_device": "{{device}} : Cet appareil utilise une ancienne version de l'application et ne peut pas afficher de code. Mettez l'application à jour dessus, puis réessayez."
   },
   "server_history": {
     "section_title": "Serveurs récents",

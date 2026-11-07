@@ -777,10 +777,21 @@ async fn refresh_keeps_the_session_and_a_reuse_revokes_it(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    let uid: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'bob'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let stream =
+        c.st.hub
+            .connect_session(uid, sid, fliks_server::events::Identity::default());
     let (s, _, e) = refresh(rt.to_owned()).await;
     assert_eq!(
         (s, e["message"].clone()),
         (401, json!("Refresh token reuse detected"))
+    );
+    assert!(
+        !c.st.hub.has_connection(&stream.id),
+        "its live stream is cut"
     );
     let h = auth_header(&r2);
     let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;
@@ -907,14 +918,17 @@ async fn a_logout_without_a_refresh_token_leaves_the_session_usable(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
-async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
+async fn revoking_a_session_drops_only_the_sse_streams_of_that_session(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = user(&pool, "bob", Some("[]"), false, true).await;
     let a = login(&c, "bob").await;
     login(&c, "bob").await;
-    let conn = c.st.hub.connect(id, Default::default());
-    assert!(c.st.hub.has_connection(&conn.id));
     let ha = auth_header(&a);
+    let current =
+        c.st.jwt
+            .verify(a["accessToken"].as_str().unwrap())
+            .unwrap()
+            .sid;
     let (_, _, l) = call(
         &c,
         "GET",
@@ -930,7 +944,15 @@ async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
         .find(|x| x["current"] == json!(false))
         .unwrap()["id"]
         .clone();
+    let conn =
+        c.st.hub
+            .connect_session(id, other.as_i64().map(|s| s as i32), Default::default());
+    let kept = c.st.hub.connect_session(id, current, Default::default());
     let uri = format!("/api/auth/sessions/{other}");
     call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
     assert!(!c.st.hub.has_connection(&conn.id));
+    assert!(
+        c.st.hub.has_connection(&kept.id),
+        "the caller's own stream stays"
+    );
 }

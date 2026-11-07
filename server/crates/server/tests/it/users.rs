@@ -460,6 +460,33 @@ async fn a_self_password_change_needs_the_current_password_and_an_admin_reset_do
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_passwordless_account_sets_a_password_only_after_a_recent_sign_in(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (a, ta) = c.user("a", "[]", false).await;
+    let uri = format!("/api/users/{a}");
+    let body = || Some(json!({"password": "newpassword"}));
+    sqlx::query(r#"UPDATE sessions SET "createdAt" = now() - interval '1 hour'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.call("PUT", &uri, &ta, body()).await.0, 403);
+    sqlx::query(r#"UPDATE sessions SET "createdAt" = now(), method = 'pairing'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        c.call("PUT", &uri, &ta, body()).await.0,
+        403,
+        "a paired session"
+    );
+    sqlx::query(r#"UPDATE sessions SET method = 'password'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.call("PUT", &uri, &ta, body()).await.0, 200);
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_admin_signs_a_user_out_of_every_device(pool: PgPool) {
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;

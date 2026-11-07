@@ -2,7 +2,7 @@ use super::{Identity, activity::List, sse, ticket::TTL as TICKET_TTL};
 use crate::{
     http::{
         AppError,
-        auth::{Authed, SessionAuthed, load_enabled},
+        auth::{Authed, SessionAuthed, load_enabled, load_session_user},
     },
     state::AppState,
 };
@@ -33,7 +33,7 @@ fn param(q: &[(String, String)], key: &str) -> Option<String> {
 pub async fn event_ticket(State(st): State<AppState>, SessionAuthed(a): SessionAuthed) -> Response {
     (
         StatusCode::CREATED,
-        Json(json!({"ticket": st.sse_tickets.mint(a.user.id), "expiresIn": TICKET_TTL.as_secs()})),
+        Json(json!({"ticket": st.sse_tickets.mint(a.user.id, a.session), "expiresIn": TICKET_TTL.as_secs()})),
     )
         .into_response()
 }
@@ -47,17 +47,20 @@ pub async fn events(
     headers: HeaderMap,
     Query(q): Query<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
-    let user_id = match param(&q, "ticket") {
+    let (user_id, sid) = match param(&q, "ticket") {
         Some(ticket) => {
             let unauthorized = || AppError::bare(StatusCode::UNAUTHORIZED);
-            let id = st.sse_tickets.redeem(&ticket).ok_or_else(unauthorized)?;
-            load_enabled(&st.db, id)
-                .await?
-                .ok_or_else(unauthorized)?
-                .0
-                .id
+            let (id, sid) = st.sse_tickets.redeem(&ticket).ok_or_else(unauthorized)?;
+            let user = match sid {
+                Some(sid) => load_session_user(&st.db, id, sid).await?,
+                None => load_enabled(&st.db, id).await?,
+            };
+            (user.ok_or_else(unauthorized)?.0.id, sid)
         }
-        None => session?.0.user.id,
+        None => {
+            let a = session?.0;
+            (a.user.id, a.session)
+        }
     };
     let identity = Identity {
         target_id: param(&q, "device"),
@@ -69,7 +72,7 @@ pub async fn events(
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned),
     };
-    let conn = st.hub.connect(user_id, identity);
+    let conn = st.hub.connect_session(user_id, sid, identity);
     Ok((
         StatusCode::OK,
         [

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"publicId\" AS public_id, \"deviceId\" AS device_id, \"deviceName\" AS device_name,\n                  \"systemName\" AS system_name, \"createdAt\" AS created_at, \"expiresAt\" AS expires_at\n           FROM pairing_requests WHERE \"userId\" = $1 AND status = 'pending' AND \"expiresAt\" >= $2\n           ORDER BY \"createdAt\" DESC",
+  "query": "SELECT \"publicId\" AS public_id, \"deviceId\" AS device_id, \"deviceName\" AS device_name,\n                  \"systemName\" AS system_name, \"legacyClient\" AS legacy_client,\n                  \"createdAt\" AS created_at, \"expiresAt\" AS expires_at\n           FROM pairing_requests WHERE \"userId\" = $1 AND status = 'pending' AND \"expiresAt\" >= $2\n           ORDER BY \"createdAt\" DESC",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "legacy_client",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "legacyClient"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -82,8 +93,9 @@
       false,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "1317921d416d59fb39fc8a29fc55051e13902a0a4513020f87eceebf0b9bd453"
+  "hash": "59a34b5a12fb58033d15ffef3faad58b272f54eeb99ab56c762613656283f61b"
 }

@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -9,6 +10,9 @@ import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
+
+/** The server's translation key for a sensitive change that needs a fresh sign-in. */
+const RECENT_SIGN_IN = 'account.recent_sign_in_required';
 
 @Component({
   selector: 'app-account',
@@ -26,6 +30,7 @@ export class AccountComponent implements OnInit {
 
   readonly saving = signal(false);
   readonly formCurrentPassword = signal('');
+  readonly linkPassword = signal('');
   readonly formPassword = signal('');
   readonly formPasswordConfirm = signal('');
   readonly sessions = signal<AuthSession[]>([]);
@@ -70,11 +75,27 @@ export class AccountComponent implements OnInit {
   async link(providerId: number) {
     this.linking.set(providerId);
     try {
-      await this.auth.oidcSignIn(providerId, { link: true });
-    } catch {
-      // handled by global error interceptor
+      await this.auth.oidcSignIn(providerId, { link: true, currentPassword: this.linkPassword() });
+    } catch (err) {
+      this.failedSensitive(err);
     } finally {
       this.linking.set(null);
+    }
+  }
+
+  /** A recent-sign-in refusal offers the sign-in again, then comes back here. */
+  private failedSensitive(err: unknown) {
+    const message = passwordErrorMessage(err, this.translate);
+    if (err instanceof HttpErrorResponse && err.status === 403 && err.error?.message === RECENT_SIGN_IN) {
+      this.toast.info(message, 8000, {
+        label: this.translate.instant('account.sign_in_again'),
+        run: () => {
+          this.auth.returnAfterSignIn('/account');
+          void this.auth.logout();
+        },
+      });
+    } else {
+      this.toast.error(message);
     }
   }
 
@@ -113,7 +134,7 @@ export class AccountComponent implements OnInit {
       void this.loadSessions();
       void this.loadIdentities();
     } catch (err) {
-      this.toast.error(passwordErrorMessage(err, this.translate));
+      this.failedSensitive(err);
     } finally {
       this.saving.set(false);
     }
