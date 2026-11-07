@@ -242,7 +242,7 @@ async fn known_paths(db: &PgPool, media: i32) -> sqlx::Result<Vec<String>> {
 /// The files of the media's own work: the works of its linked files (one per language), else of the first book file of `new`.
 fn own_paths(known: &[String], new: &[String]) -> HashSet<String> {
     let all: Vec<String> = known.iter().chain(new).cloned().collect();
-    let works = group::group(&all);
+    let works = group::group_whole(&all);
     let files_of = |w: &group::Work| -> HashSet<String> {
         w.versions.iter().flat_map(|v| v.files.clone()).collect()
     };
@@ -656,7 +656,10 @@ async fn lay_out_tx(
             }
         } else {
             // Several languages: a version goes by the first language one of its files says.
-            for v in group::group(&new).into_iter().flat_map(|w| w.versions) {
+            for v in group::group_whole(&new)
+                .into_iter()
+                .flat_map(|w| w.versions)
+            {
                 let hint = v.files.iter().find_map(own);
                 by_hint.entry(hint).or_default().extend(v.files);
             }
@@ -669,7 +672,7 @@ async fn lay_out_tx(
             by_edition.entry(e).or_default().extend(paths);
         }
         for (edition, paths) in by_edition {
-            let mine: Vec<group::Version> = group::group(&paths)
+            let mine: Vec<group::Version> = group::group_whole(&paths)
                 .into_iter()
                 .flat_map(|w| w.versions)
                 .filter(|v| v.family == family)
@@ -677,10 +680,7 @@ async fn lay_out_tx(
             if mine.is_empty() {
                 continue;
             }
-            let works = group::group(&paths);
-            let dirs: BTreeSet<&str> = works.iter().map(|w| w.dir.as_str()).collect();
-            // Audio works of one folder lay out as versions of the media that already holds them.
-            if anchored && works.len() > 1 && (family == Family::Text || dirs.len() > 1) {
+            if anchored && group::group_whole(&paths).len() > 1 {
                 return Err(LayError::Works(format!(
                     "media #{media}: its folder holds several works"
                 )));
