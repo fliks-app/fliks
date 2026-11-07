@@ -253,10 +253,12 @@ pub async fn preview(
     let Some(profile) = lib.profile else {
         return Err(bad("the library has no optimize profile; pass profileId"));
     };
-    let ctx = Context::load(&st.db, profile, lib.allow_rename).await?;
-    Ok(Json(
-        select::preview(&st.db, int_param(&id.0)?, &ctx).await?,
-    ))
+    let ctx = Context::load(&st.db, profile, lib.allow_rename, &st.queue.capabilities()).await?;
+    let mut p = select::preview(&st.db, int_param(&id.0)?, &ctx).await?;
+    p.estimate_seconds = crate::queue::speeds(&st)
+        .await?
+        .estimate(&p.duration_seconds);
+    Ok(Json(p))
 }
 
 #[derive(Deserialize)]
@@ -291,7 +293,7 @@ pub async fn preview_file(
             .profile
             .ok_or_else(|| bad("the library has no optimize profile; pass profile"))?,
     };
-    let ctx = Context::load(&st.db, profile, lib.allow_rename).await?;
+    let ctx = Context::load(&st.db, profile, lib.allow_rename, &st.queue.capabilities()).await?;
     let mut found = None;
     select::analyze(&st.db, id, Some(&[dto.file_id]), &ctx, |c| {
         found = Some(c.outcome)
@@ -342,7 +344,8 @@ pub async fn summary(
     }
     let count = match lib.profile {
         Some(profile) => {
-            let ctx = Context::load(&st.db, profile, lib.allow_rename).await?;
+            let ctx =
+                Context::load(&st.db, profile, lib.allow_rename, &st.queue.capabilities()).await?;
             select::preview(&st.db, id, &ctx).await?.with_difference
         }
         None => 0,

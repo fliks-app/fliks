@@ -1,5 +1,7 @@
 //! Queueing: "Queue", "Optimize…", "Force re-encode" and "Retry" write resolved jobs (plan and codec included).
+use super::ocr;
 use crate::{
+    events::SseEvent,
     ingest::fsx,
     optimize::{diff, select},
     state::AppState,
@@ -10,44 +12,86 @@ use serde_json::json;
 use sqlx::Row;
 use std::time::UNIX_EPOCH;
 
-/// What the diff of a file against its profile decided.
-pub struct Resolved {
-    pub plan: OptimizePlan,
-    pub profile_hash: String,
-}
-
-/// The file's difference with its library's profile, as the plan the engine executes; none when
-/// the library has no profile or nothing is due. `force` is the "Force re-encode" action.
-pub async fn resolve(st: &AppState, file_id: i32, force: bool) -> Option<Resolved> {
+/// The library's profile as a comparison context; none when it has no profile.
+async fn context(st: &AppState, library: i32) -> Option<select::Context> {
     let row = sqlx::query(
-        r#"SELECT m."libraryId" AS library, l."allowRename" AS allow_rename, p.document
-           FROM media_files f JOIN media m ON m.id = f."mediaId"
-           JOIN libraries l ON l.id = m."libraryId"
-           JOIN optimize_profiles p ON p.id = l."optimizeProfileId" WHERE f.id = $1"#,
+        r#"SELECT l."allowRename" AS allow_rename, p.document FROM libraries l
+           JOIN optimize_profiles p ON p.id = l."optimizeProfileId" WHERE l.id = $1"#,
     )
-    .bind(file_id)
+    .bind(library)
     .fetch_optional(&st.db)
     .await
     .ok()??;
     let profile = serde_json::from_value(row.get("document")).ok()?;
-    let mut ctx = select::Context::load(&st.db, profile, row.get("allow_rename"))
-        .await
-        .ok()?;
-    ctx.force = force;
-    let mut found = None;
-    select::analyze(&st.db, row.get("library"), Some(&[file_id]), &ctx, |c| {
-        found = Some(c.outcome)
-    })
+    select::Context::load(
+        &st.db,
+        profile,
+        row.get("allow_rename"),
+        &st.queue.capabilities(),
+    )
     .await
-    .ok()?;
-    let Some(diff::Outcome::Diff(d)) = found else {
-        return None;
+    .ok()
+}
+
+/// The plan of a difference, with the OCR it needs, and the hash of what it changes.
+async fn planned(
+    st: &AppState,
+    ctx: &select::Context,
+    l: &Loaded,
+    d: &diff::Diff,
+) -> Option<(OptimizePlan, String)> {
+    // ponytail: OCR runs inside the queueing call (hours for a large image track); a job-side step if that bites.
+    let extra = if d
+        .changes
+        .iter()
+        .any(|c| matches!(c, diff::Change::Ocr { .. }))
+    {
+        ocr::extra_subtitles(st, &l.folder, &l.info, l.id).await
+    } else {
+        vec![]
     };
-    let plan = d.plan()?;
+    let plan = d.plan(&ctx.profile, &l.info, &ctx.audio_playable, &extra)?;
     let json = serde_json::to_string(&d.changes).ok()?;
-    Some(Resolved {
-        profile_hash: crate::device_tokens::hash(&json)[..16].to_owned(),
-        plan,
+    Some((plan, crate::device_tokens::hash(&json)[..16].to_owned()))
+}
+
+struct Loaded {
+    id: i32,
+    info: MediaInfo,
+    folder: String,
+    snap: Snapshot,
+}
+
+async fn load(st: &AppState, id: i32) -> sqlx::Result<Result<Loaded, Outcome>> {
+    let row = sqlx::query(
+        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder
+           FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" WHERE f.id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    let Some(row) = row else {
+        return Ok(Err(Outcome::Missing));
+    };
+    let info = row
+        .get::<Option<serde_json::Value>, _>("info")
+        .and_then(|v| serde_json::from_value::<MediaInfo>(v).ok());
+    let Some(info) = info else {
+        return Ok(Err(Outcome::Unprobed));
+    };
+    let (folder, rel): (String, String) = (row.get("folder"), row.get("rel"));
+    let snap = match fsx::locate(&folder, &rel) {
+        Some(abs) => snapshot(abs).await,
+        None => None,
+    };
+    Ok(match snap {
+        Some(snap) => Ok(Loaded {
+            id,
+            info,
+            folder,
+            snap,
+        }),
+        None => Err(Outcome::Missing),
     })
 }
 
@@ -130,40 +174,88 @@ pub async fn queue_files(
         out.push(queue_one(st, id, force, priority).await?);
     }
     st.queue.wake.notify_waiters();
+    st.hub.emit(SseEvent::OptimizeQueueChanged {});
     Ok(out)
 }
 
 async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::Result<Queued> {
-    let row = sqlx::query(
-        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder
-           FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" WHERE f.id = $1"#,
+    let l = match load(st, id).await? {
+        Ok(l) => l,
+        Err(o) => return Ok(done(id, o)),
+    };
+    let library: Option<i32> = sqlx::query_scalar(
+        r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
     )
     .bind(id)
     .fetch_optional(&st.db)
     .await?;
-    let Some(row) = row else {
+    let Some(library) = library else {
         return Ok(done(id, Outcome::Missing));
     };
-    let info = row
-        .get::<Option<serde_json::Value>, _>("info")
-        .and_then(|v| serde_json::from_value::<MediaInfo>(v).ok());
-    let Some(info) = info else {
-        return Ok(done(id, Outcome::Unprobed));
+    let Some(mut ctx) = context(st, library).await else {
+        return Ok(done(id, Outcome::NothingToDo));
     };
-    let (folder, rel): (String, String) = (row.get("folder"), row.get("rel"));
-    let snap = match fsx::locate(&folder, &rel) {
-        Some(abs) => snapshot(abs).await,
-        None => None,
+    ctx.force = force;
+    let mut found = None;
+    select::analyze(&st.db, library, Some(&[id]), &ctx, |c| {
+        found = Some(c.outcome)
+    })
+    .await?;
+    let Some(diff::Outcome::Diff(d)) = found else {
+        return Ok(done(id, Outcome::NothingToDo));
     };
-    let Some(snap) = snap else {
-        return Ok(done(id, Outcome::Missing));
+    insert(st, &ctx, &l, &d, priority).await
+}
+
+/// Every file of a library with a difference, from one pass: the count, and the queueing that
+/// follows in the background (the OCR of image tracks can take long).
+pub async fn queue_library(st: &AppState, library: i32, priority: i32) -> sqlx::Result<usize> {
+    let Some(ctx) = context(st, library).await else {
+        return Ok(0);
     };
-    let Some(resolved) = resolve(st, id, force).await else {
+    let mut found: Vec<(i32, diff::Diff)> = vec![];
+    select::analyze(&st.db, library, None, &ctx, |c| {
+        if let diff::Outcome::Diff(d) = c.outcome {
+            found.push((c.media_file_id, d));
+        }
+    })
+    .await?;
+    let n = found.len();
+    let st = st.clone();
+    tokio::spawn(async move {
+        for (id, d) in found {
+            let queued = match load(&st, id).await {
+                Ok(Ok(l)) => insert(&st, &ctx, &l, &d, priority).await,
+                Ok(Err(o)) => Ok(done(id, o)),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = queued {
+                tracing::warn!(file = id, "library queueing: {e}");
+            }
+        }
+        st.queue.wake.notify_waiters();
+        st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    });
+    Ok(n)
+}
+
+async fn insert(
+    st: &AppState,
+    ctx: &select::Context,
+    l: &Loaded,
+    d: &diff::Diff,
+    priority: i32,
+) -> sqlx::Result<Queued> {
+    let (id, snap) = (l.id, &l.snap);
+    let Some((plan, hash)) = planned(st, ctx, l, d).await else {
         return Ok(done(id, Outcome::NothingToDo));
     };
     let payload = json!(OptimizePayload {
-        info,
-        plan: resolved.plan
+        info: l.info.clone(),
+        plan,
+        staged_path: None,
+        input_url: None,
+        input_token: None,
     });
     let job = sqlx::query_scalar::<_, i64>(
         r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", priority, "inPath", "inSize",
@@ -175,7 +267,7 @@ async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::
     )
     .bind(id)
     .bind(payload)
-    .bind(&resolved.profile_hash)
+    .bind(&hash)
     .bind(priority)
     .bind(&snap.path)
     .bind(snap.size)

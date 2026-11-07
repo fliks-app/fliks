@@ -50,7 +50,12 @@ pub struct Settings {
     /// Caps the `maxJobs` a device declares.
     pub device_max_jobs: BTreeMap<String, u32>,
     pub device_weights: BTreeMap<String, u32>,
-    pub gpu_playback_before_pause: bool,
+    /// Hardware playback reads on a device that pause its background GPU jobs; 0 never pauses.
+    pub gpu_playback_before_pause: u32,
+    /// CPU weight of a software optimization against the playback budget.
+    pub cpu_weight: u32,
+    /// No new lease while set; running jobs finish.
+    pub paused: bool,
 }
 
 impl Default for Settings {
@@ -62,7 +67,9 @@ impl Default for Settings {
             trash_min_free_gb: 20,
             device_max_jobs: BTreeMap::new(),
             device_weights: BTreeMap::new(),
-            gpu_playback_before_pause: true,
+            gpu_playback_before_pause: 1,
+            cpu_weight: 2,
+            paused: false,
         }
     }
 }
@@ -71,6 +78,9 @@ impl Settings {
     pub fn check(&self) -> Result<(), &'static str> {
         if self.window.is_some_and(|w| !w.valid()) {
             return Err("window must hold two different minutes below 1440");
+        }
+        if self.cpu_weight == 0 {
+            return Err("cpuWeight must be at least 1");
         }
         if self.device_max_jobs.values().any(|n| *n == 0) {
             return Err("deviceMaxJobs values must be at least 1");

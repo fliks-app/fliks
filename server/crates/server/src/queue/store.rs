@@ -383,7 +383,7 @@ pub async fn succeed(
     sqlx::query(
         r#"UPDATE jobs SET state = $2, progress = 1, "outSize" = $3, "outSha256" = $4, result = $5,
              "leaseUntil" = NULL, "finishedAt" = CASE WHEN $2 = 'done' THEN now() END,
-             "updatedAt" = now() WHERE id = $1"#,
+             "encodedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
     )
     .bind(id)
     .bind(state)

@@ -188,7 +188,6 @@ Domain/notification dispatch (not SSE): `NotificationsService.dispatch('subtitle
 | `subtitle_remove_hi_tags` | off | on only when `true` |
 | `subtitle_custom_exclusions` | empty | newline-separated regexes (files rule 33) |
 | `subtitle_ocr_burn_in_auto` | off | on only when `true` |
-| `subtitle_ocr_delete_source` | off | on only when `true` |
 
 None is a secret (no `secretsSet` entry). Provider credentials live in `subtitle_providers.settings` (providers spec) and `subtitle_translation_*_api_key` (translation spec). Reads go through the `settings` module each time, with no stale cache.
 

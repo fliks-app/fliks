@@ -4,21 +4,20 @@ use crate::{
     state::AppState,
     subtitles::{model, ocr},
 };
-use fliks_engine_core::api::MediaInfo;
-use serde_json::{Value, json};
+use fliks_engine_core::api::{ExtraSubtitle, MediaInfo};
 use std::time::Duration;
 
 const POLL: Duration = Duration::from_secs(5);
 const GIVE_UP: Duration = Duration::from_secs(4 * 3600);
 
-/// Runs the OCR of the file's image tracks (reusing finished ones) and returns the SRTs, with the track's
+/// Runs the OCR of the file's image tracks (reusing finished ones) and returns the SRTs by track, with the track's
 /// language and title (the plan's `extraSubtitles`). A track whose OCR fails is left out, so it stays image-based in the output.
 pub async fn extra_subtitles(
     st: &AppState,
     folder: &str,
     info: &MediaInfo,
     media_file_id: i32,
-) -> Vec<Value> {
+) -> Vec<(u32, ExtraSubtitle)> {
     let mut out = vec![];
     for t in info.subtitles.iter().filter(|s| s.is_image_based) {
         let Some(row) = existing_or_run(st, media_file_id, t.stream_index as i32).await else {
@@ -31,7 +30,15 @@ pub async fn extra_subtitles(
         else {
             continue;
         };
-        out.push(json!({"path": abs, "language": t.language, "title": t.title}));
+        out.push((
+            t.stream_index,
+            ExtraSubtitle {
+                path: abs.to_string_lossy().into_owned(),
+                language: Some(t.language.clone()),
+                title: t.title.clone(),
+                default: None,
+            },
+        ));
     }
     out
 }

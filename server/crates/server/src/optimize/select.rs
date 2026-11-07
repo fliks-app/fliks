@@ -20,16 +20,13 @@ pub struct Context {
     pub force: bool,
 }
 
-/// Every known device and codec: no worker registry exists yet to narrow it.
-pub fn capabilities() -> Capabilities {
-    Capabilities {
-        encodable: vec![Target::Hevc, Target::Av1],
-        main_decodes_av1_hw: false,
-    }
-}
-
 impl Context {
-    pub async fn load(db: &PgPool, profile: Profile, allow_rename: bool) -> sqlx::Result<Self> {
+    pub async fn load(
+        db: &PgPool,
+        profile: Profile,
+        allow_rename: bool,
+        caps: &Capabilities,
+    ) -> sqlx::Result<Self> {
         let rows = sqlx::query_scalar::<_, serde_json::Value>(
             r#"SELECT "directPlayProfiles" FROM client_codecs WHERE "lastSeenAt" > now() - interval '90 days'"#,
         )
@@ -37,7 +34,7 @@ impl Context {
         .await?;
         let devices: Vec<Device> = rows.iter().map(Device::from_profiles).collect();
         Ok(Self {
-            target: codec::resolve(&profile.video, &devices, &capabilities()),
+            target: codec::resolve(&profile.video, &devices, caps),
             audio_playable: codec::audio_playable(&devices),
             profile,
             allow_rename,
@@ -180,6 +177,8 @@ pub struct Preview {
     pub removed: Vec<Removed>,
     pub ocr: i64,
     pub warnings: BTreeMap<String, i64>,
+    /// Encoding seconds per level from the recent speed of the workers; none without history.
+    pub estimate_seconds: crate::queue::PerLevelOpt,
 }
 
 #[derive(Default)]

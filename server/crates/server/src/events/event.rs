@@ -247,6 +247,17 @@ pub enum SseEvent {
     StalledRemoved { title: String },
     #[serde(rename = "queue.updated")]
     QueueUpdated {},
+    /// The optimizer queue gained, lost or reordered jobs, or was paused or resumed.
+    #[serde(rename = "optimize.queue_changed")]
+    OptimizeQueueChanged {},
+    #[serde(rename = "optimize.job_changed")]
+    OptimizeJobChanged { job_id: i64, state: String },
+    #[serde(rename = "optimize.job_progress")]
+    OptimizeJobProgress {
+        job_id: i64,
+        progress: Num,
+        paused: bool,
+    },
     #[serde(rename = "activity.changed")]
     ActivityChanged {},
     #[serde(rename = "command.started")]

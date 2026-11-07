@@ -235,6 +235,7 @@ impl Engine {
             lifetime: lifetime(|k| std::env::var(k).ok()),
             livetv,
             path_mappings,
+            worker: true,
         };
         let backoff = self.timing().conflict_backoff;
         for attempt in 1..=CONFLICT_ATTEMPTS {

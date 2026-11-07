@@ -23,6 +23,7 @@ use sqlx::Row;
 
 pub fn router() -> Router<AppState> {
     super::worker_router()
+        .merge(super::control::router())
         .route("/api/optimize/jobs", get(list_jobs).post(enqueue))
         .route("/api/optimize/jobs/{id}/retry", post(retry))
         .route("/api/optimize/jobs/{id}/cancel", post(cancel))
@@ -79,9 +80,10 @@ pub async fn enqueue(
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListQuery {
     state: Option<String>,
+    library_id: Option<i32>,
     limit: Option<i64>,
 }
 
@@ -103,6 +105,11 @@ pub struct JobRow {
     in_path: Option<String>,
     in_size: Option<i64>,
     out_size: Option<i64>,
+    title: Option<String>,
+    library_id: Option<i32>,
+    level: Option<String>,
+    codec: Option<String>,
+    duration_seconds: Option<f64>,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
@@ -117,12 +124,19 @@ pub async fn list_jobs(
 ) -> Result<Json<Vec<JobRow>>, AppError> {
     manage_jobs(&authed)?;
     let rows = sqlx::query(
-        r#"SELECT id, kind, "mediaFileId", state, priority, attempt, failures, progress, paused, "workerId",
-             "deviceId", error, "inPath", "inSize", "outSize", "createdAt", "updatedAt" FROM jobs
-           WHERE ($1::text IS NULL OR state = $1) ORDER BY id DESC LIMIT $2"#,
+        r#"SELECT j.id, j.kind, j."mediaFileId", j.state, j.priority, j.attempt, j.failures, j.progress, j.paused,
+             j."workerId", j."deviceId", j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
+             m.title, m."libraryId" AS library_id, j.payload #>> '{plan,level}' AS level,
+             j.payload #>> '{plan,codec}' AS codec,
+             (j.payload #>> '{info,durationSeconds}')::float8 AS duration
+           FROM jobs j LEFT JOIN media_files f ON f.id = j."mediaFileId" LEFT JOIN media m ON m.id = f."mediaId"
+           WHERE ($1::text IS NULL OR j.state = $1) AND ($3::int IS NULL OR m."libraryId" = $3)
+           ORDER BY CASE WHEN $1 = 'queued' THEN j.priority END DESC, CASE WHEN $1 = 'queued' THEN j.id END,
+                    j.id DESC LIMIT $2"#,
     )
     .bind(q.state)
     .bind(q.limit.unwrap_or(100).clamp(1, 500))
+    .bind(q.library_id)
     .fetch_all(&st.db)
     .await
     .map_err(db)?;
@@ -144,6 +158,11 @@ pub async fn list_jobs(
                 in_path: r.get("inPath"),
                 in_size: r.get("inSize"),
                 out_size: r.get("outSize"),
+                title: r.get("title"),
+                library_id: r.get("library_id"),
+                level: r.get("level"),
+                codec: r.get("codec"),
+                duration_seconds: r.get("duration"),
                 created_at: r.get("createdAt"),
                 updated_at: r.get("updatedAt"),
             })

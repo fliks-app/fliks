@@ -3,11 +3,11 @@
 //! are settled at queue time or by the worker).
 use super::codec::{self, Target};
 use super::languages::{self, Kind, Languages};
-use super::profile::{Container, ImageSubs, Incompatible, Profile};
+use super::profile::{Container, ImageSubs, Incompatible, Profile, Quality, TooSlow};
 use fliks_domain::{release::parsing::attributes::parse_release_attributes, subtitle_flags};
 use fliks_engine_core::api::{
-    AudioStreamInfo, CropInfo, MediaInfo, OptimizeLevel, OptimizePlan, StreamPlan,
-    SubtitleStreamInfo,
+    AudioStreamInfo, CropInfo, ExtraSubtitle, MediaInfo, OptimizeContainer, OptimizeLevel,
+    OptimizePlan, OptimizeQuality, OptimizeTooSlow, StreamEncode, StreamPlan, SubtitleStreamInfo,
 };
 use serde::Serialize;
 use std::collections::HashSet;
@@ -192,10 +192,38 @@ impl From<OptimizeLevel> for LevelOut {
     }
 }
 
+fn stream(plan: &mut OptimizePlan, index: u32) -> &mut StreamPlan {
+    let at = match plan.streams.iter().position(|s| s.stream_index == index) {
+        Some(i) => i,
+        None => {
+            plan.streams.push(StreamPlan {
+                stream_index: index,
+                keep: true,
+                language: None,
+                title: None,
+                default: None,
+                encode: None,
+                keep_original: false,
+            });
+            plan.streams.len() - 1
+        }
+    };
+    &mut plan.streams[at]
+}
+
 impl Diff {
-    /// The part of the difference the engine's plan can carry: video re-encode and crop, dropped
-    /// tracks, language tags, `hvc1`, statistics tags. None when nothing of it is due.
-    pub fn plan(&self) -> Option<OptimizePlan> {
+    /// The part of the difference the engine's plan carries: the video settings, dropped, tagged,
+    /// retitled and default tracks, playable audio, OCR subtitles, container, `hvc1`, statistics
+    /// tags. `extra` holds the finished OCR of an image track; without it the track stays.
+    /// None when nothing of it is due.
+    pub fn plan(
+        &self,
+        profile: &Profile,
+        info: &MediaInfo,
+        audio_playable: &HashSet<String>,
+        extra: &[(u32, ExtraSubtitle)],
+    ) -> Option<OptimizePlan> {
+        let v = &profile.video;
         let mut plan = OptimizePlan {
             level: self.level.into(),
             codec: None,
@@ -203,31 +231,104 @@ impl Diff {
             streams: vec![],
             hvc1_tag: false,
             strip_statistics_tags: self.level > LevelOut::Metadata,
+            quality: None,
+            software: false,
+            max_software_hours: None,
+            too_slow: OptimizeTooSlow::Hardware,
+            min_savings_pct: None,
+            skip_hdr10plus_dv: None,
+            container: None,
+            clear_title: false,
+            extra_subtitles: vec![],
         };
         let mut any = false;
         for c in &self.changes {
             any |= match c {
-                Change::Reencode { codec, crop, .. } => {
+                Change::Reencode {
+                    codec,
+                    crop,
+                    crop_only,
+                    ..
+                } => {
                     plan.codec = Some(codec.as_str().to_owned());
                     plan.crop = crop.clone();
+                    plan.quality = Some(match v.quality {
+                        Quality::Small => OptimizeQuality::Small,
+                        Quality::Balanced => OptimizeQuality::Balanced,
+                        Quality::Faithful => OptimizeQuality::Faithful,
+                    });
+                    plan.software = v.prefer_software;
+                    plan.max_software_hours = Some(f64::from(v.software_max_hours));
+                    plan.too_slow = match v.too_slow {
+                        TooSlow::Hardware => OptimizeTooSlow::Hardware,
+                        TooSlow::Skip => OptimizeTooSlow::Skip,
+                    };
+                    plan.min_savings_pct =
+                        (!crop_only).then_some(f64::from(profile.guards.min_savings_pct));
+                    plan.skip_hdr10plus_dv = Some(v.when.skip_hdr10plus_dv);
                     true
                 }
-                Change::Drop { stream_index, .. } => {
-                    plan.streams.push(StreamPlan {
-                        stream_index: *stream_index,
-                        keep: false,
-                        language: None,
+                Change::Drop {
+                    stream_index,
+                    reason,
+                    ..
+                } => {
+                    // A replaced track is kept: its encode takes its place (`AddAudio`).
+                    if *reason != DropReason::Replaced {
+                        stream(&mut plan, *stream_index).keep = false;
+                    }
+                    *reason != DropReason::Replaced
+                }
+                Change::Ocr { stream_index } => match extra.iter().find(|(i, _)| i == stream_index)
+                {
+                    Some((_, e)) => {
+                        stream(&mut plan, *stream_index).keep = false;
+                        plan.extra_subtitles.push(e.clone());
+                        true
+                    }
+                    None => false,
+                },
+                Change::AddAudio { source_stream } => {
+                    let replaced = self.changes.iter().any(|c| {
+                        matches!(c, Change::Drop { stream_index, reason: DropReason::Replaced, .. }
+                            if stream_index == source_stream)
                     });
+                    let s = stream(&mut plan, *source_stream);
+                    s.encode = Some(if audio_playable.contains("eac3") {
+                        StreamEncode::Eac3
+                    } else {
+                        StreamEncode::Aac
+                    });
+                    s.keep_original = !replaced;
                     true
                 }
                 Change::Language {
                     stream_index, code, ..
                 } => {
                     let tag = fliks_domain::language::iso639_2(code).unwrap_or(code);
-                    plan.streams.push(StreamPlan {
-                        stream_index: *stream_index,
-                        keep: true,
-                        language: Some(tag.to_owned()),
+                    stream(&mut plan, *stream_index).language = Some(tag.to_owned());
+                    true
+                }
+                Change::Default { stream_index } => {
+                    for a in info
+                        .audio
+                        .iter()
+                        .filter(|a| a.is_default == Some(true) && a.stream_index != *stream_index)
+                    {
+                        stream(&mut plan, a.stream_index).default = Some(false);
+                    }
+                    stream(&mut plan, *stream_index).default = Some(true);
+                    true
+                }
+                Change::Title { stream_index, .. } => {
+                    stream(&mut plan, *stream_index).title = Some(String::new());
+                    true
+                }
+                Change::Container { to } => {
+                    plan.container = Some(if *to == "mp4" {
+                        OptimizeContainer::Mp4
+                    } else {
+                        OptimizeContainer::Mkv
                     });
                     true
                 }
@@ -236,7 +337,7 @@ impl Diff {
                     true
                 }
                 Change::StatisticsTags => true,
-                _ => false,
+                Change::Reorder { .. } | Change::Flags { .. } | Change::Rename => false,
             };
         }
         any.then_some(plan)
@@ -1035,13 +1136,15 @@ mod tests {
         let mut c = audio(2, "eng", "aac", 2);
         c.commentary = Some(true);
         let two = info("hevc", vec![audio(1, "eng", "eac3", 6), c]);
+        let profile = Preset::CleanupOnly.document();
+        let none = HashSet::new();
         let plan = diff(run(Preset::CleanupOnly, "a.mkv", &two, Some("en")))
-            .plan()
+            .plan(&profile, &two, &none, &[])
             .unwrap();
         assert!(plan.streams.iter().any(|s| s.stream_index == 2 && !s.keep));
         let lone = info("hevc", vec![audio(1, "und", "eac3", 6)]);
         let plan = diff(run(Preset::CleanupOnly, "a.mkv", &lone, Some("fr")))
-            .plan()
+            .plan(&profile, &lone, &none, &[])
             .unwrap();
         assert!(
             plan.streams
@@ -1055,6 +1158,44 @@ mod tests {
             }],
             warnings: vec![],
         };
-        assert!(reorder_only.plan().is_none());
+        assert!(reorder_only.plan(&profile, &lone, &none, &[]).is_none());
+    }
+
+    #[test]
+    fn the_plan_carries_the_profile_video_settings_container_and_defaults() {
+        let mut profile = Preset::Balanced.document();
+        profile.video.prefer_software = true;
+        profile.video.too_slow = TooSlow::Skip;
+        let mut a = audio(1, "eng", "aac", 2);
+        a.is_default = Some(true);
+        let b = audio(2, "fra", "aac", 2);
+        let i = info("h264", vec![a, b]);
+        let d = Diff {
+            level: LevelOut::Reencode,
+            changes: vec![
+                Change::Reencode {
+                    codec: Target::Hevc,
+                    bit_depth: 8,
+                    crop: None,
+                    max_height: None,
+                    crop_only: false,
+                },
+                Change::Default { stream_index: 2 },
+                Change::Container { to: "mkv" },
+            ],
+            warnings: vec![],
+        };
+        let p = d.plan(&profile, &i, &HashSet::new(), &[]).unwrap();
+        assert!(p.software && p.too_slow == OptimizeTooSlow::Skip);
+        assert_eq!(p.min_savings_pct, Some(20.0));
+        assert_eq!(p.container, Some(OptimizeContainer::Mkv));
+        let default = |n| {
+            p.streams
+                .iter()
+                .find(|s| s.stream_index == n)
+                .unwrap()
+                .default
+        };
+        assert_eq!((default(1), default(2)), (Some(false), Some(true)));
     }
 }
