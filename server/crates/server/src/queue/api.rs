@@ -17,7 +17,6 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
-use fliks_engine_core::api::OptimizePlan;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -60,8 +59,6 @@ pub struct EnqueueDto {
     force: bool,
     #[serde(default)]
     priority: i32,
-    /// The resolved plan, until the profile diff supplies it (`enqueue::resolve`).
-    plan: Option<OptimizePlan>,
 }
 
 /// Queue, "Optimize…" and "Force re-encode" (`force`).
@@ -75,7 +72,7 @@ pub async fn enqueue(
     if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
-    let out = enqueue::queue_files(&st, &dto.media_file_ids, dto.force, dto.priority, &dto.plan)
+    let out = enqueue::queue_files(&st, &dto.media_file_ids, dto.force, dto.priority)
         .await
         .map_err(db)?;
     Ok((StatusCode::CREATED, Json(out)))

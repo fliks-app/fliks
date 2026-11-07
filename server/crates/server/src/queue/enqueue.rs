@@ -1,5 +1,9 @@
 //! Queueing: "Queue", "Optimize…", "Force re-encode" and "Retry" write resolved jobs (plan and codec included).
-use crate::{ingest::fsx, state::AppState};
+use crate::{
+    ingest::fsx,
+    optimize::{diff, select},
+    state::AppState,
+};
 use fliks_engine_core::api::{MediaInfo, OptimizePayload, OptimizePlan};
 use serde::Serialize;
 use serde_json::json;
@@ -12,16 +16,35 @@ pub struct Resolved {
     pub profile_hash: String,
 }
 
-/// The one place the profile diff plugs in (S2): until then the caller supplies the resolved plan.
-// ponytail: replace the body with `optimize::diff(..)`; `force` is the "Force re-encode" action.
-pub async fn resolve(
-    _st: &AppState,
-    _file_id: i32,
-    _force: bool,
-    supplied: &Option<OptimizePlan>,
-) -> Option<Resolved> {
-    let plan = supplied.clone()?;
-    let json = serde_json::to_string(&plan).ok()?;
+/// The file's difference with its library's profile, as the plan the engine executes; none when
+/// the library has no profile or nothing is due. `force` is the "Force re-encode" action.
+pub async fn resolve(st: &AppState, file_id: i32, force: bool) -> Option<Resolved> {
+    let row = sqlx::query(
+        r#"SELECT m."libraryId" AS library, l."allowRename" AS allow_rename, p.document
+           FROM media_files f JOIN media m ON m.id = f."mediaId"
+           JOIN libraries l ON l.id = m."libraryId"
+           JOIN optimize_profiles p ON p.id = l."optimizeProfileId" WHERE f.id = $1"#,
+    )
+    .bind(file_id)
+    .fetch_optional(&st.db)
+    .await
+    .ok()??;
+    let profile = serde_json::from_value(row.get("document")).ok()?;
+    let mut ctx = select::Context::load(&st.db, profile, row.get("allow_rename"))
+        .await
+        .ok()?;
+    ctx.force = force;
+    let mut found = None;
+    select::analyze(&st.db, row.get("library"), Some(&[file_id]), &ctx, |c| {
+        found = Some(c.outcome)
+    })
+    .await
+    .ok()?;
+    let Some(diff::Outcome::Diff(d)) = found else {
+        return None;
+    };
+    let plan = d.plan()?;
+    let json = serde_json::to_string(&d.changes).ok()?;
     Some(Resolved {
         profile_hash: crate::device_tokens::hash(&json)[..16].to_owned(),
         plan,
@@ -101,23 +124,16 @@ pub async fn queue_files(
     ids: &[i32],
     force: bool,
     priority: i32,
-    supplied: &Option<OptimizePlan>,
 ) -> sqlx::Result<Vec<Queued>> {
     let mut out = Vec::with_capacity(ids.len());
     for &id in ids {
-        out.push(queue_one(st, id, force, priority, supplied).await?);
+        out.push(queue_one(st, id, force, priority).await?);
     }
     st.queue.wake.notify_waiters();
     Ok(out)
 }
 
-async fn queue_one(
-    st: &AppState,
-    id: i32,
-    force: bool,
-    priority: i32,
-    supplied: &Option<OptimizePlan>,
-) -> sqlx::Result<Queued> {
+async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::Result<Queued> {
     let row = sqlx::query(
         r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder
            FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" WHERE f.id = $1"#,
@@ -142,7 +158,7 @@ async fn queue_one(
     let Some(snap) = snap else {
         return Ok(done(id, Outcome::Missing));
     };
-    let Some(resolved) = resolve(st, id, force, supplied).await else {
+    let Some(resolved) = resolve(st, id, force).await else {
         return Ok(done(id, Outcome::NothingToDo));
     };
     let payload = json!(OptimizePayload {

@@ -6,7 +6,8 @@ use super::languages::{self, Kind, Languages};
 use super::profile::{Container, ImageSubs, Incompatible, Profile};
 use fliks_domain::{release::parsing::attributes::parse_release_attributes, subtitle_flags};
 use fliks_engine_core::api::{
-    AudioStreamInfo, CropInfo, MediaInfo, OptimizeLevel, SubtitleStreamInfo,
+    AudioStreamInfo, CropInfo, MediaInfo, OptimizeLevel, OptimizePlan, StreamPlan,
+    SubtitleStreamInfo,
 };
 use serde::Serialize;
 use std::collections::HashSet;
@@ -21,6 +22,8 @@ pub struct Env<'a> {
     /// `codec::resolve`, computed once per library.
     pub target: Option<Target>,
     pub audio_playable: &'a HashSet<String>,
+    /// "Force re-encode": the video is re-encoded to the target whatever the condition and its codec.
+    pub force: bool,
 }
 
 pub struct File<'a> {
@@ -169,6 +172,16 @@ pub enum LevelOut {
     Reencode,
 }
 
+impl From<LevelOut> for OptimizeLevel {
+    fn from(l: LevelOut) -> Self {
+        match l {
+            LevelOut::Metadata => Self::Metadata,
+            LevelOut::Remux => Self::Remux,
+            LevelOut::Reencode => Self::Reencode,
+        }
+    }
+}
+
 impl From<OptimizeLevel> for LevelOut {
     fn from(l: OptimizeLevel) -> Self {
         match l {
@@ -176,6 +189,57 @@ impl From<OptimizeLevel> for LevelOut {
             OptimizeLevel::Remux => Self::Remux,
             OptimizeLevel::Reencode => Self::Reencode,
         }
+    }
+}
+
+impl Diff {
+    /// The part of the difference the engine's plan can carry: video re-encode and crop, dropped
+    /// tracks, language tags, `hvc1`, statistics tags. None when nothing of it is due.
+    pub fn plan(&self) -> Option<OptimizePlan> {
+        let mut plan = OptimizePlan {
+            level: self.level.into(),
+            codec: None,
+            crop: None,
+            streams: vec![],
+            hvc1_tag: false,
+            strip_statistics_tags: self.level > LevelOut::Metadata,
+        };
+        let mut any = false;
+        for c in &self.changes {
+            any |= match c {
+                Change::Reencode { codec, crop, .. } => {
+                    plan.codec = Some(codec.as_str().to_owned());
+                    plan.crop = crop.clone();
+                    true
+                }
+                Change::Drop { stream_index, .. } => {
+                    plan.streams.push(StreamPlan {
+                        stream_index: *stream_index,
+                        keep: false,
+                        language: None,
+                    });
+                    true
+                }
+                Change::Language {
+                    stream_index, code, ..
+                } => {
+                    let tag = fliks_domain::language::iso639_2(code).unwrap_or(code);
+                    plan.streams.push(StreamPlan {
+                        stream_index: *stream_index,
+                        keep: true,
+                        language: Some(tag.to_owned()),
+                    });
+                    true
+                }
+                Change::Hvc1 => {
+                    plan.hvc1_tag = true;
+                    true
+                }
+                Change::StatisticsTags => true,
+                _ => false,
+            };
+        }
+        any.then_some(plan)
     }
 }
 
@@ -304,17 +368,21 @@ impl Builder<'_> {
         });
         let when = &v.when;
         let bitrate = src.bit_rate.or(self.f.info.format_bit_rate);
-        let matches_when = (when.codec.is_empty()
-            || src_codec.is_some_and(|c| when.codec.iter().any(|w| w == c)))
-            && when
-                .min_bitrate
-                .is_none_or(|m| bitrate.is_some_and(|b| b >= m))
-            && (!when.only_if_transcoding_here || self.f.transcoded_recently);
+        let matches_when = self.env.force
+            || (when.codec.is_empty()
+                || src_codec.is_some_and(|c| when.codec.iter().any(|w| w == c)))
+                && when
+                    .min_bitrate
+                    .is_none_or(|m| bitrate.is_some_and(|b| b >= m))
+                && (!when.only_if_transcoding_here || self.f.transcoded_recently);
         let max_h = v
             .max_resolution
             .height()
             .filter(|h| src.height.is_some_and(|sh| sh > *h));
-        let improving = self.env.target.filter(|t| codec::improves(*t, &src.codec));
+        let improving = self
+            .env
+            .target
+            .filter(|t| self.env.force || codec::improves(*t, &src.codec));
         // A reduction without an improving codec keeps a codec the encoders know.
         let same = match src_codec {
             Some("hevc") => Some(Target::Hevc),
@@ -778,6 +846,7 @@ mod tests {
             allow_rename: false,
             target: Some(Target::Hevc),
             audio_playable: &playable,
+            force: false,
         };
         let languages = Languages {
             original: original.map(Into::into),
@@ -827,6 +896,7 @@ mod tests {
             allow_rename: false,
             target: None,
             audio_playable: &playable,
+            force: false,
         };
         let l = Languages::default();
         let mut f = File {
@@ -935,6 +1005,7 @@ mod tests {
             allow_rename: false,
             target: Some(Target::Hevc),
             audio_playable: &playable,
+            force: false,
         };
         let l = Languages {
             original: Some("en".into()),
@@ -956,5 +1027,29 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn the_plan_carries_drops_and_language_tags_and_nothing_for_unsupported_changes() {
+        let mut c = audio(2, "eng", "aac", 2);
+        c.commentary = Some(true);
+        let i = info("hevc", vec![audio(1, "und", "eac3", 6), c]);
+        let plan = diff(run(Preset::CleanupOnly, "a.mkv", &i, Some("fr")))
+            .plan()
+            .unwrap();
+        assert!(plan.streams.iter().any(|s| s.stream_index == 2 && !s.keep));
+        assert!(
+            plan.streams
+                .iter()
+                .any(|s| s.stream_index == 1 && s.language.as_deref() == Some("fra"))
+        );
+        let reorder_only = Diff {
+            level: LevelOut::Remux,
+            changes: vec![Change::Reorder {
+                kind: TrackKind::Audio,
+            }],
+            warnings: vec![],
+        };
+        assert!(reorder_only.plan().is_none());
     }
 }

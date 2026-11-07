@@ -17,6 +17,7 @@ pub struct Context {
     pub allow_rename: bool,
     pub target: Option<Target>,
     pub audio_playable: HashSet<String>,
+    pub force: bool,
 }
 
 /// Every known device and codec: no worker registry exists yet to narrow it.
@@ -40,6 +41,7 @@ impl Context {
             audio_playable: codec::audio_playable(&devices),
             profile,
             allow_rename,
+            force: false,
         })
     }
 
@@ -49,6 +51,7 @@ impl Context {
             allow_rename: self.allow_rename,
             target: self.target,
             audio_playable: &self.audio_playable,
+            force: self.force,
         }
     }
 }
@@ -90,7 +93,7 @@ pub async fn analyze(
              AND mf."probeVersion" >= $3
              AND mf."streamInfo"->>'error' IS NULL
              AND jsonb_array_length(COALESCE(mf."streamInfo"->'video', '[]'::jsonb)) > 0
-             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state IN ('queued', 'leased', 'staged', 'committing'))
+             AND ($2::int[] IS NOT NULL OR NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state IN ('queued', 'leased', 'staged', 'committing')))
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state = 'failed'
                                AND j.error->>'class' IN ('corrupt', 'damaged')
                                AND j."inSize" = mf.size AND j."inMtimeMs" IS NOT DISTINCT FROM mf."mtimeMs")
