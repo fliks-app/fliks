@@ -89,6 +89,7 @@
                   {
                     "channelLayout": "mono",
                     "channels": 1,
+                    "hasStatisticsTags": false,
                     "codec": "aac",
                     "endSeconds": 2.023,
                     "isDefault": false,
@@ -110,6 +111,7 @@
                   {
                     "avgFrameRate": "24/1",
                     "bitDepth": 8,
+                    "hasStatisticsTags": false,
                     "codec": "h264",
                     "colorRange": "tv",
                     "cropStable": false,
