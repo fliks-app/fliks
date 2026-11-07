@@ -2193,7 +2193,7 @@
       "auto_generate_sprites_on_import": "Gerar as miniaturas de navegação na importação",
       "auto_generate_sprites_on_import_hint": "Uma passagem de descodificação por ficheiro. Desative num servidor pouco potente e execute a tarefa manualmente.",
       "section_kobo": "Kobo",
-      "kobo_store_proxy": "Kobo store proxy",
+      "kobo_store_proxy": "Proxy da loja Kobo",
       "kobo_store_proxy_hint": "Permite que a sincronização Kobo reencaminhe para a loja Kobo os pedidos que não trata. Desativado por defeito: nada sai então do servidor.",
       "saved": "Definições guardadas.",
       "save_error": "Não foi possível guardar.",
@@ -4132,7 +4132,8 @@
     "reschedule_title": "Reagendar a sessão",
     "reschedule_message": "Nova data para \"{{name}}\": {{when}}. Confirmar?",
     "regenerate_title": "Criar um novo link",
-    "regenerate_message": "O link de convite atual deixará de funcionar. Quem só tiver esse link perderá o acesso."
+    "regenerate_message": "O link de convite atual deixará de funcionar. Quem só tiver esse link perderá o acesso.",
+    "error_invalid_cover": "Esta capa não é válida para a programação atual."
   },
   "media_picker": {
     "title_add": "Adicionar um título",
@@ -4408,23 +4409,15 @@
     "authors_all": "Todos os autores"
   },
   "books_people": {
-    "series_title": "Série",
     "next_up": "A seguir",
     "continue": "Continuar",
     "missing_position": "Falta o volume {{position}}",
     "no_entries": "Sem entradas",
-    "authors": "Autores",
-    "narrators": "Narradores",
-    "works": "Obras",
-    "series": "Séries",
     "standalone": "Outras obras",
-    "in_library": "Na biblioteca",
     "bibliography": "Mais deste autor",
     "add": "Adicionar",
     "no_works": "Nenhuma obra na biblioteca",
-    "back": "Voltar",
-    "work_count": "{{count}} obras",
-    "empty": "Nenhuma pessoa"
+    "work_count": "{{count}} obras"
   },
   "books_search": {
     "filter_books": "Livros",
@@ -4437,7 +4430,6 @@
     "preview_error": "Não foi possível carregar este livro.",
     "unofficial": "Alguns dados vêm de fontes não oficiais.",
     "open_in_library": "Abrir na sua biblioteca",
-    "folder": "Pasta",
     "series": "Série",
     "publisher": "Editora",
     "published": "Publicação",
@@ -4477,15 +4469,12 @@
     "row_series": "Em {{series}}",
     "row_author": "Mais de {{author}}",
     "sources": "Fontes",
-    "source_edition": "Edição",
     "relink": "Religar",
     "unlink": "Desligar",
     "link": "Ligar",
     "provider": "Fornecedor",
     "value": "Identificador",
     "edition": "Edição",
-    "cancel": "Cancelar",
-    "save": "Guardar",
     "sources_hint": "Ligar um identificador atualiza os metadados a partir dessa fonte.",
     "send_to": "Enviar para…",
     "send_queued": "A enviar para {{name}}",

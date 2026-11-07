@@ -2,6 +2,7 @@ import { Component, ElementRef, OnDestroy, OnInit, computed, inject, input, sign
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { BooksApiService } from '../../../../core/services/api/books-api.service';
 import type { BookPreview } from '../../../../core/services/api/books.models';
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
@@ -30,7 +31,7 @@ import {
 /** The add preview of a book: the work, its editions, and Add, or Request for a user who cannot add. */
 @Component({
   selector: 'app-book-preview',
-  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, ModalHeaderComponent, ModalFooterComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent, LucidePlus],
+  imports: [FormsModule, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, ModalHeaderComponent, ModalFooterComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent, LucidePlus],
   templateUrl: './book-preview.component.html',
 })
 export class BookPreviewComponent implements OnInit, OnDestroy {
@@ -64,7 +65,7 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   protected readonly metaParts = computed(() => {
     const b = this.book();
     if (!b) return [];
-    const pages = b.pageCount ? this.translate.instant('books_search.pages_' + (b.pageCount === 1 ? 'one' : 'other'), { count: b.pageCount }) : '';
+    const pages = b.pageCount ? translatePlural(this.translate, 'books_search.pages', b.pageCount) : '';
     return [b.year ? String(b.year) : '', pages].filter(Boolean);
   });
   protected readonly chips = computed<HeroChip[]>(() => [{ label: 'kinds.book', cls: 'badge badge-outline badge-sm md:badge-md' }]);

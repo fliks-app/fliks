@@ -18,7 +18,7 @@
       </div>
       <span class="min-w-0 flex-1">
         <span class="block truncate text-sm font-semibold">{{ t.title }}</span>
-        <span class="block truncate text-xs text-base-content/60">{{ chapter()?.title ?? t.artist }}</span>
+        <span class="block truncate text-sm text-base-content/60">{{ chapter()?.title ?? t.artist }}</span>
         <progress class="progress progress-primary mt-1 h-1 w-full" [value]="percent()" max="100"></progress>
       </span>
     </button>
@@ -134,7 +134,7 @@
           (blur)="scrub.set(null)"
           [attr.aria-label]="'audio_player.seek' | translate"
         />
-        <div class="flex justify-between text-xs tabular-nums text-base-content/60">
+        <div class="flex justify-between text-sm tabular-nums text-base-content/60">
           <span>{{ clock(shown()) }}</span>
           <span>-{{ clock(audio.duration() - shown()) }}</span>
         </div>

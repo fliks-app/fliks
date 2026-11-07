@@ -258,7 +258,7 @@
           <!-- Section: book format, language, people -->
           @if (bookOnly()) {
             <div>
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+              <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">
                 {{ 'books_library.filter_format' | translate }}
               </h4>
               <div class="space-y-1">
@@ -277,7 +277,7 @@
             </div>
             <div class="space-y-3">
               <label class="flex flex-col gap-1">
-                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_language' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_language' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['language'] ?? ''" (ngModelChange)="setBookFilter('language', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (code of languageCodes; track code) {
@@ -286,7 +286,7 @@
                 </select>
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_author' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_author' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['authorId'] ?? ''" (ngModelChange)="setBookFilter('authorId', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (p of authorsList(); track p.id) {
@@ -295,7 +295,7 @@
                 </select>
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_narrator' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_narrator' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['narratorId'] ?? ''" (ngModelChange)="setBookFilter('narratorId', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (p of narratorsList(); track p.id) {
@@ -653,7 +653,7 @@
           <app-mosaic-card
             [posters]="c.posters"
             [label]="c.name"
-            [subtitle]="c.maxPosition && c.maxPosition > c.count ? ('books_library.series_progress' | translate: { count: c.count, max: c.maxPosition }) : ((c.count <= 1 ? 'books_library.books_count_one' : 'books_library.books_count_other') | translate: { count: c.count })"
+            [subtitle]="c.maxPosition && c.maxPosition > c.count ? ('books_library.series_progress' | translate: { count: c.count, max: c.maxPosition }) : ('books_library.books_count' | translatePlural: c.count)"
             (clicked)="openSeries(c.id)"
           />
         }
@@ -689,9 +689,9 @@
                 }
               </div>
             </div>
-            <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ p.name }}</span>
-            <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">
-              {{ (p.workCount <= 1 ? 'books_library.books_count_one' : 'books_library.books_count_other') | translate: { count: p.workCount } }}
+            <span class="text-sm text-center font-medium truncate w-full">{{ p.name }}</span>
+            <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">
+              {{ 'books_library.books_count' | translatePlural: p.workCount }}
             </span>
           </a>
         }

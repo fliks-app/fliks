@@ -1,7 +1,8 @@
-/* Two pages meet at the gutter: the left one hugs the right edge of its half, the right one the left edge. */
-.comic-stage { outline-offset: -2px; }
+/* Inset outline: the box-shadow ring would be clipped by the overflow-hidden root. */
+div.comic-stage:focus-visible { outline: 4px solid var(--color-primary); outline-offset: -4px; box-shadow: none; }
 .comic-spread { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: center; }
 .comic-spread img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+/* The gutter: the left page hugs the right edge of its half, the right page the left edge. */
 .comic-pair img { flex: 1 1 0; min-width: 0; max-width: 50%; }
 .comic-pair img:first-child { object-position: right center; }
 .comic-pair img:last-child { object-position: left center; }

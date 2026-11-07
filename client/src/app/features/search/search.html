@@ -100,7 +100,7 @@
                 <li>
                   <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/persons', a.id]">
                     <span class="min-w-0 truncate font-medium">{{ a.name }}</span>
-                    <span class="badge badge-sm badge-ghost">{{ ('books_search.work_count_' + (a.workCount === 1 ? 'one' : 'other')) | translate: { count: a.workCount } }}</span>
+                    <span class="badge badge-sm badge-ghost">{{ 'books_search.work_count' | translatePlural: a.workCount }}</span>
                   </a>
                 </li>
               }
@@ -115,7 +115,7 @@
                 <li>
                   <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/collections', s.id]">
                     <span class="min-w-0 truncate font-medium">{{ s.name }}</span>
-                    <span class="badge badge-sm badge-ghost">{{ ('books_search.work_count_' + (s.count === 1 ? 'one' : 'other')) | translate: { count: s.count } }}</span>
+                    <span class="badge badge-sm badge-ghost">{{ 'books_search.work_count' | translatePlural: s.count }}</span>
                   </a>
                 </li>
               }

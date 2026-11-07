@@ -63,9 +63,9 @@
             </div>
             <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ person.name }}</span>
             @if (bookRole) {
-              <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">{{ 'books_people.work_count' | translate: { count: workCounts.get(person.id) } }}</span>
+              <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">{{ 'books_people.work_count' | translate: { count: workCounts.get(person.id) } }}</span>
             } @else if (person.departments.length) {
-              <span class="text-[10px] text-base-content/50 -mt-1.5 truncate w-full text-center">{{ person.departments.join(', ') }}</span>
+              <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">{{ person.departments.join(', ') }}</span>
             }
           </a>
         }

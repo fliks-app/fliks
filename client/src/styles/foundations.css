@@ -239,6 +239,9 @@ body.native.hero-page {
 @supports not (aspect-ratio: 1 / 1) {
   app-media-card figure.aspect-2\/3::before,
   .animate-pulse .aspect-2\/3::before,
+  .animate-pulse.aspect-2\/3::before,
+  app-hero-poster div.aspect-2\/3::before,
+  app-wanted .aspect-2\/3::before,
   app-collection-detail .aspect-\[2\/3\]::before {
     content: '';
     display: block;
@@ -246,6 +249,7 @@ body.native.hero-page {
   }
   app-media-card figure.aspect-video::before,
   .animate-pulse .aspect-video::before,
+  app-hero-poster div.aspect-video::before,
   app-watch-history .aspect-video::before,
   app-received-recommendations-card .aspect-video::before,
   app-profile-recommendations .aspect-video::before,
@@ -266,6 +270,7 @@ body.native.hero-page {
      every layer that filled the box has to be positioned instead. */
   app-media-card figure.aspect-2\/3 > img,
   app-media-card figure.aspect-video > img,
+  app-wanted .aspect-2\/3 > img,
   app-received-recommendations-card .aspect-video > img,
   app-profile-recommendations .aspect-video > img,
   app-playlist-detail .aspect-video > img,

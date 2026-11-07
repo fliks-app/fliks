@@ -4132,7 +4132,8 @@
     "reschedule_title": "Reschedule the party",
     "reschedule_message": "New date for \"{{name}}\": {{when}}. Confirm?",
     "regenerate_title": "Create a new link",
-    "regenerate_message": "The current invite link will stop working. Anyone who only has it will lose access."
+    "regenerate_message": "The current invite link will stop working. Anyone who only has it will lose access.",
+    "error_invalid_cover": "This cover is not valid for the current programme."
   },
   "media_picker": {
     "title_add": "Add a title",
@@ -4408,23 +4409,15 @@
     "authors_all": "All authors"
   },
   "books_people": {
-    "series_title": "Series",
     "next_up": "Next up",
     "continue": "Continue",
     "missing_position": "Missing volume {{position}}",
     "no_entries": "No entries",
-    "authors": "Authors",
-    "narrators": "Narrators",
-    "works": "Works",
-    "series": "Series",
     "standalone": "Other works",
-    "in_library": "In the library",
     "bibliography": "More by this author",
     "add": "Add",
     "no_works": "No works in the library",
-    "back": "Back",
-    "work_count": "{{count}} works",
-    "empty": "No people"
+    "work_count": "{{count}} works"
   },
   "books_search": {
     "filter_books": "Books",
@@ -4437,7 +4430,6 @@
     "preview_error": "Unable to load this book.",
     "unofficial": "Some details come from unofficial sources.",
     "open_in_library": "Open in your library",
-    "folder": "Folder",
     "series": "Series",
     "publisher": "Publisher",
     "published": "Published",
@@ -4477,15 +4469,12 @@
     "row_series": "In {{series}}",
     "row_author": "More by {{author}}",
     "sources": "Sources",
-    "source_edition": "Edition",
     "relink": "Relink",
     "unlink": "Unlink",
     "link": "Link",
     "provider": "Provider",
     "value": "Identifier",
     "edition": "Edition",
-    "cancel": "Cancel",
-    "save": "Save",
     "sources_hint": "Linking an identifier refreshes the metadata from that source.",
     "send_to": "Send to…",
     "send_queued": "Sending to {{name}}",

@@ -62,6 +62,7 @@ import {
   CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -132,6 +133,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   selector: 'app-library',
   imports: [
     MediaLinkPipe,
+    TranslatePluralPipe,
     MediaCardComponent,
     DefaultFocusDirective,
     TvRowDirective,

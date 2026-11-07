@@ -2193,7 +2193,7 @@
       "auto_generate_sprites_on_import": "Vorschaubilder für die Zeitleiste beim Import erzeugen",
       "auto_generate_sprites_on_import_hint": "Ein Dekodierdurchlauf pro Datei. Auf einem schwachen Server deaktivieren und die Aufgabe manuell starten.",
       "section_kobo": "Kobo",
-      "kobo_store_proxy": "Kobo store proxy",
+      "kobo_store_proxy": "Kobo-Store-Proxy",
       "kobo_store_proxy_hint": "Die Kobo-Synchronisierung darf Anfragen, die sie nicht selbst bearbeitet, an den Kobo-Store weiterleiten. Standardmäßig aus: dann verlässt nichts den Server.",
       "saved": "Einstellungen gespeichert.",
       "save_error": "Speichern nicht möglich.",
@@ -4132,7 +4132,8 @@
     "reschedule_title": "Watch Party verschieben",
     "reschedule_message": "Neuer Termin für \"{{name}}\": {{when}}. Bestätigen?",
     "regenerate_title": "Neuen Link erstellen",
-    "regenerate_message": "Der aktuelle Einladungslink funktioniert nicht mehr. Wer nur diesen Link hat, verliert den Zugang."
+    "regenerate_message": "Der aktuelle Einladungslink funktioniert nicht mehr. Wer nur diesen Link hat, verliert den Zugang.",
+    "error_invalid_cover": "Dieses Cover ist für das aktuelle Programm nicht gültig."
   },
   "media_picker": {
     "title_add": "Titel hinzufügen",
@@ -4408,23 +4409,15 @@
     "authors_all": "Alle Autoren"
   },
   "books_people": {
-    "series_title": "Reihe",
     "next_up": "Als Nächstes",
     "continue": "Weiter",
     "missing_position": "Band {{position}} fehlt",
     "no_entries": "Keine Einträge",
-    "authors": "Autoren",
-    "narrators": "Sprecher",
-    "works": "Werke",
-    "series": "Reihen",
     "standalone": "Weitere Werke",
-    "in_library": "In der Bibliothek",
     "bibliography": "Weitere Werke dieses Autors",
     "add": "Hinzufügen",
     "no_works": "Keine Werke in der Bibliothek",
-    "back": "Zurück",
-    "work_count": "{{count}} Werke",
-    "empty": "Keine Personen"
+    "work_count": "{{count}} Werke"
   },
   "books_search": {
     "filter_books": "Bücher",
@@ -4437,7 +4430,6 @@
     "preview_error": "Dieses Buch konnte nicht geladen werden.",
     "unofficial": "Einige Angaben stammen aus inoffiziellen Quellen.",
     "open_in_library": "In deiner Bibliothek öffnen",
-    "folder": "Ordner",
     "series": "Reihe",
     "publisher": "Verlag",
     "published": "Erschienen",
@@ -4477,15 +4469,12 @@
     "row_series": "In {{series}}",
     "row_author": "Mehr von {{author}}",
     "sources": "Quellen",
-    "source_edition": "Ausgabe",
     "relink": "Neu verknüpfen",
     "unlink": "Trennen",
     "link": "Verknüpfen",
     "provider": "Anbieter",
     "value": "Kennung",
     "edition": "Ausgabe",
-    "cancel": "Abbrechen",
-    "save": "Speichern",
     "sources_hint": "Das Verknüpfen einer Kennung aktualisiert die Metadaten aus dieser Quelle.",
     "send_to": "Senden an…",
     "send_queued": "Wird an {{name}} gesendet",
