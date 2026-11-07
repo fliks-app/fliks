@@ -39,7 +39,13 @@ impl IssueRow {
         match &self.qp_items {
             Some(v) => serde_json::from_value::<Vec<QualityProfileItem>>(v.clone())
                 .map(|i| build_allowed_quality_ids(&i).into_iter().collect())
-                .unwrap_or_default(),
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        "issue {}: corrupt quality profile, read as empty: {e}",
+                        self.item_id
+                    );
+                    vec![]
+                }),
             None => default_allowed(Family::Image),
         }
     }

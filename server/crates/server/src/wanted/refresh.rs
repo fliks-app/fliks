@@ -231,8 +231,17 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         return Ok(false);
     }
     let target = resolve_target_in(st, &[library], MediaKind::Book, Some(library), None).await?;
-    let mut specs =
-        parse_wants(&specs.0, MediaKind::Book).unwrap_or_else(|_| default_wants(MediaKind::Book));
+    let mut specs = parse_wants(&specs.0, MediaKind::Book).unwrap_or_else(|e| {
+        let follow = match &job.source {
+            Source::Author { person, .. } => format!("author person {person}"),
+            Source::Series { collection, .. } => format!("series collection {collection}"),
+        };
+        tracing::warn!(
+            "follow of user {} ({follow}): corrupt wants, using the defaults: {e}",
+            job.user
+        );
+        default_wants(MediaKind::Book)
+    });
     wants::drop_unknown_profiles(&st.db, &mut specs).await?;
     create_book(
         st,
