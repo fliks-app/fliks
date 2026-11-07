@@ -2,7 +2,7 @@
 use super::settings;
 use crate::{ingest::fsx, libraries::path::disk};
 use sqlx::{PgPool, Row};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const GIB: i64 = 1 << 30;
 
@@ -66,11 +66,11 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
 }
 
 /// The trash file is `<root>/.fliks-trash/<job>.bak`; the root bounds the unlink.
-async fn remove(path: &PathBuf) -> bool {
+async fn remove(path: &Path) -> bool {
     let Some(root) = path.parent().and_then(|p| p.parent()).map(PathBuf::from) else {
         return false;
     };
-    let path = path.clone();
+    let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let Ok(root) = fsx::Root::open(&root.to_string_lossy()) else {
             return false;

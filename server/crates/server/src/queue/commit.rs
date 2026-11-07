@@ -530,7 +530,7 @@ pub async fn sync_rows(
         rescan::mtime_ms(&meta),
     )
     .await?;
-    subtitle_rows(st, file_id, &f, &root, ocr_job).await?;
+    subtitle_rows(st, file_id, (&f, &root), moved, ocr_job).await?;
     let episode: Option<i32> = sqlx::query_scalar(
         r#"SELECT "episodeId" FROM media_file_items WHERE "mediaFileId" = $1 LIMIT 1"#,
     )
@@ -562,8 +562,8 @@ pub async fn sync_rows(
 async fn subtitle_rows(
     st: &AppState,
     file_id: i32,
-    f: &FileRow,
-    root: &fsx::Root,
+    (f, root): (&FileRow, &fsx::Root),
+    moved: &[(PathBuf, PathBuf)],
     ocr_job: Option<i64>,
 ) -> Result<(), String> {
     let sql = |e: sqlx::Error| e.to_string();
@@ -592,7 +592,18 @@ async fn subtitle_rows(
     .await
     .map_err(sql)?;
     let Some(job) = ocr_job else { return Ok(()) };
-    let wanted = extra_paths(st, job).await;
+    // A renamed video carried its SRTs along: the plan's paths are the old names.
+    let wanted: Vec<PathBuf> = extra_paths(st, job)
+        .await
+        .into_iter()
+        .map(PathBuf::from)
+        .map(|w| {
+            moved
+                .iter()
+                .find(|(from, _)| *from == w)
+                .map_or(w, |(_, to)| to.clone())
+        })
+        .collect();
     let rows = sqlx::query(
         r#"SELECT id, "filePath" FROM subtitle_files
            WHERE "mediaFileId" = $1 AND "providerType" = 'ocr' AND "filePath" IS NOT NULL"#,
@@ -606,7 +617,7 @@ async fn subtitle_rows(
         let Some(abs) = fsx::locate(&f.folder, &path) else {
             continue;
         };
-        if !wanted.iter().any(|w| Path::new(w) == abs) {
+        if !wanted.contains(&abs) {
             continue;
         }
         sqlx::query("DELETE FROM subtitle_files WHERE id = $1")

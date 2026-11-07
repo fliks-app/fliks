@@ -100,10 +100,10 @@ pub fn spawn(st: &AppState) {
             commit::run(&st).await;
             cleanup::staged(&st.db).await;
             n = n.wrapping_add(1);
-            if n % 4 == 0 {
+            if n.is_multiple_of(4) {
                 recover::recover(&st, 120.0).await;
             }
-            if n % 240 == 0 {
+            if n.is_multiple_of(240) {
                 trash::purge(&st.db).await;
             }
         }
