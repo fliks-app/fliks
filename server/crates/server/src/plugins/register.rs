@@ -354,7 +354,7 @@ impl Plugins {
         ))
     }
 
-    pub(super) async fn warn_connection_budget(&self, _cap: usize) {
+    pub(super) async fn warn_connection_budget(&self, cap: usize) {
         let max: Option<String> = sqlx::query_scalar("SHOW max_connections")
             .fetch_one(&self.db)
             .await
@@ -365,8 +365,10 @@ impl Plugins {
         let live: usize = self
             .live()
             .iter()
+            .filter(|r| r.sh.db.is_some())
             .map(|r| 1 + 1 + r.sh.env.cfg.http_max + r.sh.env.cfg.task_max + r.jobs.len())
-            .sum();
+            .sum::<usize>()
+            + cap;
         if (live + crate::POOL_MAX as usize) * 5 > max * 4 {
             tracing::warn!(
                 "plugin database pools may use {live} connections, over 80 % of max_connections {max}"

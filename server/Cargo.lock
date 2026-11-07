@@ -1366,6 +1366,7 @@ dependencies = [
  "libarchive2",
  "libarchive2-sys",
  "libc",
+ "log",
  "md-5",
  "mimalloc",
  "miniz_oxide 0.9.1",
