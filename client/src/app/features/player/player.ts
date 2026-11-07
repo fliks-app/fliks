@@ -1700,6 +1700,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
       this.mediaFileId, this.audioStreamInfo(), this.mediaId, this.originalLanguage,
       this.launchPick()?.audioStreamIndex, this.deviceProfileService.playableAudioCodecs(),
+      this.deviceProfileService.maxAudioChannels(),
     );
   }
 

@@ -45,16 +45,16 @@ export class OptimizeSettingsComponent implements OnInit {
   readonly minFree = signal('20');
   readonly gpuReserve = signal('1');
   readonly cpuWeight = signal('2');
-  /** Per device id: the job cap and the weight, blank = the device's own value. */
+  readonly verifyDays = signal('30');
+  readonly verifyBatch = signal('50');
+  /** Per device id: the job cap, blank = the device's own value. */
   readonly caps = signal<Record<string, string>>({});
-  readonly weights = signal<Record<string, string>>({});
   readonly workers = signal<OptimizeWorker[]>([]);
 
   readonly deviceIds = computed(() => {
     const ids = new Set([
       ...this.workers().flatMap((w) => w.devices.map((d) => d.id)),
       ...Object.keys(this.caps()),
-      ...Object.keys(this.weights()),
     ]);
     return [...ids].sort();
   });
@@ -74,11 +74,10 @@ export class OptimizeSettingsComponent implements OnInit {
       this.minFree.set(String(s.trashMinFreeGb));
       this.gpuReserve.set(String(s.gpuPlaybackBeforePause));
       this.cpuWeight.set(String(s.cpuWeight));
+      this.verifyDays.set(String(s.verifyIntervalDays));
+      this.verifyBatch.set(String(s.verifyBatch));
       this.caps.set(
         Object.fromEntries(Object.entries(s.deviceMaxJobs).map(([k, v]) => [k, String(v)])),
-      );
-      this.weights.set(
-        Object.fromEntries(Object.entries(s.deviceWeights).map(([k, v]) => [k, String(v)])),
       );
     } catch {
       // The global interceptor toasts the reason; the form stays hidden.
@@ -87,9 +86,8 @@ export class OptimizeSettingsComponent implements OnInit {
     }
   }
 
-  setDevice(kind: 'caps' | 'weights', id: string, v: string) {
-    const sig = kind === 'caps' ? this.caps : this.weights;
-    sig.update((m) => ({ ...m, [id]: v }));
+  setCap(id: string, v: string) {
+    this.caps.update((m) => ({ ...m, [id]: v }));
   }
 
   /** Blank fields are left out: the device keeps its declared value. */
@@ -117,9 +115,11 @@ export class OptimizeSettingsComponent implements OnInit {
       trashMinFreeGb: Math.max(0, Math.round(Number(this.minFree()) || 0)),
       gpuPlaybackBeforePause: Math.max(0, Math.round(Number(this.gpuReserve()) || 0)),
       cpuWeight: Math.max(1, Math.round(Number(this.cpuWeight()) || 1)),
+      verifyIntervalDays: Math.max(0, Math.round(Number(this.verifyDays()) || 0)),
+      verifyBatch: Math.max(1, Math.round(Number(this.verifyBatch()) || 1)),
       deviceMaxJobs: this.numbers(this.caps()),
-      deviceWeights: this.numbers(this.weights()),
     };
+    delete body.paused;
     this.saving.set(true);
     try {
       this.current = await this.api.saveSettings(body);

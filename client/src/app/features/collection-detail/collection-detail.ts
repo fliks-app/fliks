@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
+import { AuthService } from '../../core/services/auth.service';
+import { OptimizeModalService } from '../../core/services/optimize-modal.service';
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import type { CollectionDetail } from '../../core/services/api/books.models';
-import { mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 
@@ -22,6 +24,8 @@ export type Tile =
 export class CollectionDetailComponent {
   private readonly api = inject(BooksApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
+  private readonly optimizeModal = inject(OptimizeModalService);
 
   readonly detail = signal<CollectionDetail | null>(null);
   readonly loading = signal(true);
@@ -39,6 +43,20 @@ export class CollectionDetailComponent {
 
   /** A series of books can be watched for new volumes. */
   readonly isBookSeries = computed(() => this.detail()?.entries.some((e) => e.media.type === 'book') ?? false);
+
+  private readonly videoIds = computed(
+    () =>
+      this.detail()?.entries
+        .filter((e) => KIND_REGISTRY[e.media.type].families.includes('video'))
+        .map((e) => e.media.id) ?? [],
+  );
+
+  readonly canOptimize = computed(() => this.auth.hasPermission('settings.access') && this.videoIds().length > 0);
+
+  optimize() {
+    const d = this.detail();
+    if (d) this.optimizeModal.open({ title: d.name, mediaIds: this.videoIds() });
+  }
 
   readonly nextUp = computed(() => {
     const d = this.detail();

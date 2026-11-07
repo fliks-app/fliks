@@ -1900,7 +1900,8 @@
     "secret_default": "Chiave predefinita di Fliks.",
     "secret_required": "Chiave richiesta.",
     "secret_will_clear": "Il valore salvato verrà rimosso al salvataggio.",
-    "label_colon": "{{label}}:"
+    "label_colon": "{{label}}:",
+    "back": "Indietro"
   },
   "connectivity": {
     "server_unreachable": "Server non raggiungibile"
@@ -3488,9 +3489,9 @@
         "rename_tokens": "Aggiorna il nome del file",
         "rename_tokens_hint": "Sostituisce le diciture tecniche diventate false, ad esempio «x264» con «AV1». Solo se la libreria consente la rinomina.",
         "container": "Formato del contenitore",
-        "move_up": "Sposta su",
-        "move_down": "Sposta giù",
-        "remove": "Rimuovi",
+        "move_up": "Sposta su {{label}}",
+        "move_down": "Sposta giù {{label}}",
+        "remove": "Rimuovi {{label}}",
         "add": "Aggiungi una lingua"
       },
       "opt": {
@@ -3651,8 +3652,12 @@
         "no_devices": "Nessun worker si è ancora annunciato.",
         "devices_hint": "Lascia un campo vuoto per mantenere il valore dichiarato dal dispositivo.",
         "max_jobs": "Lavori simultanei",
-        "weight": "Peso",
-        "saved": "Impostazioni salvate"
+        "saved": "Impostazioni salvate",
+        "verify": "Verifica",
+        "verify_days": "Verifica ogni (giorni)",
+        "verify_days_hint": "I file ottimizzati vengono ricontrollati a questo intervallo. 0 la disattiva.",
+        "verify_batch": "File per passaggio",
+        "verify_batch_hint": "Al massimo questo numero di file viene controllato per passaggio."
       }
     }
   },
@@ -4921,7 +4926,8 @@
         "free": "Libero",
         "busy": "Occupato",
         "paused": "In pausa per riproduzione",
-        "slots": "{{used}} di {{max}} lavoro/lavori"
+        "slots": "{{used}} di {{max}} lavoro/lavori",
+        "offline": "Offline"
       },
       "tab": {
         "active": "In corso e in attesa",
@@ -4937,7 +4943,7 @@
       "selected": "{{count}} selezionato/i",
       "to_front": "Porta in testa",
       "select_all": "Seleziona tutto",
-      "select": "Seleziona",
+      "select": "Seleziona {{title}}",
       "col": {
         "title": "Titolo",
         "level": "Livello",
@@ -4948,7 +4954,8 @@
         "state": "Stato",
         "error": "Errore",
         "codec": "Codec",
-        "saved": "Risparmiato"
+        "saved": "Risparmiato",
+        "actions": "Azioni"
       },
       "job": {
         "encoding": "Codifica",
@@ -4968,7 +4975,25 @@
       "confirm_cancel": "Annullare {{count}} lavoro/lavori?",
       "confirm_restore": "Rimettere l'originale di «{{title}}»? Il file ottimizzato prende il suo posto nel cestino.",
       "retried": "Lavoro rimesso in coda",
-      "restored": "Originale ripristinato"
+      "restored": "Originale ripristinato",
+      "cancel_title": "Annulla lavori",
+      "cancel_confirm": "Annulla i lavori",
+      "cancel_keep": "Mantienili",
+      "progress_of": "Avanzamento di {{title}}",
+      "error_class": {
+        "access": "Accesso negato",
+        "busy": "File in uso",
+        "cancelled": "Annullato",
+        "corrupt": "Sorgente corrotta",
+        "damaged": "Output danneggiato",
+        "engine": "Errore del motore",
+        "io": "Errore del disco",
+        "network": "Errore di rete",
+        "nospace": "Spazio esaurito",
+        "shared": "File condiviso",
+        "stale": "File modificato",
+        "verify": "Verifica non riuscita"
+      }
     },
     "action": {
       "menu": "Ottimizza…",
@@ -4986,7 +5011,18 @@
       "removed": "Verrebbero rimosse {{count}} traccia/tracce. Una rimozione è definitiva quando il cestino viene svuotato.",
       "too_many": "Troppi file per confrontarli uno a uno: tutti verranno messi in coda come decide il profilo.",
       "open_queue": "Apri la coda",
-      "queued": "{{count}} file su {{total}} messi in coda"
+      "queued": "{{count}} file su {{total}} messi in coda",
+      "confirm_title": "Ottimizza i file",
+      "outcome": {
+        "active": "{{count}} file già in coda.",
+        "missing": "{{count}} file mancanti.",
+        "unprobed": "{{count}} file non ancora analizzati.",
+        "nothing_to_do": "{{count}} file già aggiornati.",
+        "shared": "{{count}} file lasciati intatti perché condivisi con altri file.",
+        "stale": "{{count}} file modificati dopo l'anteprima.",
+        "ocr_pending": "{{count}} file in attesa di sottotitoli di testo."
+      },
+      "confirm_files": "{{count}} file verranno riscritti."
     }
   }
 }

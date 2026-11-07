@@ -185,7 +185,7 @@ async function createFixture(
         useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
       },
       { provide: MediaAdminService, useValue: {} },
-      { provide: BrowserDeviceProfileService, useValue: { playableAudioCodecs: () => [] } },
+      { provide: BrowserDeviceProfileService, useValue: { playableAudioCodecs: () => [], maxAudioChannels: () => 2 } },
       { provide: AddToPlaylistService, useValue: { open: vi.fn() } },
       { provide: RecommendService, useValue: { open: vi.fn() } },
       { provide: PartyApiService, useValue: { supported: () => true, canCreate: () => true } },

@@ -23,6 +23,8 @@ import {
   type OptimizeJob,
   type OptimizeWorker,
   type QueueStatus,
+  ERROR_CLASSES,
+  WORKER_OFFLINE_MS,
   savedBytes,
 } from '../../../core/models/optimize';
 import { formatBytes } from '../../../core/utils/format-bytes';
@@ -38,6 +40,8 @@ const TAB_STATES: Record<QueueTab, JobState[]> = {
 };
 const RUNNING: JobState[] = ['leased', 'staged', 'committing'];
 const RELOAD_DEBOUNCE_MS = 400;
+/** Worker liveness only changes by silence: nothing else tells the page. */
+const WORKERS_REFRESH_MS = 30_000;
 
 export interface DeviceRow {
   worker: string;
@@ -46,6 +50,7 @@ export interface DeviceRow {
   jobs: OptimizeJob[];
   /** Every job of the device is held back by playback. */
   paused: boolean;
+  offline: boolean;
 }
 
 @Component({
@@ -73,6 +78,9 @@ export class OptimizeQueueComponent implements OnInit {
   readonly libraryList = signal<Library[]>([]);
   readonly status = signal<QueueStatus | null>(null);
   readonly workers = signal<OptimizeWorker[]>([]);
+  /** The admin's per-device job caps, which override what a device declares. */
+  readonly deviceCaps = signal<Record<string, number>>({});
+  readonly now = signal(Date.now());
   readonly jobs = signal<OptimizeJob[]>([]);
   readonly loading = signal(true);
   readonly busy = signal(false);
@@ -88,20 +96,31 @@ export class OptimizeQueueComponent implements OnInit {
     return s?.paused ? 'paused' : s && !s.open ? 'closed' : 'running';
   });
 
+  /** Slots in use: staged and committing jobs have left their device. */
   readonly devices = computed<DeviceRow[]>(() =>
     this.workers().flatMap((w) =>
       w.devices.map((d) => {
-        const jobs = this.running().filter((j) => j.workerId === w.instance && j.deviceId === d.id);
+        const jobs = this.jobs().filter(
+          (j) => j.state === 'leased' && j.workerId === w.instance && j.deviceId === d.id,
+        );
         return {
           worker: w.instance,
           id: d.id,
-          maxJobs: d.maxJobs,
+          maxJobs: Math.min(d.maxJobs, this.deviceCaps()[d.id] ?? d.maxJobs),
           jobs,
           paused: jobs.length > 0 && jobs.every((j) => j.paused),
+          offline: this.isOffline(w),
         };
       }),
     ),
   );
+
+  readonly errorClass = (c: string) =>
+    (ERROR_CLASSES as readonly string[]).includes(c) ? `optimize.queue.error_class.${c}` : null;
+
+  isOffline(w: OptimizeWorker) {
+    return this.now() - new Date(w.lastSeenAt).getTime() > WORKER_OFFLINE_MS;
+  }
 
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bumped per fetch: a late answer of a previous tab or filter is dropped. */
@@ -113,6 +132,8 @@ export class OptimizeQueueComponent implements OnInit {
       this.libraryId();
       untracked(() => {
         this.selected.set([]);
+        this.jobs.set([]);
+        this.loading.set(true);
         void this.loadJobs();
       });
     });
@@ -130,7 +151,9 @@ export class OptimizeQueueComponent implements OnInit {
         this.scheduleReload();
       }
     });
+    const poll = setInterval(() => void this.loadStatus(), WORKERS_REFRESH_MS);
     this.destroyRef.onDestroy(() => {
+      clearInterval(poll);
       if (this.reloadTimer) clearTimeout(this.reloadTimer);
     });
   }
@@ -154,9 +177,15 @@ export class OptimizeQueueComponent implements OnInit {
 
   private async loadStatus() {
     try {
-      const [status, workers] = await Promise.all([this.api.queueStatus(), this.api.workers()]);
+      const [status, workers, settings] = await Promise.all([
+        this.api.queueStatus(),
+        this.api.workers(),
+        this.api.settings(),
+      ]);
       this.status.set(status);
       this.workers.set(workers);
+      this.deviceCaps.set(settings.deviceMaxJobs);
+      this.now.set(Date.now());
     } catch {
       // The global interceptor toasts the reason.
     }
@@ -245,8 +274,10 @@ export class OptimizeQueueComponent implements OnInit {
 
   private confirmCancel(count: number) {
     return this.confirmation.confirm({
-      title: this.translate.instant('common.confirm'),
+      title: this.translate.instant('optimize.queue.cancel_title'),
       message: this.translate.instant('optimize.queue.confirm_cancel', { count }),
+      confirmLabel: this.translate.instant('optimize.queue.cancel_confirm'),
+      cancelLabel: this.translate.instant('optimize.queue.cancel_keep'),
       variant: 'danger',
     });
   }
@@ -259,6 +290,8 @@ export class OptimizeQueueComponent implements OnInit {
     const ok = await this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
       message: this.translate.instant('optimize.queue.confirm_restore', { title: j.title ?? '' }),
+      confirmLabel: this.translate.instant('optimize.queue.restore'),
+      cancelLabel: this.translate.instant('common.cancel'),
       variant: 'danger',
     });
     if (ok) await this.act(() => this.api.restore(j.id), 'optimize.queue.restored');

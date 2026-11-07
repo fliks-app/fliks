@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../../core/services/toast.service';
 import { LibrariesApiService, UpdateLibraryBody } from '../../../../core/services/api/libraries-api.service';
+import { OptimizeConfirmService } from '../../../../core/services/optimize-confirm.service';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import type {
   OptimizeLevel,
@@ -24,6 +25,7 @@ const LEVELS: OptimizeLevel[] = ['reencode', 'remux', 'metadata'];
 export class LibraryOptimizeComponent implements OnInit {
   private readonly api = inject(LibrariesApiService);
   private readonly optimize = inject(OptimizeService);
+  private readonly confirm = inject(OptimizeConfirmService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   /** Bumped per request: a late response of an older library or profile is dropped. */
@@ -93,6 +95,9 @@ export class LibraryOptimizeComponent implements OnInit {
   async queueAll() {
     const lib = this.state.library();
     if (!lib) return;
+    const count = this.summary()?.filesWithDifference ?? 0;
+    const label = this.translate.instant('settings.optimize.library.queue');
+    if (!(await this.confirm.confirmRewrite(count, label))) return;
     this.queueBusy.set(true);
     try {
       const { files } = await this.optimize.queueLibrary(lib.id);

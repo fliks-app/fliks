@@ -9,6 +9,11 @@
       @if (nextUp(); as next) {
         <a class="btn btn-primary btn-sm" [routerLink]="next">{{ 'books_people.continue' | translate }}</a>
       }
+      @if (canOptimize()) {
+        <button type="button" class="btn btn-outline btn-sm" (click)="optimize()">
+          {{ 'optimize.action.menu' | translate }}
+        </button>
+      }
     </div>
 
     @if (isBookSeries()) {

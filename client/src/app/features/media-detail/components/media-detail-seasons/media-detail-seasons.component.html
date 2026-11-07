@@ -103,6 +103,16 @@
             <span class="flex-1">{{ 'downloads.download_season' | translate }}</span>
           </button>
         }
+        @if (isAdmin() && hasFiles(selSeason)) {
+          <button
+            type="button"
+            class="dropdown-item text-white"
+            (click)="optimizeSeason.emit(selSeason)"
+          >
+            <svg lucideZap class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'optimize.action.menu' | translate }}</span>
+          </button>
+        }
         <button
           type="button"
           class="dropdown-item text-white"

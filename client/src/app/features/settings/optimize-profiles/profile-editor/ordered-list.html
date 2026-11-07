@@ -7,7 +7,7 @@
         type="button"
         class="btn btn-ghost btn-xs btn-square"
         [disabled]="i === 0"
-        [attr.aria-label]="'settings.optimize.f.move_up' | translate"
+        [attr.aria-label]="'settings.optimize.f.move_up' | translate: { label: r.label }"
         (click)="move(i, -1)"
       >
         <svg lucideChevronUp class="h-4 w-4"></svg>
@@ -16,7 +16,7 @@
         type="button"
         class="btn btn-ghost btn-xs btn-square"
         [disabled]="i === rows().length - 1"
-        [attr.aria-label]="'settings.optimize.f.move_down' | translate"
+        [attr.aria-label]="'settings.optimize.f.move_down' | translate: { label: r.label }"
         (click)="move(i, 1)"
       >
         <svg lucideChevronDown class="h-4 w-4"></svg>
@@ -24,7 +24,7 @@
       <button
         type="button"
         class="btn btn-ghost btn-xs btn-square"
-        [attr.aria-label]="'settings.optimize.f.remove' | translate"
+        [attr.aria-label]="'settings.optimize.f.remove' | translate: { label: r.label }"
         (click)="remove(i)"
       >
         <svg lucideX class="h-4 w-4"></svg>

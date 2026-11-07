@@ -218,7 +218,7 @@ function createHarness(opts: {
         provide: BrowserDeviceProfileService,
         useValue: {
           getProfile: () => DEVICE_PROFILE,
-          playableAudioCodecs: () => [],
+          playableAudioCodecs: () => [], maxAudioChannels: () => 2,
           offersPassthrough: () => false,
           whenDesktopProbed: () => Promise.resolve(),
           engineTraits: () => ENGINE_TRAITS[EngineKind.WEB],

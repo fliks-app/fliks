@@ -265,13 +265,17 @@ export class BrowserDeviceProfileService {
     return Promise.race([this.desktopProbe, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
   }
 
-  /** Whether this device's profile offers bitstream passthrough (Android TV with a capable sink). */
   /** Audio codecs the device direct-plays, lowercased: what a track must be in to be chosen over one that is not. */
   playableAudioCodecs(): string[] {
     const all = this.getProfile().directPlayProfiles.flatMap((p) => p.audioCodecs.map((c) => c.toLowerCase()));
     return [...new Set(all)];
   }
 
+  maxAudioChannels(): number {
+    return this.getProfile().maxAudioChannels;
+  }
+
+  /** Whether this device's profile offers bitstream passthrough (Android TV with a capable sink). */
   offersPassthrough(): boolean {
     return this.device.tvPlatform() === 'androidtv' && !!this.nativeAudio?.passthrough?.codecs.length;
   }

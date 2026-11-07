@@ -85,6 +85,28 @@
 
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.global.verify' | translate }}</h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <app-input-field
+            type="number"
+            [label]="'settings.optimize.global.verify_days' | translate"
+            [hint]="'settings.optimize.global.verify_days_hint' | translate"
+            [value]="verifyDays()"
+            (valueChange)="verifyDays.set($event)"
+          />
+          <app-input-field
+            type="number"
+            [label]="'settings.optimize.global.verify_batch' | translate"
+            [hint]="'settings.optimize.global.verify_batch_hint' | translate"
+            [value]="verifyBatch()"
+            (valueChange)="verifyBatch.set($event)"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
         <h2 class="card-title text-lg">{{ 'settings.optimize.global.devices' | translate }}</h2>
         <div class="grid gap-4 sm:grid-cols-2">
           <app-input-field
@@ -111,19 +133,13 @@
             {{ 'settings.optimize.global.devices_hint' | translate }}
           </p>
           @for (id of deviceIds(); track id) {
-            <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] items-end gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] items-end gap-3">
               <span class="font-medium pb-3">{{ id }}</span>
               <app-input-field
                 type="number"
                 [label]="'settings.optimize.global.max_jobs' | translate"
                 [value]="caps()[id] ?? ''"
-                (valueChange)="setDevice('caps', id, $event)"
-              />
-              <app-input-field
-                type="number"
-                [label]="'settings.optimize.global.weight' | translate"
-                [value]="weights()[id] ?? ''"
-                (valueChange)="setDevice('weights', id, $event)"
+                (valueChange)="setCap(id, $event)"
               />
             </div>
           }
