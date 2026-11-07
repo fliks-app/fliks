@@ -50,12 +50,11 @@ JOIN media m ON m.id = i."mediaId" AND m.type = 'book'
 JOIN LATERAL (
   SELECT mf.id, mf.size, mf."updatedAt" FROM item_parts ip JOIN media_files mf ON mf.id = ip."mediaFileId"
   WHERE ip."itemId" = i.id
-    AND ip.version = (SELECT max(v.version) FROM item_parts v WHERE v."itemId" = i.id)
     AND lower(mf."relativePath") LIKE '%.epub'
     AND {readable}
-  ORDER BY ip.position, mf.id LIMIT 1) f ON true
+  ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1) f ON true
 WHERE i."groupId" IS NULL
-  AND i.id = (SELECT min(i2.id) FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)
   AND ($2::int[] IS NULL OR i.id = ANY($2))
 ORDER BY i.id"#
     )

@@ -11,6 +11,7 @@ use crate::{
     state::AppState,
     sync::MutexExt,
 };
+use fliks_domain::books::filename::parse_path;
 use fliks_engine_core::{
     api::{
         BgJobState, JobKind, JobPriority, JobRequest, JobResult, MediaFamily, MediaInfo, MediaRef,
@@ -18,8 +19,10 @@ use fliks_engine_core::{
     },
     jobs::merge::{MAX_PARTS, validate},
 };
+use regex::Regex;
 use std::{
     path::{Path, PathBuf},
+    sync::LazyLock,
     time::SystemTime,
 };
 
@@ -62,6 +65,20 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
         if parts.len() > MAX_PARTS {
             return None;
         }
+        // Two parts with one (disc, part) number, or one without, are two books interleaved.
+        let mut seen = std::collections::HashSet::new();
+        let rels: Vec<String> = parts
+            .iter()
+            .filter(|p| seen.insert(p.id))
+            .map(|p| p.rel.replace('\\', "/"))
+            .collect();
+        if !numbered_apart(&rels) {
+            tracing::warn!(
+                "m4b merge skipped: the part numbers of {} do not tell its parts apart",
+                parts[0].rel
+            );
+            return None;
+        }
         let dir = |p: &Part| work_dir(&p.rel.replace('\\', "/"));
         parts
             .iter()
@@ -78,6 +95,62 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
             .then_some(parts)
             .filter(|parts| !skip.contains(&fingerprint(parts)))
     })
+}
+
+static DISC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:cd|disc|disk|disque)\s*0*(\d+)\b").unwrap());
+static DISC_DIR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(?:cd|disc|disk|disque)\s*0*(\d+)$").unwrap());
+static NOISE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\s*[(\[][^)\]]*[)\]]|\b(?:cd|disc|disk|disque)\s*\d+\b|\bof\s+\d+\b").unwrap()
+});
+static EXTRA: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)(?:^|[\s\-_.:])(?:opening credits|end credits|credits|intro|introduction|prologue|epilogue|outro|afterword|foreword|preface)$",
+    )
+    .unwrap()
+});
+
+/// Whether the parts of a version are told apart by (disc, part) numbers, so no two books are
+/// interleaved in it. Credits, intros and the like carry no number and are ignored.
+fn numbered_apart(rels: &[String]) -> bool {
+    let mut parts: Vec<(Option<u32>, Option<u32>, Option<u32>)> = vec![];
+    for rel in rels {
+        let (dirs, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+        let (stem, ext) = name
+            .rfind('.')
+            .map_or((name, ""), |d| (&name[..d], &name[d..]));
+        let clean = NOISE.replace_all(stem, " ");
+        let clean = clean.trim_matches(|c: char| " -_.".contains(c));
+        if EXTRA.is_match(clean) {
+            continue;
+        }
+        let disc = dirs
+            .rsplit('/')
+            .map_while(|d| DISC_DIR.captures(d))
+            .find_map(|c| c[1].parse().ok())
+            .or_else(|| DISC.captures(stem)?[1].parse().ok());
+        let lead = parse_path(&format!("{clean}{ext}"))
+            .part
+            .and_then(|p| p.number);
+        let last = clean.rfind(|c: char| c.is_ascii_digit()).and_then(|e| {
+            let start = clean[..=e]
+                .trim_end_matches(|c: char| c.is_ascii_digit())
+                .len();
+            clean[start..=e].parse().ok()
+        });
+        parts.push((disc, lead, last));
+    }
+    let same_lead =
+        parts.len() > 1 && parts[0].1.is_some() && parts.iter().all(|p| p.1 == parts[0].1);
+    let mut nums: Vec<_> = parts
+        .iter()
+        .map(|p| (p.0, if same_lead { p.2 } else { p.1.or(p.2) }))
+        .collect();
+    let numbered = nums.iter().filter(|n| n.1.is_some()).count();
+    nums.sort();
+    (numbered == 0 || numbered == nums.len())
+        && !nums.windows(2).any(|w| w[0].1.is_some() && w[0] == w[1])
 }
 
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
@@ -123,15 +196,20 @@ fn file_stem(title: &str) -> Option<String> {
 }
 
 /// `<work folder>/<name>[ (<language>)].m4b` beside the parts, disc folders off; the name is the nearest folder
-/// that is not a format name, else the title.
-pub fn output_rel(first: &str, title: &str, language: Option<&str>) -> Option<String> {
+/// that is not a format name, else the title. A work not anchored to its folder shares it, so it takes the title.
+pub fn output_rel(
+    first: &str,
+    title: &str,
+    language: Option<&str>,
+    anchored: bool,
+) -> Option<String> {
     let dir = work_dir(&first.replace('\\', "/"));
     if dir.is_empty() {
         return None;
     }
     let name = dir
         .rsplit('/')
-        .find(|s| !GENERIC.contains(&s.to_lowercase().as_str()))
+        .find(|s| anchored && !GENERIC.contains(&s.to_lowercase().as_str()))
         .map(str::to_owned)
         .or_else(|| file_stem(title))?;
     let lang = language.map(|l| format!(" ({l})")).unwrap_or_default();
@@ -573,8 +651,11 @@ pub async fn run(st: &AppState, media: i32) -> Result<(), String> {
         .any(|r| r.edition != edition)
         .then(|| parts[0].language.as_deref())
         .flatten();
-    let mut out_rel =
-        output_rel(&parts[0].rel, &title, named).ok_or("no folder to write the m4b in")?;
+    let anchored = super::anchored(&st.db, media)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut out_rel = output_rel(&parts[0].rel, &title, named, anchored)
+        .ok_or("no folder to write the m4b in")?;
     if let Some((p, job)) = prior
         .as_ref()
         .and_then(|p| p.job_id.as_deref().map(|j| (p, j)))
@@ -1305,6 +1386,41 @@ mod tests {
     }
 
     #[test]
+    fn two_parts_with_one_number_are_never_merged() {
+        let rows = [
+            part(1, 0, "T/A - 01.mp3", "mp3"),
+            part(2, 0, "T/B - 01.mp3", "mp3"),
+        ];
+        assert!(pick(&rows, &[]).is_none());
+        let discs = [
+            part(1, 0, "T/CD1/01.mp3", "mp3"),
+            part(2, 0, "T/CD2/01.mp3", "mp3"),
+        ];
+        assert_eq!(pick(&discs, &[]).unwrap().len(), 2);
+        let ok = |names: &[&str]| {
+            let rows: Vec<Part> = names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| part(i as i32, 0, n, "mp3"))
+                .collect();
+            pick(&rows, &[]).is_some()
+        };
+        assert!(!ok(&["T/01 - Hobbit.mp3", "T/01 - LOTR.mp3"]));
+        assert!(!ok(&["T/Book A.mp3", "T/B - 01.mp3", "T/B - 02.mp3"]));
+        assert!(ok(&["T/Disc 1 - 01.mp3", "T/Disc 2 - 01.mp3"]));
+        assert!(ok(&["T/CD1/Title - 01.mp3", "T/CD2/Title - 01.mp3"]));
+        assert!(ok(&["T/Disque 1/01.mp3", "T/Disque 2/01.mp3"]));
+        assert!(ok(&["T/1984 - 01.mp3", "T/1984 - 02.mp3"]));
+        assert!(ok(&[
+            "T/Title - Opening Credits.mp3",
+            "T/Title - 01.mp3",
+            "T/Title - 02.mp3",
+            "T/Title - End Credits.mp3"
+        ]));
+        assert!(ok(&["T/Prologue.mp3", "T/01.mp3", "T/02.mp3"]));
+    }
+
+    #[test]
     fn a_merge_never_spans_two_editions() {
         let mut fr = [part(3, 0, "T/c.mp3", "mp3"), part(4, 0, "T/d.mp3", "mp3")];
         fr.iter_mut().for_each(|p| {
@@ -1370,14 +1486,18 @@ mod tests {
 
     #[test]
     fn the_output_sits_in_the_work_folder_named_after_it() {
-        let rel = |p: &str| output_rel(p, "A/Title", None);
+        let rel = |p: &str| output_rel(p, "A/Title", None, true);
         assert_eq!(rel("A/T/CD1/01.mp3").as_deref(), Some("A/T/T.m4b"));
         assert_eq!(rel("T/01.mp3").as_deref(), Some("T/T.m4b"));
         assert_eq!(rel("Book/MP3/01.mp3").as_deref(), Some("Book/MP3/Book.m4b"));
         assert_eq!(rel("MP3/01.mp3").as_deref(), Some("MP3/A_Title.m4b"));
         assert_eq!(rel("01.mp3"), None);
         assert_eq!(
-            output_rel("T/01.mp3", "A/Title", Some("fr")).as_deref(),
+            output_rel("Auteur/01.mp3", "A/Title", None, false).as_deref(),
+            Some("Auteur/A_Title.m4b")
+        );
+        assert_eq!(
+            output_rel("T/01.mp3", "A/Title", Some("fr"), true).as_deref(),
             Some("T/T (fr).m4b")
         );
     }

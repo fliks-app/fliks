@@ -29,10 +29,11 @@ pub async fn read(db: &PgPool, ids: &[i32], acl: &[i32]) -> Result<Vec<Entry>, s
       WHERE c."mediaId" = m.id AND c.role = 'author' AND c."editionId" IS NULL), '[]'::jsonb),
   'editions', COALESCE((SELECT jsonb_agg(jsonb_build_object('language', e.language, 'publisher', e.publisher,
       'files', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'path', f."relativePath", 'size', f.size)
-          ORDER BY ip.position, f.id)
+          ORDER BY (lower(f."relativePath") LIKE '%.epub') DESC, ip.version DESC, ip.position, f.id)
         FROM items i JOIN item_parts ip ON ip."itemId" = i.id JOIN media_files f ON f.id = ip."mediaFileId"
-        WHERE i.id = (SELECT min(i2.id) FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL)
-          AND ip.version = (SELECT max(ip2.version) FROM item_parts ip2 WHERE ip2."itemId" = i.id)
+        WHERE i."editionId" = e.id AND i."groupId" IS NULL
+          AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)
+          AND (e.family = 'text' OR ip.version = (SELECT max(ip2.version) FROM item_parts ip2 WHERE ip2."itemId" = i.id))
           AND {readable}), '[]'::jsonb))
       ORDER BY array_position($3::text[], e.family), e.id)
     FROM editions e WHERE e."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)), '[]'::jsonb))
@@ -81,13 +82,17 @@ fn entry(r: &Value) -> Option<Entry> {
     }
     for e in r["editions"].as_array()? {
         let files = e["files"].as_array()?;
-        for (n, f) in files.iter().enumerate() {
-            let ext = extname(f["path"].as_str().unwrap_or_default());
+        let ext_of = |f: &Value| extname(f["path"].as_str().unwrap_or_default());
+        for (i, f) in files.iter().enumerate() {
+            let ext = ext_of(f);
             let label = ext.trim_start_matches('.').to_uppercase();
+            let same = |g: &&Value| ext_of(g) == ext;
+            let total = files.iter().filter(same).count();
+            let n = files[..i].iter().filter(same).count() + 1;
             links.push(Link {
                 length: f["size"].as_i64(),
-                title: Some(if files.len() > 1 {
-                    format!("{label} {}/{}", n + 1, files.len())
+                title: Some(if total > 1 {
+                    format!("{label} {n}/{total}")
                 } else {
                     label
                 }),

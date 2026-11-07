@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id FROM persons p\n                   WHERE name_key(p.name) = name_key($1)\n                     AND (NOT EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c.\"mediaId\"\n                                       WHERE c.\"personId\" = p.id AND m.type IN ('movie', 'series'))\n                          OR EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c.\"mediaId\"\n                                      WHERE c.\"personId\" = p.id AND m.type IN ('book', 'comic')))\n                     AND NOT EXISTS (SELECT 1 FROM person_external_ids x\n                                      WHERE x.\"personId\" = p.id AND x.provider = $2 AND x.value <> $3)\n                   ORDER BY p.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "persons",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f5df2e18f90786f016e082447f62bbca8ef8288d0a39adf524e70d438c519790"
+}

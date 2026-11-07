@@ -308,6 +308,34 @@ async fn sync_round_trip_sends_changes_removals_and_survives_a_lost_answer(pool:
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_epub_with_a_text_sibling_in_a_later_version_stays_a_book(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let t1 = c.sync(None).await.sync_token.unwrap();
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (14, 'Eps', 'book', 1, 'e');
+        INSERT INTO editions (id, "mediaId", family, format) VALUES (5, 14, 'text', 'epub');
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (5, 14, 5);
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
+          (5, 14, 1, 'e.epub', 1, 'EPUB', '{}'), (6, 14, 1, 'e.pdf', 1, 'PDF', '{}'), (7, 10, 1, 'a.pdf', 1, 'PDF', '{}');
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
+          (5, 5, 14, 0, 0), (5, 6, 14, 1, 0), (1, 7, 10, 1, 0);
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let r = c.sync(Some(&t1)).await;
+    assert_eq!(ids(&r), ["NewEntitlement 5"]);
+    assert_eq!(
+        c.call("GET", &format!("/v1/library/{}/metadata", book(5)), None)
+            .await
+            .status,
+        200
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn sync_pages_by_100(pool: PgPool) {
     let (c, _) = ctx(pool).await;
     sqlx::raw_sql(

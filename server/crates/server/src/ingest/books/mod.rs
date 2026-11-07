@@ -218,7 +218,7 @@ fn tag_facts(t: Option<&MediaTags>) -> Facts {
     }
 }
 
-async fn anchored(db: &PgPool, media: i32) -> sqlx::Result<bool> {
+pub(crate) async fn anchored(db: &PgPool, media: i32) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
         r#"SELECT COALESCE("folderName", '') <> '' AS "a!" FROM media WHERE id = $1"#,
         media
