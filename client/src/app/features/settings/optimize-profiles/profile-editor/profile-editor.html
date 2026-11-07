@@ -1,0 +1,266 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (doc(); as d) {
+  <div class="flex flex-col gap-6">
+    <div class="flex items-center gap-4 min-w-0">
+      <a routerLink="/admin/settings/optimize-profiles" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.close' | translate">
+        <svg lucideChevronLeft class="h-5 w-5"></svg>
+      </a>
+      <h1 class="text-2xl font-bold truncate">{{ name() || ('settings.optimize.profiles.new' | translate) }}</h1>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
+      <div class="flex flex-col gap-4 min-w-0">
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <app-input-field [label]="'settings.optimize.editor.name' | translate" [value]="name()" (valueChange)="name.set($event)" />
+          </div>
+        </div>
+
+        <!-- Eligibility -->
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <div>
+              <h2 class="card-title text-lg">{{ 'settings.optimize.eligible.title' | translate }}</h2>
+              <p class="text-sm text-base-content/60">{{ 'settings.optimize.eligible.desc' | translate }}</p>
+            </div>
+            <app-input-field type="number" [label]="'settings.optimize.f.min_age_days' | translate" [hint]="'settings.optimize.f.min_age_days_hint' | translate"
+              [value]="'' + d.eligible.min_age_days" (valueChange)="edit(x => x.eligible.min_age_days = num($event, x.eligible.min_age_days))" />
+            <app-toggle-field [label]="'settings.optimize.f.skip_hardlinked' | translate" [hint]="'settings.optimize.f.skip_hardlinked_hint' | translate"
+              [value]="d.eligible.skip_hardlinked" (valueChange)="edit(x => x.eligible.skip_hardlinked = $event)" />
+          </div>
+        </div>
+
+        <!-- Video -->
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <app-toggle-field [label]="'settings.optimize.video.title' | translate" [hint]="'settings.optimize.video.desc' | translate"
+              [value]="d.video.enabled" (valueChange)="edit(x => x.video.enabled = $event)" />
+            @if (d.video.enabled) {
+              <div class="divider my-0"></div>
+              <h3 class="font-semibold">{{ 'settings.optimize.video.which' | translate }}</h3>
+              <div>
+                <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.when_codec' | translate }}</p>
+                <app-multi-select [options]="videoCodecs" [value]="d.video.when.codec"
+                  [placeholder]="'settings.optimize.f.any' | translate" (valueChange)="edit(x => x.video.when.codec = $event)" />
+                <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.when_codec_hint' | translate }}</p>
+              </div>
+              <app-input-field type="number" [label]="'settings.optimize.f.min_bitrate' | translate" [hint]="'settings.optimize.f.min_bitrate_hint' | translate"
+                [value]="minBitrateMbps()" (valueChange)="setMinBitrate($event)" />
+              <app-toggle-field [label]="'settings.optimize.f.only_if_transcoding_here' | translate" [hint]="'settings.optimize.f.only_if_transcoding_here_hint' | translate"
+                [value]="d.video.when.only_if_transcoding_here" (valueChange)="edit(x => x.video.when.only_if_transcoding_here = $event)" />
+              <app-toggle-field [label]="'settings.optimize.f.skip_hdr10plus_dv' | translate" [hint]="'settings.optimize.f.skip_hdr10plus_dv_hint' | translate"
+                [value]="d.video.when.skip_hdr10plus_dv" (valueChange)="edit(x => x.video.when.skip_hdr10plus_dv = $event)" />
+              <p class="text-sm text-base-content/60">{{ 'settings.optimize.video.others_copied' | translate }}</p>
+
+              <div class="divider my-0"></div>
+              <h3 class="font-semibold">{{ 'settings.optimize.video.into' | translate }}</h3>
+              <app-select-field [label]="'settings.optimize.f.format' | translate" [hint]="'settings.optimize.format.' + format() + '.desc' | translate"
+                [value]="format()" (valueChange)="setFormat($event)">
+                @for (f of formats; track f) {
+                  <option [value]="f">{{ 'settings.optimize.format.' + f + '.label' | translate }}</option>
+                }
+              </app-select-field>
+              <app-select-field [label]="'settings.optimize.f.quality' | translate" [value]="d.video.quality" (valueChange)="edit(x => x.video.quality = $event)">
+                @for (q of ['small', 'balanced', 'faithful']; track q) {
+                  <option [value]="q">{{ 'settings.optimize.opt.quality.' + q | translate }}</option>
+                }
+              </app-select-field>
+              <app-input-field type="number" [label]="'settings.optimize.f.min_savings_pct' | translate" [hint]="'settings.optimize.f.min_savings_pct_hint' | translate"
+                [value]="'' + d.guards.min_savings_pct" (valueChange)="edit(x => x.guards.min_savings_pct = num($event, x.guards.min_savings_pct))" />
+              <app-select-field [label]="'settings.optimize.f.max_resolution' | translate" [value]="d.video.max_resolution" (valueChange)="edit(x => x.video.max_resolution = $event)">
+                @for (r of ['source', '2160', '1080', '720']; track r) {
+                  <option [value]="r">{{ 'settings.optimize.opt.max_resolution.' + r | translate }}</option>
+                }
+              </app-select-field>
+              <app-toggle-field [label]="'settings.optimize.f.prefer_software' | translate" [hint]="'settings.optimize.f.prefer_software_hint' | translate"
+                [value]="d.video.prefer_software" (valueChange)="edit(x => x.video.prefer_software = $event)" />
+              @if (d.video.prefer_software) {
+                <app-input-field type="number" [label]="'settings.optimize.f.software_max_hours' | translate" [hint]="'settings.optimize.f.software_max_hours_hint' | translate"
+                  [value]="'' + d.video.software_max_hours" (valueChange)="edit(x => x.video.software_max_hours = num($event, x.video.software_max_hours))" />
+                <app-select-field [label]="'settings.optimize.f.too_slow' | translate" [value]="d.video.too_slow" (valueChange)="edit(x => x.video.too_slow = $event)">
+                  @for (t of ['hardware', 'skip']; track t) {
+                    <option [value]="t">{{ 'settings.optimize.opt.too_slow.' + t | translate }}</option>
+                  }
+                </app-select-field>
+              }
+              <app-toggle-field [label]="'settings.optimize.f.crop_in_file' | translate" [hint]="'settings.optimize.f.crop_in_file_hint' | translate"
+                [value]="d.video.crop_in_file" (valueChange)="edit(x => x.video.crop_in_file = $event)" />
+              <app-select-field [label]="'settings.optimize.f.vmaf_sample' | translate" [hint]="'settings.optimize.f.vmaf_sample_hint' | translate"
+                [value]="d.guards.vmaf_sample" (valueChange)="edit(x => x.guards.vmaf_sample = $event)">
+                @for (v of ['auto', 'on', 'off']; track v) {
+                  <option [value]="v">{{ 'settings.optimize.opt.vmaf_sample.' + v | translate }}</option>
+                }
+              </app-select-field>
+            }
+          </div>
+        </div>
+
+        <!-- Audio -->
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <h2 class="card-title text-lg">{{ 'settings.optimize.audio.title' | translate }}</h2>
+            <div>
+              <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_languages' | translate }}</p>
+              <app-multi-select [options]="languageOptions()" [value]="d.audio.languages" (valueChange)="edit(x => x.audio.languages = $event)" />
+              <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_languages_hint' | translate }}</p>
+            </div>
+            <app-toggle-field [label]="'settings.optimize.f.audio_drop_other' | translate" [hint]="'settings.optimize.f.audio_drop_other_hint' | translate"
+              [value]="d.audio.drop_other_languages" (valueChange)="edit(x => x.audio.drop_other_languages = $event)" />
+            <div>
+              <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_drop' | translate }}</p>
+              <app-multi-select [options]="dropKinds" [value]="d.audio.drop" (valueChange)="edit(x => x.audio.drop = $event)" />
+              <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_drop_hint' | translate }}</p>
+            </div>
+            <div>
+              <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_default' | translate }}</p>
+              <app-multi-select [options]="languageOptions()" [value]="d.audio.default" (valueChange)="edit(x => x.audio.default = $event)" />
+              <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_default_hint' | translate }}</p>
+            </div>
+            <app-toggle-field [label]="'settings.optimize.f.audio_reorder' | translate" [hint]="'settings.optimize.f.audio_reorder_hint' | translate"
+              [value]="d.audio.reorder" (valueChange)="edit(x => x.audio.reorder = $event)" />
+            <app-select-field [label]="'settings.optimize.f.incompatible' | translate" [hint]="'settings.optimize.incompatible.' + d.audio.incompatible + '.desc' | translate"
+              [value]="d.audio.incompatible" (valueChange)="edit(x => x.audio.incompatible = $event)">
+              @for (i of ['keep', 'add', 'replace']; track i) {
+                <option [value]="i">{{ 'settings.optimize.incompatible.' + i + '.label' | translate }}</option>
+              }
+            </app-select-field>
+            @if (d.audio.incompatible === 'replace') {
+              <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.warn.lossless' | translate }}</div>
+            }
+            @if (d.audio.drop_other_languages) {
+              <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.warn.irreversible' | translate }}</div>
+            }
+          </div>
+        </div>
+
+        <!-- Subtitles -->
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <h2 class="card-title text-lg">{{ 'settings.optimize.subtitles.title' | translate }}</h2>
+            <div>
+              <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.subtitle_languages' | translate }}</p>
+              <app-multi-select [options]="languageOptions()" [value]="d.subtitles.languages" (valueChange)="edit(x => x.subtitles.languages = $event)" />
+            </div>
+            <app-toggle-field [label]="'settings.optimize.f.subtitle_drop_other' | translate" [hint]="'settings.optimize.f.subtitle_drop_other_hint' | translate"
+              [value]="d.subtitles.drop_other_languages" (valueChange)="edit(x => x.subtitles.drop_other_languages = $event)" />
+            @if (d.subtitles.drop_other_languages) {
+              <div role="alert" class="alert alert-info text-sm">{{ 'settings.optimize.warn.profile_subtitles' | translate }}</div>
+              <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.warn.irreversible' | translate }}</div>
+            }
+            <app-select-field [label]="'settings.optimize.f.image_subtitles' | translate" [hint]="'settings.optimize.image.' + d.subtitles.image + '.desc' | translate"
+              [value]="d.subtitles.image" (valueChange)="edit(x => x.subtitles.image = $event)">
+              @for (i of ['keep', 'ocr_then_drop', 'drop']; track i) {
+                <option [value]="i">{{ 'settings.optimize.image.' + i + '.label' | translate }}</option>
+              }
+            </app-select-field>
+            <app-toggle-field [label]="'settings.optimize.f.subtitle_reorder' | translate" [hint]="'settings.optimize.f.subtitle_reorder_hint' | translate"
+              [value]="d.subtitles.reorder" (valueChange)="edit(x => x.subtitles.reorder = $event)" />
+          </div>
+        </div>
+
+        <!-- File -->
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-4">
+            <h2 class="card-title text-lg">{{ 'settings.optimize.file.title' | translate }}</h2>
+            <app-toggle-field [label]="'settings.optimize.f.clean' | translate" [hint]="'settings.optimize.f.clean_hint' | translate"
+              [value]="d.file.clean" (valueChange)="edit(x => x.file.clean = $event)" />
+            <app-toggle-field [label]="'settings.optimize.f.rename_tokens' | translate" [hint]="'settings.optimize.f.rename_tokens_hint' | translate"
+              [value]="d.file.rename_tokens" (valueChange)="edit(x => x.file.rename_tokens = $event)" />
+            <app-select-field [label]="'settings.optimize.f.container' | translate" [value]="d.file.container" (valueChange)="edit(x => x.file.container = $event)">
+              @for (c of ['keep', 'mkv', 'mp4']; track c) {
+                <option [value]="c">{{ 'settings.optimize.opt.container.' + c | translate }}</option>
+              }
+            </app-select-field>
+            @if (d.file.container !== 'keep') {
+              <div role="alert" class="alert alert-info text-sm">{{ 'settings.optimize.warn.container_rename' | translate }}</div>
+            }
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <a routerLink="/admin/settings/optimize-profiles" class="btn btn-ghost">{{ 'common.cancel' | translate }}</a>
+          <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+            @if (saving()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Effect on a sample file -->
+      <aside class="card bg-base-100 border border-base-200 lg:sticky lg:top-4">
+        <div class="card-body gap-3">
+          <h2 class="card-title text-lg">{{ 'settings.optimize.effect.title' | translate }}</h2>
+          <p class="text-sm text-base-content/60">{{ 'settings.optimize.effect.desc' | translate }}</p>
+          @if (sampleLibraries().length === 0) {
+            <p class="text-sm text-base-content/60">{{ 'settings.optimize.effect.no_library' | translate }}</p>
+          } @else {
+            <app-select-field size="sm" [label]="'settings.optimize.effect.library' | translate"
+              [value]="'' + sampleLibraryId()" (valueChange)="pickLibrary(+$event)">
+              @for (l of sampleLibraries(); track l.id) {
+                <option [value]="l.id">{{ l.name }}</option>
+              }
+            </app-select-field>
+            @if (sampleFiles().length === 0) {
+              <p class="text-sm text-base-content/60">{{ 'settings.optimize.effect.no_file' | translate }}</p>
+            } @else {
+              <app-select-field size="sm" [label]="'settings.optimize.effect.file' | translate"
+                [value]="'' + sampleFileId()" (valueChange)="sampleFileId.set(+$event)">
+                @for (f of sampleFiles(); track f.fileId) {
+                  <option [value]="f.fileId">{{ f.title }}</option>
+                }
+              </app-select-field>
+            }
+          }
+
+          @if (outcomeError()) {
+            <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.effect.error' | translate }}</div>
+          } @else if (outcome(); as o) {
+            <div [class.opacity-60]="outcomeBusy()" class="flex flex-col gap-3">
+              @switch (o.status) {
+                @case ('diff') {
+                  <div class="flex items-center gap-2">
+                    <span class="badge badge-primary">{{ 'settings.optimize.level.' + o.level | translate }}</span>
+                    <span class="text-sm text-base-content/60">{{ 'settings.optimize.effect.one_job' | translate }}</span>
+                  </div>
+                  @for (g of lines(); track g.group) {
+                    <div>
+                      <p class="font-semibold text-sm">{{ 'settings.optimize.group.' + g.group | translate }}</p>
+                      <ul class="text-sm flex flex-col gap-1 mt-1">
+                        @for (l of g.items; track $index) {
+                          <li>{{ l.key | translate: l.params }}</li>
+                        }
+                      </ul>
+                    </div>
+                  }
+                }
+                @case ('conform') {
+                  <p class="text-sm">{{ 'settings.optimize.effect.conform' | translate }}</p>
+                }
+                @case ('skipped') {
+                  <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.effect.skipped_container' | translate }}</div>
+                }
+                @case ('excluded') {
+                  <p class="text-sm">{{ 'settings.optimize.excluded.' + o.why | translate }}</p>
+                }
+              }
+              @for (w of warnings(); track $index) {
+                <div role="alert" class="alert alert-warning text-sm">
+                  @switch (w.type) {
+                    @case ('noAudioWouldRemain') { {{ 'settings.optimize.warning.no_audio' | translate }} }
+                    @case ('profileSubtitleKept') { {{ 'settings.optimize.warning.profile_subtitle' | translate: { language: w.language } }} }
+                    @case ('losslessReplaced') { {{ 'settings.optimize.warning.lossless' | translate: { n: w.streamIndex + 1 } }} }
+                    @case ('videoCopied') { {{ 'settings.optimize.warning.video_copied.' + w.reason | translate }} }
+                  }
+                </div>
+              }
+              @if (removesTracks()) {
+                <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.warn.irreversible' | translate }}</div>
+              }
+            </div>
+          }
+        </div>
+      </aside>
+    </div>
+  </div>
+}

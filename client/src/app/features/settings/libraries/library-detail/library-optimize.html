@@ -1,0 +1,83 @@
+@if (state.library(); as lib) {
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-5">
+      <h2 class="card-title text-lg">{{ 'settings.optimize.library.title' | translate }}</h2>
+      <p class="text-sm text-base-content/60 max-w-2xl">{{ 'settings.optimize.library.desc' | translate }}</p>
+
+      <div class="max-w-md">
+        <app-select-field [label]="'settings.optimize.library.profile' | translate" [disabled]="busy()"
+          [value]="lib.optimizeProfileId == null ? '' : '' + lib.optimizeProfileId" (valueChange)="setProfile($event)">
+          <option value="">{{ 'settings.optimize.library.none' | translate }}</option>
+          @for (p of profiles(); track p.id) {
+            <option [value]="'' + p.id">{{ p.name }}</option>
+          }
+        </app-select-field>
+        <a routerLink="/admin/settings/optimize-profiles" class="link link-hover text-sm mt-1 inline-block">
+          {{ 'settings.optimize.library.manage' | translate }}
+        </a>
+      </div>
+
+      @if (lib.optimizeProfileId != null) {
+        @if (summary(); as s) {
+          <div class="rounded-lg border border-base-200 p-4 flex flex-col gap-1">
+            <p class="font-semibold">
+              {{ 'settings.optimize.library.difference' | translate: { count: s.filesWithDifference } }}
+            </p>
+            <p class="text-sm text-base-content/60">{{ 'settings.optimize.library.difference_hint' | translate }}</p>
+          </div>
+        }
+
+        <div class="flex flex-col gap-1">
+          <div>
+            <button type="button" class="btn btn-outline btn-sm" (click)="loadPreview()" [disabled]="previewBusy()">
+              @if (previewBusy()) { <span class="loading loading-spinner loading-sm"></span> }
+              {{ 'settings.optimize.library.preview' | translate }}
+            </button>
+          </div>
+        </div>
+
+        @if (preview(); as pv) {
+          <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap gap-2">
+              @for (l of levels; track l) {
+                <span class="badge badge-lg badge-ghost">
+                  {{ 'settings.optimize.library.per_level.' + l | translate: { count: pv.perLevel[l] } }}
+                </span>
+              }
+            </div>
+            <ul class="text-sm flex flex-col gap-1">
+              <li>{{ 'settings.optimize.library.conform' | translate: { count: pv.conform } }}</li>
+              @if (pv.skippedContainer > 0) {
+                <li>{{ 'settings.optimize.library.skipped_container' | translate: { count: pv.skippedContainer } }}</li>
+              }
+              @if (pv.ocr > 0) {
+                <li>{{ 'settings.optimize.library.ocr' | translate: { count: pv.ocr } }}</li>
+              }
+            </ul>
+            @if (pv.removed.length > 0) {
+              <div role="alert" class="alert alert-warning text-sm">
+                <div>
+                  <p>{{ 'settings.optimize.warn.irreversible' | translate }}</p>
+                  <ul class="mt-1">
+                    @for (r of pv.removed; track $index) {
+                      <li>
+                        {{ 'settings.optimize.library.removed.' + r.kind | translate: { count: r.count, language: r.language ?? '?' } }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="divider my-0"></div>
+        <app-toggle-field [label]="'settings.optimize.library.new_files' | translate" [hint]="'settings.optimize.library.new_files_hint' | translate"
+          [disabled]="busy()" [value]="lib.optimizeNewFiles" (valueChange)="setNewFiles($event)" />
+      }
+
+      <app-toggle-field [label]="'settings.optimize.library.allow_rename' | translate" [hint]="'settings.optimize.library.allow_rename_hint' | translate"
+        [disabled]="busy()" [value]="lib.allowRename" (valueChange)="setAllowRename($event)" />
+    </div>
+  </div>
+}
