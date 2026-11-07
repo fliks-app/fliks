@@ -36,7 +36,7 @@ pub async fn recover(st: &AppState, min_age_s: f64) {
     .unwrap_or_default();
     for r in restores {
         let job = Job::from_row(&r);
-        if let Err(e) = finish_restore(st, &job).await {
+        if let Err(e) = finish_restore_locked(st, &job).await {
             tracing::warn!(job = job.id, "restore not finished, tried again later: {e}");
         }
     }
@@ -181,6 +181,18 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     let mut job = job;
     job.result["restore"] = json!(r);
     finish_restore(st, &job).await
+}
+
+/// `finish_restore` under the media and folder-move locks, as a restore itself holds them.
+async fn finish_restore_locked(st: &AppState, job: &Job) -> Result<(), String> {
+    let file = job.file_id.ok_or("the file is gone")?;
+    let f = commit::file_row(st, file)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the file is gone")?;
+    let _media = st.ingest.media.lock(f.media_id).await;
+    let _moves = st.folder_moves.read().await;
+    finish_restore(st, job).await
 }
 
 /// The disk and database halves of a journaled restore, safe to run again.
