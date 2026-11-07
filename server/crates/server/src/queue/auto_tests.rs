@@ -125,11 +125,29 @@ async fn a_library_that_does_not_optimize_new_files_queues_nothing(pool: PgPool)
     assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
 }
 
+#[sqlx::test(migrations = false)]
+async fn a_file_older_than_the_flag_is_never_queued_automatically(pool: PgPool) {
+    let w = world(pool, 0, true).await;
+    sqlx::query(r#"UPDATE libraries SET "optimizeNewFilesSince" = now() + interval '1 minute'"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    assert_ne!(
+        enqueue::queue_new(&w.st, w.file).await.unwrap().outcome,
+        Outcome::Queued
+    );
+    assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
+}
+
 #[cfg(unix)]
 #[sqlx::test(migrations = false)]
 async fn a_hard_linked_file_is_reviewed_until_it_is_free(pool: PgPool) {
     let w = world(pool, 0, true).await;
     sqlx::query(r#"UPDATE media_files SET "createdAt" = now() - interval '90 days'"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE libraries SET "optimizeNewFilesSince" = now() - interval '100 days'"#)
         .execute(&w.st.db)
         .await
         .unwrap();

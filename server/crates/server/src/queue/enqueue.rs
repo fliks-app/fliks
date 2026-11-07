@@ -245,7 +245,8 @@ async fn queue_one(
     let library: Option<i32> = sqlx::query_scalar(
         r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
-           WHERE f.id = $1 AND (NOT $2 OR l."optimizeNewFiles")"#,
+           WHERE f.id = $1
+             AND (NOT $2 OR (l."optimizeNewFiles" AND f."createdAt" >= l."optimizeNewFilesSince"))"#,
     )
     .bind(id)
     .bind(new_file)

@@ -374,6 +374,9 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
     set!("mergeM4bReplace", dto.merge_m4b_replace);
     set!("optimizeProfileId", dto.optimize_profile_id.map(profile));
     set!("optimizeNewFiles", dto.optimize_new_files);
+    if dto.optimize_new_files == Some(true) {
+        sets.push(r#""optimizeNewFilesSince" = CASE WHEN "optimizeNewFiles" THEN "optimizeNewFilesSince" ELSE now() END"#);
+    }
     set!("allowRename", dto.allow_rename);
     let given = dto.name.is_some()
         || dto.icon.is_some()

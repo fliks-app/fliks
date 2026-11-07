@@ -72,7 +72,7 @@ pub async fn review_new(st: &AppState) -> sqlx::Result<usize> {
     let ids: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f JOIN media m ON m.id = f."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
-           WHERE l."optimizeNewFiles" AND (
+           WHERE l."optimizeNewFiles" AND f."createdAt" >= l."optimizeNewFilesSince" AND (
              (f."createdAt" > now() - make_interval(days => $1)
               AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.kind = 'optimize'))
              OR (EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.state = 'skipped'
