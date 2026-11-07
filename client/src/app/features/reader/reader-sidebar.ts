@@ -181,7 +181,10 @@ export class ReaderSidebarComponent implements OnDestroy {
     const a = this.annotations().find((x) => x.id === this.editing());
     const field = this.host.nativeElement.querySelector('textarea');
     const note = field?.value.trim();
-    if (a && note != null && note !== a.note) void this.session?.engine()?.notes?.save({ annotation: a, note });
+    if (a && note != null && note !== a.note) {
+      this.editing.set(null);
+      void this.session?.engine()?.notes?.save({ annotation: a, note });
+    }
   }
 
   protected text(e: Event): string {

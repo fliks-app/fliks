@@ -140,6 +140,8 @@ export class AudioPlayerService {
       const local = await this.localParts(req.itemId);
       let opened: PlaybackInfoResponse | null = null;
       if (!local || this.network.isOnline()) {
+        // Replayed first: the server's playedAt guard orders it against progress from another device.
+        if (this.network.isOnline()) await this.sync.flush();
         opened = await this.streaming
           .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile())
           .catch((e) => {
@@ -148,13 +150,11 @@ export class AudioPlayerService {
           });
       }
       if (generation !== this.generation) return;
-      // A downloaded item plays from the device, with the server's session and resume point when it answers; a position queued here is newer than the server's.
-      const queued = this.sync.queuedPositionFor(req.mediaId, undefined, req.itemId);
+      // A downloaded item plays from the device, with the server's session and resume point when it answers.
       const info = local
         ? ({
             startAtSeconds: this.sync.resumePositionFor(req.mediaId, undefined, req.itemId)?.positionSeconds ?? 0,
             ...opened,
-            ...(queued && { startAtSeconds: queued.positionSeconds }),
             mediaFileId: opened?.mediaFileId ?? local.mediaFileId,
             playMethod: 'DirectPlay',
             durationSeconds: local.book.durationSeconds,

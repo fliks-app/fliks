@@ -31,6 +31,12 @@ function entryKey(mediaId: number, episodeId?: number, itemId?: number): string 
   return `${mediaId}:${episodeId ?? ''}${itemId != null ? `:${itemId}` : ''}`;
 }
 
+/** A 4xx other than auth, timeout and rate limit: retrying cannot succeed. */
+function refused(e: unknown): boolean {
+  const status = (e as { status?: number } | null)?.status ?? 0;
+  return status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
+}
+
 /** Playback positions recorded on this device plus the queue the backend hasn't accepted, doubling as the local read model:
  *  callers overlay {@link queuedPositionFor}/{@link overlayProgress} on API progress, which the SWR cache returns stale after offline use. */
 @Injectable({ providedIn: 'root' })
@@ -114,8 +120,6 @@ export class OfflinePlaybackSyncService {
     T extends {
       mediaId: number;
       episodeId: number | null;
-      /** Set on a book edition item: its queued position is keyed by it. */
-      itemId?: number | null;
       positionSeconds: number;
       durationSeconds: number;
       progressPercent: number;
@@ -124,7 +128,7 @@ export class OfflinePlaybackSyncService {
     const queued = this.byKey();
     if (!queued.size) return items;
     return items.map((item) => {
-      const q = queued.get(entryKey(item.mediaId, item.episodeId ?? undefined, item.itemId ?? undefined));
+      const q = queued.get(entryKey(item.mediaId, item.episodeId ?? undefined));
       if (!q) return item;
       const durationSeconds = q.durationSeconds || item.durationSeconds;
       return {
@@ -183,9 +187,14 @@ export class OfflinePlaybackSyncService {
           playedAt: update.updatedAt || undefined,
         });
         sent.push(update);
-      } catch {
-        // Still unreachable — keep the rest for the next pass instead of
-        // walking the whole queue into the same failure.
+      } catch (e) {
+        // An entry the server always refuses would block the queue for good: drop it and go on.
+        if (refused(e)) {
+          console.warn('Dropping a playback position the server refuses', update.mediaId, e);
+          sent.push(update);
+          continue;
+        }
+        // Still unreachable: keep the rest for the next pass.
         break;
       }
     }

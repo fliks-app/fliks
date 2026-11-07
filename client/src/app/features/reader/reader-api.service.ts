@@ -71,10 +71,9 @@ export class ReaderApiService {
   /** Null when the user has not started the item. Without the server, the last position this device saved. */
   async loadProgress(t: ReaderTarget): Promise<Partial<ReaderProgress> | null> {
     const local = () => (this.sync.resumePositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined) ?? null;
-    // A position queued on this device is newer than the server's.
-    const queued = this.sync.queuedPositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined;
-    if (queued) return queued;
     if (!this.network.isOnline()) return local();
+    // Replayed first: the server's playedAt guard orders it against progress from another device.
+    await this.sync.flush();
     return firstValueFrom(
       this.http.get<Partial<ReaderProgress> | null>(`/api/playback/media/${t.mediaId}/state`, {
         params: { itemId: t.itemId },
@@ -89,7 +88,7 @@ export class ReaderApiService {
     if (!this.network.isOnline()) return void this.sync.queue(saved);
     try {
       await firstValueFrom(
-        this.http.put<void>(`/api/playback/media/${t.mediaId}/state`, { positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p }, { context: silent() }),
+        this.http.put<void>(`/api/playback/media/${t.mediaId}/state`, { positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, playedAt: Date.now(), ...p }, { context: silent() }),
       );
       this.sync.record(saved);
     } catch {
@@ -102,7 +101,7 @@ export class ReaderApiService {
     const saved = { mediaId: t.mediaId, mediaFileId: t.fileId, itemId: t.itemId, positionSeconds: 0, durationSeconds: 0, extra: { ...p } };
     if (!this.network.isOnline()) return void this.sync.queue(saved);
     const { url, init } = this.streaming.positionRequest(t.mediaId);
-    fetch(url, { ...init, body: JSON.stringify({ positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p }) })
+    fetch(url, { ...init, body: JSON.stringify({ positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, playedAt: Date.now(), ...p }) })
       .then((r) => (r.ok ? this.sync.record(saved) : this.sync.queue(saved)))
       .catch(() => this.sync.queue(saved));
   }

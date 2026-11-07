@@ -129,10 +129,24 @@ describe('OfflinePlaybackSyncService', () => {
     expect(svc.resumePositionFor(7, undefined, 3)?.extra).toEqual({ progression: 0.9 });
   });
 
-  it('overlays a queued book position on its continue row by item', () => {
-    const { svc } = setup();
-    svc.queue({ ...update(0), itemId: 3, extra: {} });
-    const row = { mediaId: 7, episodeId: null, itemId: 3, positionSeconds: 10, durationSeconds: 1000, progressPercent: 1 };
-    expect(svc.overlayProgress([row])[0]).not.toBe(row);
+  it('drops an entry the server refuses and still sends the rest', async () => {
+    const { svc, online, updatePlaybackState } = setup();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    updatePlaybackState.mockRejectedValueOnce({ status: 422 });
+    svc.queue({ ...update(10), mediaId: 1 });
+    svc.queue({ ...update(20), mediaId: 2 });
+    online.set(true);
+    await settle();
+    expect(updatePlaybackState).toHaveBeenCalledTimes(2);
+    expect(svc.pending()).toEqual([]);
+  });
+
+  it('keeps the queue on a server error', async () => {
+    const { svc, online, updatePlaybackState } = setup();
+    updatePlaybackState.mockRejectedValue({ status: 503 });
+    svc.queue(update(10));
+    online.set(true);
+    await settle();
+    expect(svc.pending()).toHaveLength(1);
   });
 });
