@@ -443,22 +443,35 @@ async fn identify_keeps_the_namespace_an_explicit_provider_names(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = false)]
-async fn identify_drops_what_the_old_identity_wrote_but_keeps_locks_and_hand_edits(pool: PgPool) {
+const OLD_VALUES: &str = r#"UPDATE media SET overview = 'old', rating = 7.5, runtime = 100, year = 1999,
+         "originalTitle" = 'kept' WHERE id = 1;
+       INSERT INTO movie_details ("mediaId", tagline) VALUES (1, 'old tagline');
+       INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'digital', '2000-01-01');
+       INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES
+         (1, 'overview', 'tmdb', false), (1, 'rating', 'tmdb', true),
+         (1, 'details', 'tmdb', false), (1, 'releaseDates', 'tmdb', false),
+         (1, 'year', NULL, false), (1, 'runtime', 'file', false);"#;
+
+type Kept = (
+    Option<String>,
+    Option<f64>,
+    Option<i32>,
+    Option<i32>,
+    Option<String>,
+    i64,
+);
+
+/// Identifies media 1 against TVDB 5 (no provider is configured, so the refresh fails), waits for
+/// the detached task to settle and reads what is left.
+async fn identify_then_read(pool: PgPool, held_id: bool) -> Kept {
     let c = ctx(pool.clone()).await;
-    sqlx::raw_sql(
-        r#"UPDATE media SET overview = 'old', rating = 7.5, runtime = 100, year = 1999,
-             "originalTitle" = 'kept' WHERE id = 1;
-           INSERT INTO movie_details ("mediaId", tagline) VALUES (1, 'old tagline');
-           INSERT INTO media_release_dates ("mediaId", kind, date) VALUES (1, 'digital', '2000-01-01');
-           INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES
-             (1, 'overview', 'tmdb', false), (1, 'rating', 'tmdb', true),
-             (1, 'details', 'tmdb', false), (1, 'releaseDates', 'tmdb', false),
-             (1, 'year', NULL, false), (1, 'runtime', 'file', false);"#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::raw_sql(OLD_VALUES).execute(&pool).await.unwrap();
+    if held_id {
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (1, 'movie', 'tvdb', '5')"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
     let (status, _) = c
         .send(
             "POST",
@@ -468,7 +481,19 @@ async fn identify_drops_what_the_old_identity_wrote_but_keeps_locks_and_hand_edi
         )
         .await;
     assert_eq!(status, 201);
-    let row: (
+    for _ in 0..if held_id { 3 } else { 50 } {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let overview: Option<String> =
+            sqlx::query_scalar("SELECT overview FROM media WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        if overview.is_none() {
+            break;
+        }
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let (a, b, d, e, f): (
         Option<String>,
         Option<f64>,
         Option<i32>,
@@ -480,10 +505,6 @@ async fn identify_drops_what_the_old_identity_wrote_but_keeps_locks_and_hand_edi
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(
-        row,
-        (None, Some(7.5), Some(100), Some(1999), Some("kept".into()))
-    );
     let left: i64 = sqlx::query_scalar(
         r#"SELECT (SELECT count(*) FROM movie_details WHERE "mediaId" = 1)
                 + (SELECT count(*) FROM media_release_dates WHERE "mediaId" = 1)"#,
@@ -491,5 +512,35 @@ async fn identify_drops_what_the_old_identity_wrote_but_keeps_locks_and_hand_edi
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(left, 0);
+    (a, b, d, e, f, left)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failed_identify_clears_the_old_identity_but_keeps_locks_and_hand_edits(pool: PgPool) {
+    assert_eq!(
+        identify_then_read(pool, false).await,
+        (
+            None,
+            Some(7.5),
+            Some(100),
+            Some(1999),
+            Some("kept".into()),
+            0
+        )
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn identifying_with_the_same_id_clears_nothing(pool: PgPool) {
+    assert_eq!(
+        identify_then_read(pool, true).await,
+        (
+            Some("old".into()),
+            Some(7.5),
+            Some(100),
+            Some(1999),
+            Some("kept".into()),
+            2
+        )
+    );
 }

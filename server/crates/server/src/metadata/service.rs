@@ -668,16 +668,14 @@ async fn resolve_provider(
     {
         return Ok((Namespace::TMDB, ext));
     }
-    let plugin_ids: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, value FROM media_external_ids
-           WHERE "mediaId" = $1 AND provider LIKE '%:%' ORDER BY provider"#,
-    )
-    .bind(m.id)
-    .fetch_all(&st.db)
-    .await?;
-    for (p, v) in plugin_ids {
-        if let Some(ns) = Namespace::parse(&p).filter(|n| st.metadata.available(*n)) {
-            return Ok((ns, v));
+    for p in st
+        .metadata
+        .serving(m.kind)
+        .into_iter()
+        .filter(|p| p.core().is_none())
+    {
+        if let Some(ext) = external_id_for(st, m, p, lang, prio).await? {
+            return Ok((p, ext));
         }
     }
     Err(AppError::bad_request(

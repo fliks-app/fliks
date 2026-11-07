@@ -419,14 +419,12 @@ async fn walk_media(
                 }
             }
         }
-        // An empty root is an unmounted share as much as an empty library: remove nothing.
+        // An empty or unlistable root may be an unmounted share: trust the walk only when it lists an entry.
         if !rows.is_empty() && w.files.is_empty() {
-            let mut entries = tokio::fs::read_dir(dir).await.ok();
-            let empty = match entries.as_mut() {
-                Some(e) => e.next_entry().await.is_ok_and(|n| n.is_none()),
-                None => true,
+            w.complete = match tokio::fs::read_dir(dir).await {
+                Ok(mut e) => matches!(e.next_entry().await, Ok(Some(_))),
+                Err(_) => false,
             };
-            w.complete = !empty;
         }
     }
     Ok(w)

@@ -663,7 +663,7 @@ async fn a_refresh_gives_the_items_it_creates_inside_a_range_their_parts(pool: P
             })
             .collect(),
     };
-    crate::media::write::apply_seasons(&c.st, s, &[season])
+    crate::media::write::apply_seasons(&c.st, s, &[season], false)
         .await
         .unwrap();
     assert_eq!(
