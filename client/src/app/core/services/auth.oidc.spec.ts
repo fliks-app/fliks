@@ -276,15 +276,10 @@ describe('AuthService OpenID Connect', () => {
   });
 
   describe('auto-launch', () => {
-    const launched = async () => {
-      await settle();
-      return http.match('/api/auth/oidc/3/start').length > 0;
-    };
-
     it('starts the configured provider', async () => {
       await loadInfo(info({ autoLaunch: 3 }));
       expect(auth.oidcAutoLaunch(false)).toBe(true);
-      expect(await launched()).toBe(true);
+      await next('/api/auth/oidc/3/start');
     });
 
     it('stays off with autoLaunch=0, on a TV, and with no provider configured', async () => {
