@@ -15,8 +15,8 @@
             "name": "PostgreSQL",
             "ok": true
           },
-          "installedPlugins": 7,
-          "runningPlugins": 7
+          "installedPlugins": 8,
+          "runningPlugins": 8
         },
         "status": 200
       },
