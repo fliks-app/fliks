@@ -149,6 +149,8 @@ function secondsToMs(seconds: number | undefined): number | null {
   return typeof seconds === 'number' && seconds > 0 ? seconds * 1000 : null;
 }
 
+const SIGN_IN_RETURN_KEY = 'fliks.signInReturn';
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -401,7 +403,7 @@ export class AuthService {
           ...(opts.silent ? { prompt: 'none' } : {}),
           ...(opts.silent && opts.expectUserId !== undefined ? { expectUserId: opts.expectUserId } : {}),
         },
-        { context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent) },
+        { context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent || !!opts.link) },
       ),
     ).catch((err) => {
       platform.abort?.();
@@ -941,6 +943,25 @@ export class AuthService {
         if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err, false);
       },
     });
+  }
+
+  /** Where the next sign-in lands instead of the home page (kept across the provider's redirect). */
+  returnAfterSignIn(url: string): void {
+    try {
+      sessionStorage.setItem(SIGN_IN_RETURN_KEY, url);
+    } catch {
+      // storage unavailable: the sign-in lands on the home page
+    }
+  }
+
+  takeSignInReturn(): string {
+    try {
+      const url = sessionStorage.getItem(SIGN_IN_RETURN_KEY);
+      sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+      return url?.startsWith('/') && !url.startsWith('//') ? url : '/';
+    } catch {
+      return '/';
+    }
   }
 
   async logout(): Promise<void> {

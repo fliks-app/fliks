@@ -35,12 +35,13 @@
           <p class="text-sm text-base-content/50" data-testid="account-link-origin">{{ 'account.sso_link_origin' | translate }}</p>
         }
         @if (hasPassword() && linkable().length) {
+          <label for="account-link-password" class="label-text">{{ 'account.sso_link_password' | translate }}</label>
           <input
+            id="account-link-password"
             type="password"
             class="input input-bordered input-sm w-full max-w-xs"
             data-testid="account-link-password"
             autocomplete="current-password"
-            [placeholder]="'account.sso_link_password' | translate"
             [ngModel]="linkPassword()"
             (ngModelChange)="linkPassword.set($event)"
           />

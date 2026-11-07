@@ -301,7 +301,9 @@
     "sso_link": "{{name}} verknüpfen",
     "sso_last_method": "Das ist deine einzige Anmeldemethode. Lege ein Passwort fest, um die Verknüpfung lösen zu können.",
     "sso_link_origin": "Das Verknüpfen funktioniert über die als öffentliche URL des Servers festgelegte Adresse.",
-    "sso_link_password": "Aktuelles Passwort, zur Bestätigung"
+    "sso_link_password": "Aktuelles Passwort, zur Bestätigung",
+    "recent_sign_in_required": "Melde dich dafür erneut an und versuche es dann noch einmal.",
+    "sign_in_again": "Erneut anmelden"
   },
   "account_settings": {
     "title": "Kontoeinstellungen",
@@ -866,7 +868,7 @@
     "confirm_title": "Diese Anmeldung genehmigen?",
     "from_ip": "Netzwerkadresse: {{ip}}",
     "too_many": "Zu viele falsche Codes. Versuchen Sie es später erneut.",
-    "update_device": "Dieses Gerät nutzt eine ältere Version der App und kann keinen Code anzeigen. Aktualisiere die App darauf und versuche es erneut."
+    "update_device": "{{device}}: Dieses Gerät nutzt eine ältere Version der App und kann keinen Code anzeigen. Aktualisiere die App darauf und versuche es erneut."
   },
   "server_history": {
     "section_title": "Zuletzt verwendete Server",

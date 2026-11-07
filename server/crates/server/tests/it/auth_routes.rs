@@ -918,14 +918,17 @@ async fn a_logout_without_a_refresh_token_leaves_the_session_usable(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
-async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
+async fn revoking_a_session_drops_only_the_sse_streams_of_that_session(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = user(&pool, "bob", Some("[]"), false, true).await;
     let a = login(&c, "bob").await;
     login(&c, "bob").await;
-    let conn = c.st.hub.connect(id, Default::default());
-    assert!(c.st.hub.has_connection(&conn.id));
     let ha = auth_header(&a);
+    let current =
+        c.st.jwt
+            .verify(a["accessToken"].as_str().unwrap())
+            .unwrap()
+            .sid;
     let (_, _, l) = call(
         &c,
         "GET",
@@ -941,7 +944,15 @@ async fn revoking_a_session_drops_the_sse_streams_of_its_user(pool: PgPool) {
         .find(|x| x["current"] == json!(false))
         .unwrap()["id"]
         .clone();
+    let conn =
+        c.st.hub
+            .connect_session(id, other.as_i64().map(|s| s as i32), Default::default());
+    let kept = c.st.hub.connect_session(id, current, Default::default());
     let uri = format!("/api/auth/sessions/{other}");
     call(&c, "DELETE", &uri, &[("authorization", &ha)], None).await;
     assert!(!c.st.hub.has_connection(&conn.id));
+    assert!(
+        c.st.hub.has_connection(&kept.id),
+        "the caller's own stream stays"
+    );
 }

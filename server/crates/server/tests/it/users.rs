@@ -470,7 +470,16 @@ async fn a_passwordless_account_sets_a_password_only_after_a_recent_sign_in(pool
         .await
         .unwrap();
     assert_eq!(c.call("PUT", &uri, &ta, body()).await.0, 403);
-    sqlx::query(r#"UPDATE sessions SET "createdAt" = now()"#)
+    sqlx::query(r#"UPDATE sessions SET "createdAt" = now(), method = 'pairing'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        c.call("PUT", &uri, &ta, body()).await.0,
+        403,
+        "a paired session"
+    );
+    sqlx::query(r#"UPDATE sessions SET method = 'password'"#)
         .execute(&c.pool)
         .await
         .unwrap();

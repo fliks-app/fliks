@@ -19,7 +19,7 @@ async function run(fragment: string, result: unknown, user: unknown = null) {
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: AuthService, useValue: { oidcReturned, user: () => user } },
+      { provide: AuthService, useValue: { oidcReturned, user: () => user, takeSignInReturn: () => '/' } },
       { provide: Router, useValue: { navigate } },
       { provide: ToastService, useValue: { error } },
       { provide: ActivatedRoute, useValue: { snapshot: { fragment, queryParamMap: new Map() } } },

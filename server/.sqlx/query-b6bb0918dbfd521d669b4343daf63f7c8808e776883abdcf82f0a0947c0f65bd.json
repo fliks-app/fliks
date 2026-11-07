@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"createdAt\" > now() - make_interval(mins => $2::int) AS \"recent!\"\n                       FROM sessions WHERE id = $1",
+  "query": "SELECT \"createdAt\" > now() - make_interval(mins => $2::int) AS \"recent!\"\n                       FROM sessions WHERE id = $1 AND method IN ('password', 'oidc')",
   "describe": {
     "columns": [
       {
@@ -20,5 +20,5 @@
       null
     ]
   },
-  "hash": "86bacaf825bdd0ef34705a45e21b2c32016c1cca228de71cad9b364b1e066b07"
+  "hash": "b6bb0918dbfd521d669b4343daf63f7c8808e776883abdcf82f0a0947c0f65bd"
 }
