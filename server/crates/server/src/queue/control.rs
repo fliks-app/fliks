@@ -141,7 +141,7 @@ async fn set_paused(st: &AppState, paused: bool) -> Result<Json<Value>, AppError
     conf.paused = paused;
     settings::save(&st.db, &conf).await.map_err(db)?;
     st.queue.wake.notify_waiters();
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(Json(json!({ "paused": paused })))
 }
 
@@ -199,7 +199,7 @@ pub async fn prioritize(
     .map_err(db)?
     .len();
     st.queue.wake.notify_waiters();
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(&st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(Json(json!({ "moved": moved })))
 }
 
@@ -225,7 +225,7 @@ pub async fn cancel_many(
         }
     }
     st.queue.wake.notify_waiters();
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(&st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(Json(Cancelled { cancelled: done }))
 }
 
@@ -275,6 +275,6 @@ pub async fn restore(
     recover::restore(&st, id)
         .await
         .map_err(AppError::conflict)?;
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(&st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(Json(json!({})))
 }

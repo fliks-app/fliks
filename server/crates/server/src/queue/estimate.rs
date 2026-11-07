@@ -46,7 +46,7 @@ pub async fn speeds(st: &AppState) -> sqlx::Result<Speeds> {
         } else {
             workers
                 .iter()
-                .flat_map(|(_, w)| w.devices.iter())
+                .flat_map(|(_, w, _)| w.devices.iter())
                 .filter(|d| d.id == device)
                 .map(|d| conf.max_jobs(&d.id, d.max_jobs))
                 .sum()

@@ -205,11 +205,15 @@ pub async fn heartbeat(
     .await
     .map_err(db)?
     .ok_or_else(conflict)?;
-    st.hub.emit(SseEvent::OptimizeJobProgress {
-        job_id: id,
-        progress: req.progress.into(),
-        paused: req.paused,
-    });
+    super::emit_managers(
+        &st,
+        SseEvent::OptimizeJobProgress {
+            job_id: id,
+            progress: req.progress.into(),
+            paused: req.paused,
+        },
+    )
+    .await;
     Ok(Json(JobHeartbeatResponse {
         lease_until: beat.lease_until.timestamp_millis() as f64,
         cancel: beat.cancel,

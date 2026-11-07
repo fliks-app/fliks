@@ -42,7 +42,8 @@ async fn sweep(
            FROM jobs j LEFT JOIN media_files f ON f.id = j."mediaFileId" LEFT JOIN media m ON m.id = f."mediaId"
            WHERE j."updatedAt" >= $1 ORDER BY j."updatedAt""#,
     )
-    .bind(since)
+    // Overlaps the last sweep: a transaction that began before it may commit after it.
+    .bind(since - chrono::Duration::seconds(5))
     .fetch_all(&st.db)
     .await?;
     let mut latest = None;
@@ -52,10 +53,14 @@ async fn sweep(
         if seen.insert(id, state.clone()).as_deref() == Some(&state) {
             continue;
         }
-        st.hub.emit(SseEvent::OptimizeJobChanged {
-            job_id: id,
-            state: state.clone(),
-        });
+        super::emit_managers(
+            st,
+            SseEvent::OptimizeJobChanged {
+                job_id: id,
+                state: state.clone(),
+            },
+        )
+        .await;
         let error: Option<Value> = r.get("error");
         let class = error
             .as_ref()

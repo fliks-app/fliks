@@ -27,7 +27,7 @@ pub async fn queue_verify(st: &AppState, ids: &[i32], priority: i32) -> sqlx::Re
         });
     }
     st.queue.wake.notify_waiters();
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(out)
 }
 

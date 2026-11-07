@@ -204,7 +204,7 @@ pub async fn queue_files(
         out.push(queue_one(st, id, force, priority, false, None).await?);
     }
     st.queue.wake.notify_waiters();
-    st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    super::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
     Ok(out)
 }
 
@@ -223,7 +223,7 @@ pub async fn queue_new_cached(st: &AppState, id: i32, cache: &mut Cache) -> sqlx
     }
     if q.outcome == Outcome::Queued {
         st.queue.wake.notify_waiters();
-        st.hub.emit(SseEvent::OptimizeQueueChanged {});
+        super::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
     }
     Ok(q)
 }
@@ -325,7 +325,7 @@ pub async fn queue_library(st: &AppState, library: i32, priority: i32) -> sqlx::
             }
         }
         st.queue.wake.notify_waiters();
-        st.hub.emit(SseEvent::OptimizeQueueChanged {});
+        super::emit_managers(&st, SseEvent::OptimizeQueueChanged {}).await;
     });
     Ok(n)
 }

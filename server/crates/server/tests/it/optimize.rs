@@ -319,3 +319,25 @@ async fn job_routes_follow_library_access(pool: PgPool) {
     .await;
     assert_eq!(r["cancelled"].as_array().unwrap().len(), 0);
 }
+
+#[sqlx::test(migrations = false)]
+async fn saving_settings_never_flips_the_pause_and_shared_markers_stay_out_of_the_list(
+    pool: PgPool,
+) {
+    let c = ctx(&pool).await;
+    let (_, mut conf) = call(&c, "GET", "/api/optimize/settings", Value::Null).await;
+    call(&c, "POST", "/api/optimize/queue/pause", json!({})).await;
+    conf["paused"] = false.into();
+    let (s, saved) = call(&c, "PUT", "/api/optimize/settings", conf).await;
+    assert_eq!(s, 200);
+    assert_eq!(saved["paused"], true);
+    sqlx::query(
+        r#"INSERT INTO jobs (kind, payload, "profileHash", state, error, "finishedAt")
+           VALUES ('optimize', '{}'::jsonb, 'shared', 'skipped', '{"class": "shared"}'::jsonb, now())"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, jobs) = call(&c, "GET", "/api/optimize/jobs", Value::Null).await;
+    assert!(jobs.as_array().unwrap().is_empty());
+}
