@@ -2927,6 +2927,116 @@
         }
       }
     },
+    "/api/optimize/jobs": {
+      "get": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "list_jobs",
+        "responses": {
+          "200": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "summary": "Queue, \"Optimize…\" and \"Force re-encode\" (`force`).",
+        "operationId": "enqueue",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/optimize/jobs/{id}/cancel": {
+      "post": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "cancel",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/optimize/jobs/{id}/retry": {
+      "post": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "retry",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/optimize/settings": {
+      "get": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "get_settings",
+        "responses": {
+          "200": {}
+        }
+      },
+      "put": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "put_settings",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/workers": {
+      "get": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "summary": "The instances that said hello since the server started.",
+        "operationId": "list_workers",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/workers/tokens": {
+      "get": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "list_tokens",
+        "responses": {
+          "200": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "create_token",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/optimize/workers/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "summary": "Revokes the token and puts the leases of its workers back in the queue.",
+        "operationId": "revoke_token",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      }
+    },
     "/api/parties": {
       "get": {
         "tags": [
@@ -5387,12 +5497,60 @@
         }
       }
     },
+    "/engine/jobs/lease": {
+      "post": {
+        "tags": [
+          "crate::queue::routes"
+        ],
+        "summary": "Long-poll: 200 with a job, or 204 after `LONG_POLL_S`.",
+        "operationId": "lease",
+        "responses": {
+          "200": {},
+          "204": {}
+        }
+      }
+    },
+    "/engine/jobs/{id}/heartbeat": {
+      "post": {
+        "tags": [
+          "crate::queue::routes"
+        ],
+        "operationId": "heartbeat",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
+    "/engine/jobs/{id}/result": {
+      "post": {
+        "tags": [
+          "crate::queue::routes"
+        ],
+        "operationId": "result",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
     "/engine/resolve": {
       "post": {
         "tags": [
           "crate::engine::resolve"
         ],
         "operationId": "resolve",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/engine/workers/hello": {
+      "post": {
+        "tags": [
+          "crate::queue::routes"
+        ],
+        "operationId": "hello",
         "responses": {
           "200": {}
         }

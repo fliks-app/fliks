@@ -43,7 +43,7 @@ const KEYS: [&str; 6] = [
 ];
 
 /// `Authorization` is exactly `Bearer <token>`, compared in constant time.
-pub(super) fn bearer_is(headers: &HeaderMap, token: &str) -> bool {
+pub(crate) fn bearer_is(headers: &HeaderMap, token: &str) -> bool {
     let digest = |s: &str| Sha256::digest(s.as_bytes());
     let got = headers
         .get(header::AUTHORIZATION)
@@ -52,6 +52,15 @@ pub(super) fn bearer_is(headers: &HeaderMap, token: &str) -> bool {
     digest(got)
         .ct_eq(&digest(&format!("Bearer {token}")))
         .into()
+}
+
+/// The token of an `Authorization: Bearer <token>` header.
+pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")
 }
 
 /// `EngineHostGuard`: only the engine, presenting the per-process host token, gets through.

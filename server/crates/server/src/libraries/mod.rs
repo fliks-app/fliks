@@ -2,7 +2,7 @@
 pub mod acl;
 mod db;
 pub mod folders;
-mod path;
+pub(crate) mod path;
 mod routes;
 
 use crate::state::AppState;
