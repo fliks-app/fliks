@@ -907,7 +907,7 @@ mod tests {
     fn an_extension_change_needs_the_renaming_permission() {
         let i = MediaInfo {
             format_name: Some("avi".into()),
-            ..info("mpeg4", vec![audio(1, "eng", "ac3", 2)])
+            ..info("mpeg2video", vec![audio(1, "eng", "ac3", 2)])
         };
         assert!(matches!(
             run(Preset::Balanced, "a.avi", &i, Some("en")),
