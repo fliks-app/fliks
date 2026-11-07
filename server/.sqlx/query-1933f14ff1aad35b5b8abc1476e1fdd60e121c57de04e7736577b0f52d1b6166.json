@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id, l.\"mergeM4b\" AS merge_m4b,\n        l.\"mergeM4bReplace\" AS merge_m4b_replace,\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
+  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id, l.\"mergeM4b\" AS merge_m4b,\n        l.\"mergeM4bReplace\" AS merge_m4b_replace, l.\"optimizeProfileId\" AS optimize_profile_id,\n        l.\"optimizeNewFiles\" AS optimize_new_files, l.\"allowRename\" AS allow_rename,\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
   "describe": {
     "columns": [
       {
@@ -159,6 +159,39 @@
       },
       {
         "ordinal": 14,
+        "name": "optimize_profile_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "optimizeProfileId"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "optimize_new_files",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "optimizeNewFiles"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "allow_rename",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "allowRename"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
         "name": "path?",
         "type_info": "Text",
         "origin": {
@@ -169,7 +202,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 18,
         "name": "label",
         "type_info": "Text",
         "origin": "Expression"
@@ -196,8 +229,11 @@
       false,
       false,
       true,
+      false,
+      false,
+      true,
       null
     ]
   },
-  "hash": "691cfb3100e84f78b0e9fc05608722b46212bdc8f779dc6e73104cd9b5a8da71"
+  "hash": "1933f14ff1aad35b5b8abc1476e1fdd60e121c57de04e7736577b0f52d1b6166"
 }

@@ -32,6 +32,7 @@ pub mod metadata;
 pub mod net;
 pub mod notifications;
 pub mod opds;
+pub mod optimize;
 pub mod outbound;
 pub mod party;
 pub mod paths;

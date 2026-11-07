@@ -26,6 +26,9 @@ pub struct Library {
     pub default_language_profile_id: Option<i32>,
     pub merge_m4b: bool,
     pub merge_m4b_replace: bool,
+    pub optimize_profile_id: Option<i32>,
+    pub optimize_new_files: bool,
+    pub allow_rename: bool,
     pub path: Option<String>,
     pub label: Option<String>,
 }
@@ -117,7 +120,8 @@ pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
         "metadataLanguage" AS metadata_language, "metadataRegion" AS metadata_region,
         "defaultQualityProfileId" AS default_quality_profile_id,
         "defaultLanguageProfileId" AS default_language_profile_id, l."mergeM4b" AS merge_m4b,
-        l."mergeM4bReplace" AS merge_m4b_replace,
+        l."mergeM4bReplace" AS merge_m4b_replace, l."optimizeProfileId" AS optimize_profile_id,
+        l."optimizeNewFiles" AS optimize_new_files, l."allowRename" AS allow_rename,
         df.path AS "path?", NULL::text AS label
         FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id
         WHERE l.id = ANY($1) ORDER BY name COLLATE "C", l.id"#,
@@ -270,6 +274,9 @@ pub fn constraint(e: sqlx::Error) -> AppError {
         (Some("23505"), _) => AppError::conflict("Library name already taken"),
         (Some("23503"), "FK_1127dccf41a2959b675a0aa8891") => AppError::bad_request(vec![
             "defaultQualityProfileId must reference an existing quality profile",
+        ]),
+        (Some("23503"), "libraries_optimizeProfileId_fkey") => AppError::bad_request(vec![
+            "optimizeProfileId must reference an existing optimize profile",
         ]),
         (Some("23503"), _) => AppError::bad_request(vec![
             "defaultLanguageProfileId must reference an existing language profile",

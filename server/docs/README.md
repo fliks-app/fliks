@@ -20,6 +20,7 @@ OPDS: [`spec/opds.md`](spec/opds.md) (OPDS 1.2 catalogue on device tokens: route
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
 Kobo sync: [`spec/kobo.md`](spec/kobo.md) (emulated Kobo store API on a `kobo` device token: library, covers, reading state, shelves, optional store proxy).
 KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, auth by device token, document hash, shared progression).
+Library optimization: [`spec/optimize.md`](spec/optimize.md) (profiles, presets, difference computation, codec choice, candidate selection, preview).
 Send to device: [`spec/email-devices.md`](spec/email-devices.md) (admin SMTP settings, e-mail devices, mailing a book edition file, limits).
 
 Scene numbering: [`spec/scene-numbering.md`](spec/scene-numbering.md) (TheXEM scene to aired mapping of releases and files).

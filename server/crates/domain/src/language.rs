@@ -43,6 +43,14 @@ pub fn normalize_language_code(lang: Option<&str>) -> String {
     folded(iso1).unwrap_or(iso1).into()
 }
 
+/// An ISO 639-2 code for a canonical 639-1 code, none when it has no 639-2 entry.
+pub fn iso639_2(code: &str) -> Option<&'static str> {
+    ISO_639_2_TO_1
+        .iter()
+        .find(|(_, v)| *v == code)
+        .map(|(k, _)| *k)
+}
+
 /// The canonical code of `lang`, none when it is not a language code (`und`, over 8 characters, not alphanumeric).
 pub fn parse_language_code(lang: &str) -> Option<String> {
     let code = normalize_language_code(Some(lang));

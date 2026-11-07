@@ -70,6 +70,10 @@ struct UpdateDto {
     default_language_profile_id: Patch<i32>,
     merge_m4b: Option<bool>,
     merge_m4b_replace: Option<bool>,
+    #[serde(default, deserialize_with = "present")]
+    optimize_profile_id: Patch<i32>,
+    optimize_new_files: Option<bool>,
+    allow_rename: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -299,6 +303,15 @@ pub async fn update(
         stored.as_deref(),
     )?;
     patch(&mut tx, id, &dto).await.map_err(db::constraint)?;
+    let orphan_new_files = sqlx::query_scalar::<_, bool>(
+        r#"SELECT "optimizeNewFiles" AND "optimizeProfileId" IS NULL FROM libraries WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if orphan_new_files {
+        return Err(bad("optimizeNewFiles needs an optimizeProfileId"));
+    }
     if dto.merge_m4b == Some(true) && !was_merging {
         sqlx::query!(
             r#"UPDATE libraries SET "mergeM4bBackfill" = "mergeM4bBackfill" + 1 WHERE id = $1"#,
@@ -359,6 +372,9 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
     );
     set!("mergeM4b", dto.merge_m4b);
     set!("mergeM4bReplace", dto.merge_m4b_replace);
+    set!("optimizeProfileId", dto.optimize_profile_id.map(profile));
+    set!("optimizeNewFiles", dto.optimize_new_files);
+    set!("allowRename", dto.allow_rename);
     let given = dto.name.is_some()
         || dto.icon.is_some()
         || dto.color.is_some()
@@ -369,7 +385,10 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         || dto.default_quality_profile_id.is_some()
         || dto.default_language_profile_id.is_some()
         || dto.merge_m4b.is_some()
-        || dto.merge_m4b_replace.is_some();
+        || dto.merge_m4b_replace.is_some()
+        || dto.optimize_profile_id.is_some()
+        || dto.optimize_new_files.is_some()
+        || dto.allow_rename.is_some();
     if !given {
         return Ok(());
     }

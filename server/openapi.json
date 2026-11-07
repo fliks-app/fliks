@@ -1206,6 +1206,28 @@
         }
       }
     },
+    "/api/libraries/{id}/optimize/preview": {
+      "get": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "preview",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/libraries/{id}/optimize/summary": {
+      "get": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/likes": {
       "get": {
         "tags": [
@@ -2969,6 +2991,66 @@
         "responses": {
           "200": {},
           "409": {}
+        }
+      }
+    },
+    "/api/optimize/presets": {
+      "get": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "presets",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/optimize/profiles": {
+      "get": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/optimize/profiles/{id}": {
+      "get": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {}
+        }
+      },
+      "put": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {}
         }
       }
     },
