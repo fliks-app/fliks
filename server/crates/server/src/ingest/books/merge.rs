@@ -1,9 +1,5 @@
 //! Optional merge of a multi-file audio version into one m4b (`book-ingest.md` rule 18).
-use super::{
-    Placed,
-    group::{part_numbers, work_dir},
-    register_to,
-};
+use super::{Placed, group::work_dir, register_to};
 use crate::{
     engine::EngineError,
     ingest::{
@@ -15,6 +11,7 @@ use crate::{
     state::AppState,
     sync::MutexExt,
 };
+use fliks_domain::books::filename::parse_path;
 use fliks_engine_core::{
     api::{
         BgJobState, JobKind, JobPriority, JobRequest, JobResult, MediaFamily, MediaInfo, MediaRef,
@@ -22,8 +19,10 @@ use fliks_engine_core::{
     },
     jobs::merge::{MAX_PARTS, validate},
 };
+use regex::Regex;
 use std::{
     path::{Path, PathBuf},
+    sync::LazyLock,
     time::SystemTime,
 };
 
@@ -98,6 +97,36 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
             .then_some(parts)
             .filter(|parts| !skip.contains(&fingerprint(parts)))
     })
+}
+
+static DISC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:cd|disc|disk|disque)\s*0*(\d+)\b").unwrap());
+static NOISE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\s*[(\[][^)\]]*[)\]]|\b(?:cd|disc|disk|disque)\s*\d+\b|\bof\s+\d+\b").unwrap()
+});
+
+/// The (disc, part) of a part file: the disc of a disc folder or of the name, the part as the file-name
+/// guess reads it, else the last number of the name. Only guards a merge; it orders nothing.
+fn part_numbers(rel: &str) -> (Option<u32>, Option<u32>) {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    let (stem, ext) = name
+        .rfind('.')
+        .map_or((name, ""), |d| (&name[..d], &name[d..]));
+    let clean = NOISE.replace_all(stem, " ");
+    let clean = clean.trim_matches(|c: char| " -_.".contains(c));
+    let folder = parse_path(rel).part.and_then(|p| p.disc);
+    let disc = folder.or_else(|| DISC.captures(stem)?[1].parse().ok());
+    let number = parse_path(&format!("{clean}{ext}"))
+        .part
+        .and_then(|p| p.number)
+        .or_else(|| {
+            let end = clean.rfind(|c: char| c.is_ascii_digit())? + 1;
+            let start = clean[..end]
+                .trim_end_matches(|c: char| c.is_ascii_digit())
+                .len();
+            clean[start..end].parse().ok()
+        });
+    (disc, number)
 }
 
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
@@ -1344,6 +1373,11 @@ mod tests {
             part(2, 0, "T/CD2/01.mp3", "mp3"),
         ];
         assert_eq!(pick(&discs, &[]).unwrap().len(), 2);
+        let pair = |a: &str, b: &str| [part(1, 0, a, "mp3"), part(2, 0, b, "mp3")];
+        assert!(pick(&pair("T/01 - Hobbit.mp3", "T/01 - LOTR.mp3"), &[]).is_none());
+        assert!(pick(&pair("T/Prologue.mp3", "T/01.mp3"), &[]).is_none());
+        let named = pair("T/Disc 1 - 01.mp3", "T/Disc 2 - 01.mp3");
+        assert_eq!(pick(&named, &[]).unwrap().len(), 2);
     }
 
     #[test]
