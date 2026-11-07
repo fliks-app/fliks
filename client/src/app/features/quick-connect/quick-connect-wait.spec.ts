@@ -29,7 +29,7 @@ function setup(request: () => Promise<unknown>, userId: string | null) {
   });
   const cmp = TestBed.createComponent(QuickConnectWaitComponent).componentInstance;
   cmp.ngOnInit();
-  return { auth, cmp };
+  return { auth, cmp, router: TestBed.inject(Router) as unknown as { navigate: ReturnType<typeof vi.fn> } };
 }
 
 const invalid = () =>
@@ -47,5 +47,11 @@ describe('QuickConnectWaitComponent: userless request', () => {
   it('keeps the generic error when a picked user fails', async () => {
     const { cmp } = setup(invalid, '7');
     await vi.waitFor(() => expect(cmp.view()).toBe('error'));
+  });
+
+  it('cancel returns to select-user without auto-launching SSO', async () => {
+    const { cmp, router } = setup(invalid, '7');
+    cmp.cancel();
+    expect(router.navigate).toHaveBeenCalledWith(['/select-user'], { queryParams: { autoLaunch: 0 } });
   });
 });

@@ -36,7 +36,7 @@ function paramsFor(episodeId: string) {
   return { get: (k: string) => (k === 'id' ? '5' : k === 'episodeId' ? episodeId : null) };
 }
 
-const scrollMemory = { activate: vi.fn(), deactivate: vi.fn(), restoreSticky: vi.fn() };
+const scrollMemory = { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() };
 const navigatedBack = signal(false);
 
 function createFixture() {

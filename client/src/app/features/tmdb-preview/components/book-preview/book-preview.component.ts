@@ -178,7 +178,7 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
       this.toast.success(this.translate.instant('discover.import_success'));
       void this.router.navigate(mediaDetailLink('book', saved.id));
     } catch {
-      this.toast.error(this.translate.instant('discover.import_error'));
+      // The global HTTP interceptor toasts the failure.
     } finally {
       this.adding.set(false);
     }

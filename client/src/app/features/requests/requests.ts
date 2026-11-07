@@ -149,7 +149,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(RequestsComponent.SCROLL_KEY);
   }
 
   onStatusChange(value: string) {

@@ -76,7 +76,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
       { provide: TvService, useValue: { isTv: () => false } },
       {
         provide: ScrollMemoryService,
-        useValue: { activate: vi.fn(), deactivate: vi.fn(), restoreSticky: vi.fn() },
+        useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() },
       },
       { provide: AddToPlaylistService, useValue: {} },
       { provide: RecommendService, useValue: {} },

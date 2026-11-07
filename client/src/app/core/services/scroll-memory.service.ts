@@ -51,11 +51,6 @@ export class ScrollMemoryService {
     this.currentKey = key;
   }
 
-  /** Call on component destroy to stop tracking. */
-  deactivate() {
-    this.currentKey = null;
-  }
-
   /** Guard against a detached component stomping on the next page's activate() when both fire in close succession. */
   deactivateIf(key: string) {
     if (this.currentKey === key) this.currentKey = null;

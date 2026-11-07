@@ -53,7 +53,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(WatchHistoryComponent.SCROLL_KEY);
   }
 
   async load(silent = false) {

@@ -28,12 +28,15 @@ export class ReleaseSearchStreamService {
   private readonly sse = inject(SseService);
   private readonly registry = inject(PluginUiRegistryService);
   private readonly injector = inject(Injector);
+  /** Latest search per sinks: an older run still in flight must not write into them. */
+  private readonly latest = new WeakMap<object, string>();
 
   async run(
     fetch: (searchId: string) => Promise<MovieRelease[]>,
     sinks: ReleaseSearchSinks,
   ): Promise<MovieRelease[]> {
     const searchId = searchToken();
+    this.latest.set(sinks.releases, searchId);
     const stop = this.listen(searchId, sinks);
     try {
       return await fetch(searchId);
@@ -41,9 +44,11 @@ export class ReleaseSearchStreamService {
       stop();
       // The answer ends the search: an indexer still pending never got its completion
       // event, and its tab would spin forever.
-      sinks.indexers.update((roster) =>
-        roster.map((ix) => (ix.state === 'pending' ? { ...ix, state: 'done' } : ix)),
-      );
+      if (this.latest.get(sinks.releases) === searchId) {
+        sinks.indexers.update((roster) =>
+          roster.map((ix) => (ix.state === 'pending' ? { ...ix, state: 'done' } : ix)),
+        );
+      }
     }
   }
 
@@ -61,7 +66,7 @@ export class ReleaseSearchStreamService {
         const payload = event['payload'] as
           | { searchId?: string; indexers?: IndexerRosterEntry[]; releases?: MovieRelease[] }
           | undefined;
-        if (!payload || payload.searchId !== searchId) return;
+        if (!payload || payload.searchId !== searchId || this.latest.get(sinks.releases) !== searchId) return;
         untracked(() => {
           if (payload.indexers) sinks.indexers.set(payload.indexers);
           if (payload.releases) sinks.releases.set(payload.releases);

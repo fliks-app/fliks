@@ -430,7 +430,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
     this.playbackStopped.unsubscribe();
   }
 

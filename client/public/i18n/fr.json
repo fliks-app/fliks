@@ -2803,8 +2803,6 @@
       "drag": "Déplacer",
       "move_up": "Monter",
       "move_down": "Descendre",
-      "load_error": "Impossible de charger les réglages de métadonnées.",
-      "save_error": "Impossible d'enregistrer l'ordre.",
       "kind": {
         "movie": "Films",
         "series": "Séries",

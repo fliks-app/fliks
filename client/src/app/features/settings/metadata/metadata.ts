@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   CdkDrag,
   CdkDragHandle,
@@ -13,7 +13,6 @@ import { TvService } from '../../../core/services/tv.service';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
-import { ToastService } from '../../../core/services/toast.service';
 
 const KINDS = ['movie', 'series', 'book', 'comic', 'album'] as const;
 const DEFAULT_ORDER: Record<string, string[]> = {
@@ -48,8 +47,6 @@ interface Row {
 export class MetadataSettingsComponent implements OnInit {
   private readonly registry = inject(PluginUiRegistryService);
   private readonly settings = inject(SettingsApiService);
-  private readonly toast = inject(ToastService);
-  private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
 
   readonly kinds = KINDS;
@@ -74,7 +71,7 @@ export class MetadataSettingsComponent implements OnInit {
       for (const kind of KINDS) out[kind] = parseOrder(all[orderKey(kind)]);
       this.stored.set(out);
     } catch {
-      this.toast.error(this.translate.instant('settings.metadata.load_error'));
+      // The global HTTP interceptor toasts the failure.
     } finally {
       this.loading.set(false);
     }
@@ -115,7 +112,6 @@ export class MetadataSettingsComponent implements OnInit {
       await this.settings.set(orderKey(kind), JSON.stringify(merged));
     } catch {
       this.stored.set(previous);
-      this.toast.error(this.translate.instant('settings.metadata.save_error'));
     }
   }
 

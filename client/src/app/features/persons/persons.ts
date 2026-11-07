@@ -79,7 +79,7 @@ export class PersonsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(this.scrollKey);
     this.list.destroy();
   }
 
