@@ -788,7 +788,7 @@
   "setup": {
     "subtitle": "Konfigurieren Sie die Adresse Ihres Servers",
     "server_url": "Serveradresse",
-    "server_url_hint": "Die vollständige Adresse Ihres Servers (z. B.: http://192.168.1.10:3000)",
+    "server_url_hint": "Die vollständige Adresse Ihres Servers (z. B.: http://localhost:4848)",
     "test": "Testen",
     "save": "Speichern",
     "test_success": "Verbindung zum Server erfolgreich.",
