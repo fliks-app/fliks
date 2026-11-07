@@ -56,10 +56,10 @@ Paths are relative to `/kobo/<token>`. The device sends the headers of its firmw
 
 ## Library sync
 
-10. The device keeps nothing of what it was sent; the server does, per token, in `kobo_sync_items` (rule 26). The sync token (`x-kobo-synctoken`, request and response) is the base64 of a JSON object `{"v":1,"t":<microseconds>,"b":[item ids],"g":[item ids],"s":[playlist ids],"sg":[playlist ids]}`: what the previous answer sent as books, as removals, as shelves and as shelf removals, and when the server read the library for it. An unreadable token, or a version other than 1, is no token.
+10. The device keeps nothing of what it was sent; the server does, per token, in `kobo_sync_items` (rule 26). The sync token (`x-kobo-synctoken`, request and response) is the base64 of a JSON object `{"v":1,"t":<microseconds>,"b":[item ids],"g":[item ids],"s":[playlist ids],"sg":[playlist ids],"c":<item id>}`: what the previous answer sent as books, as removals, as shelves and as shelf removals, when the server read the library for it, and, only when that answer was cut at 100 entries (`c` absent or 0 otherwise), the item id of its last book entry. `c` is optional: a token without it starts at 0, and a negative one is no token. An unreadable token, or a version other than 1, is no token.
 11. With no token, the device starts from nothing: every row of this token is deleted (archived books included, so a reset device gets its library back) and every book is new.
 12. With a token, the server first acknowledges the batch it names: `b` and `s` become rows with `syncedAt = stateAt = t`, `g` and `sg` delete theirs. Nothing is written when an answer is built, so an answer the device never received is rebuilt identically on its retry with the same token.
-13. Then it reads the ids and dates of the library as the owner (rule 7), and the metadata of only the books it sends, and answers at most 100 entries, in this order: removals, books by item id, reading states, shelf changes. When more remain, `x-kobo-sync: continue` and the next call finishes. Each entry is one object:
+13. Then it scans the library as the owner (rule 7) in windows of 500 text items in id order, starting after the token's `c` (0 when absent): per window, the ids and dates of the readable books, the token's rows and the owner's playback states of those ids only, and the metadata of only the books it sends. It answers at most 100 entries, in this order: books, reading states and removals by item id, then shelf changes. When more remain, `x-kobo-sync: continue`, the token carries `c`, and the next call resumes after it; a change to an item at or before `c` is sent by the next sync that starts without a `c`. Shelves read only the readable books among the items of the owner's playlists. Each entry is one object:
     - a book without a row: `{"NewEntitlement": {"BookEntitlement", "BookMetadata", "ReadingState"}}`;
     - a book whose row has `syncedAt` older than the book's last change (`greatest` of the update times of the item, the work, its edition, its file and its author credits): `{"ChangedEntitlement": {...same}}`;
     - a book whose only change is the owner's playback state (`updatedAt` after the row's `stateAt`): `{"ChangedReadingState": {"ReadingState"}}`;
@@ -67,7 +67,7 @@ Paths are relative to `/kobo/<token>`. The device sends the headers of its firmw
     `BookEntitlement` is `Accessibility "Full"`, `Status "Active"`, `IsRemoved`, `Created` and `LastModified` (the work's), the ids, `OriginCategory "Imported"`.
 14. A change the device itself made to the reading state (rule 19) sets the row's `stateAt` to the state's `updatedAt`, so it is not echoed back. Another reader's change (web, KOReader) is a `ChangedReadingState` carrying a bookmark with the percentage only (rule 21).
 15. `DELETE /v1/library/{uuid}` is the user removing the book from the device: the row is kept with `archived = true` and the book is sent no more to this token, whatever changes, until a sync without a token. The library is not touched.
-16. A token no sync has acknowledged is cheap: the server holds no cursor, so there is no state to expire or leak between devices; the price is that the read of rule 13 is a full library read per call (a list of ids and dates, not the files), bounded by the ACL.
+16. A token no sync has acknowledged is cheap: the server holds no cursor, so there is no state to expire or leak between devices; the price is that a sync that starts at 0 reads the whole library in windows (ids and dates, not the files), bounded by the ACL; the pages of one sync together read it once.
 17. A removed token (`DELETE /api/device-tokens/:id`) takes its rows with it (`ON DELETE CASCADE`).
 
 ## Reading state
@@ -90,7 +90,7 @@ Paths are relative to `/kobo/<token>`. The device sends the headers of its firmw
 ## Known limits
 
 - A sync token replayed after a later one (a device restored from a backup) can resurrect a book removed in between: the removal is rebuilt from `kobo_sync_items`, and an old token acknowledges the older batch. Low impact, not guarded.
-- A sync reads the ids and dates of the whole readable library per call.
+- A sync that starts at 0 reads the ids and dates of the whole readable library, in windows.
 
 ## Data
 

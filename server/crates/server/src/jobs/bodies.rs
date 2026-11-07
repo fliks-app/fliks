@@ -46,7 +46,7 @@ async fn backup_job(st: &AppState) -> Outcome {
     let made = backup::create(&st.cfg, &dir)
         .await
         .map_err(|e| e.to_string())?;
-    let pruned = backup::prune(&dir, backup::KEEP)
+    let pruned = backup::prune(&dir, backup::KEEP, ".sql")
         .await
         .map_err(|e| e.to_string())?;
     let mut line = format!("Backup: wrote {} ({} bytes)", made.filename, made.size);

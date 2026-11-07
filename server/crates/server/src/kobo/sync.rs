@@ -18,6 +18,8 @@ use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 const LIMIT: usize = 100;
+/// Items read per step of a sync scan.
+const WINDOW: usize = 500;
 
 /// What the previous answer sent (`b` books, `g` removals, `s` shelves, `sg` shelf removals) and when it read the library.
 #[derive(Serialize, Deserialize, Default)]
@@ -32,13 +34,20 @@ struct Token {
     s: Vec<i32>,
     #[serde(default)]
     sg: Vec<i32>,
+    /// Item id the scan resumes after, set while an answer is cut short.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    c: i32,
+}
+
+fn is_zero(c: &i32) -> bool {
+    *c == 0
 }
 
 fn parse_token(v: &HeaderValue) -> Option<Token> {
     let raw = STANDARD.decode(v.as_bytes()).ok()?;
-    serde_json::from_slice::<Token>(&raw)
-        .ok()
-        .filter(|t| t.v == 1 && [&t.b, &t.g, &t.s, &t.sg].iter().all(|a| a.len() <= LIMIT))
+    serde_json::from_slice::<Token>(&raw).ok().filter(|t| {
+        t.v == 1 && t.c >= 0 && [&t.b, &t.g, &t.s, &t.sg].iter().all(|a| a.len() <= LIMIT)
+    })
 }
 
 async fn ack_kind(
@@ -79,21 +88,42 @@ async fn forget(db: &PgPool, token: i32, kind: &str, ids: &[i32]) -> sqlx::Resul
 
 type Rows = BTreeMap<i32, (DateTime<Utc>, DateTime<Utc>, bool)>;
 
-async fn rows(db: &PgPool, token: i32, kind: &str) -> sqlx::Result<Rows> {
+/// The token's item rows with an id in `(lo, hi]`.
+async fn rows(db: &PgPool, token: i32, lo: i32, hi: i32) -> sqlx::Result<Rows> {
     let r: Vec<(i32, DateTime<Utc>, DateTime<Utc>, bool)> = sqlx::query_as(
-        r#"SELECT "refId", "syncedAt", "stateAt", archived FROM kobo_sync_items WHERE "tokenId" = $1 AND kind = $2"#,
+        r#"SELECT "refId", "syncedAt", "stateAt", archived FROM kobo_sync_items
+           WHERE "tokenId" = $1 AND kind = 'item' AND "refId" > $2 AND "refId" <= $3"#,
     )
     .bind(token)
-    .bind(kind)
+    .bind(lo)
+    .bind(hi)
     .fetch_all(db)
     .await?;
     Ok(r.into_iter().map(|(i, s, a, x)| (i, (s, a, x))).collect())
 }
 
+/// The next `n` text items after `after`: a superset of the Kobo books, narrowed by `books::index`.
+async fn candidates(db: &PgPool, after: i32, n: usize) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
+           WHERE i."groupId" IS NULL AND i.id > $1 ORDER BY i.id LIMIT $2"#,
+    )
+    .bind(after)
+    .bind(n as i64)
+    .fetch_all(db)
+    .await
+}
+
+#[derive(Clone, Copy)]
 enum Change {
     New,
     Changed,
     State,
+}
+
+enum Event {
+    Gone(DateTime<Utc>),
+    Send(books::Index, Change),
 }
 
 pub async fn library_sync(
@@ -102,8 +132,10 @@ pub async fn library_sync(
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let (db, tid, user) = (&st.db, k.token_id, k.a.user.id);
+    let mut start = 0;
     match headers.get("x-kobo-synctoken").and_then(parse_token) {
         Some(p) => {
+            start = p.c;
             let t = DateTime::from_timestamp_micros(p.t).unwrap_or_default();
             ack_kind(db, tid, "item", &p.b, &p.g, t).await?;
             ack_kind(db, tid, "shelf", &p.s, &p.sg, t).await?;
@@ -124,50 +156,79 @@ pub async fn library_sync(
     let mut out: Vec<Value> = vec![];
     let mut more = false;
 
-    let index = books::index(db, &k.acl, None).await?;
-    let visible: HashSet<i32> = index.iter().map(|b| b.item).collect();
-    let have = rows(db, tid, "item").await?;
-
+    let mut events: Vec<(i32, Event)> = vec![];
     let mut purge = vec![];
-    for (id, (synced, _, archived)) in &have {
-        if visible.contains(id) {
-            continue;
+    let mut after = start;
+    loop {
+        let mut ids = candidates(db, after, WINDOW).await?;
+        let last = ids.len() < WINDOW;
+        let hi = if last { i32::MAX } else { ids[WINDOW - 1] };
+        let have = rows(db, tid, after, hi).await?;
+        ids.extend(have.keys());
+        ids.sort_unstable();
+        ids.dedup();
+        let index = books::index(db, &k.acl, Some(&ids)).await?;
+        let visible: HashSet<i32> = index.iter().map(|b| b.item).collect();
+        let touched: HashMap<i32, DateTime<Utc>> = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
+            r#"SELECT "itemId", "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = ANY($2)"#,
+        )
+        .bind(user)
+        .bind(&ids)
+        .fetch_all(db)
+        .await?
+        .into_iter()
+        .collect();
+        let mut found: Vec<(i32, Event)> = vec![];
+        for (id, (synced, _, archived)) in &have {
+            if visible.contains(id) {
+                continue;
+            }
+            if *archived {
+                purge.push(*id);
+            } else {
+                found.push((*id, Event::Gone(*synced)));
+            }
         }
-        if *archived {
-            purge.push(*id);
-        } else if out.len() < LIMIT {
-            let e = books::entitlement(*id, *synced, now, true);
-            out.push(json!({"ChangedEntitlement": {"BookEntitlement": e}}));
-            tok.g.push(*id);
-        } else {
-            more = true;
+        for b in index {
+            let change = match have.get(&b.item) {
+                None => Change::New,
+                Some((_, _, true)) => continue,
+                Some((synced, _, _)) if *synced < b.updated => Change::Changed,
+                Some((_, known, _)) if touched.get(&b.item).is_some_and(|t| t > known) => {
+                    Change::State
+                }
+                Some(_) => continue,
+            };
+            found.push((b.item, Event::Send(b, change)));
         }
+        found.sort_by_key(|e| e.0);
+        for e in found {
+            if events.len() < LIMIT {
+                events.push(e);
+            } else {
+                more = true;
+                break;
+            }
+        }
+        if more || last {
+            break;
+        }
+        after = hi;
     }
     forget(db, tid, "item", &purge).await?;
+    if more {
+        tok.c = events.last().map_or(start, |e| e.0);
+    }
 
-    let ids: Vec<i32> = index.iter().map(|b| b.item).collect();
-    let touched: HashMap<i32, DateTime<Utc>> = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
-        r#"SELECT "itemId", "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = ANY($2)"#,
-    )
-    .bind(user)
-    .bind(&ids)
-    .fetch_all(db)
-    .await?
-    .into_iter()
-    .collect();
     let mut page: Vec<(&books::Index, Change)> = vec![];
-    for b in &index {
-        let change = match have.get(&b.item) {
-            None => Change::New,
-            Some((_, _, true)) => continue,
-            Some((synced, _, _)) if *synced < b.updated => Change::Changed,
-            Some((_, known, _)) if touched.get(&b.item).is_some_and(|t| t > known) => Change::State,
-            Some(_) => continue,
-        };
-        if out.len() + page.len() < LIMIT {
-            page.push((b, change));
-        } else {
-            more = true;
+    for (id, e) in &events {
+        match e {
+            Event::Gone(synced) => {
+                let e = books::entitlement(*id, *synced, now, true);
+                out.push(json!({"ChangedEntitlement": {"BookEntitlement": e}}));
+                tok.g.push(*id);
+            }
+            Event::Send(b, c) => page.push((b, *c)),
         }
     }
     let wanted: Vec<_> = page.iter().map(|(b, _)| (b.item, b.created)).collect();
@@ -198,17 +259,7 @@ pub async fn library_sync(
         tok.b.push(b.item);
     }
 
-    more |= super::shelves::sync(
-        db,
-        &k,
-        &visible,
-        now,
-        &mut out,
-        &mut tok.s,
-        &mut tok.sg,
-        LIMIT,
-    )
-    .await?;
+    more |= super::shelves::sync(db, &k, now, &mut out, &mut tok.s, &mut tok.sg, LIMIT).await?;
 
     let mut res = json_response(StatusCode::OK, Value::Array(out));
     let h = res.headers_mut();

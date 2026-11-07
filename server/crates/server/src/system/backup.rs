@@ -123,10 +123,16 @@ fn stamp() -> String {
 
 /// Rule 17.
 pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
-    dump(cfg, dir, format!("fliks-backup-{}.sql", stamp())).await
+    let name = format!("fliks-backup-{}.sql", stamp());
+    dump(cfg, dir, name, &["--clean", "--if-exists"]).await
 }
 
-async fn dump(cfg: &Config, dir: &Path, filename: String) -> Result<Made, AppError> {
+async fn dump(
+    cfg: &Config,
+    dir: &Path,
+    filename: String,
+    format_args: &[&str],
+) -> Result<Made, AppError> {
     tracing::info!("Creating backup: {filename}");
     mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
     let path = dir.join(&filename);
@@ -134,7 +140,8 @@ async fn dump(cfg: &Config, dir: &Path, filename: String) -> Result<Made, AppErr
         create_private(&path).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
     let mut partial = Partial(Some(&path));
     let mut args = conn_args(cfg);
-    args.extend(["--clean", "--if-exists", "--no-owner", "--no-privileges"].map(String::from));
+    args.extend(format_args.iter().map(|a| (*a).to_owned()));
+    args.extend(["--no-owner", "--no-privileges"].map(String::from));
     run_tool(cfg, "pg_dump", &args, file.into()).await?;
     let size = tokio::fs::metadata(&path)
         .await
@@ -167,15 +174,19 @@ pub async fn before_migration_in(
     let Some(version) = db::pending_version(pool).await? else {
         return Ok(());
     };
-    let filename = format!("fliks-pre-migration-v{version}-{}.sql", stamp());
+    let filename = format!("fliks-pre-migration-v{version}-{}.dump", stamp());
     tracing::info!("Migrations pending, backing up to {}", dir.display());
-    dump(cfg, dir, filename).await.map_err(|e| {
+    dump(cfg, dir, filename, &["-Fc"]).await.map_err(|e| {
         format!(
             "pre-migration backup failed, migrations not applied: {e} \
              (set FLIKS_SKIP_PRE_MIGRATION_BACKUP=1 to skip it)"
         )
     })?;
-    prune(dir, PRE_MIGRATION_KEEP).await?;
+    prune(dir, PRE_MIGRATION_KEEP, ".dump").await?;
+    // Plain-SQL dumps written by earlier 6.0 builds.
+    for e in list_ext(dir, ".sql").await {
+        tokio::fs::remove_file(dir.join(e.filename)).await?;
+    }
     Ok(())
 }
 
@@ -209,6 +220,10 @@ fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
 
 /// Rule 14: newest first by `date`, then `filename` descending.
 pub async fn list(dir: &Path) -> Vec<Entry> {
+    list_ext(dir, ".sql").await
+}
+
+async fn list_ext(dir: &Path, ext: &str) -> Vec<Entry> {
     let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
         return vec![];
     };
@@ -218,7 +233,7 @@ pub async fn list(dir: &Path) -> Vec<Entry> {
         let Ok(meta) = e.metadata().await else {
             continue;
         };
-        if !filename.ends_with(".sql") || !meta.is_file() {
+        if !filename.ends_with(ext) || !meta.is_file() {
             continue;
         }
         let date = meta.modified().map_or_else(
@@ -236,8 +251,8 @@ pub async fn list(dir: &Path) -> Vec<Entry> {
 }
 
 /// Rules 20 and 33: delete all but the newest `keep`, sparing the oldest dump of the newest `v<version>`.
-pub async fn prune(dir: &Path, keep: usize) -> std::io::Result<usize> {
-    let all = list(dir).await;
+pub async fn prune(dir: &Path, keep: usize, ext: &str) -> std::io::Result<usize> {
+    let all = list_ext(dir, ext).await;
     let anchor = all
         .first()
         .and_then(|e| version_of(&e.filename))
@@ -254,7 +269,7 @@ pub async fn prune(dir: &Path, keep: usize) -> std::io::Result<usize> {
     Ok(n)
 }
 
-/// The `<version>` of `fliks-pre-migration-v<version>-<stamp>.sql`.
+/// The `<version>` of `fliks-pre-migration-v<version>-<stamp>.dump`.
 fn version_of(filename: &str) -> Option<&str> {
     let v = filename
         .strip_prefix("fliks-pre-migration-v")?
@@ -448,7 +463,7 @@ mod tests {
                 &format!("fliks-pre-migration-v123-{stamp}.sql"),
                 700 - i as u64 * 100,
             );
-            prune(&dir, 3).await.unwrap();
+            prune(&dir, 3, ".sql").await.unwrap();
             assert!(names(&dir).contains(&"fliks-pre-migration-v123-a.sql".into()));
         }
         assert_eq!(
@@ -469,7 +484,7 @@ mod tests {
                 90 - i as u64 * 10,
             );
         }
-        prune(&dir, 3).await.unwrap();
+        prune(&dir, 3, ".sql").await.unwrap();
         assert_eq!(
             names(&dir),
             [
@@ -480,7 +495,7 @@ mod tests {
             ]
         );
         // keep = 0 still spares it.
-        assert_eq!(prune(&dir, 0).await.unwrap(), 3);
+        assert_eq!(prune(&dir, 0, ".sql").await.unwrap(), 3);
         assert_eq!(names(&dir), ["fliks-pre-migration-v124-a.sql"]);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -491,7 +506,7 @@ mod tests {
         for i in 0..5u64 {
             put(&dir, &format!("fliks-backup-{i}.sql"), 500 - i * 100);
         }
-        assert_eq!(prune(&dir, 3).await.unwrap(), 2);
+        assert_eq!(prune(&dir, 3, ".sql").await.unwrap(), 2);
         assert_eq!(
             names(&dir),
             [
