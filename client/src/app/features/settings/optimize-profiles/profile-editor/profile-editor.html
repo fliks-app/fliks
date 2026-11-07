@@ -3,7 +3,7 @@
 } @else if (doc(); as d) {
   <div class="flex flex-col gap-6">
     <div class="flex items-center gap-4 min-w-0">
-      <a routerLink="/admin/settings/optimize-profiles" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.close' | translate">
+      <a routerLink="/admin/settings/optimize-profiles" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
         <svg lucideChevronLeft class="h-5 w-5"></svg>
       </a>
       <h1 class="text-2xl font-bold truncate">{{ name() || ('settings.optimize.profiles.new' | translate) }}</h1>
@@ -41,7 +41,7 @@
               <h3 class="font-semibold">{{ 'settings.optimize.video.which' | translate }}</h3>
               <div>
                 <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.when_codec' | translate }}</p>
-                <app-multi-select [options]="videoCodecs" [value]="d.video.when.codec"
+                <app-multi-select [ariaLabel]="'settings.optimize.f.when_codec' | translate" [options]="videoCodecs" [value]="d.video.when.codec"
                   [placeholder]="'settings.optimize.f.any' | translate" (valueChange)="edit(x => x.video.when.codec = $event)" />
                 <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.when_codec_hint' | translate }}</p>
               </div>
@@ -102,19 +102,19 @@
             <h2 class="card-title text-lg">{{ 'settings.optimize.audio.title' | translate }}</h2>
             <div>
               <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_languages' | translate }}</p>
-              <app-multi-select [options]="languageOptions()" [value]="d.audio.languages" (valueChange)="edit(x => x.audio.languages = $event)" />
+              <app-ordered-list [ariaLabel]="'settings.optimize.f.audio_languages' | translate" [options]="languageOptions()" [value]="d.audio.languages" (valueChange)="edit(x => x.audio.languages = $event)" />
               <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_languages_hint' | translate }}</p>
             </div>
             <app-toggle-field [label]="'settings.optimize.f.audio_drop_other' | translate" [hint]="'settings.optimize.f.audio_drop_other_hint' | translate"
               [value]="d.audio.drop_other_languages" (valueChange)="edit(x => x.audio.drop_other_languages = $event)" />
             <div>
               <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_drop' | translate }}</p>
-              <app-multi-select [options]="dropKinds" [value]="d.audio.drop" (valueChange)="edit(x => x.audio.drop = $event)" />
+              <app-multi-select [ariaLabel]="'settings.optimize.f.audio_drop' | translate" [options]="dropKinds" [value]="d.audio.drop" (valueChange)="edit(x => x.audio.drop = $event)" />
               <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_drop_hint' | translate }}</p>
             </div>
             <div>
               <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.audio_default' | translate }}</p>
-              <app-multi-select [options]="languageOptions()" [value]="d.audio.default" (valueChange)="edit(x => x.audio.default = $event)" />
+              <app-ordered-list [ariaLabel]="'settings.optimize.f.audio_default' | translate" [options]="languageOptions()" [value]="d.audio.default" (valueChange)="edit(x => x.audio.default = $event)" />
               <p class="text-sm text-base-content/60 mt-1">{{ 'settings.optimize.f.audio_default_hint' | translate }}</p>
             </div>
             <app-toggle-field [label]="'settings.optimize.f.audio_reorder' | translate" [hint]="'settings.optimize.f.audio_reorder_hint' | translate"
@@ -140,7 +140,7 @@
             <h2 class="card-title text-lg">{{ 'settings.optimize.subtitles.title' | translate }}</h2>
             <div>
               <p class="label-text font-medium mb-1">{{ 'settings.optimize.f.subtitle_languages' | translate }}</p>
-              <app-multi-select [options]="languageOptions()" [value]="d.subtitles.languages" (valueChange)="edit(x => x.subtitles.languages = $event)" />
+              <app-ordered-list [ariaLabel]="'settings.optimize.f.subtitle_languages' | translate" [options]="languageOptions()" [value]="d.subtitles.languages" (valueChange)="edit(x => x.subtitles.languages = $event)" />
             </div>
             <app-toggle-field [label]="'settings.optimize.f.subtitle_drop_other' | translate" [hint]="'settings.optimize.f.subtitle_drop_other_hint' | translate"
               [value]="d.subtitles.drop_other_languages" (valueChange)="edit(x => x.subtitles.drop_other_languages = $event)" />

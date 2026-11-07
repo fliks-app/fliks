@@ -164,3 +164,122 @@ export interface LibraryOptimizeSettings {
   optimizeNewFiles: boolean;
   allowRename: boolean;
 }
+
+export type OriginalPolicy = 'trash' | 'keep' | 'delete';
+
+/** `GET/PUT /api/optimize/settings`; `window` minutes are since local midnight. */
+export interface OptimizeSettings {
+  window: { startMin: number; endMin: number } | null;
+  optimizeOriginal: OriginalPolicy;
+  trashRetentionDays: number;
+  trashMinFreeGb: number;
+  deviceMaxJobs: Record<string, number>;
+  deviceWeights: Record<string, number>;
+  gpuPlaybackBeforePause: number;
+  cpuWeight: number;
+  paused: boolean;
+}
+
+export interface LevelLeft {
+  jobs: number;
+  playSeconds: number;
+  estimateSeconds: number | null;
+}
+
+export interface QueueEstimate {
+  perLevel: Partial<Record<OptimizeLevel, LevelLeft>>;
+  /** Null while a level with jobs has no history yet. */
+  etaSeconds: number | null;
+  endsAt: string | null;
+}
+
+export interface QueueStatus {
+  paused: boolean;
+  /** Inside the time window (or none): new leases may start. */
+  open: boolean;
+  counts: Record<string, number>;
+  estimate: QueueEstimate;
+}
+
+export type JobState =
+  | 'queued'
+  | 'leased'
+  | 'staged'
+  | 'committing'
+  | 'done'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
+
+export interface OptimizeJob {
+  id: number;
+  kind: string;
+  mediaFileId: number | null;
+  state: JobState;
+  priority: number;
+  attempt: number;
+  failures: number;
+  progress: number;
+  /** Paused by playback on its device. */
+  paused: boolean;
+  workerId: string | null;
+  deviceId: string | null;
+  error: { class?: string; message?: string } | null;
+  inPath: string | null;
+  inSize: number | null;
+  outSize: number | null;
+  title: string | null;
+  libraryId: number | null;
+  level: OptimizeLevel | null;
+  codec: string | null;
+  durationSeconds: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkerDevice {
+  id: string;
+  encoders: string[];
+  decoders: string[];
+  maxJobs: number;
+  vramMib?: number;
+}
+
+export interface OptimizeWorker {
+  instance: string;
+  engineVersion: string;
+  tokenId: number | null;
+  devices: WorkerDevice[];
+}
+
+export type QueueOutcome =
+  | 'queued'
+  | 'active'
+  | 'missing'
+  | 'unprobed'
+  | 'nothing_to_do'
+  | 'shared'
+  | 'stale';
+
+export interface Queued {
+  mediaFileId: number;
+  outcome: QueueOutcome;
+  jobId: number | null;
+}
+
+export const LEVELS: OptimizeLevel[] = ['metadata', 'remux', 'reencode'];
+
+/** Bytes a finished job saved; negative when the file grew. */
+export function savedBytes(j: Pick<OptimizeJob, 'inSize' | 'outSize'>): number | null {
+  return j.inSize != null && j.outSize != null ? j.inSize - j.outSize : null;
+}
+
+/** Minutes since midnight to `HH:MM`, and back (null when malformed). */
+export function minutesToTime(m: number): string {
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+export function timeToMinutes(t: string): number | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(t);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}

@@ -1,0 +1,143 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <div class="flex flex-col gap-6 max-w-2xl">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.optimize.global.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{ 'settings.optimize.global.desc' | translate }}
+      </p>
+      <a routerLink="/admin/optimize" class="link link-hover text-sm mt-1 inline-block">{{
+        'settings.optimize.global.open_queue' | translate
+      }}</a>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.global.window' | translate }}</h2>
+        <app-toggle-field
+          [label]="'settings.optimize.global.window_on' | translate"
+          [hint]="'settings.optimize.global.window_hint' | translate"
+          [value]="windowOn()"
+          (valueChange)="windowOn.set($event)"
+        />
+        @if (windowOn()) {
+          <div class="grid grid-cols-2 gap-4">
+            <app-input-field
+              type="time"
+              [label]="'settings.optimize.global.window_start' | translate"
+              [value]="start()"
+              (valueChange)="start.set($event)"
+            />
+            <app-input-field
+              type="time"
+              [label]="'settings.optimize.global.window_end' | translate"
+              [value]="end()"
+              (valueChange)="end.set($event)"
+            />
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.global.originals' | translate }}</h2>
+        <app-select-field
+          [label]="'settings.optimize.global.original' | translate"
+          [hint]="'settings.optimize.global.original_' + original() | translate"
+          [value]="original()"
+          (valueChange)="original.set($any($event))"
+        >
+          @for (p of policies; track p) {
+            <option [value]="p">
+              {{ 'settings.optimize.global.original_label_' + p | translate }}
+            </option>
+          }
+        </app-select-field>
+        @if (original() === 'delete') {
+          <div role="alert" class="alert alert-warning text-sm">
+            {{ 'settings.optimize.global.delete_warning' | translate }}
+          </div>
+        }
+        @if (original() === 'trash') {
+          <div class="grid gap-4 sm:grid-cols-2">
+            <app-input-field
+              type="number"
+              [label]="'settings.optimize.global.retention' | translate"
+              [hint]="'settings.optimize.global.retention_hint' | translate"
+              [value]="retention()"
+              (valueChange)="retention.set($event)"
+            />
+            <app-input-field
+              type="number"
+              [label]="'settings.optimize.global.min_free' | translate"
+              [hint]="'settings.optimize.global.min_free_hint' | translate"
+              [value]="minFree()"
+              (valueChange)="minFree.set($event)"
+            />
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.global.devices' | translate }}</h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <app-input-field
+            type="number"
+            [label]="'settings.optimize.global.gpu_reserve' | translate"
+            [hint]="'settings.optimize.global.gpu_reserve_hint' | translate"
+            [value]="gpuReserve()"
+            (valueChange)="gpuReserve.set($event)"
+          />
+          <app-input-field
+            type="number"
+            [label]="'settings.optimize.global.cpu_weight' | translate"
+            [hint]="'settings.optimize.global.cpu_weight_hint' | translate"
+            [value]="cpuWeight()"
+            (valueChange)="cpuWeight.set($event)"
+          />
+        </div>
+        @if (deviceIds().length === 0) {
+          <p class="text-sm text-base-content/60">
+            {{ 'settings.optimize.global.no_devices' | translate }}
+          </p>
+        } @else {
+          <p class="text-sm text-base-content/60">
+            {{ 'settings.optimize.global.devices_hint' | translate }}
+          </p>
+          @for (id of deviceIds(); track id) {
+            <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] items-end gap-3">
+              <span class="font-medium pb-3">{{ id }}</span>
+              <app-input-field
+                type="number"
+                [label]="'settings.optimize.global.max_jobs' | translate"
+                [value]="caps()[id] ?? ''"
+                (valueChange)="setDevice('caps', id, $event)"
+              />
+              <app-input-field
+                type="number"
+                [label]="'settings.optimize.global.weight' | translate"
+                [value]="weights()[id] ?? ''"
+                (valueChange)="setDevice('weights', id, $event)"
+              />
+            </div>
+          }
+        }
+      </div>
+    </div>
+
+    <div class="flex justify-end px-1 py-1">
+      <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+  </div>
+}

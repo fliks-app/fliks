@@ -3,6 +3,7 @@
   type="button"
   class="select select-bordered select-sm w-full h-auto min-h-8 py-1 text-left flex items-center gap-1 flex-wrap"
   [disabled]="disabled()"
+  [attr.aria-label]="ariaLabel()"
   (click)="toggleOpen()"
 >
   @if (chips().length === 0) {

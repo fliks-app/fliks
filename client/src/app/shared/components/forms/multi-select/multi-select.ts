@@ -34,6 +34,8 @@ export class MultiSelectComponent<T extends string | number = number> {
   readonly options = input.required<readonly MultiSelectOption<T>[]>();
   readonly value = model<T[]>([]);
   readonly placeholder = input<string>('');
+  /** Accessible name of the trigger, for a field whose visible label is not linked to it. */
+  readonly ariaLabel = input<string | null>(null);
   readonly disabled = input<boolean>(false);
   /** Chips shown on the trigger before collapsing the rest into "+N". */
   readonly maxChips = input<number>(3);

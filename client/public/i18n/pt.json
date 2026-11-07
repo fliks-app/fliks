@@ -2090,7 +2090,8 @@
       "cleanup": "Limpeza",
       "email": "E-mail de saída",
       "sso": "Início de sessão único",
-      "optimize_profiles": "Perfis de otimização"
+      "optimize_profiles": "Perfis de otimização",
+      "optimize": "Definições de otimização"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -2138,8 +2139,8 @@
       "throttle_unavailable_help": "Não disponível neste servidor: ele não consegue pausar o codificador durante a reprodução.",
       "throttle_threshold": "Limite de limitação",
       "throttle_threshold_help": "Quantos segundos o codificador pode ficar à frente da reprodução antes de pausar. Retoma na metade desse valor.",
-      "auto_crop": "Recorte automático das barras pretas",
-      "auto_crop_help": "Remove as barras pretas. Os leitores que recortam sozinhos mantêm o fluxo original; os demais recebem uma recodificação.",
+      "auto_crop": "Permitir a transcodificação para remover as barras pretas",
+      "auto_crop_help": "Os leitores que recortam por si recebem o fluxo original, os outros uma versão recodificada. Para remover as barras do ficheiro de forma definitiva, use um perfil de otimização.",
       "init_time": "Duração do primeiro segmento",
       "init_time_help": "O primeiro segmento pode ser mais curto para acelerar o arranque. Os seguintes usam a duração normal.",
       "qsv_preset": "Preset de codificação (QSV / libx264)",
@@ -2173,7 +2174,9 @@
       "cache_purge_title": "Limpar a cache de transcodificação",
       "cache_purge_confirm": "Isto elimina todos os segmentos transcodificados em cache. As reproduções em curso vão retranscodificar em tempo real (rebuffering breve). Continuar?",
       "cache_purge_action": "Limpar",
-      "cache_purged": "Cache limpa · {{entries}} título(s), {{size}} libertado(s)"
+      "cache_purged": "Cache limpa · {{entries}} título(s), {{size}} libertado(s)",
+      "transcoding_title": "Transcodificação",
+      "auto_crop_profile_link": "Perfis de otimização"
     },
     "general": {
       "title": "Definições gerais",
@@ -2934,8 +2937,6 @@
       "remove_hi_tags": "Remover as tags HI ([música], (suspiro), ♪, etc.)",
       "ocr_burn_in_auto": "Preferir o OCR das faixas de imagem incorporadas a uma transferência",
       "ocr_burn_in_auto_hint": "Quando falta um idioma do perfil e existe uma faixa de imagem (PGS, VobSub) nesse idioma, ela é convertida em texto por OCR em vez de transferir uma legenda. Aplica-se às pesquisas de legendas em falta, automáticas e manuais. O OCR consome muita CPU e corre em segundo plano; se falhar, o idioma volta aos fornecedores.",
-      "ocr_delete_source": "Eliminar a legenda de imagem depois de extraída",
-      "ocr_delete_source_hint": "Após uma conversão OCR bem-sucedida, elimina a faixa de imagem de origem. Nota: uma legenda embutida está no contentor, será redetetada na próxima análise do ficheiro.",
       "custom_exclusions": "Exclusões personalizadas (regex)",
       "custom_exclusions_placeholder": "opensubtitles\nadvertise\nwww\\.example\\.com",
       "custom_exclusions_hint": "Uma regex por linha. As legendas que contenham estes padrões serão eliminadas.",
@@ -3486,7 +3487,11 @@
         "clean_hint": "Não toca na imagem nem no som. Corrige os títulos de faixa que não correspondem ao conteúdo, um título que é um nome de release, as marcas «forçado» e «surdos», os idiomas em falta e as estatísticas de faixas.",
         "rename_tokens": "Atualizar o nome do ficheiro",
         "rename_tokens_hint": "Substitui as menções técnicas que deixaram de ser verdadeiras, por exemplo «x264» por «AV1». Só se a biblioteca permitir renomear.",
-        "container": "Formato do contentor"
+        "container": "Formato do contentor",
+        "move_up": "Subir",
+        "move_down": "Descer",
+        "remove": "Remover",
+        "add": "Adicionar um idioma"
       },
       "opt": {
         "quality": {
@@ -3610,7 +3615,44 @@
         "new_files": "Aplicar aos novos ficheiros",
         "new_files_hint": "Após o prazo de elegibilidade do perfil.",
         "allow_rename": "Permitir renomear",
-        "allow_rename_hint": "Extensão e palavras do nome. Uma ferramenta externa que siga o ficheiro pelo caminho perdê-lo-ia."
+        "allow_rename_hint": "Extensão e palavras do nome. Uma ferramenta externa que siga o ficheiro pelo caminho perdê-lo-ia.",
+        "queue": "Colocar na fila",
+        "open_queue": "Abrir a fila",
+        "queued": "{{count}} ficheiro(s) a ser colocado(s) na fila"
+      },
+      "global": {
+        "title": "Definições de otimização",
+        "desc": "Quando e como os ficheiros da biblioteca são otimizados, o que acontece aos originais e como os dispositivos são partilhados.",
+        "open_queue": "Abrir a fila de otimização",
+        "window": "Intervalo horário",
+        "window_on": "Otimizar apenas durante um intervalo horário",
+        "window_hint": "Fora do intervalo não começa nenhum trabalho novo, os que estão a decorrer terminam. Hora do servidor.",
+        "window_start": "Início",
+        "window_end": "Fim",
+        "window_invalid": "O início e o fim do intervalo têm de ser diferentes.",
+        "originals": "Originais",
+        "original": "Ficheiro original após uma otimização",
+        "original_label_trash": "Mover para o lixo",
+        "original_label_keep": "Manter junto ao ficheiro (.orig)",
+        "original_label_delete": "Eliminar",
+        "original_trash": "O original vai para um lixo da biblioteca e pode ser restaurado até ser purgado.",
+        "original_keep": "O original fica junto ao novo ficheiro com a extensão .orig, até o remover.",
+        "original_delete": "O original é eliminado assim que o novo ficheiro está no lugar. Não é então possível restaurar.",
+        "delete_warning": "Com esta opção uma otimização não pode ser desfeita.",
+        "retention": "Retenção do lixo (dias)",
+        "retention_hint": "Os originais mais antigos são purgados.",
+        "min_free": "Limiar de espaço livre (GB)",
+        "min_free_hint": "Abaixo deste espaço livre os originais mais antigos são purgados primeiro.",
+        "devices": "Dispositivos",
+        "gpu_reserve": "Reproduções por hardware antes de pausar",
+        "gpu_reserve_hint": "A partir deste número de reproduções por hardware num dispositivo, os seus trabalhos em segundo plano ficam em pausa. 0: nunca pausa.",
+        "cpu_weight": "Peso de uma codificação por software",
+        "cpu_weight_hint": "A quantas transcodificações de reprodução equivale uma codificação por software no orçamento de CPU.",
+        "no_devices": "Nenhum worker se anunciou ainda.",
+        "devices_hint": "Deixe um campo vazio para manter o valor declarado pelo dispositivo.",
+        "max_jobs": "Trabalhos simultâneos",
+        "weight": "Peso",
+        "saved": "Definições guardadas"
       }
     }
   },
@@ -4846,5 +4888,105 @@
       "unavailable": "O início de sessão único não está disponível neste dispositivo."
     },
     "error_last_method": "É a sua única forma de iniciar sessão. Defina uma palavra-passe antes de a desassociar."
+  },
+  "optimize": {
+    "queue": {
+      "title": "Fila de otimização",
+      "subtitle": "Trabalhos em curso e em espera, falhas e o que as otimizações pouparam.",
+      "settings": "Definições",
+      "pause": "Pausar a fila",
+      "resume": "Retomar a fila",
+      "state": {
+        "running": "A decorrer",
+        "paused": "Em pausa",
+        "closed": "Fora do intervalo horário"
+      },
+      "state_hint": {
+        "running": "Os trabalhos novos começam assim que há dispositivos livres.",
+        "paused": "Nenhum trabalho novo começa, os que estão a decorrer terminam.",
+        "closed": "Nenhum trabalho novo começa até o intervalo abrir, os que estão a decorrer terminam."
+      },
+      "counts": "{{running}} em curso, {{waiting}} em espera",
+      "ends": "Fim estimado",
+      "ends_unknown": "Ainda não se sabe, um nível não tem nenhum trabalho terminado para medir",
+      "estimate_note": "Uma estimativa a partir da velocidade dos últimos trabalhos de cada dispositivo e do intervalo horário.",
+      "level_left": "{{level}}: restam {{count}}, cerca de {{time}}",
+      "level": {
+        "metadata": "Metadados",
+        "remux": "Remux",
+        "reencode": "Recodificação"
+      },
+      "devices": "Dispositivos",
+      "device": {
+        "free": "Livre",
+        "busy": "Ocupado",
+        "paused": "Em pausa por reprodução",
+        "slots": "{{used}} de {{max}} trabalho(s)"
+      },
+      "tab": {
+        "active": "Em curso e em espera",
+        "failures": "Falhas",
+        "finished": "Terminados"
+      },
+      "library": "Biblioteca",
+      "all_libraries": "Todas as bibliotecas",
+      "running": "Em curso",
+      "running_empty": "Nada em curso.",
+      "waiting": "Em espera, por ordem de execução",
+      "waiting_empty": "Nenhum trabalho em espera.",
+      "selected": "{{count}} selecionado(s)",
+      "to_front": "Passar para o início",
+      "select_all": "Selecionar tudo",
+      "select": "Selecionar",
+      "col": {
+        "title": "Título",
+        "level": "Nível",
+        "device": "Dispositivo",
+        "progress": "Progresso",
+        "size": "Tamanho",
+        "duration": "Duração",
+        "state": "Estado",
+        "error": "Erro",
+        "codec": "Codec",
+        "saved": "Poupado"
+      },
+      "job": {
+        "encoding": "A codificar",
+        "paused": "Em pausa",
+        "leased": "A decorrer",
+        "staged": "Pronto para substituir",
+        "committing": "A substituir",
+        "queued": "Em espera",
+        "failed": "Falhou",
+        "skipped": "Ignorado",
+        "done": "Concluído",
+        "cancelled": "Cancelado"
+      },
+      "failures_empty": "Nenhuma falha.",
+      "finished_empty": "Ainda nenhuma otimização terminou.",
+      "restore": "Restaurar",
+      "confirm_cancel": "Cancelar {{count}} trabalho(s)?",
+      "confirm_restore": "Repor o original de «{{title}}»? O ficheiro otimizado ocupa o seu lugar no lixo.",
+      "retried": "Trabalho colocado de novo na fila",
+      "restored": "Original restaurado"
+    },
+    "action": {
+      "menu": "Otimizar…",
+      "title": "Otimizar",
+      "optimize": "Otimizar",
+      "force": "Forçar a recodificação",
+      "force_warning": "Uma recodificação forçada comprime o vídeo de novo, mesmo que já esteja no formato pretendido. Cada recodificação perde alguma qualidade: faça-o apenas se necessário.",
+      "no_files": "Nenhum ficheiro para otimizar.",
+      "no_profile": "A biblioteca deste título não tem perfil de otimização. Escolha um nas definições da biblioteca.",
+      "files": "{{count}} ficheiro(s) abrangido(s)",
+      "per_level": "{{level}}: {{count}} ficheiro(s), {{size}} a processar",
+      "conform": "{{count}} ficheiro(s) já cumprem o perfil.",
+      "excluded": "{{count}} ficheiro(s) não podem ser otimizados (não analisados ou contentor inadequado).",
+      "estimate_note": "Os tamanhos são os dos ficheiros a processar, não o espaço que vai poupar: a poupança só é medida no ficheiro terminado.",
+      "removed": "Seriam removida(s) {{count}} faixa(s). Uma remoção é definitiva quando o lixo é purgado.",
+      "too_many": "Demasiados ficheiros para os comparar um a um: todos serão colocados na fila conforme o perfil decidir.",
+      "open_queue": "Abrir a fila",
+      "queued": "{{count}} de {{total}} ficheiro(s) colocado(s) na fila"
+    }
   }
 }

@@ -5,11 +5,12 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideChevronLeft } from '@lucide/angular';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
-import { MediaService } from '../../../../core/services/api/media.service';
+import { MediaService, type MediaFileInfo } from '../../../../core/services/api/media.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
   Change,
+  TrackKind,
   FileOutcome,
   FormatChoice,
   PresetKey,
@@ -18,10 +19,10 @@ import {
   applyFormatChoice,
   formatChoice,
 } from '../../../../core/models/optimize';
-import { formatBytes } from '../../../../core/utils/format-bytes';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../../shared/components/forms/select-field/select-field';
 import { InputFieldComponent } from '../../../../shared/components/forms/input-field/input-field';
+import { OrderedListComponent } from './ordered-list';
 import {
   MultiSelectComponent,
   MultiSelectOption,
@@ -41,12 +42,13 @@ interface Line {
 interface SampleOption {
   fileId: number;
   title: string;
+  info: MediaFileInfo | null;
 }
 
-/** The index shown to people: ffprobe numbers from 0, a track list from 1. */
-const track = (i: number) => i + 1;
+/** Position of an ffprobe stream among the tracks of its kind, counted from 1 (the absolute index counts the video too). */
+type Ordinal = (kind: TrackKind, streamIndex: number) => number | string;
 
-function lineOf(c: Change): Line {
+function lineOf(c: Change, track: Ordinal): Line {
   const k = (t: string) => `settings.optimize.change.${t}`;
   switch (c.type) {
     case 'reencode':
@@ -59,33 +61,33 @@ function lineOf(c: Change): Line {
       return {
         group: c.kind === 'audio' ? 'audio' : 'subtitles',
         key: k(`drop_${c.reason}`),
-        params: { n: track(c.streamIndex), language: c.language ?? '?' },
+        params: { n: track(c.kind, c.streamIndex), language: c.language ?? '?' },
       };
     case 'ocr':
-      return { group: 'subtitles', key: k('ocr'), params: { n: track(c.streamIndex) } };
+      return { group: 'subtitles', key: k('ocr'), params: { n: track('subtitle', c.streamIndex) } };
     case 'addAudio':
-      return { group: 'audio', key: k('add_audio'), params: { n: track(c.sourceStream) } };
+      return { group: 'audio', key: k('add_audio'), params: { n: track('audio', c.sourceStream) } };
     case 'reorder':
       return { group: c.kind === 'audio' ? 'audio' : 'subtitles', key: k('reorder'), params: {} };
     case 'default':
-      return { group: 'audio', key: k('default'), params: { n: track(c.streamIndex) } };
+      return { group: 'audio', key: k('default'), params: { n: track('audio', c.streamIndex) } };
     case 'language':
       return {
         group: c.kind === 'audio' ? 'audio' : 'subtitles',
         key: k('language'),
-        params: { n: track(c.streamIndex), code: c.code },
+        params: { n: track(c.kind, c.streamIndex), code: c.code },
       };
     case 'flags':
       return {
         group: c.kind === 'audio' ? 'audio' : 'subtitles',
         key: k('flags'),
-        params: { n: track(c.streamIndex) },
+        params: { n: track(c.kind, c.streamIndex) },
       };
     case 'title':
       return {
         group: c.kind === 'audio' ? 'audio' : 'subtitles',
         key: k('title'),
-        params: { n: track(c.streamIndex) },
+        params: { n: track(c.kind, c.streamIndex) },
       };
     case 'statisticsTags':
       return { group: 'file', key: k('statistics_tags'), params: {} };
@@ -109,6 +111,7 @@ function lineOf(c: Change): Line {
     SelectFieldComponent,
     InputFieldComponent,
     MultiSelectComponent,
+    OrderedListComponent,
   ],
   templateUrl: './profile-editor.html',
 })
@@ -124,8 +127,6 @@ export class OptimizeProfileEditorComponent implements OnInit {
 
   readonly formats = FORMATS;
   readonly videoCodecs = VIDEO_CODECS.map((c) => ({ value: c, label: c.toUpperCase() }));
-  readonly groups = GROUPS;
-  readonly formatBytes = formatBytes;
 
   readonly id = signal<number | null>(null);
   readonly loading = signal(true);
@@ -146,6 +147,7 @@ export class OptimizeProfileEditorComponent implements OnInit {
   readonly outcomeError = signal(false);
   readonly outcomeBusy = signal(false);
   private previewSeq = 0;
+  private libSeq = 0;
 
   readonly format = computed(() => {
     const d = this.doc();
@@ -158,7 +160,13 @@ export class OptimizeProfileEditorComponent implements OnInit {
 
   readonly lines = computed(() => {
     const o = this.outcome();
-    const all = o?.status === 'diff' ? o.changes.map(lineOf) : [];
+    const info = this.sampleFiles().find((f) => f.fileId === this.sampleFileId())?.info;
+    const track: Ordinal = (kind, streamIndex) => {
+      const list = kind === 'audio' ? info?.audio : info?.subtitles;
+      const pos = list?.findIndex((t) => t.streamIndex === streamIndex) ?? -1;
+      return pos >= 0 ? pos + 1 : '?';
+    };
+    const all = o?.status === 'diff' ? o.changes.map((c) => lineOf(c, track)) : [];
     return GROUPS.map((g) => ({ group: g, items: all.filter((l) => l.group === g) })).filter(
       (g) => g.items.length > 0,
     );
@@ -226,9 +234,9 @@ export class OptimizeProfileEditorComponent implements OnInit {
     this.doc.set(d);
   }
 
-  num(v: string, fallback: number): number {
+  num(v: string, fallback: number, whole = true): number {
     const n = Number(v);
-    return Number.isFinite(n) && v.trim() !== '' ? Math.max(0, Math.round(n)) : fallback;
+    return Number.isFinite(n) && v.trim() !== '' ? Math.max(0, whole ? Math.round(n) : n) : fallback;
   }
 
   setFormat(c: string) {
@@ -237,24 +245,28 @@ export class OptimizeProfileEditorComponent implements OnInit {
 
   setMinBitrate(v: string) {
     this.edit((d) => {
-      const n = this.num(v, 0);
-      d.video.when.min_bitrate = n > 0 ? n * 1_000_000 : null;
+      const n = this.num(v, 0, false);
+      d.video.when.min_bitrate = n > 0 ? Math.round(n * 1_000_000) : null;
     });
   }
 
   async pickLibrary(id: number) {
+    const seq = ++this.libSeq;
     this.sampleLibraryId.set(id);
     this.sampleFileId.set(null);
     this.outcome.set(null);
     try {
-      const page = await this.media.getAll({ libraryId: id, limit: 100, sortBy: 'title', sortOrder: 'ASC' });
+      const page = await this.media.getAll({
+        libraryId: id, limit: 100, sortBy: 'title', sortOrder: 'ASC', view: 'grid',
+      });
+      if (seq !== this.libSeq) return;
       const files = page.data.flatMap((m) =>
-        m.files?.[0] ? [{ fileId: m.files[0].id, title: m.title }] : [],
+        m.files?.[0] ? [{ fileId: m.files[0].id, title: m.title, info: m.files[0].streamInfo ?? null }] : [],
       );
       this.sampleFiles.set(files);
       this.sampleFileId.set(files[0]?.fileId ?? null);
     } catch {
-      this.sampleFiles.set([]);
+      if (seq === this.libSeq) this.sampleFiles.set([]);
     }
   }
 

@@ -1,0 +1,381 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'optimize.queue.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'optimize.queue.subtitle' | translate }}</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 px-1 -mx-1 py-1">
+      <a routerLink="/admin/settings/optimize" class="btn btn-ghost btn-sm">{{
+        'optimize.queue.settings' | translate
+      }}</a>
+      @if (status(); as s) {
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-primary]="s.paused"
+          [class.btn-outline]="!s.paused"
+          [disabled]="busy()"
+          (click)="togglePause()"
+        >
+          {{ (s.paused ? 'optimize.queue.resume' : 'optimize.queue.pause') | translate }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (status(); as s) {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <span
+            class="badge badge-lg"
+            [class.badge-success]="state() === 'running'"
+            [class.badge-warning]="state() !== 'running'"
+          >
+            {{ 'optimize.queue.state.' + state() | translate }}
+          </span>
+          <span class="text-sm text-base-content/70">{{
+            'optimize.queue.counts'
+              | translate: { running: runningCount(), waiting: counts()['queued'] ?? 0 }
+          }}</span>
+        </div>
+        <p class="text-sm text-base-content/60">
+          {{ 'optimize.queue.state_hint.' + state() | translate }}
+        </p>
+
+        <div>
+          <p class="font-semibold">
+            {{ 'optimize.queue.ends' | translate }}:
+            @if (s.estimate.endsAt) {
+              {{ s.estimate.endsAt | date: 'medium' }} ({{ eta(s.estimate.etaSeconds) }})
+            } @else {
+              <span class="font-normal text-base-content/60">{{
+                'optimize.queue.ends_unknown' | translate
+              }}</span>
+            }
+          </p>
+          <p class="text-sm text-base-content/60">
+            {{ 'optimize.queue.estimate_note' | translate }}
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          @for (l of levels; track l) {
+            @if (s.estimate.perLevel[l]; as lv) {
+              <span class="badge badge-lg badge-ghost">
+                {{
+                  'optimize.queue.level_left'
+                    | translate
+                      : {
+                          level: ('optimize.queue.level.' + l | translate),
+                          count: lv.jobs,
+                          time: eta(lv.estimateSeconds),
+                        }
+                }}
+              </span>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (devices().length > 0) {
+    <div class="flex flex-col gap-2">
+      <h2 class="text-lg font-semibold">{{ 'optimize.queue.devices' | translate }}</h2>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        @for (d of devices(); track d.worker + d.id) {
+          <div class="rounded-lg border border-base-200 bg-base-100 p-3 flex flex-col gap-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-medium truncate">{{ d.id }}</span>
+              <span
+                class="badge badge-sm"
+                [class.badge-warning]="d.paused"
+                [class.badge-primary]="!d.paused && d.jobs.length > 0"
+                [class.badge-ghost]="d.jobs.length === 0"
+              >
+                {{
+                  'optimize.queue.device.' +
+                    (d.paused ? 'paused' : d.jobs.length > 0 ? 'busy' : 'free') | translate
+                }}
+              </span>
+            </div>
+            <p class="text-sm text-base-content/60 truncate">{{ d.worker }}</p>
+            <p class="text-sm">
+              {{
+                'optimize.queue.device.slots' | translate: { used: d.jobs.length, max: d.maxJobs }
+              }}
+            </p>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div role="tablist" class="tabs tabs-box">
+      @for (t of tabs; track t) {
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          [class.tab-active]="tab() === t"
+          [attr.aria-selected]="tab() === t"
+          (click)="tab.set(t)"
+        >
+          {{ 'optimize.queue.tab.' + t | translate }}
+        </button>
+      }
+    </div>
+    <select
+      class="select select-bordered select-sm"
+      [attr.aria-label]="'optimize.queue.library' | translate"
+      [value]="libraryId() ?? ''"
+      (change)="setLibrary($any($event.target).value)"
+    >
+      <option value="">{{ 'optimize.queue.all_libraries' | translate }}</option>
+      @for (l of libraryList(); track l.id) {
+        <option [value]="l.id">{{ l.name }}</option>
+      }
+    </select>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (tab() === 'active') {
+    <div class="flex flex-col gap-2">
+      <h2 class="text-lg font-semibold">{{ 'optimize.queue.running' | translate }}</h2>
+      @if (running().length === 0) {
+        <p class="text-base-content/50">{{ 'optimize.queue.running_empty' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto scroll-ring-safe">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{{ 'optimize.queue.col.title' | translate }}</th>
+                <th>{{ 'optimize.queue.col.level' | translate }}</th>
+                <th>{{ 'optimize.queue.col.device' | translate }}</th>
+                <th class="min-w-40">{{ 'optimize.queue.col.progress' | translate }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (j of running(); track j.id) {
+                <tr>
+                  <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                  <td>
+                    @if (j.level) {
+                      {{ 'optimize.queue.level.' + j.level | translate }}
+                    }
+                  </td>
+                  <td>{{ j.deviceId ?? '-' }}</td>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <progress
+                        class="progress progress-primary w-24"
+                        [value]="j.progress * 100"
+                        max="100"
+                      ></progress>
+                      <span class="text-sm tabular-nums">{{ (j.progress * 100).toFixed(0) }}%</span>
+                      <span class="badge badge-sm" [class.badge-warning]="j.paused">{{
+                        'optimize.queue.job.' + stateKey(j) | translate
+                      }}</span>
+                    </div>
+                  </td>
+                  <td class="text-right">
+                    @if (j.state !== 'committing') {
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        [disabled]="busy()"
+                        (click)="cancelOne(j)"
+                      >
+                        {{ 'common.cancel' | translate }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold">{{ 'optimize.queue.waiting' | translate }}</h2>
+        @if (selected().length > 0) {
+          <div class="flex flex-wrap items-center gap-2 px-1 -mx-1 py-1">
+            <span class="text-sm text-base-content/70">{{
+              'optimize.queue.selected' | translate: { count: selected().length }
+            }}</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline"
+              [disabled]="busy()"
+              (click)="moveToFront()"
+            >
+              {{ 'optimize.queue.to_front' | translate }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-error btn-outline"
+              [disabled]="busy()"
+              (click)="cancelSelected()"
+            >
+              {{ 'common.cancel' | translate }}
+            </button>
+          </div>
+        }
+      </div>
+      @if (waiting().length === 0) {
+        <p class="text-base-content/50">{{ 'optimize.queue.waiting_empty' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto scroll-ring-safe">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [attr.aria-label]="'optimize.queue.select_all' | translate"
+                    [checked]="selected().length === waiting().length"
+                    (change)="toggleAll()"
+                  />
+                </th>
+                <th>#</th>
+                <th>{{ 'optimize.queue.col.title' | translate }}</th>
+                <th>{{ 'optimize.queue.col.level' | translate }}</th>
+                <th>{{ 'optimize.queue.col.size' | translate }}</th>
+                <th>{{ 'optimize.queue.col.duration' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (j of waiting(); track j.id; let i = $index) {
+                <tr>
+                  <td>
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-sm"
+                      [attr.aria-label]="'optimize.queue.select' | translate"
+                      [checked]="selected().includes(j.id)"
+                      (change)="toggle(j.id)"
+                    />
+                  </td>
+                  <td class="tabular-nums">{{ i + 1 }}</td>
+                  <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                  <td>
+                    @if (j.level) {
+                      {{ 'optimize.queue.level.' + j.level | translate }}
+                    }
+                  </td>
+                  <td>{{ j.inSize != null ? formatBytes(j.inSize) : '-' }}</td>
+                  <td>{{ j.durationSeconds != null ? eta(j.durationSeconds) : '-' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  } @else if (tab() === 'failures') {
+    @if (jobs().length === 0) {
+      <p class="text-base-content/50">{{ 'optimize.queue.failures_empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto scroll-ring-safe">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'optimize.queue.col.title' | translate }}</th>
+              <th>{{ 'optimize.queue.col.state' | translate }}</th>
+              <th>{{ 'optimize.queue.col.error' | translate }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (j of jobs(); track j.id) {
+              <tr>
+                <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                <td>
+                  <span class="badge badge-sm" [class.badge-error]="j.state === 'failed'">{{
+                    'optimize.queue.job.' + j.state | translate
+                  }}</span>
+                </td>
+                <td class="text-sm max-w-sm">
+                  @if (j.error?.class) {
+                    <span class="font-medium">{{ j.error?.class }}</span>
+                  }
+                  {{ j.error?.message }}
+                </td>
+                <td class="text-right">
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-xs"
+                    [disabled]="busy()"
+                    (click)="retry(j)"
+                  >
+                    {{ 'common.retry' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else {
+    @if (jobs().length === 0) {
+      <p class="text-base-content/50">{{ 'optimize.queue.finished_empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto scroll-ring-safe">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'optimize.queue.col.title' | translate }}</th>
+              <th>{{ 'optimize.queue.col.level' | translate }}</th>
+              <th>{{ 'optimize.queue.col.codec' | translate }}</th>
+              <th>{{ 'optimize.queue.col.device' | translate }}</th>
+              <th>{{ 'optimize.queue.col.saved' | translate }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (j of jobs(); track j.id) {
+              <tr>
+                <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                <td>
+                  @if (j.level) {
+                    {{ 'optimize.queue.level.' + j.level | translate }}
+                  }
+                </td>
+                <td>{{ j.codec?.toUpperCase() ?? '-' }}</td>
+                <td>{{ j.deviceId ?? '-' }}</td>
+                <td>
+                  @if (savedBytes(j); as saved) {
+                    {{ formatBytes(saved) }}
+                  } @else {
+                    -
+                  }
+                </td>
+                <td class="text-right">
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-xs"
+                    [disabled]="busy()"
+                    (click)="restore(j)"
+                  >
+                    {{ 'optimize.queue.restore' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,102 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-xl flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="'optimize.action.title' | translate" (closed)="close()" />
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <p class="font-semibold truncate">{{ config()?.title }}</p>
+
+      @if (loading()) {
+        <div class="flex justify-center py-6">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+      } @else if (fileIds().length === 0) {
+        <p class="text-base-content/60">{{ 'optimize.action.no_files' | translate }}</p>
+      } @else if (noProfile()) {
+        <div role="alert" class="alert alert-info text-sm">
+          {{ 'optimize.action.no_profile' | translate }}
+        </div>
+      } @else {
+        <p class="text-sm text-base-content/60">
+          {{ 'optimize.action.files' | translate: { count: fileIds().length } }}
+        </p>
+        @if (summary(); as s) {
+          <div class="flex flex-wrap gap-2">
+            @for (l of levels; track l) {
+              @if (s.perLevel[l].count > 0) {
+                <span class="badge badge-lg badge-ghost">
+                  {{
+                    'optimize.action.per_level'
+                      | translate
+                        : {
+                            level: ('optimize.queue.level.' + l | translate),
+                            count: s.perLevel[l].count,
+                            size: formatBytes(s.perLevel[l].bytes),
+                          }
+                  }}
+                </span>
+              }
+            }
+          </div>
+          @if (s.conform > 0) {
+            <p class="text-sm">{{ 'optimize.action.conform' | translate: { count: s.conform } }}</p>
+          }
+          @if (s.excluded > 0) {
+            <p class="text-sm">
+              {{ 'optimize.action.excluded' | translate: { count: s.excluded } }}
+            </p>
+          }
+          <p class="text-sm text-base-content/60">
+            {{ 'optimize.action.estimate_note' | translate }}
+          </p>
+          @if (s.removed > 0) {
+            <div role="alert" class="alert alert-warning text-sm">
+              {{ 'optimize.action.removed' | translate: { count: s.removed } }}
+            </div>
+          }
+          @if (s.lossless > 0) {
+            <div role="alert" class="alert alert-warning text-sm">
+              {{ 'settings.optimize.warn.lossless' | translate }}
+            </div>
+          }
+        } @else if (truncated()) {
+          <p class="text-sm text-base-content/60">{{ 'optimize.action.too_many' | translate }}</p>
+        }
+        <div role="alert" class="alert alert-warning text-sm">
+          {{ 'optimize.action.force_warning' | translate }}
+        </div>
+      }
+    </div>
+
+    <div
+      class="flex flex-wrap items-center justify-between gap-2 px-5 sm:px-6 py-3 bg-base-100 border-t border-base-200"
+    >
+      <a routerLink="/admin/optimize" class="link link-hover text-sm" (click)="close()">{{
+        'optimize.action.open_queue' | translate
+      }}</a>
+      <div class="flex flex-wrap gap-2 px-1 py-1">
+        <button
+          type="button"
+          class="btn btn-outline btn-error btn-sm"
+          [disabled]="busy() || loading() || fileIds().length === 0"
+          (click)="run(true)"
+        >
+          {{ 'optimize.action.force' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="busy() || loading() || fileIds().length === 0 || noProfile()"
+          (click)="run(false)"
+        >
+          @if (busy()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'optimize.action.optimize' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

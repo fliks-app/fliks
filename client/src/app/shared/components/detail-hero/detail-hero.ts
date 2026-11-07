@@ -13,6 +13,8 @@ import {
   LucidePlay,
   LucideRotateCcw,
 } from '@lucide/angular';
+import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
+import { OptimizeModalService } from '../../../core/services/optimize-modal.service';
 import { MediaAdminService } from '../../../core/services/media-admin.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -145,6 +147,8 @@ export class DetailHeroComponent {
   protected readonly kinds = KIND_REGISTRY;
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly optimizeModal = inject(OptimizeModalService);
   private get playerSettings() {
     return this.injector.get(PlayerSettingsService);
   }
@@ -431,7 +435,8 @@ export class DetailHeroComponent {
     const audio = file.streamInfo?.audio as AudioStreamChoice[] | undefined;
     if (audio?.length) {
       const idx = this.playerSettings.resolveAudioStreamIndex(
-        file.id, audio, mediaId, this.originalLanguage(),
+        file.id, audio, mediaId, this.originalLanguage(), undefined,
+        this.deviceProfile.playableAudioCodecs(),
       );
       this.selectedAudioIndex.set(idx ?? null);
     } else {
@@ -718,6 +723,13 @@ export class DetailHeroComponent {
         'media.refresh-metadata': () => void this.admin.refreshMetadata(m.id),
         'media.edit-library': () => this.host?.openLibrary(),
         'media.delete': () => void this.admin.deleteMedia(m),
+      }),
+      ...(m && this.isVideo() && {
+        'media.optimize': () => this.optimizeModal.open({
+          title: m.title,
+          mediaIds: [m.id],
+          episodeIds: this.episodeId() ? [this.episodeId()!] : undefined,
+        }),
       }),
       ...(this.isVideo() && {
         'media.download': () => this.openDownload.emit(),

@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { ToastService } from '../../../../core/services/toast.service';
 import { LibrariesApiService, UpdateLibraryBody } from '../../../../core/services/api/libraries-api.service';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import type {
@@ -23,6 +24,11 @@ const LEVELS: OptimizeLevel[] = ['reencode', 'remux', 'metadata'];
 export class LibraryOptimizeComponent implements OnInit {
   private readonly api = inject(LibrariesApiService);
   private readonly optimize = inject(OptimizeService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
+  /** Bumped per request: a late response of an older library or profile is dropped. */
+  private seq = 0;
+  private previewSeq = 0;
   readonly state = inject(LibraryDetailState);
 
   readonly levels = LEVELS;
@@ -31,6 +37,7 @@ export class LibraryOptimizeComponent implements OnInit {
   readonly preview = signal<OptimizePreview | null>(null);
   readonly busy = signal(false);
   readonly previewBusy = signal(false);
+  readonly queueBusy = signal(false);
 
   ngOnInit() {
     void this.optimize.profiles().then((p) => this.profiles.set(p));
@@ -39,10 +46,12 @@ export class LibraryOptimizeComponent implements OnInit {
 
   private async loadSummary() {
     const lib = this.state.library();
+    const seq = ++this.seq;
     this.summary.set(null);
     if (!lib?.optimizeProfileId) return;
     try {
-      this.summary.set(await this.optimize.summary(lib.id));
+      const s = await this.optimize.summary(lib.id);
+      if (seq === this.seq) this.summary.set(s);
     } catch {
       // The counter is informative: the settings stay usable without it.
     }
@@ -62,6 +71,7 @@ export class LibraryOptimizeComponent implements OnInit {
 
   async setAllowRename(on: boolean) {
     await this.patch({ allowRename: on });
+    this.preview.set(null);
     await this.loadSummary();
   }
 
@@ -80,16 +90,32 @@ export class LibraryOptimizeComponent implements OnInit {
     }
   }
 
+  async queueAll() {
+    const lib = this.state.library();
+    if (!lib) return;
+    this.queueBusy.set(true);
+    try {
+      const { files } = await this.optimize.queueLibrary(lib.id);
+      this.toast.success(this.translate.instant('settings.optimize.library.queued', { count: files }));
+    } catch {
+      // The global interceptor toasts the reason.
+    } finally {
+      this.queueBusy.set(false);
+    }
+  }
+
   async loadPreview() {
     const lib = this.state.library();
     if (!lib) return;
+    const seq = ++this.previewSeq;
     this.previewBusy.set(true);
     try {
-      this.preview.set(await this.optimize.preview(lib.id));
+      const pv = await this.optimize.preview(lib.id);
+      if (seq === this.previewSeq) this.preview.set(pv);
     } catch {
-      this.preview.set(null);
+      if (seq === this.previewSeq) this.preview.set(null);
     } finally {
-      this.previewBusy.set(false);
+      if (seq === this.previewSeq) this.previewBusy.set(false);
     }
   }
 }

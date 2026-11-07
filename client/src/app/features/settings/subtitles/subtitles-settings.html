@@ -93,13 +93,6 @@
           [label]="'settings.subtitles.remove_hi_tags' | translate"
           toggleClass="toggle-sm toggle-primary" />
 
-        <app-toggle-field
-          [value]="deleteBurnInSource() === 'true'"
-          (valueChange)="deleteBurnInSource.set($event ? 'true' : 'false')"
-          [label]="'settings.subtitles.ocr_delete_source' | translate"
-          [hint]="'settings.subtitles.ocr_delete_source_hint' | translate"
-          toggleClass="toggle-sm toggle-primary" />
-
         <label class="form-control w-full max-w-lg">
           <div class="label">
             <span class="label-text">{{ 'settings.subtitles.custom_exclusions' | translate }}</span>

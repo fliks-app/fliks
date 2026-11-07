@@ -188,6 +188,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       action: { kind: 'action', actionId: 'media.analyze' },
     },
     {
+      id: 'core.optimize',
+      slot: 'media.actions',
+      weight: 12,
+      labelKey: 'optimize.action.menu',
+      icon: 'zap',
+      when: ['isAdmin', 'hasFiles', 'surface:detail'],
+      action: { kind: 'action', actionId: 'media.optimize' },
+    },
+    {
       // `!isEpisode`: profile/library assignment is title-level, not per-episode.
       id: 'core.edit_profiles',
       slot: 'media.actions',

@@ -33,6 +33,8 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
     </div>
 
+    <div class="divider">{{ 'settings.streaming.transcoding_title' | translate }}</div>
+
     <!-- Auto-crop black bars. Off = keep the bars and Direct Play / remux
          instead of forcing a re-encode just to crop (low-power servers). -->
     <app-toggle-field
@@ -40,6 +42,9 @@
       [label]="'settings.streaming.auto_crop' | translate"
       [hint]="'settings.streaming.auto_crop_help' | translate"
     />
+    <a routerLink="/admin/settings/optimize-profiles" class="link link-hover text-sm -mt-4">
+      {{ 'settings.streaming.auto_crop_profile_link' | translate }}
+    </a>
 
     <!-- Throttle follows the viewer's playhead (pause ahead, resume on catch-up); disabled when ffmpeg can't pause a run (Windows without the key). -->
     <app-toggle-field
