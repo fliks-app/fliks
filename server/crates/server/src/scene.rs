@@ -202,6 +202,9 @@ pub async fn refresh(st: &AppState) -> sqlx::Result<()> {
 
 /// A fresh deploy learns which series are mapped without waiting for the nightly job.
 pub fn spawn_boot_refresh(st: &AppState) {
+    if crate::jobs::cron_disabled() {
+        return;
+    }
     let st = st.clone();
     tokio::spawn(async move {
         let empty =

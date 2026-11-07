@@ -77,6 +77,7 @@ async fn start(
     let mut cmd = Command::new(crate::server_bin());
     cmd.envs(db_env(pool))
         .env("PORT", port.to_string())
+        .env("FLIKS_DISABLE_CRON", "1")
         .envs(extra_env.iter().copied())
         .env("FLIKS_CONF_DIR", conf)
         .stdout(Stdio::null())

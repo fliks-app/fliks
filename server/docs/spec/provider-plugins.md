@@ -8,7 +8,7 @@ The pluginApi stays 3: the `metadata-provider` interface and the `provider` worl
 
 1. A provider is a `process` plugin (wasm) whose manifest carries a `provider` block and whose component exports `fliks:plugin/metadata-provider@3.0.0` (the world `provider`, which is the world `plugin` plus that export). There is no third tier: `PluginSummary.kind` stays `data` or `process`, the role is read from the manifest. A manifest with a `provider` block and a component without the export, or the export without the block, fails registration `invalid-component` (`plugins.md` rule 7, step 10).
 2. A provider holds no database: `database.schema` is `false` (any other value is `PLUGIN_BAD_MANIFEST`), `scopes` may be empty (rule 3 of `plugins.md` otherwise asks for one), and `config-get` needs no scope (it reads only the caller's own keys, `plugins.md` rule 24; `config-set` still needs `config:rw`). The host calls a provider on its `provider` lane (rules 50-53) and keeps its `core` lane for `hello` and `health`.
-3. Official ids follow `fliks.download` and `fliks.notify`: `fliks.tmdb`, `fliks.tvdb`, `fliks.openlibrary`, `fliks.googlebooks`, `fliks.bnf`, `fliks.audible`, `fliks.audnexus`. They live in `fliks-app/plugins`, each with its own version and tag.
+3. Official ids follow `fliks.download` and `fliks.notify`: `fliks.tmdb`, `fliks.tvdb`, `fliks.openlibrary`, `fliks.googlebooks`, `fliks.bnf`, `fliks.audible`, `fliks.audnexus`, `fliks.thexem`. They live in `fliks-app/plugins`, each with its own version and tag.
 4. The core keeps what touches data integrity and indexes it by namespace (uniqueness, collections, the request title lock, the merge and its field orders, `metadata_snapshots`, `media_field_sources`); a provider only talks to its upstream API and maps the answer to the record shapes. The host adapter (`PluginProvider`) implements `MetadataProvider`, so the orchestrator, the snapshots, the single-flight and the merge do not change.
 
 ## Manifest block
@@ -69,7 +69,7 @@ A third-party provider with its own namespace (plugin id `org.example.anime`):
 10. Capabilities shown in the inspect report and the consent sheet (`plugins.md` rule 12): `namespace:<name>` per declared namespace, in order, then `provider:<first namespace>:<kind>` per kind, kinds sorted. They follow `network:internal`.
 11. A new `namespace:` capability in an update holds it like a new scope (`plugins.md` rule 29).
 12. `plugin.template.json` carries the same block; `fliks-plugin-sdk-provider` (`crates/plugin-sdk/provider`, next to the SDK because two `generate!` of one crate clash on their exported macros) holds the `MetadataProvider` guest trait and `export_provider!`, which export the world `provider`, `check_world` accepts the `metadata-provider` export when the manifest has the block and refuses it otherwise.
-12a. The official scene provider is `fliks.thexem` (namespace `fliks.thexem:xem`, kind `series`, capability `scene`, origin `tvdb`): it answers `scene-mapped-ids` from TheXEM's `/map/havemap?origin=tvdb` and `scene-mapping` from `/map/all?origin=tvdb&id=<id>`, its base URL a plugin setting with the TheXEM default. It is bundled by the next plugin release (`scripts/bump-providers.sh`).
+12a. The official scene provider is `fliks.thexem` (namespace `fliks.thexem:xem`, kind `series`, capability `scene`, origin `tvdb`): it answers `scene-mapped-ids` from TheXEM's `/map/havemap?origin=tvdb` and `scene-mapping` from `/map/all?origin=tvdb&id=<id>`, its base URL a plugin setting with the TheXEM default. It is bundled (rule 45).
 
 ## Calls
 
