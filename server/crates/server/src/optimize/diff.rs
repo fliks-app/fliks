@@ -820,6 +820,7 @@ mod tests {
             codec: codec.into(),
             language: lang.into(),
             channels: Some(ch),
+            is_default: Some(i == 1),
             ..Default::default()
         }
     }
@@ -1033,11 +1034,15 @@ mod tests {
     fn the_plan_carries_drops_and_language_tags_and_nothing_for_unsupported_changes() {
         let mut c = audio(2, "eng", "aac", 2);
         c.commentary = Some(true);
-        let i = info("hevc", vec![audio(1, "und", "eac3", 6), c]);
-        let plan = diff(run(Preset::CleanupOnly, "a.mkv", &i, Some("fr")))
+        let two = info("hevc", vec![audio(1, "eng", "eac3", 6), c]);
+        let plan = diff(run(Preset::CleanupOnly, "a.mkv", &two, Some("en")))
             .plan()
             .unwrap();
         assert!(plan.streams.iter().any(|s| s.stream_index == 2 && !s.keep));
+        let lone = info("hevc", vec![audio(1, "und", "eac3", 6)]);
+        let plan = diff(run(Preset::CleanupOnly, "a.mkv", &lone, Some("fr")))
+            .plan()
+            .unwrap();
         assert!(
             plan.streams
                 .iter()
