@@ -23,6 +23,22 @@ async fn ctx(pool: &PgPool) -> Ctx {
     .await
     .unwrap();
     let admin = session::token(&st, id, "admin").await;
+    // Without a registered encoder nothing can be re-encoded.
+    st.queue.register(
+        "w".into(),
+        fliks_server::queue::Worker {
+            principal: fliks_server::queue::Principal::Local,
+            engine_version: "test".into(),
+            devices: vec![fliks_engine_core::api::WorkerDevice {
+                id: "cpu".into(),
+                encoders: vec!["libx265".into()],
+                decoders: vec![],
+                max_jobs: 1,
+                vram_mib: None,
+                pause: fliks_engine_core::api::PauseMode::Suspend,
+            }],
+        },
+    );
     Ctx {
         app: app::router(st, None, "/nonexistent".into(), None),
         admin,

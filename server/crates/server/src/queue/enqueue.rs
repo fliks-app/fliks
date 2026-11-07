@@ -62,9 +62,13 @@ struct Loaded {
     snap: Snapshot,
 }
 
-async fn load(st: &AppState, id: i32) -> sqlx::Result<Result<Loaded, Outcome>> {
+async fn load(
+    st: &AppState,
+    id: i32,
+    skip_hardlinked: bool,
+) -> sqlx::Result<Result<Loaded, Outcome>> {
     let row = sqlx::query(
-        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder
+        r#"SELECT f."relativePath" AS rel, f."streamInfo" AS info, lf.path AS folder, f.size, f."mtimeMs" AS mtime
            FROM media_files f JOIN library_folders lf ON lf.id = f."folderId" WHERE f.id = $1"#,
     )
     .bind(id)
@@ -84,7 +88,12 @@ async fn load(st: &AppState, id: i32) -> sqlx::Result<Result<Loaded, Outcome>> {
         Some(abs) => snapshot(abs).await,
         None => None,
     };
+    let (size, mtime): (i64, Option<i64>) = (row.get("size"), row.get("mtime"));
     Ok(match snap {
+        Some(snap) if snap.symlink || (skip_hardlinked && snap.nlink > 1) => Err(Outcome::Shared),
+        Some(snap) if snap.size != size || mtime.is_some_and(|m| m != snap.mtime_ms) => {
+            Err(Outcome::Stale)
+        }
         Some(snap) => Ok(Loaded {
             id,
             info,
@@ -107,6 +116,10 @@ pub enum Outcome {
     Unprobed,
     /// Nothing to resolve: the file already matches.
     NothingToDo,
+    /// A symlink, or a hard-linked file the profile leaves alone: an external tool owns the bytes.
+    Shared,
+    /// The file on disk is not the one the probe describes: a rescan first.
+    Stale,
 }
 
 #[derive(Serialize)]
@@ -131,6 +144,9 @@ pub struct Snapshot {
     pub mtime_ms: i64,
     pub dev: Option<i64>,
     pub ino: Option<i64>,
+    pub nlink: u64,
+    /// The library entry itself is a symlink.
+    pub symlink: bool,
 }
 
 /// The identity the worker checks again before it swaps anything (`stale`).
@@ -139,6 +155,7 @@ pub async fn snapshot(abs: std::path::PathBuf) -> Option<Snapshot> {
 }
 
 fn stat(abs: &std::path::Path) -> Option<Snapshot> {
+    let symlink = std::fs::symlink_metadata(abs).is_ok_and(|m| m.file_type().is_symlink());
     let (real, meta) = fsx::regular_source(abs).ok()?;
     let mtime_ms = meta
         .modified()
@@ -147,18 +164,24 @@ fn stat(abs: &std::path::Path) -> Option<Snapshot> {
         .ok()?
         .as_millis() as i64;
     #[cfg(unix)]
-    let (dev, ino) = {
+    let (dev, ino, nlink) = {
         use std::os::unix::fs::MetadataExt;
-        (Some(meta.dev() as i64), Some(meta.ino() as i64))
+        (
+            Some(meta.dev() as i64),
+            Some(meta.ino() as i64),
+            meta.nlink(),
+        )
     };
     #[cfg(not(unix))]
-    let (dev, ino) = (None, None);
+    let (dev, ino, nlink) = (None, None, 1);
     Some(Snapshot {
         path: real.to_string_lossy().into_owned(),
         size: meta.len() as i64,
         mtime_ms,
         dev,
         ino,
+        nlink,
+        symlink,
     })
 }
 
@@ -179,10 +202,6 @@ pub async fn queue_files(
 }
 
 async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::Result<Queued> {
-    let l = match load(st, id).await? {
-        Ok(l) => l,
-        Err(o) => return Ok(done(id, o)),
-    };
     let library: Option<i32> = sqlx::query_scalar(
         r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
     )
@@ -196,6 +215,10 @@ async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::
         return Ok(done(id, Outcome::NothingToDo));
     };
     ctx.force = force;
+    let l = match load(st, id, ctx.profile.eligible.skip_hardlinked).await? {
+        Ok(l) => l,
+        Err(o) => return Ok(done(id, o)),
+    };
     let mut found = None;
     select::analyze(&st.db, library, Some(&[id]), &ctx, |c| {
         found = Some(c.outcome)
@@ -224,7 +247,7 @@ pub async fn queue_library(st: &AppState, library: i32, priority: i32) -> sqlx::
     let st = st.clone();
     tokio::spawn(async move {
         for (id, d) in found {
-            let queued = match load(&st, id).await {
+            let queued = match load(&st, id, ctx.profile.eligible.skip_hardlinked).await {
                 Ok(Ok(l)) => insert(&st, &ctx, &l, &d, priority).await,
                 Ok(Err(o)) => Ok(done(id, o)),
                 Err(e) => Err(e),
@@ -290,7 +313,7 @@ async fn insert(
 /// is not retryable (or another job of the file is active).
 pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
     let row = sqlx::query(
-        r#"SELECT "inPath" FROM jobs WHERE id = $1 AND state IN ('failed', 'skipped')"#,
+        r#"SELECT "inPath", "inSize", "inMtimeMs" FROM jobs WHERE id = $1 AND state IN ('failed', 'skipped')"#,
     )
     .bind(id)
     .fetch_optional(&st.db)
@@ -300,6 +323,14 @@ pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
         Some(p) => snapshot(p.into()).await,
         None => None,
     };
+    // The plan addresses streams by index: a replaced file needs a new job, not this one.
+    let unchanged = snap.as_ref().is_some_and(|s| {
+        row.get::<Option<i64>, _>("inSize") == Some(s.size)
+            && row.get::<Option<i64>, _>("inMtimeMs") == Some(s.mtime_ms)
+    });
+    if !unchanged {
+        return Ok(None);
+    }
     let res = sqlx::query(
         r#"UPDATE jobs SET state = 'queued', failures = 0, error = NULL, "notBefore" = now(),
              "workerId" = NULL, "deviceId" = NULL, "leaseUntil" = NULL, progress = 0, "finishedAt" = NULL,
@@ -322,5 +353,24 @@ pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
         Ok(_) => Ok(None),
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Ok(None),
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::stat;
+
+    #[test]
+    fn a_symlink_and_a_hard_link_are_seen_before_anything_is_queued() {
+        let dir = std::env::temp_dir().join(format!("fliks-snap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (real, link, hard) = (dir.join("a.mkv"), dir.join("s.mkv"), dir.join("h.mkv"));
+        std::fs::write(&real, b"x").unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        std::fs::hard_link(&real, &hard).unwrap();
+        assert!(stat(&link).unwrap().symlink);
+        let plain = stat(&hard).unwrap();
+        assert!(!plain.symlink && plain.nlink == 2);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

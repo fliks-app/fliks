@@ -4,6 +4,7 @@
 use super::codec::{self, Target};
 use super::languages::{self, Kind, Languages};
 use super::profile::{Container, ImageSubs, Incompatible, Profile, Quality, TooSlow};
+use fliks_domain::track_markers::{Marker, audio_markers};
 use fliks_domain::{release::parsing::attributes::parse_release_attributes, subtitle_flags};
 use fliks_engine_core::api::{
     AudioStreamInfo, CropInfo, ExtraSubtitle, MediaInfo, OptimizeContainer, OptimizeLevel,
@@ -119,6 +120,8 @@ pub enum Change {
         stream_index: u32,
     },
     StatisticsTags,
+    /// The declared duration is wrong: remux.
+    SegmentDuration,
     Hvc1,
     Container {
         to: &'static str,
@@ -135,6 +138,7 @@ impl Change {
             | Self::AddAudio { .. }
             | Self::Reorder { .. }
             | Self::Hvc1
+            | Self::SegmentDuration
             | Self::Container { .. } => OptimizeLevel::Remux,
             _ => OptimizeLevel::Metadata,
         }
@@ -230,7 +234,7 @@ impl Diff {
             crop: None,
             streams: vec![],
             hvc1_tag: false,
-            strip_statistics_tags: self.level > LevelOut::Metadata,
+            strip_statistics_tags: false,
             quality: None,
             software: false,
             max_software_hours: None,
@@ -336,11 +340,29 @@ impl Diff {
                     plan.hvc1_tag = true;
                     true
                 }
-                Change::StatisticsTags => true,
+                Change::StatisticsTags | Change::SegmentDuration => true,
                 Change::Reorder { .. } | Change::Flags { .. } | Change::Rename => false,
             };
         }
-        any.then_some(plan)
+        let mkv_out = plan.container.map_or_else(
+            || {
+                !info
+                    .format_name
+                    .as_deref()
+                    .is_some_and(|n| n.contains("mp4"))
+            },
+            |c| c == OptimizeContainer::Mkv,
+        );
+        plan.strip_statistics_tags = mkv_out
+            && (self.level > LevelOut::Metadata || self.changes.contains(&Change::StatisticsTags));
+        // Never a file without audio, whatever the changes say.
+        let audio_kept = info.audio.iter().any(|a| {
+            plan.streams
+                .iter()
+                .find(|s| s.stream_index == a.stream_index)
+                .is_none_or(|s| s.keep)
+        });
+        (any && (info.audio.is_empty() || audio_kept)).then_some(plan)
     }
 }
 
@@ -550,9 +572,10 @@ impl Builder<'_> {
             .iter()
             .zip(&langs)
             .map(|(t, l)| {
-                if t.commentary == Some(true) && p.drop.iter().any(|d| d == "commentary") {
+                let marks = audio_markers(&serde_json::to_value(t).unwrap_or_default());
+                if marks.contains(&Marker::Commentary) && p.drop.iter().any(|d| d == "commentary") {
                     Some(DropReason::Commentary)
-                } else if t.audio_description == Some(true)
+                } else if marks.contains(&Marker::AudioDescription)
                     && p.drop.iter().any(|d| d == "audio_description")
                 {
                     Some(DropReason::AudioDescription)
@@ -586,7 +609,8 @@ impl Builder<'_> {
                 continue;
             }
             let playable_exists = (0..langs.len()).any(|j| {
-                langs[j] == langs[i]
+                reason[j].is_none()
+                    && langs[j] == langs[i]
                     && self
                         .env
                         .audio_playable
@@ -756,17 +780,32 @@ impl Builder<'_> {
         let stale = info
             .video
             .iter()
-            .any(|v| v.has_statistics_tags == Some(false))
+            .any(|v| v.has_statistics_tags != Some(true))
             || info
                 .audio
                 .iter()
-                .any(|a| a.has_statistics_tags == Some(false))
+                .any(|a| a.has_statistics_tags != Some(true))
             || info
                 .subtitles
                 .iter()
-                .any(|s| s.has_statistics_tags == Some(false));
+                .any(|s| s.has_statistics_tags != Some(true));
         if stale && is_mkv(info, path) {
             self.changes.push(Change::StatisticsTags);
+        }
+        // A Matroska whose declared duration is off the latest stream end: a remux writes it right.
+        let end = info
+            .video
+            .iter()
+            .filter_map(|v| v.end_seconds)
+            .chain(info.audio.iter().filter_map(|a| a.end_seconds))
+            .fold(None, |m: Option<f64>, e| Some(m.map_or(e, |m| m.max(e))));
+        if is_mkv(info, path)
+            && info
+                .duration_seconds
+                .zip(end)
+                .is_some_and(|(d, e)| (d - e).abs() > 1.0)
+        {
+            self.changes.push(Change::SegmentDuration);
         }
         for a in &info.audio {
             if a.title
@@ -776,17 +815,6 @@ impl Builder<'_> {
                 self.changes.push(Change::Title {
                     kind: TrackKind::Audio,
                     stream_index: a.stream_index,
-                });
-            }
-        }
-        for s in &info.subtitles {
-            let title = s.title.as_deref().unwrap_or("").to_ascii_lowercase();
-            let says_forced = title.contains("forced") || title.contains("forcé");
-            let says_hi = title.contains("sdh") || title.contains("hearing");
-            if (says_forced && !s.forced) || (says_hi && !s.hearing_impaired) {
-                self.changes.push(Change::Flags {
-                    kind: TrackKind::Subtitle,
-                    stream_index: s.stream_index,
                 });
             }
         }
@@ -922,6 +950,7 @@ mod tests {
             language: lang.into(),
             channels: Some(ch),
             is_default: Some(i == 1),
+            has_statistics_tags: Some(true),
             ..Default::default()
         }
     }
@@ -932,6 +961,7 @@ mod tests {
                 codec: video.into(),
                 width: Some(1920),
                 height: Some(1080),
+                has_statistics_tags: Some(true),
                 ..Default::default()
             }],
             audio,
@@ -1197,5 +1227,75 @@ mod tests {
                 .default
         };
         assert_eq!((default(1), default(2)), (Some(false), Some(true)));
+    }
+
+    #[test]
+    fn replacing_a_lossless_track_encodes_it_in_place_and_never_leaves_the_file_silent() {
+        let mut profile = Preset::Balanced.document();
+        profile.audio.incompatible = Incompatible::Replace;
+        let i = info("h264", vec![audio(1, "eng", "dts", 6)]);
+        let playable: HashSet<String> = ["eac3".to_owned()].into();
+        let d = Diff {
+            level: LevelOut::Remux,
+            changes: vec![
+                Change::AddAudio { source_stream: 1 },
+                Change::Drop {
+                    kind: TrackKind::Audio,
+                    stream_index: 1,
+                    language: Some("en".into()),
+                    reason: DropReason::Replaced,
+                },
+            ],
+            warnings: vec![],
+        };
+        let p = d.plan(&profile, &i, &playable, &[]).unwrap();
+        let s = &p.streams[0];
+        assert!(s.keep && s.encode == Some(StreamEncode::Eac3) && !s.keep_original);
+        let only_drop = Diff {
+            changes: vec![Change::Drop {
+                kind: TrackKind::Audio,
+                stream_index: 1,
+                language: None,
+                reason: DropReason::Language,
+            }],
+            ..d
+        };
+        assert!(only_drop.plan(&profile, &i, &playable, &[]).is_none());
+    }
+
+    #[test]
+    fn missing_statistics_tags_and_a_wrong_duration_are_found_in_matroska() {
+        let mut i = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
+        i.video[0].has_statistics_tags = None;
+        let d = diff(run(Preset::Balanced, "a.mkv", &i, Some("en")));
+        assert!(d.changes.contains(&Change::StatisticsTags));
+        let p = d
+            .plan(&Preset::Balanced.document(), &i, &HashSet::new(), &[])
+            .unwrap();
+        assert!(p.strip_statistics_tags);
+        let mut j = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
+        j.duration_seconds = Some(7200.0);
+        j.video[0].end_seconds = Some(5400.0);
+        let d = diff(run(Preset::Balanced, "a.mkv", &j, Some("en")));
+        assert_eq!(
+            (d.level, &d.changes[..]),
+            (LevelOut::Remux, &[Change::SegmentDuration][..])
+        );
+    }
+
+    #[test]
+    fn a_commentary_known_by_its_title_is_dropped() {
+        let mut c = audio(2, "eng", "aac", 2);
+        c.title = Some("Director's Commentary".into());
+        let i = info("hevc", vec![audio(1, "eng", "eac3", 6), c]);
+        let d = diff(run(Preset::Balanced, "a.mkv", &i, Some("en")));
+        assert!(d.changes.iter().any(|c| matches!(
+            c,
+            Change::Drop {
+                stream_index: 2,
+                reason: DropReason::Commentary,
+                ..
+            }
+        )));
     }
 }

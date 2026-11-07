@@ -21,7 +21,9 @@ fn want<'a>(key: &'a str, codecs: &'a [String]) -> Want<'a> {
     Want {
         key,
         device: "cpu",
-        codecs,
+        hw: &[],
+        sw: codecs,
+        fallback: codecs,
         max_jobs: 1,
         local: false,
     }
@@ -116,6 +118,49 @@ async fn a_device_only_takes_a_codec_it_encodes(pool: PgPool) {
     let av1 = vec!["av1".to_string()];
     assert!(
         store::take(&pool, &want("w1", &av1))
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hardware_planned_encode_stays_off_the_cpu_while_a_gpu_exists(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    let id = job(&pool, Some("hevc"), "/m/a.mkv").await;
+    let hevc = vec!["hevc".to_string()];
+    fn cpu<'a>(sw: &'a [String], fallback: &'a [String]) -> Want<'a> {
+        Want {
+            hw: &[],
+            sw,
+            fallback,
+            ..want("w1", &[])
+        }
+    }
+    // A registered device encodes hevc in hardware: the cpu has no fallback.
+    assert!(
+        store::take(&pool, &cpu(&hevc, &[]))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let gpu = Want {
+        device: "gpu0",
+        hw: &hevc,
+        sw: &[],
+        fallback: &[],
+        ..want("w1", &[])
+    };
+    assert!(store::take(&pool, &gpu).await.unwrap().is_some());
+    sqlx::query(r#"UPDATE jobs SET state = 'queued', "leaseUntil" = NULL, "workerId" = NULL, "deviceId" = NULL WHERE id = $1"#)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Nobody has hardware: the cpu takes it, and a software plan goes to software devices only.
+    let fallback = vec!["hevc".to_string()];
+    assert!(
+        store::take(&pool, &cpu(&hevc, &fallback))
             .await
             .unwrap()
             .is_some()

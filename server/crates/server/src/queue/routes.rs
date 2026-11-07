@@ -31,6 +31,15 @@ pub fn worker_router() -> Router<AppState> {
         .route("/engine/jobs/{id}/result", post(result))
 }
 
+/// The codecs a device encodes in hardware and in software (`lib*` encoders).
+pub(super) fn codec_split(encoders: &[String]) -> (Vec<String>, Vec<String>) {
+    let (sw, hw): (Vec<String>, Vec<String>) = encoders
+        .iter()
+        .cloned()
+        .partition(|e| e.to_lowercase().starts_with("lib"));
+    (codecs_of(&hw), codecs_of(&sw))
+}
+
 /// The video codecs an encoder list can produce, as the codec names a plan carries.
 pub(super) fn codecs_of(encoders: &[String]) -> Vec<String> {
     let mut out = Vec::new();
@@ -144,10 +153,19 @@ pub async fn lease(
         woken.as_mut().enable();
         let conf = settings::load(&st.db).await.map_err(db)?;
         if local && !conf.paused && conf.open_now() {
+            let (hw, sw) = codec_split(&device.encoders);
+            let anywhere = st.queue.hardware_codecs();
+            let fallback: Vec<String> = sw
+                .iter()
+                .filter(|c| !anywhere.contains(c))
+                .cloned()
+                .collect();
             let want = store::Want {
                 key: &key,
                 device: &device.id,
-                codecs: &codecs_of(&device.encoders),
+                hw: &hw,
+                sw: &sw,
+                fallback: &fallback,
                 max_jobs: conf.max_jobs(&device.id, device.max_jobs),
                 local,
             };

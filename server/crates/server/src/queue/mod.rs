@@ -114,6 +114,19 @@ impl Shared {
         }
     }
 
+    /// Codecs some registered device encodes in hardware.
+    pub fn hardware_codecs(&self) -> Vec<String> {
+        let g = self.workers.lock_clean();
+        let mut out: Vec<String> = g
+            .values()
+            .flat_map(|w| w.devices.iter())
+            .flat_map(|d| routes::codec_split(&d.encoders).0)
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
     pub fn workers(&self) -> Vec<(String, Worker)> {
         let g = self.workers.lock_clean();
         let mut v: Vec<_> = g.iter().map(|(k, w)| (k.clone(), w.clone())).collect();

@@ -180,7 +180,7 @@ pub async fn retry(
     match enqueue::retry(&st, id).await.map_err(db)? {
         Some(()) => Ok(Json(json!({}))),
         None => Err(AppError::conflict(
-            "only a failed or skipped job without another active job can be retried",
+            "only a failed or skipped job on an unchanged file, without another active job, can be retried; queue the file again otherwise",
         )),
     }
 }

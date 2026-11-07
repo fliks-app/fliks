@@ -23,3 +23,8 @@ DELETE FROM "app_settings" WHERE "key" = 'subtitle_ocr_delete_source';
 
 -- When the output was handed back: with `startedAt`, the encoding time the completion estimate uses.
 ALTER TABLE "jobs" ADD COLUMN "encodedAt" timestamptz;
+
+-- Jobs queued before the engine plan carried every change hold a partial plan: queue them again.
+UPDATE "jobs" SET "state" = 'cancelled', "finishedAt" = now(), "updatedAt" = now(),
+       "error" = '{"class":"cancelled","message":"queued with an incomplete plan; queue the file again"}'::jsonb
+ WHERE "state" = 'queued' AND "kind" = 'optimize';

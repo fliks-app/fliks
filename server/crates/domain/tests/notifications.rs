@@ -132,8 +132,8 @@ fn update_validates_the_effective_endpoint() {
 
 #[test]
 fn vocabulary() {
-    assert_eq!(EVENTS.len(), 20);
-    assert_eq!(subscribable().count(), 19);
+    assert_eq!(EVENTS.len(), 23);
+    assert_eq!(subscribable().count(), 22);
     assert!(is_event("health.issue") && !is_event("request"));
 }
 
