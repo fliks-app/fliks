@@ -5,23 +5,42 @@ use crate::{
     subtitles::{model, ocr},
 };
 use fliks_engine_core::api::{ExtraSubtitle, MediaInfo};
-use std::time::Duration;
 
-const POLL: Duration = Duration::from_secs(5);
-const GIVE_UP: Duration = Duration::from_secs(4 * 3600);
+/// What the image tracks' OCR gives right now.
+pub struct Ocr {
+    /// The SRTs of the finished runs, by track.
+    pub done: Vec<(u32, ExtraSubtitle)>,
+    /// Some run was started or is still going: the job waits for it.
+    pub pending: bool,
+}
 
-/// Runs the OCR of the file's image tracks (reusing finished ones) and returns the SRTs by track, with the track's
-/// language and title (the plan's `extraSubtitles`). A track whose OCR fails is left out, so it stays image-based in the output.
+/// Looks at the OCR of the file's image tracks, starting what has not run (never waiting for it). A track
+/// whose last run failed is left out and stays image-based; `retry` runs it again.
 pub async fn extra_subtitles(
     st: &AppState,
     folder: &str,
     info: &MediaInfo,
     media_file_id: i32,
-) -> Vec<(u32, ExtraSubtitle)> {
-    let mut out = vec![];
+    retry: bool,
+) -> Ocr {
+    let mut out = Ocr {
+        done: vec![],
+        pending: false,
+    };
     for t in info.subtitles.iter().filter(|s| s.is_image_based) {
-        let Some(row) = existing_or_run(st, media_file_id, t.stream_index as i32).await else {
-            continue;
+        let row = match latest(st, media_file_id, t.stream_index as i32).await {
+            Some(r) if r.status == "downloaded" => r,
+            Some(r) if r.status == "processing" => {
+                out.pending = true;
+                continue;
+            }
+            Some(_) if !retry => continue,
+            _ => {
+                out.pending |= start(st, media_file_id, t.stream_index as i32)
+                    .await
+                    .is_some();
+                continue;
+            }
         };
         let Some(abs) = row
             .file_path
@@ -30,7 +49,7 @@ pub async fn extra_subtitles(
         else {
             continue;
         };
-        out.push((
+        out.done.push((
             t.stream_index,
             ExtraSubtitle {
                 path: abs.to_string_lossy().into_owned(),
@@ -43,34 +62,18 @@ pub async fn extra_subtitles(
     out
 }
 
-async fn existing_or_run(st: &AppState, file: i32, stream: i32) -> Option<model::Row> {
-    let done: Option<i32> = sqlx::query_scalar(
+/// The newest OCR row of a track: a failed run is remembered by its row, which goes with the file's content.
+async fn latest(st: &AppState, file: i32, stream: i32) -> Option<model::Row> {
+    let id: i32 = sqlx::query_scalar(
         r#"SELECT id FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'ocr'
-           AND "sourceStreamIndex" = $2 AND status = 'downloaded' AND "filePath" IS NOT NULL
-           ORDER BY id DESC LIMIT 1"#,
+           AND "sourceStreamIndex" = $2 ORDER BY id DESC LIMIT 1"#,
     )
     .bind(file)
     .bind(stream)
     .fetch_optional(&st.db)
     .await
-    .ok()
-    .flatten();
-    let id = match done {
-        Some(id) => id,
-        None => start(st, file, stream).await?,
-    };
-    let mut waited = Duration::ZERO;
-    loop {
-        let row = model::by_id(&st.db, id).await.ok().flatten()?;
-        match row.status.as_str() {
-            "processing" if waited < GIVE_UP => {
-                tokio::time::sleep(POLL).await;
-                waited += POLL;
-            }
-            "downloaded" => return Some(row),
-            _ => return None,
-        }
-    }
+    .ok()??;
+    model::by_id(&st.db, id).await.ok().flatten()
 }
 
 /// The placeholder row of a new OCR run on the embedded row of that track.

@@ -61,8 +61,8 @@ pub struct Candidate {
     pub outcome: Outcome,
 }
 
-/// Candidates of a library (or of `only` inside it): probed with the current version, probe not
-/// failed, with a video stream, no active job, no remembered `corrupt`/`damaged` failure of the
+/// Candidates of a library (or of `only` inside it; `diff::compute` then explains an old or failed probe
+/// and a file without video): probed with the current version, probe not failed, with a video stream, no active job, no remembered `corrupt`/`damaged` failure of the
 /// same bytes. `visit` runs for each one in id order.
 pub async fn analyze(
     db: &PgPool,
@@ -87,9 +87,10 @@ pub async fn analyze(
            LEFT JOIN language_profiles lp ON lp.id = COALESCE(m."languageProfileId", l."defaultLanguageProfileId")
            WHERE m."libraryId" = $1
              AND ($2::int[] IS NULL OR mf.id = ANY($2))
-             AND mf."probeVersion" >= $3
-             AND mf."streamInfo"->>'error' IS NULL
-             AND jsonb_array_length(COALESCE(mf."streamInfo"->'video', '[]'::jsonb)) > 0
+             AND mf."streamInfo" IS NOT NULL
+             AND ($2::int[] IS NOT NULL OR (mf."probeVersion" >= $3
+               AND mf."streamInfo"->>'error' IS NULL
+               AND jsonb_array_length(COALESCE(mf."streamInfo"->'video', '[]'::jsonb)) > 0))
              AND ($2::int[] IS NOT NULL OR NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state IN ('queued', 'leased', 'staged', 'committing')))
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state = 'failed'
                                AND j.error->>'class' IN ('corrupt', 'damaged')

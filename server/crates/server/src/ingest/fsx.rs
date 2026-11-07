@@ -232,9 +232,46 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
             return Err(e);
         }
     }
-    // Filesystems without renameat2: a hard link never replaces either.
-    fs::hard_link(from, to)?;
-    fs::remove_file(from)
+    #[cfg(target_os = "macos")]
+    {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+        let cstr = |p: &Path| {
+            CString::new(p.as_os_str().as_bytes())
+                .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+        };
+        let (a, b) = (cstr(from)?, cstr(to)?);
+        // SAFETY: both pointers are NUL-terminated strings that outlive the call.
+        if unsafe { libc::renamex_np(a.as_ptr(), b.as_ptr(), libc::RENAME_EXCL) } == 0 {
+            return Ok(());
+        }
+        let e = io::Error::last_os_error();
+        if e.raw_os_error() != Some(libc::ENOTSUP) {
+            return Err(e);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let wide = |p: &Path| -> Vec<u16> { p.as_os_str().encode_wide().chain([0]).collect() };
+        let (a, b) = (wide(from), wide(to));
+        // SAFETY: both buffers are NUL-terminated and outlive the call; no flag, so no replacement.
+        if unsafe {
+            windows_sys::Win32::Storage::FileSystem::MoveFileExW(a.as_ptr(), b.as_ptr(), 0)
+        } != 0
+        {
+            return Ok(());
+        }
+        return Err(io::Error::last_os_error());
+    }
+    // Filesystems with no atomic no-replace (FUSE without rename2, exFAT): check, then rename.
+    // ponytail: a writer creating `to` between the check and the rename wins the race; nothing better exists there.
+    #[cfg(not(windows))]
+    {
+        if fs::symlink_metadata(to).is_ok() {
+            return Err(io::ErrorKind::AlreadyExists.into());
+        }
+        fs::rename(from, to)
+    }
 }
 
 /// `rename` retried on the transient errors of a destination held open (Windows antivirus, indexers).
