@@ -683,11 +683,11 @@ async fn pre_migration_backup_on_scratch_databases() {
         .unwrap();
     let files = pre_files(&dir);
     assert_eq!(files.len(), 1);
-    assert!(files[0].starts_with("fliks-pre-migration-v") && files[0].ends_with(".sql"));
+    assert!(files[0].starts_with("fliks-pre-migration-v") && files[0].ends_with(".dump"));
     assert!(
-        std::fs::read_to_string(dir.join(&files[0]))
+        std::fs::read(dir.join(&files[0]))
             .unwrap()
-            .contains("CREATE TABLE")
+            .starts_with(b"PGDMP")
     );
 
     // A failing dump (unknown database) refuses to migrate.

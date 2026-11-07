@@ -334,6 +334,67 @@ async fn sync_pages_by_100(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn sync_resumes_after_the_cursor_across_scan_windows(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO media (id, title, type, "libraryId", "folderName")
+          SELECT 100 + n, 'B' || n, 'book', 1, 'f' || n FROM generate_series(1, 600) n;
+        INSERT INTO editions (id, "mediaId", family, format) SELECT 100 + n, 100 + n, 'text', 'epub' FROM generate_series(1, 600) n;
+        INSERT INTO items (id, "mediaId", "editionId") SELECT 100 + n, 100 + n, 100 + n FROM generate_series(1, 600) n;
+        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo")
+          SELECT 100 + n, 100 + n, 1, n || '.epub', 1, 'EPUB', '{}' FROM generate_series(1, 600) n;
+        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+          SELECT 100 + n, 100 + n, 100 + n, 0, 0 FROM generate_series(1, 600) n;
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let a = c.sync(None).await;
+    assert_eq!((a.body.as_array().unwrap().len(), a.more), (100, true));
+    let mut sent = ids(&a);
+
+    // an unsent book becomes unreadable and a sent one changes between two pages
+    sqlx::raw_sql(
+        r#"UPDATE media SET "libraryId" = 2 WHERE id = 400; UPDATE media SET title = 'Alpha 2' WHERE id = 10"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let mut tok = a.sync_token.unwrap();
+    loop {
+        let r = c.sync(Some(&tok)).await;
+        sent.extend(ids(&r));
+        tok = r.sync_token.clone().unwrap();
+        if !r.more {
+            break;
+        }
+    }
+    assert_eq!(sent.len(), 601, "every readable book once, no removal");
+    assert!(sent.iter().all(|e| e.starts_with("NewEntitlement")));
+    assert!(!sent.contains(&format!("NewEntitlement {:x}", 400)));
+    let mut uniq = sent.clone();
+    uniq.sort();
+    uniq.dedup();
+    assert_eq!(uniq.len(), sent.len());
+
+    // the next sync starts from the top again and finds both changes
+    let last = c.sync(Some(&tok)).await;
+    assert_eq!(ids(&last), ["ChangedEntitlement 1"]);
+    sqlx::query(r#"UPDATE media SET "libraryId" = 2 WHERE id = 550"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let gone = c.sync(last.sync_token.as_deref()).await;
+    assert_eq!(ids(&gone), [format!("ChangedEntitlement {:x}", 550)]);
+    assert_eq!(
+        gone.body[0]["ChangedEntitlement"]["BookEntitlement"]["IsRemoved"],
+        true
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_archived_book_is_not_sent_again_until_a_reset(pool: PgPool) {
     let (c, _) = ctx(pool).await;
     let t = c.sync(None).await.sync_token.unwrap();

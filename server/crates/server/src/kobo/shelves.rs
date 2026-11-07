@@ -61,8 +61,16 @@ fn tag(p: &Playlist, items: &[i32]) -> Value {
     })
 }
 
+/// The readable Kobo books among the items of the owner's playlists.
 async fn visible(db: &PgPool, k: &Kobo) -> sqlx::Result<Vec<i32>> {
-    Ok(books::index(db, &k.acl, None)
+    let ids: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT pi."itemId" FROM playlist_items pi
+           JOIN playlists p ON p.id = pi."playlistId" WHERE p."ownerId" = $1"#,
+    )
+    .bind(k.a.user.id)
+    .fetch_all(db)
+    .await?;
+    Ok(books::index(db, &k.acl, Some(&ids))
         .await?
         .into_iter()
         .map(|b| b.item)
@@ -74,14 +82,15 @@ async fn visible(db: &PgPool, k: &Kobo) -> sqlx::Result<Vec<i32>> {
 pub async fn sync(
     db: &PgPool,
     k: &Kobo,
-    visible: &HashSet<i32>,
     now: DateTime<Utc>,
     out: &mut Vec<Value>,
     sent: &mut Vec<i32>,
     gone: &mut Vec<i32>,
     limit: usize,
 ) -> sqlx::Result<bool> {
-    let lists = owned(db, k, &visible.iter().copied().collect::<Vec<_>>()).await?;
+    let visible = visible(db, k).await?;
+    let lists = owned(db, k, &visible).await?;
+    let visible: HashSet<i32> = visible.into_iter().collect();
     let have: HashMap<i32, DateTime<Utc>> = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
         r#"SELECT "refId", "syncedAt" FROM kobo_sync_items WHERE "tokenId" = $1 AND kind = 'shelf'"#,
     )
@@ -111,7 +120,7 @@ pub async fn sync(
         .filter(|p| have.get(&p.0).is_none_or(|s| *s < p.3))
         .collect();
     let ids: Vec<i32> = due.iter().map(|p| p.0).collect();
-    let items = contents(db, &ids, visible).await?;
+    let items = contents(db, &ids, &visible).await?;
     for p in due {
         if out.len() >= limit {
             more = true;
