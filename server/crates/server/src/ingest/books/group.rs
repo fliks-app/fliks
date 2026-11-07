@@ -3,8 +3,10 @@ use fliks_domain::{
     books::filename::parse_path,
     media::{AUDIO_EXTS, TEXT_EXTS, family::Family},
 };
+use regex::Regex;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::LazyLock;
 
 /// The family and format (extension without the dot) of a book file name.
 pub fn classify(name: &str) -> Option<(Family, String)> {
@@ -108,6 +110,95 @@ fn natural(s: &str) -> Vec<(u64, String)> {
     out
 }
 
+fn alnum(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn re(p: &str) -> Regex {
+    Regex::new(p).expect("static")
+}
+
+static BRACKETS: LazyLock<Regex> = LazyLock::new(|| re(r"\([^)]*\)|\[[^\]]*\]"));
+static DISC_TOKEN: LazyLock<Regex> = LazyLock::new(|| re(r"(?i)\b(?:cd|disc|disk|disque)\s*\d+\b"));
+static OF_N: LazyLock<Regex> = LazyLock::new(|| re(r"(?i)\s+of\s+\d+$"));
+static TITLE_PART: LazyLock<Regex> = LazyLock::new(|| re(r"^(.+?)\s*[-\x{2013}]\s*0*\d+$"));
+static GENERIC_LEAD: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r"(?i)^(?:chapter|chapitre|chap|kapitel|track|piste|part|partie|pt|teil|disc|disk|disque|cd)\b",
+    )
+});
+
+fn stem_of(path: &str) -> &str {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rfind('.').map_or(name, |d| &name[..d])
+}
+
+/// The book a part says it belongs to: the title of `Title - 01`, `None` for a track-first or generic name.
+fn title_key(path: &str) -> Option<String> {
+    let s = BRACKETS.replace_all(stem_of(path), "");
+    let s = DISC_TOKEN.replace_all(&s, "");
+    let s = OF_N.replace(&s, "");
+    let title = TITLE_PART
+        .captures(s.trim())?
+        .get(1)?
+        .as_str()
+        .trim_matches(|c: char| c.is_whitespace() || "-_.\u{2013}".contains(c));
+    let numeric = title.bytes().all(|b| b.is_ascii_digit());
+    if GENERIC_LEAD.is_match(title) || (numeric && title.starts_with('0')) {
+        return None;
+    }
+    Some(alnum(title)).filter(|k| !k.is_empty())
+}
+
+/// The audio files of a folder that are different books, by file: `""` stays with the folder's work.
+/// A folder splits only when two books say so: whole `m4b` of different names (the folder's own
+/// name aside) and `Title - 01` groups of at least two parts.
+fn audio_keys(dir: &str, files: &[(String, String)]) -> HashMap<String, String> {
+    let folder = dir
+        .rsplit('/')
+        .find(|s| !super::merge::GENERIC.contains(&s.to_lowercase().as_str()))
+        .map(alnum);
+    let mut whole: HashMap<&str, String> = HashMap::new();
+    let mut parts: HashMap<&str, String> = HashMap::new();
+    for (p, f) in files {
+        if f == "m4b" {
+            let k = alnum(&BRACKETS.replace_all(stem_of(p), ""));
+            if !k.is_empty() && Some(&k) != folder.as_ref() {
+                whole.insert(p, k);
+            }
+        } else if let Some(k) = title_key(p) {
+            parts.insert(p, k);
+        }
+    }
+    let mut books: BTreeSet<String> = whole.values().cloned().collect();
+    if books.len() < 2 {
+        whole.clear();
+        books.clear();
+    }
+    let mut count: HashMap<&str, usize> = HashMap::new();
+    for k in parts.values() {
+        *count.entry(k).or_default() += 1;
+    }
+    books.extend(
+        count
+            .into_iter()
+            .filter(|(_, n)| *n >= 2)
+            .map(|(k, _)| k.to_owned()),
+    );
+    if books.len() < 2 {
+        return HashMap::new();
+    }
+    parts.retain(|_, k| books.contains(k));
+    whole
+        .into_iter()
+        .chain(parts)
+        .map(|(p, k)| (p.to_owned(), k))
+        .collect()
+}
+
 struct Acc {
     dir: String,
     text: Vec<(String, String)>,
@@ -116,7 +207,7 @@ struct Acc {
 
 /// The works of `paths`, relative to one folder root and `/`-separated.
 pub fn group(paths: &[String]) -> Vec<Work> {
-    // Key: (dir, stem key) for text and for a root audio file, (dir, "") for the audio of a folder.
+    // Key: (dir, stem key) for text and for a root audio file, (dir, "") or (dir, book) for the audio of a folder.
     let mut works: BTreeMap<(String, String), Acc> = BTreeMap::new();
     let mut loose_audio: Vec<(String, String, String)> = vec![];
     for p in paths {
@@ -138,9 +229,23 @@ pub fn group(paths: &[String]) -> Vec<Work> {
         }
     }
     let text_in = |works: &BTreeMap<(String, String), Acc>, dir: &str| -> Vec<(String, String)> {
-        works.keys().filter(|(d, _)| d == dir).cloned().collect()
+        works
+            .keys()
+            .filter(|(d, k)| d == dir && !k.starts_with('\u{1}'))
+            .cloned()
+            .collect()
     };
+    let mut by_dir: BTreeMap<&str, Vec<(String, String)>> = BTreeMap::new();
+    for (dir, p, f) in &loose_audio {
+        by_dir.entry(dir).or_default().push((p.clone(), f.clone()));
+    }
+    let split: HashMap<String, String> = by_dir
+        .iter()
+        .filter(|(d, _)| !d.is_empty())
+        .flat_map(|(d, files)| audio_keys(d, files))
+        .collect();
     for (dir, p, format) in loose_audio {
+        let book = split.get(&p).map_or(String::new(), |k| format!("\u{1}{k}"));
         let key = if dir.is_empty() {
             let stem = stem_key(&p);
             if works.contains_key(&(String::new(), stem.clone())) {
@@ -150,6 +255,7 @@ pub fn group(paths: &[String]) -> Vec<Work> {
             }
         } else {
             match text_in(&works, &dir).as_slice() {
+                _ if !book.is_empty() => (dir.clone(), book),
                 [only] => only.clone(),
                 _ => (dir.clone(), String::new()),
             }
@@ -251,7 +357,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 9);
+        assert_eq!(cases.len(), 25);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()

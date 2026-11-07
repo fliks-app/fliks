@@ -677,7 +677,10 @@ async fn lay_out_tx(
             if mine.is_empty() {
                 continue;
             }
-            if anchored && group::group(&paths).len() > 1 {
+            let works = group::group(&paths);
+            let dirs: BTreeSet<&str> = works.iter().map(|w| w.dir.as_str()).collect();
+            // Audio works of one folder lay out as versions of the media that already holds them.
+            if anchored && works.len() > 1 && (family == Family::Text || dirs.len() > 1) {
                 return Err(LayError::Works(format!(
                     "media #{media}: its folder holds several works"
                 )));
