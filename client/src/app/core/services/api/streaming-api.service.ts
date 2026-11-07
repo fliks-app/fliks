@@ -656,7 +656,11 @@ export class StreamingApiService {
       this.http.put<HeartbeatResponse | null>(
         `/api/playback/media/${mediaId}/state`,
         body,
-        { headers: this.sseConnectionHeaders() },
+        {
+          headers: this.sseConnectionHeaders(),
+          // A replay is awaited before an item opens: a black-holed link must not hang it.
+          ...(body.playedAt != null && { context: new HttpContext().set(API_TIMEOUT_MS, 15_000) }),
+        },
       ),
     );
   }
