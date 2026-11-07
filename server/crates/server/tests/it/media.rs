@@ -492,13 +492,14 @@ async fn identify_then_read(pool: PgPool, held_id: bool) -> Kept {
         0,
         "the identify task settled"
     );
-    let (a, b, d, e, f): (
+    type Row = (
         Option<String>,
         Option<f64>,
         Option<i32>,
         Option<i32>,
         Option<String>,
-    ) = sqlx::query_as(
+    );
+    let (a, b, d, e, f): Row = sqlx::query_as(
         r#"SELECT overview, rating, runtime, year, "originalTitle" FROM media WHERE id = 1"#,
     )
     .fetch_one(&pool)
