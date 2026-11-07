@@ -25,7 +25,7 @@ Code: `fliks_domain::release::scene` (pure), `server/src/scene.rs` (storage, ref
 | scene S03 pack is aired S02, rejected for aired S03 | `scene_pack_resolves_to_the_aired_season`, `scene_pack_is_rejected_for_the_next_aired_season` (domain), `releases_match_reads_scene_numbers_as_aired` (`plugins/acquisition.rs`) |
 | scene S02E01 is aired S01E06, scene S02 pack is partial aired S01 | `scene_episode_resolves_per_episode`, `split_scene_season_is_a_partial_pack` (domain) |
 | file S04E01 imports into aired S03E01, explicit episode wins | `a_scene_named_file_imports_into_its_aired_episode`, `an_explicit_episode_wins_over_the_name` (`ingest/tests.rs`) |
-| upstream failure keeps the stored mapping | `a_failed_fetch_keeps_the_stored_mapping`, `refresh_keeps_the_stored_mapping_on_a_failure_body` (`scene.rs`) |
+| upstream failure keeps the stored mapping | `a_failed_fetch_keeps_the_stored_mapping` (`scene.rs`) |
 | provider answering none: not mapped, stale mapping cleared | `a_listed_series_with_no_mapping_is_unmapped_not_unknown`, `refresh_replaces_the_stored_mapping_when_the_provider_has_none` (`scene.rs`) |
 | library not matching TVDB numbering ignores the mapping | `guard_rejects_a_library_with_other_season_counts` (domain), `a_library_that_does_not_fit_is_not_mapped` (`scene.rs`) |
 | known-mapped series never identity | `an_unknown_mapping_is_fetched_on_demand_and_refuses_when_it_fails` (`scene.rs`), `an_unknown_or_ambiguous_mapping_rejects_numbered_releases` (domain), `an_unknown_mapping_skips_numbered_releases` (`plugins/acquisition.rs`), `an_unknown_mapping_skips_and_fails_the_import` (`ingest/tests.rs`) |

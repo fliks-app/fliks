@@ -734,7 +734,12 @@ pub async fn detail(st: &AppState, a: &Authed, row: &db::Req) -> Res<Map<String,
 }
 
 /// Replaces a pending book request's wants, refusing editions another active request holds.
-async fn set_wants(st: &AppState, row: &db::Req, wants: &[WantSpec]) -> Res<()> {
+/// Replaces the wants inside a transaction the caller commits.
+async fn set_wants(
+    st: &AppState,
+    row: &db::Req,
+    wants: &[WantSpec],
+) -> Res<sqlx::Transaction<'static, sqlx::Postgres>> {
     let key = row.key();
     crate::media::wants::check_profiles(&st.db, wants).await?;
     assert_wants_unsatisfied(st, &key, wants).await?;
@@ -757,8 +762,7 @@ async fn set_wants(st: &AppState, row: &db::Req, wants: &[WantSpec]) -> Res<()> 
     if !db::set_wants(&mut tx, row.id, wants).await? {
         return Err(AppError::forbidden("Only pending requests can be updated"));
     }
-    tx.commit().await?;
-    Ok(())
+    Ok(tx)
 }
 
 pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> Res<Value> {
@@ -790,12 +794,14 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         library.flatten().filter(|l| *l != 0),
     )
     .await?;
-    if let Some(w) = &dto.wants {
-        set_wants(st, &row, w).await?;
-    }
-    if !db::patch(&st.db, id, quality, language, library.map(some_id)).await? {
+    let mut tx = match &dto.wants {
+        Some(w) => set_wants(st, &row, w).await?,
+        None => st.db.begin().await?,
+    };
+    if !db::patch(&mut *tx, id, quality, language, library.map(some_id)).await? {
         return Err(AppError::forbidden("Only pending requests can be updated"));
     }
+    tx.commit().await?;
     let row = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
     let mut json = detail(st, a, &row).await?;
     if quality.is_some() {

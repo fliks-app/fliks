@@ -461,7 +461,7 @@ pub async fn set_art(
 
 /// `PATCH` of a pending row: `None` leaves a column, `Some(None)` clears it; false when it is no longer pending.
 pub async fn patch(
-    db: &PgPool,
+    db: impl PgExecutor<'_>,
     id: i32,
     quality: Option<Option<i32>>,
     language: Option<Option<i32>>,
