@@ -27,7 +27,7 @@ export class EpubSearch implements ReaderSearch {
   /** Opens the search tab on a phrase picked in the text. */
   find(text: string): void {
     this.text.set(text.slice(0, 80));
-    this.session.openPanel('sidebar', 'search');
+    this.session.showPanel('sidebar', 'search');
     void this.run(this.text());
   }
 

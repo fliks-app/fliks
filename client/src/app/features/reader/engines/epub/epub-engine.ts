@@ -170,7 +170,7 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       nav.registerDecorationObserver('annotations', {
         onDecorationActivated: (e) => {
           this.notes.focusId.set(Number(e.decoration.id));
-          this.session.openPanel('sidebar', 'notes');
+          this.session.showPanel('sidebar', 'notes');
           return true;
         },
       });

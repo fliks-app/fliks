@@ -193,8 +193,10 @@ export class AudioPlayerService {
     const { index, local } = locate(this.parts, target);
     this._position.set(target);
     const el = this.el();
-    if (el && index === this.partIndex) el.currentTime = local;
-    else await this.load(target, !(el?.paused ?? true));
+    if (el && index === this.partIndex) {
+      this.resumeSeek = false;
+      el.currentTime = local;
+    } else await this.load(target, !(el?.paused ?? true));
     this.beat();
   }
 
@@ -356,15 +358,19 @@ export class AudioPlayerService {
     }
   }
 
+  /** False once the user seeks: the resume point still waiting for metadata must not undo it. */
+  private resumeSeek = true;
+
   private native(el: HTMLAudioElement): boolean {
     return el.canPlayType('application/vnd.apple.mpegurl') !== '';
   }
 
   private startAt(el: HTMLAudioElement, seconds: number, autoplay: boolean): void {
+    this.resumeSeek = true;
     el.addEventListener(
       'loadedmetadata',
       () => {
-        if (seconds > 0) el.currentTime = seconds;
+        if (seconds > 0 && this.resumeSeek) el.currentTime = seconds;
         if (autoplay) void el.play().catch(() => undefined);
       },
       { once: true },

@@ -120,4 +120,19 @@ describe('OfflinePlaybackSyncService', () => {
     expect(updatePlaybackState).toHaveBeenCalledWith(7, expect.objectContaining({ itemId: 1, progression: 0.5, locator: { href: 'c2' }, positionSeconds: 0 }));
     expect(svc.pending()).toEqual([]);
   });
+
+  it('drops an older queued position once a newer one is recorded', () => {
+    const { svc } = setup();
+    svc.queue({ ...update(0), itemId: 3, extra: { progression: 0.1 } });
+    svc.record({ ...update(0), itemId: 3, extra: { progression: 0.9 } });
+    expect(svc.queuedPositionFor(7, undefined, 3)).toBeNull();
+    expect(svc.resumePositionFor(7, undefined, 3)?.extra).toEqual({ progression: 0.9 });
+  });
+
+  it('overlays a queued book position on its continue row by item', () => {
+    const { svc } = setup();
+    svc.queue({ ...update(0), itemId: 3, extra: {} });
+    const row = { mediaId: 7, episodeId: null, itemId: 3, positionSeconds: 10, durationSeconds: 1000, progressPercent: 1 };
+    expect(svc.overlayProgress([row])[0]).not.toBe(row);
+  });
 });

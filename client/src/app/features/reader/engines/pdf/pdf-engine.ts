@@ -15,7 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { AuthService } from '../../../../core/services/auth.service';
 import { OfflineBookStoreService } from '../../../../core/services/offline-book-store.service';
 import { ServerConfigService } from '../../../../core/services/server-config.service';
@@ -63,6 +63,7 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
   private observer: IntersectionObserver | null = null;
   private resizer: ResizeObserver | null = null;
   private readonly tasks = new Map<number, RenderTask>();
+  private readonly pageProxies = new Map<number, PDFPageProxy>();
   private destroyed = false;
   private raf = 0;
 
@@ -168,6 +169,8 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
   private release(n: number, slot: HTMLElement): void {
     this.tasks.get(n)?.cancel();
     this.tasks.delete(n);
+    this.pageProxies.get(n)?.cleanup();
+    this.pageProxies.delete(n);
     slot.replaceChildren();
     delete slot.dataset['drawn'];
   }
@@ -179,6 +182,7 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
     this.tasks.get(n)?.cancel();
     try {
       const page = await this.doc.getPage(n);
+      this.pageProxies.set(n, page);
       const unit = page.getViewport({ scale: 1 });
       const wanted = (css / unit.width) * (window.devicePixelRatio || 1);
       const cap = Math.sqrt(MAX_CANVAS_PIXELS / (unit.width * unit.height));

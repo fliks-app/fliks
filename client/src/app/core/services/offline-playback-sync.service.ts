@@ -96,6 +96,10 @@ export class OfflinePlaybackSyncService {
     // Oldest first, so the cap drops the least recently played.
     kept.sort((a, b) => a.updatedAt - b.updatedAt);
     this.saveLastKnown(kept.slice(-LAST_KNOWN_MAX));
+    // The server has this position: an older queued one would overwrite it on reopen.
+    const pending = this._pending();
+    const rest = pending.filter((p) => entryKey(p.mediaId, p.episodeId, p.itemId) !== key || p.updatedAt > entry.updatedAt);
+    if (rest.length !== pending.length) this.setPending(rest);
     return entry;
   }
 
@@ -110,6 +114,8 @@ export class OfflinePlaybackSyncService {
     T extends {
       mediaId: number;
       episodeId: number | null;
+      /** Set on a book edition item: its queued position is keyed by it. */
+      itemId?: number | null;
       positionSeconds: number;
       durationSeconds: number;
       progressPercent: number;
@@ -118,7 +124,7 @@ export class OfflinePlaybackSyncService {
     const queued = this.byKey();
     if (!queued.size) return items;
     return items.map((item) => {
-      const q = queued.get(entryKey(item.mediaId, item.episodeId ?? undefined));
+      const q = queued.get(entryKey(item.mediaId, item.episodeId ?? undefined, item.itemId ?? undefined));
       if (!q) return item;
       const durationSeconds = q.durationSeconds || item.durationSeconds;
       return {
@@ -136,9 +142,9 @@ export class OfflinePlaybackSyncService {
    *  is one, else the last one this device played. */
   resumePositionFor(mediaId: number, episodeId?: number, itemId?: number): PendingUpdate | null {
     const queued = this.queuedPositionFor(mediaId, episodeId, itemId);
-    if (queued) return queued;
     const key = entryKey(mediaId, episodeId ?? undefined, itemId);
-    return this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId, p.itemId) === key) ?? null;
+    const known = this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId, p.itemId) === key) ?? null;
+    return queued && (!known || queued.updatedAt >= known.updatedAt) ? queued : known;
   }
 
   /** Push the queue; a call during a pass joins it and schedules one more, so mid-flush entries are neither stranded nor sent twice. */

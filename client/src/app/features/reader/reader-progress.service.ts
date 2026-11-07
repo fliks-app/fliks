@@ -18,6 +18,15 @@ export class ReaderProgressService {
     this.timer = setTimeout(() => void this.flush(), PROGRESS_DEBOUNCE_MS);
   }
 
+  /** Hands the latest report to a request that survives the page going away. */
+  flushOnExit(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const send = this.pending;
+    this.pending = null;
+    if (send) this.api.saveProgressOnExit(send.target, send.progress);
+  }
+
   /** Sends the latest report now; a failed save is dropped, the next position retries. */
   async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);

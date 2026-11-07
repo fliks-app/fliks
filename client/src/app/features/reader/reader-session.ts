@@ -178,6 +178,11 @@ export class ReaderSession {
 
   openPanel(panel: ReaderPanel, tab?: SidebarTab): void {
     if (this.panel() === panel && (!tab || this.tab() === tab)) return this.closePanel();
+    this.showPanel(panel, tab);
+  }
+
+  /** Like {@link openPanel}, but a panel already open on that tab stays open. */
+  showPanel(panel: ReaderPanel, tab?: SidebarTab): void {
     if (!this.panel()) {
       this.dismissStack.push(this.dismissPanel);
       const active = document.activeElement;
@@ -294,6 +299,6 @@ export class ReaderSession {
   }
 
   flushProgress(): void {
-    void this.progress.flush();
+    this.progress.flushOnExit();
   }
 }
