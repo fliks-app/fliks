@@ -96,4 +96,10 @@ describe('LoginComponent SSO', () => {
     const { auth } = setup({ query: { autoLaunch: '0' } });
     await vi.waitFor(() => expect(auth.oidcAutoLaunch).toHaveBeenCalledWith(true));
   });
+
+  it('goToSelectUser keeps SSO from auto-launching', () => {
+    const { router, fixture } = setup();
+    fixture.componentInstance.goToSelectUser();
+    expect(router.navigate).toHaveBeenCalledWith(['/select-user'], { queryParams: { autoLaunch: 0 } });
+  });
 });

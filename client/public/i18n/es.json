@@ -2803,8 +2803,6 @@
       "drag": "Mover",
       "move_up": "Subir",
       "move_down": "Bajar",
-      "load_error": "No se pudieron cargar los ajustes de metadatos.",
-      "save_error": "No se pudo guardar el orden.",
       "kind": {
         "movie": "Películas",
         "series": "Series",

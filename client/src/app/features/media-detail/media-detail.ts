@@ -362,6 +362,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
 
     try {
       const m = await this.mediaService.getOne(id);
+      if (this.loadedId !== id) return;
       if (m.type !== kind) {
         void this.router.navigate(mediaDetailLink(m.type, m.id));
         return;
@@ -380,7 +381,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
         void this.mediaService
           .getOne(id, { force: true })
           .then((fresh) => {
-            if (fresh.type === kind) this.media.set(fresh);
+            if (fresh.type === kind && this.loadedId === id) this.media.set(fresh);
           })
           .catch(() => {
             /* network failure - cached body keeps showing */
@@ -389,9 +390,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
 
       this.requestFlow.load(m);
     } catch {
-      this.notFound.set(true);
+      if (this.loadedId === id) this.notFound.set(true);
     } finally {
-      this.loading.set(false);
+      if (this.loadedId === id) this.loading.set(false);
     }
   }
 

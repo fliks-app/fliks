@@ -101,7 +101,12 @@ export class AccountDevicesComponent implements OnInit {
   }
 
   async copy(token: string): Promise<void> {
-    await navigator.clipboard.writeText(token);
-    this.toast.success(this.translate.instant('device_tokens.copied'));
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      this.toast.success(this.translate.instant('device_tokens.copied'));
+    } catch {
+      // Clipboard denied: the token stays readable on screen.
+    }
   }
 }

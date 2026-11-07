@@ -3206,8 +3206,6 @@
       "drag": "Move",
       "move_up": "Move up",
       "move_down": "Move down",
-      "load_error": "Could not load the metadata settings.",
-      "save_error": "Could not save the order.",
       "kind": {
         "movie": "Movies",
         "series": "Series",

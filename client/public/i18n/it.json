@@ -2803,8 +2803,6 @@
       "drag": "Sposta",
       "move_up": "Su",
       "move_down": "Giù",
-      "load_error": "Impossibile caricare le impostazioni dei metadati.",
-      "save_error": "Impossibile salvare l'ordine.",
       "kind": {
         "movie": "Film",
         "series": "Serie",

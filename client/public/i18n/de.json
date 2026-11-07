@@ -2803,8 +2803,6 @@
       "drag": "Verschieben",
       "move_up": "Nach oben",
       "move_down": "Nach unten",
-      "load_error": "Die Metadaten-Einstellungen konnten nicht geladen werden.",
-      "save_error": "Die Reihenfolge konnte nicht gespeichert werden.",
       "kind": {
         "movie": "Filme",
         "series": "Serien",

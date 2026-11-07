@@ -51,7 +51,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     const param = this.route.snapshot.paramMap.get('userId');
     this.userId = param ? Number(param) : 0;
     if (param && !this.userId) {
-      void this.router.navigate(['/select-user']);
+      void this.router.navigate(['/select-user'], { queryParams: { autoLaunch: 0 } });
       return;
     }
     void this.start();
@@ -174,6 +174,6 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
 
   cancel() {
     this.stopTimers();
-    void this.router.navigate(['/select-user']);
+    void this.router.navigate(['/select-user'], { queryParams: { autoLaunch: 0 } });
   }
 }

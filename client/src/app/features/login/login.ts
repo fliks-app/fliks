@@ -108,6 +108,6 @@ export class LoginComponent {
   }
 
   goToSelectUser() {
-    void this.router.navigate(['/select-user']);
+    void this.router.navigate(['/select-user'], { queryParams: { autoLaunch: 0 } });
   }
 }

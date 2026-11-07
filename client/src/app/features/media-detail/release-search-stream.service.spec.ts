@@ -163,6 +163,32 @@ describe('ReleaseSearchStreamService', () => {
     await run;
   });
 
+  it('VERDICT: an older overlapping search no longer writes into the shared sinks', async () => {
+    const { service, releases, indexers, deliver } = setup();
+    const first = deferredFetch();
+    const second = deferredFetch();
+    const run1 = service.run(first.fetch, { releases, indexers });
+    const run2 = service.run(second.fetch, { releases, indexers });
+
+    await deliver(`plugin.${PLUGIN_ID}.search.partial`, {
+      searchId: first.searchId(),
+      releases: [release('old')],
+    });
+    expect(releases()).toEqual([]);
+
+    await deliver(`plugin.${PLUGIN_ID}.search.state`, {
+      searchId: second.searchId(),
+      indexers: [{ id: 1, name: 'alpha', state: 'pending' }],
+    });
+    first.finish([]);
+    await run1;
+    expect(indexers()[0]?.state).toBe('pending');
+
+    second.finish([]);
+    await run2;
+    expect(indexers()[0]?.state).toBe('done');
+  });
+
   it('still returns the answer when no plugin contributes a release picker', async () => {
     const { service, releases, indexers } = setup(null);
     const f = deferredFetch();
