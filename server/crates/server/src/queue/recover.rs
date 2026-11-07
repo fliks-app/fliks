@@ -150,7 +150,11 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
             .companions
             .iter()
             .map(|(from, to)| (to.clone(), from.clone()))
-            .chain(ocr.into_iter().map(|(from, trashed)| (trashed, from)))
+            .chain(ocr.into_iter().map(|(from, trashed)| {
+                // Trashed under its post-rename name; it returns under the old one.
+                let old = journal.companions.iter().find(|(_, to)| *to == from);
+                (trashed, old.map_or(from, |(f, _)| f.clone()))
+            }))
             .collect(),
     };
     let rc = r.clone();
