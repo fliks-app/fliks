@@ -56,6 +56,10 @@ pub struct Settings {
     pub cpu_weight: u32,
     /// No new lease while set; running jobs finish.
     pub paused: bool,
+    /// Source health: a file is verified again after this many days; 0 never schedules a verification.
+    pub verify_interval_days: u32,
+    /// Files queued for verification per hourly pass.
+    pub verify_batch: u32,
 }
 
 impl Default for Settings {
@@ -70,6 +74,8 @@ impl Default for Settings {
             gpu_playback_before_pause: 1,
             cpu_weight: 2,
             paused: false,
+            verify_interval_days: 0,
+            verify_batch: 20,
         }
     }
 }
@@ -84,6 +90,9 @@ impl Settings {
         }
         if self.device_max_jobs.values().any(|n| *n == 0) {
             return Err("deviceMaxJobs values must be at least 1");
+        }
+        if self.verify_batch == 0 {
+            return Err("verifyBatch must be at least 1");
         }
         Ok(())
     }

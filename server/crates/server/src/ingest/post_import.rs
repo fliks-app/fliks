@@ -348,6 +348,19 @@ pub async fn scan_sources(st: &AppState, media_id: i32) {
     }
 }
 
+/// Whether the file's queued job may start at once (its profile has no minimum age).
+pub(crate) async fn starts_now(st: &AppState, file_id: i32) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        r#"SELECT "notBefore" <= now() FROM jobs WHERE "mediaFileId" = $1 AND state = 'queued' AND kind = 'optimize'"#,
+    )
+    .bind(file_id)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false)
+}
+
 async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
     let book = sqlx::query_scalar!(r#"SELECT type FROM media WHERE id = $1"#, media_id)
@@ -375,20 +388,33 @@ async fn settled(st: &AppState, media_id: i32) {
     }
     // One batch at a time, so a season pack does not queue every media's jobs at once.
     let _turn = st.ingest.settle.turn.lock().await;
+    let ids = sqlx::query_scalar!(
+        r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        media_id
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    // A job that starts now rewrites the file and the commit requeues its sprites.
+    let mut immediate = HashSet::new();
+    for &id in &ids {
+        match crate::queue::queue_new(st, id).await {
+            Ok(q) if q.outcome == crate::queue::Outcome::Queued && starts_now(st, id).await => {
+                immediate.insert(id);
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(
+                "Post-import[media #{media_id}]: optimize queueing of file #{id} failed: {e}"
+            ),
+        }
+    }
     if super::setting_on(&st.db, "sprites_auto_generate_on_import")
         .await
         .unwrap_or(true)
     {
-        let ids = sqlx::query_scalar!(
-            r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
-            media_id
-        )
-        .fetch_all(&st.db)
-        .await
-        .unwrap_or_default();
         let thumbs = crate::paths::cache_dir().join("thumbnails");
         for id in ids {
-            if thumbs.join(id.to_string()).join("sprite.json").exists() {
+            if immediate.contains(&id) || thumbs.join(id.to_string()).join("sprite.json").exists() {
                 continue;
             }
             if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await

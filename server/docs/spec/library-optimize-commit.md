@@ -22,3 +22,10 @@ Module `server/crates/server/src/queue/` (`commit.rs`, `swap.rs`, `recover.rs`, 
 15. `POST /api/optimize/queue/pause|resume` (`paused` in the settings: no new lease), `POST /api/optimize/jobs/priority {ids}` (queued jobs run first, in the order given), `POST /api/optimize/jobs/cancel {ids}`.
 16. SSE: `optimize.job_progress {jobId, progress, paused}` on each heartbeat, `optimize.job_changed {jobId, state}` on a state change (3 s sweep), `optimize.queue_changed` on queueing, reordering, pause and restore. Notifications `optimize.completed`, `optimize.failed`, `health.corrupt` (once per file) go out from the same sweep.
 17. `hello` carries `cpuWeight` (default 2) and `gpuPlaybackBeforePause` (integer, 0 never) from the settings, applied at the next hello. `PUT /v1/config` sends `worker: true`.
+
+## Automatic (S6)
+
+18. `post_import::settled()` calls `queue::queue_new` for each file of the media: a library with `optimizeNewFiles` and a profile queues the optimize job at once with `notBefore = createdAt + eligible.min_age_days` (the age gate becomes the delay). A file that starts at once (`min_age_days = 0`) gets no sprites from `settled()`: the commit requeues them. Otherwise sprites are generated as before. Markers are always detected.
+19. Every hour the queue loop reviews the files created in the last 30 days in `optimizeNewFiles` libraries that never had a job, through the same `queue_new` (a hard-linked file becomes eligible once it stops being linked, or a pending OCR is done).
+20. `POST /api/optimize/verify {mediaFileIds, priority?}` queues a `verify` job per file (full read, software decode counting the errors; `corrupt` and `damaged` failures raise `health.corrupt` once). Same answers as the optimize queueing.
+21. Settings `verifyIntervalDays` (0 = no scheduled verification, default) and `verifyBatch` (default 20): each hourly pass queues, at priority -10, the video files whose last finished `verify` is older than the interval (never verified first), without an active job or a remembered `corrupt`/`damaged` failure of the same bytes.

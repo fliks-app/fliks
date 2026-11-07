@@ -60,14 +60,14 @@ async fn planned(
     Ok((plan, crate::device_tokens::hash(&json)[..16].to_owned()))
 }
 
-struct Loaded {
-    id: i32,
-    info: MediaInfo,
+pub(super) struct Loaded {
+    pub id: i32,
+    pub info: MediaInfo,
     folder: String,
     snap: Snapshot,
 }
 
-async fn load(
+pub(super) async fn load(
     st: &AppState,
     id: i32,
     skip_hardlinked: bool,
@@ -137,7 +137,7 @@ pub struct Queued {
     pub job_id: Option<i64>,
 }
 
-fn done(media_file_id: i32, outcome: Outcome) -> Queued {
+pub(super) fn done(media_file_id: i32, outcome: Outcome) -> Queued {
     Queued {
         media_file_id,
         outcome,
@@ -201,18 +201,37 @@ pub async fn queue_files(
 ) -> sqlx::Result<Vec<Queued>> {
     let mut out = Vec::with_capacity(ids.len());
     for &id in ids {
-        out.push(queue_one(st, id, force, priority).await?);
+        out.push(queue_one(st, id, force, priority, false).await?);
     }
     st.queue.wake.notify_waiters();
     st.hub.emit(SseEvent::OptimizeQueueChanged {});
     Ok(out)
 }
 
-async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::Result<Queued> {
+/// A new file of a library that optimizes them: queued now, to start once it is `min_age_days` old.
+pub async fn queue_new(st: &AppState, id: i32) -> sqlx::Result<Queued> {
+    let q = queue_one(st, id, false, 0, true).await?;
+    if q.outcome == Outcome::Queued {
+        st.queue.wake.notify_waiters();
+        st.hub.emit(SseEvent::OptimizeQueueChanged {});
+    }
+    Ok(q)
+}
+
+async fn queue_one(
+    st: &AppState,
+    id: i32,
+    force: bool,
+    priority: i32,
+    new_file: bool,
+) -> sqlx::Result<Queued> {
     let library: Option<i32> = sqlx::query_scalar(
-        r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
+        r#"SELECT m."libraryId" FROM media_files f JOIN media m ON m.id = f."mediaId"
+           JOIN libraries l ON l.id = m."libraryId"
+           WHERE f.id = $1 AND (NOT $2 OR l."optimizeNewFiles")"#,
     )
     .bind(id)
+    .bind(new_file)
     .fetch_optional(&st.db)
     .await?;
     let Some(library) = library else {
@@ -222,6 +241,12 @@ async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::
         return Ok(done(id, Outcome::NothingToDo));
     };
     ctx.force = force;
+    // The age gate becomes the job's `notBefore`: the file is queued now and waits.
+    let min_age = if new_file {
+        std::mem::take(&mut ctx.profile.eligible.min_age_days)
+    } else {
+        0
+    };
     let l = match load(st, id, ctx.profile.eligible.skip_hardlinked).await? {
         Ok(l) => l,
         Err(o) => return Ok(done(id, o)),
@@ -234,7 +259,7 @@ async fn queue_one(st: &AppState, id: i32, force: bool, priority: i32) -> sqlx::
     let Some(diff::Outcome::Diff(d)) = found else {
         return Ok(done(id, Outcome::NothingToDo));
     };
-    insert(st, &ctx, &l, &d, priority).await
+    insert(st, &ctx, &l, &d, priority, min_age).await
 }
 
 /// Every file of a library with a difference, from one pass: the count, and the queueing that
@@ -255,7 +280,7 @@ pub async fn queue_library(st: &AppState, library: i32, priority: i32) -> sqlx::
     tokio::spawn(async move {
         for (id, d) in found {
             let queued = match load(&st, id, ctx.profile.eligible.skip_hardlinked).await {
-                Ok(Ok(l)) => insert(&st, &ctx, &l, &d, priority).await,
+                Ok(Ok(l)) => insert(&st, &ctx, &l, &d, priority, 0).await,
                 Ok(Err(o)) => Ok(done(id, o)),
                 Err(e) => Err(e),
             };
@@ -275,11 +300,11 @@ async fn insert(
     l: &Loaded,
     d: &diff::Diff,
     priority: i32,
+    min_age_days: u32,
 ) -> sqlx::Result<Queued> {
-    let (id, snap) = (l.id, &l.snap);
     let (plan, hash) = match planned(st, ctx, l, d).await {
         Ok(p) => p,
-        Err(o) => return Ok(done(id, o)),
+        Err(o) => return Ok(done(l.id, o)),
     };
     let payload = json!(OptimizePayload {
         info: l.info.clone(),
@@ -288,23 +313,42 @@ async fn insert(
         input_url: None,
         input_token: None,
     });
+    insert_job(st, "optimize", l, payload, &hash, priority, min_age_days).await
+}
+
+/// The one write of a job: a no-op while another job of the file is active. `notBefore` is the file's
+/// creation plus `min_age_days`.
+pub(super) async fn insert_job(
+    st: &AppState,
+    kind: &str,
+    l: &Loaded,
+    payload: serde_json::Value,
+    hash: &str,
+    priority: i32,
+    min_age_days: u32,
+) -> sqlx::Result<Queued> {
+    let (id, snap) = (l.id, &l.snap);
     let job = sqlx::query_scalar::<_, i64>(
         r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", priority, "inPath", "inSize",
-             "inMtimeMs", "inDev", "inIno")
-           VALUES ('optimize', $1, $2, $3, $4, $5, $6, $7, $8, $9)
+             "inMtimeMs", "inDev", "inIno", "notBefore")
+           VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $9,
+             CASE WHEN $11 > 0 THEN (SELECT "createdAt" FROM media_files WHERE id = $1) + make_interval(days => $11)
+                  ELSE now() END)
            ON CONFLICT ("mediaFileId") WHERE "mediaFileId" IS NOT NULL
              AND state IN ('queued', 'leased', 'staged', 'committing') DO NOTHING
            RETURNING id"#,
     )
     .bind(id)
     .bind(payload)
-    .bind(&hash)
+    .bind(hash)
     .bind(priority)
     .bind(&snap.path)
     .bind(snap.size)
     .bind(snap.mtime_ms)
     .bind(snap.dev)
     .bind(snap.ino)
+    .bind(kind)
+    .bind(min_age_days as i32)
     .fetch_optional(&st.db)
     .await?;
     Ok(match job {
