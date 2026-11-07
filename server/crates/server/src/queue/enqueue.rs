@@ -211,11 +211,28 @@ pub async fn queue_files(
 /// A new file of a library that optimizes them: queued now, to start once it is `min_age_days` old.
 pub async fn queue_new(st: &AppState, id: i32) -> sqlx::Result<Queued> {
     let q = queue_one(st, id, false, 0, true).await?;
+    if q.outcome == Outcome::Shared {
+        record_shared(st, id).await?;
+    }
     if q.outcome == Outcome::Queued {
         st.queue.wake.notify_waiters();
         st.hub.emit(SseEvent::OptimizeQueueChanged {});
     }
     Ok(q)
+}
+
+/// A `skipped` marker of class `shared`, once per file: the review pass looks at those files again.
+async fn record_shared(st: &AppState, id: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state, error, "finishedAt")
+           SELECT 'optimize', $1, '{}'::jsonb, 'shared', 'skipped', '{"class": "shared"}'::jsonb, now()
+           WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE "mediaFileId" = $1 AND state = 'skipped'
+                               AND error->>'class' = 'shared')"#,
+    )
+    .bind(id)
+    .execute(&st.db)
+    .await?;
+    Ok(())
 }
 
 async fn queue_one(
@@ -365,7 +382,8 @@ pub(super) async fn insert_job(
 /// is not retryable (or another job of the file is active).
 pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
     let row = sqlx::query(
-        r#"SELECT "inPath", "inSize", "inMtimeMs" FROM jobs WHERE id = $1 AND state IN ('failed', 'skipped')"#,
+        r#"SELECT "inPath", "inSize", "inMtimeMs" FROM jobs WHERE id = $1 AND state IN ('failed', 'skipped')
+             AND COALESCE(error->>'class', '') <> 'shared'"#,
     )
     .bind(id)
     .fetch_optional(&st.db)
