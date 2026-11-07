@@ -4133,7 +4133,8 @@
     "reschedule_message": "Nouvelle date pour \"{{name}}\" : {{when}}. Confirmer ?",
     "regenerate_title": "Créer un nouveau lien",
     "regenerate_message": "Le lien d'invitation actuel ne fonctionnera plus. Les personnes qui n'ont que celui-ci perdront l'accès.",
-    "error_invalid_cover": "Cette jaquette n'est pas valide pour la programmation actuelle."
+    "error_invalid_cover": "Cette image de la séance n'est pas valide pour la programmation actuelle.",
+    "error_invalid_data": "Données de signal invalides"
   },
   "media_picker": {
     "title_add": "Ajouter un titre",
@@ -4416,8 +4417,7 @@
     "standalone": "Autres œuvres",
     "bibliography": "Autres œuvres de cet auteur",
     "add": "Ajouter",
-    "no_works": "Aucune œuvre dans la bibliothèque",
-    "work_count": "{{count}} œuvres"
+    "no_works": "Aucune œuvre dans la bibliothèque"
   },
   "books_search": {
     "filter_books": "Livres",

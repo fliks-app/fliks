@@ -4133,7 +4133,8 @@
     "reschedule_message": "Neuer Termin für \"{{name}}\": {{when}}. Bestätigen?",
     "regenerate_title": "Neuen Link erstellen",
     "regenerate_message": "Der aktuelle Einladungslink funktioniert nicht mehr. Wer nur diesen Link hat, verliert den Zugang.",
-    "error_invalid_cover": "Dieses Cover ist für das aktuelle Programm nicht gültig."
+    "error_invalid_cover": "Dieses Titelbild ist für das aktuelle Programm nicht gültig.",
+    "error_invalid_data": "Ungültige Signaldaten"
   },
   "media_picker": {
     "title_add": "Titel hinzufügen",
@@ -4416,8 +4417,7 @@
     "standalone": "Weitere Werke",
     "bibliography": "Weitere Werke dieses Autors",
     "add": "Hinzufügen",
-    "no_works": "Keine Werke in der Bibliothek",
-    "work_count": "{{count}} Werke"
+    "no_works": "Keine Werke in der Bibliothek"
   },
   "books_search": {
     "filter_books": "Bücher",

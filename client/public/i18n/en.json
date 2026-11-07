@@ -4133,7 +4133,8 @@
     "reschedule_message": "New date for \"{{name}}\": {{when}}. Confirm?",
     "regenerate_title": "Create a new link",
     "regenerate_message": "The current invite link will stop working. Anyone who only has it will lose access.",
-    "error_invalid_cover": "This cover is not valid for the current programme."
+    "error_invalid_cover": "This cover is not valid for the current programme.",
+    "error_invalid_data": "Invalid signal data"
   },
   "media_picker": {
     "title_add": "Add a title",
@@ -4416,8 +4417,7 @@
     "standalone": "Other works",
     "bibliography": "More by this author",
     "add": "Add",
-    "no_works": "No works in the library",
-    "work_count": "{{count}} works"
+    "no_works": "No works in the library"
   },
   "books_search": {
     "filter_books": "Books",

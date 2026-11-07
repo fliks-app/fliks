@@ -4133,7 +4133,8 @@
     "reschedule_message": "Nuova data per \"{{name}}\": {{when}}. Confermare?",
     "regenerate_title": "Crea un nuovo link",
     "regenerate_message": "Il link di invito attuale smetterà di funzionare. Chi ha solo quello perderà l'accesso.",
-    "error_invalid_cover": "Questa copertina non è valida per la programmazione attuale."
+    "error_invalid_cover": "Questa immagine non è valida per la programmazione attuale.",
+    "error_invalid_data": "Dati del segnale non validi"
   },
   "media_picker": {
     "title_add": "Aggiungi un titolo",
@@ -4416,8 +4417,7 @@
     "standalone": "Altre opere",
     "bibliography": "Altre opere di questo autore",
     "add": "Aggiungi",
-    "no_works": "Nessuna opera nella libreria",
-    "work_count": "{{count}} opere"
+    "no_works": "Nessuna opera nella libreria"
   },
   "books_search": {
     "filter_books": "Libri",
