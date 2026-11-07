@@ -119,28 +119,36 @@ struct LibraryView: View {
             items = []
             fetched = 0
         }
-        var query = [
-            "libraryId": String(libraryId),
-            "sortBy": sortBy,
-            "sortOrder": sortOrder,
-            "page": String(page),
-            "limit": String(pageSize),
-        ]
-        if let typeFilter { query["type"] = typeFilter.rawValue }
-        do {
-            let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
-            let data = res.data.filter(\.type.isPlayable)
-            items = reset ? data : items + data
-            total = res.total
-            fetched += res.data.count
-            state = .loaded
-            backdrop.seed(items.first?.fanartUrl)
-            if data.isEmpty, fetched < total {
-                page += 1
-                await load(reset: false)
+        let (sort, order, type) = (sortBy, sortOrder, typeFilter)
+        var next = page
+        while true {
+            var query = [
+                "libraryId": String(libraryId),
+                "sortBy": sort,
+                "sortOrder": order,
+                "page": String(next),
+                "limit": String(pageSize),
+            ]
+            if let type { query["type"] = type.rawValue }
+            do {
+                let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: query)
+                // Drop a response superseded by a sort or type change.
+                guard (sort, order, type) == (sortBy, sortOrder, typeFilter) else { return }
+                let data = res.data.filter(\.type.isPlayable)
+                items += data
+                total = res.total
+                fetched += res.data.count
+                page = next
+                backdrop.seed(items.first?.fanartUrl)
+                if data.isEmpty, !res.data.isEmpty, fetched < total {
+                    next += 1
+                    continue
+                }
+                state = .loaded
+            } catch {
+                if reset { state = .failed }
             }
-        } catch {
-            if reset { state = .failed }
+            return
         }
     }
 

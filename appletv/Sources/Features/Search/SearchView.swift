@@ -119,7 +119,7 @@ struct SearchView: View {
             self.page = page
             loadError = false
             backdrop.seed(results.first?.fanartUrl)
-            if data.isEmpty, fetched < total { await runSearch(page: page + 1) }
+            if data.isEmpty, !res.data.isEmpty, fetched < total { await runSearch(page: page + 1) }
         } catch {
             guard q == query.trimmingCharacters(in: .whitespacesAndNewlines), type == typeFilter else { return }
             if page == 1 { results = []; loadError = true }
