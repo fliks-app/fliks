@@ -270,8 +270,8 @@ pub struct Summary {
 type Stamp = (Option<DateTime<Utc>>, Option<DateTime<Utc>>, i64);
 // ponytail: in-process cache, recomputed when the profile, the library or a file row changed or
 // after 15 minutes (devices and playback drift); a persisted counter if restarts must not recompute.
-static COUNTERS: LazyLock<Mutex<HashMap<(i32, Option<i32>), (Stamp, Instant, Summary)>>> =
-    LazyLock::new(Default::default);
+type Counters = HashMap<(i32, Option<i32>), (Stamp, Instant, Summary)>;
+static COUNTERS: LazyLock<Mutex<Counters>> = LazyLock::new(Default::default);
 const COUNTER_TTL: Duration = Duration::from_secs(900);
 
 #[utoipa::path(get, path = "/api/libraries/{id}/optimize/summary", responses((status = 200)))]
