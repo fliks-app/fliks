@@ -66,15 +66,8 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
             return None;
         }
         // Two parts with one (disc, part) number, or one without, are two books interleaved.
-        let mut nums: Vec<_> = parts
-            .iter()
-            .map(|p| part_numbers(&p.rel.replace('\\', "/")))
-            .collect();
-        let numbered = nums.iter().filter(|n| n.1.is_some()).count();
-        nums.sort();
-        if (numbered > 0 && numbered < nums.len())
-            || nums.windows(2).any(|w| w[0].1.is_some() && w[0] == w[1])
-        {
+        let rels: Vec<String> = parts.iter().map(|p| p.rel.replace('\\', "/")).collect();
+        if !numbered_apart(&rels) {
             tracing::warn!(
                 "m4b merge skipped: the part numbers of {} do not tell its parts apart",
                 parts[0].rel
@@ -101,32 +94,58 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
 
 static DISC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\b(?:cd|disc|disk|disque)\s*0*(\d+)\b").unwrap());
+static DISC_DIR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(?:cd|disc|disk|disque)\s*0*(\d+)$").unwrap());
 static NOISE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\s*[(\[][^)\]]*[)\]]|\b(?:cd|disc|disk|disque)\s*\d+\b|\bof\s+\d+\b").unwrap()
 });
+static EXTRA: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)(?:^|[\s\-_.:])(?:opening credits|end credits|credits|intro|introduction|prologue|epilogue|outro|afterword|foreword|preface)$",
+    )
+    .unwrap()
+});
 
-/// The (disc, part) of a part file: the disc of a disc folder or of the name, the part as the file-name
-/// guess reads it, else the last number of the name. Only guards a merge; it orders nothing.
-fn part_numbers(rel: &str) -> (Option<u32>, Option<u32>) {
-    let name = rel.rsplit('/').next().unwrap_or(rel);
-    let (stem, ext) = name
-        .rfind('.')
-        .map_or((name, ""), |d| (&name[..d], &name[d..]));
-    let clean = NOISE.replace_all(stem, " ");
-    let clean = clean.trim_matches(|c: char| " -_.".contains(c));
-    let folder = parse_path(rel).part.and_then(|p| p.disc);
-    let disc = folder.or_else(|| DISC.captures(stem)?[1].parse().ok());
-    let number = parse_path(&format!("{clean}{ext}"))
-        .part
-        .and_then(|p| p.number)
-        .or_else(|| {
-            let end = clean.rfind(|c: char| c.is_ascii_digit())? + 1;
-            let start = clean[..end]
+/// Whether the parts of a version are told apart by (disc, part) numbers, so no two books are
+/// interleaved in it. Credits, intros and the like carry no number and are ignored.
+fn numbered_apart(rels: &[String]) -> bool {
+    let mut parts: Vec<(Option<u32>, Option<u32>, Option<u32>)> = vec![];
+    for rel in rels {
+        let (dirs, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+        let (stem, ext) = name
+            .rfind('.')
+            .map_or((name, ""), |d| (&name[..d], &name[d..]));
+        let clean = NOISE.replace_all(stem, " ");
+        let clean = clean.trim_matches(|c: char| " -_.".contains(c));
+        if EXTRA.is_match(clean) {
+            continue;
+        }
+        let disc = dirs
+            .rsplit('/')
+            .map_while(|d| DISC_DIR.captures(d))
+            .find_map(|c| c[1].parse().ok())
+            .or_else(|| DISC.captures(stem)?[1].parse().ok());
+        let lead = parse_path(&format!("{clean}{ext}"))
+            .part
+            .and_then(|p| p.number);
+        let last = clean.rfind(|c: char| c.is_ascii_digit()).and_then(|e| {
+            let start = clean[..=e]
                 .trim_end_matches(|c: char| c.is_ascii_digit())
                 .len();
-            clean[start..end].parse().ok()
+            clean[start..=e].parse().ok()
         });
-    (disc, number)
+        parts.push((disc, lead, last));
+    }
+    let same_lead =
+        parts.len() > 1 && parts[0].1.is_some() && parts.iter().all(|p| p.1 == parts[0].1);
+    let mut nums: Vec<_> = parts
+        .iter()
+        .map(|p| (p.0, if same_lead { p.2 } else { p.1.or(p.2) }))
+        .collect();
+    let numbered = nums.iter().filter(|n| n.1.is_some()).count();
+    nums.sort();
+    (numbered == 0 || numbered == nums.len())
+        && !nums.windows(2).any(|w| w[0].1.is_some() && w[0] == w[1])
 }
 
 /// What a recorded failure is tied to: the merged version's files as the database knows them.
@@ -144,7 +163,7 @@ pub fn fingerprint(parts: &[Part]) -> String {
 }
 
 /// Folder names that say a format, not a book.
-pub(super) const GENERIC: [&str; 9] = [
+const GENERIC: [&str; 9] = [
     "mp3",
     "m4a",
     "flac",
@@ -1373,11 +1392,27 @@ mod tests {
             part(2, 0, "T/CD2/01.mp3", "mp3"),
         ];
         assert_eq!(pick(&discs, &[]).unwrap().len(), 2);
-        let pair = |a: &str, b: &str| [part(1, 0, a, "mp3"), part(2, 0, b, "mp3")];
-        assert!(pick(&pair("T/01 - Hobbit.mp3", "T/01 - LOTR.mp3"), &[]).is_none());
-        assert!(pick(&pair("T/Prologue.mp3", "T/01.mp3"), &[]).is_none());
-        let named = pair("T/Disc 1 - 01.mp3", "T/Disc 2 - 01.mp3");
-        assert_eq!(pick(&named, &[]).unwrap().len(), 2);
+        let ok = |names: &[&str]| {
+            let rows: Vec<Part> = names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| part(i as i32, 0, n, "mp3"))
+                .collect();
+            pick(&rows, &[]).is_some()
+        };
+        assert!(!ok(&["T/01 - Hobbit.mp3", "T/01 - LOTR.mp3"]));
+        assert!(!ok(&["T/Book A.mp3", "T/B - 01.mp3", "T/B - 02.mp3"]));
+        assert!(ok(&["T/Disc 1 - 01.mp3", "T/Disc 2 - 01.mp3"]));
+        assert!(ok(&["T/CD1/Title - 01.mp3", "T/CD2/Title - 01.mp3"]));
+        assert!(ok(&["T/Disque 1/01.mp3", "T/Disque 2/01.mp3"]));
+        assert!(ok(&["T/1984 - 01.mp3", "T/1984 - 02.mp3"]));
+        assert!(ok(&[
+            "T/Title - Opening Credits.mp3",
+            "T/Title - 01.mp3",
+            "T/Title - 02.mp3",
+            "T/Title - End Credits.mp3"
+        ]));
+        assert!(ok(&["T/Prologue.mp3", "T/01.mp3", "T/02.mp3"]));
     }
 
     #[test]
