@@ -124,7 +124,10 @@ pub(super) fn part_numbers(path: &str) -> (Option<u32>, Option<u32>) {
     let mut segs: Vec<&str> = path.split('/').collect();
     segs.pop();
     let folder = segs.iter().rev().take_while(|s| is_disc(s)).find_map(|s| {
-        s.trim_start_matches(|c: char| !c.is_ascii_digit()).trim().parse::<u32>().ok()
+        s.trim_start_matches(|c: char| !c.is_ascii_digit())
+            .trim()
+            .parse::<u32>()
+            .ok()
     });
     let disc = folder.or_else(|| DISC.captures(stem)?[1].parse().ok());
     let clean = NOISE.replace_all(stem, " ");
