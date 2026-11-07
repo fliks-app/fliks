@@ -9,6 +9,7 @@ struct SearchView: View {
     @State private var typeFilter: MediaKind?
     @State private var results: [Media] = []
     @State private var total = 0
+    @State private var fetched = 0
     @State private var page = 1
     @State private var loading = false
     @State private var loadError = false
@@ -114,9 +115,11 @@ struct SearchView: View {
             let data = res.data.filter(\.type.isPlayable)
             results = page == 1 ? data : results + data
             total = res.total
+            fetched = page == 1 ? res.data.count : fetched + res.data.count
             self.page = page
             loadError = false
-            backdrop.seed(res.data.first?.fanartUrl)
+            backdrop.seed(results.first?.fanartUrl)
+            if data.isEmpty, fetched < total { await runSearch(page: page + 1) }
         } catch {
             guard q == query.trimmingCharacters(in: .whitespacesAndNewlines), type == typeFilter else { return }
             if page == 1 { results = []; loadError = true }
@@ -125,7 +128,7 @@ struct SearchView: View {
 
     private func loadMore() {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !isLoadingMore, results.count < total else { return }
+              !isLoadingMore, fetched < total else { return }
         isLoadingMore = true
         Task {
             await runSearch(page: page + 1)

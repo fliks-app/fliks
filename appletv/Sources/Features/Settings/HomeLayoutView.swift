@@ -78,7 +78,8 @@ struct HomeLayoutView: View {
         }
         .task {
             hiddenLibraryIds = Set(auth.currentUser?.hiddenLibraryIds ?? [])
-            libraries = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
+            let all: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
+            libraries = all.filter(\.isPlayable)
             rebuild()
         }
     }

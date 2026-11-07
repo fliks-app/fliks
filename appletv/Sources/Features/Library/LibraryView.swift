@@ -15,6 +15,7 @@ struct LibraryView: View {
 
     @State private var state: LoadState = .loading
     @State private var items: [Media] = []
+    @State private var fetched = 0
     @State private var total = 0
     @State private var page = 1
     @State private var isLoadingMore = false
@@ -116,6 +117,7 @@ struct LibraryView: View {
             state = .loading
             page = 1
             items = []
+            fetched = 0
         }
         var query = [
             "libraryId": String(libraryId),
@@ -130,8 +132,13 @@ struct LibraryView: View {
             let data = res.data.filter(\.type.isPlayable)
             items = reset ? data : items + data
             total = res.total
+            fetched += res.data.count
             state = .loaded
-            backdrop.seed(res.data.first?.fanartUrl)
+            backdrop.seed(items.first?.fanartUrl)
+            if data.isEmpty, fetched < total {
+                page += 1
+                await load(reset: false)
+            }
         } catch {
             if reset { state = .failed }
         }
@@ -141,7 +148,7 @@ struct LibraryView: View {
     /// `onReachEnd` calls `ContentGrid` fires per near-end item in one layout
     /// pass collapse into a single page fetch.
     private func loadMore() {
-        guard !isLoadingMore, items.count < total else { return }
+        guard !isLoadingMore, fetched < total else { return }
         isLoadingMore = true
         page += 1
         Task {
