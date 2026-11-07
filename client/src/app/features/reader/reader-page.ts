@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, afterNextRender, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
@@ -40,8 +40,10 @@ export class ReaderPageComponent {
   private readonly comics = inject(ComicsApiService);
 
   protected readonly opened = signal<Opened | null>(null);
+  private gone = false;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
     afterNextRender(() => void this.resolve());
   }
 
@@ -85,6 +87,7 @@ export class ReaderPageComponent {
       };
       this.opened.set({ format: format as Opened['format'], title: book.title, target, info });
     } catch {
+      if (this.gone) return;
       this.toast.error(this.translate.instant('reader.open_failed'));
       this.back();
     }

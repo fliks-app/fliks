@@ -8,13 +8,15 @@ const T = { mediaId: 3, itemId: 7, fileId: 9 };
 
 describe('ReaderProgressService', () => {
   let save: ReturnType<typeof vi.fn>;
+  let saveOnExit: ReturnType<typeof vi.fn>;
   let svc: ReaderProgressService;
 
   beforeEach(() => {
     vi.useFakeTimers();
     save = vi.fn().mockResolvedValue(undefined);
+    saveOnExit = vi.fn();
     TestBed.configureTestingModule({
-      providers: [ReaderProgressService, { provide: ReaderApiService, useValue: { saveProgress: save } }],
+      providers: [ReaderProgressService, { provide: ReaderApiService, useValue: { saveProgress: save, saveProgressOnExit: saveOnExit } }],
     });
     svc = TestBed.inject(ReaderProgressService);
   });
@@ -73,5 +75,14 @@ describe('ReaderProgressService', () => {
     save.mockRejectedValueOnce(new Error('offline'));
     svc.report(T, at(0.4));
     await expect(svc.flush()).resolves.toBeUndefined();
+  });
+
+  it('hands the latest position to the exit save, once', () => {
+    svc.report(T, at(0.4));
+    svc.flushOnExit();
+    svc.flushOnExit();
+    expect(saveOnExit).toHaveBeenCalledTimes(1);
+    expect(saveOnExit).toHaveBeenCalledWith(T, at(0.4));
+    expect(save).not.toHaveBeenCalled();
   });
 });

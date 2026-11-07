@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import type { Annotation } from './annotations-api.service';
+import { ReaderSession } from './reader-session';
 import { ReaderSettingsService } from './reader-settings.service';
 import { ReaderSidebarComponent } from './reader-sidebar';
 
@@ -67,5 +68,19 @@ describe('ReaderSidebarComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('a line');
     expect(TestBed.inject(ReaderSettingsService).panel().notesFilter).toBe('green');
+  });
+
+  it('saves a note still being typed through the engine when destroyed', async () => {
+    const save = vi.fn();
+    TestBed.configureTestingModule({
+      providers: [{ provide: ReaderSession, useValue: { engine: () => ({ notes: { save } }) } }],
+    });
+    const fixture = await open();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[aria-label="reader.edit_note"]')!.click();
+    await fixture.whenStable();
+    el.querySelector('textarea')!.value = ' typed ';
+    fixture.destroy();
+    expect(save).toHaveBeenCalledWith({ annotation: note, note: 'typed' });
   });
 });

@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   Injector,
+  type OnDestroy,
   afterNextRender,
   computed,
   effect,
@@ -29,6 +30,7 @@ import {
   type Annotation,
   type AnnotationColour,
 } from './annotations-api.service';
+import { ReaderSession } from './reader-session';
 import { ReaderSettingsService } from './reader-settings.service';
 import { COLOUR_HEX, groupByChapter } from './reader-annotations';
 import type { SearchHit } from './reader-search';
@@ -62,7 +64,7 @@ export interface TocEntry {
   styleUrl: './reader-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ReaderSidebarComponent {
+export class ReaderSidebarComponent implements OnDestroy {
   readonly tab = model.required<SidebarTab>();
   readonly toc = input.required<TocEntry[]>();
   readonly currentRow = input.required<number>();
@@ -86,6 +88,7 @@ export class ReaderSidebarComponent {
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly session = inject(ReaderSession, { optional: true });
 
   protected readonly tabs: SidebarTab[] = ['contents', 'bookmarks', 'notes'];
   protected readonly colours = ANNOTATION_COLOURS;
@@ -171,6 +174,17 @@ export class ReaderSidebarComponent {
     const field = this.host.nativeElement.querySelector('textarea');
     const a = this.annotations().find((x) => x.id === id);
     if (a && field) this.commit(a, field.value);
+  }
+
+  /** A note typed when the reader goes away without a blur: the output is dead by now, so it saves through the engine. */
+  ngOnDestroy(): void {
+    const a = this.annotations().find((x) => x.id === this.editing());
+    const field = this.host.nativeElement.querySelector('textarea');
+    const note = field?.value.trim();
+    if (a && note != null && note !== a.note) {
+      this.editing.set(null);
+      void this.session?.engine()?.notes?.save({ annotation: a, note });
+    }
   }
 
   protected text(e: Event): string {

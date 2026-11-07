@@ -5,6 +5,7 @@ import { HttpFetcher, Link, Manifest, Publication, type FetchImplementation, typ
 import { NetworkService } from '../../core/services/network.service';
 import { OfflineBookStoreService } from '../../core/services/offline-book-store.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
+import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { SKIP_ERROR_TOAST } from '../../core/interceptors/error.interceptor';
 
 /** The item being read: its media, its id and the file whose beat carries the progress. */
@@ -36,6 +37,7 @@ export class ReaderApiService {
   private readonly store = inject(OfflineBookStoreService);
   private readonly network = inject(NetworkService);
   private readonly sync = inject(OfflinePlaybackSyncService);
+  private readonly streaming = inject(StreamingApiService);
 
   manifestUrl(itemId: number): string {
     return this.store.manifestUrl(itemId);
@@ -69,10 +71,11 @@ export class ReaderApiService {
   /** Null when the user has not started the item. Without the server, the last position this device saved. */
   async loadProgress(t: ReaderTarget): Promise<Partial<ReaderProgress> | null> {
     const local = () => (this.sync.resumePositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined) ?? null;
-    // A position queued on this device is newer than the server's.
+    if (!this.network.isOnline()) return local();
+    // Replayed first: the server's playedAt guard orders it against progress from another device. An entry still queued is the newest this device has.
+    await this.sync.flush();
     const queued = this.sync.queuedPositionFor(t.mediaId, undefined, t.itemId)?.extra as Partial<ReaderProgress> | undefined;
     if (queued) return queued;
-    if (!this.network.isOnline()) return local();
     return firstValueFrom(
       this.http.get<Partial<ReaderProgress> | null>(`/api/playback/media/${t.mediaId}/state`, {
         params: { itemId: t.itemId },
@@ -93,6 +96,16 @@ export class ReaderApiService {
     } catch {
       this.sync.queue(saved);
     }
+  }
+
+  /** A save for a page going away: a keepalive request outlives the unload, which an HttpClient call does not. */
+  saveProgressOnExit(t: ReaderTarget, p: ReaderProgress): void {
+    const saved = { mediaId: t.mediaId, mediaFileId: t.fileId, itemId: t.itemId, positionSeconds: 0, durationSeconds: 0, extra: { ...p } };
+    if (!this.network.isOnline()) return void this.sync.queue(saved);
+    const { url, init } = this.streaming.positionRequest(t.mediaId);
+    fetch(url, { ...init, body: JSON.stringify({ positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p }) })
+      .then((r) => (r.ok ? this.sync.record(saved) : this.sync.queue(saved)))
+      .catch(() => this.sync.queue(saved));
   }
 
   /** The toolkit's own fetches: a stored resource of a downloaded book, else the network with the app's credentials. */

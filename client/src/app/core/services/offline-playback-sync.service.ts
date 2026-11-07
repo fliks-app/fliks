@@ -31,6 +31,12 @@ function entryKey(mediaId: number, episodeId?: number, itemId?: number): string 
   return `${mediaId}:${episodeId ?? ''}${itemId != null ? `:${itemId}` : ''}`;
 }
 
+/** A 4xx other than auth, timeout and rate limit: retrying cannot succeed. */
+function refused(e: unknown): boolean {
+  const status = (e as { status?: number } | null)?.status ?? 0;
+  return status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
+}
+
 /** Playback positions recorded on this device plus the queue the backend hasn't accepted, doubling as the local read model:
  *  callers overlay {@link queuedPositionFor}/{@link overlayProgress} on API progress, which the SWR cache returns stale after offline use. */
 @Injectable({ providedIn: 'root' })
@@ -96,6 +102,10 @@ export class OfflinePlaybackSyncService {
     // Oldest first, so the cap drops the least recently played.
     kept.sort((a, b) => a.updatedAt - b.updatedAt);
     this.saveLastKnown(kept.slice(-LAST_KNOWN_MAX));
+    // The server has this position: an older queued one would overwrite it on reopen.
+    const pending = this._pending();
+    const rest = pending.filter((p) => entryKey(p.mediaId, p.episodeId, p.itemId) !== key || p.updatedAt > entry.updatedAt);
+    if (rest.length !== pending.length) this.setPending(rest);
     return entry;
   }
 
@@ -136,9 +146,9 @@ export class OfflinePlaybackSyncService {
    *  is one, else the last one this device played. */
   resumePositionFor(mediaId: number, episodeId?: number, itemId?: number): PendingUpdate | null {
     const queued = this.queuedPositionFor(mediaId, episodeId, itemId);
-    if (queued) return queued;
     const key = entryKey(mediaId, episodeId ?? undefined, itemId);
-    return this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId, p.itemId) === key) ?? null;
+    const known = this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId, p.itemId) === key) ?? null;
+    return queued && (!known || queued.updatedAt >= known.updatedAt) ? queued : known;
   }
 
   /** Push the queue; a call during a pass joins it and schedules one more, so mid-flush entries are neither stranded nor sent twice. */
@@ -177,9 +187,14 @@ export class OfflinePlaybackSyncService {
           playedAt: update.updatedAt || undefined,
         });
         sent.push(update);
-      } catch {
-        // Still unreachable — keep the rest for the next pass instead of
-        // walking the whole queue into the same failure.
+      } catch (e) {
+        // An entry the server always refuses would block the queue for good: drop it and go on.
+        if (refused(e)) {
+          console.warn('Dropping a playback position the server refuses', update.mediaId, e);
+          sent.push(update);
+          continue;
+        }
+        // Still unreachable: keep the rest for the next pass.
         break;
       }
     }

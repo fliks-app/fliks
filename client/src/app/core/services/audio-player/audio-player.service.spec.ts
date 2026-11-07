@@ -91,6 +91,17 @@ describe('AudioPlayerService', () => {
     );
   });
 
+  it('keeps a seek made before the metadata loaded instead of restoring the resume point', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    getItemPlaybackInfo.mockResolvedValue({ ...info, startAtSeconds: 8 });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play(req);
+    await audio.seek(3);
+    const el = (audio as unknown as { els: HTMLAudioElement[] }).els[0];
+    el.dispatchEvent(new Event('loadedmetadata'));
+    expect(el.currentTime).toBe(3);
+  });
+
   it('pauses at the end of the chapter when the sleep timer asks for it', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.play(req);
