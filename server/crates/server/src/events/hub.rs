@@ -59,6 +59,7 @@ pub(super) enum Msg {
 
 struct Conn {
     user: i32,
+    session: Option<i32>,
     identity: Identity,
     since: i64,
     seq: u64,
@@ -264,6 +265,16 @@ impl Hub {
 
     /// Registers the connection and queues `sse.connected` plus the user's progress replay (rule 9).
     pub fn connect(&self, user: i32, identity: Identity) -> Connection {
+        self.connect_session(user, None, identity)
+    }
+
+    /// `connect` bound to the session that authenticated it, so revoking that session closes it.
+    pub fn connect_session(
+        &self,
+        user: i32,
+        session: Option<i32>,
+        identity: Identity,
+    ) -> Connection {
         let id = uuid_v4();
         let (tx, rx) = mpsc::channel(CONN_QUEUE_MAX);
         let has_target = identity.target().is_some();
@@ -306,6 +317,7 @@ impl Hub {
                     id.clone(),
                     Conn {
                         user,
+                        session,
                         identity,
                         since: now_ms(),
                         seq,
@@ -360,6 +372,26 @@ impl Hub {
             );
         }
         self.announce_n(user, announces);
+    }
+
+    /// Every SSE connection opened under `session` (revoked, logged out or refresh token reused).
+    pub fn drop_connections_for_session(&self, session: i32) {
+        let mut users = Vec::new();
+        {
+            let mut g = self.lock();
+            let ids: Vec<(String, i32)> = g
+                .conns
+                .iter()
+                .filter(|(_, c)| c.session == Some(session))
+                .map(|(id, c)| (id.clone(), c.user))
+                .collect();
+            for (id, user) in ids {
+                users.push((user, self.close_locked(&mut g, &id) as usize));
+            }
+        }
+        for (user, n) in users {
+            self.announce_n(user, n);
+        }
     }
 
     /// Only the caller's own device (a plain logout); a miss is logged, not an error.
@@ -879,6 +911,18 @@ mod tests {
         assert!(hub.drain_commands(1, "tv#native").is_none());
         drop(a);
         assert!(got(&mut plain).is_empty());
+    }
+
+    #[test]
+    fn a_session_scoped_drop_closes_only_that_sessions_streams() {
+        let hub = Hub::new();
+        let mut s1 = hub.connect_session(1, Some(10), Identity::default());
+        let mut s2 = hub.connect_session(1, Some(11), Identity::default());
+        let mut bare = hub.connect(1, Identity::default());
+        let _ = (got(&mut s1), got(&mut s2), got(&mut bare));
+        hub.drop_connections_for_session(10);
+        assert_eq!(got(&mut s1), ["<close>"]);
+        assert!(got(&mut s2).is_empty() && got(&mut bare).is_empty());
     }
 
     #[test]

@@ -777,10 +777,21 @@ async fn refresh_keeps_the_session_and_a_reuse_revokes_it(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    let uid: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'bob'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let stream =
+        c.st.hub
+            .connect_session(uid, sid, fliks_server::events::Identity::default());
     let (s, _, e) = refresh(rt.to_owned()).await;
     assert_eq!(
         (s, e["message"].clone()),
         (401, json!("Refresh token reuse detected"))
+    );
+    assert!(
+        !c.st.hub.has_connection(&stream.id),
+        "its live stream is cut"
     );
     let h = auth_header(&r2);
     let (s, _, _) = call(&c, "GET", "/api/auth/me", &[("authorization", &h)], None).await;

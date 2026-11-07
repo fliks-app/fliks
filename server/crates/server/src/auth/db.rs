@@ -130,7 +130,9 @@ pub enum Refreshed {
     },
     Invalid,
     AlreadyRotated,
-    Reuse,
+    Reuse {
+        session: i32,
+    },
     Expired,
     Disabled,
 }
@@ -214,7 +216,9 @@ pub async fn refresh(
         );
         revoke_session(&mut tx, t.session_id, now).await?;
         tx.commit().await?;
-        return Ok(Refreshed::Reuse);
+        return Ok(Refreshed::Reuse {
+            session: t.session_id,
+        });
     }
     if t.expires_at < now {
         tracing::info!(
@@ -340,8 +344,13 @@ pub async fn revoke_user_session(
     Ok(live.is_some())
 }
 
-/// Logout: revokes the session of the presented refresh token; an unknown token is a no-op.
-pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sqlx::Error> {
+/// Logout: revokes the session of the presented refresh token and returns its id; an unknown token
+/// is a no-op.
+pub async fn revoke(
+    db: &PgPool,
+    raw: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<i32>, sqlx::Error> {
     let session = sqlx::query_scalar!(
         r#"SELECT "sessionId" FROM refresh_tokens WHERE "tokenHash" = $1 ORDER BY id LIMIT 1"#,
         hash(raw)
@@ -353,7 +362,7 @@ pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sq
         revoke_session(&mut tx, id, now).await?;
         tx.commit().await?;
     }
-    Ok(())
+    Ok(session)
 }
 
 pub struct SessionRow {
@@ -437,6 +446,7 @@ pub async fn open_pairing(
     device_id: &str,
     device_name: &str,
     system_name: Option<&str>,
+    legacy_client: bool,
     now: DateTime<Utc>,
 ) -> Result<Opened, sqlx::Error> {
     let mut tx = db.begin().await?;
@@ -519,8 +529,8 @@ pub async fn open_pairing(
     for _ in 0..10 {
         let code = new_code();
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt", code, "clientIp", "clientNet")
-               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6, $7, $8)
+            r#"INSERT INTO pairing_requests ("publicId", "userId", "deviceId", "deviceName", "systemName", status, "expiresAt", code, "clientIp", "clientNet", "legacyClient")
+               VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9)
                ON CONFLICT (code) WHERE status = 'pending' DO NOTHING
                RETURNING "publicId""#,
             user_id,
@@ -530,7 +540,8 @@ pub async fn open_pairing(
             now + Duration::seconds(PAIRING_TTL_SECS),
             code,
             client_ip,
-            client_net
+            client_net,
+            legacy_client
         )
         .fetch_optional(&mut *tx)
         .await?;
@@ -629,6 +640,7 @@ pub struct PendingPairing {
     pub device_id: String,
     pub device_name: String,
     pub system_name: Option<String>,
+    pub legacy_client: bool,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
@@ -641,7 +653,8 @@ pub async fn pending(
     sqlx::query_as!(
         PendingPairing,
         r#"SELECT "publicId" AS public_id, "deviceId" AS device_id, "deviceName" AS device_name,
-                  "systemName" AS system_name, "createdAt" AS created_at, "expiresAt" AS expires_at
+                  "systemName" AS system_name, "legacyClient" AS legacy_client,
+                  "createdAt" AS created_at, "expiresAt" AS expires_at
            FROM pairing_requests WHERE "userId" = $1 AND status = 'pending' AND "expiresAt" >= $2
            ORDER BY "createdAt" DESC"#,
         user_id,
@@ -831,7 +844,10 @@ mod tests {
                 .unwrap();
         assert_eq!(live, 2, "grace leaves the session alone");
         let late = edge + Duration::milliseconds(1);
-        assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
+        assert!(matches!(
+            rotate(&pool, &a, late).await,
+            Refreshed::Reuse { .. }
+        ));
         let live: i64 =
             sqlx::query_scalar(r#"SELECT count(*) FROM refresh_tokens WHERE "revokedAt" IS NULL"#)
                 .fetch_one(&pool)
@@ -852,7 +868,10 @@ mod tests {
         let b = token(&pool, u, t0).await;
         spend_chain(&pool, &a, t0).await;
         let late = t0 + Duration::milliseconds(REUSE_GRACE_MS + 1);
-        assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
+        assert!(matches!(
+            rotate(&pool, &a, late).await,
+            Refreshed::Reuse { .. }
+        ));
         assert!(matches!(
             rotate(&pool, &b, late).await,
             Refreshed::Ok { .. }
@@ -877,7 +896,10 @@ mod tests {
         let Refreshed::Ok { issued: c, .. } = rotate(&pool, &issued.raw, late).await else {
             panic!("the successor must still refresh")
         };
-        assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
+        assert!(matches!(
+            rotate(&pool, &a, late).await,
+            Refreshed::Reuse { .. }
+        ));
         assert!(matches!(
             rotate(&pool, &c.raw, late).await,
             Refreshed::Invalid
@@ -1023,7 +1045,7 @@ mod tests {
         net: &str,
         at: DateTime<Utc>,
     ) -> Opened {
-        open_pairing(pool, u, None, net, dev, "TV", None, at)
+        open_pairing(pool, u, None, net, dev, "TV", None, false, at)
             .await
             .unwrap()
     }

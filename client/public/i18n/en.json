@@ -300,7 +300,8 @@
     "sso_unlink": "Unlink",
     "sso_link": "Link {{name}}",
     "sso_last_method": "This is your only way to sign in. Set a password to be able to unlink it.",
-    "sso_link_origin": "Linking works from the address set as the public URL of the server."
+    "sso_link_origin": "Linking works from the address set as the public URL of the server.",
+    "sso_link_password": "Current password, to confirm it is you"
   },
   "account_settings": {
     "title": "Account settings",
@@ -864,7 +865,8 @@
     "check": "Continue",
     "confirm_title": "Approve this sign-in?",
     "from_ip": "Network address: {{ip}}",
-    "too_many": "Too many wrong codes. Try again later."
+    "too_many": "Too many wrong codes. Try again later.",
+    "update_device": "This device runs an older version of the app and cannot show a code. Update the app on it, then try again."
   },
   "server_history": {
     "section_title": "Recent servers",

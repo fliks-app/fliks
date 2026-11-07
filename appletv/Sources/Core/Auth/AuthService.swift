@@ -239,7 +239,7 @@ import Foundation
         return try await api.post(
             "/api/auth/pairing/request",
             body: Body(userId: userId, deviceName: deviceName, systemName: systemName),
-            headers: ["X-Device-Id": DeviceId.current]
+            headers: ["X-Device-Id": DeviceId.current, "X-Fliks-Pairing-Code": "1"]
         )
     }
 

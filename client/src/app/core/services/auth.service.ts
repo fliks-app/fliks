@@ -134,6 +134,8 @@ export interface PendingRequest {
   deviceName: string;
   /** Real host OS name+version ("macOS 26"), resolved natively by the requester. */
   systemName?: string;
+  /** Opened by an older app that never shows the code: it cannot be approved by code. */
+  legacyClient?: boolean;
   requestedAt: string;
   expiresAt: string;
 }
@@ -353,7 +355,7 @@ export class AuthService {
 
   /** Sends the browser to the provider. When the page was reached through another host name than
    *  `public_url`, it moves there first: the callback returns to that origin, where the verifier must live. */
-  async oidcSignIn(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
+  async oidcSignIn(providerId: number, opts: { link?: boolean; currentPassword?: string; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
     const { origin } = this._oidc().providers.length ? this._oidc() : await this.oidcInfo();
     if (this.cookieAuth && origin && origin !== location.origin && !opts.link) {
       location.assign(`${origin}/login?sso=${providerId}`);
@@ -362,7 +364,7 @@ export class AuthService {
     await this.oidcBegin(providerId, opts);
   }
 
-  async oidcBegin(providerId: number, opts: { link?: boolean; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
+  async oidcBegin(providerId: number, opts: { link?: boolean; currentPassword?: string; silent?: boolean; expectUserId?: number } = {}): Promise<void> {
     if (this._oidcBusy()) return;
     this._oidcBusy.set(true);
     const run = ++this.oidcRun;
@@ -375,7 +377,7 @@ export class AuthService {
 
   private async oidcStart(
     providerId: number,
-    opts: { link?: boolean; silent?: boolean; expectUserId?: number },
+    opts: { link?: boolean; currentPassword?: string; silent?: boolean; expectUserId?: number },
     run: number,
   ): Promise<void> {
     const platform = oidcPlatform();
@@ -395,7 +397,7 @@ export class AuthService {
         {
           challenge,
           returnTo,
-          ...(opts.link ? { link: true } : {}),
+          ...(opts.link ? { link: true, currentPassword: opts.currentPassword || undefined } : {}),
           ...(opts.silent ? { prompt: 'none' } : {}),
           ...(opts.silent && opts.expectUserId !== undefined ? { expectUserId: opts.expectUserId } : {}),
         },
@@ -542,7 +544,7 @@ export class AuthService {
       this.http.post<{ pairingId: string; code: string; expiresIn: number }>(
         '/api/auth/pairing/request',
         { ...(userId ? { userId } : {}), deviceName, systemName },
-        { headers: { 'X-Device-Id': deviceId } },
+        { headers: { 'X-Device-Id': deviceId, 'X-Fliks-Pairing-Code': '1' } },
       ),
     );
   }

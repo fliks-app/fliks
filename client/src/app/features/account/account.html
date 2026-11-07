@@ -34,6 +34,17 @@
         @if (linkBlocked()) {
           <p class="text-sm text-base-content/50" data-testid="account-link-origin">{{ 'account.sso_link_origin' | translate }}</p>
         }
+        @if (hasPassword() && linkable().length) {
+          <input
+            type="password"
+            class="input input-bordered input-sm w-full max-w-xs"
+            data-testid="account-link-password"
+            autocomplete="current-password"
+            [placeholder]="'account.sso_link_password' | translate"
+            [ngModel]="linkPassword()"
+            (ngModelChange)="linkPassword.set($event)"
+          />
+        }
         @for (p of linkable(); track p.id) {
           <div>
             <button type="button" class="btn btn-outline btn-sm" data-testid="account-link" [disabled]="linking() !== null" (click)="link(p.id)">

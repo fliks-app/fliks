@@ -351,10 +351,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
         () => this.toast.error(this.translate.instant('pending_requests.action_error')),
       );
     };
+    const legacy = event['legacyClient'] === true;
     const toastId = this.toast.info(
-      this.translate.instant('pending_requests.requested_toast', { device: event['deviceName'] }),
+      this.translate.instant(legacy ? 'pending_requests.update_device' : 'pending_requests.requested_toast', { device: event['deviceName'] }),
       PAIRING_TTL_MS,
-      { label: this.translate.instant('pending_requests.enter_code'), run: () => void this.router.navigate(['/pending-requests']) },
+      ...(legacy ? [] : [{ label: this.translate.instant('pending_requests.enter_code'), run: () => void this.router.navigate(['/pending-requests']) }]),
       { label: this.translate.instant('pending_requests.deny'), run: settle((i) => this.auth.pairingDeny(i), 'pending_requests.denied_toast') },
     );
     this.pairingToasts.set(id, toastId);

@@ -300,7 +300,8 @@
     "sso_unlink": "Desvincular",
     "sso_link": "Vincular {{name}}",
     "sso_last_method": "Es tu única forma de iniciar sesión. Define una contraseña para poder desvincularla.",
-    "sso_link_origin": "La vinculación funciona desde la dirección definida como URL pública del servidor."
+    "sso_link_origin": "La vinculación funciona desde la dirección definida como URL pública del servidor.",
+    "sso_link_password": "Contraseña actual, para confirmar que eres tú"
   },
   "account_settings": {
     "title": "Ajustes de la cuenta",
@@ -864,7 +865,8 @@
     "check": "Continuar",
     "confirm_title": "¿Aprobar este inicio de sesión?",
     "from_ip": "Dirección de red: {{ip}}",
-    "too_many": "Demasiados códigos incorrectos. Inténtalo más tarde."
+    "too_many": "Demasiados códigos incorrectos. Inténtalo más tarde.",
+    "update_device": "Este dispositivo usa una versión antigua de la aplicación y no puede mostrar un código. Actualiza la aplicación en él e inténtalo de nuevo."
   },
   "server_history": {
     "section_title": "Servidores recientes",

@@ -300,7 +300,8 @@
     "sso_unlink": "Scollega",
     "sso_link": "Collega {{name}}",
     "sso_last_method": "È l'unico modo per accedere. Imposta una password per poterlo scollegare.",
-    "sso_link_origin": "Il collegamento funziona dall'indirizzo impostato come URL pubblico del server."
+    "sso_link_origin": "Il collegamento funziona dall'indirizzo impostato come URL pubblico del server.",
+    "sso_link_password": "Password attuale, per confermare che sei tu"
   },
   "account_settings": {
     "title": "Impostazioni dell'account",
@@ -864,7 +865,8 @@
     "check": "Continua",
     "confirm_title": "Approvare questo accesso?",
     "from_ip": "Indirizzo di rete: {{ip}}",
-    "too_many": "Troppi codici errati. Riprova più tardi."
+    "too_many": "Troppi codici errati. Riprova più tardi.",
+    "update_device": "Questo dispositivo usa una versione precedente dell'app e non può mostrare un codice. Aggiorna l'app sul dispositivo e riprova."
   },
   "server_history": {
     "section_title": "Server recenti",

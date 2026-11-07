@@ -217,7 +217,12 @@ pub async fn update(
 
 /// A self password change proves the current password when there is one; wrong guesses count in the
 /// login throttle under the username.
-async fn check_current_password(
+/// Longest age of a session's login for an account without a password to prove it is still the owner.
+const RECENT_LOGIN_MINUTES: i64 = 5;
+
+/// Step-up for a sensitive change of the caller's own account: the current password, or for an account
+/// without one a session signed in (not refreshed) within `RECENT_LOGIN_MINUTES`.
+pub(crate) async fn check_current_password(
     st: &AppState,
     a: &Authed,
     given: Option<&str>,
@@ -231,7 +236,25 @@ async fn check_current_password(
     .fetch_optional(&st.db)
     .await?
     .flatten() else {
-        return Ok(());
+        let recent = match a.session {
+            Some(sid) => {
+                sqlx::query_scalar!(
+                    r#"SELECT "createdAt" > now() - make_interval(mins => $2::int) AS "recent!"
+                       FROM sessions WHERE id = $1"#,
+                    sid,
+                    RECENT_LOGIN_MINUTES as i32
+                )
+                .fetch_optional(&st.db)
+                .await?
+                    == Some(true)
+            }
+            None => false,
+        };
+        return if recent {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("Recent sign-in required"))
+        };
     };
     // A missing field is a client that does not know the rule yet, not a guess: it must not count.
     let Some(given) = given else {

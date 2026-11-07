@@ -26,6 +26,7 @@ export class AccountComponent implements OnInit {
 
   readonly saving = signal(false);
   readonly formCurrentPassword = signal('');
+  readonly linkPassword = signal('');
   readonly formPassword = signal('');
   readonly formPasswordConfirm = signal('');
   readonly sessions = signal<AuthSession[]>([]);
@@ -70,7 +71,7 @@ export class AccountComponent implements OnInit {
   async link(providerId: number) {
     this.linking.set(providerId);
     try {
-      await this.auth.oidcSignIn(providerId, { link: true });
+      await this.auth.oidcSignIn(providerId, { link: true, currentPassword: this.linkPassword() });
     } catch {
       // handled by global error interceptor
     } finally {

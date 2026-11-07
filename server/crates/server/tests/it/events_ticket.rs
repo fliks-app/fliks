@@ -117,3 +117,16 @@ async fn the_session_token_still_opens_the_stream_for_released_clients(pool: PgP
     assert_eq!(c.call("GET", &query, None).await.0, 200);
     assert_eq!(c.call("GET", "/api/system/events", None).await.0, 401);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_ticket_of_a_revoked_session_is_refused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, token) = c.user("ana").await;
+    let ticket = c.ticket(&token).await;
+    sqlx::query(r#"UPDATE sessions SET "revokedAt" = now()"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let uri = format!("/api/system/events?ticket={ticket}");
+    assert_eq!(c.call("GET", &uri, None).await.0, 401);
+}

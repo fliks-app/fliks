@@ -52,6 +52,7 @@
           {
             "deviceId": "tv-1",
             "deviceName": "TV",
+            "legacyClient": true,
             "systemName": null
           }
         ],

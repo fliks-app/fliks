@@ -34,6 +34,7 @@
           {
             "deviceId": "dev-1",
             "deviceName": "Living room TV",
+            "legacyClient": true,
             "systemName": "tvOS"
           }
         ],
