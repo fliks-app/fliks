@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
     super::worker_router()
         .merge(super::control::router())
         .route("/api/optimize/jobs", get(list_jobs).post(enqueue))
+        .route("/api/optimize/verify", post(verify))
         .route("/api/optimize/jobs/{id}/retry", post(retry))
         .route("/api/optimize/jobs/{id}/cancel", post(cancel))
         .route(
@@ -74,6 +75,31 @@ pub async fn enqueue(
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
     let out = enqueue::queue_files(&st, &dto.media_file_ids, dto.force, dto.priority)
+        .await
+        .map_err(db)?;
+    Ok((StatusCode::CREATED, Json(out)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct VerifyDto {
+    media_file_ids: Vec<i32>,
+    #[serde(default)]
+    priority: i32,
+}
+
+/// Full read and decode of the source files, on demand.
+#[utoipa::path(post, path = "/api/optimize/verify", responses((status = 201)))]
+pub async fn verify(
+    State(st): State<AppState>,
+    authed: Authed,
+    ValidJson(dto): ValidJson<VerifyDto>,
+) -> Result<(StatusCode, Json<Vec<enqueue::Queued>>), AppError> {
+    manage_jobs(&authed)?;
+    if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
+        return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
+    }
+    let out = super::auto::queue_verify(&st, &dto.media_file_ids, dto.priority)
         .await
         .map_err(db)?;
     Ok((StatusCode::CREATED, Json(out)))

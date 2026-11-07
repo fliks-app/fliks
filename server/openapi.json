@@ -3168,6 +3168,18 @@
         }
       }
     },
+    "/api/optimize/verify": {
+      "post": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "summary": "Full read and decode of the source files, on demand.",
+        "operationId": "verify",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/optimize/workers": {
       "get": {
         "tags": [

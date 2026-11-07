@@ -2,6 +2,7 @@
 //! lease `jobs` rows over `/engine/workers/*` and `/engine/jobs/*`. Not `jobs/`, the cron scheduler.
 pub(crate) mod api;
 mod auth;
+mod auto;
 mod cleanup;
 pub mod commit;
 pub(crate) mod control;
@@ -33,6 +34,7 @@ use tokio::sync::Notify;
 
 pub use api::router;
 pub use auth::{Principal, WorkerAuth};
+pub use enqueue::{Outcome, queue_new};
 pub use estimate::{PerLevelOpt, speeds};
 pub use routes::worker_router;
 pub use store::boot;
@@ -160,12 +162,15 @@ pub fn spawn(st: &AppState) {
                 recover::recover(&st, 120.0).await;
             }
             if n.is_multiple_of(240) {
+                auto::hourly(&st).await;
                 trash::purge(&st.db).await;
             }
         }
     });
 }
 
+#[cfg(test)]
+mod auto_tests;
 #[cfg(test)]
 mod commit_tests;
 #[cfg(test)]
