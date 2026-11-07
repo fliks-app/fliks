@@ -19,7 +19,7 @@ use fliks_engine_core::api::{JobPriority, MediaInfo, OptimizeContainer, Optimize
 use serde_json::{Value, json};
 use sqlx::Row;
 use std::{
-    io,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -223,17 +223,14 @@ async fn prepare(st: &AppState, j: &Job, staged: &Path) -> Result<MediaInfo, End
 /// The source is still what the job read (`stale` otherwise) and the staged file still has its size.
 fn stat_checks(j: &Job, abs: &Path, staged: &Path) -> Result<(), String> {
     let (real, meta) = fsx::regular_source(abs).map_err(|e| format!("source: {e}"))?;
-    let mtime = rescan::mtime_ms(&meta);
-    let id = swap::ident(&real).map_err(|e| e.to_string())?;
     let same = j.in_path.as_deref() == Some(&real.to_string_lossy())
-        && j.in_size == Some(meta.len() as i64)
-        && j.in_mtime == mtime
-        && (id.ino == 0 || (j.in_dev, j.in_ino) == (Some(id.dev as i64), Some(id.ino as i64)));
+        && j.in_size
+            .is_some_and(|n| busy::on_disk_matches(&meta, n, j.in_mtime));
     if !same {
         return Err("the source changed during the job".into());
     }
-    match swap::ident(staged) {
-        Ok(s) if Some(s.size as i64) == j.out_size => Ok(()),
+    match fs::metadata(staged) {
+        Ok(s) if Some(s.len() as i64) == j.out_size => Ok(()),
         _ => Err("the staged output changed".into()),
     }
 }
@@ -273,13 +270,6 @@ fn companions(source: &Path, target: &Path, allowed: &[String]) -> Vec<(PathBuf,
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
     tokio::task::spawn_blocking(f).await.ok()
-}
-
-fn transient(e: &io::Error) -> bool {
-    matches!(
-        e.kind(),
-        io::ErrorKind::PermissionDenied | io::ErrorKind::ResourceBusy
-    )
 }
 
 /// The whole commit of one `staged` job.
@@ -346,9 +336,8 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
     match blocking(move || swap::perform(&jr)).await {
         Some(Ok(Swapped::Done)) => {}
         Some(Ok(Swapped::Nothing)) => return End::Skip("the staged output vanished".into()),
-        Some(Err(e)) if transient(&e) => return End::Busy(format!("the file is in use: {e}")),
         Some(Err(e)) => {
-            tracing::error!(job = j.id, "swap failed, the journal stays: {e}");
+            tracing::warn!(job = j.id, "swap interrupted, recovery finishes it: {e}");
             return End::Pending;
         }
         None => return End::Pending,
@@ -408,8 +397,8 @@ async fn journal_for(
         Some(Journal {
             source_id: swap::ident(&real).ok()?,
             staged_id: swap::ident(&staged).ok()?,
-            backup: swap::backup_path(policy, &root_p, &real, id),
             old: swap::old_path(&real, id),
+            backup: swap::backup_path(policy, &root_p, &target, id),
             companions: if target == real {
                 vec![]
             } else {
@@ -477,32 +466,39 @@ pub async fn sync_rows(
         .ok_or("the file row is gone")?;
     let root = fsx::Root::open(&f.folder).map_err(|e| e.to_string())?;
     let rel = fsx::rel_under(root.path(), now_at).ok_or("the file left its folder")?;
-    if rel != f.rel {
-        sqlx::query(r#"UPDATE media_files SET "relativePath" = $2 WHERE id = $1"#)
-            .bind(file_id)
-            .bind(&rel)
-            .execute(&st.db)
-            .await
-            .map_err(sql)?;
-        for (from, to) in moved {
-            let (Some(a), Some(b)) = (
-                fsx::rel_under(root.path(), from),
-                fsx::rel_under(root.path(), to),
-            ) else {
-                continue;
-            };
-            // `hashMatched` stays: the timeline and the original hash are unchanged.
-            sqlx::query(
-                r#"UPDATE subtitle_files SET "filePath" = $3 WHERE "mediaFileId" = $1 AND "filePath" = $2"#,
-            )
-            .bind(file_id)
-            .bind(a)
-            .bind(b)
-            .execute(&st.db)
-            .await
-            .map_err(sql)?;
-        }
+    // Companions the swap skipped (their new name was taken) did not move: their rows stay.
+    let renamed: Vec<_> = moved
+        .iter()
+        .filter(|(from, to)| {
+            fs::symlink_metadata(from).is_err() && fs::symlink_metadata(to).is_ok()
+        })
+        .filter_map(|(from, to)| {
+            Some((
+                fsx::rel_under(root.path(), from)?,
+                fsx::rel_under(root.path(), to)?,
+            ))
+        })
+        .collect();
+    let mut tx = st.db.begin().await.map_err(sql)?;
+    sqlx::query(r#"UPDATE media_files SET "relativePath" = $2 WHERE id = $1"#)
+        .bind(file_id)
+        .bind(&rel)
+        .execute(&mut *tx)
+        .await
+        .map_err(sql)?;
+    for (a, b) in &renamed {
+        // `hashMatched` stays: the timeline and the original hash are unchanged.
+        sqlx::query(
+            r#"UPDATE subtitle_files SET "filePath" = $3 WHERE "mediaFileId" = $1 AND "filePath" = $2"#,
+        )
+        .bind(file_id)
+        .bind(a)
+        .bind(b)
+        .execute(&mut *tx)
+        .await
+        .map_err(sql)?;
     }
+    tx.commit().await.map_err(sql)?;
     let meta = tokio::fs::metadata(now_at)
         .await
         .map_err(|e| e.to_string())?;
@@ -560,7 +556,7 @@ pub async fn sync_rows(
 async fn subtitle_rows(
     st: &AppState,
     file_id: i32,
-    (f, root): (&FileRow, &fsx::Root),
+    (f, _root): (&FileRow, &fsx::Root),
     moved: &[(PathBuf, PathBuf)],
     ocr_job: Option<i64>,
 ) -> Result<(), String> {
@@ -573,22 +569,28 @@ async fn subtitle_rows(
     .await
     .map_err(sql)?
     .and_then(|v| serde_json::from_value(v).ok());
-    let images: Vec<i32> = info
-        .iter()
-        .flat_map(|i| i.subtitles.iter())
-        .filter(|s| s.is_image_based)
-        .map(|s| s.stream_index as i32)
-        .collect();
-    sqlx::query(
-        r#"UPDATE subtitle_files SET "sourceStreamIndex" = NULL
-           WHERE "mediaFileId" = $1 AND "providerType" = 'ocr' AND "sourceStreamIndex" IS NOT NULL
-             AND NOT ("sourceStreamIndex" = ANY($2))"#,
-    )
-    .bind(file_id)
-    .bind(&images)
-    .execute(&st.db)
-    .await
-    .map_err(sql)?;
+    if let Some(new) = &info {
+        let rows = sqlx::query(
+            r#"SELECT id, "sourceStreamIndex" AS idx FROM subtitle_files
+               WHERE "mediaFileId" = $1 AND "providerType" = 'ocr' AND "sourceStreamIndex" IS NOT NULL"#,
+        )
+        .bind(file_id)
+        .fetch_all(&st.db)
+        .await
+        .map_err(sql)?;
+        for r in rows {
+            let (sid, idx): (i32, i32) = (r.get("id"), r.get("idx"));
+            let to = follow_track(f.info.as_ref().unwrap_or(new), new, idx as u32);
+            if to != Some(idx as u32) {
+                sqlx::query(r#"UPDATE subtitle_files SET "sourceStreamIndex" = $2 WHERE id = $1"#)
+                    .bind(sid)
+                    .bind(to.map(|t| t as i32))
+                    .execute(&st.db)
+                    .await
+                    .map_err(sql)?;
+            }
+        }
+    }
     let Some(job) = ocr_job else { return Ok(()) };
     // A renamed video carried its SRTs along: the plan's paths are the old names.
     let wanted: Vec<PathBuf> = extra_paths(st, job)
@@ -618,14 +620,30 @@ async fn subtitle_rows(
         if !wanted.contains(&abs) {
             continue;
         }
+        let slot = Path::new(&f.folder)
+            .join(".fliks-trash")
+            .join(format!("{job}.ocr-{sid}.srt"));
+        match trash_file(&abs, &slot) {
+            Ok(()) => {
+                sqlx::query(
+                    r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrTrash}',
+                         COALESCE(result -> 'ocrTrash', '[]'::jsonb) || jsonb_build_array(jsonb_build_array($2::text, $3::text)))
+                       WHERE id = $1"#,
+                )
+                .bind(job)
+                .bind(abs.to_string_lossy())
+                .bind(slot.to_string_lossy())
+                .execute(&st.db)
+                .await
+                .map_err(sql)?;
+            }
+            Err(e) => tracing::warn!(job, "OCR subtitle {} kept on disk: {e}", abs.display()),
+        }
         sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
             .bind(sid)
             .execute(&st.db)
             .await
             .map_err(sql)?;
-        if let Err(e) = fsx::unlink_contained(root, &abs) {
-            tracing::warn!(job, "OCR subtitle {} kept on disk: {e}", abs.display());
-        }
     }
     Ok(())
 }
@@ -643,4 +661,31 @@ async fn extra_paths(st: &AppState, job: i64) -> Vec<String> {
         .flat_map(|p| p.extra_subtitles)
         .map(|e| e.path)
         .collect()
+}
+
+fn trash_file(from: &Path, slot: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(slot.parent().ok_or(std::io::ErrorKind::InvalidInput)?)?;
+    fsx::move_file(from, slot, false).map(drop)
+}
+
+/// The track `idx` of `old` in `new`: the same language and flags, at the same rank among those; none
+/// when the new file has fewer.
+fn follow_track(old: &MediaInfo, new: &MediaInfo, idx: u32) -> Option<u32> {
+    let key = |s: &fliks_engine_core::api::SubtitleStreamInfo| {
+        (s.language.clone(), s.forced, s.hearing_impaired)
+    };
+    let images = |i: &MediaInfo| {
+        i.subtitles
+            .iter()
+            .filter(|s| s.is_image_based)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let (o, n) = (images(old), images(new));
+    let pos = o.iter().position(|s| s.stream_index == idx)?;
+    let rank = o[..pos].iter().filter(|s| key(s) == key(&o[pos])).count();
+    n.iter()
+        .filter(|s| key(s) == key(&o[pos]))
+        .nth(rank)
+        .map(|s| s.stream_index)
 }

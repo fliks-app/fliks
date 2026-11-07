@@ -170,14 +170,22 @@ pub async fn remove(
 ) -> Result<StatusCode, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let id = int_param(&id.0)?;
+    let mut tx = st.db.begin().await?;
+    sqlx::query(
+        r#"UPDATE libraries SET "optimizeNewFiles" = false WHERE "optimizeProfileId" = $1"#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
     let n = sqlx::query("DELETE FROM optimize_profiles WHERE id = $1")
         .bind(id)
-        .execute(&st.db)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
     if n == 0 {
         return Err(missing(id));
     }
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

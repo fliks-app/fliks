@@ -9,6 +9,8 @@ const GIB: i64 = 1 << 30;
 struct Held {
     id: i64,
     path: PathBuf,
+    /// SRTs moved out of the library by the job.
+    ocr: Vec<PathBuf>,
     /// Past the retention.
     expired: bool,
 }
@@ -23,7 +25,7 @@ pub async fn purge(pool: &PgPool) {
 async fn run(pool: &PgPool) -> sqlx::Result<()> {
     let s = settings::load(pool).await?;
     let rows = sqlx::query(
-        r#"SELECT id, result ->> 'trashPath' AS path,
+        r#"SELECT id, result ->> 'trashPath' AS path, result -> 'ocrTrash' AS ocr,
              "finishedAt" < now() - make_interval(days => $1) AS expired
            FROM jobs WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')
            ORDER BY "finishedAt", id"#,
@@ -36,6 +38,13 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
         .map(|r| Held {
             id: r.get("id"),
             path: PathBuf::from(r.get::<String, _>("path")),
+            ocr: r
+                .get::<Option<serde_json::Value>, _>("ocr")
+                .and_then(|v| serde_json::from_value::<Vec<(PathBuf, PathBuf)>>(v).ok())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(_, t)| t)
+                .collect(),
             expired: r.get::<Option<bool>, _>("expired").unwrap_or(false),
         })
         .collect();
@@ -53,6 +62,9 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
             continue;
         }
         if remove(&h.path).await {
+            for p in &h.ocr {
+                remove(p).await;
+            }
             sqlx::query(
                 r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now()),
                      "updatedAt" = now() WHERE id = $1"#,

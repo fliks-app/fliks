@@ -8,16 +8,38 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Which inode a path was when the journal was written; `dev`/`ino` are 0 where the OS has none.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// What a file was when the journal was written. `dev`/`ino` only speed the match up (0 where the OS has
+/// none, and unstable across remounts); the content identity is size, mtime and a hash of both ends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ident {
     pub dev: u64,
     pub ino: u64,
     pub size: u64,
+    pub mtime_ns: i64,
+    pub ends: String,
 }
 
-pub fn ident(path: &Path) -> io::Result<Ident> {
-    let m = fs::metadata(path)?;
+const END: u64 = 1 << 20;
+
+/// SHA-256 of the first and the last MiB.
+fn ends(path: &Path, size: u64) -> io::Result<String> {
+    use io::{Read, Seek, SeekFrom};
+    use sha2::{Digest, Sha256};
+    let mut f = fs::File::open(path)?;
+    let mut h = Sha256::new();
+    let mut buf = Vec::new();
+    f.by_ref().take(END).read_to_end(&mut buf)?;
+    h.update(&buf);
+    if size > END {
+        buf.clear();
+        f.seek(SeekFrom::Start(size.saturating_sub(END).max(END)))?;
+        f.read_to_end(&mut buf)?;
+        h.update(&buf);
+    }
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn stat(m: &fs::Metadata) -> (u64, u64, i64) {
     #[cfg(unix)]
     let (dev, ino) = {
         use std::os::unix::fs::MetadataExt;
@@ -25,22 +47,40 @@ pub fn ident(path: &Path) -> io::Result<Ident> {
     };
     #[cfg(not(unix))]
     let (dev, ino) = (0, 0);
+    let mtime = m
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos() as i64);
+    (dev, ino, mtime)
+}
+
+pub fn ident(path: &Path) -> io::Result<Ident> {
+    let m = fs::metadata(path)?;
+    let (dev, ino, mtime_ns) = stat(&m);
     Ok(Ident {
         dev,
         ino,
         size: m.len(),
+        mtime_ns,
+        ends: ends(path, m.len())?,
     })
 }
 
-/// Whether `path` is the inode `id` names (the size only, where the OS gives no inode).
+/// Whether `path` is the file `id` names: the same inode where the OS gives a stable one, else the same
+/// size, mtime and ends (a rename keeps all three).
 pub fn is(path: &Path, id: &Ident) -> bool {
-    ident(path).is_ok_and(|n| {
-        if id.ino == 0 {
-            n.size == id.size
-        } else {
-            (n.dev, n.ino) == (id.dev, id.ino)
-        }
-    })
+    let Ok(m) = fs::metadata(path) else {
+        return false;
+    };
+    let (dev, ino, mtime_ns) = stat(&m);
+    if m.len() != id.size {
+        return false;
+    }
+    if ino != 0 && (dev, ino) == (id.dev, id.ino) {
+        return true;
+    }
+    mtime_ns == id.mtime_ns && ends(path, id.size).is_ok_and(|e| e == id.ends)
 }
 
 /// What a commit is about to do, written before the disk is touched.
@@ -99,7 +139,11 @@ pub fn perform(j: &Journal) -> io::Result<Swapped> {
             return Ok(Swapped::Nothing);
         }
         save_original(j)?;
-        if j.target == j.source && is(&j.source, &j.source_id) {
+        if j.target == j.source {
+            // The path holds the original or, once it waits at `.old`, nothing: replacing is safe.
+            if fs::symlink_metadata(&j.source).is_ok() && !is(&j.source, &j.source_id) {
+                return Err(io::ErrorKind::AlreadyExists.into());
+            }
             fsx::rename_retry(&j.staged, &j.target)?;
         } else {
             fsx::rename_noreplace(&j.staged, &j.target)?;
@@ -149,22 +193,58 @@ fn settle_original(j: &Journal) -> io::Result<()> {
     Ok(())
 }
 
-/// Puts the original back at `source` and the current file in the trash slot, for a restore: the output
-/// must still be the file the job produced (`staged_id`).
-pub fn restore(j: &Journal, back: &Path) -> io::Result<()> {
-    if !is(&j.target, &j.staged_id) || !is(back, &j.source_id) {
+/// A restore, written before the disk is touched: the original comes back to `source`, the optimized
+/// file goes to `slot`, renamed companions return to their old names.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Restore {
+    pub target: PathBuf,
+    pub source: PathBuf,
+    pub back: PathBuf,
+    pub slot: PathBuf,
+    pub optimized: Ident,
+    pub original: Ident,
+    pub companions: Vec<(PathBuf, PathBuf)>,
+}
+
+impl Restore {
+    fn parked(&self) -> PathBuf {
+        let mut n = self.back.as_os_str().to_owned();
+        n.push(".restoring");
+        PathBuf::from(n)
+    }
+
+    /// Both files are where the job left them.
+    pub fn startable(&self) -> bool {
+        is(&self.target, &self.optimized) && is(&self.back, &self.original)
+    }
+}
+
+/// Runs, or finishes, a restore; every step looks at the disk first.
+pub fn perform_restore(r: &Restore) -> io::Result<()> {
+    let parked = r.parked();
+    let started = fs::symlink_metadata(&parked).is_ok() || is(&r.source, &r.original);
+    if !started && !r.startable() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "the file is not the one the job produced",
         ));
     }
-    let parked = back.with_extension("restoring");
-    fsx::rename_retry(&j.target, &parked)?;
-    if let Err(e) = fsx::rename_noreplace(back, &j.source) {
-        let _ = fsx::rename_noreplace(&parked, &j.target);
-        return Err(e);
+    if is(&r.target, &r.optimized) {
+        fsx::rename_retry(&r.target, &parked)?;
     }
-    fsx::rename_noreplace(&parked, back)
+    if is(&r.back, &r.original) && fs::symlink_metadata(&r.source).is_err() {
+        fsx::rename_noreplace(&r.back, &r.source)?;
+    }
+    if fs::symlink_metadata(&parked).is_ok() && fs::symlink_metadata(&r.slot).is_err() {
+        fs::create_dir_all(r.slot.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
+        fsx::rename_noreplace(&parked, &r.slot)?;
+    }
+    for (from, to) in &r.companions {
+        if fs::symlink_metadata(from).is_ok() && fs::symlink_metadata(to).is_err() {
+            fsx::rename_noreplace(from, to)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -281,16 +361,66 @@ mod tests {
         fs::remove_dir_all(d).unwrap();
     }
 
+    fn restore_of(j: &Journal, slot: PathBuf) -> Restore {
+        Restore {
+            target: j.target.clone(),
+            source: j.source.clone(),
+            back: j.backup.clone().unwrap(),
+            slot,
+            optimized: j.staged_id.clone(),
+            original: j.source_id.clone(),
+            companions: vec![],
+        }
+    }
+
     #[test]
     fn restore_swaps_back_only_the_file_the_job_produced() {
         let (d, j) = world(OriginalPolicy::Trash);
         perform(&j).unwrap();
-        let b = j.backup.clone().unwrap();
-        restore(&j, &b).unwrap();
+        let r = restore_of(&j, j.backup.clone().unwrap());
+        perform_restore(&r).unwrap();
         assert_eq!(fs::read(&j.source).unwrap(), b"original");
-        assert_eq!(fs::read(&b).unwrap(), b"new");
+        assert_eq!(fs::read(&r.slot).unwrap(), b"new");
+        perform_restore(&r).unwrap();
         fs::write(&j.source, b"edited elsewhere").unwrap();
-        assert!(restore(&j, &b).is_err());
+        assert!(!r.startable());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn a_restore_under_keep_leaves_the_original_out_of_orig() {
+        let (d, j) = world(OriginalPolicy::Keep);
+        perform(&j).unwrap();
+        let slot = d.join(".fliks-trash").join("7.bak");
+        let r = restore_of(&j, slot.clone());
+        perform_restore(&r).unwrap();
+        assert_eq!(fs::read(&j.source).unwrap(), b"original");
+        assert_eq!(fs::read(&slot).unwrap(), b"new");
+        assert!(!r.back.exists());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn a_crash_midway_through_a_restore_is_finished() {
+        let (d, j) = world(OriginalPolicy::Trash);
+        perform(&j).unwrap();
+        let r = restore_of(&j, j.backup.clone().unwrap());
+        fs::rename(&r.target, r.parked()).unwrap();
+        perform_restore(&r).unwrap();
+        assert_eq!(fs::read(&j.source).unwrap(), b"original");
+        assert_eq!(fs::read(&r.slot).unwrap(), b"new");
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn identity_survives_a_changed_device_and_a_metadata_edit_does_not_pass_for_the_source() {
+        let (d, mut j) = world(OriginalPolicy::Trash);
+        j.staged_id.dev += 1;
+        j.staged_id.ino += 1;
+        assert!(is(&j.staged, &j.staged_id));
+        let same_size = d.join("same-size.mkv");
+        fs::write(&same_size, b"origina!").unwrap();
+        assert!(!is(&same_size, &j.source_id));
         fs::remove_dir_all(d).unwrap();
     }
 }

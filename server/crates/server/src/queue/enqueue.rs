@@ -33,26 +33,31 @@ async fn context(st: &AppState, library: i32) -> Option<select::Context> {
     .ok()
 }
 
-/// The plan of a difference, with the OCR it needs, and the hash of what it changes.
+/// The plan of a difference, with the OCR it needs (`OcrPending` while that runs), and the hash of what it changes.
 async fn planned(
     st: &AppState,
     ctx: &select::Context,
     l: &Loaded,
     d: &diff::Diff,
-) -> Option<(OptimizePlan, String)> {
-    // ponytail: OCR runs inside the queueing call (hours for a large image track); a job-side step if that bites.
+) -> Result<(OptimizePlan, String), Outcome> {
     let extra = if d
         .changes
         .iter()
         .any(|c| matches!(c, diff::Change::Ocr { .. }))
     {
-        ocr::extra_subtitles(st, &l.folder, &l.info, l.id).await
+        let o = ocr::extra_subtitles(st, &l.folder, &l.info, l.id, ctx.force).await;
+        if o.pending {
+            return Err(Outcome::OcrPending);
+        }
+        o.done
     } else {
         vec![]
     };
-    let plan = d.plan(&ctx.profile, &l.info, &ctx.audio_playable, &extra)?;
-    let json = serde_json::to_string(&d.changes).ok()?;
-    Some((plan, crate::device_tokens::hash(&json)[..16].to_owned()))
+    let plan = d
+        .plan(&ctx.profile, &l.info, &ctx.audio_playable, &extra)
+        .ok_or(Outcome::NothingToDo)?;
+    let json = serde_json::to_string(&d.changes).map_err(|_| Outcome::NothingToDo)?;
+    Ok((plan, crate::device_tokens::hash(&json)[..16].to_owned()))
 }
 
 struct Loaded {
@@ -120,6 +125,8 @@ pub enum Outcome {
     Shared,
     /// The file on disk is not the one the probe describes: a rescan first.
     Stale,
+    /// The OCR of its image tracks is running: queue the file again once it is done.
+    OcrPending,
 }
 
 #[derive(Serialize)]
@@ -270,8 +277,9 @@ async fn insert(
     priority: i32,
 ) -> sqlx::Result<Queued> {
     let (id, snap) = (l.id, &l.snap);
-    let Some((plan, hash)) = planned(st, ctx, l, d).await else {
-        return Ok(done(id, Outcome::NothingToDo));
+    let (plan, hash) = match planned(st, ctx, l, d).await {
+        Ok(p) => p,
+        Err(o) => return Ok(done(id, o)),
     };
     let payload = json!(OptimizePayload {
         info: l.info.clone(),

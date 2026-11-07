@@ -206,6 +206,20 @@ async fn ocr_subtitles_of_the_plan_go_with_the_commit(pool: PgPool) {
         0
     );
     assert!(!srt.exists());
+    let trashed = w
+        .dir
+        .join(".fliks-trash")
+        .join(format!("{}.ocr-1.srt", w.job));
+    assert_eq!(
+        fs::read(&trashed).unwrap(),
+        b"1",
+        "the SRT is trashed, not deleted"
+    );
+    recover::restore(&w.st, w.job).await.unwrap();
+    assert!(
+        srt.exists() && !trashed.exists(),
+        "a restore brings it back"
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -325,4 +339,106 @@ async fn a_rename_leaves_the_files_of_a_longer_named_video_alone(pool: PgPool) {
         m.join("a.h264.txt").exists(),
         "extension not in the companion setting"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn recovery_survives_a_changed_device_after_the_placement(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    let staged = w.dir.join("M/.fliks-opt-1-1.tmp");
+    let policy = super::settings::OriginalPolicy::Trash;
+    let mut journal = swap::Journal {
+        source: w.src.clone(),
+        staged: staged.clone(),
+        target: w.src.clone(),
+        policy,
+        source_id: swap::ident(&w.src).unwrap(),
+        staged_id: swap::ident(&staged).unwrap(),
+        backup: swap::backup_path(policy, &w.dir, &w.src, 1),
+        old: swap::old_path(&w.src, 1),
+        companions: vec![],
+    };
+    let bak = journal.backup.clone().unwrap();
+    fs::create_dir_all(bak.parent().unwrap()).unwrap();
+    fs::hard_link(&w.src, &bak).unwrap();
+    fs::rename(&staged, &w.src).unwrap();
+    // A remount: the device and inode numbers of the journal no longer match.
+    (journal.source_id.dev, journal.staged_id.dev) = (1, 1);
+    (journal.source_id.ino, journal.staged_id.ino) = (1, 1);
+    sqlx::query(
+        r#"UPDATE jobs SET state = 'committing', result = result || jsonb_build_object('journal', $1::jsonb)"#,
+    )
+    .bind(json!(journal))
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    recover::recover(&w.st, 0.0).await;
+    assert_eq!(job(&w).await["state"], "done");
+    assert_eq!(fs::read(&w.src).unwrap(), b"new");
+    assert_eq!(fs::read(&bak).unwrap(), b"original bytes");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_restore_under_keep_never_writes_the_optimized_file_to_orig(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    let keep = super::settings::Settings {
+        optimize_original: super::settings::OriginalPolicy::Keep,
+        ..Default::default()
+    };
+    super::settings::save(&w.st.db, &keep).await.unwrap();
+    commit::run(&w.st).await;
+    let m = w.dir.join("M");
+    let orig = m.join("a.h265.mkv.orig");
+    assert_eq!(
+        fs::read(&orig).unwrap(),
+        b"original bytes",
+        "named after the target"
+    );
+    recover::restore(&w.st, w.job).await.unwrap();
+    assert_eq!(fs::read(m.join("a.h264.mkv")).unwrap(), b"original bytes");
+    assert!(!orig.exists());
+    let slot = w.dir.join(".fliks-trash").join(format!("{}.bak", w.job));
+    assert_eq!(fs::read(slot).unwrap(), b"new");
+    assert_eq!(
+        job(&w).await["result"]["trashPath"]
+            .as_str()
+            .map(PathBuf::from),
+        Some(w.dir.join(".fliks-trash").join(format!("{}.bak", w.job)))
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_preview_of_one_file_explains_an_old_probe(pool: PgPool) {
+    use crate::optimize::{codec::Capabilities, diff, profile::Preset, select};
+    let w = world(pool, json!([])).await;
+    sqlx::query(r#"UPDATE media_files SET "probeVersion" = 0"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    let ctx = select::Context::load(
+        &w.st.db,
+        Preset::Balanced.document(),
+        false,
+        &Capabilities {
+            encodable: vec![],
+            main_decodes_av1_hw: false,
+        },
+    )
+    .await
+    .unwrap();
+    let lib: i32 = sqlx::query_scalar("SELECT id FROM libraries LIMIT 1")
+        .fetch_one(&w.st.db)
+        .await
+        .unwrap();
+    let mut seen = vec![];
+    select::analyze(&w.st.db, lib, Some(&[w.file]), &ctx, |c| {
+        seen.push(c.outcome)
+    })
+    .await
+    .unwrap();
+    assert!(matches!(
+        seen.as_slice(),
+        [diff::Outcome::Excluded {
+            why: diff::Excluded::ProbeOutdated
+        }]
+    ));
 }

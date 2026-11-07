@@ -1,9 +1,12 @@
 //! Finishing the commits a crash, a restart or a backup restore left `committing`, and restoring originals.
 use super::{
     commit::{self, COLS, End, Job},
-    swap::{self, Swapped},
+    settings::OriginalPolicy,
+    swap::{self, Restore, Swapped},
 };
-use crate::{ingest::fsx, state::AppState};
+use crate::state::AppState;
+use serde_json::{Value, json};
+use std::path::{Path, PathBuf};
 
 /// Jobs left `committing` at least `min_age_s` ago: roll the swap forward, or cancel it when nothing moved.
 /// Boot and a backup restore pass 0, the periodic sweep leaves a commit that is running alone.
@@ -23,6 +26,20 @@ pub async fn recover(st: &AppState, min_age_s: f64) {
         let job = Job::from_row(&r);
         let end = recover_one(st, &job).await;
         commit::settle(st, job.id, &end).await;
+    }
+    let restores = sqlx::query(sqlx::AssertSqlSafe(format!(
+        r#"SELECT {COLS} FROM jobs WHERE state = 'done' AND result ? 'restore'
+           AND NOT (result ? 'restoredAt') AND "updatedAt" < now() - make_interval(secs => $1)"#
+    )))
+    .bind(min_age_s)
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    for r in restores {
+        let job = Job::from_row(&r);
+        if let Err(e) = finish_restore(st, &job).await {
+            tracing::warn!(job = job.id, "restore not finished, tried again later: {e}");
+        }
     }
 }
 
@@ -79,8 +96,8 @@ async fn recover_one(st: &AppState, job: &Job) -> End {
     }
 }
 
-/// "Restore": the original comes back, the optimized file takes its slot in the trash or `.orig`. Only while
-/// the file is still the one the job produced.
+/// "Restore": the original comes back, the optimized file goes to the trash (never to `.orig`, which only
+/// ever holds the real original). Only while the file is still the one the job produced.
 pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     let row = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM jobs WHERE id = $1 AND state = 'done'"#
@@ -95,7 +112,10 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     let (Some(file_id), Some(back)) = (job.file_id, journal.backup.clone()) else {
         return Err("the original was not kept".into());
     };
-    if job.result.get("trashPurgedAt").is_some() || job.result.get("restoredAt").is_some() {
+    if ["trashPurgedAt", "restoredAt", "restore"]
+        .iter()
+        .any(|k| job.result.get(k).is_some())
+    {
         return Err("the original is gone or already restored".into());
     }
     let f = commit::file_row(st, file_id)
@@ -107,20 +127,77 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     }
     let _media = st.ingest.media.lock(f.media_id).await;
     let _moves = st.folder_moves.read().await;
-    let (jr, b) = (journal.clone(), back.clone());
-    tokio::task::spawn_blocking(move || swap::restore(&jr, &b))
+    let slot = swap::backup_path(
+        OriginalPolicy::Trash,
+        Path::new(&f.folder),
+        &journal.source,
+        id,
+    )
+    .ok_or("no trash slot")?;
+    let ocr: Vec<(PathBuf, PathBuf)> = job
+        .result
+        .get("ocrTrash")
+        .and_then(|v| serde_json::from_value::<Vec<(PathBuf, PathBuf)>>(v.clone()).ok())
+        .unwrap_or_default();
+    let r = Restore {
+        target: journal.target.clone(),
+        source: journal.source.clone(),
+        back,
+        slot,
+        optimized: journal.staged_id.clone(),
+        original: journal.source_id.clone(),
+        companions: journal
+            .companions
+            .iter()
+            .map(|(from, to)| (to.clone(), from.clone()))
+            .chain(ocr.into_iter().map(|(from, trashed)| {
+                // Trashed under its post-rename name; it returns under the old one.
+                let old = journal.companions.iter().find(|(_, to)| *to == from);
+                (trashed, old.map_or(from, |(f, _)| f.clone()))
+            }))
+            .collect(),
+    };
+    let rc = r.clone();
+    if !tokio::task::spawn_blocking(move || rc.startable())
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        return Err("the file is not the one the job produced".into());
+    }
+    sqlx::query(
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $2::jsonb, 'trashPath', $3::text),
+             "updatedAt" = now() WHERE id = $1 AND state = 'done'"#,
+    )
+    .bind(id)
+    .bind(json!(r))
+    .bind(r.slot.to_string_lossy())
+    .execute(&st.db)
+    .await
+    .map_err(|e| e.to_string())?;
+    let mut job = job;
+    job.result["restore"] = json!(r);
+    finish_restore(st, &job).await
+}
+
+/// The disk and database halves of a journaled restore, safe to run again.
+async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
+    let r: Restore =
+        serde_json::from_value(job.result.get("restore").cloned().unwrap_or(Value::Null))
+            .map_err(|e| e.to_string())?;
+    let file_id = job.file_id.ok_or("the file is gone")?;
+    let rc = r.clone();
+    tokio::task::spawn_blocking(move || swap::perform_restore(&rc))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
+    commit::sync_rows(st, file_id, &r.source, &r.companions, None).await?;
     sqlx::query(
         r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now()), "updatedAt" = now()
            WHERE id = $1"#,
     )
-    .bind(id)
+    .bind(job.id)
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
-    commit::sync_rows(st, file_id, &journal.source, &[], None).await?;
-    let _ = fsx::Root::open(&f.folder);
     Ok(())
 }
