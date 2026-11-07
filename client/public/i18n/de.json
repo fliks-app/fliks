@@ -4990,6 +4990,7 @@
         "io": "Festplattenfehler",
         "network": "Netzwerkfehler",
         "nospace": "Kein Speicherplatz mehr",
+        "nothing_to_do": "Nichts zu ändern",
         "shared": "Geteilte Datei",
         "stale": "Datei geändert",
         "verify": "Überprüfung fehlgeschlagen"

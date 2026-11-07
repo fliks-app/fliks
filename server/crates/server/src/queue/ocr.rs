@@ -55,7 +55,9 @@ pub async fn extra_subtitles(
                 path: abs.to_string_lossy().into_owned(),
                 language: Some(t.language.clone()),
                 title: t.title.clone(),
-                default: None,
+                default: t.is_default,
+                forced: Some(t.forced),
+                hearing_impaired: Some(t.hearing_impaired),
             },
         ));
     }

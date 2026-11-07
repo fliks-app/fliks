@@ -252,6 +252,7 @@ impl Diff {
             container: None,
             clear_title: false,
             extra_subtitles: vec![],
+            rename: false,
         };
         let mut any = false;
         for c in &self.changes {

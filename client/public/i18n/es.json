@@ -4990,6 +4990,7 @@
         "io": "Error de disco",
         "network": "Error de red",
         "nospace": "Sin espacio",
+        "nothing_to_do": "Nada que cambiar",
         "shared": "Archivo compartido",
         "stale": "Archivo modificado",
         "verify": "Verificación fallida"

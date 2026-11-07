@@ -388,19 +388,29 @@ async fn journal_for(
     let allowed = transfer::companion_exts(&st.db)
         .await
         .map_err(|e| End::Busy(format!("companion extensions: {e}")))?;
-    let (allow, ext, new) = (f.allow_rename, container_ext(j), new.clone());
+    let rename = plan_of(&j.payload).is_some_and(|p| p.rename);
+    let (allow, ext, new) = (f.allow_rename && rename, container_ext(j), new.clone());
     blocking(move || {
         let stale = || End::Skip("the source changed during the job".into());
         let busy = |e: std::io::Error| End::Busy(format!("reading the files: {e}"));
         let (real, _) = fsx::regular_source(&source).map_err(|_| stale())?;
-        let target = allow
+        let wanted = allow
             .then(|| {
                 let name = real.file_name()?.to_str()?;
                 Some(real.with_file_name(words::renamed(name, &new, ext)?))
             })
-            .flatten()
-            .filter(|t| !t.exists())
-            .unwrap_or_else(|| real.clone());
+            .flatten();
+        let target = match wanted {
+            Some(t) if t != real && t.exists() => {
+                // Bytes of another container must not land under the old extension.
+                if !ext.is_empty() && real.extension().and_then(|e| e.to_str()) != Some(ext) {
+                    return Err(End::Skip("the new file name is taken".into()));
+                }
+                real.clone()
+            }
+            Some(t) => t,
+            None => real.clone(),
+        };
         Ok(Journal {
             source_id: swap::ident(&real).map_err(busy)?,
             staged_id: swap::ident(&staged).map_err(busy)?,

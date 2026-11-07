@@ -4990,6 +4990,7 @@
         "io": "Disk error",
         "network": "Network error",
         "nospace": "No space left",
+        "nothing_to_do": "Nothing to change",
         "shared": "Shared file",
         "stale": "File changed",
         "verify": "Verification failed"

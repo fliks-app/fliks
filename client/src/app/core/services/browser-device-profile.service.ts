@@ -9,7 +9,7 @@ import { ENGINE_TRAITS, engineKindFor, type EngineTraits } from './engine-traits
 import { SystemInfoService } from './system-info.service';
 import { applyTizenAudioCodecs, tizenDecoderLevels, tizenSupportsVideoCodec } from './tizen-capabilities';
 import { isTizenCropSupported } from './playback-engine/tizen-engine';
-import { getDeviceName } from '../utils/device-info';
+import { getDeviceName, getOrCreateDeviceId } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
 
@@ -126,6 +126,8 @@ export interface DeviceProfile {
   /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively; the
    *  admin label prefers this over the UA-derived OS (which the UA freezes). */
   systemName?: string;
+  /** Stable per-installation id; the server keys the device's codec support on it. */
+  deviceId?: string;
   /** Fliks client build version, sent only by non-web clients (a browser always runs the server's build). */
   appVersion?: string;
   /** Hard force MPEG-TS HLS for every transcode session; opt-in via `localStorage['fliks.useTs'] = '1'`. */
@@ -224,7 +226,10 @@ export class BrowserDeviceProfileService {
     return Capacitor.isNativePlatform() && this.nativeVideo?.cropsBlackBars === true;
   }
 
+  private deviceId: string | undefined;
+
   constructor() {
+    getOrCreateDeviceId().then((id) => (this.deviceId = id)).catch(() => {});
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
     // later sync use)
     if (Capacitor.isNativePlatform()) {
@@ -294,6 +299,7 @@ export class BrowserDeviceProfileService {
       forceDisableHdr || useTsOverride !== !!base.useTs;
     // systemName resolves asynchronously, so overlay it on every call instead of caching it.
     const systemName = this.systemInfo.systemName() || undefined;
+    const deviceId = this.auth.hasServerFeature('deviceProfileExtensions') ? this.deviceId : undefined;
     // An unadvertised server 400s on an unknown field; an empty list is
     // redundant with the boolean fallback. Omit it in both cases.
     const dolbyVisionProfiles =
@@ -305,11 +311,12 @@ export class BrowserDeviceProfileService {
       ? base.supportsMuxedAudioRendition
       : undefined;
     if (!needsOverride) {
-      return { ...base, systemName, dolbyVisionProfiles, supportsMuxedAudioRendition };
+      return { ...base, systemName, deviceId, dolbyVisionProfiles, supportsMuxedAudioRendition };
     }
     return {
       ...base,
       systemName,
+      deviceId,
       supportsMuxedAudioRendition,
       supportsHdr: forceDisableHdr ? false : base.supportsHdr,
       // Forcing HDR off (user wants SDR) also drops DV passthrough — DV is HDR.

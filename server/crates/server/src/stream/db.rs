@@ -135,13 +135,15 @@ pub async fn mark_started(db: &PgPool, user: i32, item: i32, file: i32) -> sqlx:
     .map(drop)
 }
 
-/// One row per device label + platform: what the optimizer needs to pick a codec every device decodes.
+/// One row per client device id (the label + platform for a client that sends none): what the optimizer needs to pick a codec every device decodes.
 pub async fn record_client_codecs(db: &PgPool, d: &DeviceProfile) -> sqlx::Result<()> {
     sqlx::query(
         r#"INSERT INTO client_codecs ("deviceLabel", "platform", "directPlayProfiles", "codecConditions",
-               "supportsHdr", "supportsDolbyVision")
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT ("deviceLabel", "platform") DO UPDATE SET
+               "supportsHdr", "supportsDolbyVision", "deviceId")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT ("deviceId") DO UPDATE SET
+               "deviceLabel" = EXCLUDED."deviceLabel",
+               "platform" = EXCLUDED."platform",
                "directPlayProfiles" = EXCLUDED."directPlayProfiles",
                "codecConditions" = EXCLUDED."codecConditions",
                "supportsHdr" = EXCLUDED."supportsHdr",
@@ -154,6 +156,13 @@ pub async fn record_client_codecs(db: &PgPool, d: &DeviceProfile) -> sqlx::Resul
     .bind(d.codec_conditions.as_ref().map(sqlx::types::Json))
     .bind(d.supports_hdr)
     .bind(d.supports_dolby_vision)
+    .bind(d.device_id.clone().unwrap_or_else(|| {
+        format!(
+            "{}|{}",
+            d.device_name.as_deref().unwrap_or_default(),
+            d.system_name.as_deref().unwrap_or_default()
+        )
+    }))
     .execute(db)
     .await?;
     Ok(())
@@ -162,6 +171,28 @@ pub async fn record_client_codecs(db: &PgPool, d: &DeviceProfile) -> sqlx::Resul
 #[cfg(test)]
 mod client_codecs_tests {
     use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn a_renamed_device_stays_one_row_by_its_id(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let profile = |name: &str| DeviceProfile {
+            device_name: Some(name.into()),
+            system_name: Some("tvOS".into()),
+            device_id: Some("dev-1".into()),
+            ..serde_json::from_value(serde_json::json!({"directPlayProfiles": []})).unwrap()
+        };
+        record_client_codecs(&db, &profile("Living room"))
+            .await
+            .unwrap();
+        record_client_codecs(&db, &profile("Bedroom"))
+            .await
+            .unwrap();
+        let rows: Vec<(String,)> = sqlx::query_as(r#"SELECT "deviceLabel" FROM client_codecs"#)
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(rows, vec![("Bedroom".to_owned(),)]);
+    }
 
     #[sqlx::test(migrations = false)]
     async fn a_device_is_one_row_refreshed_on_each_decide(db: PgPool) {

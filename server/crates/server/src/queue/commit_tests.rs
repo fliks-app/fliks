@@ -101,7 +101,7 @@ async fn world(pool: PgPool, extra: Value) -> W {
            VALUES (1, 'optimize', $1, $2, 'h', 'staged', $3, $4, $5, $6, $7, $8, 3, $9) RETURNING id"#,
     )
     .bind(file)
-    .bind(json!({"info": info("h264", 100.0), "plan": {"level": "remux", "container": "mkv", "extraSubtitles": extra}}))
+    .bind(json!({"info": info("h264", 100.0), "plan": {"level": "remux", "container": "mkv", "rename": true, "extraSubtitles": extra}}))
     .bind(dunce::canonicalize(&src).unwrap().to_string_lossy().as_ref())
     .bind(m.len() as i64)
     .bind(mtime)
@@ -228,6 +228,35 @@ async fn ocr_subtitles_of_the_plan_go_with_the_commit(pool: PgPool) {
         .await["n"],
         1,
         "and its row"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_job_without_a_rename_never_renames_the_file(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    sqlx::query("UPDATE jobs SET payload = jsonb_set(payload, '{plan,rename}', 'false'::jsonb)")
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    commit::run(&w.st).await;
+    assert_eq!(job(&w).await["state"], "done");
+    assert!(w.dir.join("M/a.h264.mkv").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_taken_name_keeps_the_source_name_and_a_new_extension_is_skipped(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    fs::write(w.dir.join("M/a.h265.mkv"), b"another file").unwrap();
+    commit::run(&w.st).await;
+    assert_eq!(job(&w).await["state"], "done");
+    assert_eq!(
+        fs::read(&w.src).unwrap(),
+        b"new",
+        "same extension: stays in place"
+    );
+    assert_eq!(
+        fs::read(w.dir.join("M/a.h265.mkv")).unwrap(),
+        b"another file"
     );
 }
 

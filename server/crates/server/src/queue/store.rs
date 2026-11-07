@@ -433,6 +433,34 @@ pub async fn succeed(
     Ok(Settled::Done)
 }
 
+/// The worker found nothing to write (the video was copied and the plan holds nothing else): the job is
+/// `skipped` and remembers what the encode decided.
+pub async fn skip_nothing(
+    pool: &PgPool,
+    id: i64,
+    key: &str,
+    attempt: i32,
+    result: Value,
+) -> sqlx::Result<Settled> {
+    let mut tx = pool.begin().await?;
+    let Some(row) = lock_fenced(&mut tx, id, key, attempt).await? else {
+        return Ok(Settled::Stale);
+    };
+    if row.get::<String, _>("state") == "leased" {
+        sqlx::query(
+            r#"UPDATE jobs SET state = 'skipped', progress = 1, result = $2, "leaseUntil" = NULL,
+                 error = '{"class": "nothing_to_do", "message": "the video was kept and nothing else changes"}'::jsonb,
+                 "finishedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(result)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+    }
+    Ok(Settled::Done)
+}
+
 /// A failed result, routed by its class (`next_after`).
 pub async fn fail(
     pool: &PgPool,
