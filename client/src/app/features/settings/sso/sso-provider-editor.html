@@ -275,9 +275,11 @@
               <span class="label-text">{{ u.label | translate }}</span>
               <div class="flex items-center gap-2">
                 <input type="text" readonly class="input input-bordered input-sm w-full font-mono text-sm" [value]="u.value" />
-                <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="copy(u.value)" [attr.aria-label]="'common.copy' | translate">
-                  <svg lucideCopy class="h-4 w-4"></svg>
-                </button>
+                @if (canCopy) {
+                  <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="copy(u.value)" [attr.aria-label]="'common.copy' | translate">
+                    <svg lucideCopy class="h-4 w-4"></svg>
+                  </button>
+                }
               </div>
             </div>
           }

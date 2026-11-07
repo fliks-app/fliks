@@ -197,7 +197,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.filterDebounce) clearTimeout(this.filterDebounce);
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(SearchComponent.SCROLL_KEY);
     this.removeOutsidePointerListener();
   }
 

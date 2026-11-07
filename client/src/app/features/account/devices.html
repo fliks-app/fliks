@@ -16,9 +16,11 @@
             [value]="t.token"
             [attr.aria-label]="'device_tokens.token_label' | translate: { name: t.name }"
           />
-          <button type="button" class="btn btn-sm shrink-0" (click)="copy(t.token)">
-            {{ 'device_tokens.copy' | translate }}
-          </button>
+          @if (canCopy) {
+            <button type="button" class="btn btn-sm shrink-0" (click)="copy(t.token)">
+              {{ 'device_tokens.copy' | translate }}
+            </button>
+          }
         </div>
         @if (t.kind === 'kobo') {
           <p class="text-sm">{{ 'device_tokens.kobo_hint' | translate }}</p>
@@ -29,9 +31,11 @@
               [value]="koboEndpoint(t.token)"
               [attr.aria-label]="'device_tokens.kobo_endpoint_label' | translate: { name: t.name }"
             />
-            <button type="button" class="btn btn-sm shrink-0" (click)="copy(koboEndpoint(t.token))">
-              {{ 'device_tokens.copy' | translate }}
-            </button>
+            @if (canCopy) {
+              <button type="button" class="btn btn-sm shrink-0" (click)="copy(koboEndpoint(t.token))">
+                {{ 'device_tokens.copy' | translate }}
+              </button>
+            }
           </div>
         }
       </div>

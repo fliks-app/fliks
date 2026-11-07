@@ -271,7 +271,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     // Evicted from the route cache while another page is on screen: the chrome
     // and scroll key already belong to that page, so leave them alone.
     if (this.routeFresh()) return;
-    this.scrollMemory.deactivate();
+    this.scrollMemory.deactivateIf(this.scrollKey());
     this.releaseChrome();
   }
 
@@ -404,7 +404,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     void this.mediaService
       .getOne(m.id, { force: true })
       .then((fresh) => {
-        if (fresh.id === m.id) this.media.set(fresh);
+        if (this.loadedId === m.id) this.media.set(fresh);
       })
       .catch(() => {
         /* network failure - the cached page keeps showing */
@@ -545,7 +545,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     const id = this.media()?.id;
     if (id == null) return;
     try {
-      this.media.set(await this.mediaService.getOne(id, { force: true }));
+      const fresh = await this.mediaService.getOne(id, { force: true });
+      if (this.loadedId === id) this.media.set(fresh);
     } catch {
       /* ignore */
     }

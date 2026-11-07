@@ -100,8 +100,10 @@ export class AccountDevicesComponent implements OnInit {
     return `api_endpoint=${new URL(this.serverConfig.resolveUrl(`/kobo/${token}`), location.origin).href}`;
   }
 
+  /** Plain-HTTP origins have no clipboard API. */
+  readonly canCopy = !!navigator.clipboard;
+
   async copy(token: string): Promise<void> {
-    if (!navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(token);
       this.toast.success(this.translate.instant('device_tokens.copied'));

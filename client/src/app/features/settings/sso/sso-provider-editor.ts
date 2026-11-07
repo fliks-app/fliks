@@ -142,8 +142,10 @@ export class SsoProviderEditorComponent {
     }
   }
 
+  /** Plain-HTTP origins have no clipboard API. */
+  readonly canCopy = !!navigator.clipboard;
+
   async copy(value: string): Promise<void> {
-    if (!navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(value);
       this.toast.success(this.translate.instant('settings.sso.copied'));
