@@ -1,4 +1,5 @@
 //! `/api/optimize/*` and `/api/libraries/{id}/optimize/*` (`docs/spec/optimize.md`).
+use super::diff;
 use super::profile::{Preset, Profile};
 use super::select::{self, Context, Preview};
 use crate::{
@@ -256,6 +257,52 @@ pub async fn preview(
     Ok(Json(
         select::preview(&st.db, int_param(&id.0)?, &ctx).await?,
     ))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FilePreviewDto {
+    file_id: i32,
+    /// An unsaved document to try; the library's profile when absent.
+    profile: Option<Value>,
+}
+
+#[utoipa::path(post, path = "/api/libraries/{id}/optimize/preview/file", responses((status = 200)))]
+pub async fn preview_file(
+    State(st): State<AppState>,
+    a: Authed,
+    id: PathParams<String>,
+    ValidJson(dto): ValidJson<FilePreviewDto>,
+) -> Result<Json<diff::Outcome>, AppError> {
+    a.require(Action::Read, Subject::Settings)?;
+    let id = int_param(&id.0)?;
+    let lib = library(&st, &a, id, None).await?;
+    let profile = match dto.profile {
+        Some(doc) => {
+            let p: Profile =
+                serde_json::from_value(doc).map_err(|e| bad(format!("profile: {e}")))?;
+            let problems = p.problems();
+            if !problems.is_empty() {
+                return Err(AppError::bad_request(problems));
+            }
+            p
+        }
+        None => lib
+            .profile
+            .ok_or_else(|| bad("the library has no optimize profile; pass profile"))?,
+    };
+    let ctx = Context::load(&st.db, profile, lib.allow_rename).await?;
+    let mut found = None;
+    select::analyze(&st.db, id, Some(&[dto.file_id]), &ctx, |c| {
+        found = Some(c.outcome)
+    })
+    .await?;
+    found.map(Json).ok_or_else(|| {
+        AppError::not_found(format!(
+            "File #{} is not an optimizable file of library #{id}",
+            dto.file_id
+        ))
+    })
 }
 
 #[derive(Serialize, Clone)]

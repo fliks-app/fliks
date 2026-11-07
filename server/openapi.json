@@ -1217,6 +1217,17 @@
         }
       }
     },
+    "/api/libraries/{id}/optimize/preview/file": {
+      "post": {
+        "tags": [
+          "crate::optimize"
+        ],
+        "operationId": "preview_file",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/libraries/{id}/optimize/summary": {
       "get": {
         "tags": [

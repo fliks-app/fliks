@@ -229,6 +229,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::optimize::update,
         crate::optimize::remove,
         crate::optimize::preview,
+        crate::optimize::preview_file,
         crate::optimize::summary,
         images::without_variant,
         images::with_variant,

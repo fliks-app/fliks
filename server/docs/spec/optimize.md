@@ -15,6 +15,7 @@ All need a credential. Reads: `Read Settings`; writes: `Manage Settings`.
 | `PUT /api/optimize/profiles/:id` | `{name, document}` | 200, `Profile` | 400, 403, 404 |
 | `DELETE /api/optimize/profiles/:id` | path `id` | 204; libraries using it fall back to no profile | 403, 404 |
 | `GET /api/libraries/:id/optimize/preview?profileId=` | profile defaults to the library's | 200, `Preview` | 400 (no profile), 404 |
+| `POST /api/libraries/:id/optimize/preview/file` | `{fileId, profile?}`; `profile` is an unsaved document, the library's profile when absent | 200, the file's `Outcome` (`status` `excluded`/`skipped`/`conform`/`diff`, with `level`, `changes`, `warnings` for a diff) | 400 (no profile, invalid document), 404 (not a candidate of the library) |
 | `GET /api/libraries/:id/optimize/summary` | path `id` | 200, `{profileId, filesWithDifference, computedAt}` | 404 |
 
 `Profile` = `{id, name, document, libraryCount, createdAt, updatedAt}`. Libraries are assigned with `PATCH /api/libraries/:id` (`optimizeProfileId`, `optimizeNewFiles`, `allowRename`; see `libraries.md`).

@@ -195,6 +195,29 @@ async fn library_assignment_and_preview(pool: PgPool) {
     assert_eq!(s, 200);
     assert_eq!(pv["withDifference"], 1);
     assert_eq!(pv["perLevel"]["reencode"], 1);
+    let file_id: i32 = sqlx::query_scalar(r#"SELECT id FROM media_files WHERE "mediaId" = $1"#)
+        .bind(media)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let uri = format!("/api/libraries/{lib_id}/optimize/preview/file");
+    let (s, o) = call(&c, "POST", &uri, json!({"fileId": file_id})).await;
+    assert_eq!(
+        (s, o["status"].as_str(), o["level"].as_str()),
+        (200, Some("diff"), Some("reencode"))
+    );
+    let mut cleanup = balanced(&c).await;
+    cleanup["video"]["enabled"] = json!(false);
+    let (_, o) = call(
+        &c,
+        "POST",
+        &uri,
+        json!({"fileId": file_id, "profile": cleanup}),
+    )
+    .await;
+    assert_ne!(o["level"].as_str(), Some("reencode"));
+    let (s, _) = call(&c, "POST", &uri, json!({"fileId": file_id + 999})).await;
+    assert_eq!(s, 404);
     let (_, sm) = call(
         &c,
         "GET",
