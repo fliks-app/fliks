@@ -481,18 +481,17 @@ async fn identify_then_read(pool: PgPool, held_id: bool) -> Kept {
         )
         .await;
     assert_eq!(status, 201);
-    for _ in 0..if held_id { 3 } else { 50 } {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let overview: Option<String> =
-            sqlx::query_scalar("SELECT overview FROM media WHERE id = 1")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        if overview.is_none() {
+    for _ in 0..100 {
+        if c.st.hub.activity().list(1, 100).total == 0 {
             break;
         }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert_eq!(
+        c.st.hub.activity().list(1, 100).total,
+        0,
+        "the identify task settled"
+    );
     let (a, b, d, e, f): (
         Option<String>,
         Option<f64>,
