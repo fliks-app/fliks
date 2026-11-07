@@ -23,7 +23,7 @@ function setup() {
       { provide: Router, useValue: { navigate: vi.fn(), events: of() } },
       { provide: ActivatedRoute, useValue: { snapshot: { data: {}, paramMap: { get: () => null } } } },
       { provide: AuthService, useValue: { sharingDisabled: () => false, hasPermission: () => false } },
-      { provide: ScrollMemoryService, useValue: { activate: vi.fn(), restore: vi.fn(), deactivate: vi.fn() } },
+      { provide: ScrollMemoryService, useValue: { activate: vi.fn(), restore: vi.fn(), deactivateIf: vi.fn() } },
       { provide: MediaService, useValue: { getAll: vi.fn(async () => ({ data: [], total: 0 })) } },
     ],
   });

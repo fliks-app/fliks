@@ -84,7 +84,7 @@ function createHarness(downloadManager: object = {}) {
       { provide: DownloadManagerService, useValue: downloadManager },
       { provide: DownloadProgressService, useValue: { progress: signal(new Map()) } },
       { provide: TvService, useValue: { isTv: () => false } },
-      { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivate: vi.fn(), restoreSticky: vi.fn() } },
+      { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() } },
       { provide: AddToPlaylistService, useValue: {} },
       { provide: RecommendService, useValue: {} },
       {
