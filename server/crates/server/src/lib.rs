@@ -42,6 +42,7 @@ pub mod plugins;
 pub mod presence;
 pub mod profiles;
 pub mod qoe;
+pub mod queue;
 pub mod remote;
 pub mod requests;
 pub mod roles;
@@ -95,6 +96,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
+    queue::boot(&pool).await?;
     email::sweep(&pool).await?;
     subtitles::sweep(&pool).await?;
     roles::seed(&pool).await?;
@@ -157,6 +159,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     auth::spawn_jobs(db);
     jobs::spawn(&state);
+    queue::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
     state.plugins.spawn(&state);
     if let Err(e) = state.metadata.load_orders(&state.namespaces()).await {

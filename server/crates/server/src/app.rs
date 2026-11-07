@@ -96,6 +96,20 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::engine::remote::put_remote,
         crate::engine::remote::test_remote,
         crate::engine::resolve::resolve,
+        crate::queue::routes::hello,
+        crate::queue::routes::lease,
+        crate::queue::routes::heartbeat,
+        crate::queue::routes::result,
+        crate::queue::api::enqueue,
+        crate::queue::api::list_jobs,
+        crate::queue::api::retry,
+        crate::queue::api::cancel,
+        crate::queue::api::get_settings,
+        crate::queue::api::put_settings,
+        crate::queue::api::list_workers,
+        crate::queue::api::list_tokens,
+        crate::queue::api::create_token,
+        crate::queue::api::revoke_token,
         crate::party::time,
         crate::party::create,
         crate::party::list,
@@ -502,6 +516,7 @@ fn api() -> Router<AppState> {
         .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())
+        .merge(crate::queue::router())
         .merge(requests::router())
         .merge(cleanup::router())
         .merge(subtitles::router())

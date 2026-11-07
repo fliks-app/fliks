@@ -20,7 +20,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{Value, json};
 
 /// Keys with their own write path (`settings.md` rule 9) and that path's text.
-const PROTECTED: [(&str, &str); 6] = [
+const PROTECTED: [(&str, &str); 7] = [
     (
         "livetv_restricted_groups",
         "PUT /livetv/admin/access/restricted-groups",
@@ -36,6 +36,7 @@ const PROTECTED: [(&str, &str); 6] = [
     ("engine_url", "PUT /engine/remote"),
     ("engine_token", "PUT /engine/remote"),
     ("engine_path_mappings", "PUT /engine/remote"),
+    (crate::queue::settings::KEY, "PUT /api/optimize/settings"),
 ];
 
 #[derive(Deserialize)]
