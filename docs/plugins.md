@@ -36,10 +36,10 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   transition window. The admin's plugin list shows the reason, `manifest declares pluginApi 2, this
   core accepts 3; install a build of this plugin made for pluginApi 3`, and the plugin's data is kept.
 - `fliks` — the core versions this plugin runs on, as a semver range that should carry an upper
-  bound (`>=5.0.0 <6.0.0`). Core itself only checks the range is non-empty and satisfied by the
+  bound (`>=6.0.0 <7.0.0`). Core itself only checks the range is non-empty and satisfied by the
   running version; the official catalogue's CI is what refuses an unbounded range before publishing.
-  A prerelease core matches as its own release would, so a `5.0.0-rc` runs the
-  plugins that declare `>=5.0.0` — which is how a major upgrade gets rehearsed before it ships.
+  A prerelease core matches as its own release would, so a `6.0.0-rc` runs the
+  plugins that declare `>=6.0.0` — which is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
   which core tables it needs `REFERENCES` on.
