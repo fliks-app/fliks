@@ -255,7 +255,7 @@ mv docker-compose.example.yml docker-compose.yml
 Open the file and set three things:
 
 1. `POSTGRES_PASSWORD` and `DB_PASSWORD` — the same real password
-2. the `/path/to/your/media:/medias` mount — where your files are
+2. the `/path/to/your/media:/medias` mount: where your files are
 3. `PORT` — only if `4848` is taken on the host
 
 ```bash

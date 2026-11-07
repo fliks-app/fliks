@@ -39,7 +39,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   bound (`>=6.0.0 <7.0.0`). Core itself only checks the range is non-empty and satisfied by the
   running version; the official catalogue's CI is what refuses an unbounded range before publishing.
   A prerelease core matches as its own release would, so a `6.0.0-rc` runs the
-  plugins that declare `>=6.0.0` — which is how a major upgrade gets rehearsed before it ships.
+  plugins that declare `>=6.0.0`: this is how is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
   which core tables it needs `REFERENCES` on.
