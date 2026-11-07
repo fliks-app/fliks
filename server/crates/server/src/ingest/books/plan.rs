@@ -1,6 +1,7 @@
 //! The works of a scan, one per folder or file (`docs/spec/ingest.md`). Pure.
 use super::group::{self, Work};
 use fliks_domain::books::filename::parse_path;
+use std::collections::HashSet;
 
 /// A work with files still to take, and whether its folder anchors it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,7 +15,19 @@ pub struct Planned {
 
 /// `owner(rel)` is the folder name of the media that links `rel`, `None` when none does.
 pub fn plan(rels: &[String], owner: impl Fn(&str) -> Option<String>) -> Vec<Planned> {
-    let works = group::group(rels);
+    // A folder that already has a linked file keeps the grouping of its media: no split.
+    let linked: HashSet<String> = rels
+        .iter()
+        .filter(|r| owner(r).is_some())
+        .map(|r| group::work_dir(r))
+        .collect();
+    let (old, new): (Vec<String>, Vec<String>) = rels
+        .iter()
+        .cloned()
+        .partition(|r| linked.contains(&group::work_dir(r)));
+    let mut works = group::group(&new);
+    works.extend(group::group_whole(&old));
+    works.sort_by(|a, b| (&a.dir, &a.name_path).cmp(&(&b.dir, &b.name_path)));
     works
         .iter()
         .enumerate()
@@ -119,6 +132,21 @@ mod tests {
         let owner = |r: &str| (r == "Gamma/Gamma.epub").then(|| "Gamma".to_owned());
         let p = plan(&rels(&["Gamma/Gamma.epub", "Gamma/Gamma.pdf"]), owner);
         assert_eq!(p[0].anchor.as_deref(), Some("Gamma"));
+    }
+
+    #[test]
+    fn a_folder_with_a_linked_file_is_not_split() {
+        let files = [
+            "F/A - 01.mp3",
+            "F/A - 02.mp3",
+            "F/B - 01.mp3",
+            "F/B - 02.mp3",
+        ];
+        assert_eq!(plan(&rels(&files), none).len(), 2);
+        let owner = |r: &str| (r == "F/A - 01.mp3").then(|| "F".to_owned());
+        let p = plan(&rels(&files), owner);
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].files.len(), 3);
     }
 
     #[test]

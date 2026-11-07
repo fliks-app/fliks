@@ -201,7 +201,7 @@ fn audio_keys(dir: &str, files: &[(String, String)]) -> HashMap<String, String> 
     let mut parts: HashMap<&str, String> = HashMap::new();
     for (p, f) in files {
         if f == "m4b" {
-            let k = alnum(&BRACKETS.replace_all(stem_of(p), ""));
+            let k = alnum(&DISC_TOKEN.replace_all(&BRACKETS.replace_all(stem_of(p), ""), ""));
             if !k.is_empty() && Some(&k) != folder.as_ref() {
                 whole.insert(p, k);
             }
@@ -407,6 +407,8 @@ mod tests {
             "F/A - 02.mp3",
         ]);
         assert_eq!(group_whole(&two).len(), 1);
+        let parts = p(&["F/Title Part 1.m4b", "F/Title Part 2.m4b"]);
+        assert_eq!(group(&parts).len(), 1);
         let renamed = p(&[
             "F/Old Title - 01.mp3",
             "F/Old Title - 02.mp3",
