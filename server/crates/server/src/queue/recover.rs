@@ -1,10 +1,9 @@
 //! Finishing the commits a crash, a restart or a backup restore left `committing`, and restoring originals.
 use super::{
     commit::{self, COLS, End, Job},
-    settings::OriginalPolicy,
     swap::{self, Restore, Swapped},
 };
-use crate::state::AppState;
+use crate::{ingest::fsx, state::AppState};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -64,17 +63,28 @@ async fn recover_one(st: &AppState, job: &Job) -> End {
     let swapped = tokio::task::spawn_blocking(move || swap::perform(&jr)).await;
     match swapped {
         Ok(Ok(Swapped::Done)) => {}
-        Ok(Ok(Swapped::Nothing)) if swap::is(&journal.source, &journal.source_id) => {
-            return End::Skip("the commit never reached the disk".into());
-        }
         Ok(Ok(Swapped::Nothing)) => {
-            return End::Fail(
-                "neither the output nor the original is where the journal says".into(),
-            );
+            let jr = journal.clone();
+            let _ = tokio::task::spawn_blocking(move || swap::abort(&jr)).await;
+            return if swap::is(&journal.source, &journal.source_id) {
+                End::Skip("the commit never reached the disk".into())
+            } else {
+                End::Fail("neither the output nor the original is where the journal says".into())
+            };
+        }
+        Ok(Err(e)) if fsx::busy(&e) => {
+            tracing::warn!(job = job.id, "recovery swap busy, tried again later: {e}");
+            return End::Pending;
+        }
+        Ok(Err(e)) if swap::is(&journal.target, &journal.staged_id) => {
+            return End::Fail(format!(
+                "the output is placed but the swap cannot finish: {e}"
+            ));
         }
         Ok(Err(e)) => {
-            tracing::warn!(job = job.id, "recovery swap failed, tried again later: {e}");
-            return End::Pending;
+            let jr = journal.clone();
+            let _ = tokio::task::spawn_blocking(move || swap::abort(&jr)).await;
+            return End::Skip(format!("the swap cannot be done: {e}"));
         }
         Err(_) => return End::Pending,
     }
@@ -127,13 +137,7 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     }
     let _media = st.ingest.media.lock(f.media_id).await;
     let _moves = st.folder_moves.read().await;
-    let slot = swap::backup_path(
-        OriginalPolicy::Trash,
-        Path::new(&f.folder),
-        &journal.source,
-        id,
-    )
-    .ok_or("no trash slot")?;
+    let slot = swap::optimized_slot(Path::new(&f.folder), id);
     let ocr: Vec<(PathBuf, PathBuf)> = job
         .result
         .get("ocrTrash")

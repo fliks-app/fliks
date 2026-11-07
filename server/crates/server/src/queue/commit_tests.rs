@@ -299,12 +299,14 @@ async fn restore_brings_the_original_back_and_the_trash_is_purged_by_retention(p
     let w = world(pool, json!([])).await;
     commit::run(&w.st).await;
     let j = job(&w).await;
-    let bak = PathBuf::from(j["result"]["trashPath"].as_str().unwrap());
+    let orig_bak = PathBuf::from(j["result"]["trashPath"].as_str().unwrap());
     recover::restore(&w.st, w.job).await.unwrap();
     assert_eq!(
         fs::read(w.dir.join("M/a.h264.mkv")).unwrap(),
         b"original bytes"
     );
+    let bak = PathBuf::from(job(&w).await["result"]["trashPath"].as_str().unwrap());
+    assert_ne!(bak, orig_bak, "the optimized file gets its own slot");
     assert_eq!(fs::read(&bak).unwrap(), b"new");
     assert!(recover::restore(&w.st, w.job).await.is_err(), "once");
     sqlx::query(r#"UPDATE jobs SET "finishedAt" = now() - interval '30 days'"#)
@@ -396,14 +398,33 @@ async fn a_restore_under_keep_never_writes_the_optimized_file_to_orig(pool: PgPo
     recover::restore(&w.st, w.job).await.unwrap();
     assert_eq!(fs::read(m.join("a.h264.mkv")).unwrap(), b"original bytes");
     assert!(!orig.exists());
-    let slot = w.dir.join(".fliks-trash").join(format!("{}.bak", w.job));
-    assert_eq!(fs::read(slot).unwrap(), b"new");
+    let slot = w
+        .dir
+        .join(".fliks-trash")
+        .join(format!("{}.optimized.bak", w.job));
+    assert_eq!(fs::read(&slot).unwrap(), b"new");
     assert_eq!(
         job(&w).await["result"]["trashPath"]
             .as_str()
             .map(PathBuf::from),
-        Some(w.dir.join(".fliks-trash").join(format!("{}.bak", w.job)))
+        Some(slot)
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_purge_leaves_the_original_of_an_unfinished_restore(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    commit::run(&w.st).await;
+    let bak = PathBuf::from(job(&w).await["result"]["trashPath"].as_str().unwrap());
+    sqlx::query(
+        r#"UPDATE jobs SET result = result || '{"restore": {}}'::jsonb, "finishedAt" = now() - interval '30 days'"#,
+    )
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    trash::purge(&w.st.db).await;
+    assert!(bak.exists());
+    assert!(job(&w).await["result"]["trashPurgedAt"].is_null());
 }
 
 #[sqlx::test(migrations = false)]

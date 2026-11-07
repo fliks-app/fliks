@@ -193,6 +193,44 @@ fn settle_original(j: &Journal) -> io::Result<()> {
     Ok(())
 }
 
+/// Gives the original its place back after a swap that placed nothing: `.old` returns to the source
+/// path and a backup link of the unchanged source goes.
+pub fn abort(j: &Journal) -> io::Result<()> {
+    if is(&j.target, &j.staged_id) {
+        return Ok(());
+    }
+    if fs::symlink_metadata(&j.source).is_err() && is(&j.old, &j.source_id) {
+        fsx::rename_noreplace(&j.old, &j.source)?;
+    }
+    if let Some(b) = &j.backup
+        && is(&j.source, &j.source_id)
+        && same_file(b, &j.source)
+    {
+        fs::remove_file(b)?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(x), Ok(y)) => (x.dev(), x.ino()) == (y.dev(), y.ino()),
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn same_file(_: &Path, _: &Path) -> bool {
+    false
+}
+
+/// The optimized file of a restore waits here, never under the name that holds the original.
+pub fn optimized_slot(root: &Path, job: i64) -> PathBuf {
+    root.join(".fliks-trash")
+        .join(format!("{job}.optimized.bak"))
+}
+
 /// A restore, written before the disk is touched: the original comes back to `source`, the optimized
 /// file goes to `slot`, renamed companions return to their old names.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -371,6 +409,27 @@ mod tests {
             original: j.source_id.clone(),
             companions: vec![],
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn abort_undoes_a_swap_that_placed_nothing() {
+        let (d, j) = world(OriginalPolicy::Trash);
+        save_original(&j).unwrap();
+        let b = j.backup.clone().unwrap();
+        assert!(b.exists());
+        abort(&j).unwrap();
+        assert!(!b.exists());
+        assert_eq!(fs::read(&j.source).unwrap(), b"original");
+        // Hidden at `.old` (no hard links): it comes back.
+        fs::rename(&j.source, &j.old).unwrap();
+        abort(&j).unwrap();
+        assert_eq!(fs::read(&j.source).unwrap(), b"original");
+        // Once placed, nothing is undone.
+        perform(&j).unwrap();
+        abort(&j).unwrap();
+        assert_eq!(fs::read(&j.source).unwrap(), b"new");
+        fs::remove_dir_all(d).unwrap();
     }
 
     #[test]
