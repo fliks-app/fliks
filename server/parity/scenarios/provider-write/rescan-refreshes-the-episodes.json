@@ -104,7 +104,7 @@
                 "formatBitRate": 108286,
                 "formatName": "matroska,webm",
                 "formatStartSeconds": 0,
-                "schemaVersion": 4,
+                "schemaVersion": 5,
                 "subtitles": [],
                 "video": [
                   {
@@ -112,6 +112,7 @@
                     "bitDepth": 8,
                     "codec": "h264",
                     "colorRange": "tv",
+                    "cropStable": false,
                     "displayAspectRatio": "16:9",
                     "dvBlPresent": false,
                     "dvElPresent": false,

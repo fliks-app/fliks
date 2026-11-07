@@ -286,6 +286,13 @@ async fn run(
     user_agent: Option<String>,
 ) -> Result<Value, AppError> {
     check_engine(st)?;
+    let db = st.db.clone();
+    let profile = device.clone();
+    tokio::spawn(async move {
+        if let Err(e) = db::record_client_codecs(&db, &profile).await {
+            tracing::warn!("client codecs not recorded: {e}");
+        }
+    });
     let (mut file, item) = match target {
         Target::File(id) => (resolve_file(st, Some(a), id).await?, None),
         Target::Item(id, version) => {

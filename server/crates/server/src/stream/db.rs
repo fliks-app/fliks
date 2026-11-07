@@ -1,6 +1,6 @@
 //! The reads and writes playback-info makes outside the media tables: markers and the saved position.
 use crate::playback::find_state;
-use fliks_engine_core::api::Chapter;
+use fliks_engine_core::api::{Chapter, DeviceProfile};
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -133,4 +133,52 @@ pub async fn mark_started(db: &PgPool, user: i32, item: i32, file: i32) -> sqlx:
     .execute(db)
     .await
     .map(drop)
+}
+
+/// One row per device label + platform: what the optimizer needs to pick a codec every device decodes.
+pub async fn record_client_codecs(db: &PgPool, d: &DeviceProfile) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO client_codecs ("deviceLabel", "platform", "directPlayProfiles", "codecConditions",
+               "supportsHdr", "supportsDolbyVision")
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT ("deviceLabel", "platform") DO UPDATE SET
+               "directPlayProfiles" = EXCLUDED."directPlayProfiles",
+               "codecConditions" = EXCLUDED."codecConditions",
+               "supportsHdr" = EXCLUDED."supportsHdr",
+               "supportsDolbyVision" = EXCLUDED."supportsDolbyVision",
+               "lastSeenAt" = now()"#,
+    )
+    .bind(d.device_name.as_deref().unwrap_or_default())
+    .bind(d.system_name.as_deref().unwrap_or_default())
+    .bind(sqlx::types::Json(&d.direct_play_profiles))
+    .bind(d.codec_conditions.as_ref().map(sqlx::types::Json))
+    .bind(d.supports_hdr)
+    .bind(d.supports_dolby_vision)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod client_codecs_tests {
+    use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn a_device_is_one_row_refreshed_on_each_decide(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let profile = |hdr| DeviceProfile {
+            device_name: Some("Living room".into()),
+            system_name: Some("tvOS".into()),
+            supports_hdr: Some(hdr),
+            ..serde_json::from_value(serde_json::json!({"directPlayProfiles": []})).unwrap()
+        };
+        record_client_codecs(&db, &profile(false)).await.unwrap();
+        record_client_codecs(&db, &profile(true)).await.unwrap();
+        let rows: Vec<(Option<bool>,)> =
+            sqlx::query_as(r#"SELECT "supportsHdr" FROM client_codecs"#)
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(rows, vec![(Some(true),)]);
+    }
 }
