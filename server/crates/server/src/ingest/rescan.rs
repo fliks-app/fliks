@@ -536,52 +536,99 @@ async fn refresh_existing(
             }
             continue;
         }
-        let Ok(mut p) = probe(st, &abs, !unchanged).await.inspect_err(|e| {
-            tracing::error!("Rescan[media #{media_id}] refresh \"{}\": {e}", r.rel)
-        }) else {
+        let stored = Stored {
+            file_id: r.id,
+            info: r.info.clone().and_then(|v| serde_json::from_value(v).ok()),
+            mtime_ms: r.mtime_ms,
+        };
+        let change = Change {
+            content_changed: !unchanged,
+            timeline_preserved: false,
+        };
+        let Ok(()) = refresh_content(st, &abs, &name, stored, change, disk_size, mtime)
+            .await
+            .inspect_err(|e| {
+                tracing::error!("Rescan[media #{media_id}] refresh \"{}\": {e}", r.rel)
+            })
+        else {
             continue;
         };
-        let old: Option<MediaInfo> = r.info.clone().and_then(|v| serde_json::from_value(v).ok());
-        if let Some(old) = &old {
-            if unchanged
-                && let (Some(crop), Some(v)) = (
-                    old.video.first().and_then(|v| v.crop.clone()),
-                    p.info.video.first_mut(),
-                )
-            {
-                v.crop = Some(crop);
-            }
-            if old.timestamp_break_seconds.is_some() {
-                p.info.timestamp_break_seconds = old.timestamp_break_seconds;
-            }
-        }
-        let quality = p.quality(&name);
-        sqlx::query!(
-            r#"UPDATE media_files SET size = $2, quality = COALESCE($3, quality), "streamInfo" = $4,
-                 "mtimeMs" = $5, "probeVersion" = $6 WHERE id = $1"#,
-            r.id,
-            disk_size,
-            quality,
-            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
-            mtime,
-            PROBE_VERSION
-        )
-        .execute(&st.db)
-        .await?;
         c.updated += 1;
         touched.push((r.id, episode_id));
-        if !unchanged {
-            let st = st.clone();
-            let id = r.id as u32;
-            tokio::spawn(async move { st.engine.invalidate(id).await });
-        }
-        if !unchanged || r.mtime_ms.is_some_and(|m| Some(m) != mtime) {
-            crate::stream::spawn_scan(st, r.id, abs.clone(), Some(p.info.clone()));
-        }
     }
     items::attach(&st.db, media_id, &links).await?;
     set_ends(&st.db, &ends).await?;
     items::cover_ranges(&mut *st.db.acquire().await?, media_id).await?;
+    Ok(())
+}
+
+/// What the row held before the refresh.
+pub struct Stored {
+    pub file_id: i32,
+    pub info: Option<MediaInfo>,
+    pub mtime_ms: Option<i64>,
+}
+
+/// Why a file is refreshed. `content_changed` recomputes what is derived from the bytes (crop, clock
+/// break) and invalidates the engine; `timeline_preserved` keeps the OpenSubtitles hash of the original.
+#[derive(Clone, Copy)]
+pub struct Change {
+    pub content_changed: bool,
+    pub timeline_preserved: bool,
+}
+
+/// The "content changed" path of a rescan for one file: probe, row update, engine invalidation, scan.
+pub async fn refresh_content(
+    st: &AppState,
+    abs: &Path,
+    name: &str,
+    stored: Stored,
+    change: Change,
+    disk_size: i64,
+    mtime: Option<i64>,
+) -> Result<(), String> {
+    let p = probe(st, abs, change.content_changed).await?;
+    let mut info = p.info.clone();
+    if let Some(old) = &stored.info
+        && !change.content_changed
+    {
+        if let (Some(crop), Some(v)) = (
+            old.video.first().and_then(|v| v.crop.clone()),
+            info.video.first_mut(),
+        ) {
+            v.crop = Some(crop);
+        }
+        if old.timestamp_break_seconds.is_some() {
+            info.timestamp_break_seconds = old.timestamp_break_seconds;
+        }
+    }
+    let quality = p.quality(name);
+    let (hash, bytes) = match &p.moviehash {
+        Some((h, b)) if !change.timeline_preserved => (Some(h.clone()), Some(*b)),
+        _ => (None, None),
+    };
+    sqlx::query!(
+        r#"UPDATE media_files SET size = $2, quality = COALESCE($3, quality), "streamInfo" = $4,
+             "mtimeMs" = $5, "probeVersion" = $6, "osdbHash" = COALESCE($7, "osdbHash"),
+             "osdbBytesize" = COALESCE($8, "osdbBytesize") WHERE id = $1"#,
+        stored.file_id,
+        disk_size,
+        quality,
+        serde_json::to_value(&info).map_err(|e| e.to_string())?,
+        mtime,
+        PROBE_VERSION,
+        hash,
+        bytes
+    )
+    .execute(&st.db)
+    .await
+    .map_err(|e| e.to_string())?;
+    if change.content_changed {
+        st.engine.invalidate(stored.file_id as u32).await;
+    }
+    if change.content_changed || stored.mtime_ms.is_some_and(|m| Some(m) != mtime) {
+        crate::stream::spawn_scan(st, stored.file_id, abs.to_path_buf(), Some(info));
+    }
     Ok(())
 }
 
@@ -872,7 +919,7 @@ async fn reconcile_subtitles(
     }
 }
 
-pub(super) fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
+pub(crate) fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
     let d = m
         .modified()
         .ok()?

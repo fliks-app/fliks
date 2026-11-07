@@ -212,6 +212,8 @@ pub enum SseEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         automatic: Option<bool>,
     },
+    #[serde(rename = "media.file_changed")]
+    MediaFileChanged { media_id: i64, media_file_id: i64 },
     #[serde(rename = "subtitle.list_changed")]
     SubtitleListChanged { media_id: i64 },
     #[serde(rename = "subtitle.translation_progress")]

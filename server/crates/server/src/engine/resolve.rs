@@ -407,6 +407,9 @@ async fn locate(
     let file = file.to_string_lossy().into_owned();
     match req.purpose {
         ResolvePurpose::Stream | ResolvePurpose::Download => {
+            if req.purpose == ResolvePurpose::Download {
+                st.queue.note_download(id as i32);
+            }
             let parts = crate::stream::audio_parts_of_file(&st.db, id as i32).await?;
             let format = crate::stream::book_format(&crate::stream::extname(&file));
             if parts.is_empty() {

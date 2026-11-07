@@ -3,10 +3,11 @@ use super::{Placed, group::work_dir, register_to};
 use crate::{
     engine::EngineError,
     ingest::{
+        busy::{LISTENING_SECS, listening, on_disk_matches},
         fsx,
         post_import::file_path,
         probe,
-        rescan::{PROBE_VERSION, mtime_ms},
+        rescan::PROBE_VERSION,
     },
     state::AppState,
     sync::MutexExt,
@@ -345,8 +346,7 @@ async fn unchanged(st: &AppState, media: i32, parts: &[Part], abs: &[PathBuf]) -
         let Ok(meta) = tokio::fs::metadata(path).await else {
             return false;
         };
-        let on_disk =
-            meta.len() as i64 == p.size && (p.mtime_ms.is_none() || mtime_ms(&meta) == p.mtime_ms);
+        let on_disk = on_disk_matches(&meta, p.size, p.mtime_ms);
         let same = |q: &Part| {
             (q.id, q.version, q.folder_id, &q.rel, q.size, q.mtime_ms)
                 == (p.id, p.version, p.folder_id, &p.rel, p.size, p.mtime_ms)
@@ -1184,33 +1184,6 @@ async fn same_place(
         ));
     }
     Ok(())
-}
-
-/// Seconds since the last save of a playback state under which someone is taken to be listening.
-const LISTENING_SECS: f64 = 600.0;
-
-/// Whether a live session or a recent playback state names an item of these files.
-async fn listening(st: &AppState, ids: &[i32]) -> sqlx::Result<bool> {
-    let items: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT DISTINCT "itemId" FROM item_parts WHERE "mediaFileId" = ANY($1)"#,
-    )
-    .bind(ids)
-    .fetch_all(&st.db)
-    .await?;
-    if st.presence.list().iter().any(|s| {
-        s.item_id.is_some_and(|i| items.contains(&i))
-            || ids.iter().any(|f| *f as u32 == s.media_file_id)
-    }) {
-        return Ok(true);
-    }
-    sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM playback_states WHERE "itemId" = ANY($1)
-             AND "lastPlayedAt" > now() - make_interval(secs => $2))"#,
-    )
-    .bind(&items)
-    .bind(LISTENING_SECS)
-    .fetch_one(&st.db)
-    .await
 }
 
 /// Under the media and `folder_moves` locks, once the m4b `m4b` is registered: the file is probed
