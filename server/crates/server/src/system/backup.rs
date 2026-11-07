@@ -183,6 +183,10 @@ pub async fn before_migration_in(
         )
     })?;
     prune(dir, PRE_MIGRATION_KEEP, ".dump").await?;
+    // Plain-SQL dumps written by earlier 6.0 builds.
+    for e in list_ext(dir, ".sql").await {
+        tokio::fs::remove_file(dir.join(e.filename)).await?;
+    }
     Ok(())
 }
 
