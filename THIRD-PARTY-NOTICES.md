@@ -12,7 +12,7 @@ projects and archives linked below.
 Built `FROM` the **fliks-engine** image (`ghcr.io/fliks-app/engine`, version pinned in
 `engine.lock`), itself built on **Ubuntu 24.04**, whose packages keep their own licenses (see
 `/usr/share/doc/*/copyright` in the image). The engine starts `fliks-server` and invokes the
-programs below as **separate processes** (e.g. via `execFile`), so they are aggregated alongside
+programs below as **separate processes**, so they are aggregated alongside
 Fliks rather than linked into it.
 
 | Component | License | Source |
@@ -34,10 +34,11 @@ Fliks rather than linked into it.
 
 ## Server: provider plugins
 
-`fliks-server` embeds seven provider plugin archives (`fliks.tmdb`, `fliks.tvdb`,
-`fliks.openlibrary`, `fliks.bnf`, `fliks.googlebooks`, `fliks.audible`, `fliks.audnexus`) at build
-time, pinned in `server/providers.lock`. They are built from
-https://github.com/fliks-app/plugins and licensed **AGPL-3.0-or-later**, like Fliks.
+`fliks-server` embeds the provider plugin archives pinned in `server/providers.lock` (`fliks.tmdb`,
+`fliks.tvdb`, `fliks.openlibrary`, `fliks.bnf`, `fliks.googlebooks`, `fliks.audible`,
+`fliks.audnexus`, `fliks.thexem`) at build time. They are built from
+https://github.com/fliks-app/plugins and licensed **AGPL-3.0-or-later**, like Fliks; each plugin
+folder there holds its own `LICENSE`.
 
 ## Server: Windows and macOS apps
 
@@ -64,6 +65,7 @@ with Fliks' AGPL-3.0. Every build below links an FFmpeg configured with
 | libmpv and its dylibs (macOS, from Homebrew) | GPL-3.0 | https://github.com/mpv-player/mpv |
 | mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant, re-hosted unmodified on the Fliks releases) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
 | SDL3 (Linux, bundled with the compositor addon) | zlib | https://github.com/libsdl-org/SDL |
+| libva-x11 and libXpresent (Linux .deb and AppImage, from the Ubuntu 24.04 archive, `libva-x11-2` and `libxpresent1`) | MIT | https://github.com/intel/libva and https://gitlab.freedesktop.org/xorg/lib/libxpresent |
 | Electron (bundles Chromium) | MIT (Chromium: BSD-3-Clause and others) | https://github.com/electron/electron |
 
 ## Client: reader fonts and PDF viewer
@@ -73,9 +75,11 @@ The web and app clients copy the files below out of their npm packages at build 
 
 | Component | License | Source | Use |
 |---|---|---|---|
-| Literata (`@fontsource-variable/literata`) | OFL-1.1 | https://github.com/googlefonts/literata | reader font |
-| Atkinson Hyperlegible (`@fontsource/atkinson-hyperlegible`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible | reader font |
-| pdfjs-dist (worker and JBIG2 / OpenJPEG fallbacks; their own `LICENSE_*` files ship in the package) | Apache-2.0 | https://github.com/mozilla/pdf.js | PDF reader |
+| Literata (`@fontsource-variable/literata`) | OFL-1.1 | https://github.com/googlefonts/literata | reader font; license text at `reader-fonts/literata/LICENSE` |
+| Atkinson Hyperlegible (`@fontsource/atkinson-hyperlegible`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible | reader font; license text at `reader-fonts/atkinson-hyperlegible/LICENSE` |
+| pdfjs-dist worker | Apache-2.0 | https://github.com/mozilla/pdf.js | PDF reader |
+| OpenJPEG decoder (pdfjs-dist `openjpeg_nowasm_fallback.js`) | BSD-2-Clause | https://github.com/uclouvain/openjpeg | JPEG 2000 images in PDFs; license texts at `pdfjs/wasm/LICENSE_OPENJPEG` and `LICENSE_PDFJS_OPENJPEG` |
+| JBIG2 decoder from PDFium (pdfjs-dist `jbig2_nowasm_fallback.js`) | BSD-3-Clause AND Apache-2.0 | https://pdfium.googlesource.com/pdfium | JBIG2 images in PDFs; license texts at `pdfjs/wasm/LICENSE_JBIG2` and `LICENSE_PDFJS_JBIG2` |
 
 ## Server: reaction emoji artwork
 
