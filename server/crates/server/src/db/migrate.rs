@@ -1,5 +1,7 @@
+use sqlx::ConnectOptions;
 use sqlx::migrate::{Migrate, Migrator};
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::time::{Duration, Instant};
 
 pub use sqlx::migrate::MigrateError;
 
@@ -126,7 +128,42 @@ pub async fn pending_version(pool: &PgPool) -> Result<Option<i64>, MigrateError>
 
 pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     adopt_typeorm(pool).await?;
-    MIGRATOR.run(pool).await
+    // A migration rewrites whole tables: slow by design, not worth a slow-statement warning.
+    let opts = (*pool.connect_options())
+        .clone()
+        .log_slow_statements(log::LevelFilter::Off, Duration::ZERO);
+    let quiet = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await
+        .map_err(MigrateError::Execute)?;
+    let result = run_logged(&quiet).await;
+    quiet.close().await;
+    result
+}
+
+async fn run_logged(pool: &PgPool) -> Result<(), MigrateError> {
+    let mut conn = pool.acquire().await.map_err(MigrateError::Execute)?;
+    conn.ensure_migrations_table(&MIGRATOR.table_name).await?;
+    let applied = conn.list_applied_migrations(&MIGRATOR.table_name).await?;
+    drop(conn);
+    let pending = MIGRATOR
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .filter(|m| !applied.iter().any(|a| a.version == m.version))
+        .count();
+    if pending > 0 {
+        tracing::info!("applying {pending} database migration(s), this can take a while");
+    }
+    let started = Instant::now();
+    MIGRATOR.run(pool).await?;
+    if pending > 0 {
+        tracing::info!(
+            "database migrations applied in {:.1} s",
+            started.elapsed().as_secs_f64()
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
