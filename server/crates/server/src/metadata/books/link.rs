@@ -712,7 +712,7 @@ mod tests {
                 .into_iter()
                 .chain((name == "Mia Roe").then_some(2))
             {
-                sqlx::query(r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES ($1, $2, 'actor', 0)"#)
+                sqlx::query(r#"INSERT INTO media_credits ("mediaId", "personId", role, character, position) VALUES ($1, $2, 'cast', 'X', 0)"#)
                     .bind(m)
                     .bind(id)
                     .execute(&pool)

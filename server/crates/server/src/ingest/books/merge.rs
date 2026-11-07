@@ -66,7 +66,12 @@ pub fn pick(rows: &[Part], skip: &[String]) -> Option<Vec<Part>> {
             return None;
         }
         // Two parts with one (disc, part) number, or one without, are two books interleaved.
-        let rels: Vec<String> = parts.iter().map(|p| p.rel.replace('\\', "/")).collect();
+        let mut seen = std::collections::HashSet::new();
+        let rels: Vec<String> = parts
+            .iter()
+            .filter(|p| seen.insert(p.id))
+            .map(|p| p.rel.replace('\\', "/"))
+            .collect();
         if !numbered_apart(&rels) {
             tracing::warn!(
                 "m4b merge skipped: the part numbers of {} do not tell its parts apart",
