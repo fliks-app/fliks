@@ -1210,8 +1210,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "1.9.2"
-source = "git+https://github.com/fliks-app/engine?tag=v1.9.2#ef72c4412a498966148108272d83cd0d95133c3e"
+version = "1.10.0"
+source = "git+https://github.com/fliks-app/engine?tag=v1.10.0#08d16ceb6b80c1a8b46a1158f02a7b0da30baec3"
 dependencies = [
  "serde",
  "serde_json",
@@ -1306,6 +1306,7 @@ dependencies = [
  "kepub",
  "lettre",
  "libc",
+ "log",
  "md-5",
  "mimalloc",
  "miniz_oxide 0.9.1",

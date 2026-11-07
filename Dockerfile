@@ -3,7 +3,7 @@
 # ============================================================
 
 # Engine image (ffmpeg, mkvmerge, fpcalc, OpenCL, the fliks-engine binary): bump with scripts/bump-engine.sh.
-ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.9.2@sha256:90dfb7d4dbd36832c0c9e56b40774176d041bf551c5a360d9143b3c0507f54c6
+ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.10.0@sha256:fd194b0746e75d620e488925693a5ef9a26a9cc3e617ed1a9ec6ee02b58e30e0
 
 # --- Stage 1: Build client ---
 FROM node:24.22.0-alpine AS client-build
