@@ -42,6 +42,8 @@ pub async fn carry_poster(st: &AppState, from: i32, into: i32) {
     }
 }
 
+/// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
+/// `orphans::release`s the result once its transaction commits.
 pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<Refs> {
     let (a, b) = (from.min(into), from.max(into));
     sqlx::query!(
