@@ -90,6 +90,61 @@
                 "fields": [
                   {
                     "hasDefault": false,
+                    "hint": "thexem.config.baseUrl_hint",
+                    "key": "baseUrl",
+                    "labelKey": "thexem.config.baseUrl",
+                    "requiredByProvider": false,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "thexem.config.title",
+                "subtitleKey": "thexem.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.thexem/general"
+                },
+                "id": "fliks-thexem.settings.general",
+                "labelKey": "thexem.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "thexem.config.baseUrl": "Base URL",
+                "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info.",
+                "thexem.config.subtitle": "Scene numbering of series released under another numbering than the library's.",
+                "thexem.config.title": "TheXEM"
+              },
+              "fr": {
+                "thexem.config.baseUrl": "URL de base",
+                "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info.",
+                "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
+                "thexem.config.title": "TheXEM"
+              }
+            },
+            "name": "TheXEM scene numbering",
+            "pluginId": "fliks.thexem",
+            "provider": {
+              "kinds": [
+                "series"
+              ],
+              "namespaces": [
+                "fliks.thexem:xem"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
                     "hint": "tmdb.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "tmdb.config.apiKey",
@@ -280,6 +335,61 @@
               ],
               "namespaces": [
                 "openlibrary"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "thexem.config.baseUrl_hint",
+                    "key": "baseUrl",
+                    "labelKey": "thexem.config.baseUrl",
+                    "requiredByProvider": false,
+                    "type": "text"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "thexem.config.title",
+                "subtitleKey": "thexem.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.thexem/general"
+                },
+                "id": "fliks-thexem.settings.general",
+                "labelKey": "thexem.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "thexem.config.baseUrl": "Base URL",
+                "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info.",
+                "thexem.config.subtitle": "Scene numbering of series released under another numbering than the library's.",
+                "thexem.config.title": "TheXEM"
+              },
+              "fr": {
+                "thexem.config.baseUrl": "URL de base",
+                "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info.",
+                "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
+                "thexem.config.title": "TheXEM"
+              }
+            },
+            "name": "TheXEM scene numbering",
+            "pluginId": "fliks.thexem",
+            "provider": {
+              "kinds": [
+                "series"
+              ],
+              "namespaces": [
+                "fliks.thexem:xem"
               ]
             }
           },

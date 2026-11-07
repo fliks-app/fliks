@@ -50,7 +50,7 @@ pub fn next_after(cron: &Cron, tz: Tz, after: DateTime<Utc>) -> Option<DateTime<
 const RECHECK: Duration = Duration::from_secs(30);
 
 /// `FLIKS_DISABLE_CRON=1` (exactly `1`) starts no timer; manual triggers still work.
-fn disabled() -> bool {
+pub(crate) fn disabled() -> bool {
     std::env::var("FLIKS_DISABLE_CRON").as_deref() == Ok("1")
 }
 

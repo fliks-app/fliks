@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 lock=server/providers.lock
 catalog_url="${CATALOG_URL:-https://fliks-app.github.io/fliks-plugin-catalog}"
-providers=(fliks.tmdb fliks.tvdb fliks.openlibrary fliks.bnf fliks.googlebooks fliks.audible fliks.audnexus)
+providers=(fliks.tmdb fliks.tvdb fliks.openlibrary fliks.bnf fliks.googlebooks fliks.audible fliks.audnexus fliks.thexem)
 api="$(sed -n 's/^pub const SUPPORTED_PLUGIN_API_VERSIONS: \[u32; [0-9]*\] = \[\([0-9]*\)\];/\1/p' server/crates/plugin-manifest/src/manifest.rs)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

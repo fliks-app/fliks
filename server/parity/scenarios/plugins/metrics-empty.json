@@ -17,11 +17,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1245184,
               "restartCount": 0
             },
             "pluginId": "fliks.tmdb"
@@ -29,11 +24,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1245184,
               "restartCount": 0
             },
             "pluginId": "fliks.tvdb"
@@ -41,11 +31,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1572864,
               "restartCount": 0
             },
             "pluginId": "fliks.openlibrary"
@@ -53,11 +38,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1572864,
               "restartCount": 0
             },
             "pluginId": "fliks.bnf"
@@ -65,11 +45,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1572864,
               "restartCount": 0
             },
             "pluginId": "fliks.googlebooks"
@@ -77,11 +52,6 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1572864,
               "restartCount": 0
             },
             "pluginId": "fliks.audible"
@@ -89,14 +59,16 @@
           {
             "kind": "process",
             "metrics": {
-              "eventDropCount": 0,
-              "hostCallCount": 0,
-              "hostCallFailureCount": 0,
-              "hostCallP95Ms": null,
-              "residentSetSizeBytes": 1507328,
               "restartCount": 0
             },
             "pluginId": "fliks.audnexus"
+          },
+          {
+            "kind": "process",
+            "metrics": {
+              "restartCount": 0
+            },
+            "pluginId": "fliks.thexem"
           }
         ],
         "status": 200
