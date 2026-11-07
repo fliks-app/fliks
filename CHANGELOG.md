@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.0.1](https://github.com/fliks-app/fliks/compare/v6.0.0...v6.0.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **plugins:** bundle the thexem scene numbering provider ([#2453](https://github.com/fliks-app/fliks/issues/2453)) ([50fbb6a](https://github.com/fliks-app/fliks/commit/50fbb6a96fdfd9dc3e8aa6d82bf302988af6e1be))
+
 ## [6.0.0](https://github.com/fliks-app/fliks/compare/v5.2.1...v6.0.0) (2026-11-07)
 
 
