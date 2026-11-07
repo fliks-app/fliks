@@ -1,5 +1,8 @@
 //! Files into works, editions and versions (`docs/spec/book-ingest.md` rules 1-4). Pure.
-use fliks_domain::media::{AUDIO_EXTS, TEXT_EXTS, family::Family};
+use fliks_domain::{
+    books::filename::parse_path,
+    media::{AUDIO_EXTS, TEXT_EXTS, family::Family},
+};
 use regex::Regex;
 use serde::Serialize;
 use std::{collections::BTreeMap, sync::LazyLock};
@@ -93,7 +96,11 @@ fn norm(s: &str) -> String {
 static DISC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\b(?:cd|disc|disk|disque)\s*0*(\d+)\b").unwrap());
 static NOISE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\(?\b(?:cd|disc|disk|disque)\s*\d+\b\)?|\bof\s+\d+\b").unwrap()
+    Regex::new(r"(?i)\s*[(\[][^)\]]*[)\]]|\b(?:cd|disc|disk|disque)\s*\d+\b|\bof\s+\d+\b").unwrap()
+});
+static TRACK_FIRST: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^\s*(?:(?:track|part|partie|chapter|chapitre|chap|piste|pt)\s*\.?\s*)?\d{1,3}(?:\D|$)")
+        .unwrap()
 });
 
 fn stem_of(path: &str) -> &str {
@@ -109,19 +116,24 @@ fn last_digits(s: &str) -> Option<(usize, u32)> {
 }
 
 /// The disc and part number of an audio file: the disc from a `CD1` folder or a `Disc 1` in the name,
-/// the part the last number of the name once the disc and ` of N` are off. Orders parts and guards merges.
+/// the part as `parse_path` reads it (the leading number of a track-first name), else the last number.
+/// Orders parts and guards merges.
 pub(super) fn part_numbers(path: &str) -> (Option<u32>, Option<u32>) {
+    let name = path.rsplit('/').next().unwrap_or(path);
     let stem = stem_of(path);
     let mut segs: Vec<&str> = path.split('/').collect();
     segs.pop();
     let folder = segs.iter().rev().take_while(|s| is_disc(s)).find_map(|s| {
-        s.trim_start_matches(|c: char| !c.is_ascii_digit())
-            .trim()
-            .parse::<u32>()
-            .ok()
+        s.trim_start_matches(|c: char| !c.is_ascii_digit()).trim().parse::<u32>().ok()
     });
     let disc = folder.or_else(|| DISC.captures(stem)?[1].parse().ok());
-    let number = last_digits(&NOISE.replace_all(stem, " ")).map(|(_, n)| n);
+    let clean = NOISE.replace_all(stem, " ");
+    let clean = clean.trim_matches(|c: char| " -_.".contains(c));
+    let ext = name.rfind('.').map_or("", |d| &name[d..]);
+    let number = parse_path(&format!("{clean}{ext}"))
+        .part
+        .and_then(|p| p.number)
+        .or_else(|| last_digits(clean).map(|(_, n)| n));
     (disc, number)
 }
 
@@ -144,6 +156,9 @@ fn audio_key(path: &str, format: &str, dir: &str) -> String {
         };
     }
     let stem = NOISE.replace_all(stem_of(path), " ");
+    if TRACK_FIRST.is_match(&stem) {
+        return String::new();
+    }
     let Some((start, _)) = last_digits(&stem) else {
         return String::new();
     };
@@ -340,7 +355,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 24);
+        assert_eq!(cases.len(), 29);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()
