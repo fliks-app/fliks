@@ -238,7 +238,7 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// `rename` retried on the transient errors of a destination held open (Windows antivirus, indexers).
-fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
+pub fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
     let mut last = None;
     for _ in 0..5 {
         match fs::rename(from, to) {

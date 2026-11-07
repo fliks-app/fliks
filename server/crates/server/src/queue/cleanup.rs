@@ -41,7 +41,7 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
     .await?;
     let rows = sqlx::query(
         r#"SELECT id, "stagedPath" FROM jobs
-           WHERE "stagedPath" IS NOT NULL AND state IN ('queued', 'failed', 'skipped', 'cancelled')"#,
+           WHERE "stagedPath" IS NOT NULL AND state IN ('queued', 'done', 'failed', 'skipped', 'cancelled')"#,
     )
     .fetch_all(pool)
     .await?;

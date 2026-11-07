@@ -283,6 +283,16 @@ impl Engine {
 
     /// `POST /v1/revoke` for a deleted or demoted owner when the engine announces `revoke`; never fails.
     pub async fn revoke_owner(&self, user_id: i32) {
+        self.revoke(serde_json::json!({"ownerId": user_id.to_string()}))
+            .await;
+    }
+
+    /// `POST /v1/revoke` for the sessions of replaced files, so they reopen on the new bytes; never fails.
+    pub async fn revoke_files(&self, ids: &[i32]) {
+        self.revoke(serde_json::json!({"mediaFileIds": ids})).await;
+    }
+
+    async fn revoke(&self, body: serde_json::Value) {
         let (client, revoke) = {
             let s = self.state();
             let revoke = s.hello.as_ref().is_some_and(|h| has(h, "revoke"));
@@ -291,7 +301,6 @@ impl Engine {
         let Some(client) = client.filter(|_| revoke) else {
             return;
         };
-        let body = serde_json::json!({"ownerId": user_id.to_string()});
         match client
             .send(reqwest::Method::POST, "/v1/revoke", &body)
             .await

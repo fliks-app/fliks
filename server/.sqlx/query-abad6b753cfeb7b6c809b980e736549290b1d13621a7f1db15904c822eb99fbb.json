@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_files SET size = $2, quality = COALESCE($3, quality), \"streamInfo\" = $4,\n             \"mtimeMs\" = $5, \"probeVersion\" = $6, \"osdbHash\" = COALESCE($7, \"osdbHash\"),\n             \"osdbBytesize\" = COALESCE($8, \"osdbBytesize\") WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Varchar",
+        "Jsonb",
+        "Int8",
+        "Int4",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abad6b753cfeb7b6c809b980e736549290b1d13621a7f1db15904c822eb99fbb"
+}
