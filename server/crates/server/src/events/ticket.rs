@@ -8,9 +8,11 @@ use std::time::{Duration, Instant};
 pub const TTL: Duration = Duration::from_secs(30);
 const MAX_TICKETS: usize = 10_000;
 
+type Ticket = (i32, Option<i32>, Instant);
+
 #[derive(Default)]
 pub struct Tickets {
-    open: Mutex<HashMap<String, (i32, Option<i32>, Instant)>>,
+    open: Mutex<HashMap<String, Ticket>>,
 }
 
 impl Tickets {
