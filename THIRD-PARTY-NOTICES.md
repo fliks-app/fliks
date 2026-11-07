@@ -9,16 +9,19 @@ projects and archives linked below.
 
 ## Server: Docker image
 
-Built on **Ubuntu 24.04**, whose packages keep their own licenses (see
-`/usr/share/doc/*/copyright` in the image). Fliks invokes the programs below as
-**separate processes** (e.g. via `execFile`), so they are aggregated alongside
+Built `FROM` the **fliks-engine** image (`ghcr.io/fliks-app/engine`, version pinned in
+`engine.lock`), itself built on **Ubuntu 24.04**, whose packages keep their own licenses (see
+`/usr/share/doc/*/copyright` in the image). The engine starts `fliks-server` and invokes the
+programs below as **separate processes**, so they are aggregated alongside
 Fliks rather than linked into it.
 
 | Component | License | Source |
 |---|---|---|
+| fliks-engine (the video and streaming engine, built from the engine repository) | AGPL-3.0-or-later | https://github.com/fliks-app/engine |
 | jellyfin-ffmpeg (ffmpeg / ffprobe, bundles libva, Intel iHD driver, oneVPL) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | intel-opencl-icd (amd64 only, Ubuntu archive) | MIT | https://github.com/intel/compute-runtime |
-| MKVToolNix (`mkvextract`) | GPL-2.0-or-later | https://mkvtoolnix.download |
+| MKVToolNix (`mkvmerge`, `mkvextract`) | GPL-2.0-or-later | https://mkvtoolnix.download |
+| Chromaprint (`libchromaprint-tools`, `fpcalc`) | LGPL-2.1-or-later | https://github.com/acoustid/chromaprint |
 | Tesseract OCR | Apache-2.0 | https://github.com/tesseract-ocr/tesseract |
 | Tesseract trained data (`tesseract-ocr-*` language packs) | Apache-2.0 | https://github.com/tesseract-ocr/tessdata |
 | subtile-ocr (compiled from crates.io) | GPL-3.0 | https://github.com/gwen-lg/subtile-ocr |
@@ -26,21 +29,27 @@ Fliks rather than linked into it.
 | pysrt (PyPI, pgsrip dependency) | GPL-3.0 | https://github.com/byroot/pysrt |
 | opencv-python-headless (PyPI, bundles an LGPL FFmpeg) | Apache-2.0 | https://github.com/opencv/opencv-python |
 | ffsubsync (PyPI) | MIT | https://github.com/smacke/ffsubsync |
-| alass (amd64 only, upstream release binary) | GPL-3.0 | https://github.com/kaegi/alass |
-| Chromaprint (`libchromaprint-tools`) | LGPL-2.1-or-later | https://github.com/acoustid/chromaprint |
 | libarchive (built into `fliks-server` on Linux through `libarchive2-sys`, reads CB7 and CBR) | BSD-2-Clause | https://www.libarchive.org |
-| Node.js runtime (NodeSource) | MIT | https://github.com/nodejs/node |
-| PostgreSQL client (PGDG archive) | PostgreSQL License | https://www.postgresql.org |
+| PostgreSQL client (PGDG archive, `pg_dump` for the backup before a migration) | PostgreSQL License | https://www.postgresql.org |
+
+## Server: provider plugins
+
+`fliks-server` embeds the provider plugin archives pinned in `server/providers.lock` (`fliks.tmdb`,
+`fliks.tvdb`, `fliks.openlibrary`, `fliks.bnf`, `fliks.googlebooks`, `fliks.audible`,
+`fliks.audnexus`, `fliks.thexem`) at build time. They are built from
+https://github.com/fliks-app/plugins and licensed **AGPL-3.0-or-later**, like Fliks; each plugin
+folder there holds its own `LICENSE`.
 
 ## Server: Windows and macOS apps
 
-Both bundle the programs below, also run as separate processes.
+Both bundle the programs below; `fliks-engine` starts `fliks-server`, and the other programs run as
+separate processes.
 
 | Component | License | Source |
 |---|---|---|
+| fliks-engine (release binary pinned in `engine.lock`) | AGPL-3.0-or-later | https://github.com/fliks-app/engine |
 | jellyfin-ffmpeg (portable build) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | PostgreSQL (Windows: EDB binaries; macOS: Homebrew bottle) | PostgreSQL License | https://www.postgresql.org |
-| Node.js runtime | MIT | https://github.com/nodejs/node |
 | Microsoft Visual C++ runtime DLLs (Windows only) | Microsoft redistributable license | https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
 
 ## Desktop client
@@ -54,8 +63,23 @@ with Fliks' AGPL-3.0. Every build below links an FFmpeg configured with
 |---|---|---|
 | libmpv (Linux: built with `-Dgpl=true`, FFmpeg, libass, libplacebo and libunibreak linked statically) | GPL-3.0 | https://github.com/mpv-player/mpv |
 | libmpv and its dylibs (macOS, from Homebrew) | GPL-3.0 | https://github.com/mpv-player/mpv |
-| mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
+| mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant, re-hosted unmodified on the Fliks releases) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
+| SDL3 (Linux, bundled with the compositor addon) | zlib | https://github.com/libsdl-org/SDL |
+| libva-x11 and libXpresent (Linux .deb and AppImage, from the Ubuntu 24.04 archive, `libva-x11-2` and `libxpresent1`) | MIT | https://github.com/intel/libva and https://gitlab.freedesktop.org/xorg/lib/libxpresent |
 | Electron (bundles Chromium) | MIT (Chromium: BSD-3-Clause and others) | https://github.com/electron/electron |
+
+## Client: reader fonts and PDF viewer
+
+The web and app clients copy the files below out of their npm packages at build time
+(`client/angular.json` assets), so they ship as separate files.
+
+| Component | License | Source | Use |
+|---|---|---|---|
+| Literata (`@fontsource-variable/literata`) | OFL-1.1 | https://github.com/googlefonts/literata | reader font; license text at `reader-fonts/literata/LICENSE` |
+| Atkinson Hyperlegible (`@fontsource/atkinson-hyperlegible`) | OFL-1.1 | https://github.com/googlefonts/atkinson-hyperlegible | reader font; license text at `reader-fonts/atkinson-hyperlegible/LICENSE` |
+| pdfjs-dist worker | Apache-2.0 | https://github.com/mozilla/pdf.js | PDF reader |
+| OpenJPEG decoder (pdfjs-dist `openjpeg_nowasm_fallback.js`) | BSD-2-Clause | https://github.com/uclouvain/openjpeg | JPEG 2000 images in PDFs; license texts at `pdfjs/wasm/LICENSE_OPENJPEG` and `LICENSE_PDFJS_OPENJPEG` |
+| JBIG2 decoder from PDFium (pdfjs-dist `jbig2_nowasm_fallback.js`) | BSD-3-Clause AND Apache-2.0 | https://pdfium.googlesource.com/pdfium | JBIG2 images in PDFs; license texts at `pdfjs/wasm/LICENSE_JBIG2` and `LICENSE_PDFJS_JBIG2` |
 
 ## Server: reaction emoji artwork
 
@@ -103,5 +127,6 @@ license applies to the ported logic:
 
 ## Package-manager dependencies
 
-npm, Gradle, CocoaPods and Swift packages declare their own licenses in their
+npm, Cargo (the Rust crates linked into `fliks-server` and the provider plugins), Gradle, CocoaPods
+and Swift packages declare their own licenses in their
 respective manifests; this file covers the programs embedded outside them.
