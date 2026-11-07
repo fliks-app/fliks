@@ -3,8 +3,10 @@ use fliks_domain::{
     books::filename::parse_path,
     media::{AUDIO_EXTS, TEXT_EXTS, family::Family},
 };
+use regex::Regex;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::LazyLock;
 
 /// The family and format (extension without the dot) of a book file name.
 pub fn classify(name: &str) -> Option<(Family, String)> {
@@ -108,6 +110,135 @@ fn natural(s: &str) -> Vec<(u64, String)> {
     out
 }
 
+fn alnum(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn re(p: &str) -> Regex {
+    Regex::new(p).expect("static")
+}
+
+static BRACKETS: LazyLock<Regex> = LazyLock::new(|| re(r"\([^)]*\)|\[[^\]]*\]"));
+static DISC_TOKEN: LazyLock<Regex> =
+    LazyLock::new(|| re(r"(?i)\b(?:cd|disc|disk|disque|part|pt|partie|teil)\s*\d+\b"));
+static DISC_TRACK: LazyLock<Regex> = LazyLock::new(|| re(r"^(.+?)[\s\x{2013}-]+\d+[-.]\d+$"));
+static OF_N: LazyLock<Regex> = LazyLock::new(|| re(r"(?i)\s+of\s+\d+$"));
+static TITLE_PART: LazyLock<Regex> = LazyLock::new(|| re(r"^(.+?)\s*[-\x{2013}]\s*0*\d+$"));
+static GENERIC_LEAD: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r"(?i)^(?:chapter|chapitre|chap|kapitel|track|piste|part|partie|pt|teil|disc|disk|disque|cd)\b",
+    )
+});
+
+fn stem_of(path: &str) -> &str {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rfind('.').map_or(name, |d| &name[..d])
+}
+
+/// The book a part says it belongs to: the title of `Title - 01`, `None` for a track-first or generic name.
+fn title_key(path: &str) -> Option<String> {
+    let s = BRACKETS.replace_all(stem_of(path), "");
+    let s = DISC_TOKEN.replace_all(&s, "");
+    let s = OF_N.replace(&s, "");
+    let s = s.trim();
+    let trim = |t: &str| {
+        t.trim_matches(|c: char| c.is_whitespace() || "-_.\u{2013}".contains(c))
+            .to_owned()
+    };
+    let head = DISC_TRACK.captures(s).or_else(|| TITLE_PART.captures(s))?[1].to_owned();
+    let mut title = trim(&head);
+    // `Title - 01 - 01`: a disc number then the track.
+    if let Some(c) = TITLE_PART.captures(&title) {
+        title = trim(&c[1]);
+    }
+    let title = title.as_str();
+    let numeric = title.bytes().all(|b| b.is_ascii_digit());
+    if GENERIC_LEAD.is_match(title) || (numeric && title.starts_with('0')) {
+        return None;
+    }
+    Some(alnum(title)).filter(|k| !k.is_empty())
+}
+
+/// Two keys that differ by a typo or one is the start of the other: the same book, not two.
+/// Keys differing only by digits (`Book 2`, `Book 3`) are two books.
+fn alike(a: &str, b: &str) -> bool {
+    let strip = |k: &str| {
+        k.chars()
+            .filter(|c| !c.is_ascii_digit())
+            .collect::<Vec<_>>()
+    };
+    let (a, b) = (strip(a), strip(b));
+    if a == b || a.len().min(b.len()) < 4 {
+        return false;
+    }
+    if a.starts_with(&b) || b.starts_with(&a) {
+        return true;
+    }
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, x) in a.iter().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, y) in b.iter().enumerate() {
+            let cur = row[j + 1];
+            row[j + 1] = (prev + usize::from(x != y)).min(row[j] + 1).min(cur + 1);
+            prev = cur;
+        }
+    }
+    row[b.len()] <= 2
+}
+
+/// The books of a folder's audio by file (`""` stays with the folder's work); a folder splits only
+/// on two clearly different books: m4b names or `Title - 01` groups of at least two parts.
+fn audio_keys(dir: &str, files: &[(String, String)]) -> HashMap<String, String> {
+    let folder = dir
+        .rsplit('/')
+        .find(|s| !super::merge::GENERIC.contains(&s.to_lowercase().as_str()))
+        .map(alnum);
+    let mut whole: HashMap<&str, String> = HashMap::new();
+    let mut parts: HashMap<&str, String> = HashMap::new();
+    for (p, f) in files {
+        if f == "m4b" {
+            let k = alnum(&DISC_TOKEN.replace_all(&BRACKETS.replace_all(stem_of(p), ""), ""));
+            if !k.is_empty() && Some(&k) != folder.as_ref() {
+                whole.insert(p, k);
+            }
+        } else if let Some(k) = title_key(p) {
+            parts.insert(p, k);
+        }
+    }
+    let mut books: BTreeSet<String> = whole.values().cloned().collect();
+    if books.len() < 2 {
+        whole.clear();
+        books.clear();
+    }
+    let mut count: HashMap<&str, usize> = HashMap::new();
+    for k in parts.values() {
+        *count.entry(k).or_default() += 1;
+    }
+    books.extend(
+        count
+            .into_iter()
+            .filter(|(_, n)| *n >= 2)
+            .map(|(k, _)| k.to_owned()),
+    );
+    if books.len() < 2
+        || books
+            .iter()
+            .any(|a| books.iter().any(|b| a < b && alike(a, b)))
+    {
+        return HashMap::new();
+    }
+    parts.retain(|_, k| books.contains(k));
+    whole
+        .into_iter()
+        .chain(parts)
+        .map(|(p, k)| (p.to_owned(), k))
+        .collect()
+}
+
 struct Acc {
     dir: String,
     text: Vec<(String, String)>,
@@ -116,7 +247,16 @@ struct Acc {
 
 /// The works of `paths`, relative to one folder root and `/`-separated.
 pub fn group(paths: &[String]) -> Vec<Work> {
-    // Key: (dir, stem key) for text and for a root audio file, (dir, "") for the audio of a folder.
+    group_by(paths, true)
+}
+
+/// `group` with the audio of a folder always one work: the files of a media that already exists.
+pub fn group_whole(paths: &[String]) -> Vec<Work> {
+    group_by(paths, false)
+}
+
+fn group_by(paths: &[String], split_books: bool) -> Vec<Work> {
+    // Key: (dir, stem key) for text and for a root audio file, (dir, "") or (dir, book) for the audio of a folder.
     let mut works: BTreeMap<(String, String), Acc> = BTreeMap::new();
     let mut loose_audio: Vec<(String, String, String)> = vec![];
     for p in paths {
@@ -138,9 +278,23 @@ pub fn group(paths: &[String]) -> Vec<Work> {
         }
     }
     let text_in = |works: &BTreeMap<(String, String), Acc>, dir: &str| -> Vec<(String, String)> {
-        works.keys().filter(|(d, _)| d == dir).cloned().collect()
+        works
+            .keys()
+            .filter(|(d, k)| d == dir && !k.starts_with('\u{1}'))
+            .cloned()
+            .collect()
     };
+    let mut by_dir: BTreeMap<&str, Vec<(String, String)>> = BTreeMap::new();
+    for (dir, p, f) in &loose_audio {
+        by_dir.entry(dir).or_default().push((p.clone(), f.clone()));
+    }
+    let split: HashMap<String, String> = by_dir
+        .iter()
+        .filter(|(d, _)| split_books && !d.is_empty())
+        .flat_map(|(d, files)| audio_keys(d, files))
+        .collect();
     for (dir, p, format) in loose_audio {
+        let book = split.get(&p).map_or(String::new(), |k| format!("\u{1}{k}"));
         let key = if dir.is_empty() {
             let stem = stem_key(&p);
             if works.contains_key(&(String::new(), stem.clone())) {
@@ -150,6 +304,7 @@ pub fn group(paths: &[String]) -> Vec<Work> {
             }
         } else {
             match text_in(&works, &dir).as_slice() {
+                _ if !book.is_empty() => (dir.clone(), book),
                 [only] => only.clone(),
                 _ => (dir.clone(), String::new()),
             }
@@ -243,6 +398,28 @@ mod tests {
     }
 
     #[test]
+    fn the_files_of_an_existing_media_group_without_the_split() {
+        let p = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let two = p(&[
+            "F/Book One.m4b",
+            "F/Book Two.m4b",
+            "F/A - 01.mp3",
+            "F/A - 02.mp3",
+        ]);
+        assert_eq!(group_whole(&two).len(), 1);
+        let parts = p(&["F/Title Part 1.m4b", "F/Title Part 2.m4b"]);
+        assert_eq!(group(&parts).len(), 1);
+        let renamed = p(&[
+            "F/Old Title - 01.mp3",
+            "F/Old Title - 02.mp3",
+            "F/New Title - 01.flac",
+            "F/New Title - 02.flac",
+        ]);
+        assert_eq!(group_whole(&renamed).len(), 1);
+        assert_eq!(group(&renamed).len(), 2);
+    }
+
+    #[test]
     fn grouping_reproduces_expected() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -251,7 +428,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 9);
+        assert_eq!(cases.len(), 28);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()

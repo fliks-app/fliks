@@ -168,7 +168,7 @@ pub fn fingerprint(parts: &[Part]) -> String {
 }
 
 /// Folder names that say a format, not a book.
-const GENERIC: [&str; 9] = [
+pub(super) const GENERIC: [&str; 9] = [
     "mp3",
     "m4a",
     "flac",

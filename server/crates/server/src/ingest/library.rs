@@ -437,7 +437,7 @@ fn book_parts(files: &[File]) -> std::collections::HashMap<PathBuf, (usize, usiz
         .map(|f| f.path.to_string_lossy().trim_start_matches('/').to_owned())
         .collect();
     let mut out = std::collections::HashMap::new();
-    for v in books::group::group(&paths)
+    for v in books::group::group_whole(&paths)
         .into_iter()
         .flat_map(|w| w.versions)
     {
