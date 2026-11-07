@@ -301,3 +301,28 @@ async fn restore_brings_the_original_back_and_the_trash_is_purged_by_retention(p
     assert!(!bak.exists());
     assert!(job(&w).await["result"]["trashPurgedAt"].is_string());
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_rename_leaves_the_files_of_a_longer_named_video_alone(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    for n in [
+        "a.h264.en.srt",
+        "a.h264.part2.mkv",
+        "a.h264.part2.en.srt",
+        "a.h264.txt",
+    ] {
+        fs::write(w.dir.join("M").join(n), b"x").unwrap();
+    }
+    commit::run(&w.st).await;
+    assert_eq!(job(&w).await["state"], "done");
+    let m = w.dir.join("M");
+    assert!(m.join("a.h265.en.srt").exists() && !m.join("a.h264.en.srt").exists());
+    assert!(
+        m.join("a.h264.part2.en.srt").exists(),
+        "belongs to the longer video"
+    );
+    assert!(
+        m.join("a.h264.txt").exists(),
+        "extension not in the companion setting"
+    );
+}

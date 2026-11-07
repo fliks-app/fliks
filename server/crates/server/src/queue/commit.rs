@@ -11,6 +11,7 @@ use crate::{
     ingest::{
         busy, fsx,
         rescan::{self, Change, Stored},
+        transfer,
     },
     state::AppState,
 };
@@ -246,8 +247,8 @@ fn container_ext(j: &Job) -> &'static str {
     }
 }
 
-/// Files that follow a renamed video: `<old stem>.<tail>` that is not a video or one of ours.
-fn companions(source: &Path, target: &Path) -> Vec<(PathBuf, PathBuf)> {
+/// Files that follow a renamed video: the ones a transfer would carry (`transfer::companion_names`).
+fn companions(source: &Path, target: &Path, allowed: &[String]) -> Vec<(PathBuf, PathBuf)> {
     let (Some(dir), Some(old), Some(new)) = (
         source.parent(),
         source.file_stem().and_then(|s| s.to_str()),
@@ -255,19 +256,11 @@ fn companions(source: &Path, target: &Path) -> Vec<(PathBuf, PathBuf)> {
     ) else {
         return vec![];
     };
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return vec![];
-    };
-    let mut out: Vec<_> = rd
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().into_string().ok()?;
-            let tail = name.strip_prefix(&format!("{old}."))?;
-            let skip = name.starts_with(".fliks-")
-                || tail.ends_with("orig")
-                || crate::ingest::is_video(&name)
-                || !e.file_type().ok()?.is_file();
-            (!skip).then(|| (e.path(), dir.join(format!("{new}.{tail}"))))
+    let mut out: Vec<_> = transfer::companion_names(dir, old, allowed)
+        .into_iter()
+        .filter_map(|name| {
+            let tail = name.get(old.len()..)?;
+            Some((dir.join(&name), dir.join(format!("{new}{tail}"))))
         })
         .collect();
     out.sort();
@@ -319,11 +312,11 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
         None => return End::Pending,
     }
     let Some(journal) = journal_for(
+        st,
         j,
         &f,
         &root,
-        &abs,
-        &staged,
+        (&abs, &staged),
         &new_info,
         settings.optimize_original,
     )
@@ -382,11 +375,11 @@ fn clone_job(j: &Job) -> Job {
 }
 
 async fn journal_for(
+    st: &AppState,
     j: &Job,
     f: &FileRow,
     root: &fsx::Root,
-    abs: &Path,
-    staged: &Path,
+    (abs, staged): (&Path, &Path),
     new: &MediaInfo,
     policy: OriginalPolicy,
 ) -> Option<Journal> {
@@ -396,6 +389,7 @@ async fn journal_for(
         staged.to_owned(),
         j.id,
     );
+    let allowed = transfer::companion_exts(&st.db).await.ok()?;
     let (allow, ext, new) = (f.allow_rename, container_ext(j), new.clone());
     blocking(move || {
         let (real, _) = fsx::regular_source(&source).ok()?;
@@ -415,7 +409,7 @@ async fn journal_for(
             companions: if target == real {
                 vec![]
             } else {
-                companions(&real, &target)
+                companions(&real, &target, &allowed)
             },
             target,
             source: real,
