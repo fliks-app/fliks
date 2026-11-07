@@ -1,0 +1,93 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.optimize.profiles.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1 max-w-2xl">
+        {{ 'settings.optimize.profiles.subtitle' | translate }}
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openPresets()">
+      {{ 'settings.optimize.profiles.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+  } @else if (loadError()) {
+    <div role="alert" class="alert alert-error">{{ 'settings.optimize.profiles.load_error' | translate }}</div>
+  } @else if (profiles().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.optimize.profiles.empty' | translate }}</p>
+  } @else {
+    <div class="grid gap-4 md:grid-cols-2 scroll-ring-safe">
+      @for (p of profiles(); track p.id) {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-3">
+            <div class="flex items-start justify-between gap-3">
+              <a [routerLink]="['/admin/settings/optimize-profiles', p.id]" class="card-title link link-hover">
+                {{ p.name }}
+              </a>
+              <span class="badge badge-ghost shrink-0">
+                {{ 'settings.optimize.profiles.libraries_count' | translate: { count: p.libraryCount } }}
+              </span>
+            </div>
+            <ul class="text-sm text-base-content/70 flex flex-col gap-1">
+              <li>
+                <span class="font-medium">{{ 'settings.optimize.profiles.sum_video' | translate }}</span>
+                @if (p.document.video.enabled) {
+                  {{
+                    'settings.optimize.format.' + format(p) + '.short' | translate
+                  }}
+                } @else {
+                  {{ 'settings.optimize.profiles.disabled' | translate }}
+                }
+              </li>
+              <li>
+                <span class="font-medium">{{ 'settings.optimize.profiles.sum_audio' | translate }}</span>
+                {{ 'settings.optimize.incompatible.' + p.document.audio.incompatible + '.short' | translate }}
+              </li>
+              <li>
+                <span class="font-medium">{{ 'settings.optimize.profiles.sum_subtitles' | translate }}</span>
+                {{ 'settings.optimize.image.' + p.document.subtitles.image + '.short' | translate }}
+              </li>
+              @if (p.document.file.clean) {
+                <li>{{ 'settings.optimize.profiles.sum_clean' | translate }}</li>
+              }
+            </ul>
+            <div class="card-actions justify-end">
+              <button type="button" class="btn btn-ghost btn-sm text-error" (click)="remove(p)">
+                {{ 'common.delete' | translate }}
+              </button>
+              <a [routerLink]="['/admin/settings/optimize-profiles', p.id]" class="btn btn-sm btn-outline">
+                {{ 'common.edit' | translate }}
+              </a>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<dialog #presetDialog class="modal">
+  <div class="modal-box max-w-xl flex flex-col">
+    <app-modal-header class="shrink-0">
+      <h3 class="text-lg font-bold">{{ 'settings.optimize.profiles.preset_title' | translate }}</h3>
+    </app-modal-header>
+    <p class="text-sm text-base-content/60 pt-2">{{ 'settings.optimize.profiles.preset_hint' | translate }}</p>
+    <div class="py-4 flex flex-col gap-2 scroll-ring-safe">
+      @for (k of presets; track k) {
+        <button type="button" class="btn btn-outline h-auto justify-start text-start py-3 flex-col items-start gap-1" (click)="create(k)">
+          <span class="font-semibold">{{ 'settings.optimize.presets.' + k + '.name' | translate }}</span>
+          <span class="text-sm font-normal text-base-content/70 whitespace-normal">
+            {{ 'settings.optimize.presets.' + k + '.desc' | translate }}
+          </span>
+        </button>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closePresets()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

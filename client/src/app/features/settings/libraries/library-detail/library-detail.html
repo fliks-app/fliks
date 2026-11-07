@@ -44,6 +44,14 @@
       <a
         role="tab"
         class="tab"
+        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'optimize']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.optimize.library.tab' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
         [routerLink]="['/admin/settings/libraries', state.libraryId(), 'media']"
         routerLinkActive="tab-active"
       >

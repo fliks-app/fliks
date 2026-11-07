@@ -65,6 +65,9 @@ export interface Library {
   defaultLanguageProfileId: number | null;
   mergeM4b: boolean;
   mergeM4bReplace: boolean;
+  optimizeProfileId: number | null;
+  optimizeNewFiles: boolean;
+  allowRename: boolean;
   /** First folder, kept for older clients: `folders` is the list. */
   path: string | null;
   label: string | null;
@@ -85,6 +88,9 @@ export interface CreateLibraryBody {
   defaultLanguageProfileId?: number | null;
   mergeM4b?: boolean;
   mergeM4bReplace?: boolean;
+  optimizeProfileId?: number | null;
+  optimizeNewFiles?: boolean;
+  allowRename?: boolean;
   path?: string;
   userIds?: number[];
 }

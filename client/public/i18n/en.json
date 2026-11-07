@@ -2089,7 +2089,8 @@
       "cleanup": "Cleanup",
       "metadata": "Metadata",
       "email": "Outgoing mail",
-      "sso": "Single sign-on"
+      "sso": "Single sign-on",
+      "optimize_profiles": "Optimization profiles"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -3323,6 +3324,294 @@
       "uri_logout": "Post-logout redirect URI",
       "copied": "Copied",
       "insecure_context": "Single sign-on needs the server to be reached over https. Over plain http the sign-in buttons stay hidden."
+    },
+    "optimize": {
+      "profiles": {
+        "title": "Optimization profiles",
+        "subtitle": "A profile describes the wanted state of the files, section by section. Each library picks one, or none. Fliks compares that state with every file and only creates a job when there is a difference.",
+        "new": "New profile",
+        "load_error": "Could not load the profiles.",
+        "empty": "No profile yet. Create one from a preset.",
+        "libraries_count": "{{count}} library(ies)",
+        "confirm_delete": "Delete the profile \"{{name}}\"? The {{count}} library(ies) using it will have no profile.",
+        "sum_video": "Video:",
+        "sum_audio": "Audio:",
+        "sum_subtitles": "Subtitles:",
+        "sum_clean": "File cleanup",
+        "disabled": "disabled",
+        "preset_title": "New profile",
+        "preset_hint": "Start from a preset. Everything stays editable afterwards."
+      },
+      "presets": {
+        "balanced": {
+          "name": "Balanced",
+          "desc": "Original language plus the media language profile, file cleanup, space saving up to a re-encode."
+        },
+        "cleanup_only": {
+          "name": "Cleanup only",
+          "desc": "Video untouched, languages unchanged. Statistics, titles, flags and unknown languages are fixed."
+        },
+        "direct_playback": {
+          "name": "Direct playback",
+          "desc": "Only videos that had to be converted during a playback, in a format all your devices play."
+        }
+      },
+      "format": {
+        "most_compact": {
+          "label": "Most compact possible",
+          "desc": "AV1 if your hardware can encode it and the server can read it back, otherwise HEVC. Devices that cannot play AV1 receive it converted.",
+          "short": "most compact format"
+        },
+        "playable_everywhere": {
+          "label": "Playable everywhere without conversion",
+          "desc": "The most compact format that all your devices play directly.",
+          "short": "format playable on all devices"
+        },
+        "hevc": {
+          "label": "Always HEVC",
+          "desc": "H.265.",
+          "short": "HEVC"
+        },
+        "av1": {
+          "label": "Always AV1",
+          "desc": "The most compact, played natively by fewer devices.",
+          "short": "AV1"
+        }
+      },
+      "incompatible": {
+        "keep": {
+          "label": "Change nothing",
+          "desc": "Those devices receive them converted during playback.",
+          "short": "incompatible tracks kept"
+        },
+        "add": {
+          "label": "Add a playable version",
+          "desc": "Keeps the original track and adds a copy in E-AC3 (same channels) if all your devices play it, otherwise stereo AAC.",
+          "short": "playable audio version added"
+        },
+        "replace": {
+          "label": "Replace with a playable version",
+          "desc": "Same conversion, but the original track is removed: saves space (often 2 to 4 GB per film). Lossless sound and Atmos are lost. Only for a language with no track playable on all your devices.",
+          "short": "incompatible tracks replaced"
+        }
+      },
+      "image": {
+        "keep": {
+          "label": "Keep them",
+          "desc": "Some devices will have to burn them into the picture during playback.",
+          "short": "image subtitles kept"
+        },
+        "ocr_then_drop": {
+          "label": "Convert them to text",
+          "desc": "Text recognition (OCR); the image track is replaced by the same one in text. If recognition fails, it is kept.",
+          "short": "image subtitles to text"
+        },
+        "drop": {
+          "label": "Remove them",
+          "desc": "Without conversion.",
+          "short": "image subtitles removed"
+        }
+      },
+      "editor": {
+        "name": "Profile name",
+        "name_required": "The name is required.",
+        "saved": "Profile saved."
+      },
+      "eligible": {
+        "title": "Eligibility",
+        "desc": "Which files of the libraries using this profile it may touch."
+      },
+      "video": {
+        "title": "Video",
+        "desc": "Re-encode the video. Turned off, the video is never touched.",
+        "which": "Which videos to re-encode (current file)",
+        "into": "What to re-encode them to (the new file)",
+        "others_copied": "Other videos are copied as they are; audio, subtitles and cleanup still apply."
+      },
+      "audio": {
+        "title": "Audio"
+      },
+      "subtitles": {
+        "title": "Subtitles"
+      },
+      "file": {
+        "title": "File"
+      },
+      "f": {
+        "min_age_days": "Imported for at least (days)",
+        "min_age_days_hint": "The file may still be replaced or shared by an external tool.",
+        "skip_hardlinked": "Skip files with several hard links",
+        "skip_hardlinked_hint": "Shared with another folder: replacing them would not free any space.",
+        "when_codec": "Current video format",
+        "when_codec_hint": "Empty means any format.",
+        "any": "Any",
+        "min_bitrate": "Current bitrate of at least (Mb/s)",
+        "min_bitrate_hint": "Leave empty or 0 for no limit.",
+        "only_if_transcoding_here": "Only if the video had to be converted during a playback",
+        "only_if_transcoding_here_hint": "On one of your devices, in the last 30 days.",
+        "skip_hdr10plus_dv": "Do not touch HDR10+ and Dolby Vision videos",
+        "skip_hdr10plus_dv_hint": "Re-encoding would lose that information.",
+        "format": "Output format",
+        "quality": "Quality of the new file",
+        "min_savings_pct": "Only re-encode if the video shrinks by at least (%)",
+        "min_savings_pct_hint": "Otherwise the original video is kept.",
+        "max_resolution": "Maximum resolution",
+        "prefer_software": "Prefer efficiency (software encoding)",
+        "prefer_software_hint": "Smaller files, much slower.",
+        "software_max_hours": "Maximum estimated hours per file in software",
+        "software_max_hours_hint": "Beyond that, the \"too slow\" choice below applies.",
+        "too_slow": "When software encoding is too slow",
+        "crop_in_file": "Remove black bars from the file",
+        "crop_in_file_hint": "Re-encodes the video if it has bars, once, when the frame is the same all along. Never on HDR10+ or Dolby Vision.",
+        "vmaf_sample": "Quality check on a sample",
+        "vmaf_sample_hint": "Automatic: on for the faithful quality and for hardware outputs.",
+        "audio_languages": "Audio languages, in order of preference",
+        "audio_languages_hint": "Used to pick the default track and to order the tracks.",
+        "audio_drop_other": "Remove audio tracks of other languages",
+        "audio_drop_other_hint": "A track with an unknown language is always kept, and a file always keeps at least one audio track.",
+        "audio_drop": "Remove these tracks",
+        "audio_drop_hint": "Detected by their flag or title (\"Commentary\", \"Audio description\"). Other tracks are not touched.",
+        "audio_default": "Audio track played by default",
+        "audio_default_hint": "Flagged \"default\" in the file, for other players. The Fliks player keeps its own settings.",
+        "audio_reorder": "Order audio tracks by the languages above",
+        "audio_reorder_hint": "Then the best quality first for a same language. Removes nothing.",
+        "incompatible": "DTS, TrueHD or PCM tracks, which some devices cannot play",
+        "subtitle_languages": "Subtitle languages, in order of preference",
+        "subtitle_drop_other": "Remove subtitles of other languages",
+        "subtitle_drop_other_hint": "Only the tracks inside the file; subtitle files next to the video are not touched.",
+        "image_subtitles": "Image subtitles (PGS, VobSub)",
+        "subtitle_reorder": "Order subtitles by the languages above",
+        "subtitle_reorder_hint": "Removes nothing.",
+        "clean": "Fix the file information",
+        "clean_hint": "Touches neither picture nor sound. Fixes track titles that contradict the content, a title that is a release name, \"forced\" and \"hearing impaired\" flags, missing languages and track statistics.",
+        "rename_tokens": "Update the file name",
+        "rename_tokens_hint": "Replaces technical words that became wrong, for example \"x264\" by \"AV1\". Only if the library allows renaming.",
+        "container": "Container format"
+      },
+      "opt": {
+        "quality": {
+          "small": "Smaller, a bit less faithful",
+          "balanced": "Balanced",
+          "faithful": "More faithful, bigger"
+        },
+        "max_resolution": {
+          "source": "The source's",
+          "2160": "2160p",
+          "1080": "1080p",
+          "720": "720p"
+        },
+        "too_slow": {
+          "hardware": "Switch to hardware encoding",
+          "skip": "Copy the video"
+        },
+        "vmaf_sample": {
+          "auto": "Automatic",
+          "on": "Always",
+          "off": "Never"
+        },
+        "container": {
+          "keep": "Keep the current one",
+          "mkv": "MKV",
+          "mp4": "MP4"
+        }
+      },
+      "drop_kind": {
+        "commentary": "Commentary",
+        "audio_description": "Audio description"
+      },
+      "lang_original": "Original language",
+      "lang_media_profile": "Media language profile",
+      "warn": {
+        "lossless": "Lossless sound and Atmos tracks are lost when the original track is replaced.",
+        "irreversible": "Irreversible once the trash is emptied: removed tracks cannot be recovered.",
+        "profile_subtitles": "Languages requested by the media's language profile are always kept, even if not listed here, so subtitle search does not download them again.",
+        "container_rename": "A different container changes the extension: the library must allow renaming, otherwise the file is skipped."
+      },
+      "effect": {
+        "title": "Effect on a file",
+        "desc": "Change a section or the output format to see the cost change.",
+        "no_library": "No video library to take a sample file from.",
+        "library": "Library",
+        "file": "Sample file",
+        "no_file": "This library has no file yet.",
+        "error": "This file cannot be compared (not a video of the library, or the profile is invalid).",
+        "one_job": "one job, one pass",
+        "conform": "Nothing to do: the file already matches the profile.",
+        "skipped_container": "Skipped: the container does not fit the target and the library does not allow renaming."
+      },
+      "level": {
+        "metadata": "Metadata",
+        "remux": "Remux",
+        "reencode": "Re-encode"
+      },
+      "group": {
+        "video": "Video",
+        "audio": "Audio",
+        "subtitles": "Subtitles",
+        "file": "File"
+      },
+      "excluded": {
+        "probe_outdated": "Not analysed yet with the current analysis version.",
+        "probe_failed": "The analysis of this file failed.",
+        "not_video": "This file has no video.",
+        "too_recent": "Imported too recently for the profile."
+      },
+      "warning": {
+        "no_audio": "The filters would remove every audio track: none is removed.",
+        "profile_subtitle": "Subtitles \"{{language}}\" are kept: the media's language profile requests them.",
+        "lossless": "Audio track {{n}}: lossless sound or Atmos is lost by the replacement.",
+        "video_copied": {
+          "interlaced": "The video is copied: it is interlaced.",
+          "hdr": "The video is copied: its HDR information would be lost."
+        }
+      },
+      "change": {
+        "reencode": "Re-encoded to {{codec}} {{depth}} bit.",
+        "reencode_crop": "Black bars removed, re-encoded to {{codec}} {{depth}} bit.",
+        "drop_commentary": "Track {{n}} ({{language}}) removed: commentary.",
+        "drop_audio_description": "Track {{n}} ({{language}}) removed: audio description.",
+        "drop_language": "Track {{n}} removed: language {{language}} not wanted.",
+        "drop_image_subtitle": "Image subtitle track {{n}} ({{language}}) removed.",
+        "drop_replaced": "Track {{n}} ({{language}}) removed: replaced by a playable version.",
+        "ocr": "Image subtitle track {{n}} converted to text.",
+        "add_audio": "Playable version of audio track {{n}} added.",
+        "reorder": "Tracks reordered.",
+        "default": "Track {{n}} becomes the default one.",
+        "language": "Track {{n}}: language set to {{code}}.",
+        "flags": "Track {{n}}: flags fixed.",
+        "title": "Track {{n}}: title fixed.",
+        "statistics_tags": "Track statistics regenerated.",
+        "hvc1": "Video tag fixed for MP4 (hvc1).",
+        "container": "Container changed to {{to}}.",
+        "rename": "File name updated."
+      },
+      "library": {
+        "tab": "Optimization",
+        "title": "Optimization",
+        "desc": "Existing files are never processed on their own: you choose when to apply the profile. \"Apply to new files\" only concerns future imports.",
+        "profile": "Optimization profile",
+        "none": "None",
+        "manage": "Manage the profiles",
+        "difference": "{{count}} file(s) with a difference",
+        "difference_hint": "Counted from the database, without reading the files. Updated when the profile or a file changes.",
+        "preview": "File preview",
+        "per_level": {
+          "reencode": "{{count}} re-encode(s)",
+          "remux": "{{count}} remux",
+          "metadata": "{{count}} metadata fix(es)"
+        },
+        "conform": "{{count}} file(s) already match the profile.",
+        "skipped_container": "{{count}} file(s) skipped: the container does not fit and renaming is not allowed.",
+        "ocr": "{{count}} file(s) with image subtitles to convert to text.",
+        "removed": {
+          "audio": "{{count}} audio track(s) removed ({{language}}).",
+          "subtitle": "{{count}} subtitle track(s) removed ({{language}})."
+        },
+        "new_files": "Apply to new files",
+        "new_files_hint": "After the profile's eligibility delay.",
+        "allow_rename": "Allow renaming",
+        "allow_rename_hint": "Extension and words of the name. An external tool that follows the file by its path would lose it."
+      }
     }
   },
   "roles": {

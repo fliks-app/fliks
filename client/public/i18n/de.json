@@ -2089,7 +2089,8 @@
       "subtitles_activity": "Untertitel-Aktivität",
       "cleanup": "Bereinigung",
       "email": "E-Mail-Versand",
-      "sso": "Single Sign-on"
+      "sso": "Single Sign-on",
+      "optimize_profiles": "Optimierungsprofile"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -3323,6 +3324,294 @@
       "uri_logout": "Redirect-URI nach der Abmeldung",
       "copied": "Kopiert",
       "insecure_context": "Single Sign-on braucht den Zugriff auf den Server über https. Über einfaches http bleiben die Anmeldeschaltflächen verborgen."
+    },
+    "optimize": {
+      "profiles": {
+        "title": "Optimierungsprofile",
+        "subtitle": "Ein Profil beschreibt den gewünschten Zustand der Dateien, Abschnitt für Abschnitt. Jede Bibliothek wählt eines oder keines. Fliks vergleicht diesen Zustand mit jeder Datei und erstellt nur bei einer Abweichung einen Auftrag.",
+        "new": "Neues Profil",
+        "load_error": "Die Profile konnten nicht geladen werden.",
+        "empty": "Noch kein Profil. Erstellen Sie eines aus einer Vorlage.",
+        "libraries_count": "{{count}} Bibliothek(en)",
+        "confirm_delete": "Das Profil „{{name}}“ löschen? Die {{count}} Bibliothek(en), die es nutzen, haben danach kein Profil mehr.",
+        "sum_video": "Video:",
+        "sum_audio": "Audio:",
+        "sum_subtitles": "Untertitel:",
+        "sum_clean": "Dateibereinigung",
+        "disabled": "deaktiviert",
+        "preset_title": "Neues Profil",
+        "preset_hint": "Beginnen Sie mit einer Vorlage. Danach ist alles änderbar."
+      },
+      "presets": {
+        "balanced": {
+          "name": "Ausgewogen",
+          "desc": "Originalsprache plus Sprachprofil des Mediums, Bereinigung, Platzersparnis bis hin zur Neukodierung."
+        },
+        "cleanup_only": {
+          "name": "Nur bereinigen",
+          "desc": "Video unberührt, Sprachen unverändert. Statistiken, Titel, Markierungen und unbekannte Sprachen werden korrigiert."
+        },
+        "direct_playback": {
+          "name": "Direkte Wiedergabe",
+          "desc": "Nur Videos, die während einer Wiedergabe umgewandelt werden mussten, in einem Format, das alle Ihre Geräte abspielen."
+        }
+      },
+      "format": {
+        "most_compact": {
+          "label": "So kompakt wie möglich",
+          "desc": "AV1, wenn Ihre Hardware es kodieren und der Server es wieder lesen kann, sonst HEVC. Geräte ohne AV1-Unterstützung erhalten es umgewandelt.",
+          "short": "kompaktestes Format"
+        },
+        "playable_everywhere": {
+          "label": "Überall ohne Umwandlung abspielbar",
+          "desc": "Das kompakteste Format, das alle Ihre Geräte direkt abspielen.",
+          "short": "auf allen Geräten abspielbar"
+        },
+        "hevc": {
+          "label": "Immer HEVC",
+          "desc": "H.265.",
+          "short": "HEVC"
+        },
+        "av1": {
+          "label": "Immer AV1",
+          "desc": "Am kompaktesten, von weniger Geräten nativ abgespielt.",
+          "short": "AV1"
+        }
+      },
+      "incompatible": {
+        "keep": {
+          "label": "Nichts ändern",
+          "desc": "Diese Geräte erhalten sie während der Wiedergabe umgewandelt.",
+          "short": "inkompatible Spuren bleiben"
+        },
+        "add": {
+          "label": "Abspielbare Version hinzufügen",
+          "desc": "Behält die Originalspur und fügt eine Kopie in E-AC3 (gleiche Kanalzahl) hinzu, wenn alle Geräte es abspielen, sonst Stereo-AAC.",
+          "short": "abspielbare Audioversion wird hinzugefügt"
+        },
+        "replace": {
+          "label": "Durch abspielbare Version ersetzen",
+          "desc": "Gleiche Umwandlung, aber die Originalspur wird entfernt: spart Platz (oft 2 bis 4 GB pro Film). Verlustfreier Ton und Atmos gehen verloren. Nur für eine Sprache ohne auf allen Geräten abspielbare Spur.",
+          "short": "inkompatible Spuren werden ersetzt"
+        }
+      },
+      "image": {
+        "keep": {
+          "label": "Behalten",
+          "desc": "Manche Geräte müssen sie während der Wiedergabe ins Bild einbrennen.",
+          "short": "Bild-Untertitel bleiben"
+        },
+        "ocr_then_drop": {
+          "label": "In Text umwandeln",
+          "desc": "Texterkennung (OCR); die Bildspur wird durch dieselbe als Text ersetzt. Schlägt die Erkennung fehl, bleibt sie erhalten.",
+          "short": "Bild-Untertitel → Text"
+        },
+        "drop": {
+          "label": "Entfernen",
+          "desc": "Ohne Umwandlung.",
+          "short": "Bild-Untertitel werden entfernt"
+        }
+      },
+      "editor": {
+        "name": "Profilname",
+        "name_required": "Der Name ist erforderlich.",
+        "saved": "Profil gespeichert."
+      },
+      "eligible": {
+        "title": "Berechtigung",
+        "desc": "Welche Dateien der betroffenen Bibliotheken das Profil anfassen darf."
+      },
+      "video": {
+        "title": "Video",
+        "desc": "Das Video neu kodieren. Deaktiviert wird das Video nie angefasst.",
+        "which": "Welche Videos neu kodiert werden (aktuelle Datei)",
+        "into": "In was sie neu kodiert werden (neue Datei)",
+        "others_copied": "Andere Videos werden unverändert kopiert; Audio, Untertitel und Bereinigung gelten trotzdem."
+      },
+      "audio": {
+        "title": "Audio"
+      },
+      "subtitles": {
+        "title": "Untertitel"
+      },
+      "file": {
+        "title": "Datei"
+      },
+      "f": {
+        "min_age_days": "Importiert seit mindestens (Tage)",
+        "min_age_days_hint": "Die Datei kann noch von einem externen Tool ersetzt oder geteilt werden.",
+        "skip_hardlinked": "Dateien mit mehreren Hardlinks überspringen",
+        "skip_hardlinked_hint": "Mit einem anderen Ordner geteilt: Ersetzen würde keinen Platz freigeben.",
+        "when_codec": "Aktuelles Videoformat",
+        "when_codec_hint": "Leer bedeutet jedes Format.",
+        "any": "Beliebig",
+        "min_bitrate": "Aktuelle Bitrate von mindestens (Mb/s)",
+        "min_bitrate_hint": "Leer oder 0 für keine Grenze.",
+        "only_if_transcoding_here": "Nur wenn das Video während einer Wiedergabe umgewandelt werden musste",
+        "only_if_transcoding_here_hint": "Auf einem Ihrer Geräte in den letzten 30 Tagen.",
+        "skip_hdr10plus_dv": "HDR10+- und Dolby-Vision-Videos nicht anfassen",
+        "skip_hdr10plus_dv_hint": "Beim Neukodieren gingen diese Informationen verloren.",
+        "format": "Ausgabeformat",
+        "quality": "Qualität der neuen Datei",
+        "min_savings_pct": "Nur neu kodieren, wenn das Video mindestens so viel schrumpft (%)",
+        "min_savings_pct_hint": "Sonst bleibt das Originalvideo erhalten.",
+        "max_resolution": "Maximale Auflösung",
+        "prefer_software": "Effizienz bevorzugen (Software-Kodierung)",
+        "prefer_software_hint": "Kleinere Dateien, viel langsamer.",
+        "software_max_hours": "Maximal geschätzte Stunden pro Datei per Software",
+        "software_max_hours_hint": "Darüber gilt die Auswahl „zu langsam“ unten.",
+        "too_slow": "Wenn die Software-Kodierung zu langsam ist",
+        "crop_in_file": "Schwarze Balken aus der Datei entfernen",
+        "crop_in_file_hint": "Kodiert das Video einmal neu, wenn es Balken hat und der Bildausschnitt durchgehend gleich ist. Nie bei HDR10+ oder Dolby Vision.",
+        "vmaf_sample": "Qualitätsprüfung an einer Stichprobe",
+        "vmaf_sample_hint": "Automatisch: aktiv bei treuer Qualität und bei Hardware-Ausgaben.",
+        "audio_languages": "Audiosprachen in Reihenfolge der Präferenz",
+        "audio_languages_hint": "Dienen zur Wahl der Standardspur und zum Sortieren der Spuren.",
+        "audio_drop_other": "Audiospuren anderer Sprachen entfernen",
+        "audio_drop_other_hint": "Eine Spur mit unbekannter Sprache bleibt immer erhalten, und eine Datei behält immer mindestens eine Audiospur.",
+        "audio_drop": "Diese Spuren entfernen",
+        "audio_drop_hint": "Erkannt an Markierung oder Titel („Commentary“, „Audiodeskription“). Andere Spuren bleiben unberührt.",
+        "audio_default": "Standardmäßig abgespielte Audiospur",
+        "audio_default_hint": "Im Datei als „Standard“ markiert, für andere Player. Der Fliks-Player behält seine eigenen Einstellungen.",
+        "audio_reorder": "Audiospuren in der Reihenfolge der obigen Sprachen anordnen",
+        "audio_reorder_hint": "Danach bei gleicher Sprache die beste Qualität zuerst. Entfernt nichts.",
+        "incompatible": "DTS-, TrueHD- oder PCM-Spuren, die manche Geräte nicht abspielen",
+        "subtitle_languages": "Untertitelsprachen in Reihenfolge der Präferenz",
+        "subtitle_drop_other": "Untertitel anderer Sprachen entfernen",
+        "subtitle_drop_other_hint": "Nur die Spuren in der Datei; Untertiteldateien neben dem Video bleiben unberührt.",
+        "image_subtitles": "Bild-Untertitel (PGS, VobSub)",
+        "subtitle_reorder": "Untertitel in der Reihenfolge der obigen Sprachen anordnen",
+        "subtitle_reorder_hint": "Entfernt nichts.",
+        "clean": "Dateiinformationen korrigieren",
+        "clean_hint": "Berührt weder Bild noch Ton. Korrigiert Spurtitel, die dem Inhalt widersprechen, einen Titel, der ein Release-Name ist, die Markierungen „erzwungen“ und „hörgeschädigt“, fehlende Sprachen und Spurstatistiken.",
+        "rename_tokens": "Dateinamen aktualisieren",
+        "rename_tokens_hint": "Ersetzt technische Angaben, die falsch geworden sind, z. B. „x264“ durch „AV1“. Nur wenn die Bibliothek das Umbenennen erlaubt.",
+        "container": "Containerformat"
+      },
+      "opt": {
+        "quality": {
+          "small": "Kleiner, etwas weniger treu",
+          "balanced": "Ausgewogen",
+          "faithful": "Treuer, größer"
+        },
+        "max_resolution": {
+          "source": "Die der Quelle",
+          "2160": "2160p",
+          "1080": "1080p",
+          "720": "720p"
+        },
+        "too_slow": {
+          "hardware": "Auf Hardware-Kodierung wechseln",
+          "skip": "Video kopieren"
+        },
+        "vmaf_sample": {
+          "auto": "Automatisch",
+          "on": "Immer",
+          "off": "Nie"
+        },
+        "container": {
+          "keep": "Aktuelles beibehalten",
+          "mkv": "MKV",
+          "mp4": "MP4"
+        }
+      },
+      "drop_kind": {
+        "commentary": "Kommentar",
+        "audio_description": "Audiodeskription"
+      },
+      "lang_original": "Originalsprache",
+      "lang_media_profile": "Sprachprofil des Mediums",
+      "warn": {
+        "lossless": "Verlustfreier Ton und Atmos gehen verloren, wenn die Originalspur ersetzt wird.",
+        "irreversible": "Nicht umkehrbar, sobald der Papierkorb geleert ist: entfernte Spuren lassen sich nicht wiederherstellen.",
+        "profile_subtitles": "Vom Sprachprofil des Mediums angeforderte Sprachen bleiben immer erhalten, auch wenn sie hier nicht stehen, damit die Untertitelsuche sie nicht erneut lädt.",
+        "container_rename": "Ein anderer Container ändert die Endung: Die Bibliothek muss das Umbenennen erlauben, sonst wird die Datei übersprungen."
+      },
+      "effect": {
+        "title": "Wirkung auf eine Datei",
+        "desc": "Ändern Sie einen Abschnitt oder das Ausgabeformat, um die Kosten zu sehen.",
+        "no_library": "Keine Videobibliothek für eine Beispieldatei.",
+        "library": "Bibliothek",
+        "file": "Beispieldatei",
+        "no_file": "Diese Bibliothek hat noch keine Datei.",
+        "error": "Diese Datei kann nicht verglichen werden (kein Video der Bibliothek oder ungültiges Profil).",
+        "one_job": "ein Auftrag, ein Durchlauf",
+        "conform": "Nichts zu tun: Die Datei entspricht bereits dem Profil.",
+        "skipped_container": "Übersprungen: Der Container passt nicht zum Ziel und die Bibliothek erlaubt kein Umbenennen."
+      },
+      "level": {
+        "metadata": "Metadaten",
+        "remux": "Remux",
+        "reencode": "Neukodierung"
+      },
+      "group": {
+        "video": "Video",
+        "audio": "Audio",
+        "subtitles": "Untertitel",
+        "file": "Datei"
+      },
+      "excluded": {
+        "probe_outdated": "Noch nicht mit der aktuellen Analyseversion analysiert.",
+        "probe_failed": "Die Analyse dieser Datei ist fehlgeschlagen.",
+        "not_video": "Diese Datei enthält kein Video.",
+        "too_recent": "Für das Profil zu kürzlich importiert."
+      },
+      "warning": {
+        "no_audio": "Die Filter würden alle Audiospuren entfernen: Es wird keine entfernt.",
+        "profile_subtitle": "Untertitel „{{language}}“ bleiben erhalten: Das Sprachprofil des Mediums fordert sie an.",
+        "lossless": "Audiospur {{n}}: Verlustfreier Ton oder Atmos geht durch den Ersatz verloren.",
+        "video_copied": {
+          "interlaced": "Das Video wird kopiert: Es ist interlaced.",
+          "hdr": "Das Video wird kopiert: Seine HDR-Informationen gingen verloren."
+        }
+      },
+      "change": {
+        "reencode": "Neu kodiert nach {{codec}} {{depth}} Bit.",
+        "reencode_crop": "Schwarze Balken entfernt, neu kodiert nach {{codec}} {{depth}} Bit.",
+        "drop_commentary": "Spur {{n}} ({{language}}) entfernt: Kommentar.",
+        "drop_audio_description": "Spur {{n}} ({{language}}) entfernt: Audiodeskription.",
+        "drop_language": "Spur {{n}} entfernt: Sprache {{language}} nicht gewünscht.",
+        "drop_image_subtitle": "Bild-Untertitelspur {{n}} ({{language}}) entfernt.",
+        "drop_replaced": "Spur {{n}} ({{language}}) entfernt: durch eine abspielbare Version ersetzt.",
+        "ocr": "Bild-Untertitelspur {{n}} in Text umgewandelt.",
+        "add_audio": "Abspielbare Version der Audiospur {{n}} hinzugefügt.",
+        "reorder": "Spuren neu angeordnet.",
+        "default": "Spur {{n}} wird zur Standardspur.",
+        "language": "Spur {{n}}: Sprache auf {{code}} gesetzt.",
+        "flags": "Spur {{n}}: Markierungen korrigiert.",
+        "title": "Spur {{n}}: Titel korrigiert.",
+        "statistics_tags": "Spurstatistiken neu erzeugt.",
+        "hvc1": "Video-Kennung für MP4 korrigiert (hvc1).",
+        "container": "Container auf {{to}} geändert.",
+        "rename": "Dateiname aktualisiert."
+      },
+      "library": {
+        "tab": "Optimierung",
+        "title": "Optimierung",
+        "desc": "Vorhandene Dateien werden nie automatisch verarbeitet: Sie bestimmen, wann das Profil angewendet wird. „Auf neue Dateien anwenden“ betrifft nur künftige Importe.",
+        "profile": "Optimierungsprofil",
+        "none": "Keines",
+        "manage": "Profile verwalten",
+        "difference": "{{count}} Datei(en) mit Abweichung",
+        "difference_hint": "Aus der Datenbank gezählt, ohne die Dateien zu lesen. Aktualisiert, wenn sich das Profil oder eine Datei ändert.",
+        "preview": "Dateivorschau",
+        "per_level": {
+          "reencode": "{{count}} Neukodierung(en)",
+          "remux": "{{count}} Remux",
+          "metadata": "{{count}} Metadatenkorrektur(en)"
+        },
+        "conform": "{{count}} Datei(en) entsprechen bereits dem Profil.",
+        "skipped_container": "{{count}} Datei(en) übersprungen: Der Container passt nicht und Umbenennen ist nicht erlaubt.",
+        "ocr": "{{count}} Datei(en) mit Bild-Untertiteln, die in Text umgewandelt werden.",
+        "removed": {
+          "audio": "{{count}} Audiospur(en) entfernt ({{language}}).",
+          "subtitle": "{{count}} Untertitelspur(en) entfernt ({{language}})."
+        },
+        "new_files": "Auf neue Dateien anwenden",
+        "new_files_hint": "Nach der Berechtigungsfrist des Profils.",
+        "allow_rename": "Umbenennen erlauben",
+        "allow_rename_hint": "Endung und Wörter des Namens. Ein externes Tool, das die Datei über ihren Pfad verfolgt, würde sie verlieren."
+      }
     }
   },
   "roles": {
