@@ -96,6 +96,7 @@ export interface AudioStreamChoice {
   commentary?: boolean;
   audioDescription?: boolean;
   channels?: number;
+  codec?: string;
   /** Server-derived track markers (`commentary`, `original`, …). */
   trackMarkers?: readonly string[];
 }
@@ -170,18 +171,24 @@ export function matchRememberedAudio(
 }
 
 /** Stream the language targets: a main track over a side one (unless nothing else carries the
- *  language), then the `original`-flagged one when `preferOriginal`, then the default-flagged one. */
+ *  language), a track the device decodes (`playableCodecs`) over one it does not, then the
+ *  `original`-flagged one when `preferOriginal`, then the default-flagged one. */
 export function pickAudioStreamForLanguage(
   streams: AudioStreamChoice[],
   language: string,
   preferOriginal = false,
+  playableCodecs?: readonly string[],
 ): number | undefined {
   const want = normalizeLangCode(language);
   const same = streams
     .map((s, i) => (normalizeLangCode(s.language) === want ? i : -1))
     .filter((i) => i >= 0);
   const main = same.filter((i) => !isSideTrack(streams[i]));
-  const pool = main.length ? main : same;
+  const sided = main.length ? main : same;
+  const playable = playableCodecs
+    ? sided.filter((i) => playableCodecs.includes((streams[i].codec ?? '').toLowerCase()))
+    : [];
+  const pool = playable.length ? playable : sided;
   const original = preferOriginal ? pool.find((i) => streams[i].trackMarkers?.includes('original')) : undefined;
   return original ?? pool.find((i) => streams[i].isDefault) ?? pool[0];
 }
@@ -282,6 +289,7 @@ export class PlayerSettingsService {
     mediaId?: number,
     originalLanguage?: string | null,
     picked?: number,
+    playableCodecs?: readonly string[],
   ): number | undefined {
     if (!audioStreams.length) return undefined;
     const s = this.get();
@@ -300,7 +308,7 @@ export class PlayerSettingsService {
     // Priority 2: the mode's target language.
     const lang = this.audioLanguage(originalLanguage);
     if (lang) {
-      const idx = pickAudioStreamForLanguage(audioStreams, lang, s.audioSelectionMode === 'original');
+      const idx = pickAudioStreamForLanguage(audioStreams, lang, s.audioSelectionMode === 'original', playableCodecs);
       if (idx != null) return idx;
     }
 

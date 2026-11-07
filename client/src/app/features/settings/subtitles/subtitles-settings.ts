@@ -32,7 +32,6 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly removeHiTags = signal('false');
   readonly burnInCovers = signal('false');
   readonly ocrBurnInAuto = signal('false');
-  readonly deleteBurnInSource = signal('false');
   readonly customExclusions = signal('');
 
   async ngOnInit() {
@@ -47,7 +46,6 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
       this.burnInCovers.set(map['subtitle_burn_in_covers_language'] ?? 'false');
       this.ocrBurnInAuto.set(map['subtitle_ocr_burn_in_auto'] ?? 'false');
-      this.deleteBurnInSource.set(map['subtitle_ocr_delete_source'] ?? 'false');
       this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
     } catch {
       this.toast.error(this.translate.instant('settings.subtitles.load_error'));
@@ -69,7 +67,6 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_remove_hi_tags: this.removeHiTags(),
         subtitle_burn_in_covers_language: this.burnInCovers(),
         subtitle_ocr_burn_in_auto: this.ocrBurnInAuto(),
-        subtitle_ocr_delete_source: this.deleteBurnInSource(),
         subtitle_custom_exclusions: this.customExclusions(),
       });
       this.toast.success(this.translate.instant('settings.subtitles.saved'));

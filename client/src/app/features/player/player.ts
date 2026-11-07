@@ -1699,7 +1699,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private resolveAudioTarget(): void {
     this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
       this.mediaFileId, this.audioStreamInfo(), this.mediaId, this.originalLanguage,
-      this.launchPick()?.audioStreamIndex,
+      this.launchPick()?.audioStreamIndex, this.deviceProfileService.playableAudioCodecs(),
     );
   }
 

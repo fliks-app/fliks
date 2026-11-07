@@ -12,6 +12,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import type { Media } from '../../../core/services/api/media.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { MediaAdminService } from '../../../core/services/media-admin.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -184,6 +185,7 @@ async function createFixture(
         useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
       },
       { provide: MediaAdminService, useValue: {} },
+      { provide: BrowserDeviceProfileService, useValue: { playableAudioCodecs: () => [] } },
       { provide: AddToPlaylistService, useValue: { open: vi.fn() } },
       { provide: RecommendService, useValue: { open: vi.fn() } },
       { provide: PartyApiService, useValue: { supported: () => true, canCreate: () => true } },

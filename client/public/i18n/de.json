@@ -2090,7 +2090,8 @@
       "cleanup": "Bereinigung",
       "email": "E-Mail-Versand",
       "sso": "Single Sign-on",
-      "optimize_profiles": "Optimierungsprofile"
+      "optimize_profiles": "Optimierungsprofile",
+      "optimize": "Optimierungseinstellungen"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -2138,8 +2139,8 @@
       "throttle_unavailable_help": "Auf diesem Server nicht verfügbar: er kann den Encoder während der Wiedergabe nicht pausieren.",
       "throttle_threshold": "Drosselschwelle",
       "throttle_threshold_help": "Wie viele Sekunden der Encoder der Wiedergabe voraus sein darf, bevor er pausiert. Setzt bei der Hälfte dieses Werts fort.",
-      "auto_crop": "Automatisches Zuschneiden der schwarzen Balken",
-      "auto_crop_help": "Entfernt schwarze Balken. Player, die selbst zuschneiden, behalten den Original-Stream; andere erhalten eine Neukodierung.",
+      "auto_crop": "Transkodierung zum Entfernen schwarzer Balken erlauben",
+      "auto_crop_help": "Player, die selbst zuschneiden, erhalten den Originalstream, die anderen eine neu kodierte Version. Um die Balken dauerhaft aus der Datei zu entfernen, verwenden Sie ein Optimierungsprofil.",
       "init_time": "Dauer des ersten Segments",
       "init_time_help": "Das erste Segment kann kürzer sein, um den Start zu beschleunigen. Die folgenden verwenden die normale Dauer.",
       "qsv_preset": "Encoding-Preset (QSV / libx264)",
@@ -2173,7 +2174,9 @@
       "cache_purge_title": "Transkodierungs-Cache leeren",
       "cache_purge_confirm": "Dies löscht alle zwischengespeicherten transkodierten Segmente. Laufende Wiedergaben werden in Echtzeit neu transkodieren (kurzes Rebuffering). Fortfahren?",
       "cache_purge_action": "Leeren",
-      "cache_purged": "Cache geleert · {{entries}} Titel, {{size}} freigegeben"
+      "cache_purged": "Cache geleert · {{entries}} Titel, {{size}} freigegeben",
+      "transcoding_title": "Transkodierung",
+      "auto_crop_profile_link": "Optimierungsprofile"
     },
     "general": {
       "title": "Allgemeine Einstellungen",
@@ -2934,8 +2937,6 @@
       "remove_hi_tags": "HI-Tags entfernen ([Musik], (Seufzen), ♪ usw.)",
       "ocr_burn_in_auto": "OCR eingebetteter Bildspuren einem Download vorziehen",
       "ocr_burn_in_auto_hint": "Fehlt eine Profilsprache und existiert eine Bildspur (PGS, VobSub) in dieser Sprache, wird sie per OCR in Text umgewandelt, statt einen Untertitel herunterzuladen. Gilt für die Suche nach fehlenden Untertiteln, automatisch wie manuell. OCR ist rechenintensiv und läuft im Hintergrund; schlägt sie fehl, greift die Sprache wieder auf die Anbieter zurück.",
-      "ocr_delete_source": "Bild-Untertitel nach der Extraktion löschen",
-      "ocr_delete_source_hint": "Nach einer erfolgreichen OCR-Konvertierung wird die Quell-Bildspur gelöscht. Hinweis: Ein eingebetteter Untertitel befindet sich im Container, er wird bei der nächsten Analyse der Datei erneut erkannt.",
       "custom_exclusions": "Benutzerdefinierte Ausschlüsse (Regex)",
       "custom_exclusions_placeholder": "opensubtitles\nadvertise\nwww\\.example\\.com",
       "custom_exclusions_hint": "Ein Regex pro Zeile. Untertitel, die diese Muster enthalten, werden gelöscht.",
@@ -3486,7 +3487,11 @@
         "clean_hint": "Berührt weder Bild noch Ton. Korrigiert Spurtitel, die dem Inhalt widersprechen, einen Titel, der ein Release-Name ist, die Markierungen „erzwungen“ und „hörgeschädigt“, fehlende Sprachen und Spurstatistiken.",
         "rename_tokens": "Dateinamen aktualisieren",
         "rename_tokens_hint": "Ersetzt technische Angaben, die falsch geworden sind, z. B. „x264“ durch „AV1“. Nur wenn die Bibliothek das Umbenennen erlaubt.",
-        "container": "Containerformat"
+        "container": "Containerformat",
+        "move_up": "Nach oben",
+        "move_down": "Nach unten",
+        "remove": "Entfernen",
+        "add": "Sprache hinzufügen"
       },
       "opt": {
         "quality": {
@@ -3610,7 +3615,44 @@
         "new_files": "Auf neue Dateien anwenden",
         "new_files_hint": "Nach der Berechtigungsfrist des Profils.",
         "allow_rename": "Umbenennen erlauben",
-        "allow_rename_hint": "Endung und Wörter des Namens. Ein externes Tool, das die Datei über ihren Pfad verfolgt, würde sie verlieren."
+        "allow_rename_hint": "Endung und Wörter des Namens. Ein externes Tool, das die Datei über ihren Pfad verfolgt, würde sie verlieren.",
+        "queue": "In die Warteschlange",
+        "open_queue": "Warteschlange öffnen",
+        "queued": "{{count}} Datei(en) werden eingereiht"
+      },
+      "global": {
+        "title": "Optimierungseinstellungen",
+        "desc": "Wann und wie die Dateien der Bibliothek optimiert werden, was mit den Originalen geschieht und wie die Geräte aufgeteilt werden.",
+        "open_queue": "Optimierungswarteschlange öffnen",
+        "window": "Zeitfenster",
+        "window_on": "Nur in einem Zeitfenster optimieren",
+        "window_hint": "Außerhalb des Fensters startet kein neuer Auftrag, laufende werden beendet. Serverzeit.",
+        "window_start": "Beginn",
+        "window_end": "Ende",
+        "window_invalid": "Beginn und Ende des Fensters müssen verschieden sein.",
+        "originals": "Originale",
+        "original": "Originaldatei nach einer Optimierung",
+        "original_label_trash": "In den Papierkorb verschieben",
+        "original_label_keep": "Neben der Datei behalten (.orig)",
+        "original_label_delete": "Löschen",
+        "original_trash": "Das Original kommt in einen Papierkorb der Bibliothek und kann bis zur Bereinigung wiederhergestellt werden.",
+        "original_keep": "Das Original bleibt mit der Endung .orig neben der neuen Datei, bis Sie es entfernen.",
+        "original_delete": "Das Original wird gelöscht, sobald die neue Datei an ihrem Platz ist. Eine Wiederherstellung ist dann unmöglich.",
+        "delete_warning": "Mit dieser Wahl kann eine Optimierung nicht rückgängig gemacht werden.",
+        "retention": "Aufbewahrung im Papierkorb (Tage)",
+        "retention_hint": "Ältere Originale werden bereinigt.",
+        "min_free": "Schwelle für freien Speicher (GB)",
+        "min_free_hint": "Unterhalb dieses freien Speichers werden die ältesten Originale zuerst bereinigt.",
+        "devices": "Geräte",
+        "gpu_reserve": "Hardware-Wiedergaben vor der Pause",
+        "gpu_reserve_hint": "Ab dieser Zahl von Hardware-Wiedergaben auf einem Gerät pausieren seine Hintergrundaufträge. 0: nie pausieren.",
+        "cpu_weight": "Gewicht einer Software-Kodierung",
+        "cpu_weight_hint": "Für wie viele Wiedergabe-Transkodierungen eine Software-Kodierung im CPU-Budget zählt.",
+        "no_devices": "Noch kein Worker hat sich gemeldet.",
+        "devices_hint": "Lassen Sie ein Feld leer, um den vom Gerät gemeldeten Wert zu behalten.",
+        "max_jobs": "Gleichzeitige Aufträge",
+        "weight": "Gewicht",
+        "saved": "Einstellungen gespeichert"
       }
     }
   },
@@ -4846,5 +4888,105 @@
       "unavailable": "Single Sign-on ist auf diesem Gerät nicht verfügbar."
     },
     "error_last_method": "Das ist deine einzige Anmeldemethode. Lege ein Passwort fest, bevor du die Verknüpfung löst."
+  },
+  "optimize": {
+    "queue": {
+      "title": "Optimierungswarteschlange",
+      "subtitle": "Laufende und wartende Aufträge, Fehler und was die Optimierungen eingespart haben.",
+      "settings": "Einstellungen",
+      "pause": "Warteschlange pausieren",
+      "resume": "Warteschlange fortsetzen",
+      "state": {
+        "running": "Läuft",
+        "paused": "Pausiert",
+        "closed": "Außerhalb des Zeitfensters"
+      },
+      "state_hint": {
+        "running": "Neue Aufträge starten, sobald Geräte frei sind.",
+        "paused": "Kein neuer Auftrag startet, laufende werden beendet.",
+        "closed": "Kein neuer Auftrag startet, bis das Zeitfenster öffnet, laufende werden beendet."
+      },
+      "counts": "{{running}} laufend, {{waiting}} wartend",
+      "ends": "Geschätztes Ende",
+      "ends_unknown": "Noch nicht bekannt, für eine Stufe gibt es noch keinen abgeschlossenen Auftrag zum Messen",
+      "estimate_note": "Eine Schätzung anhand der Geschwindigkeit der letzten Aufträge jedes Geräts und des Zeitfensters.",
+      "level_left": "{{level}}: noch {{count}}, etwa {{time}}",
+      "level": {
+        "metadata": "Metadaten",
+        "remux": "Remux",
+        "reencode": "Neu kodieren"
+      },
+      "devices": "Geräte",
+      "device": {
+        "free": "Frei",
+        "busy": "Belegt",
+        "paused": "Durch Wiedergabe pausiert",
+        "slots": "{{used}} von {{max}} Auftrag/Aufträgen"
+      },
+      "tab": {
+        "active": "Laufend und wartend",
+        "failures": "Fehler",
+        "finished": "Abgeschlossen"
+      },
+      "library": "Bibliothek",
+      "all_libraries": "Alle Bibliotheken",
+      "running": "Laufend",
+      "running_empty": "Nichts läuft.",
+      "waiting": "Wartend, in Ausführungsreihenfolge",
+      "waiting_empty": "Kein Auftrag wartet.",
+      "selected": "{{count}} ausgewählt",
+      "to_front": "An den Anfang",
+      "select_all": "Alle auswählen",
+      "select": "Auswählen",
+      "col": {
+        "title": "Titel",
+        "level": "Stufe",
+        "device": "Gerät",
+        "progress": "Fortschritt",
+        "size": "Größe",
+        "duration": "Dauer",
+        "state": "Status",
+        "error": "Fehler",
+        "codec": "Codec",
+        "saved": "Eingespart"
+      },
+      "job": {
+        "encoding": "Kodierung",
+        "paused": "Pausiert",
+        "leased": "Läuft",
+        "staged": "Bereit zum Austausch",
+        "committing": "Austausch",
+        "queued": "Wartend",
+        "failed": "Fehlgeschlagen",
+        "skipped": "Übersprungen",
+        "done": "Fertig",
+        "cancelled": "Abgebrochen"
+      },
+      "failures_empty": "Keine Fehler.",
+      "finished_empty": "Noch keine Optimierung abgeschlossen.",
+      "restore": "Wiederherstellen",
+      "confirm_cancel": "{{count}} Auftrag/Aufträge abbrechen?",
+      "confirm_restore": "Das Original von „{{title}}“ zurückholen? Die optimierte Datei kommt an seiner Stelle in den Papierkorb.",
+      "retried": "Auftrag erneut eingereiht",
+      "restored": "Original wiederhergestellt"
+    },
+    "action": {
+      "menu": "Optimieren …",
+      "title": "Optimieren",
+      "optimize": "Optimieren",
+      "force": "Neukodierung erzwingen",
+      "force_warning": "Eine erzwungene Neukodierung komprimiert das Video erneut, auch wenn es schon im Zielformat vorliegt. Jede Neukodierung kostet etwas Qualität: nur bei Bedarf verwenden.",
+      "no_files": "Keine Datei zu optimieren.",
+      "no_profile": "Die Bibliothek dieses Titels hat kein Optimierungsprofil. Wählen Sie eines in den Bibliothekseinstellungen.",
+      "files": "{{count}} Datei(en) betroffen",
+      "per_level": "{{level}}: {{count}} Datei(en), {{size}} zu verarbeiten",
+      "conform": "{{count}} Datei(en) entsprechen bereits dem Profil.",
+      "excluded": "{{count}} Datei(en) können nicht optimiert werden (nicht analysiert oder Container passt nicht).",
+      "estimate_note": "Die Größen sind die der zu verarbeitenden Dateien, nicht der gesparte Platz: Die Ersparnis wird erst an der fertigen Datei gemessen.",
+      "removed": "{{count}} Spur(en) würden entfernt. Ein Entfernen ist endgültig, sobald der Papierkorb bereinigt ist.",
+      "too_many": "Zu viele Dateien für einen Einzelvergleich: Alle werden nach der Entscheidung des Profils eingereiht.",
+      "open_queue": "Warteschlange öffnen",
+      "queued": "{{count}} von {{total}} Datei(en) eingereiht"
+    }
   }
 }

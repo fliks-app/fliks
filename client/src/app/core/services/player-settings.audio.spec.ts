@@ -147,6 +147,24 @@ describe('PlayerSettingsService audio selection', () => {
     });
   });
 
+  describe('playable codecs', () => {
+    const streams = [
+      { language: 'eng', codec: 'dts', isDefault: true },
+      { language: 'eng', codec: 'eac3' },
+    ];
+
+    it('prefers a track of the language the device decodes over a non-playable default', () => {
+      const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+      expect(svc.resolveAudioStreamIndex(1, streams, 1, null, undefined, ['aac', 'eac3'])).toBe(1);
+    });
+
+    it('keeps the default when no track of the language is playable, or no codec list is known', () => {
+      const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+      expect(svc.resolveAudioStreamIndex(1, streams, 1, null, undefined, ['aac'])).toBe(0);
+      expect(svc.resolveAudioStreamIndex(1, streams, 1, null)).toBe(0);
+    });
+  });
+
   describe('language variant', () => {
     const dubs = [
       { language: 'por', languageTag: 'pt-BR', channels: 6 },

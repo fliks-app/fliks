@@ -101,7 +101,9 @@ export class TrackManagerService {
     // resolveAudioStreamIndex applies before load.
     const lang = this.playerSettings.audioLanguage(originalLanguage);
     const source = streams?.length ? streams : tracks;
-    const idx = lang ? pickAudioStreamForLanguage(source, lang, settings.audioSelectionMode === 'original') : undefined;
+    const idx = lang ? pickAudioStreamForLanguage(
+      source, lang, settings.audioSelectionMode === 'original', this.deviceProfile.playableAudioCodecs(),
+    ) : undefined;
     const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }

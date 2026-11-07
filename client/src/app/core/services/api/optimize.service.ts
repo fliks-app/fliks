@@ -4,6 +4,12 @@ import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 import type {
   FileOutcome,
+  JobState,
+  OptimizeJob,
+  OptimizeSettings,
+  OptimizeWorker,
+  Queued,
+  QueueStatus,
   OptimizePreset,
   OptimizeProfile,
   OptimizeProfileBody,
@@ -62,5 +68,74 @@ export class OptimizeService {
         profile,
       }, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
     );
+  }
+
+  queueStatus() {
+    return firstValueFrom(this.http.get<QueueStatus>('/api/optimize/queue'));
+  }
+
+  pause() {
+    return firstValueFrom(this.http.post<void>('/api/optimize/queue/pause', {}));
+  }
+
+  resume() {
+    return firstValueFrom(this.http.post<void>('/api/optimize/queue/resume', {}));
+  }
+
+  jobs(opts: { state?: JobState; libraryId?: number | null; limit?: number } = {}) {
+    const params: Record<string, string | number> = {};
+    if (opts.state) params['state'] = opts.state;
+    if (opts.libraryId != null) params['libraryId'] = opts.libraryId;
+    if (opts.limit) params['limit'] = opts.limit;
+    return firstValueFrom(this.http.get<OptimizeJob[]>('/api/optimize/jobs', { params }));
+  }
+
+  /** "Optimize…" (and "Force re-encode" with `force`) on up to 500 files. */
+  enqueue(mediaFileIds: number[], force = false) {
+    return firstValueFrom(
+      this.http.post<Queued[]>('/api/optimize/jobs', { mediaFileIds, force }),
+    );
+  }
+
+  /** Queues what differs from the library's profile; answers at once, the queueing continues server-side. */
+  queueLibrary(libraryId: number) {
+    return firstValueFrom(
+      this.http.post<{ files: number }>(`/api/libraries/${libraryId}/optimize/queue`, {}),
+    );
+  }
+
+  retry(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/optimize/jobs/${id}/retry`, {}));
+  }
+
+  cancel(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/optimize/jobs/${id}/cancel`, {}));
+  }
+
+  cancelMany(ids: number[]) {
+    return firstValueFrom(
+      this.http.post<{ cancelled: number[] }>('/api/optimize/jobs/cancel', { ids }),
+    );
+  }
+
+  /** Moves queued jobs to the front, in the order given. */
+  prioritize(ids: number[]) {
+    return firstValueFrom(this.http.post<{ moved: number }>('/api/optimize/jobs/priority', { ids }));
+  }
+
+  restore(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/optimize/jobs/${id}/restore`, {}));
+  }
+
+  settings() {
+    return firstValueFrom(this.http.get<OptimizeSettings>('/api/optimize/settings'));
+  }
+
+  saveSettings(body: OptimizeSettings) {
+    return firstValueFrom(this.http.put<OptimizeSettings>('/api/optimize/settings', body));
+  }
+
+  workers() {
+    return firstValueFrom(this.http.get<OptimizeWorker[]>('/api/optimize/workers'));
   }
 }

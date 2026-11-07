@@ -28,11 +28,16 @@
         }
 
         <div class="flex flex-col gap-1">
-          <div>
+          <div class="flex flex-wrap gap-2 px-1 -mx-1 py-1">
             <button type="button" class="btn btn-outline btn-sm" (click)="loadPreview()" [disabled]="previewBusy()">
               @if (previewBusy()) { <span class="loading loading-spinner loading-sm"></span> }
               {{ 'settings.optimize.library.preview' | translate }}
             </button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="queueAll()" [disabled]="queueBusy() || summary()?.filesWithDifference === 0">
+              @if (queueBusy()) { <span class="loading loading-spinner loading-sm"></span> }
+              {{ 'settings.optimize.library.queue' | translate }}
+            </button>
+            <a routerLink="/admin/optimize" class="btn btn-ghost btn-sm">{{ 'settings.optimize.library.open_queue' | translate }}</a>
           </div>
         </div>
 

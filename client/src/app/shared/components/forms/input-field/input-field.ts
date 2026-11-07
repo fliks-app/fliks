@@ -11,7 +11,8 @@ export type InputFieldType =
   | 'password'
   | 'url'
   | 'number'
-  | 'search';
+  | 'search'
+  | 'time';
 
 /** DaisyUI input with label and optional hint; two-way `[(value)]`. */
 @Component({

@@ -1,0 +1,46 @@
+<div class="flex flex-col gap-1" role="group" [attr.aria-label]="ariaLabel()">
+  @for (r of rows(); track r.value; let i = $index) {
+    <div class="flex items-center gap-1 rounded-lg bg-base-200 px-2 py-1">
+      <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
+      <span class="flex-1 min-w-0 truncate text-sm">{{ r.label }}</span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square"
+        [disabled]="i === 0"
+        [attr.aria-label]="'settings.optimize.f.move_up' | translate"
+        (click)="move(i, -1)"
+      >
+        <svg lucideChevronUp class="h-4 w-4"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square"
+        [disabled]="i === rows().length - 1"
+        [attr.aria-label]="'settings.optimize.f.move_down' | translate"
+        (click)="move(i, 1)"
+      >
+        <svg lucideChevronDown class="h-4 w-4"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square"
+        [attr.aria-label]="'settings.optimize.f.remove' | translate"
+        (click)="remove(i)"
+      >
+        <svg lucideX class="h-4 w-4"></svg>
+      </button>
+    </div>
+  }
+  @if (rest().length > 0) {
+    <select
+      class="select select-bordered select-sm w-full"
+      [attr.aria-label]="'settings.optimize.f.add' | translate"
+      (change)="add($any($event.target).value); $any($event.target).value = ''"
+    >
+      <option value="">{{ 'settings.optimize.f.add' | translate }}</option>
+      @for (o of rest(); track o.value) {
+        <option [value]="o.value">{{ o.label }}</option>
+      }
+    </select>
+  }
+</div>

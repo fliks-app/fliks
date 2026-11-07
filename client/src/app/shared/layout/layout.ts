@@ -42,6 +42,7 @@ import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal
 import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
 import { PartyReconnectComponent } from '../../features/party/party-reconnect';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
+import { OptimizeModalComponent } from '../components/optimize-modal/optimize-modal';
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
@@ -100,6 +101,7 @@ const PAIRING_TTL_MS = 600_000;
     PartyReconnectComponent,
     TrackingModalHostComponent,
     IdentifyModalHostComponent,
+    OptimizeModalComponent,
     UserMenuComponent,
     AppUpdateModalComponent,
     LucideIconComponent,

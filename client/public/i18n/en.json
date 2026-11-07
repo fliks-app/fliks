@@ -2090,7 +2090,8 @@
       "metadata": "Metadata",
       "email": "Outgoing mail",
       "sso": "Single sign-on",
-      "optimize_profiles": "Optimization profiles"
+      "optimize_profiles": "Optimization profiles",
+      "optimize": "Optimization settings"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -2138,8 +2139,8 @@
       "throttle_unavailable_help": "Not available on this server: it can't pause an encoder mid-run.",
       "throttle_threshold": "Throttle threshold",
       "throttle_threshold_help": "How far ahead of playback the encoder may get before it pauses, in seconds. Resumes at half this value.",
-      "auto_crop": "Automatic black bar cropping",
-      "auto_crop_help": "Removes black bars. Players that crop themselves keep the original stream; others get a re-encode.",
+      "auto_crop": "Allow transcoding to remove black bars",
+      "auto_crop_help": "Players that crop by themselves receive the original stream, the others a re-encoded version. To remove the bars from the file for good, use an optimization profile.",
       "init_time": "First segment duration",
       "init_time_help": "The first segment can be shorter to speed up startup. The following ones use the normal duration.",
       "qsv_preset": "Encoding preset (QSV / libx264)",
@@ -2173,7 +2174,9 @@
       "cache_purge_title": "Clear transcode cache",
       "cache_purge_confirm": "This deletes all cached transcoded segments. Playbacks in progress will retranscode on the fly (brief rebuffering). Continue?",
       "cache_purge_action": "Clear",
-      "cache_purged": "Cache cleared · {{entries}} title(s), {{size}} freed"
+      "cache_purged": "Cache cleared · {{entries}} title(s), {{size}} freed",
+      "transcoding_title": "Transcoding",
+      "auto_crop_profile_link": "Optimization profiles"
     },
     "general": {
       "title": "General settings",
@@ -2913,8 +2916,6 @@
       "remove_hi_tags": "Remove HI tags ([music], (sigh), ♪, etc.)",
       "ocr_burn_in_auto": "Prefer OCR of embedded image tracks over a download",
       "ocr_burn_in_auto_hint": "When a profile language is missing and an image track (PGS, VobSub) exists in that language, it is converted to text by OCR instead of downloading a subtitle. Applies to missing-subtitle searches, automatic and manual. OCR is CPU-heavy and runs in the background; if it fails, the language falls back to the providers.",
-      "ocr_delete_source": "Delete the image subtitle once extracted",
-      "ocr_delete_source_hint": "After a successful OCR conversion, deletes the source image track. Note: an embedded subtitle is inside the container, it will be re-detected at the next file scan.",
       "custom_exclusions": "Custom exclusions (regex)",
       "custom_exclusions_placeholder": "opensubtitles\nadvertise\nwww\\.example\\.com",
       "custom_exclusions_hint": "One regex per line. Subtitles containing these patterns will be removed.",
@@ -3486,7 +3487,11 @@
         "clean_hint": "Touches neither picture nor sound. Fixes track titles that contradict the content, a title that is a release name, \"forced\" and \"hearing impaired\" flags, missing languages and track statistics.",
         "rename_tokens": "Update the file name",
         "rename_tokens_hint": "Replaces technical words that became wrong, for example \"x264\" by \"AV1\". Only if the library allows renaming.",
-        "container": "Container format"
+        "container": "Container format",
+        "move_up": "Move up",
+        "move_down": "Move down",
+        "remove": "Remove",
+        "add": "Add a language"
       },
       "opt": {
         "quality": {
@@ -3610,7 +3615,44 @@
         "new_files": "Apply to new files",
         "new_files_hint": "After the profile's eligibility delay.",
         "allow_rename": "Allow renaming",
-        "allow_rename_hint": "Extension and words of the name. An external tool that follows the file by its path would lose it."
+        "allow_rename_hint": "Extension and words of the name. An external tool that follows the file by its path would lose it.",
+        "queue": "Queue",
+        "open_queue": "Open the queue",
+        "queued": "{{count}} file(s) being queued"
+      },
+      "global": {
+        "title": "Optimization settings",
+        "desc": "When and how the library files are optimized, what happens to the originals and how the devices are shared.",
+        "open_queue": "Open the optimization queue",
+        "window": "Time window",
+        "window_on": "Only optimize during a time window",
+        "window_hint": "Outside the window no new job starts, the running ones finish. Server time.",
+        "window_start": "Start",
+        "window_end": "End",
+        "window_invalid": "The start and the end of the window must differ.",
+        "originals": "Originals",
+        "original": "Original file after an optimization",
+        "original_label_trash": "Move to the trash",
+        "original_label_keep": "Keep next to the file (.orig)",
+        "original_label_delete": "Delete",
+        "original_trash": "The original goes to a trash folder of the library and can be restored until it is purged.",
+        "original_keep": "The original stays next to the new file with the .orig extension, until you remove it.",
+        "original_delete": "The original is deleted as soon as the new file is in place. A restore is then impossible.",
+        "delete_warning": "With this choice an optimization cannot be undone.",
+        "retention": "Trash retention (days)",
+        "retention_hint": "Older originals are purged.",
+        "min_free": "Free space threshold (GB)",
+        "min_free_hint": "Below this free space the oldest originals are purged first.",
+        "devices": "Devices",
+        "gpu_reserve": "Hardware playbacks before pausing",
+        "gpu_reserve_hint": "From this many hardware playbacks on a device, its background jobs pause. 0 never pauses.",
+        "cpu_weight": "Weight of a software encode",
+        "cpu_weight_hint": "How many playback transcodes a software encode counts for in the CPU budget.",
+        "no_devices": "No worker has announced itself yet.",
+        "devices_hint": "Leave a field empty to keep the value the device declares.",
+        "max_jobs": "Simultaneous jobs",
+        "weight": "Weight",
+        "saved": "Settings saved"
       }
     }
   },
@@ -4846,5 +4888,105 @@
       "unavailable": "Single sign-on is not available on this device."
     },
     "error_last_method": "This is your only way to sign in. Set a password before unlinking it."
+  },
+  "optimize": {
+    "queue": {
+      "title": "Optimization queue",
+      "subtitle": "Running and waiting jobs, failures and what the optimizations saved.",
+      "settings": "Settings",
+      "pause": "Pause the queue",
+      "resume": "Resume the queue",
+      "state": {
+        "running": "Running",
+        "paused": "Paused",
+        "closed": "Outside the time window"
+      },
+      "state_hint": {
+        "running": "New jobs start as devices are free.",
+        "paused": "No new job starts, the running ones finish.",
+        "closed": "No new job starts until the window opens, the running ones finish."
+      },
+      "counts": "{{running}} running, {{waiting}} waiting",
+      "ends": "Estimated end",
+      "ends_unknown": "Not known yet, a level has no finished job to measure from",
+      "estimate_note": "An estimate from the speed of the last jobs of each device and from the time window.",
+      "level_left": "{{level}}: {{count}} left, about {{time}}",
+      "level": {
+        "metadata": "Metadata",
+        "remux": "Remux",
+        "reencode": "Re-encode"
+      },
+      "devices": "Devices",
+      "device": {
+        "free": "Free",
+        "busy": "Busy",
+        "paused": "Paused by playback",
+        "slots": "{{used}} of {{max}} job(s)"
+      },
+      "tab": {
+        "active": "Running and waiting",
+        "failures": "Failures",
+        "finished": "Finished"
+      },
+      "library": "Library",
+      "all_libraries": "All libraries",
+      "running": "Running",
+      "running_empty": "Nothing is running.",
+      "waiting": "Waiting, in order of execution",
+      "waiting_empty": "No job is waiting.",
+      "selected": "{{count}} selected",
+      "to_front": "Move to the front",
+      "select_all": "Select all",
+      "select": "Select",
+      "col": {
+        "title": "Title",
+        "level": "Level",
+        "device": "Device",
+        "progress": "Progress",
+        "size": "Size",
+        "duration": "Duration",
+        "state": "State",
+        "error": "Error",
+        "codec": "Codec",
+        "saved": "Saved"
+      },
+      "job": {
+        "encoding": "Encoding",
+        "paused": "Paused",
+        "leased": "Running",
+        "staged": "Ready to swap",
+        "committing": "Swapping",
+        "queued": "Waiting",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "done": "Done",
+        "cancelled": "Cancelled"
+      },
+      "failures_empty": "No failure.",
+      "finished_empty": "No optimization finished yet.",
+      "restore": "Restore",
+      "confirm_cancel": "Cancel {{count}} job(s)?",
+      "confirm_restore": "Put the original of \"{{title}}\" back? The optimized file takes its place in the trash.",
+      "retried": "Job queued again",
+      "restored": "Original restored"
+    },
+    "action": {
+      "menu": "Optimize…",
+      "title": "Optimize",
+      "optimize": "Optimize",
+      "force": "Force re-encode",
+      "force_warning": "A forced re-encode compresses the video again, even if it is already in the target format. Every re-encode loses some quality: do it only when needed.",
+      "no_files": "No file to optimize.",
+      "no_profile": "The library of this title has no optimization profile. Choose one in the library settings.",
+      "files": "{{count}} file(s) concerned",
+      "per_level": "{{level}}: {{count}} file(s), {{size}} to process",
+      "conform": "{{count}} file(s) already match the profile.",
+      "excluded": "{{count}} file(s) cannot be optimized (not analysed, or the container does not fit).",
+      "estimate_note": "The sizes are the files to process, not the space you will save: the saving is only measured on the finished file.",
+      "removed": "{{count}} track(s) would be removed. A removal is final once the trash is purged.",
+      "too_many": "Too many files to compare one by one: they will all be queued as the profile decides.",
+      "open_queue": "Open the queue",
+      "queued": "{{count}} of {{total}} file(s) queued"
+    }
   }
 }
