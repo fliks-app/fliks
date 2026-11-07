@@ -42,6 +42,71 @@ fn db(e: sqlx::Error) -> AppError {
     e.into()
 }
 
+/// The libraries the caller reads, `None` for everyone (admin).
+pub(super) async fn scope(st: &AppState, a: &Authed) -> Result<Option<Vec<i32>>, AppError> {
+    if a.user.is_admin || a.perms.can(Action::Manage, &Subject::All) {
+        return Ok(None);
+    }
+    Ok(Some(accessible_library_ids(&st.db, a).await?))
+}
+
+/// The ids of `files` that sit in a readable library.
+pub(super) async fn readable_files(
+    st: &AppState,
+    a: &Authed,
+    files: &[i32],
+) -> Result<Vec<i32>, AppError> {
+    let Some(libs) = scope(st, a).await? else {
+        return Ok(files.to_vec());
+    };
+    sqlx::query_scalar(
+        r#"SELECT f.id FROM media_files f JOIN media m ON m.id = f."mediaId"
+           WHERE f.id = ANY($1) AND m."libraryId" = ANY($2)"#,
+    )
+    .bind(files)
+    .bind(libs)
+    .fetch_all(&st.db)
+    .await
+    .map_err(db)
+}
+
+/// The ids of `jobs` whose file sits in a readable library.
+pub(super) async fn readable_jobs(
+    st: &AppState,
+    a: &Authed,
+    jobs: &[i64],
+) -> Result<Vec<i64>, AppError> {
+    let Some(libs) = scope(st, a).await? else {
+        return Ok(jobs.to_vec());
+    };
+    sqlx::query_scalar(
+        r#"SELECT j.id FROM jobs j JOIN media_files f ON f.id = j."mediaFileId"
+           JOIN media m ON m.id = f."mediaId"
+           WHERE j.id = ANY($1) AND m."libraryId" = ANY($2)"#,
+    )
+    .bind(jobs)
+    .bind(libs)
+    .fetch_all(&st.db)
+    .await
+    .map_err(db)
+}
+
+pub(super) async fn require_job(st: &AppState, a: &Authed, id: i64) -> Result<(), AppError> {
+    if readable_jobs(st, a, &[id]).await?.is_empty() {
+        return Err(AppError::not_found(format!("Job #{id} not found")));
+    }
+    Ok(())
+}
+
+pub(super) async fn require_files(st: &AppState, a: &Authed, ids: &[i32]) -> Result<(), AppError> {
+    if readable_files(st, a, ids).await?.len()
+        != ids.iter().collect::<std::collections::HashSet<_>>().len()
+    {
+        return Err(AppError::not_found("File not found"));
+    }
+    Ok(())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -115,13 +180,20 @@ pub async fn prioritize(
 ) -> Result<Json<Value>, AppError> {
     manage(&a)?;
     checked(&body.ids)?;
+    let ids = readable_jobs(&st, &a, &body.ids).await?;
+    let ids: Vec<i64> = body
+        .ids
+        .iter()
+        .copied()
+        .filter(|i| ids.contains(i))
+        .collect();
     let moved = sqlx::query(
         r#"WITH top AS (SELECT COALESCE(max(priority), 0) AS p FROM jobs WHERE state = 'queued'),
                 u AS (SELECT id, n FROM unnest($1::bigint[]) WITH ORDINALITY AS t(id, n))
            UPDATE jobs SET priority = top.p + 1 + (cardinality($1::bigint[]) - u.n)::int, "updatedAt" = now()
            FROM top, u WHERE jobs.id = u.id AND jobs.state = 'queued' RETURNING jobs.id"#,
     )
-    .bind(&body.ids)
+    .bind(&ids)
     .fetch_all(&st.db)
     .await
     .map_err(db)?
@@ -145,8 +217,9 @@ pub async fn cancel_many(
 ) -> Result<Json<Cancelled>, AppError> {
     manage(&a)?;
     checked(&body.ids)?;
+    let allowed = readable_jobs(&st, &a, &body.ids).await?;
     let mut done = vec![];
-    for id in body.ids {
+    for id in body.ids.into_iter().filter(|i| allowed.contains(i)) {
         if store::cancel(&st.db, id).await.map_err(db)? {
             done.push(id);
         }
@@ -198,6 +271,7 @@ pub async fn restore(
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
     manage(&a)?;
+    require_job(&st, &a, id).await?;
     recover::restore(&st, id)
         .await
         .map_err(AppError::conflict)?;

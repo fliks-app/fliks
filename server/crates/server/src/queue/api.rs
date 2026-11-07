@@ -74,6 +74,7 @@ pub async fn enqueue(
     if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
+    super::control::require_files(&st, &authed, &dto.media_file_ids).await?;
     let out = enqueue::queue_files(&st, &dto.media_file_ids, dto.force, dto.priority)
         .await
         .map_err(db)?;
@@ -99,6 +100,7 @@ pub async fn verify(
     if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
+    super::control::require_files(&st, &authed, &dto.media_file_ids).await?;
     let out = super::auto::queue_verify(&st, &dto.media_file_ids, dto.priority)
         .await
         .map_err(db)?;
@@ -149,6 +151,7 @@ pub async fn list_jobs(
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Vec<JobRow>>, AppError> {
     manage_jobs(&authed)?;
+    let libs = super::control::scope(&st, &authed).await?;
     let rows = sqlx::query(
         r#"SELECT j.id, j.kind, j."mediaFileId", j.state, j.priority, j.attempt, j.failures, j.progress, j.paused,
              j."workerId", j."deviceId", j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
@@ -157,12 +160,14 @@ pub async fn list_jobs(
              (j.payload #>> '{info,durationSeconds}')::float8 AS duration
            FROM jobs j LEFT JOIN media_files f ON f.id = j."mediaFileId" LEFT JOIN media m ON m.id = f."mediaId"
            WHERE ($1::text IS NULL OR j.state = $1) AND ($3::int IS NULL OR m."libraryId" = $3)
+             AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            ORDER BY CASE WHEN $1 = 'queued' THEN j.priority END DESC, CASE WHEN $1 = 'queued' THEN j.id END,
                     j.id DESC LIMIT $2"#,
     )
     .bind(q.state)
     .bind(q.limit.unwrap_or(100).clamp(1, 500))
     .bind(q.library_id)
+    .bind(libs)
     .fetch_all(&st.db)
     .await
     .map_err(db)?;
@@ -203,6 +208,7 @@ pub async fn retry(
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
     manage_jobs(&authed)?;
+    super::control::require_job(&st, &authed, id).await?;
     match enqueue::retry(&st, id).await.map_err(db)? {
         Some(()) => Ok(Json(json!({}))),
         None => Err(AppError::conflict(
@@ -218,6 +224,7 @@ pub async fn cancel(
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
     manage_jobs(&authed)?;
+    super::control::require_job(&st, &authed, id).await?;
     if store::cancel(&st.db, id).await.map_err(db)? {
         Ok(Json(json!({})))
     } else {
