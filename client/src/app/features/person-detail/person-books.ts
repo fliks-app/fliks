@@ -49,7 +49,7 @@ export class PersonBooksComponent {
       if (current()) this.loading.set(false);
     }
     // The bibliography lists an author's works: a narrator view has none. A provider outage shows none.
-    if (role !== 'author') return;
+    if (role !== 'author' || !current()) return;
     const credits = await this.api.personBibliography(id).catch(() => []);
     if (current()) this.credits.set(credits);
   }
