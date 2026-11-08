@@ -1,5 +1,5 @@
 import type { MediaType } from '../../core/enums/media-type.enum';
-import { KIND_REGISTRY } from '../../core/media-kinds';
+import { kindOf } from '../../core/media-kinds';
 
 export interface BackTargetInput {
   /** Page that opened the player, null on a deep link or reload. */
@@ -15,7 +15,7 @@ export interface BackTargetInput {
  *  the episode to resume or watch next. */
 export function backTarget(i: BackTargetInput): string {
   if (!i.mediaId) return i.origin ?? '/';
-  const { hasSeasons, segment } = KIND_REGISTRY[i.kind];
+  const { hasSeasons, segment } = kindOf(i.kind);
   const detail =
     i.episodeId && hasSeasons
       ? `/${segment}/${i.mediaId}/episode/${i.landingEpisodeId ?? i.episodeId}`

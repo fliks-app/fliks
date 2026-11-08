@@ -63,10 +63,11 @@
     }
     @if (!imgLoaded() && !posters().length) {
       <div class="absolute inset-0 flex items-center justify-center bg-base-300 text-base-content/20">
-        @if (squareCover()) {
-          <svg lucideMusic class="h-12 w-12" [strokeWidth]="1.5"></svg>
-        } @else {
-          <svg lucideFilm class="h-12 w-12" [strokeWidth]="1.5"></svg>
+        @switch (media()?.type) {
+          @case ('book') { <svg lucideBook class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @case ('comic') { <svg lucideBookOpen class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @case ('album') { <svg lucideMusic class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @default { <svg lucideFilm class="h-12 w-12" [strokeWidth]="1.5"></svg> }
         }
       </div>
     }

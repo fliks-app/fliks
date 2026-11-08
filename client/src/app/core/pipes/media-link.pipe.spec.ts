@@ -9,8 +9,8 @@ describe('MediaLinkPipe', () => {
     expect(pipe.transform('series', '4')).toEqual(['/series', '4']);
   });
 
-  it('refuses a kind the registry does not describe', () => {
-    expect(() => pipe.transform('' as MediaType, 1)).toThrow();
-    expect(() => pipe.transform(null as unknown as MediaType, 1)).toThrow();
+  it('falls back on the movie page for a kind the registry does not describe', () => {
+    expect(pipe.transform('' as MediaType, 1)).toEqual(['/movies', '1']);
+    expect(pipe.transform(null as unknown as MediaType, 1)).toEqual(['/movies', '1']);
   });
 });

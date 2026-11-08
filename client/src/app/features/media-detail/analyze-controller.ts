@@ -4,7 +4,7 @@ import type { Media, MediaService } from '../../core/services/api/media.service'
 import type { MarkersApiService } from '../../core/services/api/markers-api.service';
 import type { ToastService } from '../../core/services/toast.service';
 import { serverMessage } from '../../core/utils/server-message';
-import { KIND_REGISTRY } from '../../core/media-kinds';
+import { kindOf } from '../../core/media-kinds';
 
 export interface AnalyzeHost {
   media(): Media | null;
@@ -39,7 +39,7 @@ export class AnalyzeController {
    *  applies to series. */
   readonly showMarkers = computed(() => {
     const m = this.host.media();
-    return !!m && KIND_REGISTRY[m.type].hasSeasons;
+    return !!m && kindOf(m.type).hasSeasons;
   });
 
   constructor(

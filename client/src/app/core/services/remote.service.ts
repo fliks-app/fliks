@@ -12,7 +12,7 @@ import { CastService } from './cast.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import type { PlaybackSnapshot } from './playback/playback-output';
-import { DETAIL_SEGMENTS_PATTERN, KIND_REGISTRY, isMediaKind, kindFromSegment } from '../media-kinds';
+import { DETAIL_SEGMENTS_PATTERN, isMediaKind, kindFromSegment, kindOf } from '../media-kinds';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -383,7 +383,7 @@ export class RemoteService {
     }
     if (this.router.url.startsWith('/watch')) return;
     this.appliedBrowseKey = browseKey(cmd);
-    const base = '/' + KIND_REGISTRY[cmd.mediaType].segment;
+    const base = '/' + kindOf(cmd.mediaType).segment;
     const path = cmd.episodeId ? [base, cmd.mediaId, 'episode', cmd.episodeId] : [base, cmd.mediaId];
     await this.router.navigate(path);
   }

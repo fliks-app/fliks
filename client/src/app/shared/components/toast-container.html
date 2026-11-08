@@ -37,7 +37,7 @@
       </div>
       <button
         class="btn btn-ghost btn-xs btn-square shrink-0 text-inherit hover:border-transparent hover:bg-current/15"
-        (click)="toastService.dismiss(toast.id)"
+        (click)="toastService.close(toast.id)"
         [attr.aria-label]="'common.close_notification' | translate"
       >
         <svg lucideX class="h-4 w-4"></svg>

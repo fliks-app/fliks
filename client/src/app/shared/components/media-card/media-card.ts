@@ -2,7 +2,7 @@ import { Component, booleanAttribute, ElementRef, InjectionToken, input, output,
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucideMusic, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones, LucideBook, LucideMusic } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
@@ -65,7 +65,7 @@ export interface CardDownloadState {
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective, PosterMosaicComponent,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
-    LucideFilm, LucideMusic, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones,
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones, LucideBook, LucideMusic,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.

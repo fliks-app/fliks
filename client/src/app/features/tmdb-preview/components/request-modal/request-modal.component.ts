@@ -24,7 +24,7 @@ import {
   defaultFolderId,
 } from '../../../../shared/components/library-folder-select/library-folder-select';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
-import { KIND_REGISTRY } from '../../../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-request-modal',
@@ -107,7 +107,7 @@ export class RequestModalComponent {
   /** Series only: a pick is required, unless the season list never loaded. */
   readonly nothingPicked = computed(
     () =>
-      KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+      kindOf(this.mediaType()).hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   /** A profile still on the previous library's pre-fill follows the new library. */
@@ -166,7 +166,7 @@ export class RequestModalComponent {
     this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
-    if (KIND_REGISTRY[params.mediaType].hasSeasons) {
+    if (kindOf(params.mediaType).hasSeasons) {
       this.seasonsLoading.set(true);
       const preselected = new Set(params.preselectedSeasons ?? []);
       this.metadata
@@ -215,7 +215,7 @@ export class RequestModalComponent {
   async confirm() {
     this.requesting.set(true);
     try {
-      const isSeries = KIND_REGISTRY[this.mediaType()].hasSeasons;
+      const isSeries = kindOf(this.mediaType()).hasSeasons;
       await this.requestsApi.create({
         mediaType: this.mediaType(),
         ...this.titleKey(),

@@ -45,7 +45,7 @@ import { RequestStatusBadgeComponent } from './request-status-badge/request-stat
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
-import { KIND_REGISTRY } from '../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-requests',
@@ -341,7 +341,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     // `row.media` is resolved by (tmdbId, type), so it exists even when the request's `mediaId` FK is still null.
     const libraryId = row.media?.id;
     if (libraryId) {
-      return ['/' + KIND_REGISTRY[row.mediaType].segment, libraryId];
+      return ['/' + kindOf(row.mediaType).segment, libraryId];
     }
     return requestAddLink(row);
   }

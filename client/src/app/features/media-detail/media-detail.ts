@@ -35,7 +35,7 @@ import { WantsStore } from '../../core/acquisition/acquisition';
 import { DETAIL_HERO_HOST } from '../../shared/components/detail-hero/detail-hero';
 import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
-import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { mediaDetailLink, kindOf } from '../../core/media-kinds';
 import { MEDIA_DETAIL_HOST, type HandedEpisode, type MediaDetailHost } from './media-detail-host';
 
 /** The route shell of every detail page: loads the title, owns the hero chrome, the scroll memory and the modals
@@ -184,7 +184,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     const params = this.routeParams();
     if (!m || !params || m.id !== Number(params.get('id'))) return;
     // Seeded stub: no season tree yet, so the page has not resolved what its title is.
-    if (KIND_REGISTRY[m.type].hasSeasons && !m.seasons) return;
+    if (kindOf(m.type).hasSeasons && !m.seasons) return;
     this.navbarService.enterHeroPage(title ?? m.title, m.logoUrl);
   });
 
@@ -509,7 +509,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
         refresh: () => void this.refreshMetadata(),
         tracking: () => this.trackingModals.open(m.id, { kind: m.type }),
         // Profiles are a video title's; a book's are its wants, inside its own page.
-        ...(KIND_REGISTRY[m.type].families.includes('video') && { profiles: () => this.openProfiles() }),
+        ...(kindOf(m.type).families.includes('video') && { profiles: () => this.openProfiles() }),
         ...this.pageActions,
       };
       openers[action]?.();

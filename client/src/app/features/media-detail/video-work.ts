@@ -13,7 +13,7 @@ import { DownloadProgressService } from '../../core/services/download-progress.s
 import { isActive, nothingStartedKey } from '../../core/services/download-status';
 import type { MediaActionHandlers } from '../../core/plugin-ui/media-action-registry';
 import { hasProviderId } from '../../core/utils/media-identity';
-import { KIND_REGISTRY } from '../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { leavingLabel, scopedLeavingLabels } from '../../shared/utils/cleanup.util';
 import { DetailHeroComponent, type DetailHeroBadge } from '../../shared/components/detail-hero/detail-hero';
@@ -71,11 +71,11 @@ export abstract class VideoWorkBase {
   protected readonly mediaFiles = computed(() => {
     const m = this.media();
     // Series files belong to episodes; hide orphans at the root.
-    return KIND_REGISTRY[m.type].hasSeasons ? [] : (m.files ?? []);
+    return kindOf(m.type).hasSeasons ? [] : (m.files ?? []);
   });
   protected readonly headerFiles = computed(() => {
     const m = this.media();
-    return KIND_REGISTRY[m.type].hasSeasons ? (m.files ?? []) : this.mediaFiles();
+    return kindOf(m.type).hasSeasons ? (m.files ?? []) : this.mediaFiles();
   });
   /** Falls back to the file's own duration when the provider never gave a runtime. */
   protected readonly displayRuntime = computed(() => {

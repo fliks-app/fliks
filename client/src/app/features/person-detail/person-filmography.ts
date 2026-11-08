@@ -7,7 +7,7 @@ import {
 } from '../../core/services/api/persons-api.service';
 import { PersonDetailComponent } from './person-detail';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
-import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { mediaDetailLink, kindOf } from '../../core/media-kinds';
 
 @Component({
   selector: 'app-person-filmography',
@@ -37,7 +37,7 @@ export class PersonFilmographyComponent implements OnInit {
   linkFor(credit: PersonProviderCreditItem): string[] {
     if (credit.mediaId) return mediaDetailLink(credit.mediaType, credit.mediaId);
     return [
-      '/add/' + KIND_REGISTRY[credit.mediaType].providerSegment,
+      '/add/' + kindOf(credit.mediaType).providerSegment,
       this.credits()?.provider ?? 'tmdb',
       String(credit.externalId),
     ];

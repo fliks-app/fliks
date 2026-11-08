@@ -55,7 +55,7 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { CacheRead } from '../../core/interceptors/cache.interceptor';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
-import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { canMarkWatched, mediaDetailLink, kindOf } from '../../core/media-kinds';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
@@ -628,7 +628,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async markRecommendationWatched(rec: RecommendationItem) {
     const id = rec.media.id;
     try {
-      if (KIND_REGISTRY[rec.media.type].hasSeasons) {
+      if (kindOf(rec.media.type).hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(id, true);
       } else {
         const media = await this.mediaService.getOne(id);
@@ -648,7 +648,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Needs a movie with a file or a series (bulk endpoint); lean rows without a file keep it hidden. */
   canMarkMediaWatched(m: Media): boolean {
-    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
+    return canMarkWatched(m);
   }
 
   async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
@@ -664,7 +664,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async toggleRecentMediaWatched(m: Media, watched: boolean) {
     try {
-      if (KIND_REGISTRY[m.type].hasSeasons) {
+      if (kindOf(m.type).hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;
@@ -682,7 +682,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  row — drops the watched item from that library's bucket. */
   async toggleLibraryRecentWatched(libraryId: number, m: Media, watched: boolean) {
     try {
-      if (KIND_REGISTRY[m.type].hasSeasons) {
+      if (kindOf(m.type).hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;

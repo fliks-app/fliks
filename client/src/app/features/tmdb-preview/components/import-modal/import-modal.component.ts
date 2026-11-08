@@ -30,7 +30,7 @@ import {
 } from '../../../../shared/components/library-folder-select/library-folder-select';
 import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
 import { serverMessage } from '../../../../core/utils/server-message';
-import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
+import { KIND_REGISTRY, mediaDetailLink, kindOf } from '../../../../core/media-kinds';
 
 @Component({
   selector: 'app-import-modal',
@@ -98,7 +98,7 @@ export class ImportModalComponent {
    *  confirm button waits for a pick, same rule as the request modal. */
   protected readonly nothingToMonitor = computed(
     () =>
-      KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+      kindOf(this.mediaType()).hasSeasons && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   /** The server refuses an import without a quality profile. */
@@ -123,7 +123,7 @@ export class ImportModalComponent {
     this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
-    if (KIND_REGISTRY[params.mediaType].hasSeasons) this.loadSeasons();
+    if (kindOf(params.mediaType).hasSeasons) this.loadSeasons();
 
     this.loading.set(true);
     this.loadFailed.set(false);
@@ -223,7 +223,7 @@ export class ImportModalComponent {
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
         folderId: this.selectedFolderId() ?? undefined,
-        ...(KIND_REGISTRY[this.mediaType()].hasSeasons && !this.seasonsFailed()
+        ...(kindOf(this.mediaType()).hasSeasons && !this.seasonsFailed()
           ? {
               monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b),
             }

@@ -49,7 +49,7 @@ import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
-import { KIND_REGISTRY, kindOfListFilter, mediaDetailLink } from '../../core/media-kinds';
+import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 /** The content types searched as shelves of their own (library, people and providers), not through the video flow. */
@@ -568,12 +568,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
   canMarkMediaWatched(m: Media): boolean {
-    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
+    return canMarkWatched(m);
   }
 
   async toggleMediaWatched(m: Media, watched: boolean) {
     try {
-      if (KIND_REGISTRY[m.type].hasSeasons) {
+      if (kindOf(m.type).hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;
@@ -762,7 +762,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const provider = row.provider ?? 'tmdb';
     const externalId =
       row.externalId ?? (provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId));
-    return ['/add/' + KIND_REGISTRY[row.mediaType].providerSegment, provider, externalId];
+    return ['/add/' + kindOf(row.mediaType).providerSegment, provider, externalId];
   }
 
 }

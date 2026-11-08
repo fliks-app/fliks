@@ -86,9 +86,21 @@ export function isMediaKind(value: unknown): value is MediaType {
   return typeof value === 'string' && Object.hasOwn(KIND_REGISTRY, value);
 }
 
+/** The descriptor of a kind, or the one of a movie when an older client meets a kind it predates. */
+export function kindOf(type: string | null | undefined): KindDescriptor {
+  return (isMediaKind(type) ? KIND_REGISTRY[type] : undefined) ?? KIND_REGISTRY[DEFAULT_LIST_KIND];
+}
+
+/** A card toggles watched for a series (bulk endpoint) or a movie with a file; other kinds have no such state. */
+export function canMarkWatched(m: { type: MediaType; files?: readonly unknown[] }): boolean {
+  if (!isMediaKind(m.type)) return false;
+  const k = KIND_REGISTRY[m.type];
+  return k.families.includes('video') && (k.hasSeasons || !!m.files?.length);
+}
+
 /** Router link of a title's detail page. */
 export function mediaDetailLink(type: MediaType, id: number | string): string[] {
-  return ['/' + KIND_REGISTRY[type].segment, String(id)];
+  return ['/' + kindOf(type).segment, String(id)];
 }
 
 /** The kind served at a detail route segment, if any. */
