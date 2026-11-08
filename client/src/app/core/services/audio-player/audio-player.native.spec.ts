@@ -37,6 +37,7 @@ describe('AudioPlayerService on the native player', () => {
   const updatePlaybackState = vi.fn();
   const getItemPlaybackInfo = vi.fn();
   const refreshAccessToken = vi.fn().mockResolvedValue(true);
+  const user = signal<{ id: number } | null>({ id: 1 });
   const emit = (event: string, e: unknown) => handlers.get(event)!(e);
 
   beforeEach(() => {
@@ -46,6 +47,7 @@ describe('AudioPlayerService on the native player', () => {
     updatePlaybackState.mockReset().mockResolvedValue(null);
     getItemPlaybackInfo.mockReset();
     refreshAccessToken.mockClear();
+    user.set({ id: 1 });
     (plugin as unknown as { addListener: unknown }).addListener = vi.fn(async (event: string, fn: (e: unknown) => void) => {
       handlers.set(event, fn);
       return { remove: async () => undefined };
@@ -55,7 +57,7 @@ describe('AudioPlayerService on the native player', () => {
         provideZonelessChangeDetection(),
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
-        { provide: AuthService, useValue: { refreshAccessToken, user: signal(null) } },
+        { provide: AuthService, useValue: { refreshAccessToken, user } },
         { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
         { provide: CastPlayerService, useValue: {} },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x', directPlayProfiles: [] }) } },
@@ -173,6 +175,18 @@ describe('AudioPlayerService on the native player', () => {
     plugin['seek']!.mockClear();
     audio.previousChapter();
     await vi.waitFor(() => expect(plugin['seek']).toHaveBeenCalledWith({ position: 485, index: 0 }));
+  });
+
+  it('drops the queue and the track when the account leaves, without a progress beat', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    updatePlaybackState.mockClear();
+    user.set(null);
+    TestBed.tick();
+    await vi.waitFor(() => expect(audio.track()).toBeNull());
+    expect(plugin['stop']).toHaveBeenCalled();
+    expect(updatePlaybackState).not.toHaveBeenCalled();
   });
 
   it('has the web layer refresh the session when the native side gets a 401', async () => {

@@ -1,4 +1,4 @@
-import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal, untracked } from '@angular/core';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AuthService } from '../auth.service';
@@ -189,6 +189,18 @@ export class AudioPlayerService {
     window.addEventListener('pagehide', () => this.beatOnExit());
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
+    let signedIn = !!this.auth.user();
+    effect(() => {
+      const now = !!this.auth.user();
+      if (signedIn && !now) untracked(() => this.dropForSession());
+      signedIn = now;
+    });
+  }
+
+  /** The account left: its queue goes without a progress beat, which would reach the next account. */
+  private dropForSession(): void {
+    this.info = null;
+    void this.close();
   }
 
   /** Starts the item, or resumes it when it is the one loaded. */
