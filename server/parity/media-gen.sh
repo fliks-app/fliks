@@ -33,7 +33,7 @@ img="$root/data"
 mkdir -p "$img"
 put media/art.jpg "$root/assets/art.jpg"
 put media/art.png "$root/assets/art.png"
-for f in media/1/{poster,poster-thumb,fanart,fanart-1}.jpg media/2/poster.jpg persons/5.jpg episodes/3.jpg seasons/2.jpg \
+for f in media/1/{poster,poster-thumb,fanart,fanart-1}.jpg media/5/poster.jpg persons/5.jpg episodes/3.jpg seasons/2.jpg \
   requests/movie-603/poster.jpg requests/movie-tmdb-603/poster.jpg; do
   put "$root/assets/art.jpg" "$img/$f"
 done

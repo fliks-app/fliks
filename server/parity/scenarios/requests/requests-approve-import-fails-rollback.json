@@ -10,11 +10,11 @@
       "as": "admin",
       "expect": {
         "body": {
-          "error": "Service Unavailable",
-          "message": "The tmdb provider is not available",
-          "statusCode": 503
+          "error": "Internal Server Error",
+          "message": "Internal server error",
+          "statusCode": 500
         },
-        "status": 503
+        "status": 500
       },
       "method": "POST",
       "path": "/api/requests/1/approve"

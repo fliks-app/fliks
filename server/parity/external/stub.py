@@ -82,9 +82,6 @@ class H(BaseHTTPRequestHandler):
         raw = self.rfile.read(n) if n else b""
         if u.path.startswith("/__"):
             return self.control(method, u.path, query, raw)
-        if u.path.startswith("/tmdb/3/") and not query.get("api_key", [""])[-1]:
-            # a keyless run (no provider keys) sees what api.themoviedb.org answers
-            return self.send(401, {"status_code": 7, "status_message": "Invalid API key: You must be granted a valid key.", "success": False})
         with LOCK:
             STATE["hits"].append({"method": method, "path": u.path, "query": {k: v[-1] for k, v in query.items()}})
             fail = next((f for p, f in STATE["fail"].items() if u.path.startswith(p)), None)

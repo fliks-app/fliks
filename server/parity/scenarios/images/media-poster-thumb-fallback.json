@@ -14,7 +14,7 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/images/media/2/poster?size=thumb"
+      "path": "/api/images/media/5/poster?size=thumb"
     }
   ]
 }
