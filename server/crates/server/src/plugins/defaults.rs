@@ -2,24 +2,23 @@
 use fliks_domain::external_id::ExternalProvider;
 use serde_json::Value;
 
-type Table = [(ExternalProvider, &'static str, Option<&'static str>)];
+type Table = [(ExternalProvider, &'static str, &'static str)];
 
-/// Empty in a local build.
 pub const DEFAULTS: &Table = &[
     (
         ExternalProvider::Tmdb,
         "apiKey",
-        option_env!("FLIKS_DEFAULT_TMDB_API_KEY"),
+        "b7beb6d9fccf72a8b16504c10e19c1f9",
     ),
     (
         ExternalProvider::Tvdb,
         "apiKey",
-        option_env!("FLIKS_DEFAULT_TVDB_API_KEY"),
+        "958315ec-ad12-41bc-bc2c-1f9b96d0933f",
     ),
     (
         ExternalProvider::FanartTv,
         "apiKey",
-        option_env!("FLIKS_DEFAULT_FANARTTV_API_KEY"),
+        "2adb74d6f81e04531b4ad6b15083bee2",
     ),
 ];
 
@@ -71,7 +70,7 @@ async fn import_with(
             .await?
             .is_some_and(|v| !v.is_empty());
         if let Some(v) = set(var)
-            .filter(|v| compiled.and_then(|c| c.2) != Some(v.as_str()))
+            .filter(|v| compiled.map(|c| c.2) != Some(v.as_str()))
             .filter(|_| !kept)
         {
             crate::settings::set_in(&mut tx, key, Some(&v)).await?;
@@ -113,7 +112,7 @@ fn lookup<'a>(
     table
         .iter()
         .find(|(p, n, _)| p.as_str() == first && *n == name)
-        .and_then(|(_, _, v)| *v)
+        .map(|(_, _, v)| *v)
         .filter(|v| !v.is_empty())
 }
 
@@ -163,7 +162,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    const T: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("k-tmdb"))];
+    const T: &Table = &[(ExternalProvider::Tmdb, "apiKey", "k-tmdb")];
 
     fn manifest(ns: &str) -> Value {
         json!({
@@ -206,18 +205,6 @@ mod tests {
         assert_eq!(c, d);
     }
 
-    #[test]
-    fn a_local_build_has_no_default() {
-        assert!(
-            resolved(
-                &[(ExternalProvider::Tmdb, "apiKey", None)],
-                &manifest("tmdb"),
-                true
-            )
-            .is_empty()
-        );
-    }
-
     fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
         move |k| {
             pairs
@@ -234,7 +221,7 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn a_key_that_differs_from_the_default_is_imported_once(pool: sqlx::PgPool) {
         crate::db::migrate(&pool).await.unwrap();
-        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
+        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", "built-in")];
         import_with(
             &pool,
             d,
@@ -275,7 +262,7 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn the_compiled_default_is_not_imported(pool: sqlx::PgPool) {
         crate::db::migrate(&pool).await.unwrap();
-        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", Some("built-in"))];
+        let d: &Table = &[(ExternalProvider::Tmdb, "apiKey", "built-in")];
         import_with(&pool, d, env(&[("TMDB_API_KEY", "built-in")]))
             .await
             .unwrap();

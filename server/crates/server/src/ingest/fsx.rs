@@ -259,9 +259,10 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
             windows_sys::Win32::Storage::FileSystem::MoveFileExW(a.as_ptr(), b.as_ptr(), 0)
         } != 0
         {
-            return Ok(());
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
         }
-        return Err(io::Error::last_os_error());
     }
     // Filesystems with no atomic no-replace (FUSE without rename2, exFAT): check, then rename.
     // ponytail: a writer creating `to` between the check and the rename wins the race; nothing better exists there.
