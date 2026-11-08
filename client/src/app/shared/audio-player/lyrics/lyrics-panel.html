@@ -81,6 +81,9 @@
               (input)="audio.setVocalLevel(+$any($event.target).value / 100)"
             />
           </label>
+          @if (k.lyricsError) {
+            <span class="text-sm text-error" role="alert" data-testid="karaoke-lyrics-error">{{ 'karaoke.lyrics_failed' | translate }} {{ k.lyricsError }}</span>
+          }
         }
       }
     </div>
