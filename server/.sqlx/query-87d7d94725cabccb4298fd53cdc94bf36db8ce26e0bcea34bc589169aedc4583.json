@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, kind, \"inPath\" AS in_path, \"inSize\" AS in_size, \"mediaFileId\" AS media_file_id FROM jobs\n           WHERE state = 'queued' AND \"notBefore\" <= now() AND (kind <> 'verify' OR $4)\n             AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'\n                  AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'\n                       THEN jsonb_array_length(payload #> '{plan,extraSubtitles}') ELSE 0 END = 0))\n             AND (payload #>> '{plan,codec}' IS NULL OR CASE\n                    WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)\n                    ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)\n           ORDER BY priority DESC, id LIMIT 16 FOR UPDATE SKIP LOCKED",
+  "query": "SELECT id, kind, \"inPath\" AS in_path, \"inSize\" AS in_size, \"mediaFileId\" AS media_file_id FROM jobs\n           WHERE state = 'queued' AND \"notBefore\" <= now() AND (kind <> 'verify' OR $4)\n             AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'\n                  AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'\n                       THEN jsonb_array_length(payload #> '{plan,extraSubtitles}') ELSE 0 END = 0))\n             AND (CASE WHEN payload #>> '{plan,codec}' IS NULL THEN $5\n                    WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)\n                    ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)\n           ORDER BY priority DESC, id LIMIT 16 FOR UPDATE SKIP LOCKED",
   "describe": {
     "columns": [
       {
@@ -64,6 +64,7 @@
         "TextArray",
         "TextArray",
         "TextArray",
+        "Bool",
         "Bool"
       ]
     },
@@ -75,5 +76,5 @@
       true
     ]
   },
-  "hash": "06edba07633e0bb3283ec54455be655f7b273378c040361c256f78c2c996a922"
+  "hash": "87d7d94725cabccb4298fd53cdc94bf36db8ce26e0bcea34bc589169aedc4583"
 }

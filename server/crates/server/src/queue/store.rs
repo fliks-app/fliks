@@ -51,6 +51,9 @@ pub async fn release_token(pool: &PgPool, token_id: i32) -> sqlx::Result<u64> {
     Ok(r.rows_affected())
 }
 
+/// The device id of a worker's CPU lane.
+const CPU_DEVICE: &str = "cpu";
+
 /// What the lease needs to know about the asking device.
 pub struct Want<'a> {
     pub key: &'a str,
@@ -164,14 +167,15 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
              AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'
                   AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'
                        THEN jsonb_array_length(payload #> '{plan,extraSubtitles}') ELSE 0 END = 0))
-             AND (payload #>> '{plan,codec}' IS NULL OR CASE
+             AND (CASE WHEN payload #>> '{plan,codec}' IS NULL THEN $5
                     WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)
                     ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)
            ORDER BY priority DESC, id LIMIT 16 FOR UPDATE SKIP LOCKED"#,
         w.hw,
         w.sw,
         w.fallback,
-        w.local
+        w.local,
+        w.device == CPU_DEVICE
     )
     .fetch_all(&mut *tx)
     .await?;
