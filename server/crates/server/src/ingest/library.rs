@@ -469,6 +469,7 @@ impl Ctx<'_> {
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
         // An issue's number lives in the file name, so it keeps it; a track's name comes from its tags.
+        let mut disc_dir = None;
         let mut base = if m.media_type == MediaKind::Comic {
             transfer::split_ext(&name).0.to_owned()
         } else if m.media_type == MediaKind::Album {
@@ -480,7 +481,10 @@ impl Ctx<'_> {
             )
             .await;
             match tagged {
-                Ok(named) => named.unwrap_or_else(|| transfer::split_ext(&name).0.to_owned()),
+                Ok((named, disc)) => {
+                    disc_dir = disc;
+                    named.unwrap_or_else(|| transfer::split_ext(&name).0.to_owned())
+                }
                 Err(e) => return Ok(Placed::Retry(format!("{name}: {e}"))),
             }
         } else {
@@ -510,7 +514,10 @@ impl Ctx<'_> {
             Ok(n) => n,
             Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
         };
-        let dir = self.mdir.to_path_buf();
+        let dir = match disc_dir.as_deref().map(|d| component(d, "")) {
+            Some(Ok(d)) => self.mdir.join(d),
+            _ => self.mdir.to_path_buf(),
+        };
         let (dest_at, src_at) = (dir.join(&file), src.clone());
         let at_dest = tokio::task::spawn_blocking(move || {
             dunce::canonicalize(dest_at).is_ok_and(|d| d == src_at)

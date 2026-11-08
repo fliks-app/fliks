@@ -348,6 +348,22 @@ impl host::Host for Ctx {
             }
         )
     }
+    async fn music_find_recording(
+        &mut self,
+        recording: t::RecordingRef,
+    ) -> Result<Option<t::WantedTrack>, HostError> {
+        let app = self.app();
+        call!(
+            self,
+            "music.findRecording",
+            ["media:read"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::find_recording(&app, recording).await
+            }
+        )
+    }
     async fn playlist_sync(
         &mut self,
         user_id: u32,
@@ -355,6 +371,7 @@ impl host::Host for Ctx {
         item_ids: Vec<u32>,
     ) -> Result<u32, HostError> {
         let app = self.app();
+        let plugin_id = self.sh.id.to_string();
         call!(
             self,
             "playlist.sync",
@@ -362,7 +379,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::playlist_sync(&app, user_id, &name, &item_ids).await
+                super::acquisition::playlist_sync(&app, &plugin_id, user_id, &name, &item_ids).await
             }
         )
     }

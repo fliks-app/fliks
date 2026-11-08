@@ -203,7 +203,10 @@ pub async fn write_album(
     .bind(a.popularity)
     .execute(&mut *tx)
     .await?;
-    let artists: Vec<Credited> = a.artists.iter().map(credited).collect();
+    let mut artists: Vec<Credited> = a.artists.iter().map(credited).collect();
+    if a.is_compilation && artists.is_empty() {
+        artists = vec![people::various_artists()];
+    }
     people::replace_album_artists(&mut tx, media, &artists).await?;
     release_facts(&mut tx, media, f).await?;
     tx.commit().await?;

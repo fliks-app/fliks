@@ -14,6 +14,15 @@ pub struct Credited {
     pub instrument: Option<String>,
 }
 
+/// The album artist of a compilation no source credits: a name-only person, as the Various Artists id names none.
+pub fn various_artists() -> Credited {
+    Credited {
+        name: "Various Artists".into(),
+        sort_name: Some("Various Artists".into()),
+        ..Credited::default()
+    }
+}
+
 /// The person holding this MusicBrainz id (live or alias), else the one of this name, else a new one.
 /// A person that holds another artist id is someone else, and so is one known only from films or series.
 pub async fn person(

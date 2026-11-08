@@ -403,6 +403,20 @@ function library(mediaTypes: LibrarySummary['mediaTypes']): LibrarySummary {
   return { id: 1, name: 'lib', mediaTypes } as LibrarySummary;
 }
 
+describe('LibraryComponent: album library', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('counts the tracks of its albums in the footer', () => {
+    const { component } = createHarness();
+    const album = (id: number, trackCount: number) => ({ id, type: 'album', album: { trackCount, playCount: 0 } }) as never;
+    component.list.all.set([album(1, 5), album(2, 3)]);
+    expect(component.kindStats()).toEqual([{ labelKey: 'legend.album_tracks', done: 8, total: null }]);
+  });
+});
+
 describe('LibraryComponent: book library', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

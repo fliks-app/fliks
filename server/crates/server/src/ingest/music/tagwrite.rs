@@ -1,6 +1,6 @@
 //! Opt-in tag writing (`docs/spec/music.md`, Naming and tags): the setting `music.write_tags` makes a settled album's
-//! files carry what the library knows. A file with several hard links is copied first, so the other links keep their
-//! bytes (a seeding torrent stays valid).
+//! files carry what the library knows. A file whose tags already match is left alone, a symlink is never followed and
+//! every write goes through a copy renamed over the file, so a hard link keeps its bytes (a seeding torrent stays valid).
 use super::super::rescan::mtime_ms;
 use crate::{settings::setting_value, state::AppState};
 use lofty::{
@@ -36,71 +36,55 @@ pub async fn enabled(st: &AppState) -> bool {
         .is_some_and(|v| v == "true")
 }
 
-fn linked(meta: &std::fs::Metadata) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        meta.nlink() > 1
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = meta;
-        false
-    }
-}
-
 fn set(tag: &mut Tag, key: ItemKey, v: Option<&str>) {
     if let Some(v) = v.filter(|v| !v.is_empty()) {
         tag.insert_text(key, v.to_owned());
     }
 }
 
-/// Writes `f` into the file at `path`; a file with several links is rewritten through a copy.
-fn write(path: &Path, f: &Facts) -> Result<(), String> {
+/// Writes `f` into the file at `path` through a copy renamed over it; `false` when the file is a symlink or its
+/// tags already match.
+fn write(path: &Path, f: &Facts) -> Result<bool, String> {
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !meta.is_file() {
+        return Ok(false);
+    }
     let tagged = lofty::read_from_path(path).map_err(|e| e.to_string())?;
     let mut tag = tagged
         .primary_tag()
         .cloned()
         .unwrap_or_else(|| Tag::new(tagged.primary_tag_type()));
-    set(&mut tag, ItemKey::TrackTitle, f.title.as_deref());
-    set(&mut tag, ItemKey::AlbumTitle, Some(&f.album));
-    set(&mut tag, ItemKey::TrackArtist, f.artists.as_deref());
-    set(&mut tag, ItemKey::AlbumArtist, f.album_artists.as_deref());
-    set(
-        &mut tag,
-        ItemKey::MusicBrainzRecordingId,
-        f.recording.as_deref(),
-    );
-    set(
-        &mut tag,
-        ItemKey::MusicBrainzTrackId,
-        f.release_track.as_deref(),
-    );
-    set(
-        &mut tag,
-        ItemKey::MusicBrainzReleaseId,
-        f.release.as_deref(),
-    );
-    set(
-        &mut tag,
-        ItemKey::MusicBrainzReleaseGroupId,
-        f.group.as_deref(),
-    );
-    if let Some(n) = f.number.and_then(|n| u32::try_from(n).ok()) {
+    let year = f.year.and_then(|y| u32::try_from(y).ok());
+    let text = [
+        (ItemKey::TrackTitle, f.title.as_deref()),
+        (ItemKey::AlbumTitle, Some(f.album.as_str())),
+        (ItemKey::TrackArtist, f.artists.as_deref()),
+        (ItemKey::AlbumArtist, f.album_artists.as_deref()),
+        (ItemKey::MusicBrainzRecordingId, f.recording.as_deref()),
+        (ItemKey::MusicBrainzTrackId, f.release_track.as_deref()),
+        (ItemKey::MusicBrainzReleaseId, f.release.as_deref()),
+        (ItemKey::MusicBrainzReleaseGroupId, f.group.as_deref()),
+    ];
+    let number = f.number.and_then(|n| u32::try_from(n).ok());
+    let disc = u32::try_from(f.disc).unwrap_or(1);
+    let current = text.iter().all(|(k, v)| {
+        v.filter(|v| !v.is_empty())
+            .is_none_or(|v| tag.get_string(*k) == Some(v))
+    }) && number.is_none_or(|n| tag.track() == Some(n))
+        && tag.disk() == Some(disc);
+    if current {
+        return Ok(false);
+    }
+    for (k, v) in text {
+        set(&mut tag, k, v);
+    }
+    if let Some(y) = year {
+        tag.insert_text(ItemKey::RecordingDate, y.to_string());
+    }
+    if let Some(n) = number {
         tag.set_track(n);
     }
-    tag.set_disk(u32::try_from(f.disc).unwrap_or(1));
-    set(
-        &mut tag,
-        ItemKey::Year,
-        f.year.map(|y| y.to_string()).as_deref(),
-    );
-    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
-    if !linked(&meta) {
-        return tag
-            .save_to_path(path, WriteOptions::default())
-            .map_err(|e| e.to_string());
-    }
+    tag.set_disk(disc);
     let mut copy: PathBuf = path.to_path_buf();
     copy.set_extension(format!(
         "{}.tmp",
@@ -114,7 +98,7 @@ fn write(path: &Path, f: &Facts) -> Result<(), String> {
     if saved.is_err() {
         let _ = std::fs::remove_file(&copy);
     }
-    saved
+    saved.map(|()| true)
 }
 
 /// Writes the tags of every file of the album `media`; the count of files written. A file that fails is
@@ -147,13 +131,14 @@ pub async fn write_album_tags(st: &AppState, media: i32) -> Result<usize, String
     let mut done = 0;
     for f in rows {
         let path = Path::new(&f.folder).join(&f.rel);
+        let (p, file) = (path.clone(), f.file);
         let facts = f;
-        let (p, file) = (path.clone(), facts.file);
-        let facts = tokio::task::spawn_blocking(move || write(&p, &facts).map(|()| facts))
+        let written = tokio::task::spawn_blocking(move || write(&p, &facts))
             .await
             .map_err(|e| e.to_string())?;
-        match facts {
-            Ok(_) => {
+        match written {
+            Ok(false) => {}
+            Ok(true) => {
                 let meta = tokio::fs::metadata(&path)
                     .await
                     .map_err(|e| e.to_string())?;
@@ -220,24 +205,42 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("a.wav");
         std::fs::write(&path, wav()).unwrap();
-        write(&path, &facts()).unwrap();
+        assert!(write(&path, &facts()).unwrap());
         let tagged = lofty::read_from_path(&path).unwrap();
         let tag = tagged.primary_tag().unwrap();
         assert_eq!(tag.title().as_deref(), Some("Low Tide"));
         assert_eq!(tag.track(), Some(5));
+        assert!(
+            !write(&path, &facts()).unwrap(),
+            "matching tags are not rewritten"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[cfg(unix)]
     #[test]
-    fn a_file_with_several_links_is_never_rewritten_in_place() {
+    fn a_symlink_is_never_followed() {
+        let dir =
+            std::env::temp_dir().join(format!("fliks-tagwrite-{}", crate::config::random_hex(6)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (path, seed) = (dir.join("a.wav"), dir.join("seeding.wav"));
+        std::fs::write(&seed, wav()).unwrap();
+        std::os::unix::fs::symlink(&seed, &path).unwrap();
+        assert!(!write(&path, &facts()).unwrap());
+        assert_eq!(std::fs::read(&seed).unwrap(), wav());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_with_several_links_keeps_the_bytes_of_the_other_links() {
         let dir =
             std::env::temp_dir().join(format!("fliks-tagwrite-{}", crate::config::random_hex(6)));
         std::fs::create_dir_all(&dir).unwrap();
         let (path, seed) = (dir.join("a.wav"), dir.join("seeding.wav"));
         std::fs::write(&seed, wav()).unwrap();
         std::fs::hard_link(&seed, &path).unwrap();
-        write(&path, &facts()).unwrap();
+        assert!(write(&path, &facts()).unwrap());
         assert_eq!(
             std::fs::read(&seed).unwrap(),
             wav(),

@@ -106,7 +106,7 @@ const KIND_STATS: Record<MediaType, (m: Media) => { key: string; labelKey: strin
   album: (m) => ({
     key: 'album',
     labelKey: 'legend.album_tracks',
-    done: (m as AlbumMedia).album?.playCount ? 1 : 0,
+    done: (m as AlbumMedia).album?.trackCount ?? 0,
     total: null,
   }),
 };

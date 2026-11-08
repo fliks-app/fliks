@@ -4911,6 +4911,76 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn two_untagged_discs_of_a_download_keep_their_own_file_names(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        let bare = || {
+            track(
+                "x",
+                1,
+                1,
+                json!({"title": null, "track": null, "disc": null, "lyrics": null}),
+            )
+        };
+        c.fake.script("POST", "/v1/probe", vec![bare()]);
+        let inbox = c.dir.join("inbox/Alpha");
+        let files: Vec<_> = ["CD1/01.flac", "CD2/01.flac"]
+            .iter()
+            .map(|r| {
+                touch(&inbox.join(r), r.as_bytes());
+                crate::ingest::library::File {
+                    path: inbox.join(r),
+                    episode_id: None,
+                }
+            })
+            .collect();
+        let guard = c.st.ingest.media.lock(m).await;
+        let out = crate::ingest::library::ingest(
+            &c.st,
+            &guard,
+            crate::ingest::library::Request {
+                media_id: m,
+                files,
+                transfer: crate::ingest::transfer::Method::Copy,
+                fallback_quality: None,
+                release_name: None,
+                force: false,
+                uniquify_on_collision: false,
+                replace_existing: false,
+                language: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (
+                out.imported.len(),
+                out.already_present.len(),
+                out.errors.len()
+            ),
+            (2, 0, 0),
+            "{:?}",
+            out.errors
+        );
+        let discs: Vec<(String, i32)> = sqlx::query_as(
+            r#"SELECT f."relativePath", td."discNumber" FROM track_details td
+               JOIN item_parts p ON p."itemId" = td."itemId" JOIN media_files f ON f.id = p."mediaFileId"
+               ORDER BY td."discNumber""#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            discs,
+            [
+                ("Alpha/CD1/01.flac".into(), 1),
+                ("Alpha/CD2/01.flac".into(), 2)
+            ]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn lyrics_are_found_served_edited_and_carried_to_the_new_file(pool: PgPool) {
         let c = ctx_music(pool, None).await;
         let l = album_lib(&c).await;
@@ -5319,6 +5389,103 @@ mod music_ingest {
         assert_eq!(
             identify::identify_media(&c.st, m).await.unwrap(),
             identify::Outcome::Nothing
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn untagged_files_of_an_identified_album_fill_its_target_edition_and_satisfy_the_want(
+        pool: PgPool,
+    ) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({m}, 'album', 'musicbrainz', '{GROUP}');
+               INSERT INTO editions ("mediaId", family) VALUES ({m}, 'audio');
+               INSERT INTO items ("mediaId", "editionId", monitored, title)
+                 SELECT {m}, e.id, true, t FROM editions e, unnest(ARRAY['One', 'Two', 'Three']) t;
+               INSERT INTO track_details ("itemId", "mediaId", position, "discNumber", "trackNumber")
+                 SELECT i.id, {m}, row_number() OVER (ORDER BY i.id), CASE i.title WHEN 'Three' THEN 2 ELSE 1 END,
+                        CASE i.title WHEN 'Two' THEN 2 ELSE 1 END
+                   FROM items i WHERE i."mediaId" = {m};
+               INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
+                 SELECT id, {m}, 'musicbrainz', '{RELEASE}' FROM editions;
+               INSERT INTO album_details ("mediaId", "targetEditionId") SELECT {m}, id FROM editions"#
+        )))
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let plain = |t: &str, n: u32, d: u32| track(t, n, d, json!({}));
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                plain("One", 1, 1),
+                plain("Two", 2, 1),
+                plain("three", 1, 2),
+                plain("Stray", 7, 1),
+            ],
+        );
+        music::register(
+            &c.st,
+            m,
+            &place(
+                &c,
+                &["Alpha/1.mp3", "Alpha/2.mp3", "Alpha/3.mp3", "Alpha/7.mp3"],
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM editions WHERE family = 'audio'").await,
+            2,
+            "the file no track pairs with gets the release-less edition"
+        );
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM item_parts p JOIN items i ON i.id = p.\"itemId\" JOIN album_details ad ON ad.\"mediaId\" = i.\"mediaId\" WHERE i.\"editionId\" = ad.\"targetEditionId\""
+            )
+            .await,
+            3
+        );
+        let wants = crate::media::wants::list(&c.st.db, m).await.unwrap();
+        assert!(wants.iter().all(|w| w.satisfied), "{:?}", wants.len());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_compilation_has_various_artists_as_its_album_artist(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Mix").await;
+        let by = |t: &str, n: u32, who: &str| {
+            track(
+                t,
+                n,
+                1,
+                json!({"artist": who, "albumArtist": null, "lyrics": null}),
+            )
+        };
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![by("One", 1, "Ana"), by("Two", 2, "Bo")],
+        );
+        music::register(&c.st, m, &place(&c, &["Mix/1.flac", "Mix/2.flac"]))
+            .await
+            .unwrap();
+        let (compilation, names): (bool, Vec<String>) = sqlx::query_as(
+            r#"SELECT ad."isCompilation", COALESCE(array_agg(p.name) FILTER (WHERE p.name IS NOT NULL), '{}')
+               FROM album_details ad LEFT JOIN media_credits mc ON mc."mediaId" = ad."mediaId" AND mc.role = 'artist'
+               LEFT JOIN persons p ON p.id = mc."personId" WHERE ad."mediaId" = $1 GROUP BY ad."isCompilation""#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            (compilation, names),
+            (true, vec!["Various Artists".to_owned()])
         );
     }
 

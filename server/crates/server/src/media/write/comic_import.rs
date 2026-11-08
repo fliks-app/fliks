@@ -98,6 +98,7 @@ pub(crate) async fn create_comic_from(st: &AppState, c: &Creation<'_>) -> Result
         overview: None,
         provider: Some(ns),
         refreshed: false,
+        monitored: true,
     };
     let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, None).await?;
     if external_ids::link(&mut tx, &st.namespaces(), media, MediaKind::Comic, ns, id).await?

@@ -133,6 +133,27 @@ pub async fn ensure(st: &AppState, media: i32, prio: Priority) -> Result<bool, A
     Ok(true)
 }
 
+/// An album asked for as a whole (a request): its target picked when it has none, then every track of the
+/// target edition wanted again, a recording owned through another album left out.
+pub async fn want_all(st: &AppState, media: i32, prio: Priority) -> Result<(), AppError> {
+    ensure(st, media, prio).await?;
+    let edition: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
+            .bind(media)
+            .fetch_optional(&st.db)
+            .await?
+            .flatten();
+    let Some(edition) = edition else {
+        return Ok(());
+    };
+    sqlx::query(r#"UPDATE items SET monitored = true WHERE "editionId" = $1 AND NOT monitored"#)
+        .bind(edition)
+        .execute(&st.db)
+        .await?;
+    leave_owned(&st.db, media, edition).await?;
+    Ok(())
+}
+
 /// The monitored albums that hold an id, no file and no target yet, oldest first: a provider that was
 /// down when they were added is asked again.
 pub async fn sweep(st: &AppState) -> Result<usize, AppError> {
@@ -230,5 +251,32 @@ mod tests {
             again, held,
             "a release the album does not hold gets its own edition"
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_album_asked_for_whole_wants_every_track_but_the_owned_ones(db: PgPool) {
+        two_albums(&db).await;
+        let edition: i32 = sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = 2"#)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        set_target(&db, 2, edition).await.unwrap();
+        sqlx::query(r#"UPDATE items SET monitored = false WHERE "mediaId" = 2"#)
+            .execute(&db)
+            .await
+            .unwrap();
+        let st = AppState::new(
+            db.clone(),
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        want_all(&st, 2, Priority::Background).await.unwrap();
+        let wanted: Vec<bool> = sqlx::query_scalar(
+            r#"SELECT i.monitored FROM items i WHERE i."mediaId" = 2 ORDER BY i.id"#,
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        assert_eq!(wanted, [false, true]);
     }
 }
