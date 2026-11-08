@@ -3,7 +3,8 @@ import SwiftUI
 /// Native tvOS search: system `.searchable` field + a type filter, debounced
 /// ~250ms against GET /api/media?q=&type=&page=&limit= -> Paginated<Media>.
 struct SearchView: View {
-    var onSelectMedia: (Int) -> Void
+    var onSelectMedia: (Int, MediaKind) -> Void
+    var onSelectArtist: (Int) -> Void
 
     @State private var query = ""
     @State private var typeFilter: MediaKind?
@@ -24,6 +25,11 @@ struct SearchView: View {
             VStack(alignment: .leading, spacing: 24) {
                 typePicker
                 content
+                if typeFilter == nil || typeFilter == .album {
+                    MusicSearchSections(query: query.trimmingCharacters(in: .whitespacesAndNewlines),
+                                        genericEmpty: results.isEmpty && !loading,
+                                        onSelectAlbum: { onSelectMedia($0, .album) }, onSelectArtist: onSelectArtist)
+                }
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 40)
@@ -63,18 +69,24 @@ struct SearchView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 100)
         } else if results.isEmpty {
+            if typeFilter != .album && typeFilter != nil { emptyText }
+        } else {
+            ContentGrid(title: nil, items: results, onReachEnd: loadMore) { media in
+                PosterCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id,
+                           missing: media.isMissing) {
+                    onSelectMedia(media.id, media.type)
+                }
+            }
+        }
+    }
+
+    private var emptyText: some View {
+        VStack {
             Text(tr("search.empty"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 100)
-        } else {
-            ContentGrid(title: nil, items: results, onReachEnd: loadMore) { media in
-                PosterCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id,
-                           missing: media.isMissing) {
-                    onSelectMedia(media.id)
-                }
-            }
         }
     }
 
@@ -108,11 +120,12 @@ struct SearchView: View {
         defer { loading = false }
         var params = ["q": q, "page": String(page), "limit": String(pageSize)]
         if let type { params["type"] = type.rawValue }
+        if type == .album { results = []; return }
         do {
             let res: Paginated<Media> = try await APIClient.shared.get("/api/media", query: params)
             // Drop a stale response superseded by a newer query/filter change.
             guard q == query.trimmingCharacters(in: .whitespacesAndNewlines), type == typeFilter else { return }
-            let data = res.data.filter(\.type.isPlayable)
+            let data = res.data.filter { $0.type.isPlayable && $0.type != .album }
             results = page == 1 ? data : results + data
             total = res.total
             fetched = page == 1 ? res.data.count : fetched + res.data.count

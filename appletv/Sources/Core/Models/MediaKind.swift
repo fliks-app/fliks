@@ -2,12 +2,12 @@ import Foundation
 
 /// Wire `mediaType`; mirrors `MediaKind` in the server and `KIND_REGISTRY` in the client.
 enum MediaKind: Hashable, Codable {
-    case movie, series, book, comic
+    case movie, series, book, comic, album
     /// A kind this build doesn't know yet; keeps the raw value.
     case unknown(String)
 
     /// Kinds offered by the type filters.
-    static let filterable: [MediaKind] = [.movie, .series]
+    static let filterable: [MediaKind] = [.movie, .series, .album]
 
     var rawValue: String {
         switch self {
@@ -15,6 +15,7 @@ enum MediaKind: Hashable, Codable {
         case .series: "series"
         case .book: "book"
         case .comic: "comic"
+        case .album: "album"
         case .unknown(let raw): raw
         }
     }
@@ -25,6 +26,7 @@ enum MediaKind: Hashable, Codable {
         case "series": self = .series
         case "book": self = .book
         case "comic": self = .comic
+        case "album": self = .album
         default: self = .unknown(rawValue)
         }
     }
@@ -41,7 +43,7 @@ enum MediaKind: Hashable, Codable {
     /// The app can play it; books, comics and future kinds need a reader it doesn't have.
     var isPlayable: Bool {
         switch self {
-        case .movie, .series: true
+        case .movie, .series, .album: true
         case .book, .comic, .unknown: false
         }
     }
@@ -50,7 +52,7 @@ enum MediaKind: Hashable, Codable {
     var hasChildren: Bool {
         switch self {
         case .series: true
-        case .movie, .book, .comic, .unknown: false
+        case .movie, .book, .comic, .album, .unknown: false
         }
     }
 
@@ -61,6 +63,7 @@ enum MediaKind: Hashable, Codable {
         case .series: "library.type.series"
         case .book: "library.type.book"
         case .comic: "library.type.comic"
+        case .album: "library.type.album"
         case .unknown: "library.type.all"
         }
     }

@@ -27,7 +27,7 @@ struct CodecCondition: Encodable {
 /// device profile of `server/crates/server/src/stream/info.rs`. Advertises the
 /// device's real native decode capabilities (probed below), not a fixed list.
 struct DeviceProfile: Encodable {
-    let directPlayProfiles: [DirectPlayProfile]
+    var directPlayProfiles: [DirectPlayProfile]
     let codecConditions: [CodecCondition]
     let maxStreamingBitrate: Int
     let maxAudioChannels: Int
@@ -90,6 +90,15 @@ enum DeviceProfileBuilder {
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
             useTs: false
         )
+    }
+
+    /// The device profile plus the audio files AVPlayer opens as they are, for a music track.
+    static func buildMusic() -> DeviceProfile {
+        var profile = build()
+        profile.directPlayProfiles.append(DirectPlayProfile(
+            containers: ["mp3", "flac", "aac", "wav", "mp4"], videoCodecs: [],
+            audioCodecs: ["mp3", "flac", "aac", "alac", "pcm_s16le", "pcm_s24le"]))
+        return profile
     }
 
     // h264 universal; hevc/av1 only when VideoToolbox reports a hardware decoder.

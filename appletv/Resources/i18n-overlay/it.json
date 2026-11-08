@@ -110,5 +110,10 @@
   "party.tv_votes_one": "{{count}} voto",
   "party.tv_votes_other": "{{count}} voti",
   "party.tv_proposals_empty": "Nessuna proposta. Gli ospiti propongono film dal web o dall'app mobile.",
-  "media_picker.back": "Indietro"
+  "media_picker.back": "Indietro",
+  "sidebar.now_playing": "In riproduzione",
+  "library.type.album": "Album",
+  "music.not_playable": "«%@» non può essere riprodotto qui",
+  "music.nothing_playing": "Nessuna riproduzione in corso",
+  "music.tab_albums": "Album"
 }

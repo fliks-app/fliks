@@ -8,6 +8,8 @@ struct MediaDetailView: View {
     /// P5 owns actual playback — this only hands off the resolved target.
     var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double) -> Void
     var onSelectEpisode: (_ episodeId: Int) -> Void
+    /// The media is an album: its own page replaces this one.
+    var onAlbum: (() -> Void)?
 
     private enum LoadState {
         case loading
@@ -229,6 +231,7 @@ struct MediaDetailView: View {
         liked = false
         do {
             let media: Media = try await APIClient.shared.get("/api/media/\(mediaId)")
+            if media.type == .album, let onAlbum { return onAlbum() }
             state = .loaded(media)
         } catch {
             state = .failed

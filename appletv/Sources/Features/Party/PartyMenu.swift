@@ -5,9 +5,9 @@ import UIKit
 enum PartyMenu {
     static func key(_ p: PartyService) -> String {
         let members = p.members.map { "\($0.id):\($0.status):\($0.role)" }.joined(separator: ",")
-        let queue = p.queue.map { "\($0.mediaId).\($0.episodeId ?? 0)" }.joined(separator: ",")
+        let queue = p.queue.map { "\($0.id)" }.joined(separator: ",")
         let pend = pending(p).map { "\($0.userId)" }.joined(separator: ",")
-        let cur = p.item.map { "\($0.mediaId).\($0.episodeId ?? 0)" } ?? ""
+        let cur = p.item?.id ?? ""
         return [members, pend, p.policy, String(p.chatEnabled), String(p.reactionsEnabled), p.reactionBar.joined(), String(p.isHost), queue, cur].joined(separator: "|")
     }
 
@@ -78,7 +78,7 @@ enum PartyMenu {
             UIAction(title: tr("player.play_next"), image: UIImage(systemName: "forward.end")) { _ in Task { await p.sendIntent("next") } },
         ]
         let items = p.queue.map { item -> UIAction in
-            let isCurrent = item.mediaId == cur?.mediaId && item.episodeId == cur?.episodeId
+            let isCurrent = cur.map { item.sameEntry(as: $0) } == true
             return UIAction(title: item.shownTitle, state: isCurrent ? .on : .off) { _ in
                 if !isCurrent { Task { await p.sendIntent("setItem", item: item) } }
             }

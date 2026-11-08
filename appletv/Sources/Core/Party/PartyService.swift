@@ -47,6 +47,8 @@ import Foundation
 
     /// File to play, media, episode: pushes the player for the party's current item.
     @ObservationIgnored var onOpenPlayer: ((Int, Int, Int?) -> Void)?
+    /// A party track plays: the Now Playing page opens and follows the party.
+    @ObservationIgnored var onOpenMusic: (() -> Void)?
     @ObservationIgnored var onOpenLobby: ((Int) -> Void)?
     @ObservationIgnored var onLive: ((PartyLiveState) -> Void)?
     @ObservationIgnored var onClosed: ((String) -> Void)?
@@ -92,7 +94,7 @@ import Foundation
     var item: PartyItem? { live?.item ?? party?.item }
     /// Suggestions the programme does not hold yet.
     var openProposals: [PartyProposal] {
-        proposals.filter { p in !queue.contains { $0.mediaId == p.item.mediaId && $0.episodeId == p.item.episodeId } }
+        proposals.filter { p in !queue.contains { $0.sameEntry(as: p.item) } }
     }
     /// Tied for the top vote with nothing chosen: the server refuses a start until the host picks one.
     var voteTied: Bool { party?.item == nil && PartyProposal.best(proposals).count > 1 }
@@ -135,13 +137,13 @@ import Foundation
 
     /// Host only: the whole programme in its new order (reorder, remove and add are one list).
     func setProgramme(_ items: [PartyItem]) async -> Bool {
-        struct Row: Encodable { let mediaId: Int; let mediaFileId: Int?; let episodeId: Int? }
+        struct Row: Encodable { let mediaId: Int; let mediaFileId: Int?; let episodeId: Int?; let itemId: Int? }
         struct Body: Encodable { let items: [Row] }
         guard let id = managed?.id else { return false }
         do {
             let dto: Party = try await APIClient.shared.put(
                 "/api/parties/\(id)/programme",
-                body: Body(items: items.map { Row(mediaId: $0.mediaId, mediaFileId: $0.mediaFileId, episodeId: $0.episodeId) }))
+                body: Body(items: items.map { Row(mediaId: $0.mediaId, mediaFileId: $0.mediaFileId, episodeId: $0.episodeId, itemId: $0.itemId) }))
             applyManaged(dto)
             return true
         } catch {
@@ -215,10 +217,10 @@ import Foundation
     // MARK: - Actions
 
     func sendIntent(_ action: String, position: Double? = nil, item: PartyItem? = nil) async {
-        struct Ref: Encodable { let mediaId: Int; let mediaFileId: Int?; let episodeId: Int? }
+        struct Ref: Encodable { let mediaId: Int; let mediaFileId: Int?; let episodeId: Int?; let itemId: Int? }
         struct Body: Encodable { let deviceId: String; let action: String; let position: Double?; let item: Ref?; let baseRev: Int }
         guard let id = party?.id else { return }
-        let ref = item.map { Ref(mediaId: $0.mediaId, mediaFileId: $0.mediaFileId, episodeId: $0.episodeId) }
+        let ref = item.map { Ref(mediaId: $0.mediaId, mediaFileId: $0.mediaFileId, episodeId: $0.episodeId, itemId: $0.itemId) }
         do {
             try await APIClient.shared.post(
                 "/api/parties/\(id)/intent",
@@ -231,8 +233,8 @@ import Foundation
     }
 
     /// `ended` carries the item the client saw end, so a second device's or a raced one is a no-op.
-    func sendEnded(mediaId: Int, episodeId: Int?) async {
-        guard let item = live?.item, item.mediaId == mediaId, item.episodeId == episodeId else { return }
+    func sendEnded(mediaId: Int, episodeId: Int?, itemId: Int? = nil) async {
+        guard let item = live?.item, item.mediaId == mediaId, item.episodeId == episodeId, item.itemId == itemId else { return }
         await sendIntent("ended", item: item)
     }
 
@@ -508,6 +510,11 @@ import Foundation
     }
 
     private func openPlayer(_ item: PartyItem) async {
+        if item.isTrack {
+            handoff = true
+            onOpenMusic?()
+            return
+        }
         guard let fileId = await fileId(for: item) else {
             show(tr("player.next_unavailable"))
             await leave()
@@ -516,6 +523,9 @@ import Foundation
         handoff = true
         onOpenPlayer?(fileId, item.mediaId, item.episodeId)
     }
+
+    /// Opens the player for `item` (a video after a track).
+    func reopenPlayer(_ item: PartyItem) async { await openPlayer(item) }
 
     /// True once for the player the party just opened; any other playback is a plain one, whatever the party state.
     func takeHandoff() -> Bool {
@@ -526,8 +536,8 @@ import Foundation
     // MARK: - Queue
 
     private func syncQueue(_ item: PartyItem) {
-        if let q = queuedFor, q.mediaId == item.mediaId, q.episodeId == item.episodeId { return }
-        if queuedFor != nil, queue.contains(where: { $0.mediaId == item.mediaId && $0.episodeId == item.episodeId }) {
+        if let q = queuedFor, q.sameEntry(as: item) { return }
+        if queuedFor != nil, queue.contains(where: { $0.sameEntry(as: item) }) {
             queuedFor = item
             return
         }

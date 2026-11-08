@@ -113,5 +113,10 @@
   "party.tv_votes_one": "{{count}} voto",
   "party.tv_votes_other": "{{count}} votos",
   "party.tv_proposals_empty": "Aún no hay propuestas. Los invitados proponen películas desde la web o la app móvil.",
-  "media_picker.back": "Atrás"
+  "media_picker.back": "Atrás",
+  "sidebar.now_playing": "Reproduciendo",
+  "library.type.album": "Álbumes",
+  "music.not_playable": "«%@» no se puede reproducir aquí",
+  "music.nothing_playing": "No hay nada en reproducción",
+  "music.tab_albums": "Álbumes"
 }

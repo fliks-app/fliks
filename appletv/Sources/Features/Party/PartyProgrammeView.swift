@@ -59,7 +59,7 @@ struct PartyProgrammeView: View {
     }
 
     private func row(_ index: Int, _ item: PartyItem) -> some View {
-        let playing = service.live != nil && service.item?.mediaId == item.mediaId && service.item?.episodeId == item.episodeId
+        let playing = service.live != nil && service.item.map { item.sameEntry(as: $0) } == true
         return HStack(spacing: 24) {
             Text(String(index + 1)).font(.callout).foregroundStyle(.secondary).frame(width: 40)
             PosterImage(path: item.cardImage)
@@ -95,7 +95,7 @@ struct PartyProgrammeView: View {
     private func append(_ picks: [PartyPick]) {
         adding = false
         var next = items
-        for pick in picks where !next.contains(where: { $0.mediaId == pick.mediaId && $0.episodeId == pick.episodeId }) {
+        for pick in picks where !next.contains(where: { $0.mediaId == pick.mediaId && $0.episodeId == pick.episodeId && !$0.isTrack }) {
             next.append(PartyItem(mediaId: pick.mediaId, mediaFileId: nil, episodeId: pick.episodeId, title: pick.title,
                                   posterUrl: nil, fanartUrl: nil, hidden: false))
         }

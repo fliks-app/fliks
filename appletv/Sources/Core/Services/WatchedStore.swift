@@ -115,14 +115,16 @@ import Foundation
     struct Target: Identifiable, Hashable {
         let mediaId: Int
         let episodeId: Int?
-        var id: String { "\(mediaId):\(episodeId ?? 0)" }
+        /// A track of an album.
+        var itemId: Int?
+        var id: String { "\(mediaId):\(episodeId ?? 0):\(itemId ?? 0)" }
     }
 
     var target: Target?
 
     private init() {}
 
-    func open(mediaId: Int, episodeId: Int? = nil) {
-        target = Target(mediaId: mediaId, episodeId: episodeId)
+    func open(mediaId: Int, episodeId: Int? = nil, itemId: Int? = nil) {
+        target = Target(mediaId: mediaId, episodeId: episodeId, itemId: itemId)
     }
 }

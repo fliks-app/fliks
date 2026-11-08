@@ -12,6 +12,9 @@ enum Route: Hashable {
     case library(id: Int)
     case mediaDetail(id: Int)
     case episodeDetail(mediaId: Int, episodeId: Int)
+    case album(id: Int)
+    case artist(id: Int)
+    case nowPlaying
     case search
     case playlists
     case playlistDetail(id: Int)
@@ -23,4 +26,11 @@ enum Route: Hashable {
     // seconds (0 = from start); `startPaused` and `launch` carry a remote handoff's pause and track picks.
     case player(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, startPaused: Bool = false,
                 launch: LaunchTracks? = nil)
+}
+
+extension Route {
+    /// The page of a media: an album opens its own.
+    static func forMedia(_ id: Int, _ kind: MediaKind) -> Route {
+        kind == .album ? .album(id: id) : .mediaDetail(id: id)
+    }
 }
