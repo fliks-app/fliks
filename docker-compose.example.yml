@@ -113,6 +113,9 @@ services:
   #     NVIDIA_VISIBLE_DEVICES: all
   #     # video = NVENC/NVDEC, compute = the CUDA filters (scale_cuda), utility = nvidia-smi
   #     NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+  # Several NVIDIA cards are one GPU each (NVIDIA_VISIBLE_DEVICES: all, or a list of indexes
+  # such as 0,1). With an Intel iGPU as well, add the /dev/dri device above next to
+  # `runtime: nvidia`: the iGPU and each NVIDIA card are then separate GPUs.
 
   # arm64 (Pi 5, ARM NAS) pulls fine, but the Intel and NVIDIA stacks are
   # amd64-only — transcodes fall back to CPU.
