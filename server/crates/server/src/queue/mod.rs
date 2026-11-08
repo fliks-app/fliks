@@ -162,15 +162,15 @@ impl Shared {
         out
     }
 
-    /// Every instance with the time since its last sign of life.
+    /// The live instances with the time since their last sign of life; a restarted engine is a new instance.
     pub fn workers(&self) -> Vec<(String, Worker, Duration)> {
         let g = self.workers.lock_clean();
         let seen = self.seen.lock_clean();
         let mut v: Vec<_> = g
             .iter()
-            .map(|(k, w)| {
+            .filter_map(|(k, w)| {
                 let silent = seen.get(k).map_or(LIVE, Instant::elapsed);
-                (k.clone(), w.clone(), silent)
+                (silent < LIVE).then(|| (k.clone(), w.clone(), silent))
             })
             .collect();
         v.sort_by(|a, b| a.0.cmp(&b.0));
