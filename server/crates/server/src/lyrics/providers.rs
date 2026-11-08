@@ -307,7 +307,7 @@ pub async fn enqueue_missing(st: &AppState, media: Option<i32>) {
         r#"SELECT i.id FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
            WHERE ($1::int IS NULL OR i."mediaId" = $1)
              AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-             AND NOT EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = i.id AND l.kind = 'main' AND l.sync <> 'none')
+             AND NOT EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = i.id AND l.kind = 'main' AND l.sync <> 'none' AND l.source <> 'generated')
              AND EXISTS (SELECT 1 FROM unnest($2::text[]) p WHERE NOT EXISTS (
                SELECT 1 FROM lyrics_lookups k WHERE k."itemId" = i.id AND k.provider = p
                  AND k."checkedAt" > now() - make_interval(days => $3)))
