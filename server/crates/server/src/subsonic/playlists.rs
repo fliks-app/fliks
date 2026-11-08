@@ -180,10 +180,17 @@ pub async fn create(st: &AppState, c: &Caller, p: &Params) -> Answer {
             Role::Editor
         };
         assert_role(&st.db, c.user(), id, min).await?;
+        let held = item_ids(&st.db, id).await?;
+        let replaced: Vec<i32> = catalog::visible_tracks(&st.db, &c.libraries, &held)
+            .await?
+            .into_iter()
+            .map(|(item, _)| item)
+            .collect();
         let mut tx = st.db.begin().await?;
         lock(&mut tx, id).await?;
-        sqlx::query(r#"DELETE FROM playlist_items WHERE "playlistId" = $1"#)
+        sqlx::query(r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "itemId" = ANY($2)"#)
             .bind(id)
+            .bind(&replaced)
             .execute(&mut *tx)
             .await?;
         if let Some(name) = p.get("name") {
@@ -259,10 +266,10 @@ pub async fn update(st: &AppState, c: &Caller, p: &Params) -> Answer {
     }
     if let Some(public) = public {
         sqlx::query(
-            "UPDATE playlists SET visibility = $2::text::playlists_visibility_enum WHERE id = $1",
+            "UPDATE playlists SET visibility = (CASE WHEN $2 THEN 'public' WHEN visibility = 'public' THEN 'private' ELSE visibility::text END)::playlists_visibility_enum WHERE id = $1",
         )
         .bind(id)
-        .bind(if public { "public" } else { "private" })
+        .bind(public)
         .execute(&mut *tx)
         .await?;
     }

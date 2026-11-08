@@ -202,13 +202,29 @@ pub async fn touch(db: &PgPool, id: i32) -> Result<(), sqlx::Error> {
     .map(drop)
 }
 
-/// Whether the `subsonic` row `id` still belongs to `owner`.
-pub async fn subsonic_alive(db: &PgPool, id: i32, owner: i32) -> Result<bool, sqlx::Error> {
+/// What a stream credential binds to: the start of the row's hash, which a renewal replaces.
+pub async fn subsonic_stamp(db: &PgPool, id: i32) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM device_tokens WHERE id = $1 AND "userId" = $2 AND "kind" = 'subsonic')"#,
+        r#"SELECT left("hash", 16) FROM device_tokens WHERE id = $1 AND "kind" = 'subsonic'"#,
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await
+}
+
+/// Whether the `subsonic` row `id` still belongs to `owner` and has not been renewed since `stamp`.
+pub async fn subsonic_alive(
+    db: &PgPool,
+    id: i32,
+    owner: i32,
+    stamp: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM device_tokens WHERE id = $1 AND "userId" = $2 AND "kind" = 'subsonic' AND left("hash", 16) = $3)"#,
     )
     .bind(id)
     .bind(owner)
+    .bind(stamp)
     .fetch_one(db)
     .await
 }
