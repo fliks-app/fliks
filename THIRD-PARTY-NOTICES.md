@@ -66,7 +66,8 @@ Windows x64 only, pinned in `engine.lock`).
 | fliks-engine (release binary pinned in `engine.lock`) | AGPL-3.0-or-later | https://github.com/fliks-app/engine |
 | jellyfin-ffmpeg (portable build) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | PostgreSQL (Windows: EDB binaries; macOS: Homebrew bottle) | PostgreSQL License | https://www.postgresql.org |
-| ONNX Runtime (official release 1.31.1 in `karaoke/`, loaded at run time by `fliks-engine`; macOS build with the CoreML provider, Windows build CPU only; `LICENSE` and `ThirdPartyNotices.txt` beside it) | MIT | https://github.com/microsoft/onnxruntime |
+| ONNX Runtime (macOS: official release 1.31.1 in `karaoke/` with the CoreML provider, loaded at run time by `fliks-engine`; `LICENSE` and `ThirdPartyNotices.txt` in `karaoke/licenses/onnxruntime`) | MIT | https://github.com/microsoft/onnxruntime |
+| Windows ML runtime 2.5.96 (Windows: `onnxruntime.dll` 1.28.3 with DirectML, `DirectML.dll` and `Microsoft.Windows.AI.MachineLearning.dll` in `karaoke\`; the licence and notices in `karaoke\licenses\windows-ml`; execution providers Windows downloads for the hardware are Microsoft's and the vendors', under their own terms) | Microsoft Windows ML Runtime license terms (redistributable) | https://www.nuget.org/packages/Microsoft.Windows.AI.MachineLearning |
 | whisper.cpp (`whisper-cli` v1.9.5 in `karaoke/`, Metal on macOS, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
 | ffmpeg-pitch (`karaoke/ffmpeg-pitch`, FFmpeg built with `--enable-gpl --enable-librubberband` and libopus, for key changes and stem encoding; license texts and source offer in `karaoke/licenses/ffmpeg-pitch/SOURCE`) | GPL-3.0-or-later | https://ffmpeg.org |
 | Rubber Band Library (linked statically into ffmpeg-pitch) | GPL-2.0-or-later | https://breakfastquay.com/rubberband/ |

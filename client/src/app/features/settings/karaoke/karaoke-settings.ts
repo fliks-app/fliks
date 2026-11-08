@@ -15,8 +15,19 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
-/** OpenVINO is never offered: the engine does not verify it. */
-export const VERIFIABLE_PROVIDERS = ['cuda', 'migraphx', 'coreml'] as const;
+/** The engine's provider names: each is ticked once `provider-check` showed it matches the CPU. */
+export const VERIFIABLE_PROVIDERS = [
+  'cuda',
+  'nvtensorrtrtx',
+  'amdgpu',
+  'migraphx',
+  'coreml',
+  'openvino',
+  'qnn',
+  'vitisai',
+  'webgpu',
+  'directml',
+] as const;
 const MIN_BUDGET_MB = 256;
 
 @Component({
