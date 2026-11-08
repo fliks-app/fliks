@@ -30,6 +30,8 @@ final class MusicCatalog {
     static final String SEARCH = "search";
     static final String SCHEME = "fliks-track";
 
+    private static final String GROUP_TITLE = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT";
+
     static final String X_ITEM = "fliks.itemId";
     static final String X_MEDIA = "fliks.mediaId";
     static final String X_GAIN = "fliks.gain";
@@ -165,7 +167,11 @@ final class MusicCatalog {
         List<MediaItem> out = new ArrayList<>();
         String q = Uri.encode(query);
         albums(out, api.getJson("/api/media?type=album&limit=10&q=" + q).getJSONArray("data"));
+        int albums = out.size();
         tracks(out, api.getArray("/api/tracks?limit=30&q=" + q), SEARCH);
+        for (int i = 0; i < out.size(); i++) {
+            out.set(i, grouped(out.get(i), context.getString(i < albums ? R.string.auto_albums : R.string.auto_tracks)));
+        }
         return out;
     }
 
@@ -196,12 +202,21 @@ final class MusicCatalog {
             }
             JSONArray tracks = album.getJSONArray("tracks");
             String cover = url(m, "posterUrl");
+            boolean discs = false;
+            for (int i = 0; i < tracks.length(); i++) discs |= tracks.getJSONObject(i).optInt("discNumber", 1) > 1;
             for (int i = 0; i < tracks.length(); i++) {
                 JSONObject t = tracks.getJSONObject(i);
                 if (t.getInt("editionId") != edition || !t.optBoolean("hasFile")) continue;
-                items.add(track(parent, t.getLong("itemId"), m.getLong("id"), t.optString("title"), artists(t, album),
+                String by = artists(t, album);
+                MediaItem item = track(parent, t.getLong("itemId"), m.getLong("id"), t.optString("title"), by,
                         m.optString("title"), cover, optDouble(t, "durationSeconds"), optDouble(t, "gain"),
-                        optDouble(t, "peak"), albumGain, albumPeak));
+                        optDouble(t, "peak"), albumGain, albumPeak);
+                if (discs) {
+                    String name = t.isNull("discTitle") ? "" : t.optString("discTitle");
+                    item = grouped(item, name.isEmpty()
+                            ? context.getString(R.string.auto_disc, t.optInt("discNumber", 1)) : name);
+                }
+                items.add(item);
             }
         } else if (parent.startsWith("playlist:")) {
             JSONArray entries = api.getArray("/api/playlists/" + parent.substring(9) + "/items");
@@ -279,6 +294,12 @@ final class MusicCatalog {
             out.add(folder("album:" + m.getInt("id"), m.optString("title"), artists(m.optJSONObject("album")),
                     url(m, "posterUrl"), MediaMetadata.MEDIA_TYPE_ALBUM));
         }
+    }
+
+    private static MediaItem grouped(MediaItem item, String title) {
+        Bundle x = item.mediaMetadata.extras == null ? new Bundle() : new Bundle(item.mediaMetadata.extras);
+        x.putString(GROUP_TITLE, title);
+        return item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(x).build()).build();
     }
 
     private MediaItem folder(String id, String title, @Nullable String subtitle, @Nullable String art, int type) {

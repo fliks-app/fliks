@@ -3,4 +3,11 @@
     <string name="notification_stop">Interrompi</string>
     <string name="notification_like">Mi piace</string>
     <string name="notification_unlike">Non mi piace più</string>
+    <string name="auto_recent">Recenti</string>
+    <string name="auto_favourites">Preferiti</string>
+    <string name="auto_playlists">Playlist</string>
+    <string name="auto_albums">Album</string>
+    <string name="auto_artists">Artisti</string>
+    <string name="auto_disc">Disco %1$d</string>
+    <string name="auto_tracks">Brani</string>
 </resources>
