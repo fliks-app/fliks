@@ -4,27 +4,9 @@
     "$..updatedAt",
     "$..metadataRefreshedAt"
   ],
-  "name": "media-write-import-tmdb-no-key",
+  "name": "media-write-import-tmdb-validation",
   "seed": "ingest",
   "steps": [
-    {
-      "as": "admin",
-      "body": {
-        "qualityProfileId": 1,
-        "tmdbId": 603,
-        "type": "movie"
-      },
-      "expect": {
-        "body": {
-          "error": "Service Unavailable",
-          "message": "The tmdb provider is not available",
-          "statusCode": 503
-        },
-        "status": 503
-      },
-      "method": "POST",
-      "path": "/api/media/import/tmdb"
-    },
     {
       "as": "admin",
       "body": {

@@ -59,7 +59,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "fanarttv.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "fanarttv.config.apiKey",
@@ -293,7 +293,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "tmdb.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "tmdb.config.apiKey",
@@ -350,7 +350,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "tvdb.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "tvdb.config.apiKey",
@@ -462,7 +462,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "fanarttv.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "fanarttv.config.apiKey",
@@ -696,7 +696,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "tmdb.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "tmdb.config.apiKey",
@@ -753,7 +753,7 @@
               {
                 "fields": [
                   {
-                    "hasDefault": false,
+                    "hasDefault": true,
                     "hint": "tvdb.config.apiKey_hint",
                     "key": "apiKey",
                     "labelKey": "tvdb.config.apiKey",
