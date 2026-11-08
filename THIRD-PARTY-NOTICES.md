@@ -31,6 +31,10 @@ Fliks rather than linked into it.
 | ffsubsync (PyPI) | MIT | https://github.com/smacke/ffsubsync |
 | libarchive (built into `fliks-server` on Linux through `libarchive2-sys`, reads CB7 and CBR) | BSD-2-Clause | https://www.libarchive.org |
 | PostgreSQL client (PGDG archive, `pg_dump` for the backup before a migration) | PostgreSQL License | https://www.postgresql.org |
+| ffmpeg-pitch (FFmpeg 8.1.2 built with `--enable-gpl --enable-librubberband`, for key changes; license and source pointer in `/usr/share/doc/ffmpeg-pitch`) | GPL-3.0-or-later | https://ffmpeg.org |
+| Rubber Band Library (`librubberband2`, Ubuntu archive, used by ffmpeg-pitch) | GPL-2.0-or-later | https://breakfastquay.com/rubberband/ |
+| whisper.cpp (`whisper-cli` v1.9.5, built from the sha256-pinned release tarball, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
+| ONNX Runtime (CPU build 1.31.1, loaded at run time by `fliks-engine` for the model jobs; `LICENSE` and `ThirdPartyNotices.txt` in `/usr/share/doc/onnxruntime`) | MIT | https://github.com/microsoft/onnxruntime |
 
 ## Server: provider plugins
 
@@ -39,6 +43,17 @@ Fliks rather than linked into it.
 `fliks.audnexus`, `fliks.thexem`, `fliks.musicbrainz`, `fliks.fanarttv`) at build time. They are built from
 https://github.com/fliks-app/plugins and licensed **AGPL-3.0-or-later**, like Fliks; each plugin
 folder there holds its own `LICENSE`.
+
+## Server: karaoke models
+
+No model weights ship in the image. An administrator downloads them on request from the model
+page, which shows each licence before the download:
+
+| Model | License | Source |
+|---|---|---|
+| Spleeter 2 stems (vocals, accompaniment), ONNX export published by sherpa-onnx | MIT | https://github.com/deezer/spleeter |
+| SwiftF0 (voice pitch) | MIT | https://github.com/lars76/swift-f0 |
+| Whisper small and base, ggml 5-bit conversion published by whisper.cpp | MIT | https://github.com/openai/whisper |
 
 ## Server: Windows and macOS apps
 
