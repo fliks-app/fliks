@@ -11,6 +11,7 @@ pub mod language;
 pub mod livetv;
 pub mod media;
 pub mod metadata;
+pub mod music;
 pub mod naming;
 pub mod net;
 pub mod nfo;

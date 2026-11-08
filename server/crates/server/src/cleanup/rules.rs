@@ -336,7 +336,7 @@ pub async fn matched(
 
 /// Built-in recommendations: reason key, criteria, levels (`cleanup.md` rules 33-36).
 fn recommendation_sets() -> [(&'static str, &'static str, Vec<&'static str>); 4] {
-    let all = MediaKind::NAMES.to_vec();
+    let all = super::dto::cleanable();
     [
         (
             "never_played",

@@ -192,10 +192,12 @@ mod tests {
         "wants",
     ];
     /// Left to cascade: the attach on the holder and the cleanup job derive them again, and a book
-    /// or a comic has no movie or series details.
+    /// has no other kind's details nor aliases of a music id.
     const DROPPED: &[&str] = &[
+        "album_details",
         "cleanup_candidates",
         "comic_details",
+        "media_external_id_aliases",
         "media_field_sources",
         "movie_details",
         "series_details",

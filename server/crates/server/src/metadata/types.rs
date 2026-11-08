@@ -90,9 +90,11 @@ pub struct PersonDetails {
     pub known_for_department: Option<String>,
 }
 
-/// `PersonCreditItem` objects (meta rule 34), one list per side.
+/// `PersonCreditItem` objects (meta rule 34), one list per side; a music provider answers `albums`, the
+/// discography of an artist (`music.md`), instead.
 #[derive(Debug, Clone, Default)]
 pub struct Credits {
     pub cast: Vec<Value>,
     pub crew: Vec<Value>,
+    pub albums: Vec<Value>,
 }

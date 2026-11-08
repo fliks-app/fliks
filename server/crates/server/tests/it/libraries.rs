@@ -160,6 +160,8 @@ async fn validation_conflicts_and_acl(pool: PgPool) {
         (json!({"name": "B", "userIds": [1, 1]}), 400),
         (json!({"name": "B", "icon": "x".repeat(49)}), 400),
         (json!({"name": "B", "mediaTypes": ["music"]}), 400),
+        (json!({"name": "B", "mediaTypes": ["album", "book"]}), 400),
+        (json!({"name": "M", "mediaTypes": ["album"]}), 201),
     ] {
         assert_eq!(
             call(&c, "POST", "/api/libraries", &c.admin, body.clone())

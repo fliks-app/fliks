@@ -86,6 +86,7 @@
       },
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "avatar": null,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,

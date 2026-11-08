@@ -35,6 +35,7 @@ pub struct Scripted {
     routes: Mutex<HashMap<String, Answer>>,
     fallback: Mutex<Option<Fallback>>,
     log: Mutex<Vec<String>>,
+    person_of: Mutex<Vec<Namespace>>,
     pub on: AtomicBool,
 }
 
@@ -45,6 +46,7 @@ impl Scripted {
             routes: Mutex::default(),
             fallback: Mutex::default(),
             log: Mutex::default(),
+            person_of: Mutex::default(),
             on: AtomicBool::new(true),
         })
     }
@@ -55,6 +57,11 @@ impl Scripted {
 
     pub fn fail(&self, key: &str, status: u16) {
         self.routes.lock().unwrap().insert(key.into(), Err(status));
+    }
+
+    /// Also describes the people of `ns` for the albums, as a provider listing `ns` in its `findBy` does.
+    pub fn serve_persons_of(&self, ns: Namespace) {
+        self.person_of.lock().unwrap().push(ns);
     }
 
     /// Answers the keys the table does not hold; `None` is a 404.
@@ -107,6 +114,9 @@ impl MetadataProvider for Scripted {
     }
     fn has_persons(&self) -> bool {
         true
+    }
+    fn serves_persons_of(&self, kind: MediaKind, ns: Namespace) -> bool {
+        kind == MediaKind::Album && (ns == self.id || self.person_of.lock().unwrap().contains(&ns))
     }
     fn limits(&self) -> Limits {
         Limits::new(1000.0, 1000)
@@ -200,6 +210,7 @@ impl MetadataProvider for Scripted {
         self.answer(key.clone(), key, |v| Credits {
             cast: items(v["cast"].clone()),
             crew: items(v["crew"].clone()),
+            albums: items(v["albums"].clone()),
         })
     }
     fn list<'a>(

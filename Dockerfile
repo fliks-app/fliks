@@ -33,6 +33,7 @@ COPY server/ .
 # Compiled into fliks-server as the default provider keys; empty in a local build.
 ARG FLIKS_DEFAULT_TMDB_API_KEY=""
 ARG FLIKS_DEFAULT_TVDB_API_KEY=""
+ARG FLIKS_DEFAULT_FANARTTV_API_KEY=""
 RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
     && cp target/release/fliks-server /usr/local/bin/fliks-server
 

@@ -24,6 +24,7 @@ mod media;
 mod media_servers;
 mod metadata;
 mod migrations;
+mod music_schema;
 mod notifications;
 mod oidc;
 mod opds;

@@ -25,12 +25,17 @@ pub enum ExternalProvider {
     Audnexus,
     Isbn,
     Asin,
+    MusicBrainz,
+    Isrc,
+    Spotify,
+    Deezer,
+    FanartTv,
     /// Provenance of a value read from a file; never stored as an id.
     File,
 }
 
 impl ExternalProvider {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 16] = [
         Self::Tmdb,
         Self::Tvdb,
         Self::Imdb,
@@ -41,6 +46,11 @@ impl ExternalProvider {
         Self::Audnexus,
         Self::Isbn,
         Self::Asin,
+        Self::MusicBrainz,
+        Self::Isrc,
+        Self::Spotify,
+        Self::Deezer,
+        Self::FanartTv,
         Self::File,
     ];
 
@@ -56,6 +66,11 @@ impl ExternalProvider {
             Self::Audnexus => "audnexus",
             Self::Isbn => "isbn",
             Self::Asin => "asin",
+            Self::MusicBrainz => "musicbrainz",
+            Self::Isrc => "isrc",
+            Self::Spotify => "spotify",
+            Self::Deezer => "deezer",
+            Self::FanartTv => "fanarttv",
             Self::File => "file",
         }
     }
@@ -73,6 +88,11 @@ impl ExternalProvider {
             Self::Audnexus => "Audnexus",
             Self::Isbn => "ISBN",
             Self::Asin => "ASIN",
+            Self::MusicBrainz => "MusicBrainz",
+            Self::Isrc => "ISRC",
+            Self::Spotify => "Spotify",
+            Self::Deezer => "Deezer",
+            Self::FanartTv => "Fanart.tv",
             Self::File => "file",
         }
     }
@@ -89,7 +109,7 @@ impl ExternalProvider {
     /// Whether one id names at most one media of a kind: TMDB and OpenLibrary do, the others do not
     /// (TMDB splits a TVDB show into several, and a title can be catalogued twice).
     pub const fn is_unique(self) -> bool {
-        matches!(self, Self::Tmdb | Self::OpenLibrary)
+        matches!(self, Self::Tmdb | Self::OpenLibrary | Self::MusicBrainz)
     }
 
     /// `value` as stored for this provider, or `None` when it is not an id of it.
@@ -102,6 +122,26 @@ impl ExternalProvider {
             }
             Self::Imdb => !value.is_empty(),
             Self::Isbn => return isbn::parse(value).map(|i| i.isbn13),
+            // A MusicBrainz id is a UUID, stored in lower case; Fanart.tv keys its images by it.
+            Self::MusicBrainz | Self::FanartTv => {
+                return rx!(
+                    r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+                )
+                .is_match(value)
+                .then(|| value.to_ascii_lowercase());
+            }
+            Self::Isrc => {
+                let v: String = value
+                    .chars()
+                    .filter(|c| *c != '-')
+                    .map(|c| c.to_ascii_uppercase())
+                    .collect();
+                return rx!(r"^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$")
+                    .is_match(&v)
+                    .then_some(v);
+            }
+            Self::Spotify => rx!(r"^[0-9A-Za-z]{22}$").is_match(value),
+            Self::Deezer => rx!(r"^[1-9][0-9]{0,17}$").is_match(value),
             Self::Asin => rx!(r"^[0-9A-Z]{10}$").is_match(value),
             Self::OpenLibrary => rx!(r"^OL[1-9][0-9]*[WMA]$").is_match(value),
             Self::Bnf => rx!(r"^cb[0-9a-z]+$").is_match(value),
@@ -166,6 +206,7 @@ impl Namespace {
     pub const AUDNEXUS: Self = Self::Core(ExternalProvider::Audnexus);
     pub const ISBN: Self = Self::Core(ExternalProvider::Isbn);
     pub const ASIN: Self = Self::Core(ExternalProvider::Asin);
+    pub const MUSICBRAINZ: Self = Self::Core(ExternalProvider::MusicBrainz);
     pub const FILE: Self = Self::Core(ExternalProvider::File);
 
     /// The namespace the ids this provider answers are stored in: Audible and Audnexus answer ASINs.
@@ -360,9 +401,41 @@ mod tests {
     }
 
     #[test]
-    fn only_tmdb_and_openlibrary_are_unique() {
+    fn only_tmdb_openlibrary_and_musicbrainz_are_unique() {
         let unique: Vec<_> = P::ALL.into_iter().filter(|p| p.is_unique()).collect();
-        assert_eq!(unique, [P::Tmdb, P::OpenLibrary]);
+        assert_eq!(unique, [P::Tmdb, P::OpenLibrary, P::MusicBrainz]);
+    }
+
+    #[test]
+    fn music_ids_are_normalized_per_namespace() {
+        let mbid = "5B11F4CE-A62D-471E-81FC-A69A8278C7DA";
+        let lower = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
+        for p in [P::MusicBrainz, P::FanartTv] {
+            assert_eq!(p.normalize(mbid).as_deref(), Some(lower));
+            for bad in [
+                &lower[1..],
+                "5b11f4cea62d471e81fca69a8278c7da",
+                "5b11f4ce-a62d-471e-81fc-a69a8278c7dg",
+            ] {
+                assert_eq!(p.normalize(bad), None, "{bad}");
+            }
+        }
+        assert_eq!(
+            P::Isrc.normalize("us-rc1-76-07839").as_deref(),
+            Some("USRC17607839")
+        );
+        assert_eq!(P::Isrc.normalize("USRC1760783"), None);
+        assert_eq!(P::Isrc.normalize("USRC1760783X"), None);
+        assert_eq!(
+            P::Spotify.normalize("4uLU6hMCjMI75M1A2tKUQC").as_deref(),
+            Some("4uLU6hMCjMI75M1A2tKUQC")
+        );
+        assert_eq!(P::Spotify.normalize("4uLU6hMCjMI75M1A2tKUQ"), None);
+        assert_eq!(P::Deezer.normalize("3135556").as_deref(), Some("3135556"));
+        for bad in ["0", "03135556", "x", ""] {
+            assert_eq!(P::Deezer.normalize(bad), None, "{bad}");
+        }
+        assert!(!P::MusicBrainz.is_numeric());
     }
 
     #[test]

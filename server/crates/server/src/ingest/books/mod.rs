@@ -44,6 +44,7 @@ pub fn owns(kind: MediaKind, name: &str) -> bool {
         MediaKind::Book => is_book_file(name),
         MediaKind::Movie | MediaKind::Series => super::is_video(name),
         MediaKind::Comic => super::comics::is_comic_file(name),
+        MediaKind::Album => false,
     }
 }
 

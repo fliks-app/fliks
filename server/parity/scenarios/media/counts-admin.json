@@ -6,6 +6,7 @@
       "as": "admin",
       "expect": {
         "body": {
+          "albums": 0,
           "books": 0,
           "comics": 0,
           "movies": 42,

@@ -12,6 +12,7 @@
         "body": {
           "activity": {},
           "playback": {
+            "albumsFinished": 0,
             "booksFinished": 0,
             "comicsFinished": 0,
             "episodesWatched": 0,

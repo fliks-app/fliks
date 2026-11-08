@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO album_details (\"mediaId\", \"originalLanguage\", popularity) VALUES ($1, $2, $3)\n                   ON CONFLICT (\"mediaId\") DO UPDATE SET\n                     \"originalLanguage\" = COALESCE(EXCLUDED.\"originalLanguage\", album_details.\"originalLanguage\"),\n                     popularity = COALESCE(EXCLUDED.popularity, album_details.popularity)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9efd96aa936467e105ffb85c2d9e23da7a48defa3f82fa2e0859ef21a5d4ee97"
+}

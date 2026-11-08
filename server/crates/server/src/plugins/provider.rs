@@ -15,6 +15,7 @@ use fliks_domain::{
         language::Resolved,
         limiter::{Limits, Priority},
     },
+    music::provider as music,
     plugins::provider,
     release::scene::Entry,
 };
@@ -227,8 +228,10 @@ impl PluginProvider {
     /// `record` for a work: a `comic` one that breaks rule 60 is malformed (rule 14).
     fn work_record(&self, kind: MediaKind, json: &str) -> Result<Value, Upstream> {
         let checked = parse(json, false).and_then(|v| {
-            if kind == MediaKind::Comic {
-                comics::work(&v).map_err(bad)?;
+            match kind {
+                MediaKind::Comic => drop(comics::work(&v).map_err(bad)?),
+                MediaKind::Album => drop(music::album(&v).map_err(bad)?),
+                _ => {}
             }
             Ok(v)
         });
@@ -248,6 +251,31 @@ impl PluginProvider {
             );
         }
         got.kept.iter().map(comics::Issue::to_value).collect()
+    }
+
+    /// `music.md` rule on releases: the children of an album that pass; the rest is dropped and warned.
+    fn album_children(&self, list: Vec<Value>) -> Vec<Value> {
+        let before = list.len();
+        let mut first = None;
+        let kept: Vec<Value> = list
+            .into_iter()
+            .filter(|v| match music::release(v) {
+                Ok(_) => true,
+                Err(why) => {
+                    first.get_or_insert(why);
+                    false
+                }
+            })
+            .collect();
+        if kept.len() < before {
+            tracing::warn!(
+                "plugin \"{}\": {} releases dropped ({})",
+                self.rt.sh.id,
+                before - kept.len(),
+                first.unwrap_or("none")
+            );
+        }
+        kept
     }
 
     /// `record` for an answer that may be absent (`fetch-edition`, `fetch-chapters`).
@@ -338,6 +366,11 @@ impl MetadataProvider for PluginProvider {
 
     fn has_persons(&self) -> bool {
         self.declares(None, "person")
+    }
+
+    fn serves_persons_of(&self, kind: MediaKind, ns: Namespace) -> bool {
+        self.declares(Some(kind), "person")
+            && (self.key == ns || self.block.find_by.iter().any(|n| n == ns.as_str()))
     }
 
     fn limits(&self) -> Limits {
@@ -438,10 +471,10 @@ impl MetadataProvider for PluginProvider {
                 })
                 .await?;
             let list = self.array(&json)?;
-            Ok(if kind == MediaKind::Comic {
-                self.comic_children(list)
-            } else {
-                list
+            Ok(match kind {
+                MediaKind::Comic => self.comic_children(list),
+                MediaKind::Album => self.album_children(list),
+                _ => list,
             })
         }
         .boxed()
@@ -529,6 +562,19 @@ impl MetadataProvider for PluginProvider {
                 })
                 .await?;
             let v = self.record(&json, false)?;
+            if self.declares(Some(MediaKind::Album), "person") {
+                let m = self.checked(music::person(&v).map_err(bad))?;
+                let day = |d: Option<chrono::NaiveDate>| d.map(|d| d.to_string());
+                return Ok(PersonDetails {
+                    name: m.name,
+                    biography: m.biography,
+                    birthday: day(m.birthday),
+                    deathday: day(m.deathday),
+                    place_of_birth: m.place_of_birth,
+                    avatar_url: m.avatar_url,
+                    known_for_department: None,
+                });
+            }
             let s = |k: &str| v[k].as_str().map(str::to_owned);
             Ok(PersonDetails {
                 name: s("name"),
@@ -561,6 +607,22 @@ impl MetadataProvider for PluginProvider {
                 })
                 .await?;
             let v = self.record(&json, false)?;
+            if self.declares(Some(MediaKind::Album), "credits") {
+                let albums = v["albums"]
+                    .as_array()
+                    .filter(|a| a.len() <= MAX_LIST)
+                    .ok_or_else(|| bad("credits without albums"));
+                return self.checked(albums.map(|a| {
+                    Credits {
+                        albums: a
+                            .iter()
+                            .filter(|r| music::album(r).is_ok())
+                            .cloned()
+                            .collect(),
+                        ..Credits::default()
+                    }
+                }));
+            }
             let side = |k: &str| {
                 v[k].as_array()
                     .cloned()
@@ -570,6 +632,7 @@ impl MetadataProvider for PluginProvider {
                 Ok(Credits {
                     cast,
                     crew: side("crew")?,
+                    ..Credits::default()
                 })
             }))
         }
@@ -699,7 +762,11 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.optional_record(json)
+            let record = self.optional_record(json)?;
+            if let (Some(r), true) = (&record, e.namespace == Namespace::MUSICBRAINZ) {
+                self.checked(music::edition(r).map(drop).map_err(bad))?;
+            }
+            Ok(record)
         }
         .boxed()
     }

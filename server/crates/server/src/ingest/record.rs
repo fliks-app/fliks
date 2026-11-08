@@ -53,6 +53,7 @@ pub async fn of_group(g: &Group<'_>) -> Option<Record> {
             let read = comics::read_info(g.sample, format).await;
             Some(comic(&name::parse_path(&rel), read.as_ref()))
         }
+        MediaKind::Album => None,
     }
 }
 

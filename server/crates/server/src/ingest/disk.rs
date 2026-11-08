@@ -913,12 +913,14 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
 fn validated_folder(name: &str, media_type: MediaKind) -> Result<String, AppError> {
     if name.is_empty() {
         match media_type {
-            MediaKind::Movie | MediaKind::Book | MediaKind::Comic => return Ok(String::new()),
+            MediaKind::Movie | MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
+                return Ok(String::new());
+            }
             MediaKind::Series => {}
         }
     }
     match media_type {
-        MediaKind::Book | MediaKind::Comic => validate_folder_path(name),
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => validate_folder_path(name),
         _ => validate_folder_name(name),
     }
     .map(str::to_owned)

@@ -69,6 +69,8 @@ pub struct UpdateUser {
     #[serde(default, deserialize_with = "non_null")]
     pub comic_quota_limit: Option<i32>,
     #[serde(default, deserialize_with = "non_null")]
+    pub album_quota_limit: Option<i32>,
+    #[serde(default, deserialize_with = "non_null")]
     pub quota_period_days: Option<i32>,
     #[serde(default, deserialize_with = "non_null")]
     pub library_ids: Option<Vec<i32>>,
@@ -183,6 +185,10 @@ impl UpdateUser {
                 "comicQuotaLimit must not be less than 0",
             ),
             (
+                ge(self.album_quota_limit, 0),
+                "albumQuotaLimit must not be less than 0",
+            ),
+            (
                 ge(self.quota_period_days, 1),
                 "quotaPeriodDays must not be less than 1",
             ),
@@ -206,6 +212,7 @@ impl UpdateUser {
             MediaKind::Series => self.series_quota_limit,
             MediaKind::Book => self.book_quota_limit,
             MediaKind::Comic => self.comic_quota_limit,
+            MediaKind::Album => self.album_quota_limit,
         }
     }
 

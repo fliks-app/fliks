@@ -120,7 +120,9 @@ fn walk(
         }
         let n = e.file_name().to_string_lossy().into_owned();
         let regular = match kind {
-            MediaKind::Book | MediaKind::Comic => e.file_type().is_ok_and(|t| t.is_file()),
+            MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
+                e.file_type().is_ok_and(|t| t.is_file())
+            }
             _ => fs::metadata(&path).is_ok_and(|m| m.is_file()),
         };
         if !super::books::owns(kind, &n) || !regular {

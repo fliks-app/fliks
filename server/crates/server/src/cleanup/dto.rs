@@ -15,9 +15,17 @@ pub const ACTIONS: [&str; 3] = ["delete", "delete_files_unmonitor", "none"];
 /// The levels below a media: its seasons and episodes, only for kinds made of them.
 const ITEM_LEVELS: [&str; 2] = ["season", "episode"];
 
-/// Every kind names a whole-media level, then the item levels of the kinds with seasons.
+/// The kinds a rule may clean: every kind but the album, whose files cleanup never deletes.
+pub fn cleanable() -> Vec<&'static str> {
+    MediaKind::NAMES
+        .into_iter()
+        .filter(|k| *k != MediaKind::Album.as_str())
+        .collect()
+}
+
+/// Every cleanable kind names a whole-media level, then the item levels of the kinds with seasons.
 pub fn levels_allowed() -> Vec<&'static str> {
-    let mut all = MediaKind::NAMES.to_vec();
+    let mut all = cleanable();
     all.extend(ITEM_LEVELS);
     all
 }
@@ -420,4 +428,18 @@ pub fn import(v: Value, libraries: &[(i32, String)]) -> Res<Rule> {
     }
     o.insert("enabled".into(), json!(false));
     rule(Value::Object(o))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn an_album_is_no_cleanup_level() {
+        assert!(!levels_allowed().contains(&"album") && levels_allowed().contains(&"comic"));
+        let r = |l: &str| rule(json!({"name": "r", "levels": [l], "criteria": {}}));
+        assert!(r("comic").is_ok());
+        assert!(r("album").is_err());
+    }
 }

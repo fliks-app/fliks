@@ -151,7 +151,7 @@ impl Lifecycle {
         let (eps, files) = match media.media_type {
             MediaKind::Movie => (vec![], db::file_count(&self.st.db, media_id).await?),
             MediaKind::Series => (db::episodes(&self.st.db, media_id).await?, 0),
-            MediaKind::Book | MediaKind::Comic => (vec![], 0),
+            MediaKind::Book | MediaKind::Comic | MediaKind::Album => (vec![], 0),
         };
         for r in active {
             let covered = match (media.media_type, &r.wants) {
