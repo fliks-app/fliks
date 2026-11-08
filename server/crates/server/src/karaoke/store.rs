@@ -96,27 +96,35 @@ pub async fn put(db: &PgPool, n: &New<'_>) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// The file of a served stem, with its row's mark of use when the request starts the file.
+/// The file of a served stem; a request that starts the file marks every stem of it as used.
 pub async fn serve(
     db: &PgPool,
     file: i32,
     kind: &str,
     start: bool,
 ) -> sqlx::Result<Option<String>> {
-    sqlx::query_scalar(
-        r#"UPDATE derived_audio SET "lastUsedAt" = CASE WHEN $3 THEN now() ELSE "lastUsedAt" END
-           WHERE "mediaFileId" = $1 AND kind = $2 RETURNING path"#,
+    let path: Option<String> = sqlx::query_scalar(
+        r#"SELECT path FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2"#,
     )
     .bind(file)
     .bind(kind)
-    .bind(start)
     .fetch_optional(db)
-    .await
+    .await?;
+    if start && path.is_some() {
+        sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() WHERE "mediaFileId" = $1"#)
+            .bind(file)
+            .execute(db)
+            .await?;
+    }
+    Ok(path)
 }
 
 async fn unlink(paths: Vec<String>) -> u64 {
     for p in &paths {
         let _ = tokio::fs::remove_file(p).await;
+        if let Some(dir) = Path::new(p).parent() {
+            let _ = tokio::fs::remove_dir(dir).await;
+        }
     }
     paths.len() as u64
 }
@@ -154,7 +162,7 @@ pub async fn invalidate_model(db: &PgPool, model: &str) -> sqlx::Result<u64> {
     Ok(unlink(paths).await)
 }
 
-/// Stems of another model or version than the installed default's.
+/// Stems of another model or version than the one the host picks (rule 12).
 pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) -> sqlx::Result<u64> {
     let paths = sqlx::query_scalar(
         r#"DELETE FROM derived_audio WHERE model <> $1 OR "modelVersion" <> $2 RETURNING path"#,
@@ -172,14 +180,15 @@ pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
         .await
 }
 
-/// Rule 14: oldest `lastUsedAt` first until the total fits `budget` bytes.
+/// Rule 14: the file last used longest ago first, all its rows at once, until the total fits `budget` bytes.
 pub async fn evict(db: &PgPool, budget: i64) -> sqlx::Result<u64> {
     let mut removed = 0;
     while total(db).await? > budget {
         let paths: Vec<String> = sqlx::query_scalar(
-            r#"DELETE FROM derived_audio WHERE id = (
-                 SELECT id FROM derived_audio
-                 WHERE "lastUsedAt" < now() - make_interval(mins => $1) ORDER BY "lastUsedAt" LIMIT 1)
+            r#"DELETE FROM derived_audio WHERE "mediaFileId" = (
+                 SELECT "mediaFileId" FROM derived_audio GROUP BY "mediaFileId"
+                 HAVING max("lastUsedAt") < now() - make_interval(mins => $1)
+                 ORDER BY max("lastUsedAt") LIMIT 1)
                RETURNING path"#,
         )
         .bind(EVICT_GRACE_MINUTES)

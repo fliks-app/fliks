@@ -40,7 +40,7 @@ pub use background::spawn;
 const SLOTS: usize = 2;
 const DEFAULT_BUDGET_MB: i64 = 4096;
 const MIN_BUDGET_MB: i64 = 256;
-const DEFAULT_VERIFIED: [&str; 1] = ["coreml"];
+const DEFAULT_VERIFIED: [&str; 3] = ["coreml", "cuda", "migraphx"];
 const GPU_PROVIDERS: [&str; 3] = ["cuda", "migraphx", "coreml"];
 
 /// In-memory state of the runs and of the background pass.
@@ -136,7 +136,7 @@ pub(crate) async fn caps(st: &AppState) -> Caps {
         has(feature)
             && models
                 .as_ref()
-                .is_some_and(|m| run::installed_default(&m.models, kind).is_some())
+                .is_some_and(|m| run::installed_model(&m.models, kind).is_some())
     };
     Caps {
         separate: ready("karaoke-separate", ModelKind::Separation),
@@ -227,8 +227,12 @@ pub async fn delete_model(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// What a caller who does not manage settings reads of a failed step (rule 8).
+const REASON: &str = "The engine could not process this track";
+const LYRICS_REASON: &str = "The engine could not time the lyrics";
+
 /// Rule 8.
-async fn state_of(st: &AppState, item: i32) -> Result<Value, AppError> {
+async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
     let file: Option<i32> = sqlx::query_scalar(
         r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1 ORDER BY version LIMIT 1"#,
     )
@@ -247,6 +251,7 @@ async fn state_of(st: &AppState, item: i32) -> Result<Value, AppError> {
         );
     }
     let ready = store::KINDS.iter().all(|k| stems.contains_key(*k));
+    let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);
     let run = st
         .karaoke
         .runs
@@ -275,7 +280,10 @@ async fn state_of(st: &AppState, item: i32) -> Result<Value, AppError> {
             out["progress"] = json!(p);
         }
         if let Some(e) = r.error {
-            out["error"] = json!(e);
+            out["error"] = json!(if detail { e } else { REASON.to_owned() });
+        }
+        if let Some(e) = r.lyrics_error {
+            out["lyricsError"] = json!(if detail { e } else { LYRICS_REASON.to_owned() });
         }
     }
     Ok(out)
@@ -289,7 +297,7 @@ pub async fn item_state(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Read, Subject::Media)?;
     crate::music::assert_track(&st, &a, item).await?;
-    Ok(Json(state_of(&st, item).await?))
+    Ok(Json(state_of(&st, &a, item).await?))
 }
 
 #[derive(Deserialize)]
@@ -299,7 +307,7 @@ pub struct PrepareDto {
     melody: Option<bool>,
 }
 
-#[utoipa::path(post, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 202), (status = 409), (status = 503)))]
+#[utoipa::path(post, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 202), (status = 409), (status = 429), (status = 503)))]
 pub async fn prepare(
     State(st): State<AppState>,
     a: Authed,
@@ -321,13 +329,28 @@ pub async fn prepare(
         align: dto.align.unwrap_or(true),
         melody: dto.melody.unwrap_or(true),
     };
-    let started = run::start(&st, item, opts, JobPriority::Normal).is_some();
-    let status = if started {
-        StatusCode::ACCEPTED
+    let priority = if a.perms.can(Action::Update, &Subject::Media) {
+        JobPriority::Normal
     } else {
-        StatusCode::OK
+        JobPriority::Low
     };
-    Ok((status, Json(state_of(&st, item).await?)))
+    let status = match run::start(&st, item, opts, priority, Some(a.user.id)).await {
+        run::Start::Started(_) => StatusCode::ACCEPTED,
+        run::Start::Idle => StatusCode::OK,
+        run::Start::Refused(run::Refusal::Busy) => {
+            return Err(AppError::with_message(
+                StatusCode::TOO_MANY_REQUESTS,
+                "karaoke_busy",
+            ));
+        }
+        run::Start::Refused(run::Refusal::Full) => {
+            return Err(AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "karaoke_storage_full",
+            ));
+        }
+    };
+    Ok((status, Json(state_of(&st, &a, item).await?)))
 }
 
 #[utoipa::path(delete, path = "/api/items/{itemId}/karaoke", responses((status = 204), (status = 404)))]
@@ -348,6 +371,12 @@ pub async fn remove(
         .bind(item)
         .execute(&st.db)
         .await?;
+    {
+        let mut runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+        if runs.get(&item).is_some_and(|r| !r.active()) {
+            runs.remove(&item);
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -397,13 +426,15 @@ pub async fn stem(
     Ok(res)
 }
 
-pub(crate) fn emit_model(st: &AppState, model: Value) {
-    st.hub.emit(SseEvent::KaraokeModelChanged { model });
+/// Model events carry the engine's error strings: settings managers only.
+pub(crate) async fn emit_model(st: &AppState, model: Value) {
+    crate::queue::emit_managers(st, SseEvent::KaraokeModelChanged { model }).await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| (*s).to_owned()).collect()
@@ -416,5 +447,62 @@ mod tests {
         assert_eq!(gpu_provider(&feats, &s(&["migraphx"])), None);
         assert_eq!(gpu_provider(&feats, &s(&["openvino"])), None);
         assert_eq!(gpu_provider(&s(&["onnx"]), &s(&["cuda"])), None);
+    }
+
+    fn run(user: Option<i32>, state: &'static str) -> run::RunState {
+        run::RunState {
+            state,
+            stage: None,
+            progress: None,
+            error: None,
+            lyrics_error: None,
+            user,
+            viewers: Arc::from([]),
+        }
+    }
+
+    #[test]
+    fn a_caller_holds_two_runs_and_a_second_request_for_a_track_joins() {
+        let mut runs = HashMap::from([(1, run(Some(7), "queued")), (2, run(Some(7), "running"))]);
+        assert_eq!(run::admit(&runs, 3, Some(7)), run::Admit::Busy);
+        assert_eq!(run::admit(&runs, 3, Some(8)), run::Admit::Go);
+        assert_eq!(run::admit(&runs, 3, None), run::Admit::Go);
+        assert_eq!(run::admit(&runs, 1, Some(7)), run::Admit::Join);
+        assert_eq!(run::admit(&runs, 1, Some(8)), run::Admit::Join);
+        runs.insert(2, run(Some(7), "failed"));
+        assert_eq!(run::admit(&runs, 3, Some(7)), run::Admit::Go);
+    }
+
+    fn model(
+        id: &str,
+        kind: &str,
+        default: bool,
+        state: &str,
+    ) -> fliks_engine_core::api::ModelInfo {
+        serde_json::from_value(json!({
+            "id": id, "kind": kind, "name": id, "version": "1", "default": default, "state": state,
+            "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_job_names_the_installed_default_else_any_installed_model_of_the_kind() {
+        let pick = |m: &[fliks_engine_core::api::ModelInfo]| {
+            run::installed_model(m, ModelKind::Alignment).map(|m| m.id.clone())
+        };
+        let base = model("base", "alignment", false, "installed");
+        let small = model("small", "alignment", true, "absent");
+        let other = model("sep", "separation", true, "installed");
+        assert_eq!(
+            pick(&[small.clone(), base.clone(), other.clone()]).as_deref(),
+            Some("base")
+        );
+        let small = model("small", "alignment", true, "installed");
+        assert_eq!(
+            pick(&[base, small, other.clone()]).as_deref(),
+            Some("small")
+        );
+        assert_eq!(pick(&[other]), None);
     }
 }

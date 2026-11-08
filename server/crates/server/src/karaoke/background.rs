@@ -46,12 +46,13 @@ async fn follow(st: AppState) {
             continue;
         };
         if let Ok(v) = serde_json::to_value(model) {
-            super::emit_model(&st, v);
+            super::emit_model(&st, v).await;
         }
         if model.kind == ModelKind::Separation
-            && model.default
             && model.state == ModelState::Installed
-            && let Err(e) = store::invalidate_stale_models(&st.db, &model.id, &model.version).await
+            && let Ok(all) = st.engine.models().await
+            && let Some(sep) = run::installed_model(&all.models, ModelKind::Separation)
+            && let Err(e) = store::invalidate_stale_models(&st.db, &sep.id, &sep.version).await
         {
             tracing::warn!("karaoke model invalidation failed: {e}");
         }
@@ -104,7 +105,8 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
             align: true,
             melody: true,
         };
-        let Some(handle) = run::start(st, item, opts, JobPriority::Low) else {
+        let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
+        else {
             continue;
         };
         match handle.await {

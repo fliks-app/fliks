@@ -52,6 +52,8 @@ export interface KaraokeItemState {
   stage?: KaraokeStage;
   progress?: number;
   error?: string;
+  /** The `Align` or `Melody` failure of the last run; the stems are ready. */
+  lyricsError?: string;
   fileId: number;
   stems: Partial<Record<StemKind, { size: number; durationMs: number }>>;
   lyrics: boolean;

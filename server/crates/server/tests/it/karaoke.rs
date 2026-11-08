@@ -95,6 +95,7 @@ fn json_of(b: &[u8]) -> Value {
 
 async fn stem(st: &AppState, dir: &std::path::Path, file: i32, kind: &str, model: &str) {
     let path = dir.join(format!("{file}-{kind}.opus"));
+    std::fs::create_dir_all(dir).unwrap();
     std::fs::write(&path, b"0123456789").unwrap();
     store::put(
         &st.db,
@@ -184,7 +185,7 @@ async fn the_state_lists_the_stems_and_a_delete_removes_them_and_the_generated_l
         (&gone["state"], &gone["lyrics"]),
         (&json!("none"), &json!(false))
     );
-    assert!(!dir.path().join("1-vocals.opus").exists());
+    assert!(!dir.path().exists());
 }
 
 #[sqlx::test(migrations = false)]
@@ -249,12 +250,137 @@ async fn stems_are_invalidated_by_a_replaced_file_a_model_and_the_budget(pool: P
     }
     // Rows younger than the grace are never evicted, even over the budget.
     assert_eq!(store::evict(&st.db, 0).await.unwrap(), 0);
+    // A file goes whole, and a young row protects its siblings.
     sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour' WHERE kind <> 'guide'"#)
         .execute(&st.db)
         .await
         .unwrap();
-    assert_eq!(store::evict(&st.db, 10).await.unwrap(), 2);
-    assert_eq!(store::total(&st.db).await.unwrap(), 10);
+    assert_eq!(store::evict(&st.db, 10).await.unwrap(), 0);
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(store::evict(&st.db, 10).await.unwrap(), 3);
+    assert_eq!(store::total(&st.db).await.unwrap(), 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_stem_request_touches_every_stem_of_the_file_only_from_byte_zero(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let dir = Dir::new();
+    for k in store::KINDS {
+        stem(&st, dir.path(), 1, k, "m").await;
+    }
+    let age = || async {
+        sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
+            .execute(&st.db)
+            .await
+            .unwrap();
+    };
+    let fresh = || async {
+        sqlx::query_scalar::<_, i64>(
+            r#"SELECT count(*) FROM derived_audio WHERE "lastUsedAt" > now() - interval '1 minute'"#,
+        )
+        .fetch_one(&st.db)
+        .await
+        .unwrap()
+    };
+    age().await;
+    assert!(
+        store::serve(&st.db, 1, "vocals", false)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(fresh().await, 0);
+    assert!(
+        store::serve(&st.db, 1, "vocals", true)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(fresh().await, 3);
+    age().await;
+    assert!(
+        store::serve(&st.db, 1, "other", true)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(fresh().await, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_melody_never_overwrites_a_lyrics_edit_made_while_it_ran(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let doc = |text: &str| {
+        json!({"agents": [], "lines": [{"text": text, "cues": [
+            {"start": 0, "end": 5, "byteStart": 0, "byteEnd": text.len()}]}]})
+    };
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO lyrics ("itemId", kind, lang, sync, source, doc)
+           VALUES (1, 'main', 'und', 'word', 'generated', $1) RETURNING id"#,
+    )
+    .bind(sqlx::types::Json(doc("la la")))
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    let snapshot = |text: &str| serde_json::from_value(doc(text)).unwrap();
+    let notes = vec![vec![(0, 5, 60.0)]];
+    sqlx::query("UPDATE lyrics SET doc = $2 WHERE id = $1")
+        .bind(id)
+        .bind(sqlx::types::Json(doc("edited")))
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert!(
+        !fliks_server::karaoke::run::write_pitch(&st.db, id, &snapshot("la la"), &notes)
+            .await
+            .unwrap()
+    );
+    let kept: Value = sqlx::query_scalar("SELECT doc FROM lyrics WHERE id = $1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(kept, doc("edited"));
+    assert!(
+        fliks_server::karaoke::run::write_pitch(&st.db, id, &snapshot("edited"), &notes)
+            .await
+            .unwrap()
+    );
+    let pitched: Value = sqlx::query_scalar("SELECT doc FROM lyrics WHERE id = $1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(pitched["lines"][0]["cues"][0]["pitch"], 60.0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reader_without_access_to_the_library_gets_404_on_the_stems(pool: PgPool) {
+    let (app, st, _t) = ctx(&pool).await;
+    let dir = Dir::new();
+    stem(&st, dir.path(), 1, "vocals", "m").await;
+    sqlx::raw_sql(
+        r#"INSERT INTO roles (id, name, permissions) VALUES (60, 'Viewer', '["media.read"]');
+           INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (2, 'reader', false, 60);"#,
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+    let t = session::token(&st, 2, "reader").await;
+    let uri = "/api/media-files/1/stems/vocals";
+    assert_eq!(call(&app, &t, "GET", uri, None).await.0, 404);
+    assert_eq!(
+        call(&app, &t, "GET", "/api/items/1/karaoke", None).await.0,
+        404
+    );
+    sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES (2, 1)"#)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(call(&app, &t, "GET", uri, None).await.0, 200);
 }
 
 #[sqlx::test(migrations = false)]
