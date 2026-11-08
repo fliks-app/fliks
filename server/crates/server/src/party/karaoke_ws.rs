@@ -29,10 +29,11 @@ const MAX_PER_SECOND: u32 = 20;
 const RECHECK: Duration = Duration::from_secs(5);
 
 type Sink = mpsc::Sender<String>;
+type Displays = HashMap<i32, Vec<(u64, Sink)>>;
 
 /// The display sockets of each party.
 #[derive(Clone, Default)]
-pub struct Relay(Arc<Mutex<HashMap<i32, Vec<(u64, Sink)>>>>);
+pub struct Relay(Arc<Mutex<Displays>>);
 
 impl Relay {
     fn add(&self, party: i32, id: u64, tx: Sink) {
