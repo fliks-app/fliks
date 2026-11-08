@@ -597,6 +597,7 @@
     "section_subtitles": "Legendas",
     "section_integrations": "Integrações",
     "section_users": "Utilizadores",
+    "section_optimize": "Otimização",
     "section_advanced": "Avançado",
     "section_livetv": "TV em direto"
   },
@@ -2091,9 +2092,9 @@
       "cleanup": "Limpeza",
       "email": "E-mail de saída",
       "sso": "Início de sessão único",
-      "optimize_profiles": "Perfis de otimização",
-      "optimize": "Definições de otimização",
-      "optimize_workers": "Workers de otimização"
+      "optimize_profiles": "Perfis",
+      "optimize": "Definições",
+      "optimize_workers": "Workers"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -3558,7 +3559,7 @@
         "file": "Ficheiro"
       },
       "excluded": {
-        "probe_outdated": "Ainda não analisado com a versão de análise atual.",
+        "probe_outdated": "O ficheiro precisa de nova análise: analise a biblioteca.",
         "probe_failed": "A análise deste ficheiro falhou.",
         "not_video": "Este ficheiro não tem vídeo.",
         "too_recent": "Importado há demasiado pouco tempo para o perfil."
@@ -3686,7 +3687,6 @@
         "map_to": "Caminho do worker",
         "add_mapping": "Adicionar uma correspondência",
         "mapping_invalid": "Cada correspondência precisa dos dois caminhos.",
-        "device_jobs": "{{count}} de cada vez",
         "no_public_url": "O URL público não está definido: os workers sem acesso à biblioteca não recebem trabalhos. Defina-o nas definições gerais.",
         "help": "Como executar um worker",
         "start_command": "Execute-o com:",

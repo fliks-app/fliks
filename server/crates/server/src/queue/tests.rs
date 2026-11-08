@@ -300,3 +300,21 @@ async fn a_worker_without_the_library_is_not_leased_what_needs_server_paths(pool
     };
     assert!(store::take(&pool, &local).await.unwrap().is_some());
 }
+
+#[test]
+fn workers_lists_only_live_instances() {
+    let q = super::Shared::default();
+    let w = || super::Worker {
+        principal: super::Principal::Local,
+        engine_version: "1".into(),
+        devices: vec![],
+    };
+    q.register("old".into(), w());
+    q.register("new".into(), w());
+    q.seen.lock().unwrap().insert(
+        "old".into(),
+        std::time::Instant::now() - super::LIVE - std::time::Duration::from_secs(1),
+    );
+    let keys: Vec<String> = q.workers().into_iter().map(|(k, ..)| k).collect();
+    assert_eq!(keys, ["new"]);
+}

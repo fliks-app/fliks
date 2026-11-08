@@ -3185,7 +3185,7 @@
         "tags": [
           "crate::queue::api"
         ],
-        "summary": "The instances that said hello since the server started.",
+        "summary": "The instances seen within the last few minutes.",
         "operationId": "list_workers",
         "responses": {
           "200": {}

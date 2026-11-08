@@ -597,6 +597,7 @@
     "section_subtitles": "Sottotitoli",
     "section_integrations": "Integrazioni",
     "section_users": "Utenti",
+    "section_optimize": "Ottimizzazione",
     "section_advanced": "Avanzate",
     "section_livetv": "TV in diretta"
   },
@@ -2091,9 +2092,9 @@
       "cleanup": "Pulizia",
       "email": "Posta in uscita",
       "sso": "Single sign-on",
-      "optimize_profiles": "Profili di ottimizzazione",
-      "optimize": "Impostazioni di ottimizzazione",
-      "optimize_workers": "Worker di ottimizzazione"
+      "optimize_profiles": "Profili",
+      "optimize": "Impostazioni",
+      "optimize_workers": "Worker"
     },
     "engine": {
       "title": "Motore di streaming remoto",
@@ -3558,7 +3559,7 @@
         "file": "File"
       },
       "excluded": {
-        "probe_outdated": "Non ancora analizzato con la versione di analisi attuale.",
+        "probe_outdated": "Il file va rianalizzato: scansiona la libreria.",
         "probe_failed": "L'analisi di questo file è fallita.",
         "not_video": "Questo file non ha video.",
         "too_recent": "Importato troppo di recente per il profilo."
@@ -3686,7 +3687,6 @@
         "map_to": "Percorso worker",
         "add_mapping": "Aggiungi una corrispondenza",
         "mapping_invalid": "Ogni corrispondenza richiede entrambi i percorsi.",
-        "device_jobs": "{{count}} alla volta",
         "no_public_url": "L'URL pubblico non è impostato: i worker senza accesso alla libreria non ricevono lavori. Impostalo nelle impostazioni generali.",
         "help": "Come avviare un worker",
         "start_command": "Avvialo con:",

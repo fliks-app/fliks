@@ -27,7 +27,7 @@ export interface CoreSettingsSection {
   items: readonly UiContribution[];
 }
 
-/** Core's admin settings links as `settings.page` contributions in the 7 sidebar sections; plugins get their own section
+/** Core's admin settings links as `settings.page` contributions in the 8 sidebar sections; plugins get their own section
  *  (see `SettingsSectionsService`), so weight only orders core items, kept 100-spaced like `CORE_NAV_CONTRIBUTIONS`. */
 export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
   {
@@ -54,9 +54,6 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
     items: [
       { id: 'core.quality_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.quality_profiles', action: { kind: 'route', path: '/admin/settings/quality-profiles' } },
       { id: 'core.language_profiles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.language_profiles', action: { kind: 'route', path: '/admin/settings/language-profiles' } },
-      { id: 'core.optimize_profiles', slot: 'settings.page', weight: 250, labelKey: 'settings.nav.optimize_profiles', action: { kind: 'route', path: '/admin/settings/optimize-profiles' } },
-      { id: 'core.optimize_workers', slot: 'settings.page', weight: 270, labelKey: 'settings.nav.optimize_workers', action: { kind: 'route', path: '/admin/settings/optimize-workers' } },
-      { id: 'core.optimize_settings', slot: 'settings.page', weight: 260, labelKey: 'settings.nav.optimize', action: { kind: 'route', path: '/admin/settings/optimize' } },
       { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
       { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },
       { id: 'core.auto_approval', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.auto_approval', action: { kind: 'route', path: '/admin/settings/auto-approval' } },
@@ -92,6 +89,14 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.users', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.users', when: ['hasPermission:users.manage'], action: { kind: 'route', path: '/admin/settings/users' } },
       { id: 'core.roles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.roles', when: ['hasPermission:roles.manage'], action: { kind: 'route', path: '/admin/settings/roles' } },
       { id: 'core.sso', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.sso', when: ['isAdmin'], action: { kind: 'route', path: '/admin/settings/sso' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_optimize',
+    items: [
+      { id: 'core.optimize_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.optimize_profiles', action: { kind: 'route', path: '/admin/settings/optimize-profiles' } },
+      { id: 'core.optimize_settings', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.optimize', action: { kind: 'route', path: '/admin/settings/optimize' } },
+      { id: 'core.optimize_workers', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.optimize_workers', action: { kind: 'route', path: '/admin/settings/optimize-workers' } },
     ],
   },
   {

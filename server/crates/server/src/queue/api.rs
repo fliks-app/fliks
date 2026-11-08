@@ -278,7 +278,7 @@ pub struct WorkerRow {
     last_seen_at: DateTime<Utc>,
 }
 
-/// The instances that said hello since the server started.
+/// The instances seen within the last few minutes.
 #[utoipa::path(get, path = "/api/optimize/workers", responses((status = 200)))]
 pub async fn list_workers(
     State(st): State<AppState>,

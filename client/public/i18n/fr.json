@@ -597,6 +597,7 @@
     "section_subtitles": "Sous-titres",
     "section_integrations": "Intégrations",
     "section_users": "Utilisateurs",
+    "section_optimize": "Optimisation",
     "section_advanced": "Avancé",
     "section_livetv": "TV en direct"
   },
@@ -2091,9 +2092,9 @@
       "cleanup": "Nettoyage",
       "email": "Envoi d'e-mails",
       "sso": "Authentification unique",
-      "optimize_profiles": "Profils d'optimisation",
-      "optimize": "Réglages d'optimisation",
-      "optimize_workers": "Workers d'optimisation"
+      "optimize_profiles": "Profils",
+      "optimize": "Réglages",
+      "optimize_workers": "Workers"
     },
     "engine": {
       "title": "Moteur de streaming distant",
@@ -3449,7 +3450,7 @@
         "when_codec_hint": "Vide : n'importe lequel.",
         "any": "N'importe lequel",
         "min_bitrate": "Débit actuel d'au moins (Mb/s)",
-        "min_bitrate_hint": "Vide ou 0 : peu importe.",
+        "min_bitrate_hint": "Vide ou 0 : ignorer.",
         "only_if_transcoding_here": "Seulement si la vidéo a dû être convertie pendant une lecture",
         "only_if_transcoding_here_hint": "Sur un de vos appareils, ces 30 derniers jours.",
         "skip_hdr10plus_dv": "Ne pas toucher aux vidéos HDR10+ et Dolby Vision",
@@ -3558,7 +3559,7 @@
         "file": "Fichier"
       },
       "excluded": {
-        "probe_outdated": "Pas encore analysé avec la version d'analyse actuelle.",
+        "probe_outdated": "Fichier à réanalyser : lancez un scan de la bibliothèque.",
         "probe_failed": "L'analyse de ce fichier a échoué.",
         "not_video": "Ce fichier n'a pas de vidéo.",
         "too_recent": "Importé trop récemment pour le profil."
@@ -3686,7 +3687,6 @@
         "map_to": "Chemin worker",
         "add_mapping": "Ajouter une correspondance",
         "mapping_invalid": "Chaque correspondance a besoin des deux chemins.",
-        "device_jobs": "{{count}} à la fois",
         "no_public_url": "L'URL publique n'est pas définie : les workers sans accès à la bibliothèque ne reçoivent aucun travail. Définissez-la dans les réglages généraux.",
         "help": "Lancer un worker",
         "start_command": "Lancez-le avec :",
