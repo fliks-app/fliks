@@ -5307,6 +5307,7 @@
     "native_hint": "Karaoke braucht den Web- oder Desktop-Player.",
     "mode_original": "Original",
     "mode_guide": "Guide",
+    "vocal_level": "Gesang",
     "mode_instrumental": "Instrumental",
     "stage_separate": "Stimme wird getrennt",
     "stage_align": "Text wird synchronisiert",

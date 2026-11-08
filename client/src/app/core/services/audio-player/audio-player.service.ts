@@ -695,13 +695,22 @@ export class AudioPlayerService {
       const state = await api.itemState(itemId);
       if (run !== this.stemsRun) return;
       const ready = state.state === 'ready' && !!state.stems.instrumental && !!state.stems.vocals;
-      if (!ready || !sameOrigin(api.stemUrl(state.fileId, 'vocals'))) return this.dropStems();
-      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady());
+      if (!ready) return this.dropStems();
+      if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
+      if (run !== this.stemsRun) return;
+      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed());
       if (!this.stems.load(state.fileId)) return this.dropStems();
       this._stemsAvailable.set(true);
     } catch {
       if (run === this.stemsRun) this.dropStems();
     }
+  }
+
+  /** A stem that errors (evicted, token expired) hands the sound back to the original. */
+  private onStemsFailed(): void {
+    this.dropStems();
+    this._stemMode.set('original');
+    this.applyGains();
   }
 
   private onStemsReady(): void {

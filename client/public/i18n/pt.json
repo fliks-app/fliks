@@ -5307,6 +5307,7 @@
     "native_hint": "O karaoke precisa do leitor web ou de ambiente de trabalho.",
     "mode_original": "Original",
     "mode_guide": "Guia",
+    "vocal_level": "Voz",
     "mode_instrumental": "Instrumental",
     "stage_separate": "A separar a voz",
     "stage_align": "A sincronizar a letra",

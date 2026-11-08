@@ -5307,6 +5307,7 @@
     "native_hint": "Karaoke needs the web or desktop player.",
     "mode_original": "Original",
     "mode_guide": "Guide",
+    "vocal_level": "Vocals",
     "mode_instrumental": "Instrumental",
     "stage_separate": "Separating the voice",
     "stage_align": "Syncing the lyrics",

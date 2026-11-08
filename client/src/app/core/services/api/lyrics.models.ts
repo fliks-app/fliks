@@ -18,6 +18,9 @@ export interface LyricsCue {
   value: string;
   byteStart: number;
   byteEnd: number;
+  /** MIDI note of the reference melody; absent when unvoiced or unknown. */
+  pitch?: number;
+  golden?: boolean;
 }
 
 export interface LyricsCueLine {

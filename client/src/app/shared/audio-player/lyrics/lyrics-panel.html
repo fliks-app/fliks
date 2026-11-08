@@ -67,6 +67,20 @@
               </button>
             }
           </div>
+          <label class="flex items-center gap-2 text-sm">
+            <span>{{ 'karaoke.vocal_level' | translate }}</span>
+            <input
+              type="range"
+              class="range range-sm w-32"
+              min="0"
+              max="100"
+              step="5"
+              data-testid="karaoke-vocal-level"
+              [value]="audio.vocalLevel() * 100"
+              [disabled]="!audio.stemsAvailable() || audio.stemMode() === 'original'"
+              (input)="audio.setVocalLevel(+$any($event.target).value / 100)"
+            />
+          </label>
         }
       }
     </div>
