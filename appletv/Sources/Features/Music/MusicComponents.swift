@@ -11,7 +11,7 @@ struct AlbumTile: View {
     @FocusState private var focused: Bool
     @Environment(Backdrop.self) private var backdrop
 
-    private static let side: CGFloat = 260
+    private static let side: CGFloat = 236
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

@@ -193,7 +193,6 @@ private struct QueueSheet: View {
                 }
                 .padding(.horizontal, 24).padding(.vertical, 20)
             }
-            .scrollClipDisabled()
             Button(tr("common.cancel")) { dismiss() }
         }
         .padding(60)
