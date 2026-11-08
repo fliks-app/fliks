@@ -7,7 +7,15 @@ struct LyricsResponse: Decodable {
 
 struct StructuredLyrics: Decodable {
     struct Line: Decodable { let start: Int?; let value: String }
-    struct Cue: Decodable { let start: Int; let end: Int; let value: String }
+    struct Cue: Decodable {
+        let start: Int
+        let end: Int
+        let value: String
+        /// MIDI note of the reference melody, absent when unvoiced or unknown.
+        let pitch: Double?
+        let golden: Bool?
+    }
+    struct Agent: Decodable { let id: String; let role: String }
     struct CueLine: Decodable {
         let index: Int
         let agentId: String?
@@ -24,6 +32,7 @@ struct StructuredLyrics: Decodable {
     /// Positive shows the text sooner.
     let offset: Int
     let line: [Line]
+    let agents: [Agent]?
     let cueLine: [CueLine]?
 }
 

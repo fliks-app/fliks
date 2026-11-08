@@ -11,6 +11,8 @@ struct NowPlayingView: View {
     @State private var rating: Int?
     @State private var lyrics: StructuredLyrics?
     @State private var showLyrics = false
+    @State private var showKaraoke = false
+    @State private var karaokeReady = false
     @FocusState private var focus: Control?
     @Environment(Backdrop.self) private var backdrop
 
@@ -27,6 +29,10 @@ struct NowPlayingView: View {
         .onAppear { focus = .play; player.nowPlayingOpen = true }
         .onDisappear { player.nowPlayingOpen = false }
         .sheet(isPresented: $showQueue) { QueueSheet() }
+        .fullScreenCover(isPresented: $showKaraoke) {
+            if let id = player.current?.itemId { KaraokeView(itemId: id, lyrics: lyrics) { showKaraoke = false } }
+        }
+        .task { karaokeReady = await KaraokeAPI.status()?.ready == true }
         .overlay(alignment: .top) {
             if let notice = player.notice {
                 Text(notice).padding(.horizontal, 28).padding(.vertical, 14).background(.thinMaterial, in: Capsule()).padding(.top, 30)
@@ -144,6 +150,10 @@ struct NowPlayingView: View {
             if lyrics != nil {
                 Button { showLyrics.toggle() } label: { Image(systemName: "quote.bubble") }
                     .accessibilityLabel(tr("lyrics.title"))
+            }
+            if karaokeReady, lyrics?.cueLine?.isEmpty == false {
+                Button { showKaraoke = true } label: { Image(systemName: "music.mic") }
+                    .accessibilityLabel(tr("karaoke.title"))
             }
             Button { showQueue = true } label: { Image(systemName: "list.bullet") }
                 .accessibilityLabel(tr("music_player.queue"))

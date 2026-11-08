@@ -115,5 +115,6 @@
   "library.type.album": "Album",
   "music.not_playable": "«%@» non può essere riprodotto qui",
   "music.nothing_playing": "Nessuna riproduzione in corso",
-  "music.tab_albums": "Album"
+  "music.tab_albums": "Album",
+  "karaoke.unavailable": "Il karaoke non è disponibile su questo server."
 }
