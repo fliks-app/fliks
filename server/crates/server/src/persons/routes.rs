@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/persons/{id}/provider-credits", get(provider_credits))
         .route("/api/persons/{id}/bibliography", get(bibliography))
         .route("/api/persons/{id}/works", get(works))
+        .route("/api/persons/{id}/discography", get(discography))
 }
 
 type Res = Result<Json<Value>, AppError>;
@@ -75,14 +76,15 @@ pub async fn bibliography(
 }
 
 const ROLES: [&str; 2] = ["author", "narrator"];
+const LIST_ROLES: [&str; 4] = ["author", "narrator", "artist", "composer"];
 
 /// `role` is required: a missing one is the same 400 as a wrong one.
-fn role_of(r: &mut Reader) -> Option<String> {
-    let role = r.one_of("role", &ROLES);
+fn role_of(r: &mut Reader, roles: &[&str]) -> Option<String> {
+    let role = r.one_of("role", roles);
     if r.all("role").is_empty() {
         r.errors.push(format!(
             "role must be one of the following values: {}",
-            ROLES.join(", ")
+            roles.join(", ")
         ));
     }
     role
@@ -96,7 +98,7 @@ pub async fn list(
 ) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let mut r = Reader::new(&q, &["role", "libraryId", "q", "sortBy", "page", "limit"]);
-    let role = role_of(&mut r);
+    let role = role_of(&mut r, &LIST_ROLES);
     let (library, name) = (r.int("libraryId"), r.string("q"));
     let sort = r.one_of("sortBy", &["name", "works"]);
     let (page, limit) = (r.number("page"), r.number("limit"));
@@ -118,6 +120,20 @@ pub async fn list(
     let scope = aggregates::scope(&acl, library.map(|l| l.to_string()).as_deref());
     let by_works = sort.as_deref() == Some("works");
     let tsq = tsq.flatten();
+    if matches!(role.as_str(), "artist" | "composer") {
+        return Ok(Json(Value::Array(
+            service::music_people(
+                &st.db,
+                &role,
+                &scope,
+                &acl,
+                tsq.as_deref(),
+                by_works,
+                paging,
+            )
+            .await?,
+        )));
+    }
     Ok(Json(Value::Array(
         service::people(
             &st.db,
@@ -142,11 +158,21 @@ pub async fn works(
     a.require(Action::Read, Subject::Media)?;
     let id = id?.0;
     let mut r = Reader::new(&q, &["role"]);
-    let role = role_of(&mut r);
+    let role = role_of(&mut r, &ROLES);
     r.finish()?;
     let acl = accessible_library_ids(&st.db, &a).await?;
     let role = role.unwrap_or_default();
     Ok(Json(
         service::works(&st.db, id, &role, a.user.id, &acl).await?,
     ))
+}
+
+#[utoipa::path(get, path = "/api/persons/{id}/discography", responses((status = 200)))]
+pub async fn discography(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Res {
+    a.require(Action::Read, Subject::Media)?;
+    Ok(Json(service::discography(&st, &a, id?.0).await?))
 }

@@ -1,0 +1,60 @@
+@if (loading()) {
+  <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (data(); as d) {
+  <div class="flex flex-col gap-6">
+    <div class="flex flex-col sm:flex-row gap-6 items-start">
+      <div class="avatar">
+        <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
+          @if (d.artist.imageUrl) {
+            <img [cachedSrc]="d.artist.imageUrl | resolveUrl:'medium'" [alt]="d.artist.name" />
+          } @else {
+            <div class="bg-base-300 flex items-center justify-center w-full h-full text-4xl font-bold text-base-content/30">{{ d.artist.name.charAt(0) }}</div>
+          }
+        </div>
+      </div>
+      <div class="flex min-w-0 flex-col gap-2">
+        <h1 class="text-3xl font-bold" data-testid="artist-name">{{ d.artist.name }}</h1>
+        @if (subtitle()) {
+          <p class="text-sm text-base-content/60">{{ subtitle() }}</p>
+        }
+        @if (d.artist.biography; as bio) {
+          <p class="text-sm leading-relaxed" [class.line-clamp-4]="!expanded()" data-testid="biography">{{ bio }}</p>
+          @if (bio.length > 280) {
+            <button type="button" class="btn btn-xs btn-ghost self-end" (click)="expanded.set(!expanded())">
+              {{ (expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+            </button>
+          }
+        }
+        <app-follow-toggle kind="person" role="artist" [targetId]="d.artist.id" />
+      </div>
+    </div>
+
+    @for (g of groups().groups; track g.key) {
+      <section data-testid="release-group">
+        <h2 class="text-lg font-semibold mb-3">{{ 'music.group_' + g.key | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 tv:gap-8 p-1">
+          @for (a of g.albums; track a.mediaId) {
+            <app-media-card [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="a.year ? '' + a.year : undefined" [link]="['/albums', '' + a.mediaId]" />
+          }
+        </div>
+      </section>
+    }
+
+    @if (groups().missing.length) {
+      <section data-testid="missing-group">
+        <h2 class="text-lg font-semibold mb-3">{{ 'music.group_missing' | translate }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 tv:gap-8 p-1">
+          @for (a of groups().missing; track a.externalId ?? a.title) {
+            <app-media-card [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="a.year ? '' + a.year : undefined" [grayscale]="true" [link]="a.externalId ? ['/add/album', 'musicbrainz', a.externalId] : null" />
+          }
+        </div>
+      </section>
+    }
+
+    @if (!groups().groups.length && !groups().missing.length) {
+      <p class="text-center py-12 text-base-content/50">{{ 'music.no_albums' | translate }}</p>
+    }
+  </div>
+} @else if (failed()) {
+  <div role="alert" class="alert alert-error">{{ 'music.load_failed' | translate }}</div>
+}

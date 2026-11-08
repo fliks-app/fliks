@@ -4,6 +4,7 @@ use super::family::Family;
 const VIDEO_TAIL_S: f64 = 30.0;
 const VIDEO_SHARE: f64 = 0.9;
 const AUDIO_SHARE: f64 = 0.98;
+const MUSIC_CAP_S: f64 = 240.0;
 /// The last Readium position has a `totalProgression` just under 1.
 pub const TEXT_SHARE: f64 = 0.99;
 
@@ -15,6 +16,8 @@ pub struct Standing {
     pub progression: Option<f64>,
     /// Start of the last chapter, only for an item with at least two.
     pub last_chapter_start: Option<f64>,
+    /// A track of an album: finished at half its length, or 240 s.
+    pub music: bool,
 }
 
 /// The video rule alone: also the zone in which every beat is written.
@@ -25,6 +28,9 @@ pub fn video(position: f64, duration: f64) -> bool {
 pub fn finished(family: Family, s: &Standing) -> bool {
     match family {
         Family::Video => video(s.position, s.duration),
+        Family::Audio if s.music => {
+            s.duration > 0.0 && s.position >= (s.duration / 2.0).min(MUSIC_CAP_S)
+        }
         Family::Audio => {
             (s.duration > 0.0 && s.position >= s.duration * AUDIO_SHARE)
                 || s.last_chapter_start
@@ -77,6 +83,19 @@ mod tests {
             ..at(120.0, 0.0)
         };
         assert!(finished(Family::Audio, &unknown_duration));
+    }
+
+    #[test]
+    fn a_track_completes_at_half_its_length_or_240_s() {
+        let track = |p, d| Standing {
+            music: true,
+            ..at(p, d)
+        };
+        assert!(!finished(Family::Audio, &track(99.0, 200.0)));
+        assert!(finished(Family::Audio, &track(100.0, 200.0)));
+        assert!(!finished(Family::Audio, &track(239.0, 900.0)));
+        assert!(finished(Family::Audio, &track(240.0, 900.0)));
+        assert!(!finished(Family::Audio, &track(50.0, 0.0)));
     }
 
     #[test]

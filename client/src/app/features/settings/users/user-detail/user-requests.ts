@@ -25,6 +25,7 @@ export class UserRequestsComponent implements OnInit {
     series: 'badge-accent',
     book: 'badge-warning',
     comic: 'badge-secondary',
+    album: 'badge-primary',
   };
   private readonly requestsApi = inject(RequestsService);
   private readonly state = inject(UserDetailState);

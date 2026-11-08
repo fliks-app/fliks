@@ -229,6 +229,45 @@ export class CastPlayerService {
     };
   }
 
+  /** Audio-only profile for a music track: FLAC, MP3 and AAC play as they are, anything else (ALAC) is transcoded by the server. */
+  getCastAudioProfile(): DeviceProfile {
+    return {
+      ...this.getCastDeviceProfile(),
+      directPlayProfiles: [{ containers: ['flac', 'mp3', 'aac', 'm4a'], videoCodecs: [], audioCodecs: ['flac', 'mp3', 'aac'] }],
+      codecConditions: [{ codec: 'flac', maxBitDepth: 24 }],
+    };
+  }
+
+  /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
+  async castTrack(t: { itemId: number; mediaId: number; title: string; artists: string; coverUrl: string | null }, autoplay = true) {
+    const [pi, castInfo] = await Promise.all([
+      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastAudioProfile(), { startAt: 0 }),
+      this.authService.getCastInfo(),
+    ]);
+    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
+    const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
+    try {
+      await this.cast.loadMedia({
+        url,
+        contentType,
+        title: t.title,
+        subtitle: t.artists,
+        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
+        mediaId: t.mediaId,
+        mediaFileId: pi.mediaFileId,
+        sid: pi.sessionId,
+        userId: this.authService.user()?.id,
+        autoplay,
+      });
+      return pi;
+    } catch (err) {
+      console.error('[cast] LOAD failed', err);
+      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
+      this.toast.error(this.translate.instant('cast.error.load_failed'));
+      return null;
+    }
+  }
+
   /** Conservative video side of the profile: only a v2 receiver, and only what its MSE reports; levels
    * are capped below what receivers over-report. HDR needs a 10-bit decoder and an HDR display. */
   private receiverVideo(caps: CastDeviceCapabilities | null) {

@@ -10,6 +10,7 @@ pub mod field_sources;
 pub mod hydrate;
 pub mod items;
 pub(crate) mod list;
+pub(crate) mod music;
 pub(crate) mod params;
 mod related;
 mod routes;

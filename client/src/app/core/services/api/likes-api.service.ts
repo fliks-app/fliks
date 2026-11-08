@@ -4,11 +4,12 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 
-/** Identifies liked content: movie (mediaId), season (+seasonId), episode (+episodeId). */
+/** Identifies liked content: movie (mediaId), season (+seasonId), episode (+episodeId), track (+itemId). */
 export interface LikeTarget {
   mediaId: number;
   seasonId?: number;
   episodeId?: number;
+  itemId?: number;
 }
 
 /** The caller's likes on one media. */

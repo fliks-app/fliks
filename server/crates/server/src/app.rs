@@ -385,10 +385,17 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         persons::detail,
         metadata::music::works::search,
         metadata::music::works::detail,
+        crate::music::tracks,
+        crate::music::rate,
+        crate::music::unrate,
+        crate::music::composer_works,
+        crate::music::recordings,
+        crate::music::recently_played,
         persons::provider_credits,
         persons::bibliography,
         persons::list,
         persons::works,
+        persons::discography,
         wanted::wants_get,
         wanted::wants_put,
         wanted::wanted,
@@ -538,6 +545,7 @@ fn api() -> Router<AppState> {
         .merge(collections::router())
         .merge(persons::router())
         .merge(metadata::music::works::router())
+        .merge(crate::music::router())
         .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())

@@ -26,6 +26,7 @@ pub struct AddDto {
     episode_id: Option<i32>,
     season_id: Option<i32>,
     media_id: Option<i32>,
+    item_id: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -150,7 +151,7 @@ pub async fn items(
     let accessible = accessible_library_ids(&st.db, &a).await?;
     let paths = paths_visible(&a.perms);
     let rows = sqlx::query!(
-        r#"SELECT pi.id AS item_id, pi.position, pi."addedById" AS added_by_id,
+        r#"SELECT pi.id AS item_id, pi."itemId" AS track_item, (m.type = 'album') AS "is_track!", pi.position, pi."addedById" AS added_by_id,
                   (to_jsonb(m) - 'searchVector' - 'sortCreator') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
@@ -217,9 +218,17 @@ pub async fn items(
     )
     .fetch_all(&st.db)
     .await?;
+    let track_items: Vec<i32> = rows
+        .iter()
+        .filter(|r| r.is_track)
+        .map(|r| r.track_item)
+        .collect();
+    let mut tracks =
+        crate::media::music::playlist_tracks(&st.db, a.user.id, &accessible, &track_items).await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| {
+                let track = tracks.remove(&r.track_item).filter(|_| r.is_track);
                 let (percent, watched) =
                     progress(r.completed, r.position_seconds, r.duration_seconds);
                 let episode = r.episode.map(|Jsonb(mut e)| {
@@ -239,11 +248,15 @@ pub async fn items(
                     },
                     paths,
                 );
-                json!({
+                let mut out = json!({
                     "itemId": r.item_id, "position": r.position, "addedById": r.added_by_id,
                     "media": media, "episode": episode,
                     "progressPercent": percent, "watched": watched,
-                })
+                });
+                if let Some(t) = track {
+                    out["track"] = t;
+                }
+                out
             })
             .collect(),
     ))
@@ -268,6 +281,20 @@ async fn resolve(
     dto: &AddDto,
     accessible: &[i32],
 ) -> Result<(Vec<i32>, bool), AppError> {
+    if let Some(item) = dto.item_id {
+        let ok = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
+                 JOIN editions e ON e.id = i."editionId"
+                 WHERE i.id = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) AS "e!""#,
+            item,
+            accessible
+        )
+        .fetch_one(&mut *c)
+        .await?;
+        return ok
+            .then_some((vec![item], false))
+            .ok_or_else(|| AppError::not_found(format!("Item #{item} not found")));
+    }
     if let Some(episode) = dto.episode_id {
         let series = sqlx::query_scalar!(
             r#"SELECT s."mediaId" AS "media_id!" FROM items e JOIN item_groups s ON s.id = e."groupId"

@@ -48,6 +48,7 @@ export class LibraryMediaComponent implements OnInit {
     series: 'settings.libraries.media_type_series',
     book: 'kinds.book',
     comic: 'kinds.comic',
+    album: 'kinds.album',
   };
   private readonly mediaService = inject(MediaService);
   private readonly sse = inject(SseService);

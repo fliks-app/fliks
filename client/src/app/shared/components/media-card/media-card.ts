@@ -654,6 +654,8 @@ export class MediaCardComponent {
         return { text: this.translate.instant('books_library.type_book'), class: 'badge-accent' };
       case 'comic':
         return { text: this.translate.instant('kinds.comic'), class: 'badge-warning' };
+      case 'album':
+        return { text: this.translate.instant('kinds.album'), class: 'badge-primary' };
       default:
         return null;
     }

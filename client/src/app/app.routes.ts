@@ -253,6 +253,32 @@ export const routes: Routes = [
         resolve: { page: () => import('./features/media-detail/comic/comic-volume.component').then((m) => m.ComicVolumeComponent) },
       },
       {
+        path: 'albums/:id',
+        loadComponent: () =>
+          import('./features/media-detail/media-detail').then(
+            (m) => m.MediaDetailComponent,
+          ),
+        data: { kind: 'album', reuse: true },
+        resolve: { page: () => import('./features/media-detail/album/album-page.component').then((m) => m.AlbumPageComponent) },
+      },
+      {
+        path: 'artists/:id',
+        loadComponent: () => import('./features/music/artist-page.component').then((m) => m.ArtistPageComponent),
+        data: { reuse: true },
+      },
+      {
+        path: 'composers/:id',
+        loadComponent: () => import('./features/music/composer-page.component').then((m) => m.ComposerPageComponent),
+        data: { reuse: true },
+      },
+      {
+        path: 'add/album/:provider/:externalId',
+        data: { kind: 'album' },
+        loadComponent: () =>
+          import('./features/tmdb-preview/tmdb-preview').then((m) => m.TmdbPreviewComponent),
+        resolve: { page: () => import('./features/tmdb-preview/components/album-preview/album-preview.component').then((m) => m.AlbumPreviewComponent) },
+      },
+      {
         path: 'collections/:id',
         loadComponent: () =>
           import('./features/collection-detail/collection-detail').then(

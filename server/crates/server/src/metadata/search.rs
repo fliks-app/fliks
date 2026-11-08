@@ -36,6 +36,7 @@ pub(crate) fn segment_kind(seg: &str) -> Option<MediaKind> {
         "tv" => Some(MediaKind::Series),
         "book" => Some(MediaKind::Book),
         "comic" => Some(MediaKind::Comic),
+        "album" => Some(MediaKind::Album),
         _ => None,
     }
 }

@@ -1,4 +1,5 @@
 import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { RecentlyPlayedRowComponent } from '../music/recently-played-row.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
@@ -60,6 +61,7 @@ import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
 @Component({
   selector: 'app-home',
   imports: [
+    RecentlyPlayedRowComponent,
     MediaLinkPipe,
     RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,

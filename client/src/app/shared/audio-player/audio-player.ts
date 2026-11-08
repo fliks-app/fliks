@@ -1,9 +1,17 @@
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
+  LucideArrowDown,
+  LucideArrowUp,
   LucideChevronDown,
   LucideGauge,
+  LucideHeart,
+  LucideListMusic,
+  LucideRepeat,
+  LucideRepeat1,
+  LucideShuffle,
+  LucideStar,
   LucideMoon,
   LucidePause,
   LucidePlay,
@@ -20,6 +28,11 @@ import {
   SPEEDS,
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
+import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
+import { LikesApiService } from '../../core/services/api/likes-api.service';
+import { MediaService } from '../../core/services/api/media.service';
+import { MusicApiService } from '../../core/services/api/music-api.service';
+import type { AlbumDetail } from '../../core/services/api/music.models';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { formatTime } from '../../core/utils/player.utils';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
@@ -38,8 +51,16 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     TvRowDirective,
     TvSectionDirective,
     LucideBookmarkPlus,
+    LucideArrowDown,
+    LucideArrowUp,
     LucideChevronDown,
     LucideGauge,
+    LucideHeart,
+    LucideListMusic,
+    LucideRepeat,
+    LucideRepeat1,
+    LucideShuffle,
+    LucideStar,
     LucideMoon,
     LucidePause,
     LucidePlay,
@@ -54,6 +75,9 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 })
 export class AudioPlayerComponent {
   protected readonly audio = inject(AudioPlayerService);
+  private readonly likes = inject(LikesApiService);
+  private readonly mediaApi = inject(MediaService);
+  private readonly musicApi = inject(MusicApiService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly clock = formatTime;
@@ -73,7 +97,16 @@ export class AudioPlayerComponent {
     return s?.kind === 'duration' ? this.clock(this.audio.sleepLeft()) : null;
   });
 
+  protected readonly stars = [1, 2, 3, 4, 5];
+  protected readonly fav = signal(false);
+  protected readonly rating = signal<number | null>(null);
+  private readonly albums = new Map<number, Promise<AlbumDetail | null>>();
+
   constructor() {
+    effect(() => {
+      const t = this.audio.musicMode() ? this.audio.track() : null;
+      if (t) untracked(() => void this.loadTrackState(t.mediaId, t.itemId));
+    });
     effect(() => {
       const el = this.dialog()?.nativeElement;
       if (!el) return;
@@ -110,6 +143,59 @@ export class AudioPlayerComponent {
     }
   }
 
+  /** The caller's favourite and rating come with the album detail. */
+  private async loadTrackState(mediaId: number, itemId: number): Promise<void> {
+    this.fav.set(false);
+    this.rating.set(null);
+    let album = this.albums.get(mediaId);
+    if (!album) {
+      album = this.mediaApi
+        .getOne(mediaId)
+        .then((m) => (m as { album?: AlbumDetail }).album ?? null)
+        .catch(() => null);
+      this.albums.set(mediaId, album);
+    }
+    const track = (await album)?.tracks.find((x) => x.itemId === itemId);
+    if (track && this.audio.track()?.itemId === itemId) {
+      this.fav.set(track.favourite);
+      this.rating.set(track.rating);
+    }
+  }
+
+  protected async toggleFavourite(): Promise<void> {
+    const t = this.audio.track();
+    if (!t) return;
+    const target = { mediaId: t.mediaId, itemId: t.itemId };
+    const was = this.fav();
+    this.fav.set(!was);
+    try {
+      await (was ? this.likes.unlike(target) : this.likes.like(target));
+    } catch {
+      this.fav.set(was);
+    }
+  }
+
+  /** Clicking the star that is already the rating clears it. */
+  protected async rate(n: number): Promise<void> {
+    const t = this.audio.track();
+    if (!t) return;
+    const was = this.rating();
+    this.rating.set(was === n ? null : n);
+    try {
+      await (was === n ? this.musicApi.clearRating(t.itemId) : this.musicApi.rate(t.itemId, n));
+    } catch {
+      this.rating.set(was);
+    }
+  }
+
+  protected cycleReplayGain(): void {
+    this.audio.setReplayGain(next(REPLAY_GAINS, this.audio.replayGain()));
+  }
+
+  protected cyclePreamp(): void {
+    this.audio.setPreamp(next(PREAMP_STEPS, this.audio.preamp()));
+  }
+
   protected goTo(b: AudioBookmark): void {
     void this.audio.seek(b.position);
   }
@@ -119,6 +205,6 @@ export class AudioPlayerComponent {
   }
 }
 
-function next(steps: number[], value: number): number {
+function next<T>(steps: T[], value: T): T {
   return steps[(steps.indexOf(value) + 1) % steps.length];
 }

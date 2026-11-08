@@ -26,6 +26,7 @@ const LIKES_LIMIT: i64 = 60;
 pub struct TargetDto {
     media_id: i32,
     season_id: Option<i32>,
+    #[serde(alias = "itemId")]
     episode_id: Option<i32>,
 }
 

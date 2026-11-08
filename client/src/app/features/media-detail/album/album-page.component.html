@@ -1,0 +1,145 @@
+@let m = media();
+@let a = album();
+
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="album" [media]="m" [posterUrl]="coverUrl()" [overview]="m.overview || null" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
+  @if (a) {
+    <p heroMeta class="flex flex-wrap gap-x-3 gap-y-1 text-base-content/70" data-testid="facts">
+      @for (ar of a.artists; track ar.id; let last = $last) {
+        <span><a class="link link-hover font-medium" [routerLink]="['/artists', ar.id]">{{ ar.creditedName ?? ar.name }}</a>@if (!last) {{{ ar.joinPhrase ?? ', ' }}}</span>
+      }
+      @if (a.primaryType) {
+        <span class="badge badge-outline badge-sm">{{ a.primaryType }}</span>
+      }
+      @if (a.firstReleaseDate) {
+        <span>{{ a.firstReleaseDate.slice(0, 4) }}</span>
+      }
+      <span>{{ 'music.track_count' | translatePlural: tracks().length }}</span>
+      @if (duration()) {
+        <span>{{ duration() }}</span>
+      }
+      @if (orphaned()) {
+        <span class="badge badge-warning badge-sm" data-testid="orphaned">{{ 'music.orphaned' | translate }}</span>
+      }
+    </p>
+  }
+  @if (playable().length) {
+    <button ngProjectAs="[heroActions]" type="button" class="btn btn-primary gap-2" autofocus (click)="play()" data-testid="play">
+      <svg lucidePlay class="size-4"></svg>{{ 'music.play' | translate }}
+    </button>
+    <button ngProjectAs="[heroActions]" type="button" class="btn btn-outline gap-2" (click)="play(undefined, true)" data-testid="shuffle">
+      <svg lucideShuffle class="size-4"></svg>{{ 'music.shuffle' | translate }}
+    </button>
+  }
+  @if (canIdentify()) {
+    <button ngProjectAs="[heroActions]" type="button" class="btn btn-outline" [disabled]="reviewing()" (click)="review()" data-testid="identify">
+      {{ 'music.identify' | translate }}
+    </button>
+  }
+</app-detail-hero>
+
+@if (candidates(); as list) {
+  <app-detail-section [heading]="'music.candidates' | translate" [collapsible]="false">
+    @if (!list.length) {
+      <p class="text-base-content/60" data-testid="no-candidates">{{ 'music.no_candidates' | translate }}</p>
+    }
+    <ul class="flex flex-col gap-1">
+      @for (c of list; track c.release) {
+        <li>
+          <button type="button" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2" [disabled]="reviewing()" (click)="pick(c)" data-testid="candidate">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate font-medium">{{ c.title }}</span>
+              <span class="block truncate text-sm text-base-content/60">{{ c.artists.join(', ') }}{{ c.year ? ' · ' + c.year : '' }}</span>
+            </span>
+            <span class="badge badge-ghost badge-sm tabular-nums">{{ (c.similarity * 100).toFixed(0) }}%</span>
+          </button>
+        </li>
+      }
+    </ul>
+  </app-detail-section>
+}
+
+@if (a) {
+  @if (a.editions.length > 1) {
+    <app-detail-section [heading]="'music.editions' | translate" [collapsible]="false">
+      <select appTvSelect class="select select-bordered w-full max-w-xl" [attr.aria-label]="'music.editions' | translate" [ngModel]="editionId()" (ngModelChange)="editionId.set(+$event)" data-testid="editions">
+        @for (e of a.editions; track e.id) {
+          <option [ngValue]="e.id">{{ editionLabel(e) }}</option>
+        }
+      </select>
+    </app-detail-section>
+  }
+  @if (edition()) {
+    <app-facts-grid class="mt-4" [facts]="facts()" />
+  }
+
+  <ng-template #row let-t>
+    <li class="flex items-center gap-1" [class.opacity-50]="!t.hasFile" data-testid="track">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
+        <span class="w-8 shrink-0 text-right tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate font-medium">{{ t.title }}@if (t.explicit) { <span class="badge badge-ghost badge-sm ml-2">{{ 'music.explicit' | translate }}</span> }</span>
+          @if (t.artists.length) {
+            <span class="block truncate text-sm text-base-content/60">{{ line(t.artists) }}</span>
+          }
+        </span>
+        @if (!t.hasFile) {
+          <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
+        }
+        <span class="hidden sm:inline text-sm tabular-nums text-base-content/60">{{ fmt(t.durationSeconds) }}</span>
+      </button>
+      <span class="hidden md:inline-flex shrink-0 items-center" role="group" [attr.aria-label]="'music.rating' | translate">
+        @for (s of stars; track s) {
+          <button type="button" class="btn btn-ghost btn-xs btn-square" [attr.aria-label]="'music.rate_n' | translate: { n: s }" [attr.aria-pressed]="(t.rating ?? 0) >= s" (click)="rate(t, s)" data-testid="star">
+            <svg lucideStar class="size-4" [class.fill-current]="(t.rating ?? 0) >= s"></svg>
+          </button>
+        }
+      </span>
+      <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
+        <svg lucideHeart class="size-4" [class.fill-current]="t.favourite"></svg>
+      </button>
+      @if (t.hasFile) {
+        <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'playlists.add_to_playlist_title' | translate" (click)="addToPlaylist(t)">
+          <svg lucideListPlus class="size-4"></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'music.play_next' | translate" (click)="enqueue(t, 'next')">
+          <svg lucideListStart class="size-4"></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'music.add_to_queue' | translate" (click)="enqueue(t, 'last')">
+          <svg lucideListEnd class="size-4"></svg>
+        </button>
+      }
+    </li>
+    @if (creditGroups(t); as groups) {
+      @if (groups.length) {
+        <li class="px-3 pb-1 pl-14">
+          <details>
+            <summary class="cursor-pointer text-sm text-base-content/60">{{ 'music.credits' | translate }}</summary>
+            <dl class="grid grid-cols-[max-content_1fr] gap-x-4 text-sm text-base-content/70">
+              @for (g of groups; track g.role) {
+                <dt>{{ 'music.role_' + g.role | translate }}</dt>
+                <dd>{{ g.names }}</dd>
+              }
+            </dl>
+          </details>
+        </li>
+      }
+    }
+  </ng-template>
+
+  @for (d of discs(); track d.disc.discNumber) {
+    <app-detail-section [heading]="discs().length > 1 || d.disc.title ? ('music.disc' | translate: { n: d.disc.discNumber }) + (d.disc.title ? ' · ' + d.disc.title : '') : ('music.tracks' | translate)" [collapsible]="false">
+      <ul class="flex flex-col gap-1">
+        @for (s of d.sections; track $index) {
+          @if (s.work) {
+            <li class="px-3 pt-3 pb-1 font-semibold" data-testid="work">
+              {{ s.work.composerName ? s.work.composerName + ': ' : '' }}{{ s.work.title }}
+            </li>
+          }
+          @for (t of s.tracks; track t.itemId) {
+            <ng-container *ngTemplateOutlet="row; context: { $implicit: t }" />
+          }
+        }
+      </ul>
+    </app-detail-section>
+  }
+}

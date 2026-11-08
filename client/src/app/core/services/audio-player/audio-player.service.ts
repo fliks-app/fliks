@@ -1,4 +1,6 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal } from '@angular/core';
+import { CastService } from '../cast.service';
+import { CastPlayerService } from '../cast-player.service';
 import { ServerConfigService } from '../server-config.service';
 import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { MediaService } from '../api/media.service';
@@ -11,6 +13,8 @@ import { OfflinePlaybackSyncService } from '../offline-playback-sync.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { asBookMedia } from '../api/book-media';
 import { mediaKeyAction } from '../../../features/player/player-keymap';
+import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
+import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
   chapterAt,
   chaptersFromParts,
@@ -27,6 +31,7 @@ export interface AudioRequest {
   title: string;
   artist?: string;
   coverUrl?: string | null;
+  album?: string;
 }
 
 export interface AudioBookmark {
@@ -50,10 +55,13 @@ interface Prefs {
   rate: number;
   skipBack: number;
   skipForward: number;
+  replayGain: ReplayGainMode;
+  preamp: number;
 }
 
 const BEAT_MS = 15_000;
 const PRELOAD_S = 20;
+const RESTART_S = 3;
 const POSITION_STATE_MS = 1000;
 const PREFS_KEY = 'fliks.audio.prefs';
 const BOOKMARKS_KEY = 'fliks.audio.bookmarks';
@@ -64,13 +72,14 @@ export class AudioPlayerService {
   private readonly streaming = inject(StreamingApiService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly mediaService = inject(MediaService);
-  private readonly queue = inject(PlaybackQueueService);
+  private readonly bookQueue = inject(PlaybackQueueService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly storage = inject(StorageScopeService);
   private readonly downloads = inject(DownloadCacheService);
   private readonly store = inject(OfflineBookStoreService);
   private readonly network = inject(NetworkService);
   private readonly sync = inject(OfflinePlaybackSyncService);
+  private readonly injector = inject(Injector);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -83,6 +92,11 @@ export class AudioPlayerService {
   private readonly _prefs = signal<Prefs>(this.readPrefs());
   private readonly _bookmarks = signal<AudioBookmark[]>([]);
   private readonly _expanded = signal(false);
+  private readonly _musicMode = signal(false);
+  private readonly _queue = signal<readonly MusicTrackRequest[]>([]);
+  private readonly _queueIndex = signal(-1);
+  private readonly _shuffle = signal(false);
+  private readonly _repeat = signal<Repeat>('off');
 
   readonly track = this._track.asReadonly();
   readonly playing = this._playing.asReadonly();
@@ -96,6 +110,14 @@ export class AudioPlayerService {
   readonly sleepLeft = this._sleepLeft.asReadonly();
   readonly bookmarks = this._bookmarks.asReadonly();
   readonly expanded = this._expanded.asReadonly();
+  /** True while a track queue plays instead of an audiobook. */
+  readonly musicMode = this._musicMode.asReadonly();
+  readonly queue = this._queue.asReadonly();
+  readonly queueIndex = this._queueIndex.asReadonly();
+  readonly shuffle = this._shuffle.asReadonly();
+  readonly repeat = this._repeat.asReadonly();
+  readonly replayGain = computed(() => this._prefs().replayGain);
+  readonly preamp = computed(() => this._prefs().preamp);
   readonly active = computed(() => this._track() !== null);
   readonly rate = computed(() => this._prefs().rate);
   readonly skipBack = computed(() => this._prefs().skipBack);
@@ -114,6 +136,14 @@ export class AudioPlayerService {
   private sleepTimer: ReturnType<typeof setInterval> | undefined;
   private lastPositionState = 0;
   private generation = 0;
+  /** True while the playing track is on a Cast receiver instead of the local elements. */
+  private casting = false;
+  private cast: CastService | null = null;
+  private readonly mq = new MusicQueue();
+  private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string } | null = null;
+  private preTried: MusicTrackRequest | null = null;
+  private audioCtx: AudioContext | null = null;
+  private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -129,13 +159,14 @@ export class AudioPlayerService {
     }
     const generation = ++this.generation;
     await this.release();
+    this.leaveMusic();
     this._track.set(req);
     this._loading.set(true);
     this._position.set(0);
     this._duration.set(0);
     this._chapters.set([]);
     this._bookmarks.set(this.readBookmarks(req.itemId));
-    this.queue.syncTo(req.mediaId);
+    this.bookQueue.syncTo(req.mediaId);
     try {
       const local = await this.localParts(req.itemId);
       let opened: PlaybackInfoResponse | null = null;
@@ -178,7 +209,290 @@ export class AudioPlayerService {
     }
   }
 
+  /** Plays a track queue from `startIndex`, always from 0:00. */
+  async playTracks(tracks: readonly MusicTrackRequest[], startIndex = 0, opts?: { shuffle?: boolean }): Promise<void> {
+    if (!tracks.length) return;
+    this.mq.set(tracks, startIndex, opts?.shuffle ?? this._shuffle());
+    this.mq.repeat = this._repeat();
+    this.syncQueue();
+    await this.startMusic(this.mq.current!);
+  }
+
+  /** Adds tracks after the current one or at the end; starts them when nothing plays. */
+  enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
+    if (!tracks.length) return;
+    if (!this._musicMode()) return void this.playTracks(tracks);
+    if (where === 'next') this.mq.addNext(tracks);
+    else this.mq.addLast(tracks);
+    this.dropPreload();
+    this.syncQueue();
+  }
+
+  /** The next track of the queue, or the next chapter of a book. */
+  next(): void {
+    if (!this._musicMode()) return this.nextChapter();
+    const t = this.mq.next(false);
+    if (t) this.syncQueue(), void this.goTo(t);
+  }
+
+  /** Restarts the track past a few seconds, else the previous one. */
+  previous(): void {
+    if (!this._musicMode()) return this.previousChapter();
+    const t = this._position() > RESTART_S ? null : this.mq.previous();
+    if (t) this.syncQueue(), void this.goTo(t);
+    else void this.seek(0);
+  }
+
+  playQueueAt(index: number): void {
+    const t = this.mq.playAt(index);
+    if (t) this.syncQueue(), void this.goTo(t);
+  }
+
+  removeFromQueue(index: number): void {
+    const removingCurrent = index === this.mq.index;
+    this.mq.remove(index);
+    this.dropPreload();
+    this.syncQueue();
+    if (!removingCurrent) return;
+    const t = this.mq.current;
+    if (t) void this.goTo(t);
+    else void this.close();
+  }
+
+  moveInQueue(from: number, to: number): void {
+    this.mq.move(from, to);
+    this.dropPreload();
+    this.syncQueue();
+  }
+
+  setShuffle(on: boolean): void {
+    this.mq.setShuffle(on);
+    this.dropPreload();
+    this.syncQueue();
+  }
+
+  cycleRepeat(): void {
+    this.mq.repeat = ({ off: 'all', all: 'one', one: 'off' } as const)[this.mq.repeat];
+    this.dropPreload();
+    this.syncQueue();
+  }
+
+  setReplayGain(mode: ReplayGainMode): void {
+    this.updatePrefs({ replayGain: mode });
+    this.applyGains();
+  }
+
+  setPreamp(preamp: number): void {
+    this.updatePrefs({ preamp });
+    this.applyGains();
+  }
+
+  private syncQueue(): void {
+    this._queue.set([...this.mq.tracks]);
+    this._queueIndex.set(this.mq.index);
+    this._shuffle.set(this.mq.shuffle);
+    this._repeat.set(this.mq.repeat);
+  }
+
+  private leaveMusic(): void {
+    this._musicMode.set(false);
+    this.mq.clear();
+    this.syncQueue();
+    this.applyGains();
+  }
+
+  private audioOf(t: MusicTrackRequest): AudioRequest {
+    return { mediaId: t.mediaId, itemId: t.itemId, title: t.title, artist: t.artists, album: t.albumTitle, coverUrl: t.coverUrl };
+  }
+
+  /** Swaps to the preloaded element when it holds `t`, else opens it. */
+  private async goTo(t: MusicTrackRequest): Promise<void> {
+    if (this.pre?.req === t) this.swapToPreloaded(this.pre);
+    else await this.startMusic(t);
+  }
+
+  private async startMusic(req: MusicTrackRequest): Promise<void> {
+    const generation = ++this.generation;
+    await this.release();
+    this._musicMode.set(true);
+    this._track.set(this.audioOf(req));
+    this._loading.set(true);
+    this._position.set(0);
+    this._duration.set(req.durationSeconds ?? 0);
+    this._chapters.set([]);
+    this._bookmarks.set([]);
+    try {
+      if (this.network.isOnline()) await this.sync.flush();
+      if (this.bindCast().isConnected()) return await this.startCast(req, generation);
+      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: 0 });
+      if (generation !== this.generation) {
+        if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+        return;
+      }
+      this.info = info;
+      this.sessionId = info.sessionId;
+      this.parts = this.partsOf(info);
+      this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
+      this.setupMediaSession(this._track()!);
+      await this.load(0, true);
+    } catch {
+      if (generation === this.generation) await this.close();
+    } finally {
+      if (generation === this.generation) this._loading.set(false);
+    }
+  }
+
+  /** The Cast service, with its receiver signals followed from the first music track on. */
+  private bindCast(): CastService {
+    if (this.cast) return this.cast;
+    const cast = (this.cast = this.injector.get(CastService));
+    runInInjectionContext(this.injector, () => {
+      effect(() => {
+        const time = cast.currentTime();
+        if (this.casting) this._position.set(time);
+      });
+      effect(() => {
+        const paused = cast.isPaused();
+        if (this.casting) this.onPlayState(!paused);
+      });
+      effect(() => {
+        if (cast.ended() && this.casting) void this.onMusicEnded();
+      });
+      effect(() => {
+        if (!cast.isConnected() && this.casting) void this.close();
+      });
+    });
+    return cast;
+  }
+
+  private async startCast(req: MusicTrackRequest, generation: number): Promise<void> {
+    const info = await this.injector.get(CastPlayerService).castTrack(req);
+    if (generation !== this.generation) return;
+    if (!info) return void (await this.close());
+    this.info = info;
+    this.sessionId = info.sessionId;
+    this.casting = true;
+    this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
+    this.setupMediaSession(this._track()!);
+    this.onPlayState(true);
+  }
+
+  /** Loads the next track's stream on the standby element once the current one nears its end. */
+  private preloadNext(): void {
+    const next = this.mq.peekNext();
+    if (!next || this.casting || this.preTried === next || this.info?.playMethod !== 'DirectPlay') return;
+    this.preTried = next;
+    const generation = this.generation;
+    void this.streaming
+      .getItemPlaybackInfo(next.itemId, this.deviceProfile.getProfile(), { startAt: 0 })
+      .then((info) => {
+        const stale = generation !== this.generation || this.preTried !== next;
+        if (stale || info.playMethod !== 'DirectPlay') {
+          if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+          return;
+        }
+        const url = this.partsOf(info)[0].url;
+        const standby = this.els[1 - this.current];
+        standby.src = url;
+        standby.load();
+        this.applyGain(standby, next, url);
+        this.pre = { req: next, info, url };
+      })
+      .catch(() => undefined);
+  }
+
+  private dropPreload(): void {
+    const pre = this.pre;
+    this.pre = null;
+    this.preTried = null;
+    if (!pre) return;
+    if (pre.info.sessionId) void this.streaming.stopSession(pre.info.sessionId).catch(() => undefined);
+    const standby = this.els[1 - this.current];
+    standby?.removeAttribute('src');
+    standby?.load();
+  }
+
+  /** Ends the finished track's session and starts the buffered one on the standby element. */
+  private swapToPreloaded(pre: NonNullable<typeof this.pre>): void {
+    const old = this.els[this.current];
+    const standby = this.els[1 - this.current];
+    this._playing.set(false);
+    this._position.set(this._duration());
+    this.beat();
+    if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+    this.pre = null;
+    this.preTried = null;
+    this.current = 1 - this.current;
+    this.info = pre.info;
+    this.sessionId = pre.info.sessionId;
+    this.parts = this.partsOf(pre.info);
+    this.partIndex = 0;
+    this._track.set(this.audioOf(pre.req));
+    this._duration.set(pre.info.durationSeconds ?? pre.req.durationSeconds ?? 0);
+    this._position.set(0);
+    this.setupMediaSession(this._track()!);
+    standby.playbackRate = this.rate();
+    standby.currentTime = 0;
+    void standby.play().catch(() => undefined);
+    old.pause();
+    old.removeAttribute('src');
+  }
+
+  /** Moves on after a track ends: repeat one replays it, else the next track, else stops. */
+  private async onMusicEnded(): Promise<void> {
+    const t = this.mq.next(true);
+    if (t && this.mq.repeat === 'one' && !this.casting) {
+      const el = this.el();
+      if (el) {
+        el.currentTime = 0;
+        void el.play().catch(() => undefined);
+      }
+      return;
+    }
+    if (t) {
+      this.syncQueue();
+      return this.goTo(t);
+    }
+    this._playing.set(false);
+    this._position.set(this._duration());
+    this.beat();
+  }
+
+  private gainOf(req: MusicTrackRequest | null): number {
+    return req ? replayGainFactor(this.replayGain(), this.preamp(), req, this.mq.singleAlbum) : 1;
+  }
+
+  /** Applies the ReplayGain of the playing track to its element and of the buffered one to the standby. */
+  private applyGains(): void {
+    const cur = this.el();
+    if (cur) this.applyGain(cur, this._musicMode() ? this.mq.current : null, cur.src);
+    const standby = this.els[1 - this.current];
+    if (standby && this.pre) this.applyGain(standby, this.pre.req, this.pre.url);
+  }
+
+  /** A GainNode when the stream is same-origin (a cross-origin element would go silent through Web Audio), else attenuation by `volume`. */
+  private applyGain(el: HTMLAudioElement, req: MusicTrackRequest | null, url: string): void {
+    const factor = this.gainOf(req);
+    let node = this.gainNodes.get(el);
+    if (!node && factor !== 1 && typeof AudioContext !== 'undefined' && sameOrigin(url)) {
+      try {
+        this.audioCtx ??= new AudioContext();
+        node = this.audioCtx.createGain();
+        this.audioCtx.createMediaElementSource(el).connect(node).connect(this.audioCtx.destination);
+        this.gainNodes.set(el, node);
+      } catch {
+        node = undefined;
+      }
+    }
+    if (node) {
+      node.gain.value = factor;
+      el.volume = 1;
+      void this.audioCtx?.resume().catch(() => undefined);
+    } else el.volume = Math.min(1, factor);
+  }
+
   toggle(): void {
+    if (this.casting) return this.cast!.togglePlayPause();
     const el = this.el();
     if (!el) return;
     if (el.paused) void el.play().catch(() => undefined);
@@ -186,12 +500,18 @@ export class AudioPlayerService {
   }
 
   pause(): void {
+    if (this.casting) return this.cast!.pause();
     this.el()?.pause();
   }
 
   /** Seeks on the item timeline, switching part when the position lies in another one. */
   async seek(position: number): Promise<void> {
     const target = Math.min(Math.max(0, position), this._duration());
+    if (this.casting) {
+      this._position.set(target);
+      this.cast!.seek(target);
+      return this.beat();
+    }
     const { index, local } = locate(this.parts, target);
     this._position.set(target);
     const el = this.el();
@@ -272,7 +592,9 @@ export class AudioPlayerService {
   /** Saves the position, ends the session and drops the player. */
   async close(): Promise<void> {
     this.generation++;
+    if (this.casting) this.cast?.stop();
     await this.release();
+    this.leaveMusic();
     this._track.set(null);
     this._expanded.set(false);
     this._loading.set(false);
@@ -348,6 +670,7 @@ export class AudioPlayerService {
     const el = this.els[this.current];
     const part = this.parts[index];
     el.playbackRate = this.rate();
+    this.applyGain(el, this._musicMode() ? this.mq.current : null, part.url);
     if (this.info?.playMethod === 'DirectPlay') {
       el.src = part.url;
       this.startAt(el, local, autoplay);
@@ -402,6 +725,7 @@ export class AudioPlayerService {
       standby.src = next.url;
       standby.load();
     }
+    if (this._musicMode() && !this.pre && this._duration() - position < PRELOAD_S) this.preloadNext();
     const now = Date.now();
     if (now - this.lastPositionState > POSITION_STATE_MS) {
       this.lastPositionState = now;
@@ -419,6 +743,7 @@ export class AudioPlayerService {
 
   /** Next part on the standby element (already buffered when preloaded), else the next volume of the queue. */
   private async onEnded(): Promise<void> {
+    if (this._musicMode()) return this.onMusicEnded();
     const next = this.parts[this.partIndex + 1];
     if (next) {
       const el = this.els[this.current];
@@ -441,8 +766,8 @@ export class AudioPlayerService {
 
   private async playNextVolume(): Promise<void> {
     const track = this._track();
-    if (!track || !this.queue.autoplay() || this.queue.current()?.mediaId !== track.mediaId) return;
-    const next = this.queue.advance();
+    if (!track || !this.bookQueue.autoplay() || this.bookQueue.current()?.mediaId !== track.mediaId) return;
+    const next = this.bookQueue.advance();
     if (!next) return;
     try {
       const media = await this.mediaService.getOne(next.mediaId);
@@ -494,14 +819,15 @@ export class AudioPlayerService {
     if (!b) return;
     const { positionSeconds, durationSeconds, mediaFileId, itemId } = b.payload;
     const saved = { mediaId: b.mediaId, mediaFileId, itemId, positionSeconds, durationSeconds };
-    if (!this.network.isOnline()) return void this.sync.queue(saved);
+    const music = this._musicMode();
+    if (!this.network.isOnline()) return music ? undefined : void this.sync.queue(saved);
     this.streaming
       .updatePlaybackState(b.mediaId, b.payload)
       .then((r) => {
         if (r?.sessionLost) this.sessionId = undefined;
-        this.sync.record(saved);
+        if (!music) this.sync.record(saved);
       })
-      .catch(() => this.sync.queue(saved));
+      .catch(() => (music ? undefined : this.sync.queue(saved)));
   }
 
   private beatOnExit(): void {
@@ -515,10 +841,11 @@ export class AudioPlayerService {
   private async release(): Promise<void> {
     clearInterval(this.beatTimer);
     const el = this.el();
-    if (el && this.info) {
+    if ((el || this.casting) && this.info) {
       this._playing.set(false);
       this.beat();
     }
+    this.dropPreload();
     await this.hls?.destroy().catch(() => undefined);
     this.hls = null;
     for (const e of this.els) {
@@ -532,6 +859,7 @@ export class AudioPlayerService {
     this.parts = [];
     this.partIndex = 0;
     this.current = 0;
+    this.casting = false;
     this._playing.set(false);
   }
 
@@ -544,6 +872,7 @@ export class AudioPlayerService {
     else if (action === 'play') void this.el()?.play();
     else if (action === 'pause') this.pause();
     else if (action === 'stop') void this.close();
+    else if (this._musicMode()) action === 'forward' ? this.next() : this.previous();
     else this.skip(action === 'forward' ? this.skipForward() : -this.skipBack());
   }
 
@@ -554,6 +883,7 @@ export class AudioPlayerService {
     ms.metadata = new MediaMetadata({
       title: req.title,
       artist: req.artist ?? '',
+      album: req.album ?? '',
       artwork: art ? [{ src: art }] : [],
     });
     const on = (a: MediaSessionAction, fn: MediaSessionActionHandler) => {
@@ -569,8 +899,8 @@ export class AudioPlayerService {
     on('seekbackward', (d) => this.skip(-(d.seekOffset ?? this.skipBack())));
     on('seekforward', (d) => this.skip(d.seekOffset ?? this.skipForward()));
     on('seekto', (d) => void this.seek(d.seekTime ?? 0));
-    on('previoustrack', () => this.previousChapter());
-    on('nexttrack', () => this.nextChapter());
+    on('previoustrack', () => this.previous());
+    on('nexttrack', () => this.next());
   }
 
   private updatePositionState(): void {
@@ -593,7 +923,7 @@ export class AudioPlayerService {
   }
 
   private readPrefs(): Prefs {
-    const base: Prefs = { rate: 1, skipBack: 15, skipForward: 30 };
+    const base: Prefs = { rate: 1, skipBack: 15, skipForward: 30, replayGain: 'track', preamp: 0 };
     try {
       const raw = localStorage.getItem(PREFS_KEY);
       const saved = raw ? (JSON.parse(raw) as Partial<Prefs>) : {};
@@ -601,6 +931,8 @@ export class AudioPlayerService {
         rate: SPEEDS.includes(saved.rate ?? 0) ? saved.rate! : base.rate,
         skipBack: SKIP_STEPS.includes(saved.skipBack ?? 0) ? saved.skipBack! : base.skipBack,
         skipForward: SKIP_STEPS.includes(saved.skipForward ?? 0) ? saved.skipForward! : base.skipForward,
+        replayGain: REPLAY_GAINS.includes(saved.replayGain!) ? saved.replayGain! : base.replayGain,
+        preamp: PREAMP_STEPS.includes(saved.preamp ?? NaN) ? saved.preamp! : base.preamp,
       };
     } catch {
       return base;
@@ -640,5 +972,13 @@ export class AudioPlayerService {
     } catch {
       // Storage unavailable: the bookmarks last for the session.
     }
+  }
+}
+
+function sameOrigin(url: string): boolean {
+  try {
+    return new URL(url, document.baseURI).origin === location.origin;
+  } catch {
+    return false;
   }
 }

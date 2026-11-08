@@ -18,6 +18,8 @@ const DEFAULT_WANTS = (): WantSpec[] => [
   { family: 'text', language: null },
   { family: 'audio', language: null },
 ];
+const PERSON_PREFIXES = { author: 'follows.person', artist: 'follows.artist' } as const;
+const ARTIST_WANTS = (): WantSpec[] => [{ family: 'audio', language: null }];
 
 /** Follow the new releases of an author, or watch a series: where new titles land and what they are wished in. */
 @Component({
@@ -36,6 +38,8 @@ export class FollowToggleComponent {
 
   readonly kind = input.required<'person' | 'series'>();
   readonly targetId = input.required<number>();
+  /** A person is an author (books) or an artist (albums). */
+  readonly role = input<'author' | 'artist'>('author');
 
   protected readonly available = signal(false);
   protected readonly current = signal<Current | null>(null);
@@ -44,7 +48,13 @@ export class FollowToggleComponent {
   protected readonly libraries = signal<LibrarySummary[]>([]);
   protected readonly libraryId = signal<number | null>(null);
   protected readonly wants = signal<WantSpec[]>(DEFAULT_WANTS());
-  protected readonly prefix = computed(() => (this.kind() === 'person' ? 'follows.person' : 'follows.series'));
+  private readonly defaultWants = () => (this.role() === 'artist' ? ARTIST_WANTS() : DEFAULT_WANTS());
+  protected readonly prefix = computed(() => this.kind() === 'person' ? PERSON_PREFIXES[this.role()] : 'follows.series');
+
+  /** Only an artist follow names its role: the author calls stay as they were. */
+  private roleParam() {
+    return this.role() === 'artist' ? ('artist' as const) : undefined;
+  }
 
   constructor() {
     effect(() => {
@@ -58,10 +68,10 @@ export class FollowToggleComponent {
     this.editing.set(false);
     if (!this.auth.hasPermission('media.create')) return;
     try {
-      const libs = (await this.librariesApi.listMine()).filter((l) => l.mediaTypes.includes('book'));
+      const libs = (await this.librariesApi.listMine()).filter((l) => l.mediaTypes.includes(this.role() === 'artist' ? 'album' : 'book'));
       let canFollow = true;
       if (this.kind() === 'person') {
-        const state = await this.api.personFollow(id);
+        const state = await this.api.personFollow(id, this.roleParam());
         this.current.set(state.follow);
         canFollow = state.canFollow;
       } else {
@@ -77,7 +87,7 @@ export class FollowToggleComponent {
   protected open() {
     const c = this.current();
     this.libraryId.set(c?.libraryId ?? this.libraries()[0]?.id ?? null);
-    this.wants.set(c ? c.wants.map((w) => ({ ...w })) : DEFAULT_WANTS());
+    this.wants.set(c ? c.wants.map((w) => ({ ...w })) : this.defaultWants());
     this.editing.set(true);
   }
 
@@ -86,7 +96,7 @@ export class FollowToggleComponent {
     if (libraryId == null || this.busy()) return;
     this.busy.set(true);
     try {
-      const body = { libraryId, wants: this.wants() };
+      const body = { libraryId, wants: this.wants(), ...(this.roleParam() && { role: this.roleParam() }) };
       const id = this.targetId();
       if (this.kind() === 'person') {
         this.current.set((await this.api.followPerson(id, body)).follow);
@@ -105,7 +115,7 @@ export class FollowToggleComponent {
     this.busy.set(true);
     try {
       const id = this.targetId();
-      await (this.kind() === 'person' ? this.api.unfollowPerson(id) : this.api.unwatchSeries(id));
+      await (this.kind() === 'person' ? this.api.unfollowPerson(id, this.roleParam()) : this.api.unwatchSeries(id));
       this.current.set(null);
       this.editing.set(false);
       this.toast.success(this.translate.instant('follows.stopped'));

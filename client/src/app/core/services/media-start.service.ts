@@ -36,7 +36,7 @@ export function leadFamily(book: BookDetail | null): BookFormatFamily | undefine
   return (editions.find((e) => e.id === progress?.editionId) ?? editions.find((e) => e.hasFile) ?? editions[0])?.family;
 }
 
-const isVideo = (m: Media) => m.type !== 'book' && m.type !== 'comic';
+const isVideo = (m: Media) => m.type !== 'book' && m.type !== 'comic' && m.type !== 'album';
 
 /** Starts any media by kind: the video player, the audio player, the reader, else the detail page. */
 /** A list row is enough: the book/comic details and the video files are fetched when missing. */
@@ -87,6 +87,7 @@ export class MediaStartService {
     const url = this.router.url;
     if (media.type === 'book') return this.startBook(media, url);
     if (media.type === 'comic') return this.startComic(media, url);
+    if (media.type === 'album') return this.openDetail(media);
     const full = media.files?.length ? (media as Media) : await this.mediaService.getOne(media.id);
     const file = full.files?.[0];
     if (!file) return void this.openDetail(full);

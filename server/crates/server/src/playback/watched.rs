@@ -412,14 +412,33 @@ pub async fn record_watch(
         .zip(existing.as_ref())
         .is_some_and(|(at, e)| e.last_played_at > at);
     let was_completed = existing.as_ref().is_some_and(|e| e.completed);
+    let music: bool = sqlx::query_scalar(
+        r#"SELECT m.type = 'album' FROM items i JOIN media m ON m.id = i."mediaId" WHERE i.id = $1"#,
+    )
+    .bind(w.item)
+    .fetch_optional(db)
+    .await?
+    .unwrap_or(false);
     let standing = Standing {
         position: w.position,
         duration: w.duration,
         progression: w.progression,
         last_chapter_start: w.last_chapter_start,
+        music,
     };
     let completed = finish::finished(w.family, &standing) || (replay.is_some() && was_completed);
     let watched = w.position >= 5.0 || w.progression.is_some_and(|p| p > 0.0);
+    // A track keeps no resume position: the next play starts over.
+    let tracked;
+    let w = if music {
+        tracked = Watch {
+            position: 0.0,
+            ..w.clone()
+        };
+        &tracked
+    } else {
+        w
+    };
     let write = |file: Option<i32>| async move {
         if stale {
             Ok(())

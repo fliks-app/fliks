@@ -77,6 +77,8 @@ export interface AddToPlaylistBody {
   mediaId?: number;
   episodeId?: number;
   seasonId?: number;
+  /** A track of an album. */
+  itemId?: number;
 }
 
 @Injectable({ providedIn: 'root' })
