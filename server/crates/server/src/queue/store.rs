@@ -61,7 +61,7 @@ pub struct Want<'a> {
     pub sw: &'a [String],
     pub fallback: &'a [String],
     pub max_jobs: u32,
-    /// The worker reads the library by path: only then can it run a verification.
+    /// The worker reads the library by path: only then can it run a verification, a metadata edit or a sidecar.
     pub local: bool,
 }
 
@@ -159,6 +159,9 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let rows = sqlx::query(
         r#"SELECT id, kind, "inPath", "inSize", "mediaFileId" FROM jobs
            WHERE state = 'queued' AND "notBefore" <= now() AND (kind <> 'verify' OR $4)
+             AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'
+                  AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'
+                       THEN jsonb_array_length(payload #> '{plan,extraSubtitles}') ELSE 0 END = 0))
              AND (payload #>> '{plan,codec}' IS NULL OR CASE
                     WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)
                     ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)
@@ -516,6 +519,18 @@ pub async fn staged_of(pool: &PgPool, id: i64) -> sqlx::Result<Option<String>> {
             .await?
             .flatten(),
     )
+}
+
+/// Whether the instance still holds the lease of this attempt.
+pub async fn holds(pool: &PgPool, id: i64, key: &str, attempt: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased')"#,
+    )
+    .bind(id)
+    .bind(key)
+    .bind(attempt)
+    .fetch_one(pool)
+    .await
 }
 
 /// Cancels a job that is not being committed; whether it was.

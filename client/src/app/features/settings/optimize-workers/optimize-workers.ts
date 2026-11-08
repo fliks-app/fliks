@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { OptimizeService } from '../../../core/services/api/optimize.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -27,6 +28,7 @@ interface Draft {
 })
 export class OptimizeWorkersComponent implements OnInit {
   private readonly api = inject(OptimizeService);
+  private readonly settings = inject(SettingsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
@@ -39,25 +41,33 @@ export class OptimizeWorkersComponent implements OnInit {
   readonly newName = signal('');
   readonly creating = signal(false);
   readonly issued = signal<IssuedWorkerToken | null>(null);
+  readonly publicUrlSet = signal(true);
+  readonly origin = window.location.origin;
+  readonly helpUrl = 'https://github.com/fliks-app/fliks/blob/main/docs/optimize-workers.md';
 
   async ngOnInit() {
     await this.load();
     this.loading.set(false);
   }
 
-  private async load() {
+  private async load(saved?: number) {
     try {
       const [tokens, workers] = await Promise.all([this.api.workerTokens(), this.api.workers()]);
       this.tokens.set(tokens);
       this.workers.set(workers);
+      const old = this.drafts();
       this.drafts.set(
         Object.fromEntries(
           tokens.map((t) => [
             t.id,
-            { access: t.pathAccess, mappings: t.pathMappings.map((m) => ({ ...m })) },
+            // An unsaved edit survives the reload that another action triggers.
+            t.id !== saved && old[t.id] && this.differs(old[t.id], t)
+              ? old[t.id]
+              : { access: t.pathAccess, mappings: t.pathMappings.map((m) => ({ ...m })) },
           ]),
         ),
       );
+      this.publicUrlSet.set(!!(await this.settings.getAll())['public_url']);
     } catch {
       // The global interceptor toasts the reason.
     }
@@ -90,11 +100,14 @@ export class OptimizeWorkersComponent implements OnInit {
     this.edit(t, (d) => ({ ...d, mappings: d.mappings.filter((_, j) => j !== i) }));
   }
 
-  dirty(t: WorkerToken): boolean {
-    const d = this.draft(t);
+  private differs(d: Draft, t: WorkerToken): boolean {
     return (
       d.access !== t.pathAccess || JSON.stringify(d.mappings) !== JSON.stringify(t.pathMappings)
     );
+  }
+
+  dirty(t: WorkerToken): boolean {
+    return this.differs(this.draft(t), t);
   }
 
   async create() {
@@ -115,8 +128,12 @@ export class OptimizeWorkersComponent implements OnInit {
   async copyIssued() {
     const token = this.issued()?.token;
     if (!token) return;
-    await navigator.clipboard.writeText(token);
-    this.toast.success(this.translate.instant('common.copied'));
+    try {
+      await navigator.clipboard.writeText(token);
+      this.toast.success(this.translate.instant('common.copied'));
+    } catch {
+      // Plain-http origins have no clipboard: the token stays selectable on screen.
+    }
   }
 
   async toggle(t: WorkerToken) {
@@ -130,14 +147,18 @@ export class OptimizeWorkersComponent implements OnInit {
       this.toast.error(this.translate.instant('settings.optimize.workers.mapping_invalid'));
       return;
     }
-    await this.patch(t, { pathAccess: d.access, pathMappings: mappings });
+    await this.patch(t, { pathAccess: d.access, pathMappings: mappings }, true);
   }
 
-  private async patch(t: WorkerToken, body: Parameters<OptimizeService['patchWorkerToken']>[1]) {
+  private async patch(
+    t: WorkerToken,
+    body: Parameters<OptimizeService['patchWorkerToken']>[1],
+    reset = false,
+  ) {
     this.busy.set(t.id);
     try {
       await this.api.patchWorkerToken(t.id, body);
-      await this.load();
+      await this.load(reset ? t.id : undefined);
     } catch {
       // The global interceptor toasts the reason.
     } finally {
@@ -168,7 +189,7 @@ export class OptimizeWorkersComponent implements OnInit {
 
   seen(iso: string | null): string {
     return iso
-      ? new Date(iso).toLocaleString()
+      ? new Date(iso).toLocaleString(this.translate.currentLang() || undefined)
       : this.translate.instant('settings.optimize.workers.never');
   }
 }

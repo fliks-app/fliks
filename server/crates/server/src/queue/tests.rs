@@ -248,3 +248,33 @@ async fn moving_or_deleting_a_media_file_cancels_its_pending_job(pool: PgPool) {
         assert_eq!(state(&pool, id).await, "cancelled");
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_worker_without_the_library_is_not_leased_what_needs_server_paths(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    let hevc = vec!["hevc".to_string()];
+    for plan in [
+        json!({ "level": "metadata", "codec": null }),
+        json!({ "level": "remux", "codec": null, "extraSubtitles": [{ "path": "/m/a.srt" }] }),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO jobs (kind, payload, "profileHash", "inPath", "inSize")
+               VALUES ('optimize', $1, 'h', '/m/a.mkv', 1)"#,
+        )
+        .bind(json!({ "info": { "video": [], "audio": [], "subtitles": [] }, "plan": plan }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    assert!(
+        store::take(&pool, &want("t1:w", &hevc))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let local = Want {
+        local: true,
+        ..want("w", &hevc)
+    };
+    assert!(store::take(&pool, &local).await.unwrap().is_some());
+}

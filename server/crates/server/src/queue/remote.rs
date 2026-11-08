@@ -1,6 +1,6 @@
 //! Remote workers: read grants for `inputUrl` and the chunked, resumable upload of an output.
 use super::{WorkerAuth, store};
-use crate::{config::random_hex, http::AppError, state::AppState, sync::MutexExt};
+use crate::{http::AppError, state::AppState, sync::MutexExt};
 use axum::{
     Json,
     body::Bytes,
@@ -12,13 +12,21 @@ use fliks_engine_core::api::{
     HEADER_ATTEMPT, HEADER_UPLOAD_COMPLETE, HEADER_UPLOAD_OFFSET, HEADER_WORKER_ID, JobError,
     JobErrorClass, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse, UploadAck,
 };
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
-use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::Mutex};
+use subtle::ConstantTimeEq;
+use tokio::{
+    fs::OpenOptions,
+    io::{AsyncSeekExt, AsyncWriteExt},
+    sync::Mutex,
+};
 
 const GRANT_PREFIX: &str = "fkj_";
 /// What the engine may cache of an answer, bounded by the lease.
 const MAX_TTL_S: f64 = 60.0;
+/// Slack above twice the source size that an upload may reach.
+const MAX_EXTRA: u64 = 64 << 20;
 
 /// The read right of one lease on one file; it ends with the lease.
 #[derive(Clone)]
@@ -40,43 +48,63 @@ pub struct Upload {
 }
 
 impl Upload {
-    async fn load(&mut self, path: &Path) {
+    /// Folds the file in once; a read that fails leaves the upload unloaded for the next call.
+    async fn load(&mut self, path: &Path) -> std::io::Result<()> {
         if !self.loaded {
-            self.loaded = true;
-            if let Ok((len, hasher)) = hash_file(path).await {
-                (self.len, self.hasher) = (len, hasher);
+            match hash_file(path).await {
+                Ok((len, hasher)) => (self.len, self.hasher) = (len, hasher),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
             }
+            self.loaded = true;
         }
+        Ok(())
     }
 }
 
+/// `fkj_<job>.<attempt>.<file>.<mac>`: the signature keeps a grant valid across a server restart.
+fn grant_token(key: &[u8], g: &Grant) -> String {
+    let body = format!("{}.{}.{}", g.job, g.attempt, g.file);
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("hmac takes any key length");
+    mac.update(body.as_bytes());
+    format!(
+        "{GRANT_PREFIX}{body}.{}",
+        crate::device_tokens::hex(&mac.finalize().into_bytes())
+    )
+}
+
+pub(super) fn parse_grant(key: &[u8], token: &str) -> Option<Grant> {
+    let mut f = token.strip_prefix(GRANT_PREFIX)?.splitn(4, '.');
+    let g = Grant {
+        job: f.next()?.parse().ok()?,
+        attempt: f.next()?.parse().ok()?,
+        file: f.next()?.parse().ok()?,
+    };
+    let ok = grant_token(key, &g).as_bytes().ct_eq(token.as_bytes());
+    bool::from(ok).then_some(g)
+}
+
 impl super::Shared {
-    pub fn mint(&self, job: i64, attempt: i32, file: i32) -> String {
-        let token = format!("{GRANT_PREFIX}{}", random_hex(24));
-        self.grants
-            .lock_clean()
-            .insert(token.clone(), Grant { job, attempt, file });
+    /// The token is derived from the lease; the map only lets the sweep revoke it at the engine.
+    pub fn mint(&self, key: &[u8], job: i64, attempt: i32, file: i32) -> String {
+        let g = Grant { job, attempt, file };
+        let token = grant_token(key, &g);
+        self.grants.lock_clean().insert(token.clone(), g);
         token
     }
 
-    fn grant(&self, token: &str) -> Option<Grant> {
-        self.grants.lock_clean().get(token).cloned()
-    }
-
     fn upload(&self, job: i64, attempt: i32) -> Slot {
-        let mut g = self.uploads.lock_clean();
-        if let Some((a, u)) = g.get(&job)
-            && *a == attempt
-        {
-            return u.clone();
-        }
-        let fresh = Arc::new(Mutex::new(Upload {
-            len: 0,
-            hasher: Sha256::new(),
-            loaded: false,
-        }));
-        g.insert(job, (attempt, fresh.clone()));
-        fresh
+        self.uploads
+            .lock_clean()
+            .entry((job, attempt))
+            .or_insert_with(|| {
+                Arc::new(Mutex::new(Upload {
+                    len: 0,
+                    hasher: Sha256::new(),
+                    loaded: false,
+                }))
+            })
+            .clone()
     }
 }
 
@@ -98,7 +126,7 @@ pub async fn grant_answer(
         ttl_s: Some(MAX_TTL_S),
         parts: vec![],
     };
-    let Some(g) = st.queue.grant(&token) else {
+    let Some(g) = parse_grant(&st.grant_key, &token) else {
         return Ok(Some(deny));
     };
     if req.purpose != ResolvePurpose::Download
@@ -145,16 +173,10 @@ pub async fn sweep(st: &AppState) {
             st.engine.revoke_credential(&token).await;
         }
     }
-    let held: Vec<(i64, i32)> = st
-        .queue
-        .uploads
-        .lock_clean()
-        .iter()
-        .map(|(id, (a, _))| (*id, *a))
-        .collect();
+    let held: Vec<(i64, i32)> = st.queue.uploads.lock_clean().keys().copied().collect();
     for (id, attempt) in held {
         if leased(st, id, attempt).await == Some(false) {
-            st.queue.uploads.lock_clean().remove(&id);
+            st.queue.uploads.lock_clean().remove(&(id, attempt));
         }
     }
 }
@@ -217,37 +239,66 @@ pub async fn put_output(
     let complete = header(&headers, HEADER_UPLOAD_COMPLETE) == Some("?1");
     let conflict = || AppError::bare(StatusCode::CONFLICT);
     let key = who.owner_key(worker);
-    let staged: Option<String> = sqlx::query_scalar(
-        r#"SELECT "stagedPath" FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3
-             AND state = 'leased' AND kind = 'optimize'"#,
+    // The fence also renews the lease: a chunk may take longer than the lease on a slow uplink.
+    let (staged, in_size): (Option<String>, Option<i64>) = sqlx::query_as(
+        r#"UPDATE jobs SET "leaseUntil" = now() + make_interval(secs => $4), "updatedAt" = now()
+           WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased' AND kind = 'optimize'
+           RETURNING "stagedPath", "inSize""#,
     )
     .bind(id)
     .bind(&key)
     .bind(attempt)
+    .bind(f64::from(store::LEASE_S))
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(conflict)?;
     let staged = staged.ok_or_else(|| AppError::internal("remote job without a staging path"))?;
     let path = Path::new(&staged);
+    // An output is about the size of its source; far above that is not an encode.
+    let cap = in_size.unwrap_or(0).max(0) as u64 * 2 + MAX_EXTRA;
+    if offset.saturating_add(body.len() as u64) > cap {
+        return Err(AppError::bare(StatusCode::PAYLOAD_TOO_LARGE));
+    }
     let slot = st.queue.upload(id, attempt);
     let mut up = slot.lock().await;
-    up.load(path).await;
+    up.load(path)
+        .await
+        .map_err(|e| AppError::internal(format!("{}: {e}", path.display())))?;
     if offset != up.len {
         return Ok((StatusCode::CONFLICT, ack(up.len)).into_response());
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
+    // A requeue may have removed this attempt's file since the fence: never recreate it then.
+    if offset == 0 && leased(&st, id, attempt).await != Some(true) {
+        return Err(conflict());
+    }
+    let mut f = match OpenOptions::new()
+        .write(true)
+        .create(offset == 0)
+        .truncate(false)
         .open(path)
         .await
-        .map_err(|e| AppError::internal(format!("{}: {e}", path.display())))?;
-    f.write_all(&body)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    if complete {
-        f.sync_all()
-            .await
-            .map_err(|e| AppError::internal(e.to_string()))?;
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            (up.len, up.hasher) = (0, Sha256::new());
+            return Ok((StatusCode::CONFLICT, ack(0)).into_response());
+        }
+        Err(e) => return Err(AppError::internal(format!("{}: {e}", path.display()))),
+    };
+    // The file holds exactly the counted bytes before a chunk: leftovers of a failed write are cut.
+    let written = async {
+        f.set_len(up.len).await?;
+        f.seek(std::io::SeekFrom::Start(up.len)).await?;
+        f.write_all(&body).await?;
+        if complete {
+            f.sync_all().await?;
+        }
+        std::io::Result::Ok(())
+    }
+    .await;
+    if let Err(e) = written {
+        let _ = f.set_len(up.len).await;
+        return Err(AppError::internal(e.to_string()));
     }
     up.hasher.update(&body);
     up.len += body.len() as u64;
@@ -269,19 +320,20 @@ pub async fn output_error(
     };
     let slot = st.queue.upload(id, attempt);
     let mut up = slot.lock().await;
-    let path = store::staged_of(&st.db, id).await.ok().flatten()?;
-    up.load(Path::new(&path)).await;
-    let got: String = up
-        .hasher
-        .clone()
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    (up.len as i64 != size || !got.eq_ignore_ascii_case(sha)).then(|| {
-        net(format!(
-            "the uploaded output holds {} bytes (sha256 {got}), the worker reported {size}",
-            up.len
-        ))
-    })
+    let Some(path) = store::staged_of(&st.db, id).await.ok().flatten() else {
+        return Some(net("the staged output of the job is unknown".into()));
+    };
+    if let Err(e) = up.load(Path::new(&path)).await {
+        return Some(net(format!("{path}: {e}")));
+    }
+    let on_disk = tokio::fs::metadata(&path).await.map(|m| m.len()).ok();
+    let got = crate::device_tokens::hex(&up.hasher.clone().finalize());
+    (on_disk != Some(up.len) || up.len as i64 != size || !got.eq_ignore_ascii_case(sha)).then(
+        || {
+            net(format!(
+                "the uploaded output holds {} bytes (sha256 {got}), the worker reported {size}",
+                up.len
+            ))
+        },
+    )
 }

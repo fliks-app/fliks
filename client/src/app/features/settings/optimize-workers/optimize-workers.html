@@ -8,7 +8,15 @@
       <h1 class="text-2xl font-bold">{{ 'settings.optimize.workers.title' | translate }}</h1>
       <p class="text-sm text-base-content/60 mt-1">
         {{ 'settings.optimize.workers.desc' | translate }}
+        <a class="link" [href]="helpUrl" target="_blank" rel="noopener">{{
+          'settings.optimize.workers.help' | translate
+        }}</a>
       </p>
+      @if (!publicUrlSet()) {
+        <div role="alert" class="alert alert-warning mt-3 text-sm">
+          {{ 'settings.optimize.workers.no_public_url' | translate }}
+        </div>
+      }
     </div>
 
     <div class="card bg-base-100 border border-base-200">
@@ -29,7 +37,10 @@
             <div class="flex flex-wrap gap-2">
               @for (d of w.devices; track d.id) {
                 <span class="badge badge-ghost text-sm"
-                  >{{ d.id }} · {{ d.encoders.join(', ') || '-' }} · {{ d.maxJobs }}</span
+                  >{{ d.id }} · {{ d.encoders.join(', ') || '-' }} ·
+                  {{
+                    'settings.optimize.workers.device_jobs' | translate: { count: d.maxJobs }
+                  }}</span
                 >
               }
             </div>
@@ -67,6 +78,10 @@
           <div role="alert" class="alert alert-success flex-col items-start gap-2 text-sm">
             <span>{{ 'settings.optimize.workers.issued' | translate: { name: i.name } }}</span>
             <code class="break-all">{{ i.token }}</code>
+            <span>{{ 'settings.optimize.workers.start_command' | translate }}</span>
+            <code class="break-all"
+              >FLIKS_WORKER_URL={{ origin }} FLIKS_WORKER_TOKEN={{ i.token }} fliks-engine</code
+            >
             <button type="button" class="btn btn-sm" (click)="copyIssued()">
               {{ 'common.copy' | translate }}
             </button>

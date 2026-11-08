@@ -3685,6 +3685,10 @@
         "map_to": "Percorso worker",
         "add_mapping": "Aggiungi una corrispondenza",
         "mapping_invalid": "Ogni corrispondenza richiede entrambi i percorsi.",
+        "device_jobs": "{{count}} alla volta",
+        "no_public_url": "L'URL pubblico non è impostato: i worker senza accesso alla libreria non ricevono lavori. Impostalo nelle impostazioni generali.",
+        "help": "Come avviare un worker",
+        "start_command": "Avvialo con:",
         "confirm_revoke": "Revocare il token di {{name}}? I suoi lavori tornano in coda."
       }
     }

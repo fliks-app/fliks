@@ -89,6 +89,7 @@ pub async fn hello(
         .map(|j| (i64::from(j.id), j.attempt as i32))
         .collect();
     let abandon = store::hello(&st.db, &key, &held).await.map_err(db)?;
+    super::remote::sweep(&st).await;
     if let Principal::Token(id) = who {
         tokens::touch(&st.db, id).await.map_err(db)?;
     }
@@ -228,7 +229,9 @@ pub async fn lease(
                     super::cleanup::remove_staged(t.id, old).await;
                 }
                 let token = match (&reach, t.media_file_id) {
-                    (Reach::Http(_), Some(f)) => Some(st.queue.mint(t.id, t.attempt, f)),
+                    (Reach::Http(_), Some(f)) => {
+                        Some(st.queue.mint(&st.grant_key, t.id, t.attempt, f))
+                    }
                     _ => None,
                 };
                 return Ok(Json(leased(t, &reach, token)?).into_response());
@@ -316,7 +319,12 @@ pub async fn result(
     let failure = match (req.ok, req.error) {
         (false, Some(e)) => Some(e),
         (false, None) => Some(missing("failed without an error")),
-        (true, _) => output_error(&st, who, id, attempt, &req.out_sha256, out_size).await?,
+        (true, _) => {
+            if !store::holds(&st.db, id, &key, attempt).await.map_err(db)? {
+                return Err(conflict());
+            }
+            output_error(&st, who, id, attempt, &req.out_sha256, out_size).await?
+        }
     };
     let settled = match failure {
         Some(e) => store::fail(&st.db, id, &key, attempt, &e).await,
