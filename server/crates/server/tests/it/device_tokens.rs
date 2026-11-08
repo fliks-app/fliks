@@ -149,7 +149,7 @@ async fn validation_and_the_per_user_cap(pool: PgPool) {
         ),
         (
             json!({"name": "x", "kind": "nope"}),
-            "kind must be one of the following values: opds, kosync, kobo",
+            "kind must be one of the following values: opds, kosync, kobo, subsonic",
         ),
     ] {
         let (s, b) = c.call("POST", "/api/device-tokens", &jwt, Some(body)).await;

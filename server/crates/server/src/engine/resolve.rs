@@ -314,13 +314,35 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
     let Some(claims) = claims else {
         return device_user(st, req).await;
     };
-    let (live, file) = (claims.live, claims.mf);
     let Some(sid) = claims.sid else {
-        return Ok(None);
+        return subsonic_credential(st, &claims).await;
     };
+    let (live, file) = (claims.live, claims.mf);
     Ok(load_session_user(&st.db, claims.sub, sid)
         .await?
         .map(|(user, role)| Caller::of(user, role, live, file)))
+}
+
+/// A session-less stream token minted for a `subsonic` row (`device-tokens.md` rule 16): valid while the
+/// row lives and its owner is enabled, and only for the file it names.
+async fn subsonic_credential(
+    st: &AppState,
+    claims: &crate::auth_token::Claims,
+) -> Result<Option<Caller>, AppError> {
+    let (Some(dt), Some(mf), true) = (claims.dt, claims.mf, claims.live.is_none()) else {
+        return Ok(None);
+    };
+    if claims.scope != Some(crate::auth_token::TokenScope::Stream)
+        || !device_tokens::subsonic_alive(&st.db, dt, claims.sub).await?
+    {
+        return Ok(None);
+    }
+    Ok(load_enabled(&st.db, claims.sub)
+        .await?
+        .map(|(user, role)| Caller {
+            device: Some(device_tokens::Kind::Subsonic),
+            ..Caller::of(user, role, None, Some(mf))
+        }))
 }
 
 /// Whether the file is the part of an item of a `text` edition.

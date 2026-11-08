@@ -53,6 +53,7 @@ pub mod settings;
 pub mod social;
 pub mod state;
 pub mod stream;
+pub mod subsonic;
 pub mod subtitles;
 pub mod sync;
 pub mod system;

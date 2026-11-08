@@ -43,6 +43,7 @@ mod routes;
 mod session;
 mod settings;
 mod social;
+mod subsonic;
 mod topology;
 mod users;
 

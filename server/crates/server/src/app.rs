@@ -529,6 +529,7 @@ fn api() -> Router<AppState> {
         .merge(crate::books::router())
         .merge(crate::comics::router())
         .merge(crate::opds::router())
+        .merge(crate::subsonic::router())
         .merge(libraries::router())
         .merge(crate::optimize::router())
         .merge(images::router())

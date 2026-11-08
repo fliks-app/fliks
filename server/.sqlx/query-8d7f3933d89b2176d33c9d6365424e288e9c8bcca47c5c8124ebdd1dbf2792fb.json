@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO device_tokens (\"userId\", name, kind, \"hash\")\n           VALUES ($1, $2, $3::text::device_token_kind, $4)\n           RETURNING id, name, kind::text AS \"kind!\", \"createdAt\" AS created_at, \"lastUsedAt\" AS last_used_at",
+  "query": "UPDATE device_tokens SET \"hash\" = $3, \"secret\" = $4, \"lastUsedAt\" = NULL WHERE id = $1 AND \"userId\" = $2\n           RETURNING id, name, kind::text AS \"kind!\", \"createdAt\" AS created_at, \"lastUsedAt\" AS last_used_at",
   "describe": {
     "columns": [
       {
@@ -57,9 +57,9 @@
     "parameters": {
       "Left": [
         "Int4",
+        "Int4",
         "Text",
-        "Text",
-        "Text"
+        "Bytea"
       ]
     },
     "nullable": [
@@ -70,5 +70,5 @@
       true
     ]
   },
-  "hash": "cf16a0d299fbb0a4bdf8cb8e9092f47d2212b7d9e812bb00f36bed168151fa07"
+  "hash": "8d7f3933d89b2176d33c9d6365424e288e9c8bcca47c5c8124ebdd1dbf2792fb"
 }

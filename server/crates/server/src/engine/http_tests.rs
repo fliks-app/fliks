@@ -947,6 +947,67 @@ mod resolve {
         assert_eq!(ask_basic(&w, "r", &again).await, denied(), "revoked");
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn a_subsonic_stream_credential_follows_its_row_and_its_file(pool: PgPool) {
+        let w = world(pool).await;
+        let kind = crate::device_tokens::Kind::Subsonic;
+        device_token(&w, w.member.0, kind).await;
+        let row: i32 = sqlx::query_scalar("SELECT id FROM device_tokens")
+            .fetch_one(&w.c.pool)
+            .await
+            .unwrap();
+        let sign = |user: i32, file: i32| {
+            w.c.st
+                .jwt
+                .sign_stream_for_device(user, "x", row, file as u32, 60)
+                .unwrap()
+                .token
+        };
+        let ask = |credential: String, file: i32, purpose: &'static str| {
+            let w = &w;
+            async move {
+                resolve(
+                    w,
+                    json!({"mediaId": file, "credential": credential, "purpose": purpose, "credentialSource": "query"}),
+                )
+                .await
+                .1
+            }
+        };
+        let own = sign(w.member.0, w.file);
+        for purpose in ["stream", "download"] {
+            let b = ask(own.clone(), w.file, purpose).await;
+            assert_eq!(b["allow"], true, "{purpose}");
+            assert_eq!(b["ttlS"], 30.0, "{purpose}");
+        }
+        assert_eq!(
+            ask(own.clone(), w.file, "sprite").await,
+            denied(),
+            "purpose"
+        );
+        assert_eq!(
+            ask(own.clone(), w.loose, "stream").await,
+            denied(),
+            "another file"
+        );
+        assert_eq!(
+            ask(sign(w.admin.0, w.file), w.file, "stream").await,
+            denied(),
+            "another owner"
+        );
+        let (token, _) = crate::device_tokens::issue(kind);
+        assert_eq!(
+            ask_device(&w, &basic("x", &token), Some("basic"), "stream").await,
+            denied(),
+            "the token itself opens nothing"
+        );
+        sqlx::query("DELETE FROM device_tokens")
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        assert_eq!(ask(own, w.file, "stream").await, denied(), "revoked");
+    }
+
     /// A book of an audio item (two parts, then a one-file item) and a text item, in the movie's library.
     async fn book(w: &World) -> (i32, [i32; 4]) {
         let p = &w.c.pool;
