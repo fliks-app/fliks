@@ -3685,6 +3685,10 @@
         "map_to": "Worker-Pfad",
         "add_mapping": "Zuordnung hinzufügen",
         "mapping_invalid": "Jede Zuordnung braucht beide Pfade.",
+        "device_jobs": "{{count}} gleichzeitig",
+        "no_public_url": "Die öffentliche URL ist nicht gesetzt: Worker ohne Bibliothekszugriff erhalten keine Aufträge. Lege sie in den allgemeinen Einstellungen fest.",
+        "help": "Einen Worker starten",
+        "start_command": "Starte ihn mit:",
         "confirm_revoke": "Token von {{name}} widerrufen? Seine Jobs kehren in die Warteschlange zurück."
       }
     }

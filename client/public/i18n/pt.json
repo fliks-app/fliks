@@ -3685,6 +3685,10 @@
         "map_to": "Caminho do worker",
         "add_mapping": "Adicionar uma correspondência",
         "mapping_invalid": "Cada correspondência precisa dos dois caminhos.",
+        "device_jobs": "{{count}} de cada vez",
+        "no_public_url": "O URL público não está definido: os workers sem acesso à biblioteca não recebem trabalhos. Defina-o nas definições gerais.",
+        "help": "Como executar um worker",
+        "start_command": "Execute-o com:",
         "confirm_revoke": "Revogar o token de {{name}}? As suas tarefas voltam à fila."
       }
     }

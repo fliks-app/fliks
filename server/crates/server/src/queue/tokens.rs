@@ -132,20 +132,22 @@ pub struct Patch {
     pub path_mappings: Option<Vec<PathMapping>>,
 }
 
-/// Whether a live token was found.
-pub async fn update(pool: &PgPool, id: i32, p: &Patch) -> sqlx::Result<bool> {
-    let n = sqlx::query(
-        r#"UPDATE worker_tokens SET name = COALESCE($2, name), enabled = COALESCE($3, enabled),
+/// `None` without a live token, else whether the patch ended the terms of its leases (disabled, or another
+/// access or mapping).
+pub async fn update(pool: &PgPool, id: i32, p: &Patch) -> sqlx::Result<Option<bool>> {
+    sqlx::query_scalar(
+        r#"WITH old AS (SELECT "pathAccess", "pathMappings" FROM worker_tokens WHERE id = $1 AND "revokedAt" IS NULL)
+           UPDATE worker_tokens SET name = COALESCE($2, name), enabled = COALESCE($3, enabled),
              "pathAccess" = COALESCE($4, "pathAccess"), "pathMappings" = COALESCE($5, "pathMappings")
-           WHERE id = $1 AND "revokedAt" IS NULL"#,
+           WHERE id = $1 AND "revokedAt" IS NULL
+           RETURNING (NOT enabled OR "pathAccess" IS DISTINCT FROM (SELECT "pathAccess" FROM old)
+             OR "pathMappings" IS DISTINCT FROM (SELECT "pathMappings" FROM old))"#,
     )
     .bind(id)
     .bind(&p.name)
     .bind(p.enabled)
     .bind(&p.path_access)
     .bind(p.path_mappings.as_ref().map(|m| serde_json::json!(m)))
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(n > 0)
+    .fetch_optional(pool)
+    .await
 }

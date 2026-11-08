@@ -60,7 +60,7 @@ pub struct Shared {
     pub recover: Notify,
     downloads: Mutex<HashMap<i32, Instant>>,
     grants: Mutex<HashMap<String, remote::Grant>>,
-    uploads: Mutex<HashMap<i64, (i32, remote::Slot)>>,
+    uploads: Mutex<HashMap<(i64, i32), remote::Slot>>,
     /// Files whose OCR just ended; their queueing runs in the queue's own task.
     ocr_ended: Mutex<Vec<i32>>,
     ocr_wake: Notify,

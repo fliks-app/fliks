@@ -42,6 +42,8 @@ pub struct AppState {
     pub kobo_store: Arc<str>,
     /// Where converted KEPUB files live; `None` is `<cache dir>/kepub`, only a test harness sets one.
     pub kepub_cache: Option<Arc<std::path::Path>>,
+    /// Signs the read grants of remote workers, so they outlive a restart.
+    pub grant_key: Arc<[u8]>,
 }
 
 impl AppState {
@@ -90,6 +92,11 @@ impl AppState {
             sse_tickets: Arc::default(),
             kobo_store: crate::kobo::STORE.into(),
             kepub_cache: None,
+            grant_key: <sha2::Sha256 as sha2::Digest>::digest(format!(
+                "fliks-job-grants:{jwt_secret}"
+            ))
+            .to_vec()
+            .into(),
             cfg: Arc::new(cfg),
             db,
         }

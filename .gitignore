@@ -74,6 +74,7 @@ plans/
 !/docs/plugins.md
 !/docs/livetv.md
 !/docs/cleanup-rules.md
+!/docs/optimize-workers.md
 docker-compose.yml
 
 # Dev-stack bind mounts (media library, downloads, images, transcode cache).

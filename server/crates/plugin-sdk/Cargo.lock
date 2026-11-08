@@ -1210,8 +1210,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "1.14.0"
-source = "git+https://github.com/fliks-app/engine?tag=v1.14.0#9179dc265b38e9dac5bf39de6c021f4e0c673a23"
+version = "1.14.1"
+source = "git+https://github.com/fliks-app/engine?tag=v1.14.1#cb0ed68daa6c9f52f94fc36d06e0adf19c77b226"
 dependencies = [
  "serde",
  "serde_json",
@@ -1295,6 +1295,7 @@ dependencies = [
  "fliks_domain",
  "futures-util",
  "getrandom 0.4.3",
+ "hmac 0.13.0",
  "http",
  "http-body",
  "http-body-util",

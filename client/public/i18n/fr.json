@@ -3662,7 +3662,7 @@
       },
       "workers": {
         "title": "Workers d'optimisation",
-        "desc": "Machines qui ré-encodent et remuxent les fichiers de la bibliothèque. Le moteur du serveur travaille toujours; les workers distants se connectent avec un jeton.",
+        "desc": "Machines qui ré-encodent et remuxent les fichiers de la bibliothèque. Le moteur du serveur travaille toujours ; les workers distants se connectent avec un jeton.",
         "connected": "Workers connectés",
         "none_connected": "Aucun worker ne s'est connecté depuis le démarrage du serveur.",
         "local": "Moteur local",
@@ -3678,13 +3678,17 @@
         "access_label_none": "Aucun (HTTP et envoi)",
         "access_label_shared": "Dossiers partagés",
         "access_none": "Le worker lit les fichiers en HTTP et envoie sa sortie. Nécessite l'URL publique.",
-        "access_shared": "Le worker monte la bibliothèque; les chemins sont traduits par les correspondances.",
+        "access_shared": "Le worker monte la bibliothèque ; les chemins sont traduits par les correspondances.",
         "mappings": "Correspondances de chemins",
         "mappings_hint": "Le chemin serveur d'un dossier, puis le même dossier sur le worker.",
         "map_from": "Chemin serveur",
         "map_to": "Chemin worker",
         "add_mapping": "Ajouter une correspondance",
         "mapping_invalid": "Chaque correspondance a besoin des deux chemins.",
+        "device_jobs": "{{count}} à la fois",
+        "no_public_url": "L'URL publique n'est pas définie : les workers sans accès à la bibliothèque ne reçoivent aucun travail. Définissez-la dans les réglages généraux.",
+        "help": "Lancer un worker",
+        "start_command": "Lancez-le avec :",
         "confirm_revoke": "Révoquer le jeton de {{name}} ? Ses jobs retournent dans la file."
       }
     }

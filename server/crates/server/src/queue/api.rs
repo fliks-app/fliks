@@ -387,11 +387,13 @@ pub async fn patch_token(
     }) {
         return Err(AppError::bad_request("a mapping needs both paths"));
     }
-    if !tokens::update(&st.db, id, &dto).await.map_err(db)? {
+    let Some(ended) = tokens::update(&st.db, id, &dto).await.map_err(db)? else {
         return Err(AppError::not_found("Not Found"));
-    }
+    };
     // A changed access or mapping, or a disabled token, ends the leases taken under the old terms.
-    store::release_token(&st.db, id).await.map_err(db)?;
+    if ended {
+        store::release_token(&st.db, id).await.map_err(db)?;
+    }
     super::remote::sweep(&st).await;
     st.queue.wake.notify_waiters();
     Ok(StatusCode::NO_CONTENT)

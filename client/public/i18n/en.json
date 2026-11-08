@@ -3685,6 +3685,10 @@
         "map_to": "Worker path",
         "add_mapping": "Add a mapping",
         "mapping_invalid": "Each mapping needs both paths.",
+        "device_jobs": "{{count}} at once",
+        "no_public_url": "The public URL is not set: workers without library access are leased nothing. Set it in General settings.",
+        "help": "How to run a worker",
+        "start_command": "Start it with:",
         "confirm_revoke": "Revoke the token of {{name}}? Its jobs return to the queue."
       }
     }
