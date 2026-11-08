@@ -685,7 +685,7 @@ mod tests {
                 json!({"qualityProfileId": 1})
             )),
             json!([
-                "mediaType must be one of the following values: movie, series, book, comic",
+                "mediaType must be one of the following values: movie, series, book, comic, album",
                 "tmdbId must not be less than 1",
                 "tmdbId must be an integer number",
                 "title must be a string"
