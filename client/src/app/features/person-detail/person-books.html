@@ -10,7 +10,7 @@
         <h2 class="text-lg font-semibold mb-3">
           <a class="link link-hover" [routerLink]="['/collections', s.collection.id]">{{ s.collection.name }}</a>
         </h2>
-        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+        <app-media-grid>
           @for (e of s.works; track e.media.id) {
             <app-media-card
               [imageUrl]="e.media.posterUrl"
@@ -21,13 +21,13 @@
               [link]="link(e.media)"
             />
           }
-        </div>
+        </app-media-grid>
       </div>
     }
     @if (w.standalone.length > 0) {
       <div>
         <h2 class="text-lg font-semibold mb-3">{{ 'books_people.standalone' | translate }}</h2>
-        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+        <app-media-grid>
           @for (m of w.standalone; track m.id) {
             <app-media-card
               [imageUrl]="m.posterUrl"
@@ -38,7 +38,7 @@
               [link]="link(m)"
             />
           }
-        </div>
+        </app-media-grid>
       </div>
     }
   } @else {
@@ -48,7 +48,7 @@
   @if (missing().length > 0) {
     <div>
       <h2 class="text-lg font-semibold mb-3">{{ 'books_people.bibliography' | translate }}</h2>
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+      <app-media-grid>
         @for (c of missing(); track c.provider + c.externalId) {
           <app-media-card
             [imageUrl]="c.posterUrl"
@@ -60,7 +60,7 @@
             [link]="['/add/book', c.provider, c.externalId]"
           />
         }
-      </div>
+      </app-media-grid>
     </div>
   }
 }

@@ -5199,7 +5199,6 @@
   "music": {
     "play": "Play",
     "shuffle": "Shuffle",
-    "identify": "Identify",
     "candidates": "Releases the files may be",
     "no_candidates": "No matching release found",
     "editions": "Editions",

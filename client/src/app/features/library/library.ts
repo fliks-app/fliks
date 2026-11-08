@@ -25,8 +25,7 @@ import { BooksApiService } from '../../core/services/api/books-api.service';
 import type { BookListInfo, CollectionSummary as SeriesSummary, PersonListItem } from '../../core/services/api/books.models';
 import { SUBTITLE_LANGUAGE_CODES } from '../../core/constants/subtitle-languages';
 import { LocalizeLanguagePipe } from '../../core/pipes/localize-language.pipe';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
 import {
   SocialApiService,
   ReceivedRecommendation,
@@ -153,8 +152,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     FormsModule,
     RouterLink,
     LocalizeLanguagePipe,
-    ResolveUrlPipe,
-    CachedSrcDirective,
+    PersonAvatarCardComponent,
     TranslatePipe,
     LucideSearch,
     LucideSlidersHorizontal,

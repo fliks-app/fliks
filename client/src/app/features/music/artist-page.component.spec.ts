@@ -2,16 +2,20 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of } from 'rxjs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../core/services/auth.service';
 import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
 import { bookSpecProviders } from '../media-detail/book/book-test-setup';
 import { ArtistPageComponent } from './artist-page.component';
 
 describe('ArtistPageComponent', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
+  });
 
   it('groups owned albums by type and lists the missing ones apart', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ id: '4' })) } },
@@ -29,7 +33,7 @@ describe('ArtistPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="artist-name"]')?.textContent).toBe('Band');
+    expect(el.querySelector('[data-testid="person-name"]')?.textContent).toBe('Band');
     expect(el.querySelectorAll('[data-testid="release-group"]').length).toBe(2);
     expect(el.querySelectorAll('[data-testid="missing-group"] app-media-card').length).toBe(1);
   });

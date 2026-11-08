@@ -12,31 +12,28 @@
       <option value="rated">{{ 'music.filter_rated' | translate }}</option>
     </select>
   </div>
-  @if (!rows().length) {
-    @if (loading()) {
+  @if (!list.rows().length) {
+    @if (list.loading()) {
       <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
     } @else {
       <p class="text-center py-12 text-base-content/50">{{ 'music.no_tracks' | translate }}</p>
     }
   } @else {
     <ul class="flex flex-col gap-1">
-      @for (r of rows(); track r.itemId; let i = $index) {
+      @for (r of list.rows(); track r.itemId; let i = $index) {
         <li class="flex items-center gap-1" [class.opacity-50]="!r.hasFile" data-testid="track-row">
           <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!r.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="play(i)">
-            <svg lucidePlay class="size-4 shrink-0 text-base-content/50"></svg>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium">{{ r.title }}</span>
-              <span class="block truncate text-sm text-base-content/60">{{ line(r.artists) }}</span>
-            </span>
-            <span class="hidden sm:inline min-w-0 max-w-48 truncate text-sm text-base-content/60">{{ r.albumTitle }}</span>
-            <span class="hidden sm:inline text-sm tabular-nums text-base-content/60">{{ fmt(r.durationSeconds) }}</span>
+            <app-track-line [title]="r.title" [subtitle]="line(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
+              <svg lead lucidePlay class="size-4 shrink-0 text-base-content/50"></svg>
+              <span class="hidden sm:inline min-w-0 max-w-48 truncate text-sm text-base-content/60">{{ r.albumTitle }}</span>
+            </app-track-line>
           </button>
-          <a class="btn btn-ghost btn-xs shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
+          <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
         </li>
       }
     </ul>
-    @if (more()) {
-      <button type="button" class="btn btn-ghost self-center" [disabled]="loading()" (click)="loadMore()">{{ 'common.show_more' | translate }}</button>
+    @if (list.more()) {
+      <button type="button" class="btn btn-ghost self-center" [disabled]="list.loading()" (click)="list.loadMore()">{{ 'common.show_more' | translate }}</button>
     }
   }
 </div>

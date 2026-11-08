@@ -2,7 +2,7 @@ import { Component, booleanAttribute, ElementRef, InjectionToken, input, output,
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones } from '@lucide/angular';
+import { LucideFilm, LucideMusic, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
@@ -65,7 +65,7 @@ export interface CardDownloadState {
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective, PosterMosaicComponent,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones,
+    LucideFilm, LucideMusic, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
@@ -102,10 +102,12 @@ export class MediaCardComponent {
   protected readonly bookInfo = computed(
     () => this.book() ?? (this.media() as (Media & { book?: BookListInfo }) | null)?.book ?? null,
   );
+  /** For a square cover the card can't tell from its media (an album given by `imageUrl` alone). */
+  readonly square = input(false);
   /** An audio cover is square: it sits on a blurred fill inside the 2:3 frame. */
   protected readonly squareCover = computed(() => {
     const b = this.bookInfo();
-    return !!b && (b.lastFamily ?? (b.formats.length === 1 ? b.formats[0] : 'text')) === 'audio';
+    return this.square() || this.media()?.type === 'album' || (!!b && (b.lastFamily ?? (b.formats.length === 1 ? b.formats[0] : 'text')) === 'audio');
   });
 
   // Layout

@@ -7,24 +7,27 @@ import { LucidePlay } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
+import { PersonsApiService, type Person } from '../../core/services/api/persons-api.service';
 import type { ComposerWork, WorkRecording } from '../../core/services/api/music.models';
-import { formatDuration } from './music-utils';
+import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
+import { TrackLineComponent } from './track-line.component';
 
 /** A composer: the works, and per work the recordings in the library (fetched when the work opens). */
 @Component({
   selector: 'app-composer-page',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, LucidePlay],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucidePlay],
   templateUrl: './composer-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ComposerPageComponent {
   private readonly api = inject(MusicApiService);
+  private readonly persons = inject(PersonsApiService);
   private readonly player = inject(AudioPlayerService);
   protected readonly id = toSignal(inject(ActivatedRoute).paramMap.pipe(map((p) => Number(p.get('id')))), { initialValue: 0 });
   protected readonly works = signal<ComposerWork[]>([]);
   protected readonly loading = signal(true);
   protected readonly recordings = signal<Record<number, WorkRecording[]>>({});
-  protected readonly fmt = formatDuration;
+  protected readonly person = signal<Person | null>(null);
 
   constructor() {
     effect(() => {
@@ -36,6 +39,8 @@ export class ComposerPageComponent {
   private async load(id: number): Promise<void> {
     this.loading.set(true);
     this.recordings.set({});
+    this.person.set(null);
+    void this.persons.getOne(id).then((d) => id === this.id() && this.person.set(d.person), () => undefined);
     try {
       const w = await this.api.composerWorks(id);
       if (id === this.id()) this.works.set(w);

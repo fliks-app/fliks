@@ -5,16 +5,16 @@ import { map } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import type { Discography } from '../../core/services/api/music.models';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { MediaGridComponent } from '../../shared/components/media-grid/media-grid';
+import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { groupDiscography } from './music-utils';
 
 /** An artist: biography, follow, and the discography by release type with the albums not in the library apart. */
 @Component({
   selector: 'app-artist-page',
-  imports: [TranslatePipe, ResolveUrlPipe, CachedSrcDirective, FollowToggleComponent, MediaCardComponent],
+  imports: [TranslatePipe, FollowToggleComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
   templateUrl: './artist-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -29,7 +29,6 @@ export class ArtistPageComponent {
     const a = this.data()?.artist;
     return [a?.artistType, a?.disambiguation].filter(Boolean).join(' · ');
   });
-  protected readonly expanded = signal(false);
 
   constructor() {
     effect(() => {
@@ -41,7 +40,6 @@ export class ArtistPageComponent {
   private async load(id: number): Promise<void> {
     this.loading.set(true);
     this.failed.set(false);
-    this.expanded.set(false);
     try {
       const d = await this.api.discography(id);
       if (id === this.id()) this.data.set(d);

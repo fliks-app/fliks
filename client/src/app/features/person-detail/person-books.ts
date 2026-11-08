@@ -5,13 +5,14 @@ import { BooksApiService } from '../../core/services/api/books-api.service';
 import type { BookSearchResult, PersonWorks } from '../../core/services/api/books.models';
 import { mediaDetailLink } from '../../core/media-kinds';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { MediaGridComponent } from '../../shared/components/media-grid/media-grid';
 
 type Work = PersonWorks['standalone'][number];
 
 /** Owned works of an author or narrator (by series, then standalone) and the provider bibliography. */
 @Component({
   selector: 'app-person-books',
-  imports: [TranslatePipe, RouterLink, MediaCardComponent],
+  imports: [TranslatePipe, RouterLink, MediaCardComponent, MediaGridComponent],
   templateUrl: './person-books.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -44,30 +44,14 @@
     <div class="flex gap-2">
       <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4">
         @for (person of list.visible(); track person.id) {
-          <a
+          <app-person-avatar-card
             [id]="'person-' + person.id"
-            [routerLink]="'/persons/' + person.id"
+            [link]="'/persons/' + person.id"
             [queryParams]="bookRole ? { role: bookRole } : null"
-            class="flex flex-col items-center gap-2 group cursor-pointer"
-          >
-            <div class="avatar">
-              <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
-                @if (person.avatarUrl) {
-                  <img [cachedSrc]="person.avatarUrl | resolveUrl:'thumb'" [alt]="person.name" loading="lazy" />
-                } @else {
-                  <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">
-                    {{ person.name.charAt(0) }}
-                  </div>
-                }
-              </div>
-            </div>
-            <span class="text-xs sm:text-sm text-center font-medium truncate w-full">{{ person.name }}</span>
-            @if (bookRole) {
-              <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">{{ 'books_search.work_count' | translatePlural: (workCounts.get(person.id) ?? 0) }}</span>
-            } @else if (person.departments.length) {
-              <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">{{ person.departments.join(', ') }}</span>
-            }
-          </a>
+            [name]="person.name"
+            [avatarUrl]="person.avatarUrl"
+            [subtitle]="bookRole ? ('books_search.work_count' | translatePlural: (workCounts.get(person.id) ?? 0)) : person.departments.join(', ')"
+          />
         }
       </div>
 

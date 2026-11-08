@@ -5199,7 +5199,6 @@
   "music": {
     "play": "Lire",
     "shuffle": "Aléatoire",
-    "identify": "Identifier",
     "candidates": "Sorties possibles pour ces fichiers",
     "no_candidates": "Aucune sortie correspondante",
     "editions": "Éditions",
