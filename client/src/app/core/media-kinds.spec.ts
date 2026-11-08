@@ -4,6 +4,7 @@ import {
   MEDIA_KINDS,
   canMarkWatched,
   isMediaKind,
+  kindOf,
   kindFromProviderSegment,
   kindFromSegment,
   kindOfListFilter,
@@ -51,5 +52,15 @@ describe('canMarkWatched', () => {
     expect(canMarkWatched({ type: 'movie', files: [{}] })).toBe(true);
     expect(canMarkWatched({ type: 'movie', files: [] })).toBe(false);
     for (const type of ['book', 'comic', 'album'] as const) expect(canMarkWatched({ type, files: [{}] })).toBe(false);
+  });
+});
+
+describe('a kind the client predates', () => {
+  const unknown = 'podcast' as never;
+  it('has no watched toggle and falls back on the movie descriptor', () => {
+    expect(canMarkWatched({ type: unknown, files: [{}] })).toBe(false);
+    expect(kindOf(unknown)).toBe(KIND_REGISTRY.movie);
+    expect(kindOf(undefined)).toBe(KIND_REGISTRY.movie);
+    expect(mediaDetailLink(unknown, 3)).toEqual(['/movies', '3']);
   });
 });
