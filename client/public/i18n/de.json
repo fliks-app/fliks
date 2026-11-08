@@ -3653,6 +3653,7 @@
         "no_devices": "Noch kein Worker hat sich gemeldet.",
         "devices_hint": "Lassen Sie ein Feld leer, um den vom Gerät gemeldeten Wert zu behalten.",
         "max_jobs": "Gleichzeitige Aufträge",
+        "device_reserve": "Hardware-Wiedergaben vor der Pause (dieses Gerät)",
         "saved": "Einstellungen gespeichert",
         "verify": "Überprüfung",
         "verify_days": "Prüfen alle (Tage)",

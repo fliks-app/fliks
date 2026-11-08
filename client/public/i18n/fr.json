@@ -3653,6 +3653,7 @@
         "no_devices": "Aucun worker ne s'est encore annoncé.",
         "devices_hint": "Laissez un champ vide pour garder la valeur déclarée par l'appareil.",
         "max_jobs": "Travaux simultanés",
+        "device_reserve": "Lectures matérielles avant la pause (cet appareil)",
         "saved": "Réglages enregistrés",
         "verify": "Vérification",
         "verify_days": "Vérifier tous les (jours)",

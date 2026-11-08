@@ -111,6 +111,7 @@ pub async fn hello(
             upload_chunk_bytes: UPLOAD_CHUNK_BYTES,
             cpu_weight: Some(conf.cpu_weight),
             gpu_playback_before_pause: Some(conf.gpu_playback_before_pause),
+            device_gpu_playback_before_pause: conf.device_gpu_playback_before_pause.clone(),
         },
         abandon: abandon
             .into_iter()

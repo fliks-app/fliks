@@ -133,7 +133,7 @@
             {{ 'settings.optimize.global.devices_hint' | translate }}
           </p>
           @for (id of deviceIds(); track id) {
-            <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] items-end gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] items-end gap-3">
               <span class="font-medium pb-3">{{ id }}</span>
               <app-input-field
                 type="number"
@@ -141,6 +141,14 @@
                 [value]="caps()[id] ?? ''"
                 (valueChange)="setCap(id, $event)"
               />
+              @if (id !== 'cpu') {
+                <app-input-field
+                  type="number"
+                  [label]="'settings.optimize.global.device_reserve' | translate"
+                  [value]="reserves()[id] ?? ''"
+                  (valueChange)="setReserve(id, $event)"
+                />
+              }
             </div>
           }
         }

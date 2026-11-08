@@ -49,12 +49,15 @@ export class OptimizeSettingsComponent implements OnInit {
   readonly verifyBatch = signal('50');
   /** Per device id: the job cap, blank = the device's own value. */
   readonly caps = signal<Record<string, string>>({});
+  /** Per device id: the playback reserve, blank = the global one. */
+  readonly reserves = signal<Record<string, string>>({});
   readonly workers = signal<OptimizeWorker[]>([]);
 
   readonly deviceIds = computed(() => {
     const ids = new Set([
       ...this.workers().flatMap((w) => w.devices.map((d) => d.id)),
       ...Object.keys(this.caps()),
+      ...Object.keys(this.reserves()),
     ]);
     return [...ids].sort();
   });
@@ -76,6 +79,11 @@ export class OptimizeSettingsComponent implements OnInit {
       this.cpuWeight.set(String(s.cpuWeight));
       this.verifyDays.set(String(s.verifyIntervalDays));
       this.verifyBatch.set(String(s.verifyBatch));
+      this.reserves.set(
+        Object.fromEntries(
+          Object.entries(s.deviceGpuPlaybackBeforePause ?? {}).map(([k, v]) => [k, String(v)]),
+        ),
+      );
       this.caps.set(
         Object.fromEntries(Object.entries(s.deviceMaxJobs).map(([k, v]) => [k, String(v)])),
       );
@@ -88,6 +96,10 @@ export class OptimizeSettingsComponent implements OnInit {
 
   setCap(id: string, v: string) {
     this.caps.update((m) => ({ ...m, [id]: v }));
+  }
+
+  setReserve(id: string, v: string) {
+    this.reserves.update((m) => ({ ...m, [id]: v }));
   }
 
   /** Blank fields are left out: the device keeps its declared value. */
@@ -118,6 +130,7 @@ export class OptimizeSettingsComponent implements OnInit {
       verifyIntervalDays: Math.max(0, Math.round(Number(this.verifyDays()) || 0)),
       verifyBatch: Math.max(1, Math.round(Number(this.verifyBatch()) || 1)),
       deviceMaxJobs: this.numbers(this.caps()),
+      deviceGpuPlaybackBeforePause: this.numbers(this.reserves()),
     };
     delete body.paused;
     this.saving.set(true);

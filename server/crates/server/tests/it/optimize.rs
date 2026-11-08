@@ -31,6 +31,7 @@ async fn ctx(pool: &PgPool) -> Ctx {
             engine_version: "test".into(),
             devices: vec![fliks_engine_core::api::WorkerDevice {
                 id: "cpu".into(),
+                name: None,
                 encoders: vec!["libx265".into()],
                 decoders: vec![],
                 max_jobs: 1,
