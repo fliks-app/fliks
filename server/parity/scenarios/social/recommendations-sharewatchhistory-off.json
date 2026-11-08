@@ -90,6 +90,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 16,
           "media": {
             "id": 4,
             "path": null

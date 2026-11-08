@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT ps.id, ps.\"createdAt\" AS created_at, ps.\"updatedAt\" AS updated_at,\n                  ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n                  ps.completed, ps.\"hiddenFromContinueWatching\" AS hidden_from_continue_watching,\n                  ps.\"lastPlayedAt\" AS last_played_at, ps.\"playedAt\" AS played_at,\n                  ps.\"userId\" AS user_id, i.\"mediaId\" AS media_id, ps.\"mediaFileId\" AS media_file_id,\n                  CASE WHEN i.\"groupId\" IS NOT NULL THEN i.id END AS episode_id,\n                  ps.progression, ps.locator AS \"locator?: serde_json::Value\"\n           FROM playback_states ps JOIN items i ON i.id = ps.\"itemId\"\n           WHERE ps.\"userId\" = $1 AND ps.\"itemId\" = $2",
+  "query": "SELECT ps.id, ps.\"createdAt\" AS created_at, ps.\"updatedAt\" AS updated_at,\n                  ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n                  ps.completed, ps.\"hiddenFromContinueWatching\" AS hidden_from_continue_watching,\n                  ps.\"lastPlayedAt\" AS last_played_at, ps.\"playedAt\" AS played_at,\n                  ps.\"userId\" AS user_id, i.\"mediaId\" AS media_id, ps.\"mediaFileId\" AS media_file_id,\n                  i.id AS \"item_id!\",\n                  CASE WHEN i.\"groupId\" IS NOT NULL THEN i.id END AS episode_id,\n                  ps.progression, ps.locator AS \"locator?: serde_json::Value\"\n           FROM playback_states ps JOIN items i ON i.id = ps.\"itemId\"\n           WHERE ps.\"userId\" = $1 AND ps.\"itemId\" = $2",
   "describe": {
     "columns": [
       {
@@ -137,12 +137,23 @@
       },
       {
         "ordinal": 12,
+        "name": "item_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
         "name": "episode_id",
         "type_info": "Int4",
         "origin": "Expression"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "progression",
         "type_info": "Float8",
         "origin": {
@@ -153,7 +164,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "locator?: serde_json::Value",
         "type_info": "Jsonb",
         "origin": {
@@ -183,10 +194,11 @@
       false,
       false,
       true,
+      false,
       null,
       true,
       true
     ]
   },
-  "hash": "6dbe14840109480b3eafd1739ce2ceb12f17db991c41eaa9191294c3913b315c"
+  "hash": "33d5d51103da47247dcd14146ea7c2bc3ccf40c0fda97019e75bcdc1e24a2881"
 }

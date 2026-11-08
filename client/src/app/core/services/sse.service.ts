@@ -46,6 +46,7 @@ export interface RemoteCommand {
   mediaType?: MediaType;
   mediaFileId?: number;
   episodeId?: number;
+  itemId?: number;
   positionSeconds?: number;
   level?: number;
   muted?: boolean;
@@ -62,6 +63,7 @@ export interface RemoteState {
   mediaId: number | null;
   mediaFileId: number;
   episodeId?: number | null;
+  itemId?: number;
   mediaTitle: string | null;
   episodeLabel: string | null;
   posterUrl: string | null;

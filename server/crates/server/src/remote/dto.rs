@@ -96,6 +96,7 @@ pub struct Command {
     pub media_type: Option<MediaKind>,
     pub media_file_id: Option<i64>,
     pub episode_id: Option<i64>,
+    pub item_id: Option<i64>,
     pub position_seconds: Option<Num>,
     pub level: Option<Num>,
     pub muted: Option<bool>,

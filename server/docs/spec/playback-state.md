@@ -54,7 +54,8 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### History
 
-13. `history`: rows with `"playedAt" IS NOT NULL` (set by real playback progress only: manual "mark watched" never sets it) for accessible libraries, newest `playedAt` first, `LIMIT $limit OFFSET (page-1)*limit`; `total` = count of the same predicate (as a `Number`). `progressPercent` `Number()`-ed. Empty accessible list -> `{data:[], total:0}`. `WatchHistoryItem` = `id, mediaId, mediaFileId, episodeId, positionSeconds, durationSeconds, progressPercent, completed, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel (null for movies)`.
+13. `history`: rows with `"playedAt" IS NOT NULL` (set by real playback progress only: manual "mark watched" never sets it) for accessible libraries, newest `playedAt` first, `LIMIT $limit OFFSET (page-1)*limit`; `total` = count of the same predicate (as a `Number`). `progressPercent` `Number()`-ed. Empty accessible list -> `{data:[], total:0}`. `WatchHistoryItem` = `id, mediaId, mediaFileId, itemId (the played item, which names it where the pair is ambiguous, rule 5), episodeId, positionSeconds, durationSeconds, progressPercent, completed, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel (null for movies)`.
+13a. Every response row that names an item carries `itemId` next to the pair: `PlaybackState` (`GET state`, the heartbeat answer, `toggle-watched`), `ContinueWatchingItem` and `WatchHistoryItem`; `remote.state` echoes the heartbeat's `itemId` when it has one. `episodeId` stays the item's id only when it is grouped.
 14. `watched-ids`: ids of movies completed by the user plus series whose every non-special episode that has a file (an item part, `items.md` rule 21, `seasonNumber > 0`) is completed (at least one such episode); union, `DISTINCT` semantics, no ordering; `[]` when no library.
 
 ### Watched toggles

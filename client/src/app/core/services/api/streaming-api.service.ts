@@ -177,6 +177,7 @@ export interface PlaybackState {
   id: number;
   mediaId: number;
   mediaFileId: number;
+  itemId: number;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -195,6 +196,8 @@ export interface WatchHistoryItem {
   id: number;
   mediaId: number;
   mediaFileId: number;
+  /** The played item: names a track, which `episodeId` cannot. */
+  itemId: number;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -234,6 +237,7 @@ export interface ContinueWatchingItem {
   id: number;
   mediaId: number;
   mediaFileId: number;
+  itemId: number;
   episodeId: number | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -729,8 +733,11 @@ export class StreamingApiService {
     );
   }
 
-  deletePlaybackState(mediaId: number, episodeId?: number) {
-    const params = episodeId ? `?episodeId=${episodeId}` : '';
+  deletePlaybackState(mediaId: number, episodeId?: number, itemId?: number) {
+    const q = new URLSearchParams();
+    if (episodeId) q.set('episodeId', String(episodeId));
+    if (itemId) q.set('itemId', String(itemId));
+    const params = q.size ? `?${q}` : '';
     return firstValueFrom(
       this.http.delete<void>(`/api/playback/media/${mediaId}/state${params}`),
     );
@@ -743,9 +750,9 @@ export class StreamingApiService {
     );
   }
 
-  toggleWatched(mediaId: number, mediaFileId?: number, episodeId?: number) {
+  toggleWatched(mediaId: number, mediaFileId?: number, episodeId?: number, itemId?: number) {
     return firstValueFrom(
-      this.http.post<PlaybackState>(`/api/playback/media/${mediaId}/toggle-watched`, { mediaFileId, episodeId }),
+      this.http.post<PlaybackState>(`/api/playback/media/${mediaId}/toggle-watched`, { mediaFileId, episodeId, itemId }),
     );
   }
 

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id AS \"id!\" FROM items i\n                   JOIN track_details td ON td.\"itemId\" = i.id\n                   JOIN editions e ON e.id = i.\"editionId\"\n                   JOIN media m ON m.id = i.\"mediaId\"\n                   LEFT JOIN album_details ad ON ad.\"mediaId\" = m.id\n                   WHERE i.\"mediaId\" = $1 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)\n                     AND CASE WHEN EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op.\"itemId\" = o.id\n                                           JOIN editions oe ON oe.id = o.\"editionId\"\n                                           WHERE o.\"mediaId\" = m.id\n                                             AND COALESCE(oe.\"libraryId\", m.\"libraryId\") = ANY($2))\n                              THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = i.id)\n                              ELSE i.\"editionId\" = ad.\"targetEditionId\" END\n                   ORDER BY td.\"discNumber\", td.position, i.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2e3214772e1c4c7a4f9d413ac5be1dbeb5f536b0a5b19007acf3a23ed6f5c7e4"
+}

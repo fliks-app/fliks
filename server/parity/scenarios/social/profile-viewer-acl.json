@@ -139,6 +139,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 16,
           "media": {
             "id": 4,
             "path": null
@@ -189,6 +190,7 @@
             "episodeId": null,
             "hiddenFromContinueWatching": false,
             "id": 10,
+            "itemId": 25,
             "media": {
               "id": 13,
               "path": null
@@ -229,6 +231,7 @@
             "episodeId": 5,
             "hiddenFromContinueWatching": false,
             "id": 11,
+            "itemId": 5,
             "media": {
               "id": 19,
               "path": null
@@ -409,6 +412,7 @@
               "episodeLabel": null,
               "fanartUrl": null,
               "id": 10,
+              "itemId": 25,
               "mediaFileId": 13,
               "mediaId": 13,
               "mediaTitle": "Parity Movie 13",
@@ -769,6 +773,7 @@
               "episodeLabel": "S01E01 - Episode 1",
               "fanartUrl": null,
               "id": 11,
+              "itemId": 5,
               "mediaFileId": 22,
               "mediaId": 19,
               "mediaTitle": "Parity Series B",
@@ -785,6 +790,7 @@
               "episodeLabel": null,
               "fanartUrl": null,
               "id": 10,
+              "itemId": 25,
               "mediaFileId": 13,
               "mediaId": 13,
               "mediaTitle": "Parity Movie 13",

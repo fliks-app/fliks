@@ -264,8 +264,10 @@ export class PartyApiService {
     );
   }
 
-  proposeMany(id: number, items: { mediaId: number; episodeId: number | null }[]) {
-    const body = { items: items.map(({ mediaId, episodeId }) => ({ mediaId, ...(episodeId != null && { episodeId }) })) };
+  proposeMany(id: number, items: { mediaId: number; episodeId: number | null; itemId?: number }[]) {
+    const body = {
+      items: items.map(({ mediaId, episodeId, itemId }) => ({ mediaId, ...(episodeId != null && { episodeId }), ...(itemId != null && { itemId }) })),
+    };
     return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals/batch`, body));
   }
 

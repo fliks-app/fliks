@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRend
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyProposal } from '../../core/services/api/party-api.service';
+import { MediaService } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -11,6 +12,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { type PartyPerson } from '../player/party/party-people';
 import { keepFocus, runBusy } from './party-busy';
+import { albumRows, type NewRow } from './party-programme-items';
 import { reducedMotion, rowTops, slideRows } from './party-flip';
 import { itemThumb } from './party-thumb';
 import { episodeLabel } from '../../shared/utils/episode-label';
@@ -60,6 +62,7 @@ const bump = (value: 1 | -1, cast: boolean): Keyframe[] => [
 export class PartyProposalsComponent {
   private readonly api = inject(PartyApiService);
   private readonly auth = inject(AuthService);
+  private readonly media = inject(MediaService);
   private readonly injector = inject(Injector);
   private readonly confirm = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
@@ -149,8 +152,17 @@ export class PartyProposalsComponent {
     return this.isHost() || p.proposedBy === this.me();
   }
 
+  /** Albums come back from the picker whole: each becomes its tracks. */
   protected propose(picks: MediaPick[]): void {
-    if (picks.length) void runBusy(this.busy, () => this.api.proposeMany(this.partyId(), picks));
+    if (!picks.length) return;
+    void runBusy(this.busy, async () => {
+      const rows: NewRow[] = [];
+      for (const p of picks) {
+        if (p.type === 'album') rows.push(...albumRows(await this.media.getOne(p.mediaId).catch(() => null)));
+        else rows.push(p);
+      }
+      if (rows.length) await this.api.proposeMany(this.partyId(), rows);
+    });
   }
 
   protected async vote(p: PartyProposal, value: 1 | -1): Promise<void> {

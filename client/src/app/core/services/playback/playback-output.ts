@@ -40,7 +40,7 @@ export const NO_TIMELINE: PlaybackTimeline = { intro: null, outro: null, chapter
 
 /** Everything an output hands to the next one; every field is required so a handoff cannot drop one. */
 export interface PlaybackSnapshot {
-  item: { fileId: number; mediaId: number; episodeId?: number };
+  item: { fileId: number; mediaId: number; episodeId?: number; itemId?: number };
   position: number;
   paused: boolean;
   tracks: LaunchTracks;

@@ -232,6 +232,36 @@ async fn add_expands_series_and_seasons_and_skips_present(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn add_expands_a_media_with_several_items_and_keeps_the_book_ambiguous(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(
+        r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2);
+           INSERT INTO media (id, title, type, "libraryId") VALUES (10, 'album', 'album', 1), (11, 'book', 'book', 1);
+           INSERT INTO editions (id, "mediaId", family) VALUES (10, 10, 'audio'), (11, 11, 'text'), (12, 11, 'text');
+           INSERT INTO items (id, "mediaId", "editionId", title) VALUES
+             (20, 10, 10, 'b'), (21, 10, 10, 'a'), (22, 10, 10, 'unowned'), (23, 11, 11, 'x'), (24, 11, 12, 'y');
+           INSERT INTO track_details ("itemId", "mediaId", "discNumber", position, "durationMs") VALUES
+             (20, 10, 1, 2, 1), (21, 10, 1, 1, 1), (22, 10, 1, 3, 1);
+           INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+             SELECT n, 10, (SELECT min(id) FROM library_folders), 'f' || n, 1, 'q' FROM generate_series(1, 2) n;
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (20, 1, 10, 0, 0), (21, 2, 10, 0, 0)"#,
+    )
+    .await;
+    let add = |body: Value| c.call(1, "POST", "/api/playlists/1/items", body);
+    assert_eq!(add(json!({"mediaId": 10})).await.1, json!({"added": 2}));
+    let order: Vec<i32> =
+        sqlx::query_scalar(r#"SELECT "itemId" FROM playlist_items ORDER BY position"#)
+            .fetch_all(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(order, vec![21, 20], "owned tracks in disc order");
+    let (s, b) = add(json!({"mediaId": 11})).await;
+    assert_eq!((s, b["message"].as_str()), (409, Some("ambiguous_item")));
+    assert_eq!(add(json!({"itemId": 24})).await.1, json!({"added": 1}));
+}
+
+#[sqlx::test(migrations = false)]
 async fn items_carry_the_details_of_their_kind_and_the_collection(pool: PgPool) {
     let c = ctx(pool).await;
     c.sql(

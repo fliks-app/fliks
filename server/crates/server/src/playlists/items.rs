@@ -304,7 +304,7 @@ async fn resolve(
 ) -> Result<(Vec<i32>, bool), AppError> {
     if let Some(item) = dto.item_id {
         let ok = sqlx::query_scalar!(
-            r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
+            r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
                  JOIN editions e ON e.id = i."editionId"
                  WHERE i.id = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) AS "e!""#,
             item,
@@ -354,6 +354,43 @@ async fn resolve(
     .await?
     .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;
     if !crate::db::kind(&kind)?.has_seasons() {
+        let listed = match kind.as_str() {
+            "album" => sqlx::query_scalar!(
+                r#"SELECT i.id AS "id!" FROM items i
+                   JOIN track_details td ON td."itemId" = i.id
+                   JOIN editions e ON e.id = i."editionId"
+                   JOIN media m ON m.id = i."mediaId"
+                   LEFT JOIN album_details ad ON ad."mediaId" = m.id
+                   WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                     AND CASE WHEN EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op."itemId" = o.id
+                                           JOIN editions oe ON oe.id = o."editionId"
+                                           WHERE o."mediaId" = m.id
+                                             AND COALESCE(oe."libraryId", m."libraryId") = ANY($2))
+                              THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+                              ELSE i."editionId" = ad."targetEditionId" END
+                   ORDER BY td."discNumber", td.position, i.id"#,
+                media,
+                accessible
+            )
+            .fetch_all(&mut *c)
+            .await?,
+            "comic" => sqlx::query_scalar!(
+                r#"SELECT i.id AS "id!" FROM items i
+                   JOIN comic_issues ci ON ci."itemId" = i.id
+                   JOIN editions e ON e.id = i."editionId"
+                   JOIN media m ON m.id = i."mediaId"
+                   WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                   ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id"#,
+                media,
+                accessible
+            )
+            .fetch_all(&mut *c)
+            .await?,
+            _ => vec![],
+        };
+        if listed.len() > 1 {
+            return Ok((listed, true));
+        }
         let item = crate::playback::named_item(&mut *c, media, None)
             .await?
             .ok_or_else(|| AppError::not_found(format!("Media #{media} not found")))?;

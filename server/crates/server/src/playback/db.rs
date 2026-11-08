@@ -27,6 +27,7 @@ pub struct StateRow {
     pub(super) user_id: i32,
     pub(super) media_id: i32,
     pub(super) media_file_id: Option<i32>,
+    pub(super) item_id: i32,
     pub(super) episode_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) progression: Option<f64>,
@@ -53,6 +54,7 @@ pub struct ContinueItem {
     id: i32,
     media_id: i32,
     media_file_id: Option<i32>,
+    item_id: i32,
     episode_id: Option<i32>,
     position_seconds: f64,
     duration_seconds: Option<f64>,
@@ -73,6 +75,7 @@ pub struct HistoryItem {
     id: i32,
     media_id: i32,
     media_file_id: Option<i32>,
+    item_id: i32,
     episode_id: Option<i32>,
     position_seconds: f64,
     duration_seconds: Option<f64>,
@@ -187,6 +190,7 @@ pub async fn find_state(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Optio
                   ps.completed, ps."hiddenFromContinueWatching" AS hidden_from_continue_watching,
                   ps."lastPlayedAt" AS last_played_at, ps."playedAt" AS played_at,
                   ps."userId" AS user_id, i."mediaId" AS media_id, ps."mediaFileId" AS media_file_id,
+                  i.id AS "item_id!",
                   CASE WHEN i."groupId" IS NOT NULL THEN i.id END AS episode_id,
                   ps.progression, ps.locator AS "locator?: serde_json::Value"
            FROM playback_states ps JOIN items i ON i.id = ps."itemId"
@@ -380,14 +384,14 @@ pub async fn continue_watching(
              WHERE ni."itemId" IS NOT NULL AND COALESCE(NOT ps.completed, true)
            )
            SELECT x.id AS id, x."mediaId" AS media_id, x.file AS media_file_id,
-                  x."episodeId" AS episode_id, x.pos AS position_seconds,
+                  x.item AS item_id, x."episodeId" AS episode_id, x.pos AS position_seconds,
                   x.dur AS duration_seconds, x."lastPlayedAt" AS last_played_at,
                   x.title AS media_title, x.poster AS poster_url, x.fanart AS fanart_url,
                   x.kind AS media_type, x.still AS still_url, x.label AS episode_label,
                   CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100)
                        ELSE 0 END AS progress_percent
            FROM (
-             SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
+             SELECT c.id, c."mediaId", e.id AS item, f.id AS file, c.pos, c.dur, c."lastPlayedAt",
                     CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS "episodeId",
                     m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
                     m.type AS kind,
@@ -456,6 +460,7 @@ pub async fn history(
         HistoryItem,
         r#"SELECT
              ps.id, e."mediaId" AS "media_id!", ps."mediaFileId" AS media_file_id,
+             e.id AS "item_id!",
              CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS episode_id,
              ps."positionSeconds" AS position_seconds, ps."durationSeconds" AS duration_seconds,
              ps.completed,
