@@ -33,9 +33,6 @@ const BASELINE_SIDEBAR = [
   { label: 'admin.section_media', links: [
     { label: 'settings.nav.quality_profiles', href: '/admin/settings/quality-profiles' },
     { label: 'settings.nav.language_profiles', href: '/admin/settings/language-profiles' },
-    { label: 'settings.nav.optimize_profiles', href: '/admin/settings/optimize-profiles' },
-    { label: 'settings.nav.optimize_workers', href: '/admin/settings/optimize-workers' },
-    { label: 'settings.nav.optimize', href: '/admin/settings/optimize' },
     { label: 'settings.nav.quality_definitions', href: '/admin/settings/quality-definitions' },
     { label: 'settings.nav.custom_formats', href: '/admin/settings/custom-formats' },
     { label: 'settings.nav.auto_approval', href: '/admin/settings/auto-approval' },
@@ -58,6 +55,11 @@ const BASELINE_SIDEBAR = [
   { label: 'admin.section_users', links: [
     { label: 'settings.nav.users', href: '/admin/settings/users' },
     { label: 'settings.nav.roles', href: '/admin/settings/roles' },
+  ] },
+  { label: 'admin.section_optimize', links: [
+    { label: 'settings.nav.optimize_profiles', href: '/admin/settings/optimize-profiles' },
+    { label: 'settings.nav.optimize', href: '/admin/settings/optimize' },
+    { label: 'settings.nav.optimize_workers', href: '/admin/settings/optimize-workers' },
   ] },
   { label: 'admin.section_advanced', links: [
     { label: 'settings.nav.schedulers', href: '/admin/settings/schedulers' },

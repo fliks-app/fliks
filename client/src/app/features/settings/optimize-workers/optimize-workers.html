@@ -37,10 +37,7 @@
             <div class="flex flex-wrap gap-2">
               @for (d of w.devices; track d.id) {
                 <span class="badge badge-ghost text-sm"
-                  >{{ d.id }}{{ d.name ? ' (' + d.name + ')' : '' }} · {{ d.encoders.join(', ') || '-' }} ·
-                  {{
-                    'settings.optimize.workers.device_jobs' | translate: { count: d.maxJobs }
-                  }}</span
+                  >{{ d.id }}{{ d.name ? ' (' + d.name + ')' : '' }} · {{ d.encoders.join(', ') || '-' }}</span
                 >
               }
             </div>
@@ -75,7 +72,7 @@
         </div>
 
         @if (issued(); as i) {
-          <div role="alert" class="alert alert-success flex-col items-start gap-2 text-sm">
+          <div role="alert" class="alert alert-success flex flex-col items-start gap-2 text-sm">
             <span>{{ 'settings.optimize.workers.issued' | translate: { name: i.name } }}</span>
             <code class="break-all">{{ i.token }}</code>
             <span>{{ 'settings.optimize.workers.start_command' | translate }}</span>

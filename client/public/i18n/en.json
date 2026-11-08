@@ -597,6 +597,7 @@
     "section_subtitles": "Subtitles",
     "section_integrations": "Integrations",
     "section_users": "Users",
+    "section_optimize": "Optimization",
     "section_advanced": "Advanced",
     "section_livetv": "Live TV"
   },
@@ -2091,9 +2092,9 @@
       "metadata": "Metadata",
       "email": "Outgoing mail",
       "sso": "Single sign-on",
-      "optimize_profiles": "Optimization profiles",
-      "optimize": "Optimization settings",
-      "optimize_workers": "Optimization workers"
+      "optimize_profiles": "Profiles",
+      "optimize": "Settings",
+      "optimize_workers": "Workers"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -3558,7 +3559,7 @@
         "file": "File"
       },
       "excluded": {
-        "probe_outdated": "Not analysed yet with the current analysis version.",
+        "probe_outdated": "File needs a new analysis: scan the library.",
         "probe_failed": "The analysis of this file failed.",
         "not_video": "This file has no video.",
         "too_recent": "Imported too recently for the profile."
@@ -3686,7 +3687,6 @@
         "map_to": "Worker path",
         "add_mapping": "Add a mapping",
         "mapping_invalid": "Each mapping needs both paths.",
-        "device_jobs": "{{count}} at once",
         "no_public_url": "The public URL is not set: workers without library access are leased nothing. Set it in General settings.",
         "help": "How to run a worker",
         "start_command": "Start it with:",
