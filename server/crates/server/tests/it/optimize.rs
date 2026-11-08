@@ -35,7 +35,6 @@ async fn ctx(pool: &PgPool) -> Ctx {
                 encoders: vec!["libx265".into()],
                 decoders: vec![],
                 max_jobs: 1,
-                vram_mib: None,
                 pause: fliks_engine_core::api::PauseMode::Suspend,
             }],
         },
