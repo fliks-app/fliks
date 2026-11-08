@@ -68,6 +68,19 @@ impl LoginThrottle {
         true
     }
 
+    /// Whether the pair has used up `max` failures in the window, without counting anything.
+    pub fn blocked(&self, ip: Option<IpAddr>, username: &str, max: u32) -> bool {
+        self.fails
+            .lock_clean()
+            .get(&key(ip, username))
+            .is_some_and(|(n, since)| *n >= max && since.elapsed() < WINDOW)
+    }
+
+    /// Counts one failure.
+    pub fn fail(&self, ip: Option<IpAddr>, username: &str) {
+        self.attempt_with(ip, username, u32::MAX);
+    }
+
     /// Gives back one attempt that turned out not to be a failure; unlike `clear` it cannot reset
     /// a counter an attacker fed with failures.
     pub fn refund(&self, ip: Option<IpAddr>, username: &str) {
@@ -114,6 +127,20 @@ mod tests {
             !t.attempt(ip("1.1.1.1"), "bob"),
             "four failures stayed counted"
         );
+    }
+
+    #[test]
+    fn blocked_reads_without_counting_and_fail_counts() {
+        let t = LoginThrottle::default();
+        for _ in 0..100 {
+            assert!(!t.blocked(ip("1.1.1.1"), "bob", 3));
+        }
+        for _ in 0..3 {
+            t.fail(ip("1.1.1.1"), "Bob");
+        }
+        assert!(t.blocked(ip("1.1.1.1"), "bob", 3));
+        assert!(!t.blocked(ip("1.1.1.1"), "alice", 3));
+        assert!(!t.blocked(ip("2.2.2.2"), "bob", 3));
     }
 
     #[test]

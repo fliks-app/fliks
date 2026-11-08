@@ -25,8 +25,9 @@ struct Bound<'a> {
     sid: Option<i32>,
     live: Option<&'a str>,
     mf: Option<u32>,
-    /// The `subsonic` device token that issued a stream credential, which then has no session.
-    dt: Option<i32>,
+    /// The `subsonic` device token that issued a stream credential, which then has no session, and
+    /// its stamp.
+    dt: Option<(i32, &'a str)>,
 }
 
 impl Bound<'_> {
@@ -54,6 +55,8 @@ struct SignClaims<'a> {
     mf: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dt: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ds: Option<&'a str>,
     iat: i64,
     exp: i64,
 }
@@ -71,6 +74,8 @@ pub struct Claims {
     pub mf: Option<u32>,
     /// The `subsonic` device token a session-less stream credential comes from (`device-tokens.md` rule 16).
     pub dt: Option<i32>,
+    /// The stamp of that row when the credential was issued: a renewal of its secret ends the credential.
+    pub ds: Option<String>,
     pub exp: i64,
 }
 
@@ -154,6 +159,7 @@ impl Jwt {
         user_id: i32,
         username: &str,
         device_token: i32,
+        stamp: &str,
         media_file_id: u32,
         ttl_secs: u64,
     ) -> Result<Signed, AppError> {
@@ -166,7 +172,7 @@ impl Jwt {
                 sid: None,
                 live: None,
                 mf: Some(media_file_id),
-                dt: Some(device_token),
+                dt: Some((device_token, stamp)),
             },
         )
     }
@@ -235,7 +241,8 @@ impl Jwt {
             sid: bound.sid,
             live: bound.live,
             mf: bound.mf,
-            dt: bound.dt,
+            dt: bound.dt.map(|(id, _)| id),
+            ds: bound.dt.map(|(_, stamp)| stamp),
             iat,
             exp,
         };

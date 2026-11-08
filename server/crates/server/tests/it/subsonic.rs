@@ -292,20 +292,31 @@ async fn a_secret_sealed_by_another_key_still_verifies_by_hash_only(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
-async fn failures_are_throttled_and_a_success_gives_its_attempt_back(pool: PgPool) {
+async fn only_failures_count_and_per_network_and_user(pool: PgPool) {
     let c = ctx(pool).await;
-    for _ in 0..200 {
-        assert_eq!(c.alice("ping", "").await["status"], "ok");
+    for v in futures_util::future::join_all((0..150).map(|_| c.alice("ping", ""))).await {
+        assert_eq!(v["status"], "ok", "concurrent successes never trip it");
     }
     let mut last = 0;
     for _ in 0..70 {
-        last = code(&c.call("ping", "apiKey=nope", "").await);
+        last = code(&c.call("ping", "u=alice&p=nope", "").await);
     }
-    assert_eq!(last, 40, "throttled");
-    let v = c.alice("ping", "").await;
+    assert_eq!(last, 40);
+    let blocked = c.call("ping", &format!("u=alice&p={}", c.alice), "").await;
     assert_eq!(
-        v["error"]["message"],
+        blocked["error"]["message"],
         "Too many failed attempts, try again later"
+    );
+    let bob = c.call("ping", &format!("u=bob&p={}", c.bob), "").await;
+    assert_eq!(bob["status"], "ok", "another user on the same network");
+    assert_eq!(c.alice("ping", "").await["status"], "ok", "apiKey bucket");
+    for _ in 0..70 {
+        c.call("ping", "apiKey=nope", "").await;
+    }
+    assert_eq!(
+        code(&c.alice("ping", "").await),
+        40,
+        "apiKey failures block apiKey"
     );
 }
 
@@ -899,6 +910,77 @@ async fn playlists_follow_the_roles_of_the_playlist_spec(pool: PgPool) {
         "ok"
     );
     assert_eq!(code(&c.alice("getPlaylist", &format!("id={id}")).await), 70);
+}
+
+#[sqlx::test(migrations = false)]
+async fn replacing_a_playlist_keeps_what_the_caller_cannot_see_and_public_false_keeps_followers(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (20, 'Novel', 'book', 3, 'n');
+        INSERT INTO editions (id, "mediaId", family) VALUES (20, 20, 'text');
+        INSERT INTO items (id, "mediaId", "editionId", title) VALUES (200, 20, 20, 'Novel');
+        "#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let made = c
+        .alice("createPlaylist", "name=Mix&songId=tr-100&songId=tr-103")
+        .await["playlist"]
+        .clone();
+    let id = made["id"].as_str().unwrap().to_owned();
+    sqlx::raw_sql(
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (1, 200, 10);
+           INSERT INTO playlist_shares ("playlistId", "userId", role) VALUES (1, 2, 'editor');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let held = || async {
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT "itemId" FROM playlist_items WHERE "playlistId" = 1 ORDER BY position, id"#,
+        )
+        .fetch_all(&c.pool)
+        .await
+        .unwrap()
+    };
+    // Bob cannot see tr-103 (library 2) nor the book: a replace keeps them and drops tr-100.
+    assert_eq!(
+        c.bob("createPlaylist", &format!("playlistId={id}&songId=tr-102"))
+            .await["status"],
+        "ok"
+    );
+    assert_eq!(held().await, [103, 200, 102]);
+    // Alice sees both tracks: they go, the book stays.
+    assert_eq!(
+        c.alice("createPlaylist", &format!("playlistId={id}&songId=tr-101"))
+            .await["status"],
+        "ok"
+    );
+    assert_eq!(held().await, [200, 101]);
+
+    let visibility = || async {
+        sqlx::query_scalar::<_, String>("SELECT visibility::text FROM playlists WHERE id = 1")
+            .fetch_one(&c.pool)
+            .await
+            .unwrap()
+    };
+    sqlx::query("UPDATE playlists SET visibility = 'followers'")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    c.alice("updatePlaylist", &format!("playlistId={id}&public=false"))
+        .await;
+    assert_eq!(visibility().await, "followers");
+    c.alice("updatePlaylist", &format!("playlistId={id}&public=true"))
+        .await;
+    assert_eq!(visibility().await, "public");
+    c.alice("updatePlaylist", &format!("playlistId={id}&public=false"))
+        .await;
+    assert_eq!(visibility().await, "private");
 }
 
 #[sqlx::test(migrations = false)]

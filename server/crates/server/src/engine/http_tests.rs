@@ -956,10 +956,14 @@ mod resolve {
             .fetch_one(&w.c.pool)
             .await
             .unwrap();
+        let stamp = crate::device_tokens::subsonic_stamp(&w.c.pool, row)
+            .await
+            .unwrap()
+            .unwrap();
         let sign = |user: i32, file: i32| {
             w.c.st
                 .jwt
-                .sign_stream_for_device(user, "x", row, file as u32, 60)
+                .sign_stream_for_device(user, "x", row, &stamp, file as u32, 60)
                 .unwrap()
                 .token
         };
@@ -1000,6 +1004,16 @@ mod resolve {
             ask_device(&w, &basic("x", &token), Some("basic"), "stream").await,
             denied(),
             "the token itself opens nothing"
+        );
+        sqlx::query(r#"UPDATE device_tokens SET "hash" = $1"#)
+            .bind(crate::device_tokens::hash("renewed"))
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            ask(own.clone(), w.file, "stream").await,
+            denied(),
+            "renewed"
         );
         sqlx::query("DELETE FROM device_tokens")
             .execute(&w.c.pool)

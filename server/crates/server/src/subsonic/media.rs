@@ -5,6 +5,7 @@ use super::{
     render::{Format, SubError, respond},
 };
 use crate::{
+    device_tokens,
     images::{
         self,
         paths::{Size, Target, Variant},
@@ -50,10 +51,14 @@ pub async fn redirect(
     let file = track_file(st, c, item)
         .await?
         .ok_or_else(SubError::not_found)?;
+    let stamp = device_tokens::subsonic_stamp(&st.db, c.token)
+        .await?
+        .ok_or_else(|| SubError::new(40, "Wrong username or password"))?;
     let token = st.jwt.sign_stream_for_device(
         c.user(),
         &c.a.user.username,
         c.token,
+        &stamp,
         file as u32,
         STREAM_TTL_SECS,
     )?;

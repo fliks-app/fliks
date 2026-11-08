@@ -10,9 +10,9 @@ use md5::{Digest as _, Md5};
 use std::net::IpAddr;
 use subtle::ConstantTimeEq;
 
-/// No username can hold a NUL, so this bucket of the login limiter is never a user's.
+/// The login limiter bucket of `apiKey` calls: no username holds a NUL. Calls with `u` use that name.
 const THROTTLE_KEY: &str = "\0subsonic";
-/// A sync opens many calls at once and a success gives its attempt back, so only failures add up.
+/// A sync opens many calls at once, so only failures add up.
 const MAX_FAILS: u32 = 60;
 const WRONG: &str = "Wrong username or password";
 
@@ -45,29 +45,36 @@ pub async fn authenticate(
             "Multiple conflicting authentication mechanisms provided",
         ));
     }
-    if !st.login_throttle.attempt_with(ip, THROTTLE_KEY, MAX_FAILS) {
+    let bucket = user.unwrap_or(THROTTLE_KEY);
+    if st.login_throttle.blocked(ip, bucket, MAX_FAILS) {
         return Err(SubError::new(
             40,
             "Too many failed attempts, try again later",
         ));
     }
+    let fail = |e: SubError| {
+        st.login_throttle.fail(ip, bucket);
+        e
+    };
     let (row, owner_name) = match (key, user) {
         (Some(key), _) => (
             by_secret(st, key)
                 .await?
-                .ok_or_else(|| SubError::new(44, "Invalid API key"))?,
+                .ok_or_else(|| fail(SubError::new(44, "Invalid API key")))?,
             None,
         ),
-        (None, Some(u)) => (by_password(st, u, p).await?.ok_or_else(wrong)?, Some(u)),
+        (None, Some(u)) => (
+            by_password(st, u, p).await?.ok_or_else(|| fail(wrong()))?,
+            Some(u),
+        ),
         (None, None) => return Err(SubError::missing("u")),
     };
     let a = Authed::load(&st.db, row.owner)
         .await?
         .filter(|a| owner_name.is_none_or(|u| a.user.username.to_lowercase() == u.to_lowercase()))
-        .ok_or_else(wrong)?;
+        .ok_or_else(|| fail(wrong()))?;
     a.require(Action::Read, Subject::Media)
         .map_err(|_| SubError::new(50, "User is not authorized for the given operation"))?;
-    st.login_throttle.refund(ip, THROTTLE_KEY);
     device_tokens::touch(&st.db, row.id).await?;
     Ok((a, row.id))
 }

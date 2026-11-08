@@ -324,16 +324,21 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
 }
 
 /// A session-less stream token minted for a `subsonic` row (`device-tokens.md` rule 16): valid while the
-/// row lives and its owner is enabled, and only for the file it names.
+/// row lives unrenewed and its owner is enabled, and only for the file it names.
 async fn subsonic_credential(
     st: &AppState,
     claims: &crate::auth_token::Claims,
 ) -> Result<Option<Caller>, AppError> {
-    let (Some(dt), Some(mf), true) = (claims.dt, claims.mf, claims.live.is_none()) else {
+    let (Some(dt), Some(ds), Some(mf), true) = (
+        claims.dt,
+        claims.ds.as_deref(),
+        claims.mf,
+        claims.live.is_none(),
+    ) else {
         return Ok(None);
     };
     if claims.scope != Some(crate::auth_token::TokenScope::Stream)
-        || !device_tokens::subsonic_alive(&st.db, dt, claims.sub).await?
+        || !device_tokens::subsonic_alive(&st.db, dt, claims.sub, ds).await?
     {
         return Ok(None);
     }
