@@ -113,5 +113,6 @@
   "library.type.album": "Alben",
   "music.not_playable": "„%@“ kann hier nicht abgespielt werden",
   "music.nothing_playing": "Es läuft nichts",
-  "music.tab_albums": "Alben"
+  "music.tab_albums": "Alben",
+  "karaoke.unavailable": "Karaoke ist auf diesem Server nicht verfügbar."
 }

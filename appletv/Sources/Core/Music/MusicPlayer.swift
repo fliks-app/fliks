@@ -27,6 +27,11 @@ enum MusicTransport: Equatable {
         }
     }
 
+    /// The karaoke stems carry the sound: the track's own audio stays silent but keeps the clock.
+    var stemsActive = false {
+        didSet { applyGain() }
+    }
+
     /// The Now Playing page is on screen: a second push is not needed.
     @ObservationIgnored var nowPlayingOpen = false
 
@@ -341,15 +346,19 @@ enum MusicTransport: Equatable {
         }
     }
 
+    /// A stream token bound to one media file, reused while it has 30 min of life left.
+    func streamToken(mediaFileId: Int) async -> String? {
+        struct Minted: Decodable { let streamToken: String; let expiresAt: Double }
+        if let known = streamTokens[mediaFileId], known.expiresAt.timeIntervalSinceNow > 30 * 60 { return known.token }
+        guard let minted: Minted = try? await api.post("/api/auth/stream-token", body: ["mediaFileId": mediaFileId]) else { return nil }
+        streamTokens[mediaFileId] = (minted.streamToken, Date(timeIntervalSince1970: minted.expiresAt / 1000))
+        return minted.streamToken
+    }
+
     /// The stream URL, bound to its file by a stream token reused while it has 30 min of life left.
     private func streamUrl(_ r: Resolved) async -> URL? {
-        struct Minted: Decodable { let streamToken: String; let expiresAt: Double }
-        var token = streamTokens[r.mediaFileId].flatMap { $0.expiresAt.timeIntervalSinceNow > 30 * 60 ? $0.token : nil }
-        if token == nil {
-            guard let minted: Minted = try? await api.post("/api/auth/stream-token", body: ["mediaFileId": r.mediaFileId]) else { return nil }
-            streamTokens[r.mediaFileId] = (minted.streamToken, Date(timeIntervalSince1970: minted.expiresAt / 1000))
-            token = minted.streamToken
-        }
+        let token = await streamToken(mediaFileId: r.mediaFileId)
+        guard token != nil else { return nil }
         var comps = URLComponents(string: ServerStore.shared.resolveUrl(r.path))
         comps?.queryItems = [URLQueryItem(name: "token", value: token)]
             + (r.sessionId.map { [URLQueryItem(name: "sid", value: $0)] } ?? [])
@@ -483,7 +492,7 @@ enum MusicTransport: Equatable {
 
     private func applyGain() {
         guard let track = current else { return }
-        player.volume = ReplayGain.volume(replayGain, track, oneAlbum: queue.singleAlbum)
+        player.volume = stemsActive ? 0 : ReplayGain.volume(replayGain, track, oneAlbum: queue.singleAlbum)
     }
 
     private func activateSession() {
