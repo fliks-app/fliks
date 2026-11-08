@@ -1208,6 +1208,28 @@ async fn item_info(c: &Ctx, token: &str, item: i32, query: &str) -> (u16, Value)
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_audio_item_asks_the_engine_for_a_key_change(pool: PgPool) {
+    let mut features = RUNTIME.to_vec();
+    features.push("pitch-shift");
+    let c = ctx_with(pool, true, &features).await;
+    let b = audiobook(&c).await;
+    let (status, body) = item_info(&c, &c.token, b.audio, "?pitchSemitones=40").await;
+    assert_eq!(status, 201, "{body}");
+    let req = &c.fake.seen("POST", "/v1/sessions")[0].body;
+    assert_eq!(req["decide"]["selection"]["pitchSemitones"], 12.0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_key_change_without_the_engine_feature_is_unavailable(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let (status, _) = item_info(&c, &c.token, b.audio, "?pitchSemitones=2").await;
+    assert_eq!(status, 503);
+    let (status, _) = item_info(&c, &c.token, b.audio, "?pitchSemitones=0").await;
+    assert_eq!(status, 201);
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_audio_item_opens_one_session_over_all_its_parts(pool: PgPool) {
     let c = ctx(pool, true).await;
     let b = audiobook(&c).await;

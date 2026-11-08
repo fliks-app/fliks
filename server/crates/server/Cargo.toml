@@ -23,7 +23,7 @@ parity = []
 sha2 = "0.11"
 
 [dependencies]
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 dunce = "1"
 cap-std = "4"
 emojis = "0.9"

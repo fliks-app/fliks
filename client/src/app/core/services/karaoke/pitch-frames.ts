@@ -1,7 +1,5 @@
 import type { PitchFrame } from './karaoke-score';
 
-/** Data channel label of the pitch frames inside a party. */
-export const PITCH_CHANNEL = 'karaoke-pitch';
 export const MAX_FRAMES_PER_BATCH = 50;
 
 /** Wire batch: frame times in host media ms, notes in tenths of a semitone (-1 unvoiced). Never audio. */

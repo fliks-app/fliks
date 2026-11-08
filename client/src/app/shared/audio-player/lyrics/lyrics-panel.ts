@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, input, output, signal, untracked }
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronDown, LucidePause, LucidePlay } from '@lucide/angular';
+import { LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
 import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
@@ -12,6 +12,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import { AuthService } from '../../../core/services/auth.service';
 import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
+import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
@@ -23,7 +24,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideChevronDown, LucidePause, LucidePlay],
+  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
@@ -41,6 +42,8 @@ export class LyricsPanelComponent {
   protected readonly failed = signal(false);
   protected readonly busy = signal(false);
   protected readonly mode = signal<'view' | 'import' | 'tap'>('view');
+  /** The karaoke view (pitch lane, scores) in place of the plain lyrics. */
+  protected readonly stage = signal(false);
 
   private readonly mainId = signal<number | null>(null);
   protected readonly layerId = signal<number | null>(null);

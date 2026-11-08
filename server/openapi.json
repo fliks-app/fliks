@@ -3599,6 +3599,18 @@
         }
       }
     },
+    "/api/parties/{id}/karaoke/ws": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "`GET /api/parties/{id}/karaoke/ws?role=singer|display`: any member sends as `singer`, only the party host\nopens a `display`. The credential is the session (cookie, Bearer or `?token=`) or an events `?ticket=`.",
+        "operationId": "karaoke_ws",
+        "responses": {
+          "101": {}
+        }
+      }
+    },
     "/api/parties/{id}/leave": {
       "post": {
         "tags": [

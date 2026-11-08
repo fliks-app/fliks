@@ -24,6 +24,29 @@ pub fn router() -> Router<AppState> {
         .route("/api/system/activity", get(activity))
 }
 
+/// The user and session of a stream request: a redeemed one-time `?ticket=`, else the session credential.
+pub async fn credential(
+    st: &AppState,
+    ticket: Option<String>,
+    session: Result<SessionAuthed, AppError>,
+) -> Result<(i32, Option<i32>), AppError> {
+    match ticket {
+        Some(ticket) => {
+            let unauthorized = || AppError::bare(StatusCode::UNAUTHORIZED);
+            let (id, sid) = st.sse_tickets.redeem(&ticket).ok_or_else(unauthorized)?;
+            let user = match sid {
+                Some(sid) => load_session_user(&st.db, id, sid).await?,
+                None => load_enabled(&st.db, id).await?,
+            };
+            Ok((user.ok_or_else(unauthorized)?.0.id, sid))
+        }
+        None => {
+            let a = session?.0;
+            Ok((a.user.id, a.session))
+        }
+    }
+}
+
 fn param(q: &[(String, String)], key: &str) -> Option<String> {
     q.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
 }
@@ -47,21 +70,7 @@ pub async fn events(
     headers: HeaderMap,
     Query(q): Query<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
-    let (user_id, sid) = match param(&q, "ticket") {
-        Some(ticket) => {
-            let unauthorized = || AppError::bare(StatusCode::UNAUTHORIZED);
-            let (id, sid) = st.sse_tickets.redeem(&ticket).ok_or_else(unauthorized)?;
-            let user = match sid {
-                Some(sid) => load_session_user(&st.db, id, sid).await?,
-                None => load_enabled(&st.db, id).await?,
-            };
-            (user.ok_or_else(unauthorized)?.0.id, sid)
-        }
-        None => {
-            let a = session?.0;
-            (a.user.id, a.session)
-        }
-    };
+    let (user_id, sid) = credential(&st, param(&q, "ticket"), session).await?;
     let identity = Identity {
         target_id: param(&q, "device"),
         form_factor: param(&q, "ff"),

@@ -140,6 +140,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::reaction,
         crate::party::voice,
         crate::party::signal,
+        crate::party::karaoke_ws,
         crate::party::ice,
         crate::party::reactions,
         crate::party::kick,
