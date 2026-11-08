@@ -29,6 +29,7 @@ pub mod markers;
 pub mod media;
 pub mod media_servers;
 pub mod metadata;
+pub mod music;
 pub mod net;
 pub mod notifications;
 pub mod opds;

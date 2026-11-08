@@ -53,7 +53,7 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
     - `audio`: `duration > 0` and `position >= duration * 0.98`; or the position is at or past the start of the last chapter, when the item's version has at least two chapters and that start is above 0 (a one-chapter book, or a part-per-chapter fallback of one part, never finishes by it).
     - `text`: `progression >= 0.99`. The last position of a Readium publication has a `totalProgression` just under 1, so the last page is read as 0.99; no page count is needed.
     - `image`: `progression >= 0.99`, like `text` (a comic reader reports only a progression).
-    A music rule (scrobble) belongs here when a music kind exists; none is defined yet.
+    - `audio` of a track (`standing.music`, the item of an `album`): `duration > 0` and `position >= min(duration / 2, 240)`. A track keeps no resume position (the state stores 0), is excluded from Continue Watching and its resume info, and each completion adds a history row (its play count).
 23. The last chapter start of an audio item is read from the `chapter` markers of its version's parts shifted by their offsets (rule 5), when the heartbeat names an audio item.
 24. `completed` is recomputed on every written beat, as before; an offline replay keeps its rule (`heartbeat.md` rule 21) with the same family rule. The debounce flushes every beat of the finish zone: the video zone, and a text or image `progression` of 0.99 or more; and a beat whose `progression` or `locator` differs from the last write's (rule 19).
 

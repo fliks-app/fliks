@@ -1,0 +1,7 @@
+@if (albums().length) {
+  <app-horizontal-scroller [title]="'music.recently_played' | translate">
+    @for (m of albums(); track m.id) {
+      <app-media-card [media]="m" [imageUrl]="m.posterUrl" [title]="m.title" [subtitle]="artists(m)" [link]="m.type | mediaLink: m.id" />
+    }
+  </app-horizontal-scroller>
+}

@@ -544,3 +544,143 @@ ORDER BY c.name, c.id, e.position NULLS LAST, e."mediaId""#,
         .collect();
     Ok(json!({"series": series, "standalone": standalone}))
 }
+
+/// The artists (album or track credits) or composers of readable, owned music, with their counts.
+pub async fn music_people(
+    db: &PgPool,
+    role: &str,
+    scope: &[i32],
+    acl: &[i32],
+    tsq: Option<&str>,
+    by_works: bool,
+    paging: Option<(i64, i64)>,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH rel AS (
+  SELECT c."personId" AS pid, m.id AS mid, NULL::int AS iid FROM media_credits c JOIN media m ON m.id = c."mediaId"
+   WHERE $3 = 'artist' AND c.role = 'artist' AND c."editionId" IS NULL AND m.type = 'album'
+     AND m."libraryId" = ANY($1)
+     AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id)
+  UNION ALL
+  SELECT c."personId", i."mediaId", i.id FROM item_credits c JOIN items i ON i.id = c."itemId"
+   JOIN media m ON m.id = i."mediaId" JOIN editions e ON e.id = i."editionId"
+   WHERE c.role = $3 AND m.type = 'album' AND m."libraryId" = ANY($1)
+     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+     AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+  UNION ALL
+  SELECT c."personId", i."mediaId", i.id FROM media_credits c JOIN items i ON i."mediaId" = c."mediaId"
+   JOIN media m ON m.id = i."mediaId" JOIN editions e ON e.id = i."editionId"
+   WHERE $3 = 'artist' AND c.role = 'artist' AND c."editionId" IS NULL AND m.type = 'album'
+     AND m."libraryId" = ANY($1) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+     AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+     AND NOT EXISTS (SELECT 1 FROM item_credits t WHERE t."itemId" = i.id AND t.role = 'artist'))
+SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName", 'avatarUrl', p."avatarUrl",
+  'workCount', count(DISTINCT rel.mid)::int, 'albumCount', count(DISTINCT rel.mid)::int,
+  'trackCount', count(DISTINCT rel.iid)::int)
+FROM rel JOIN persons p ON p.id = rel.pid
+WHERE ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $4))
+GROUP BY p.id
+ORDER BY CASE WHEN $5 THEN -count(DISTINCT rel.mid) ELSE 0 END, COALESCE(p."sortName", p.name), p.id
+LIMIT $6 OFFSET $7"#,
+    )
+    .bind(scope)
+    .bind(acl)
+    .bind(role)
+    .bind(tsq)
+    .bind(by_works)
+    .bind(paging.map(|p| p.0))
+    .bind(paging.map(|p| p.1))
+    .fetch_all(db)
+    .await
+}
+
+/// `GET /api/persons/:id/discography`: the owned albums credited to the artist merged by release-group id
+/// with the provider's discography; the owned ones alone when no provider answers.
+pub async fn discography(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
+    let mut p = find(&st.db, id).await?;
+    let lang = st.metadata.lang.resolve(None).await?;
+    ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, &mut p).await;
+    let acl = accessible_library_ids(&st.db, a).await?;
+    let artist: Value = sqlx::query_scalar(
+        r#"SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName",
+  'disambiguation', p.disambiguation, 'artistType', p."artistType", 'biography', p.biography,
+  'imageUrl', p."avatarUrl", 'avatarUrl', p."avatarUrl",
+  'following', EXISTS (SELECT 1 FROM person_follows f WHERE f."userId" = $2 AND f."personId" = p.id
+                        AND f.role = 'artist'))
+FROM persons p WHERE p.id = $1"#,
+    )
+    .bind(id)
+    .bind(a.user.id)
+    .fetch_one(&st.db)
+    .await?;
+    let owned: Vec<Value> = sqlx::query_scalar(
+        r#"SELECT jsonb_build_object('mediaId', m.id, 'externalId', x.value, 'title', m.title, 'year', m.year,
+  'primaryType', ad."primaryType", 'secondaryTypes', COALESCE(to_jsonb(ad."secondaryTypes"), '[]'::jsonb),
+  'posterUrl', m."posterUrl", 'owned', true, 'monitored', m.monitored,
+  'trackCount', GREATEST(t.n, COALESCE(te."trackCount", 0)), 'ownedTrackCount', t.owned)
+FROM media m JOIN media_credits c ON c."mediaId" = m.id AND c.role = 'artist' AND c."editionId" IS NULL
+LEFT JOIN album_details ad ON ad."mediaId" = m.id
+LEFT JOIN editions te ON te.id = ad."targetEditionId"
+LEFT JOIN media_external_ids x ON x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz'
+CROSS JOIN LATERAL (SELECT count(*) AS n,
+    count(*) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)) AS owned
+  FROM items i JOIN editions e ON e.id = i."editionId"
+  WHERE i."mediaId" = m.id AND (i."editionId" = ad."targetEditionId" OR ad."targetEditionId" IS NULL)
+    AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) t
+WHERE c."personId" = $1 AND m.type = 'album' AND m."libraryId" = ANY($2)
+ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
+    )
+    .bind(id)
+    .bind(&acl)
+    .fetch_all(&st.db)
+    .await?;
+    let mut albums = owned;
+    if let Some(mbid) = &p.musicbrainz {
+        let md = &st.metadata;
+        let mut credits = None;
+        for pr in md.person_providers(MediaKind::Album, Namespace::MUSICBRAINZ) {
+            match md
+                .of(pr)
+                .person_credits(mbid, &lang, Priority::Interactive)
+                .await
+            {
+                Ok(c) => {
+                    credits = Some(c);
+                    break;
+                }
+                Err(e) => tracing::warn!("discography of person {id} from {}: {e}", pr.as_str()),
+            }
+        }
+        let held: HashSet<String> = albums
+            .iter()
+            .filter_map(|v| v["externalId"].as_str().map(str::to_owned))
+            .collect();
+        let aliases: HashSet<String> = sqlx::query_scalar(
+            r#"SELECT a.value FROM media_external_id_aliases a JOIN media m ON m.id = a."mediaId"
+               WHERE a.provider = 'musicbrainz' AND a.kind = 'album' AND m."libraryId" = ANY($1)"#,
+        )
+        .bind(&acl)
+        .fetch_all(&st.db)
+        .await?
+        .into_iter()
+        .collect();
+        for al in fliks_domain::music::provider::albums(&credits.unwrap_or_default().albums).kept {
+            if held.contains(&al.external_id) || aliases.contains(&al.external_id) {
+                continue;
+            }
+            albums.push(json!({
+                "mediaId": null, "externalId": al.external_id, "title": al.title, "year": al.year,
+                "primaryType": al.primary_type, "secondaryTypes": al.secondary_types,
+                "posterUrl": al.poster_url, "owned": false, "monitored": false,
+                "trackCount": 0, "ownedTrackCount": 0,
+            }));
+        }
+        albums.sort_by_key(|v| {
+            (
+                std::cmp::Reverse(v["year"].as_i64()),
+                v["title"].as_str().map(str::to_lowercase),
+            )
+        });
+    }
+    Ok(json!({"artist": artist, "albums": albums}))
+}

@@ -249,6 +249,7 @@ pub async fn resume_info(
              LIMIT 1) f ON true
            WHERE ps."userId" = $1
              AND e."mediaId" = $2
+             AND NOT EXISTS (SELECT 1 FROM media am WHERE am.id = e."mediaId" AND am.type = 'album')
              AND ps.completed = false
              AND ps."positionSeconds" > 0
            ORDER BY ps."lastPlayedAt" DESC

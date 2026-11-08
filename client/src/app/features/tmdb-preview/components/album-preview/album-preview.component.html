@@ -1,0 +1,28 @@
+<app-hero-base
+  [title]="seed()?.title ?? null"
+  [loading]="!seed()"
+  mediaType="album"
+  [posterUrl]="seed()?.posterUrl ?? null"
+  [viewTransitionName]="posterTransitionName()"
+  [chips]="chips"
+>
+  <ng-container ngProjectAs="[heroActions]">
+    @if (canImport()) {
+      <div class="flex flex-wrap items-end gap-2">
+        @if (albumLibraries().length > 1) {
+          <select appTvSelect class="select select-bordered" [attr.aria-label]="'follows.library' | translate" [ngModel]="libraryId()" (ngModelChange)="selectLibrary(+$event)">
+            @for (l of albumLibraries(); track l.id) {
+              <option [ngValue]="l.id">{{ l.name }}</option>
+            }
+          </select>
+        }
+        @if (folders().length > 1) {
+          <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
+        }
+        <button type="button" class="btn btn-primary gap-2" [disabled]="libraryId() === null || adding()" (click)="add()" data-hero-actions>
+          <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
+        </button>
+      </div>
+    }
+  </ng-container>
+</app-hero-base>

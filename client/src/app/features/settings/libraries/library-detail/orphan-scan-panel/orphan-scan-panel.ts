@@ -130,6 +130,7 @@ export class OrphanScanPanelComponent {
     series: 'settings.libraries.scan_group_series',
     book: 'kinds.book',
     comic: 'kinds.comic',
+    album: 'kinds.album',
   };
   readonly scanning = signal(false);
   readonly scanError = signal('');
@@ -305,7 +306,7 @@ export class OrphanScanPanelComponent {
       transfer: this.transfer() ?? undefined,
       scanRoot: this.scanRoot,
       folderId: group.folderId,
-      files: group.mediaType === 'series' ? undefined : group.files.map((f) => ({
+      files: KIND_REGISTRY[group.mediaType].hasSeasons ? undefined : group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
         episodeNumber: f.episodeNumber ?? undefined,

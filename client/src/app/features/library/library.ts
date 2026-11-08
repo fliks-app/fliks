@@ -1,4 +1,7 @@
+import { MusicPeopleComponent } from '../music/music-people.component';
+import { MusicTracksComponent } from '../music/music-tracks.component';
 import type { ComicListInfo } from '../../core/services/api/comics.models';
+import type { AlbumListInfo } from '../../core/services/api/music.models';
 import type { MediaType } from '../../core/enums/media-type.enum';
 import {
   Component,
@@ -69,12 +72,13 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 /** Top-bar tab — `all` is the existing library grid (label = library name),
  *  `suggestions` / `genres` are placeholders for upcoming views. */
-export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections' | 'likes' | 'series' | 'authors';
+export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections' | 'likes' | 'series' | 'authors' | 'artists' | 'tracks' | 'composers';
 export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
 type FilterWatched = '' | 'watched' | 'unwatched' | 'inProgress';
 type BookMedia = Media & { book?: BookListInfo };
 type ComicMedia = Media & { comic?: ComicListInfo };
+type AlbumMedia = Media & { album?: AlbumListInfo };
 /** Book-only list keys: the server answers 400 for them on another type. */
 interface BookQuery { format?: string; language?: string; authorId?: number; narratorId?: number; inProgress?: true }
 const BOOK_FILTER_KEYS = ['format', 'language', 'authorId', 'narratorId'] as const;
@@ -99,6 +103,12 @@ const KIND_STATS: Record<MediaType, (m: Media) => { key: string; labelKey: strin
     labelKey: 'legend.comic_issues',
     done: (m as ComicMedia).comic?.readCount ?? 0,
     total: (m as ComicMedia).comic?.issueCount ?? 0,
+  }),
+  album: (m) => ({
+    key: 'album',
+    labelKey: 'legend.album_tracks',
+    done: (m as AlbumMedia).album?.playCount ? 1 : 0,
+    total: null,
   }),
 };
 
@@ -160,6 +170,8 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkVirtualScrollableWindow,
     CardSkeletonComponent,
     ImportProgressBannerComponent,
+    MusicPeopleComponent,
+    MusicTracksComponent,
   ],
   templateUrl: './library.html',
 })
@@ -217,6 +229,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
   readonly mixedLibrary = computed(() => (this.library()?.mediaTypes.length ?? 0) > 1);
+  readonly hasMusic = computed(() => !!this.library()?.mediaTypes.includes('album'));
   readonly hasBooks = computed(() => !!this.library()?.mediaTypes.includes('book'));
   /** Book filters and sorts need `type=book`, so only a library of books alone gets them. */
   readonly bookOnly = computed(() => {
@@ -232,6 +245,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
       tab('all', bookOnly ? 'books_library.tab_books' : null),
       ...(bookOnly ? [] : [tab('suggestions', 'library.view_suggestions')]),
       ...(books ? [tab('series', 'books_library.tab_series'), tab('authors', 'books_library.tab_authors')] : []),
+      ...(this.hasMusic()
+        ? [tab('artists', 'music.tab_artists'), tab('tracks', 'music.tab_tracks'), tab('composers', 'music.tab_composers')]
+        : []),
       tab('genres', 'library.view_genres'),
       ...(bookOnly ? [] : [tab('collections', 'library.view_collections')]),
       tab('likes', 'library.view_likes'),

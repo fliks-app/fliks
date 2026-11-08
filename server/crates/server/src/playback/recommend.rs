@@ -17,7 +17,7 @@ async fn window(
            FROM playback_states ps
            JOIN items i ON i.id = ps."itemId"
            JOIN media m ON m.id = i."mediaId"
-           WHERE ps."userId" = $1 AND ps.completed = true
+           WHERE ps."userId" = $1 AND ps.completed = true AND m.type <> 'album'
              AND ($2::int[] IS NULL OR m."libraryId" = ANY($2))
            ORDER BY ps."lastPlayedAt" DESC
            LIMIT 15"#,
@@ -85,7 +85,7 @@ pub async fn recommendations(
                   m."fanartUrl" AS fanart_url, m."additionalFanartUrls" AS additional_fanart_urls,
                   m.genres AS "genres: Json<Vec<String>>"
            FROM media m
-           WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb
+           WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'
              AND m.id != ALL($1) AND m."libraryId" = ANY($2)"#,
         &excluded,
         libs

@@ -18,6 +18,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
+import { MusicApiService } from '../../core/services/api/music-api.service';
+import type { MusicPersonRow } from '../../core/services/api/music.models';
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import type { CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
@@ -50,6 +52,9 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 import { KIND_REGISTRY, kindOfListFilter, mediaDetailLink } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
+/** The content types searched as shelves of their own (library, people and providers), not through the video flow. */
+const isShelf = (ct: 'all' | MediaType) => ct === 'book' || ct === 'album';
+
 @Component({
   selector: 'app-search',
   imports: [TranslatePluralPipe, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
@@ -60,6 +65,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly booksApi = inject(BooksApiService);
+  private readonly music = inject(MusicApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   /** Opted out of the social layer → the people tab is hidden. */
@@ -142,7 +148,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private async applyFiltersNow(): Promise<void> {
     if (this.state.tab() !== 'videos') return;
     const ct = this.state.contentType();
-    if (ct === 'book') return;
+    if (isShelf(ct)) return;
     if (this.state.hasQuery()) {
       const q = this.state.query().trim();
       if (this.filterSig(q, ct) !== this.lastLocalSig) await this.runLocalSearch(q, ct);
@@ -164,6 +170,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly bookAuthors = signal<PersonListItem[]>([]);
   readonly bookSeries = signal<CollectionSummary[]>([]);
   readonly bookExternal = signal<SearchHit[]>([]);
+  readonly albumArtists = signal<MusicPersonRow[]>([]);
   readonly bookLoading = signal(false);
   /** Books to add on the All tab: owned ones already show in the library section. */
   readonly allBookResults = computed(() =>
@@ -335,7 +342,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ct: 'all' | MediaType,
     external: boolean,
   ): Promise<void> {
-    if (ct === 'book') return;
+    if (isShelf(ct)) return;
     this.state.discoveryLoading.set(true);
     try {
 
@@ -540,7 +547,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Load the discover genre list for the active content type when missing, so
    *  the filter panel's genre chips render during a text search. Fails soft. */
   private async ensureDiscoverGenres(): Promise<void> {
-    if (this.state.tab() !== 'videos' || this.state.contentType() === 'book') return;
+    if (this.state.tab() !== 'videos' || isShelf(this.state.contentType())) return;
     const type = kindOfListFilter(this.state.contentType());
     if (type === this.lastGenreType && this.state.discoverGenres().length) return;
     this.lastGenreType = type;
@@ -611,12 +618,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const ct = this.state.contentType();
     if (ct === 'book') return this.runBookSearch(q);
+    if (ct === 'album') return this.runAlbumSearch(q);
     await this.runLocalSearch(q, ct);
     if (this.state.externalEnabled()) await this.runExternalSearch(q, ct);
   }
 
   private clearBookResults() {
     this.bookAuthors.set([]);
+    this.albumArtists.set([]);
     this.bookSeries.set([]);
     this.bookExternal.set([]);
     this.bookLoading.set(false);
@@ -638,6 +647,25 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.bookSeries.set(series);
     this.bookExternal.set(rows);
     this.bookLoading.set(false);
+  }
+
+  /** Library albums and artists, plus the album providers when external search is on; each source fails soft. */
+  private async runAlbumSearch(q: string) {
+    const fresh = () => this.state.query().trim() === q && this.state.contentType() === 'album';
+    this.bookLoading.set(true);
+    const [artists, rows] = await Promise.all([
+      this.music.people('artist', { q, limit: 12 }).catch(() => []),
+      this.state.externalEnabled() ? this.metadata.search('album', q).catch(() => []) : Promise.resolve([]),
+      this.runLocalSearch(q, 'album'),
+    ]);
+    if (!fresh()) return;
+    this.albumArtists.set(artists);
+    this.bookExternal.set(rows);
+    this.bookLoading.set(false);
+  }
+
+  albumLink(row: SearchHit): string[] {
+    return row.existingMediaId ? mediaDetailLink('album', row.existingMediaId) : ['/add/album', row.provider, row.externalId];
   }
 
   bookLink(row: SearchHit): string[] {

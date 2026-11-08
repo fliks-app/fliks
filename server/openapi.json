@@ -674,6 +674,17 @@
         }
       }
     },
+    "/api/composers/{id}/works": {
+      "get": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "composer_works",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/counts": {
       "get": {
         "tags": [
@@ -1091,6 +1102,26 @@
         "operationId": "item_playback_info",
         "responses": {
           "201": {}
+        }
+      }
+    },
+    "/api/items/{itemId}/rating": {
+      "put": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "rate",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "unrate",
+        "responses": {
+          "204": {}
         }
       }
     },
@@ -3645,6 +3676,17 @@
         }
       }
     },
+    "/api/persons/{id}/discography": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "discography",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/persons/{id}/follow": {
       "get": {
         "tags": [
@@ -3821,6 +3863,17 @@
           "playback"
         ],
         "operationId": "watched_episodes",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/playback/recently-played": {
+      "get": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "recently_played",
         "responses": {
           "200": {}
         }
@@ -5594,6 +5647,17 @@
         }
       }
     },
+    "/api/tracks": {
+      "get": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "tracks",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/users": {
       "get": {
         "tags": [
@@ -5730,6 +5794,17 @@
         "responses": {
           "200": {},
           "404": {}
+        }
+      }
+    },
+    "/api/works/{id}/recordings": {
+      "get": {
+        "tags": [
+          "crate::music"
+        ],
+        "operationId": "recordings",
+        "responses": {
+          "200": {}
         }
       }
     },

@@ -69,6 +69,15 @@ export const KIND_REGISTRY: Record<MediaType, KindDescriptor> = {
     families: ['image'],
     levels: { item: { releasesTitleKey: 'media_detail.issue_releases_title' } },
   },
+  album: {
+    segment: 'albums',
+    providerSegment: 'album',
+    requestLabelKey: 'kinds.album',
+    libraryLabelKey: 'settings.libraries.media_type_album',
+    hasSeasons: false,
+    families: ['audio'],
+    levels: { item: { releasesTitleKey: 'media_detail.track_releases_title' } },
+  },
 };
 
 export const MEDIA_KINDS = Object.keys(KIND_REGISTRY) as MediaType[];

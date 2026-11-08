@@ -1,5 +1,5 @@
 use super::{
-    aggregates, books, calendar as cal, comics, hydrate, list,
+    aggregates, books, calendar as cal, comics, hydrate, list, music,
     params::{Calendar, Recent, Search, bare},
     related, streams, tracking,
 };
@@ -184,6 +184,8 @@ pub async fn get_media(
         media["book"] = book;
     } else if media["type"] == MediaKind::Comic.as_str() {
         media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
+    } else if media["type"] == MediaKind::Album.as_str() {
+        media["album"] = music::detail(&st.db, id, a.user.id, &acl).await?;
     }
     media["providers"] = attribution::providers(&st.db, id).await?.into();
     media["fieldSources"] = attribution::field_sources(&st.db, id).await?;

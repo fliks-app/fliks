@@ -45,6 +45,8 @@ export interface FollowBody {
   libraryId: number;
   wants?: WantSpec[];
   newReleases?: boolean;
+  /** The follow's role; the server defaults to the author of a book. */
+  role?: 'author' | 'artist';
 }
 
 // GET /api/wanted
@@ -82,16 +84,16 @@ export class WantsApiService {
     return firstValueFrom(this.http.get<WantedPage>('/api/wanted', { params }));
   }
 
-  personFollow(id: number) {
-    return firstValueFrom(this.http.get<PersonFollowState>(`/api/persons/${id}/follow`));
+  personFollow(id: number, role?: 'author' | 'artist') {
+    return firstValueFrom(this.http.get<PersonFollowState>(`/api/persons/${id}/follow`, { params: role ? { role } : {} }));
   }
 
   followPerson(id: number, body: FollowBody) {
     return firstValueFrom(this.http.put<PersonFollowState>(`/api/persons/${id}/follow`, body));
   }
 
-  unfollowPerson(id: number) {
-    return firstValueFrom(this.http.delete<void>(`/api/persons/${id}/follow`));
+  unfollowPerson(id: number, role?: 'author' | 'artist') {
+    return firstValueFrom(this.http.delete<void>(`/api/persons/${id}/follow`, { params: role ? { role } : {} }));
   }
 
   async seriesWatch(id: number) {
