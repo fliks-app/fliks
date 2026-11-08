@@ -2199,6 +2199,18 @@
         }
       }
     },
+    "/api/media/{id}/music/candidates": {
+      "get": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`GET /api/media/:id/music/candidates`: the releases the files of an album may be (`music.md` rule 33).",
+        "operationId": "album_candidates",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media/{id}/profiles": {
       "patch": {
         "tags": [
