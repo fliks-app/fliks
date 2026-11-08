@@ -86,7 +86,7 @@ function setup(
     },
     relinkOrphans: (body: RelinkOrphansBody) => {
       linked.push(body);
-      return Promise.resolve({ mediaId: 1, created: true, linked: body.files.length, errors: [] });
+      return Promise.resolve({ mediaId: 1, created: true, linked: body.files?.length ?? 1, errors: [] });
     },
   };
   const metadata = {
@@ -243,6 +243,23 @@ describe('OrphanScanPanelComponent.autoImportAll', () => {
     ]);
     expect(panel.groups().every((g) => g.done)).toBe(true);
     expect(queued).toBe(true);
+  });
+});
+
+describe('OrphanScanPanelComponent: series sent by folder', () => {
+  it('sends a series group without its files', async () => {
+    const { panel, relinked } = setup(['Show'], {}, [], 'series');
+    await panel.scanPath('/medias', ['series'], 'tmdb');
+    await panel.autoImportAll();
+    expect(relinked[0]).toMatchObject({ folderName: 'Show', type: 'series', scanRoot: '/medias' });
+    expect(relinked[0].files).toBeUndefined();
+  });
+
+  it('sends a movie group with its files', async () => {
+    const { panel, relinked } = setup(['Film']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    await panel.autoImportAll();
+    expect(relinked[0].files).toEqual([{ filePath: '/medias/Film/a.mkv' }]);
   });
 });
 
@@ -543,7 +560,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
       },
       relinkOrphans: (body: RelinkOrphansBody) => {
         relinked.push(body);
-        return Promise.resolve({ mediaId: 1, created: true, linked: body.files.length, errors: [] });
+        return Promise.resolve({ mediaId: 1, created: true, linked: body.files?.length ?? 1, errors: [] });
       },
     };
     const metadata = {

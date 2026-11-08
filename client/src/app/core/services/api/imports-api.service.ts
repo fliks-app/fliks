@@ -30,6 +30,8 @@ export interface OrphanGroup {
   guessAuthors?: string[];
   fileIds: OrphanFileId[];
   suggestedProvider: string;
+  /** The library folder the group was found in; absent for a preview. */
+  folderId?: number;
   files: OrphanFileEntry[];
 }
 
@@ -73,7 +75,9 @@ export interface RelinkOrphansBody {
   transfer?: TransferMethod;
   /** The folder this group was scanned from; caps a series-folder lookup on the server. */
   scanRoot?: string;
-  files: RelinkFile[];
+  folderId?: number;
+  /** Absent for a series: the server walks `folderName` again. */
+  files?: RelinkFile[];
 }
 
 export interface RelinkResult {
