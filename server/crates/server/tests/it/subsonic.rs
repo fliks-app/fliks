@@ -215,10 +215,7 @@ async fn every_credential_form_authenticates_and_a_wrong_one_does_not(pool: PgPo
         ),
         40
     );
-    assert_eq!(
-        code(&c.call("ping", &format!("u=alice&p=enc:zz"), "").await),
-        40
-    );
+    assert_eq!(code(&c.call("ping", "u=alice&p=enc:zz", "").await), 40);
     assert_eq!(
         code(&c.call("ping", &format!("apiKey={}", c.gone), "").await),
         40,
@@ -816,11 +813,10 @@ async fn playlists_follow_the_roles_of_the_playlist_spec(pool: PgPool) {
         c.bob("getPlaylist", &format!("id={id}")).await["playlist"]["songCount"],
         2
     );
-    assert_eq!(
+    assert!(
         c.bob("getPlaylists", "").await["playlists"]["playlist"]
             .as_array()
-            .is_none_or(Vec::is_empty),
-        true
+            .is_none_or(Vec::is_empty)
     );
     assert_eq!(
         code(

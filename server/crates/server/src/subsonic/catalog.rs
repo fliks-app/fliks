@@ -358,6 +358,17 @@ GROUP BY lower(g.name) ORDER BY lower(min(g.name))"#
 
 // Credits
 
+/// `itemId`, `personId`, name, credited name, role, join phrase and instrument.
+type ItemCreditRow = (
+    i32,
+    i32,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+);
+
 pub struct ItemCredit {
     person: i32,
     name: String,
@@ -378,7 +389,7 @@ pub struct Credits {
 
 impl Credits {
     pub async fn load(db: &PgPool, media: &[i32], items: &[i32]) -> Result<Self, sqlx::Error> {
-        let rows: Vec<(i32, i32, String, Option<String>, String, Option<String>, Option<String>)> = sqlx::query_as(
+        let rows: Vec<ItemCreditRow> = sqlx::query_as(
             r#"SELECT ic."itemId", ic."personId", p.name, ic."creditedName", ic.role, ic."joinPhrase", ic.instrument
                FROM item_credits ic JOIN persons p ON p.id = ic."personId" WHERE ic."itemId" = ANY($1)
                ORDER BY ic."itemId", ic.role, ic.position"#,
@@ -806,31 +817,6 @@ pub async fn album_values(db: &PgPool, rows: &[AlbumRow]) -> Result<Vec<Value>, 
         .collect())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn query_words_become_escaped_contains_patterns() {
-        assert_eq!(search_patterns("  "), None);
-        assert_eq!(search_patterns("\"\""), None);
-        assert_eq!(
-            search_patterns("100% _x* a\\b").unwrap(),
-            vec!["%100\\%%", "%\\_x%", "%a\\\\b%"]
-        );
-    }
-
-    #[test]
-    fn dates_and_types_are_shaped_for_the_wire() {
-        assert_eq!(
-            partial_date("1999-05-02"),
-            json!({"year": 1999, "month": 5, "day": 2})
-        );
-        assert_eq!(partial_date("1999"), json!({"year": 1999}));
-        assert_eq!(type_label("live"), "Live");
-    }
-}
-
 /// `(item, media)` of the tracks among `items` that the caller reads and that have a file.
 pub async fn visible_tracks(
     db: &PgPool,
@@ -862,4 +848,29 @@ pub async fn visible_albums(
         .bind(libs)
         .fetch_all(db)
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_words_become_escaped_contains_patterns() {
+        assert_eq!(search_patterns("  "), None);
+        assert_eq!(search_patterns("\"\""), None);
+        assert_eq!(
+            search_patterns("100% _x* a\\b").unwrap(),
+            vec!["%100\\%%", "%\\_x%", "%a\\\\b%"]
+        );
+    }
+
+    #[test]
+    fn dates_and_types_are_shaped_for_the_wire() {
+        assert_eq!(
+            partial_date("1999-05-02"),
+            json!({"year": 1999, "month": 5, "day": 2})
+        );
+        assert_eq!(partial_date("1999"), json!({"year": 1999}));
+        assert_eq!(type_label("live"), "Live");
+    }
 }

@@ -115,7 +115,7 @@ pub async fn indexes(st: &AppState, c: &Caller, p: &Params, folders: bool) -> An
     )
 }
 
-fn parse<'a>(p: &'a Params, name: &str) -> Result<Id, SubError> {
+fn parse(p: &Params, name: &str) -> Result<Id, SubError> {
     Id::parse(p.required(name)?).ok_or_else(SubError::not_found)
 }
 
