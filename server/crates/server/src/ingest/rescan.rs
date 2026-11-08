@@ -115,7 +115,10 @@ fn walk(
     for e in entries.flatten() {
         let path = e.path();
         if e.file_type().is_ok_and(|t| t.is_dir()) {
-            walk(&path, root, depth + 1, linked, in_bonus, kind, out);
+            let disc = fliks_domain::music::group::is_disc_folder(&e.file_name().to_string_lossy());
+            if kind != MediaKind::Album || disc {
+                walk(&path, root, depth + 1, linked, in_bonus, kind, out);
+            }
             continue;
         }
         let n = e.file_name().to_string_lossy().into_owned();

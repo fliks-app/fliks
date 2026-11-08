@@ -196,22 +196,26 @@ impl PluginRt {
         }
     }
 
-    /// One export of the `metadata-provider` interface on the provider lane (rules 49-51).
+    /// One export of the `metadata-provider` interface on the provider lane (rules 49-51), with the gate of
+    /// its latest outbound request (`provider-plugins.md` rule 54).
     pub async fn provider_call<R: Send + 'static>(
         self: &Arc<Self>,
         budget: Budget,
         wait: Duration,
         p: Priority,
         f: impl for<'a> FnOnce(&'a mut Inst) -> BoxFuture<'a, wasmtime::Result<R>> + Send + 'static,
-    ) -> Result<R, CallError> {
+    ) -> Result<(R, Option<Arc<crate::plugins::outbound::Gate>>), CallError> {
         let lane = self
             .provider
             .as_ref()
             .ok_or_else(|| CallError::Unavailable("not a provider".into()))?;
         self.wait_ready(wait).await?;
         let run = call_fn(move |i| {
-            i.store.data_mut().set_priority(p);
-            f(i)
+            i.store.data_mut().begin_provider_export(p);
+            Box::pin(async move {
+                let r = f(i).await?;
+                Ok((r, i.store.data().last_gate()))
+            })
         });
         lane.call(self, budget, run).await
     }

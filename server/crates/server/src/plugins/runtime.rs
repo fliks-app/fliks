@@ -303,6 +303,17 @@ impl Ctx {
         self.out.priority = p;
     }
 
+    /// The gate of the latest outbound request of the export in progress.
+    pub fn last_gate(&self) -> Option<Arc<super::outbound::Gate>> {
+        self.out.last.clone()
+    }
+
+    /// Starts a provider export: no request of an earlier one counts.
+    pub fn begin_provider_export(&mut self, p: Priority) {
+        self.out.priority = p;
+        self.out.last = None;
+    }
+
     /// When the call in this Store is interrupted; the outbound hook never waits past it.
     pub fn set_deadline(&mut self, at: Instant) {
         self.deadline = at;
@@ -664,6 +675,7 @@ impl PluginRt {
                 net: env.cfg.net.clone(),
                 permits: self.sh.outbound.clone(),
                 gate: self.sh.gate.clone(),
+                last: None,
                 priority: Priority::Background,
                 deadline: Instant::now() + env.cfg.deadlines.hello,
                 over: env.cfg.upstream_override.clone(),

@@ -1,5 +1,6 @@
 //! A merged MusicBrainz id is kept as an alias of the row that holds the surviving id
 //! (`docs/spec/music.md` rule 15): lookups read the live id first, then the alias.
+use crate::metadata::books::absorb::same_library;
 use crate::{media::write::orphans::Refs, state::AppState};
 use sqlx::{PgConnection, PgPool};
 
@@ -44,6 +45,8 @@ pub enum Moved {
     Folded(i32),
     /// The old id is no longer on this row.
     Gone,
+    /// An album of another library holds the new id: nothing moved.
+    Elsewhere,
 }
 
 /// The album `media` held `old` and the provider now answers `new`: `new` becomes its live id and `old` its
@@ -74,6 +77,10 @@ pub async fn redirect_album(
         return Ok((Moved::Gone, None));
     }
     if let Some(other) = held.filter(|o| *o != media) {
+        if !same_library(&mut tx, media, other).await? {
+            tracing::warn!("album #{media}: an album of another library holds the merged id");
+            return Ok((Moved::Elsewhere, None));
+        }
         let refs = fold(&mut tx, media, other, Some(old)).await?;
         tx.commit().await?;
         return Ok((Moved::Folded(other), Some(refs)));
@@ -139,13 +146,17 @@ async fn fold(c: &mut PgConnection, from: i32, into: i32, old: Option<&str>) -> 
     crate::metadata::books::absorb::absorb(c, from, into).await
 }
 
-/// `from` (an album that holds no id) is folded into `into`, which holds the id its files were matched to.
-pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<()> {
+/// `from` (an album that holds no id) is folded into `into`, which holds the id its files were matched to;
+/// `false` and nothing moved when `into` is in another library.
+pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<bool> {
     let mut tx = st.db.begin().await?;
+    if !same_library(&mut tx, from, into).await? {
+        return Ok(false);
+    }
     let refs = fold(&mut tx, from, into, None).await?;
     tx.commit().await?;
     crate::media::write::orphans::release(st, refs);
-    Ok(())
+    Ok(true)
 }
 
 /// The person `person` held `old` and the provider now answers `new`; a person that already holds `new`

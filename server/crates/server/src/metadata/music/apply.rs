@@ -139,7 +139,7 @@ pub async fn write_album(
                 return Ok(Written::Folded(into));
             }
             (aliases::Moved::Renamed, _) => asked = f.album.external_id.clone(),
-            (aliases::Moved::Gone, _) => {}
+            (aliases::Moved::Gone | aliases::Moved::Elsewhere, _) => {}
         }
     }
     let stored = poster(st, media, ns, f, &asked, lang, prio).await?;
@@ -444,7 +444,8 @@ pub async fn write_edition(
              "catalogNumber" = COALESCE($6, "catalogNumber"), publisher = COALESCE($7, publisher),
              "trackCount" = COALESCE($8, $9), "discCount" = COALESCE($10, "discCount"),
              "albumGain" = COALESCE($11, "albumGain"), "albumPeak" = COALESCE($12, "albumPeak"),
-             language = COALESCE(language, $13), title = $14, "orphanedAt" = NULL
+             language = COALESCE(language, $13),
+             title = NULLIF($14, (SELECT title FROM media WHERE id = $15)), "orphanedAt" = NULL
            WHERE id = $1"#,
     )
     .bind(edition)
@@ -461,6 +462,7 @@ pub async fn write_edition(
     .bind(ed.album_peak.map(|g| g as f32))
     .bind(&ed.language)
     .bind(&r.title)
+    .bind(media)
     .execute(&mut *tx)
     .await?;
     if let Some(d) = r.release_date {
@@ -609,20 +611,36 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
         }
         Err(e) => return Err(e),
     };
+    // The editions `write_album` leaves unflagged: those the group lists, or all when it lists none.
+    let listed: Vec<&str> = fetched
+        .releases
+        .iter()
+        .map(|r| r.external_id.as_str())
+        .collect();
+    let editions: Vec<(i32, String)> = sqlx::query_as(
+        r#"SELECT e.id, x.value FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
+           WHERE e."mediaId" = $1 AND x.provider = 'musicbrainz'
+             AND (x.value = ANY($2) OR (cardinality($2) = 0 AND e."orphanedAt" IS NULL)) ORDER BY e.id"#,
+    )
+    .bind(media)
+    .bind(&listed)
+    .fetch_all(&st.db)
+    .await?;
+    let mut read = Vec::with_capacity(editions.len());
+    for (edition, release) in editions {
+        match super::fetch_edition(st, ns, &release, &lang, prio).await {
+            Ok(ed) => read.push((edition, Some(ed))),
+            Err(e) if e.status() == StatusCode::NOT_FOUND => read.push((edition, None)),
+            Err(e) => return Err(e),
+        }
+    }
     if write_album(st, media, ns, &fetched, &id, &lang, prio).await? != Written::Done {
         return Ok(true);
     }
-    let editions: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT e.id, x.value FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
-           WHERE e."mediaId" = $1 AND x.provider = 'musicbrainz' AND e."orphanedAt" IS NULL ORDER BY e.id"#,
-    )
-    .bind(media)
-    .fetch_all(&st.db)
-    .await?;
-    for (edition, release) in editions {
-        match super::fetch_edition(st, ns, &release, &lang, prio).await {
-            Ok(ed) => write_edition(st, media, edition, &ed, false).await?,
-            Err(e) if e.status() == StatusCode::NOT_FOUND => {
+    for (edition, ed) in read {
+        match ed {
+            Some(ed) => write_edition(st, media, edition, &ed, false).await?,
+            None => {
                 sqlx::query(
                     r#"UPDATE editions SET "orphanedAt" = COALESCE("orphanedAt", now()) WHERE id = $1"#,
                 )
@@ -630,7 +648,6 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
                 .execute(&st.db)
                 .await?;
             }
-            Err(e) => return Err(e),
         }
     }
     Ok(true)

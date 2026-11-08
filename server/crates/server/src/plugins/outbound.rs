@@ -34,6 +34,9 @@ pub struct Outbound {
     /// Set for a plugin with a `provider` block (`provider-plugins.md` rule 54): one limiter and breaker per
     /// upstream host.
     pub gate: Option<Arc<Gates>>,
+    /// The gate of the latest request of the export in progress: what its `rate-limited`, spent quota and
+    /// checked records are about.
+    pub last: Option<Arc<Gate>>,
     /// The export in progress in this Store (rule 58).
     pub priority: Priority,
     /// When the export in progress is interrupted.
@@ -61,6 +64,7 @@ impl WasiHttpHooks for Outbound {
         let left = self.deadline.saturating_duration_since(Instant::now());
         let internal = self.internal | self.over.rewrite(request.uri_mut());
         let gate = gate.map(|g| g.for_host(request.uri().host().unwrap_or_default()));
+        self.last.clone_from(&gate);
         Box::new(async move {
             // The call's deadline aborts a guest still queued here, like any other host wait.
             let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
@@ -464,9 +468,10 @@ pub struct Gates {
     timeout: Duration,
     max_pause_ms: u64,
     hosts: Mutex<HashMap<String, Arc<Gate>>>,
-    /// The host of the latest request: what a guest's `rate-limited`, a spent quota or a checked record is about.
-    last: Mutex<Option<String>>,
 }
+
+/// Hosts with a gate of their own; the others share the one keyed by the empty string.
+const MAX_HOSTS: usize = 16;
 
 impl Gates {
     /// From a validated manifest `provider` block.
@@ -478,7 +483,6 @@ impl Gates {
             timeout: proto.timeout,
             max_pause_ms: proto.max_pause_ms,
             hosts: Mutex::default(),
-            last: Mutex::default(),
         })
     }
 
@@ -490,27 +494,26 @@ impl Gates {
             timeout: gate.timeout,
             max_pause_ms: gate.max_pause_ms,
             hosts: Mutex::new(HashMap::from([(host.to_owned(), Arc::new(gate))])),
-            last: Mutex::default(),
         }
     }
 
-    /// The gate of `host`, made on its first request.
+    /// The gate of `host` (lower-case, no trailing dot), made on its first request.
     pub fn for_host(&self, host: &str) -> Arc<Gate> {
-        *self.last.lock_clean() = Some(host.to_owned());
-        self.hosts
-            .lock_clean()
-            .entry(host.to_owned())
+        let host = host.trim_end_matches('.').to_ascii_lowercase();
+        let mut hosts = self.hosts.lock_clean();
+        let key = if hosts.contains_key(&host) || hosts.len() < MAX_HOSTS {
+            host
+        } else {
+            String::new()
+        };
+        hosts
+            .entry(key)
             .or_insert_with(|| {
                 let mut g = Gate::new(&self.id, *self.limits.lock_clean(), self.timeout);
                 g.max_pause_ms = self.max_pause_ms;
                 Arc::new(g)
             })
             .clone()
-    }
-
-    fn current(&self) -> Option<Arc<Gate>> {
-        let host = self.last.lock_clean().clone()?;
-        self.hosts.lock_clean().get(&host).cloned()
     }
 
     pub fn limits(&self) -> Limits {
@@ -528,31 +531,10 @@ impl Gates {
         }
     }
 
-    /// `provider-quota-spent`: no request to the host the plugin last spoke to until midnight UTC.
-    pub fn quota_spent(&self) {
-        if let Some(g) = self.current() {
-            g.quota_spent();
-        }
-    }
-
-    /// `rate-limited(retry)`: the host the plugin last spoke to is paused.
-    pub fn pause_secs(&self, secs: u32) {
-        if let Some(g) = self.current() {
-            g.pause_secs(secs);
-        }
-    }
-
     /// The plugin's settings changed: no host stays paused.
     pub fn clear_pause(&self) {
         for g in self.hosts.lock_clean().values() {
             g.clear_pause();
-        }
-    }
-
-    /// A record of the plugin's answer parsed (`true`) or not, counted by the host it came from.
-    pub fn record_checked(&self, valid: bool) {
-        if let Some(g) = self.current() {
-            g.record_checked(valid);
         }
     }
 }
@@ -1285,9 +1267,8 @@ mod tests {
         let gates = Gates::from_block("p", &block).unwrap();
         let (a, b) = (gates.for_host("a.example"), gates.for_host("b.example"));
         assert!(!Arc::ptr_eq(&a, &b) && Arc::ptr_eq(&a, &gates.for_host("a.example")));
-        // The host spoken to last is the one a plugin's `rate-limited` and spent quota are about.
-        gates.for_host("a.example");
-        gates.pause_secs(60);
+        assert!(Arc::ptr_eq(&a, &gates.for_host("A.Example.")));
+        a.pause_secs(60);
         assert!(a.limiter.lock_clean().take(0, 0, Interactive).is_err());
         assert!(b.limiter.lock_clean().take(0, 0, Interactive).is_ok());
         for _ in 0..BREAKER_FAILURES {
@@ -1300,6 +1281,36 @@ mod tests {
         assert_eq!(gates.for_host("c.example").limits().rate_per_sec, 5.0);
         gates.clear_pause();
         assert!(a.limiter.lock_clean().take(2_000, 0, Interactive).is_ok());
+    }
+
+    #[test]
+    fn hosts_past_the_cap_share_one_gate() {
+        let block = serde_json::json!({"limits": {"ratePerSec": 1.0, "burst": 1}});
+        let gates = Gates::from_block("p", &block).unwrap();
+        for i in 0..MAX_HOSTS {
+            gates.for_host(&format!("h{i}.example"));
+        }
+        let (x, y) = (gates.for_host("x.example"), gates.for_host("y.example"));
+        assert!(Arc::ptr_eq(&x, &y));
+        assert!(!Arc::ptr_eq(&x, &gates.for_host("h0.example")));
+        assert_eq!(gates.hosts.lock_clean().len(), MAX_HOSTS + 1);
+    }
+
+    #[tokio::test]
+    async fn each_export_remembers_the_gate_of_its_own_latest_request() {
+        let block = serde_json::json!({"limits": {"ratePerSec": 100.0, "burst": 100}});
+        let gates = Arc::new(Gates::from_block("p", &block).unwrap());
+        let (mut one, mut two) = (hook(Some(gates.clone())), hook(Some(gates.clone())));
+        let (port, _) = serve(&[]).await;
+        post(&mut one, port, 1).await;
+        let other = gates.for_host("other.example");
+        assert!(!Arc::ptr_eq(one.last.as_ref().unwrap(), &other));
+        assert!(two.last.is_none());
+        post(&mut two, port, 1).await;
+        assert!(Arc::ptr_eq(
+            one.last.as_ref().unwrap(),
+            two.last.as_ref().unwrap()
+        ));
     }
 
     #[test]
@@ -1407,6 +1418,7 @@ mod tests {
             net: Arc::new(crate::net::guard::SystemNet::new()),
             permits: Arc::new(Semaphore::new(4)),
             gate,
+            last: None,
             priority: Background,
             deadline: Instant::now() + Duration::from_secs(600),
             over: Arc::new(Override::default()),

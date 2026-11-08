@@ -463,13 +463,17 @@ impl host::Host for Ctx {
     }
     async fn provider_quota_spent(&mut self) -> Result<(), HostError> {
         let gate = self.provider_gate("provider.quotaSpent");
+        let host = self.last_gate();
         call!(
             self,
             "provider.quotaSpent",
             scopes = &[],
             HOST_CALL,
             async {
-                gate?.quota_spent();
+                gate?;
+                if let Some(h) = host {
+                    h.quota_spent();
+                }
                 Ok(())
             }
         )

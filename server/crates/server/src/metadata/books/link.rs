@@ -163,16 +163,7 @@ pub async fn attach_with(
             let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, work).await?;
             // An edition with no library follows its work: another library's work must not take it.
             let same_library = match holder {
-                Some(h) => {
-                    sqlx::query_scalar::<_, bool>(
-                        r#"SELECT (SELECT "libraryId" FROM media WHERE id = $1)
-                              IS NOT DISTINCT FROM (SELECT "libraryId" FROM media WHERE id = $2)"#,
-                    )
-                    .bind(media)
-                    .bind(h)
-                    .fetch_one(&mut *tx)
-                    .await?
-                }
+                Some(h) => super::absorb::same_library(&mut tx, media, h).await?,
                 None => false,
             };
             match holder.filter(|h| *h != media && edition.is_some() && same_library) {
