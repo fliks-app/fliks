@@ -5348,7 +5348,7 @@
       "budget_hint": "Oldest stems are removed past this size. At least {{min}}.",
       "budget_invalid": "The budget must be at least {{min}} MB.",
       "verified": "Verified acceleration",
-      "verified_hint": "The background pass runs on a ticked acceleration the engine reports. CUDA and MIGraphX need an ONNX Runtime library mounted on the host (CUDA with cuDNN and cuBLAS), pointed to by ORT_DYLIB_PATH.",
+      "verified_hint": "The background pass runs on a ticked acceleration the engine reports. CUDA and MIGraphX need the whole lib/ directory of one ONNX Runtime release mounted on the host and ORT_DYLIB_PATH pointing at its libonnxruntime.so. CUDA also needs cudart, cufft, curand, cuDNN 9 and cuBLAS of the build's CUDA version on LD_LIBRARY_PATH and a recent enough driver. MIGraphX needs ROCm and MIGraphX libraries, the devices /dev/kfd and /dev/dri and the video and render groups, and Microsoft publishes no MIGraphX build: build or extract one yourself. The GPU is the first one; choose another with CUDA_VISIBLE_DEVICES or HIP_VISIBLE_DEVICES.",
       "saved": "Karaoke settings saved",
       "models": "Models",
       "models_failed": "The models could not be loaded.",

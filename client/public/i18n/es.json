@@ -5348,7 +5348,7 @@
       "budget_hint": "Las pistas más antiguas se borran al superarlo. Mínimo {{min}}.",
       "budget_invalid": "El presupuesto debe ser de al menos {{min}} MB.",
       "verified": "Aceleración verificada",
-      "verified_hint": "El proceso en segundo plano usa una aceleración marcada que el motor indica. CUDA y MIGraphX necesitan una biblioteca ONNX Runtime montada en el host (CUDA con cuDNN y cuBLAS), señalada por ORT_DYLIB_PATH.",
+      "verified_hint": "El proceso en segundo plano usa una aceleración marcada que el motor indica. CUDA y MIGraphX necesitan el directorio lib/ completo de una versión de ONNX Runtime montado en el host, con ORT_DYLIB_PATH apuntando a su libonnxruntime.so. CUDA necesita además cudart, cufft, curand, cuDNN 9 y cuBLAS de la versión de CUDA del build en LD_LIBRARY_PATH y un controlador suficientemente reciente. MIGraphX necesita las bibliotecas ROCm y MIGraphX, los dispositivos /dev/kfd y /dev/dri y los grupos video y render; Microsoft no publica ningún build de MIGraphX: hay que compilarlo o extraerlo. La GPU es la primera; otra se elige con CUDA_VISIBLE_DEVICES o HIP_VISIBLE_DEVICES.",
       "saved": "Ajustes de karaoke guardados",
       "models": "Modelos",
       "models_failed": "No se pudieron cargar los modelos.",

@@ -5348,7 +5348,7 @@
       "budget_hint": "Die ältesten Spuren werden darüber hinaus gelöscht. Mindestens {{min}}.",
       "budget_invalid": "Das Budget muss mindestens {{min}} MB betragen.",
       "verified": "Geprüfte Beschleunigung",
-      "verified_hint": "Die Hintergrundverarbeitung nutzt eine angekreuzte Beschleunigung, die die Engine meldet. CUDA und MIGraphX brauchen eine auf dem Host eingebundene ONNX-Runtime-Bibliothek (CUDA mit cuDNN und cuBLAS), auf die ORT_DYLIB_PATH zeigt.",
+      "verified_hint": "Die Hintergrundverarbeitung nutzt eine angekreuzte Beschleunigung, die die Engine meldet. CUDA und MIGraphX brauchen das gesamte lib/-Verzeichnis einer ONNX-Runtime-Version, auf dem Host eingebunden, mit ORT_DYLIB_PATH auf dessen libonnxruntime.so. CUDA braucht außerdem cudart, cufft, curand, cuDNN 9 und cuBLAS der CUDA-Version des Builds in LD_LIBRARY_PATH und einen ausreichend neuen Treiber. MIGraphX braucht die ROCm- und MIGraphX-Bibliotheken, die Geräte /dev/kfd und /dev/dri sowie die Gruppen video und render; Microsoft veröffentlicht keinen MIGraphX-Build: selbst bauen oder extrahieren. Die GPU ist die erste; eine andere wählt man mit CUDA_VISIBLE_DEVICES oder HIP_VISIBLE_DEVICES.",
       "saved": "Karaoke-Einstellungen gespeichert",
       "models": "Modelle",
       "models_failed": "Die Modelle konnten nicht geladen werden.",
