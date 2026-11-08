@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pi.\"itemId\" FROM playlist_items pi JOIN items i ON i.id = pi.\"itemId\"\n                   JOIN media m ON m.id = i.\"mediaId\" AND m.type = 'album'\n                   WHERE pi.\"playlistId\" = $1 ORDER BY pi.position, pi.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "itemId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playlist_items",
+            "name": "itemId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c5019bb4312e0a6b0dd3397447bad94f4d57d3d6b520a80d80fe7f558f45b09a"
+}

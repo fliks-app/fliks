@@ -1,8 +1,10 @@
 //! Playlist CRUD, saves and members (`docs/spec/playlists.md` rules 7-27, 36).
 use super::{
     access::{PlaylistView, Role, assert_role},
+    smart,
     view::{list_for, view_for},
 };
+use crate::libraries::accessible_library_ids;
 use crate::{
     http::{
         AppError,
@@ -13,7 +15,9 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
+use fliks_domain::music::playlist_rules::SmartRules;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use sqlx::PgPool;
 
 const NAME_MAX: usize = 255;
@@ -43,6 +47,7 @@ pub struct CreateDto {
     auto_remove_watched: Option<bool>,
     auto_download: Option<bool>,
     auto_play: Option<bool>,
+    rules: Option<SmartRules>,
 }
 
 #[derive(Deserialize)]
@@ -53,15 +58,24 @@ pub struct UpdateDto {
     auto_download: Option<bool>,
     auto_play: Option<bool>,
     visibility: Option<Visibility>,
+    rules: Option<SmartRules>,
 }
 
-fn check_name(name: Option<&str>) -> Result<(), AppError> {
+pub(super) fn check_name(name: Option<&str>) -> Result<(), AppError> {
     match name {
         Some(n) if n.chars().count() > NAME_MAX => Err(AppError::bad_request(vec![format!(
             "name must be shorter than or equal to {NAME_MAX} characters"
         )])),
         _ => Ok(()),
     }
+}
+
+pub(super) fn check_rules(rules: &SmartRules) -> Result<(), AppError> {
+    rules.validate().map_err(AppError::bad_request)
+}
+
+fn smart_auto_remove() -> AppError {
+    AppError::bad_request("errors.playlist_smart_auto_remove")
 }
 
 fn sharing_disabled() -> AppError {
@@ -83,18 +97,43 @@ pub async fn create(
     ValidJson(dto): ValidJson<CreateDto>,
 ) -> Result<(StatusCode, Json<PlaylistView>), AppError> {
     check_name(Some(&dto.name))?;
+    if let Some(r) = &dto.rules {
+        check_rules(r)?;
+        if dto.auto_remove_watched == Some(true) {
+            return Err(smart_auto_remove());
+        }
+    }
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO playlists (name, "ownerId", "autoRemoveWatched", "autoDownload", "autoPlay")
-           VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
+        r#"INSERT INTO playlists (name, "ownerId", "autoRemoveWatched", "autoDownload", "autoPlay", rules)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"#,
         dto.name.trim(),
         a.user.id,
         dto.auto_remove_watched.unwrap_or(false),
         dto.auto_download.unwrap_or(false),
-        dto.auto_play.unwrap_or(false)
+        dto.auto_play.unwrap_or(false),
+        dto.rules.as_ref().map(|r| serde_json::to_value(r).expect("typed"))
     )
     .fetch_one(&st.db)
     .await?;
     Ok((StatusCode::CREATED, Json(view_for(&st.db, &a, id).await?)))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewDto {
+    rules: SmartRules,
+}
+
+#[utoipa::path(post, path = "/api/playlists/preview", responses((status = 200)))]
+pub async fn preview(
+    State(st): State<AppState>,
+    a: Authed,
+    ValidJson(dto): ValidJson<PreviewDto>,
+) -> Result<Json<Value>, AppError> {
+    check_rules(&dto.rules)?;
+    let acl = accessible_library_ids(&st.db, &a).await?;
+    let ids = smart::evaluate(&st.db, a.user.id, &acl, &dto.rules).await?;
+    Ok(Json(json!({"count": ids.len()})))
 }
 
 #[utoipa::path(get, path = "/api/playlists/{id}", responses((status = 200)))]
@@ -114,7 +153,16 @@ pub async fn update(
     ValidJson(dto): ValidJson<UpdateDto>,
 ) -> Result<Json<PlaylistView>, AppError> {
     check_name(dto.name.as_deref())?;
-    assert_role(&st.db, a.user.id, id, Role::Administrator).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Administrator).await?;
+    if let Some(r) = &dto.rules {
+        check_rules(r)?;
+        if !playlist.is_smart() {
+            return Err(AppError::bad_request("errors.playlist_not_smart"));
+        }
+    }
+    if playlist.is_smart() && dto.auto_remove_watched == Some(true) {
+        return Err(smart_auto_remove());
+    }
     if a.user.share_disabled
         && dto
             .visibility
@@ -126,7 +174,8 @@ pub async fn update(
         || dto.auto_remove_watched.is_some()
         || dto.auto_download.is_some()
         || dto.auto_play.is_some()
-        || dto.visibility.is_some();
+        || dto.visibility.is_some()
+        || dto.rules.is_some();
     if patch {
         sqlx::query!(
             r#"UPDATE playlists SET
@@ -135,6 +184,7 @@ pub async fn update(
                  "autoDownload" = COALESCE($4, "autoDownload"),
                  "autoPlay" = COALESCE($5, "autoPlay"),
                  visibility = COALESCE($6::text::playlists_visibility_enum, visibility),
+                 rules = COALESCE($7, rules),
                  "updatedAt" = now()
                WHERE id = $1"#,
             id,
@@ -142,7 +192,10 @@ pub async fn update(
             dto.auto_remove_watched,
             dto.auto_download,
             dto.auto_play,
-            dto.visibility.map(Visibility::as_str)
+            dto.visibility.map(Visibility::as_str),
+            dto.rules
+                .as_ref()
+                .map(|r| serde_json::to_value(r).expect("typed"))
         )
         .execute(&st.db)
         .await?;

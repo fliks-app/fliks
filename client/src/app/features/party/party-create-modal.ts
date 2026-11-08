@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucidePlus, LucideX } from '@lucide/angular';
+import { MediaService } from '../../core/services/api/media.service';
+import { itemIn } from '../../core/services/party/party-item';
 import type { PartySwitches } from '../../core/services/api/party-api.service';
 import { PartyService, type PartyCreateTarget } from '../../core/services/party/party.service';
 import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
@@ -11,6 +13,9 @@ import { PartyHostSwitchesComponent } from '../player/party/party-host-switches'
 import { readStored, writeStored } from '../../core/services/party/local-flag';
 import { AUTO_COVER, PartyCoverPickerComponent, coverChoice, coverValid, type CoverDraft } from './party-cover-picker';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
+import { albumRows } from './party-programme-items';
+
+type Film = { mediaId: number; mediaFileId?: number; episodeId: number | null; itemId?: number; title: string; posterUrl: string | null };
 
 const SWITCHES_KEY = 'fliks.partySwitches';
 const DEFAULT_SWITCHES: PartySwitches = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false };
@@ -39,12 +44,13 @@ export function toLocalInput(d: Date): string {
 })
 export class PartyCreateModalComponent {
   private readonly party = inject(PartyService);
+  private readonly media = inject(MediaService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly picker = viewChild.required(MediaPickerComponent);
   protected readonly target = signal<PartyCreateTarget | null>(null);
   /** The programme the party opens with; empty means the host chooses it later. */
-  protected readonly films = signal<{ mediaId: number; mediaFileId?: number; episodeId: number | null; title: string; posterUrl: string | null }[]>([]);
+  protected readonly films = signal<Film[]>([]);
   protected readonly groups = computed(() => {
     const out: { mediaId: number; title: string; count: number }[] = [];
     for (const f of this.films()) {
@@ -92,9 +98,14 @@ export class PartyCreateModalComponent {
     return !this.busy() && this.name().trim().length > 0 && (!this.later() || !!this.when()) && coverValid(this.cover());
   }
 
-  protected pick(picks: MediaPick[]): void {
+  protected async pick(picks: MediaPick[]): Promise<void> {
     if (!picks.length) return;
-    this.films.update((f) => [...f, ...picks.map(({ mediaId, episodeId, title, posterUrl }) => ({ mediaId, episodeId, title, posterUrl }))]);
+    const rows: Film[] = [];
+    for (const p of picks) {
+      if (p.type !== 'album') rows.push({ mediaId: p.mediaId, episodeId: p.episodeId, title: p.title, posterUrl: p.posterUrl });
+      else rows.push(...albumRows(await this.media.getOne(p.mediaId).catch(() => null)));
+    }
+    this.films.update((f) => [...f, ...rows]);
     if (!this.name().trim()) this.name.set(picks[0].title);
   }
 
@@ -123,7 +134,7 @@ export class PartyCreateModalComponent {
         ...(t.playlistId != null
           ? { playlistId: t.playlistId }
           : films.length > 0 && {
-              items: films.map((f) => ({ mediaId: f.mediaId, ...(f.mediaFileId != null && { mediaFileId: f.mediaFileId }), ...(f.episodeId != null && { episodeId: f.episodeId }) })),
+              items: films.map(itemIn),
             }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
         ...(choice && { cover: choice }),

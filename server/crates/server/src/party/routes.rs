@@ -505,8 +505,15 @@ async fn initial_programme(st: &AppState, a: &Authed, b: &Create) -> R<Vec<Item>
         (media_id, Some(playlist)) => (media_id, playlist),
     };
     let requested = media_id.map(requested);
-    playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
-    let rows = db::playlist_rows(&st.db, playlist).await?;
+    let (list, _) = playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
+    let rows = match &list.rules {
+        Some(rules) => {
+            let ids = accessible_library_ids(&st.db, a).await?;
+            let found = playlists::smart::evaluate(&st.db, list.owner_id, &ids, &rules.0).await?;
+            db::track_rows(&st.db, &found).await?
+        }
+        None => db::playlist_rows(&st.db, playlist).await?,
+    };
     for (at, row) in rows.iter().enumerate() {
         let wanted = requested
             .as_ref()

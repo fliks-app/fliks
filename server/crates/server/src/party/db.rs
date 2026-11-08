@@ -109,8 +109,13 @@ pub async fn insert(
         Some(item) => {
             sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
                 .bind(format!(
-                    "party:{}:{}:{:?}:{:?}:{:?}",
-                    n.owner, item.media_id, item.media_file_id, item.episode_id, n.playlist_id
+                    "party:{}:{}:{:?}:{:?}:{:?}:{:?}",
+                    n.owner,
+                    item.media_id,
+                    item.media_file_id,
+                    item.episode_id,
+                    item.item_id,
+                    n.playlist_id
                 ))
                 .execute(&mut *tx)
                 .await?;
@@ -120,6 +125,7 @@ pub async fn insert(
                 r#"SELECT * FROM (SELECT {COLS} FROM {FROM}) r
            WHERE r.owner_id = $1 AND r.media_id = $2 AND r.media_file_id IS NOT DISTINCT FROM $3
              AND r.episode_id IS NOT DISTINCT FROM $4 AND r.playlist_id IS NOT DISTINCT FROM $5
+             AND ($9::int IS NULL OR r.item_id = $9)
              AND CASE WHEN $6 THEN r.status = 'live' OR (r.status = 'scheduled' AND r.scheduled_at <= $7)
                       ELSE r.status = 'scheduled' AND r.scheduled_at = $8 END
            ORDER BY r.id LIMIT 1"#
@@ -132,6 +138,7 @@ pub async fn insert(
             .bind(immediate)
             .bind(now)
             .bind(n.scheduled_at)
+            .bind(item.item_id)
             .fetch_optional(&mut *tx)
             .await?
         }
@@ -657,16 +664,19 @@ pub struct ItemInfo {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub episode_title: Option<String>,
+    /// The row is a track of an album: `title` is the track and `series_title` the album.
+    pub track: bool,
 }
 
-/// Media title (with `S01E02` for an episode) and artwork of every `(media, episode)` key, in one
-/// query; a media that is gone is missing from the map.
+/// Media title (with `S01E02` for an episode, the track title for a track) and artwork of every
+/// `(media, episode, item)` key, in one query; a media that is gone is missing from the map.
 pub async fn item_infos(
     db: &PgPool,
-    keys: &[(i32, Option<i32>)],
-) -> sqlx::Result<HashMap<(i32, Option<i32>), ItemInfo>> {
+    keys: &[(i32, Option<i32>, Option<i32>)],
+) -> sqlx::Result<HashMap<(i32, Option<i32>, Option<i32>), ItemInfo>> {
     type Row = (
         i32,
+        Option<i32>,
         Option<i32>,
         String,
         Option<String>,
@@ -676,18 +686,24 @@ pub async fn item_infos(
         Option<i32>,
         Option<String>,
         Option<String>,
+        bool,
+        String,
     );
-    let (media, episode): (Vec<i32>, Vec<Option<i32>>) = keys.iter().copied().unzip();
+    let media: Vec<i32> = keys.iter().map(|k| k.0).collect();
+    let episode: Vec<Option<i32>> = keys.iter().map(|k| k.1).collect();
+    let item: Vec<Option<i32>> = keys.iter().map(|k| k.2).collect();
     let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT q.media, q.episode, m.title, m."posterUrl", m."fanartUrl", m."additionalFanartUrls",
-                  s."number", e."number", e."stillUrl", e.title
-           FROM unnest($1::int[], $2::int[]) AS q(media, episode)
+        r#"SELECT q.media, q.episode, q.item, m.title, m."posterUrl", m."fanartUrl", m."additionalFanartUrls",
+                  s."number", e."number", e."stillUrl", e.title, ti.id IS NOT NULL, COALESCE(ti.title, '')
+           FROM unnest($1::int[], $2::int[], $3::int[]) AS q(media, episode, item)
            JOIN media m ON m.id = q.media
            LEFT JOIN items e ON e.id = q.episode
+           LEFT JOIN items ti ON ti.id = q.item AND ti."mediaId" = m.id AND m.type = 'album'
            LEFT JOIN item_groups s ON s.id = e."groupId""#,
     )
     .bind(media)
     .bind(episode)
+    .bind(item)
     .fetch_all(db)
     .await?;
     Ok(rows
@@ -696,6 +712,7 @@ pub async fn item_infos(
             |(
                 media,
                 episode,
+                item,
                 title,
                 poster,
                 fanart,
@@ -704,14 +721,17 @@ pub async fn item_infos(
                 number,
                 still,
                 ep_title,
+                track,
+                track_title,
             )| {
-                let series = episode.map(|_| title.clone());
+                let series = (episode.is_some() || track).then(|| title.clone());
                 let title = match (season, number) {
+                    _ if track => track_title,
                     (Some(s), Some(e)) => format!("{title} S{s:02}E{e:02}"),
                     _ => title,
                 };
                 (
-                    (media, episode),
+                    (media, episode, item),
                     ItemInfo {
                         title,
                         poster_url: poster,
@@ -722,6 +742,7 @@ pub async fn item_infos(
                         season_number: season,
                         episode_number: number,
                         episode_title: ep_title.filter(|t| !t.is_empty()),
+                        track,
                     },
                 )
             },
@@ -754,15 +775,18 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
         r#"SELECT ($2::int IS NULL OR EXISTS (SELECT 1 FROM media_files WHERE id = $2 AND "mediaId" = $1))
                AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN item_groups s ON s.id = e."groupId"
                                                WHERE e.id = $3 AND s."mediaId" = $1))
+               AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM items e WHERE e.id = $5 AND e."mediaId" = $1
+                                               AND (e.id = $3 OR ($3 IS NULL AND e."groupId" IS NULL))))
                AND ($3::int IS NOT NULL OR NOT EXISTS (SELECT 1 FROM media WHERE id = $1 AND type = ANY($4)))
                AND (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId"
-                            WHERE (e.id = $3 OR ($3 IS NULL AND e."mediaId" = $1 AND e."groupId" IS NULL)) AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
-               AND item_of($1, $3) IS NOT NULL"#,
+                            WHERE (e.id = COALESCE($5, $3) OR (COALESCE($5, $3) IS NULL AND e."mediaId" = $1 AND e."groupId" IS NULL)) AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+               AND ($5::int IS NOT NULL OR item_of($1, $3) IS NOT NULL)"#,
     )
     .bind(item.media_id)
     .bind(item.media_file_id)
     .bind(item.episode_id)
     .bind(MediaKind::seasonal_names())
+    .bind(item.item_id)
     .fetch_one(db)
     .await
 }
@@ -809,6 +833,29 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
                 playable,
             },
         )
+        .collect())
+}
+
+/// Track items as playable queue rows, in the order given.
+pub async fn track_rows(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<QueueRow>> {
+    let rows: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT it."mediaId", it.id FROM unnest($1::int[]) WITH ORDINALITY AS t(id, n)
+           JOIN items it ON it.id = t.id ORDER BY t.n"#,
+    )
+    .bind(ids)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(media_id, item_id)| QueueRow {
+            item: Item {
+                media_id,
+                media_file_id: None,
+                episode_id: None,
+                item_id: Some(item_id),
+            },
+            playable: true,
+        })
         .collect())
 }
 
@@ -916,6 +963,45 @@ mod tests {
         assert!(
             !item_valid(&pool, &bare).await.unwrap(),
             "the bare pair names no item"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_track_is_a_row_of_its_own_with_its_title(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L', '["album"]');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+               INSERT INTO media (id, title, type, "libraryId") VALUES (1, 'Album', 'album', 1);
+               INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'audio');
+               INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 1, 1, 'One'), (2, 1, 1, 'Two');
+               INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, 1, 'a.flac', 1, 'FLAC');
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (2, 1, 1, 0, 0);"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let track = |item_id| Item {
+            media_id: 1,
+            media_file_id: None,
+            episode_id: None,
+            item_id,
+        };
+        assert!(item_valid(&pool, &track(Some(2))).await.unwrap());
+        assert!(
+            !item_valid(&pool, &track(Some(1))).await.unwrap(),
+            "no file"
+        );
+        assert!(!item_valid(&pool, &track(None)).await.unwrap());
+        let infos = item_infos(&pool, &[(1, None, Some(2))]).await.unwrap();
+        let info = &infos[&(1, None, Some(2))];
+        assert_eq!(
+            (
+                info.title.as_str(),
+                info.series_title.as_deref(),
+                info.track
+            ),
+            ("Two", Some("Album"), true)
         );
     }
 }

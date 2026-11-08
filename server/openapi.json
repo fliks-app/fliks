@@ -3966,6 +3966,28 @@
         }
       }
     },
+    "/api/playlists/import-m3u": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "import_m3u",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/playlists/preview": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "preview",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/playlists/{id}": {
       "get": {
         "tags": [
@@ -3990,6 +4012,17 @@
           "playlists"
         ],
         "operationId": "update",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/playlists/{id}/export.m3u": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "export_m3u",
         "responses": {
           "200": {}
         }

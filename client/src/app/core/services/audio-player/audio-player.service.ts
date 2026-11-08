@@ -42,6 +42,18 @@ export interface AudioBookmark {
 /** Sleep timer: a wall-clock deadline, or the end of the chapter playing when it was set. */
 export type SleepTimer = { kind: 'duration'; endsAt: number; minutes: number } | { kind: 'chapter'; end: number };
 
+/** What a party driving the audio player intercepts; `drives` asks whether it does. */
+export type AudioPartyCommand =
+  | { type: 'drives' }
+  | { type: 'external' }
+  | { type: 'toggle' }
+  | { type: 'seek'; at: number }
+  | { type: 'next' }
+  | { type: 'prev' }
+  | { type: 'item'; index: number };
+
+export type AudioPartyRouter = (c: AudioPartyCommand) => boolean;
+
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 export const SKIP_STEPS = [10, 15, 30, 45, 60];
 
@@ -97,6 +109,8 @@ export class AudioPlayerService {
   private readonly _queueIndex = signal(-1);
   private readonly _shuffle = signal(false);
   private readonly _repeat = signal<Repeat>('off');
+  private readonly _ended = signal(false);
+  private readonly _buffering = signal(false);
 
   readonly track = this._track.asReadonly();
   readonly playing = this._playing.asReadonly();
@@ -116,6 +130,9 @@ export class AudioPlayerService {
   readonly queueIndex = this._queueIndex.asReadonly();
   readonly shuffle = this._shuffle.asReadonly();
   readonly repeat = this._repeat.asReadonly();
+  /** A party's track played to its end: the queue does not advance, the server picks what follows. */
+  readonly ended = this._ended.asReadonly();
+  readonly buffering = this._buffering.asReadonly();
   readonly replayGain = computed(() => this._prefs().replayGain);
   readonly preamp = computed(() => this._prefs().preamp);
   readonly active = computed(() => this._track() !== null);
@@ -144,6 +161,9 @@ export class AudioPlayerService {
   private preTried: MusicTrackRequest | null = null;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
+  private partyRouter: AudioPartyRouter | null = null;
+  /** Voice-chat ducking factor, never persisted. */
+  private duck = 1;
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -153,6 +173,7 @@ export class AudioPlayerService {
 
   /** Starts the item, or resumes it when it is the one loaded. */
   async play(req: AudioRequest): Promise<void> {
+    if (this.blockedByParty()) return;
     if (this._track()?.itemId === req.itemId && this.info) {
       if (this.el()?.paused) this.toggle();
       return;
@@ -211,7 +232,7 @@ export class AudioPlayerService {
 
   /** Plays a track queue from `startIndex`, always from 0:00. */
   async playTracks(tracks: readonly MusicTrackRequest[], startIndex = 0, opts?: { shuffle?: boolean }): Promise<void> {
-    if (!tracks.length) return;
+    if (!tracks.length || this.blockedByParty()) return;
     this.mq.set(tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.repeat = this._repeat();
     this.syncQueue();
@@ -220,7 +241,7 @@ export class AudioPlayerService {
 
   /** Adds tracks after the current one or at the end; starts them when nothing plays. */
   enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
-    if (!tracks.length) return;
+    if (!tracks.length || this.blockedByParty()) return;
     if (!this._musicMode()) return void this.playTracks(tracks);
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
@@ -231,6 +252,7 @@ export class AudioPlayerService {
   /** The next track of the queue, or the next chapter of a book. */
   next(): void {
     if (!this._musicMode()) return this.nextChapter();
+    if (this.routed({ type: 'next' })) return;
     const t = this.mq.next(false);
     if (t) this.syncQueue(), void this.goTo(t);
   }
@@ -238,12 +260,15 @@ export class AudioPlayerService {
   /** Restarts the track past a few seconds, else the previous one. */
   previous(): void {
     if (!this._musicMode()) return this.previousChapter();
-    const t = this._position() > RESTART_S ? null : this.mq.previous();
+    if (this._position() > RESTART_S) return void this.seek(0);
+    if (this.routed({ type: 'prev' })) return;
+    const t = this.mq.previous();
     if (t) this.syncQueue(), void this.goTo(t);
     else void this.seek(0);
   }
 
   playQueueAt(index: number): void {
+    if (this.routed({ type: 'item', index })) return;
     const t = this.mq.playAt(index);
     if (t) this.syncQueue(), void this.goTo(t);
   }
@@ -287,6 +312,66 @@ export class AudioPlayerService {
     this.applyGains();
   }
 
+  /** The party's router for the audio player; the disposer only clears its own registration. */
+  setPartyRouter(router: AudioPartyRouter): () => void {
+    this.partyRouter = router;
+    return () => {
+      if (this.partyRouter === router) this.partyRouter = null;
+    };
+  }
+
+  private routed(c: AudioPartyCommand): boolean {
+    return this.partyRouter?.(c) ?? false;
+  }
+
+  private blockedByParty(): boolean {
+    return this.routed({ type: 'external' });
+  }
+
+  /** The party opens its track paused: the queue holds just that track, and the group starts it. */
+  async openForParty(req: MusicTrackRequest): Promise<void> {
+    this.mq.set([req], 0, false);
+    this.mq.repeat = 'off';
+    this.syncQueue();
+    await this.startMusic(req, false);
+  }
+
+  /** True when the loaded track can be seeked: metadata is in and no load is in flight. */
+  partyReady(): boolean {
+    const el = this.el();
+    return !!el && !!this.info && !this._loading() && !this.casting && el.readyState >= 1;
+  }
+
+  /** Plays the loaded track without going through the party. */
+  resume(): void {
+    if (this.casting) return this.cast!.play();
+    void this.el()?.play().catch(() => undefined);
+  }
+
+  /** Playback speed of the element, which the party nudges to stay in sync. */
+  elementRate(): number {
+    return this.el()?.playbackRate ?? 1;
+  }
+
+  /** A party's rate nudge: never saved to the prefs. */
+  setElementRate(rate: number): void {
+    for (const el of this.els) el.playbackRate = rate;
+  }
+
+  /** Voice-chat ducking: a factor on the track's level, never saved. */
+  setDuck(factor: number): void {
+    this.duck = factor;
+    this.applyGains();
+  }
+
+  duckLevel(): number {
+    return this.duck;
+  }
+
+  private playRate(): number {
+    return this.routed({ type: 'drives' }) ? 1 : this.rate();
+  }
+
   private syncQueue(): void {
     this._queue.set([...this.mq.tracks]);
     this._queueIndex.set(this.mq.index);
@@ -311,7 +396,7 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
-  private async startMusic(req: MusicTrackRequest): Promise<void> {
+  private async startMusic(req: MusicTrackRequest, autoplay = true): Promise<void> {
     const generation = ++this.generation;
     await this.release();
     this._musicMode.set(true);
@@ -323,7 +408,7 @@ export class AudioPlayerService {
     this._bookmarks.set([]);
     try {
       if (this.network.isOnline()) await this.sync.flush();
-      if (this.bindCast().isConnected()) return await this.startCast(req, generation);
+      if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
       const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: 0 });
       if (generation !== this.generation) {
         if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
@@ -334,7 +419,7 @@ export class AudioPlayerService {
       this.parts = this.partsOf(info);
       this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
       this.setupMediaSession(this._track()!);
-      await this.load(0, true);
+      await this.load(0, autoplay);
     } catch {
       if (generation === this.generation) await this.close();
     } finally {
@@ -380,7 +465,7 @@ export class AudioPlayerService {
   /** Loads the next track's stream on the standby element once the current one nears its end. */
   private preloadNext(): void {
     const next = this.mq.peekNext();
-    if (!next || this.casting || this.preTried === next || this.info?.playMethod !== 'DirectPlay') return;
+    if (!next || this.casting || this.routed({ type: 'drives' }) || this.preTried === next || this.info?.playMethod !== 'DirectPlay') return;
     this.preTried = next;
     const generation = this.generation;
     void this.streaming
@@ -431,7 +516,7 @@ export class AudioPlayerService {
     this._duration.set(pre.info.durationSeconds ?? pre.req.durationSeconds ?? 0);
     this._position.set(0);
     this.setupMediaSession(this._track()!);
-    standby.playbackRate = this.rate();
+    standby.playbackRate = this.playRate();
     standby.currentTime = 0;
     void standby.play().catch(() => undefined);
     old.pause();
@@ -440,6 +525,13 @@ export class AudioPlayerService {
 
   /** Moves on after a track ends: repeat one replays it, else the next track, else stops. */
   private async onMusicEnded(): Promise<void> {
+    if (this.routed({ type: 'drives' })) {
+      this._playing.set(false);
+      this._position.set(this._duration());
+      this._ended.set(true);
+      this.beat();
+      return;
+    }
     const t = this.mq.next(true);
     if (t && this.mq.repeat === 'one' && !this.casting) {
       const el = this.el();
@@ -472,7 +564,7 @@ export class AudioPlayerService {
 
   /** A GainNode when the stream is same-origin (a cross-origin element would go silent through Web Audio), else attenuation by `volume`. */
   private applyGain(el: HTMLAudioElement, req: MusicTrackRequest | null, url: string): void {
-    const factor = this.gainOf(req);
+    const factor = this.gainOf(req) * this.duck;
     let node = this.gainNodes.get(el);
     if (!node && factor !== 1 && typeof AudioContext !== 'undefined' && sameOrigin(url)) {
       try {
@@ -492,6 +584,7 @@ export class AudioPlayerService {
   }
 
   toggle(): void {
+    if (this.routed({ type: 'toggle' })) return;
     if (this.casting) return this.cast!.togglePlayPause();
     const el = this.el();
     if (!el) return;
@@ -507,6 +600,13 @@ export class AudioPlayerService {
   /** Seeks on the item timeline, switching part when the position lies in another one. */
   async seek(position: number): Promise<void> {
     const target = Math.min(Math.max(0, position), this._duration());
+    if (this._musicMode() && this.routed({ type: 'seek', at: target })) return;
+    return this.seekLocal(target);
+  }
+
+  /** The seek itself, never routed to a party. */
+  async seekLocal(target: number): Promise<void> {
+    this._ended.set(false);
     if (this.casting) {
       this._position.set(target);
       this.cast!.seek(target);
@@ -623,6 +723,8 @@ export class AudioPlayerService {
       el.addEventListener('pause', mine(() => this.onPlayState(false)));
       el.addEventListener('ended', mine(() => void this.onEnded()));
       el.addEventListener('error', mine(() => this.onError()));
+      el.addEventListener('waiting', mine(() => this._buffering.set(true)));
+      for (const e of ['playing', 'canplay', 'pause', 'emptied'] as const) el.addEventListener(e, mine(() => this._buffering.set(false)));
     }
   }
 
@@ -669,7 +771,7 @@ export class AudioPlayerService {
     this.preloaded = -1;
     const el = this.els[this.current];
     const part = this.parts[index];
-    el.playbackRate = this.rate();
+    el.playbackRate = this._musicMode() ? this.playRate() : this.rate();
     this.applyGain(el, this._musicMode() ? this.mq.current : null, part.url);
     if (this.info?.playMethod === 'DirectPlay') {
       el.src = part.url;
@@ -791,6 +893,14 @@ export class AudioPlayerService {
     this._loading.set(false);
   }
 
+  /** A play or pause key: a party hears it as a toggle, and only when it changes something. */
+  private setPlaying(want: boolean): void {
+    if (want === this._playing()) return;
+    if (this.routed({ type: 'toggle' })) return;
+    if (want) this.resume();
+    else this.pause();
+  }
+
   private fireSleep(): void {
     this.setSleep(null);
     this.pause();
@@ -861,6 +971,8 @@ export class AudioPlayerService {
     this.current = 0;
     this.casting = false;
     this._playing.set(false);
+    this._ended.set(false);
+    this._buffering.set(false);
   }
 
   private onMediaKey(e: KeyboardEvent): void {
@@ -869,8 +981,8 @@ export class AudioPlayerService {
     if (!action) return;
     e.preventDefault();
     if (action === 'toggle') this.toggle();
-    else if (action === 'play') void this.el()?.play();
-    else if (action === 'pause') this.pause();
+    else if (action === 'play') this.setPlaying(true);
+    else if (action === 'pause') this.setPlaying(false);
     else if (action === 'stop') void this.close();
     else if (this._musicMode()) action === 'forward' ? this.next() : this.previous();
     else this.skip(action === 'forward' ? this.skipForward() : -this.skipBack());
@@ -893,8 +1005,8 @@ export class AudioPlayerService {
         // An action this browser does not know.
       }
     };
-    on('play', () => void this.el()?.play());
-    on('pause', () => this.pause());
+    on('play', () => this.setPlaying(true));
+    on('pause', () => this.setPlaying(false));
     on('stop', () => void this.close());
     on('seekbackward', (d) => this.skip(-(d.seekOffset ?? this.skipBack())));
     on('seekforward', (d) => this.skip(d.seekOffset ?? this.skipForward()));

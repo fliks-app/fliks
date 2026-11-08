@@ -2,24 +2,34 @@
 //! auto-remove of watched items.
 mod access;
 mod items;
+mod m3u;
 mod routes;
+pub(crate) mod smart;
 mod view;
 
 use crate::state::AppState;
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{delete, get, post, put},
 };
 use sqlx::PgPool;
 
 pub use access::{Role, assert_role};
 pub use items::*;
+pub use m3u::*;
 pub use routes::*;
 pub use view::visible_for_owner;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/playlists", get(routes::list).post(routes::create))
+        .route("/api/playlists/preview", post(routes::preview))
+        .route(
+            "/api/playlists/import-m3u",
+            post(m3u::import_m3u).layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 64 * 1024)),
+        )
+        .route("/api/playlists/{id}/export.m3u", get(m3u::export_m3u))
         .route(
             "/api/playlists/{id}",
             get(routes::get_one)

@@ -1,7 +1,8 @@
 import type { PartyCover, PartyItem } from '../../core/services/api/party-api.service';
 
-/** A film shows its poster (portrait), an episode its still (landscape). */
-export function itemThumb(item: PartyItem): { url: string | null; aspect: 'aspect-video' | 'aspect-2/3' } {
+/** A film shows its poster (portrait), an episode its still (landscape), a track its album cover (square). */
+export function itemThumb(item: PartyItem): { url: string | null; aspect: 'aspect-video' | 'aspect-2/3' | 'aspect-square' } {
+  if (item.itemId != null) return { url: item.posterUrl, aspect: 'aspect-square' };
   return item.episodeId != null
     ? { url: item.stillUrl ?? item.fanartUrl ?? item.posterUrl, aspect: 'aspect-video' }
     : { url: item.posterUrl, aspect: 'aspect-2/3' };

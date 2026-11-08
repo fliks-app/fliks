@@ -1,0 +1,43 @@
+<dialog #dialog class="modal" (close)="onClosed()">
+  <div class="modal-box flex h-[80dvh] w-11/12 max-w-2xl flex-col gap-0 overflow-hidden p-0">
+    <app-modal-header flush [title]="'party.programme_add_music' | translate" (closed)="close()" />
+    <div class="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3 sm:px-6" [style.padding-bottom.px]="keyboard.height()">
+      <div role="tablist" class="tabs tabs-box shrink-0">
+        <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'tracks'" [attr.aria-selected]="tab() === 'tracks'" (click)="tab.set('tracks')">{{ 'party.music_tracks' | translate }}</button>
+        <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'playlists'" [attr.aria-selected]="tab() === 'playlists'" (click)="tab.set('playlists')">{{ 'party.music_playlists' | translate }}</button>
+      </div>
+      @if (tab() === 'tracks') {
+        <input type="search" class="input input-bordered w-full shrink-0" autofocus [placeholder]="'party.music_search' | translate" [attr.aria-label]="'party.music_search' | translate" [ngModel]="query()" (ngModelChange)="search($event)" />
+        <ul class="scroll-ring-safe flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+          @for (t of tracks(); track t.itemId) {
+            <li>
+              <label class="flex cursor-pointer items-center gap-3 rounded-box p-2 hover:bg-base-200">
+                <input type="checkbox" class="checkbox checkbox-sm" [checked]="ticked().has(t.itemId)" (change)="toggle(t)" />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-medium">{{ t.title }}</span>
+                  <span class="block truncate text-sm text-base-content/60">{{ t.albumTitle }}</span>
+                </span>
+              </label>
+            </li>
+          } @empty {
+            <li class="text-base-content/60">{{ 'party.music_empty' | translate }}</li>
+          }
+        </ul>
+        <button type="button" class="btn btn-primary shrink-0" [disabled]="!ticked().size" (click)="confirm()">{{ 'party.programme_add' | translate }} ({{ ticked().size }})</button>
+      } @else {
+        <ul class="scroll-ring-safe flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+          @for (p of playlists(); track p.id) {
+            <li>
+              <button type="button" class="flex w-full items-center gap-3 rounded-box p-2 text-left hover:bg-base-200" [disabled]="busy()" (click)="addPlaylist(p)">
+                <span class="min-w-0 flex-1 truncate font-medium">{{ p.name }}</span>
+                <span class="text-sm text-base-content/60">{{ p.itemCount }}</span>
+              </button>
+            </li>
+          } @empty {
+            <li class="text-base-content/60">{{ 'party.music_empty' | translate }}</li>
+          }
+        </ul>
+      }
+    </div>
+  </div>
+</dialog>

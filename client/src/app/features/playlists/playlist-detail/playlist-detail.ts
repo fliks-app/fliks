@@ -26,12 +26,14 @@ import {
   LucideArrowDown,
   LucideArrowUp,
   LucideCheck,
+  LucideDownload,
   LucideEllipsisVertical,
   LucideGripVertical,
   LucideInfo,
   LucideListVideo,
   LucidePencil,
   LucidePlay,
+  LucideShuffle,
   LucideSettings,
   LucideTrash2,
   LucideUsers,
@@ -67,6 +69,12 @@ import { PosterMosaicComponent } from '../../../shared/components/poster-mosaic/
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { mediaDetailLink } from '../../../core/media-kinds';
+import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import type { MusicTrackRequest } from '../../../core/services/audio-player/music-queue';
+import { safeFileName, saveFile } from '../../../core/plugins/save-file.plugin';
+import type { SmartRules } from '../../../core/services/api/smart-rules';
+import { formatDuration } from '../../music/music-utils';
+import { SmartPlaylistEditorComponent } from '../smart-playlist-editor/smart-playlist-editor';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -95,12 +103,14 @@ type PlaylistGroupedEntry =
     LucideArrowDown,
     LucideArrowUp,
     LucideCheck,
+    LucideDownload,
     LucideEllipsisVertical,
     LucideGripVertical,
     LucideInfo,
     LucideListVideo,
     LucidePencil,
     LucidePlay,
+    LucideShuffle,
     LucideSettings,
     LucideTrash2,
     LucideUsers,
@@ -112,6 +122,7 @@ type PlaylistGroupedEntry =
     ModalHeaderComponent,
     ResolveUrlPipe,
     PosterMosaicComponent,
+    SmartPlaylistEditorComponent,
   ],
   templateUrl: './playlist-detail.html',
 })
@@ -129,6 +140,7 @@ export class PlaylistDetailComponent {
   private readonly mediaStart = inject(MediaStartService);
   private readonly social = inject(SocialApiService);
   private readonly party = inject(PartyService);
+  private readonly audio = inject(AudioPlayerService);
   protected readonly partyApi = inject(PartyApiService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
@@ -168,14 +180,31 @@ export class PlaylistDetailComponent {
   /** Add / remove / reorder items — editor and above. */
   readonly canEditItems = computed(() => {
     const r = this.playlist()?.role;
-    return r === 'owner' || r === 'editor' || r === 'administrator';
+    return !this.isSmart() && (r === 'owner' || r === 'editor' || r === 'administrator');
   });
+  /** Smart playlists are evaluated at read time: no item can be added, removed or moved. */
+  readonly isSmart = computed(() => !!this.playlist()?.rules);
+  readonly hasTracks = computed(() => this.items().some((i) => i.track));
   /** Rename + settings — administrator and above. */
   readonly canManage = computed(() => {
     const r = this.playlist()?.role;
     return r === 'owner' || r === 'administrator';
   });
   readonly isOwner = computed(() => this.playlist()?.role === 'owner');
+
+  /** One line naming the match mode, rule count, sort and limit. */
+  readonly rulesSummary = computed(() => {
+    const r: SmartRules | null | undefined = this.playlist()?.rules;
+    if (!r) return '';
+    return this.translate.instant(r.limit ? 'playlists.summary_limit' : 'playlists.summary', {
+      match: this.translate.instant(r.match === 'all' ? 'playlists.match_all' : 'playlists.match_any'),
+      count: r.criteria.length,
+      sort: this.translate.instant('playlists.sort_' + r.sort.by),
+      limit: r.limit,
+    });
+  });
+
+  protected readonly formatDuration = formatDuration;
 
   readonly expandedSeries = signal<Set<number>>(new Set());
 
@@ -288,23 +317,59 @@ export class PlaylistDetailComponent {
     if (pl) this.party.createRequest.set({ title: pl.name, playlistId: pl.id });
   }
 
+  /** Video and music entries play through different players: a mixed playlist plays the kind of the row it starts from. */
+  private readonly videoItems = computed(() => this.orderedItems().filter((i) => !i.track));
+  private readonly trackItems = computed(() => this.orderedItems().filter((i) => i.track));
+
+  private toTrackRequest(it: PlaylistItem): MusicTrackRequest {
+    const t = it.track!;
+    return {
+      itemId: t.itemId,
+      mediaId: t.mediaId,
+      title: t.title,
+      artists: t.artists.join(', '),
+      albumTitle: t.albumTitle,
+      coverUrl: t.posterUrl,
+      durationSeconds: t.durationSeconds,
+      gain: null,
+      peak: null,
+      albumGain: null,
+      albumPeak: null,
+    };
+  }
+
   playAll(): void {
-    const list = this.orderedItems();
-    if (!list.length) return;
+    const first = this.orderedItems()[0];
+    if (!first) return;
+    if (first.track) return this.playTracks(0, false);
+    const list = this.videoItems();
     const firstUnwatched = list.findIndex((i) => !i.watched);
     void this.launchQueue(firstUnwatched >= 0 ? firstUnwatched : 0);
   }
 
+  shuffleAll(): void {
+    this.playTracks(0, true);
+  }
+
+  private playTracks(startIndex: number, shuffle: boolean): void {
+    void this.audio.playTracks(this.trackItems().map((i) => this.toTrackRequest(i)), startIndex, { shuffle });
+  }
+
   /** Play from a specific row, queueing the rest of the playlist after it. */
   playFrom(item: PlaylistItem): void {
-    const index = this.orderedItems().findIndex((i) => i.itemId === item.itemId);
+    if (item.track) {
+      const index = this.trackItems().findIndex((i) => i.itemId === item.itemId);
+      if (index >= 0) this.playTracks(index, false);
+      return;
+    }
+    const index = this.videoItems().findIndex((i) => i.itemId === item.itemId);
     if (index >= 0) void this.launchQueue(index);
   }
 
   private async launchQueue(startIndex: number): Promise<void> {
     const p = this.playlist();
     if (!p) return;
-    const items = this.orderedItems().map((i) => ({ media: i.media, queue: this.toQueueItem(i) }));
+    const items = this.videoItems().map((i) => ({ media: i.media, queue: this.toQueueItem(i) }));
     const launched = await this.mediaStart.startFromPlaylist(p.id, items, startIndex, p.autoPlay);
     if (!launched) {
       this.toast.error(this.translate.instant('playlists.item_unavailable'));
@@ -373,6 +438,22 @@ export class PlaylistDetailComponent {
     }
   }
 
+  // ── Smart rules and M3U ──
+  onRulesSaved(): void {
+    void this.load(this.playlistId());
+  }
+
+  async exportM3u(): Promise<void> {
+    const p = this.playlist();
+    if (!p) return;
+    try {
+      const { blob, filename } = await this.api.exportM3u(p.id);
+      await saveFile(blob, filename ?? `${safeFileName(p.name, 'playlist')}.m3u8`);
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    }
+  }
+
   // ── Settings ──
   openSettings() {
     const p = this.playlist();
@@ -394,7 +475,7 @@ export class PlaylistDetailComponent {
     this.savingSettings.set(true);
     try {
       const updated = await this.api.update(p.id, {
-        autoRemoveWatched: this.draftAutoRemoveWatched(),
+        ...(this.isSmart() ? {} : { autoRemoveWatched: this.draftAutoRemoveWatched() }),
         autoPlay: this.draftAutoPlay(),
         visibility: this.draftVisibility(),
       });
@@ -600,7 +681,7 @@ export class PlaylistDetailComponent {
   async removeItem(item: PlaylistItem): Promise<void> {
     const id = this.playlist()?.id;
     if (id == null) return;
-    const title = item.episode ? this.episodeLabel(item.episode) : item.media.title;
+    const title = item.track?.title ?? (item.episode ? this.episodeLabel(item.episode) : item.media.title);
     const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('playlists.remove_item_title'),
       message: this.translate.instant('playlists.remove_item_confirm', {

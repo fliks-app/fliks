@@ -260,11 +260,13 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         season_number: None,
         episode_number: None,
         episode_title: None,
+        track: false,
     });
     PartyItem {
         media_id: item.media_id,
         media_file_id: item.media_file_id,
         episode_id: item.episode_id,
+        item_id: item.item_id.filter(|_| i.track),
         title: i.title,
         poster_url: i.poster_url,
         fanart_url: i.fanart_url,
@@ -297,11 +299,19 @@ pub async fn item_dto(st: &AppState, item: &Item) -> sqlx::Result<PartyItem> {
 
 /// One query for all the items, in the order given.
 pub async fn item_dtos(st: &AppState, items: &[Item]) -> sqlx::Result<Vec<PartyItem>> {
-    let keys: Vec<_> = items.iter().map(|i| (i.media_id, i.episode_id)).collect();
+    let keys: Vec<_> = items
+        .iter()
+        .map(|i| (i.media_id, i.episode_id, i.item_id))
+        .collect();
     let infos = db::item_infos(&st.db, &keys).await?;
     Ok(items
         .iter()
-        .map(|i| item_dto_of(infos.get(&(i.media_id, i.episode_id)).cloned(), i))
+        .map(|i| {
+            item_dto_of(
+                infos.get(&(i.media_id, i.episode_id, i.item_id)).cloned(),
+                i,
+            )
+        })
         .collect())
 }
 
@@ -413,13 +423,17 @@ fn item_key(m: &Message) -> Option<(i32, Option<i32>)> {
 #[derive(Default)]
 pub struct Titles {
     loaded: bool,
-    infos: HashMap<(i32, Option<i32>), db::ItemInfo>,
+    infos: HashMap<(i32, Option<i32>, Option<i32>), db::ItemInfo>,
     libraries: HashMap<i32, i32>,
 }
 
 impl Titles {
     pub async fn load(st: &AppState, messages: &[Message]) -> Result<Self, AppError> {
-        let keys: Vec<_> = messages.iter().filter_map(item_key).collect();
+        let keys: Vec<_> = messages
+            .iter()
+            .filter_map(item_key)
+            .map(|(m, e)| (m, e, None))
+            .collect();
         if keys.is_empty() {
             return Ok(Self::default());
         }
@@ -451,7 +465,7 @@ impl Titles {
         for m in messages.iter_mut().filter(|m| is_item_message(m)) {
             let title = item_key(m)
                 .filter(|k| db::can_open(&self.libraries, &allowed, k.0))
-                .and_then(|k| self.infos.get(&k).map(|i| i.title.clone()))
+                .and_then(|k| self.infos.get(&(k.0, k.1, None)).map(|i| i.title.clone()))
                 .unwrap_or_default();
             if let Some(args) = m.system.as_mut().and_then(|s| s.args.as_object_mut()) {
                 args.insert("title".into(), Value::String(title));

@@ -1,5 +1,8 @@
 //! Playlist items: list, add, remove and reorder (`docs/spec/playlists.md` rules 13-15, 28-35).
-use super::access::{Role, assert_role, not_found};
+use super::{
+    access::{Playlist, Role, assert_role, not_found},
+    smart,
+};
 use crate::{
     http::{
         AppError,
@@ -19,6 +22,13 @@ use sqlx::{PgConnection, types::Json as Jsonb};
 use std::collections::HashSet;
 
 const DUPLICATE: &str = "errors.media_already_in_playlist";
+
+fn writable(p: &Playlist) -> Result<(), AppError> {
+    if p.is_smart() {
+        return Err(AppError::bad_request("errors.playlist_smart_readonly"));
+    }
+    Ok(())
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -147,11 +157,21 @@ pub async fn items(
     a: Authed,
     PathParams(id): PathParams<i32>,
 ) -> Result<Json<Vec<Value>>, AppError> {
-    assert_role(&st.db, a.user.id, id, Role::Viewer).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Viewer).await?;
     let accessible = accessible_library_ids(&st.db, &a).await?;
     let paths = paths_visible(&a.perms);
+    let smart_ids = match &playlist.rules {
+        Some(r) => Some(smart::evaluate(&st.db, playlist.owner_id, &accessible, &r.0).await?),
+        None => None,
+    };
     let rows = sqlx::query!(
-        r#"SELECT pi.id AS item_id, pi."itemId" AS track_item, (m.type = 'album') AS "is_track!", pi.position, pi."addedById" AS added_by_id,
+        r#"WITH pi AS (
+             SELECT id, "itemId", position, "addedById" FROM playlist_items WHERE "playlistId" = $1 AND $7::int[] IS NULL
+             UNION ALL
+             SELECT t.i, t.i, (t.n - 1)::int, NULL::int FROM unnest($7::int[]) WITH ORDINALITY AS t(i, n)
+           )
+           SELECT pi.id AS "item_id!", pi."itemId" AS "track_item!", (m.type = 'album') AS "is_track!",
+                  pi.position AS "position!", pi."addedById" AS added_by_id,
                   (to_jsonb(m) - 'searchVector' - 'sortCreator') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
@@ -182,7 +202,7 @@ pub async fn items(
                     'posterUrl', s."posterUrl", 'overview', s.overview, 'airDate', s."airDate") END AS "season: Jsonb<Value>",
                   ps.completed AS "completed?", ps."positionSeconds" AS "position_seconds?",
                   ps."durationSeconds" AS duration_seconds
-           FROM playlist_items pi
+           FROM pi
            JOIN items e ON e.id = pi."itemId"
            JOIN media m ON m.id = e."mediaId"
            JOIN libraries l ON l.id = m."libraryId" AND l.id = ANY($2)
@@ -207,14 +227,14 @@ pub async fn items(
              WHERE e."mediaId" = m.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN playback_states ps ON ps."userId" = $3 AND ps."itemId" = pi."itemId"
-           WHERE pi."playlistId" = $1
            ORDER BY pi.position, pi.id"#,
         id,
         &accessible,
         a.user.id,
         external_ids::TMDB,
         external_ids::TVDB,
-        external_ids::IMDB
+        external_ids::IMDB,
+        smart_ids.as_deref() as Option<&[i32]>
     )
     .fetch_all(&st.db)
     .await?;
@@ -373,7 +393,8 @@ pub async fn add_item(
     PathParams(id): PathParams<i32>,
     ValidJson(dto): ValidJson<AddDto>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    writable(&playlist)?;
     let accessible = accessible_library_ids(&st.db, &a).await?;
     let mut tx = st.db.begin().await?;
     lock(&mut tx, id).await?;
@@ -423,7 +444,8 @@ pub async fn remove_item(
     a: Authed,
     PathParams((id, item)): PathParams<(i32, i32)>,
 ) -> Result<(), AppError> {
-    assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    writable(&playlist)?;
     let mut tx = st.db.begin().await?;
     let gone = sqlx::query!(
         r#"DELETE FROM playlist_items WHERE id = $2 AND "playlistId" = $1"#,
@@ -448,7 +470,8 @@ pub async fn remove_by_media(
     a: Authed,
     PathParams((id, media)): PathParams<(i32, i32)>,
 ) -> Result<Json<Value>, AppError> {
-    assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    writable(&playlist)?;
     let mut tx = st.db.begin().await?;
     let removed = sqlx::query!(
         r#"DELETE FROM playlist_items
@@ -473,7 +496,8 @@ pub async fn reorder(
     PathParams(id): PathParams<i32>,
     ValidJson(dto): ValidJson<ReorderDto>,
 ) -> Result<(), AppError> {
-    assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    let (playlist, _) = assert_role(&st.db, a.user.id, id, Role::Editor).await?;
+    writable(&playlist)?;
     let mut tx = st.db.begin().await?;
     lock(&mut tx, id).await?;
     let current: HashSet<i32> = sqlx::query_scalar!(

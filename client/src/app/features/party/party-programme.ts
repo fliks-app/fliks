@@ -5,7 +5,8 @@ import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, m
 import { DropListSettleDirective } from '../../shared/directives/drop-list-settle.directive';
 import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
-import { type Media } from '../../core/services/api/media.service';
+import { MediaService, type Media } from '../../core/services/api/media.service';
+import { itemIn, sameItem as sameRow, type ItemRef } from '../../core/services/party/party-item';
 import { SseService } from '../../core/services/sse.service';
 import { DeviceService } from '../../core/services/device.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -16,6 +17,8 @@ import { episodeLabel } from '../../shared/utils/episode-label';
 import { keepFocus, runBusy } from './party-busy';
 import { rowTops, slideRows } from './party-flip';
 import { itemThumb } from './party-thumb';
+import { PartyMusicPickerComponent } from './party-music-picker';
+import { albumRows, type NewRow } from './party-programme-items';
 
 export function findEpisode(media: Media | null | undefined, id: number | null | undefined) {
   if (id == null) return null;
@@ -26,18 +29,20 @@ export function findEpisode(media: Media | null | undefined, id: number | null |
   return null;
 }
 
-export const sameItem = (a: { mediaId: number; episodeId: number | null }, b: { mediaId: number; episodeId: number | null }) =>
-  a.mediaId === b.mediaId && a.episodeId === b.episodeId;
+export const sameItem = (a: ItemRef, b: ItemRef) => sameRow(a, b);
+
+const rowKey = (i: ItemRef) => `${i.mediaId}:${i.episodeId ?? ''}:${i.itemId ?? ''}`;
 
 /** The party's ordered programme: everyone sees it, the host reorders, removes and appends. */
 @Component({
   selector: 'app-party-programme',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, PartyMusicPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
   templateUrl: './party-programme.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyProgrammeComponent {
   private readonly api = inject(PartyApiService);
+  private readonly mediaService = inject(MediaService);
   private readonly sse = inject(SseService);
   protected readonly device = inject(DeviceService);
   private readonly injector = inject(Injector);
@@ -54,10 +59,11 @@ export class PartyProgrammeComponent {
   readonly changed = output<PartyDto>();
 
   protected readonly picker = viewChild.required(MediaPickerComponent);
+  protected readonly musicPicker = viewChild.required(PartyMusicPickerComponent);
   /** The programme as loaded and edited here; the page reads it to hide proposals already in it. */
   readonly items = model<PartyItem[]>([]);
   /** Items that came from a proposal, which the host can send back to the proposals. */
-  readonly proposed = input<readonly { mediaId: number; episodeId: number | null }[]>([]);
+  readonly proposed = input<readonly ItemRef[]>([]);
   protected readonly busy = signal(false);
   private seq = 0;
 
@@ -65,11 +71,13 @@ export class PartyProgrammeComponent {
     this.items().map((item) => {
       const label = episodeLabel({ seasonNumber: item.seasonNumber, episodeNumber: item.episodeNumber, episodeTitle: item.episodeTitle });
       const cur = this.current();
+      const track = item.itemId != null;
       return {
         item,
+        key: rowKey(item),
         hidden: !!item.hidden,
-        title: item.seriesTitle ?? item.title,
-        label,
+        title: track ? item.title : (item.seriesTitle ?? item.title),
+        label: track ? item.seriesTitle : label,
         thumb: itemThumb(item),
         playing: this.live() && !!cur && sameItem(cur, item),
       };
@@ -108,7 +116,7 @@ export class PartyProgrammeComponent {
     const dto = await runBusy(this.busy, () =>
       this.api.programme(
         this.partyId(),
-        next.map((i) => ({ mediaId: i.mediaId, ...(i.mediaFileId != null && { mediaFileId: i.mediaFileId }), ...(i.episodeId != null && { episodeId: i.episodeId }) })),
+        next.map(itemIn),
       ),
     );
     if (!dto) {
@@ -171,12 +179,21 @@ export class PartyProgrammeComponent {
     });
   }
 
-  protected append(picks: MediaPick[]): void {
+  /** Albums come back from the picker whole: each becomes its tracks. */
+  protected async append(picks: MediaPick[]): Promise<void> {
+    const rows: NewRow[] = [];
+    for (const p of picks) {
+      if (p.type === 'album') rows.push(...albumRows(await this.mediaService.getOne(p.mediaId).catch(() => null)));
+      else rows.push({ mediaId: p.mediaId, episodeId: p.episodeId, title: p.title, posterUrl: p.posterUrl });
+    }
+    this.appendRows(rows);
+  }
+
+  protected appendRows(rows: NewRow[]): void {
     const have = this.items();
     const added: PartyItem[] = [];
-    for (const p of picks) {
-      const item = { mediaId: p.mediaId, episodeId: p.episodeId } as PartyItem;
-      if (![...have, ...added].some((i) => sameItem(i, item))) added.push(item);
+    for (const r of rows) {
+      if (![...have, ...added].some((i) => sameRow(i, r))) added.push(r as PartyItem);
     }
     if (added.length) void this.save([...have, ...added], false);
   }

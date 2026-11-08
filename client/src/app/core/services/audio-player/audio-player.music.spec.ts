@@ -182,4 +182,84 @@ describe('AudioPlayerService music mode', () => {
     await audio.close();
     expect(cast.stop).toHaveBeenCalled();
   });
+
+  describe('driven by a party', () => {
+    const drive = (audio: AudioPlayerService, drives = true) => {
+      const router = vi.fn((c: { type: string }) => c.type === 'drives' && drives);
+      audio.setPartyRouter(router as never);
+      return router;
+    };
+
+    it('opens its track paused, with a queue of just that track', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.openForParty(track(3));
+      expect(audio.queue().map((t) => t.itemId)).toEqual([3]);
+      expect(audio.track()?.itemId).toBe(3);
+      expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    });
+
+    it('turns toggle, seek, next and previous into party commands and leaves the element alone', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      const router = vi.fn((_c: { type: string }) => true);
+      audio.setPartyRouter(router);
+      (HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>).mockClear();
+      audio.toggle();
+      await audio.seek(30);
+      audio.next();
+      audio.previous();
+      expect(router.mock.calls.map(([c]) => c.type)).toEqual(['toggle', 'seek', 'next', 'prev']);
+      expect(audio.track()?.itemId).toBe(1);
+      expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    });
+
+    it('seeks the element itself through seekLocal', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      drive(audio);
+      await audio.seekLocal(12);
+      expect(els(audio)[0].currentTime).toBe(12);
+    });
+
+    it('does not advance or preload when a track ends, and reports it ended', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      drive(audio);
+      getItemPlaybackInfo.mockClear();
+      els(audio)[0].dispatchEvent(new Event('ended'));
+      expect(audio.track()?.itemId).toBe(1);
+      expect(audio.ended()).toBe(true);
+      expect(getItemPlaybackInfo).not.toHaveBeenCalled();
+      await audio.seekLocal(0);
+      expect(audio.ended()).toBe(false);
+    });
+
+    it('refuses an outside play while the party drives it', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      const router = vi.fn((_c: { type: string }) => true);
+      audio.setPartyRouter(router);
+      await audio.playTracks([track(1)]);
+      expect(audio.track()).toBeNull();
+      expect(router).toHaveBeenCalledWith({ type: 'external' });
+    });
+
+    it('ducks the element level without touching the prefs', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      audio.setDuck(0.4);
+      expect(els(audio)[0].volume).toBeCloseTo(0.4);
+      audio.setDuck(1);
+      expect(els(audio)[0].volume).toBe(1);
+      expect(localStorage.getItem('fliks.audio.prefs')).toBeNull();
+    });
+
+    it('nudges the playback rate without saving it', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      audio.setElementRate(1.05);
+      expect(audio.elementRate()).toBe(1.05);
+      expect(audio.rate()).toBe(1);
+      expect(localStorage.getItem('fliks.audio.prefs')).toBeNull();
+    });
+  });
 });

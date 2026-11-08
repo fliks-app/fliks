@@ -1,7 +1,11 @@
 //! Playlist views: counts and posters under the viewer's library ACL, the list and the profile listing.
-use super::access::{Playlist, PlaylistView, Role, assert_role};
+use super::{
+    access::{Playlist, PlaylistView, Role, assert_role},
+    smart,
+};
 use crate::{http::AppError, http::auth::Authed, libraries::accessible_library_ids};
-use sqlx::PgPool;
+use fliks_domain::music::playlist_rules::SmartRules;
+use sqlx::{PgPool, types::Json};
 use std::collections::HashMap;
 
 type Stats = HashMap<i32, (i32, Vec<String>)>;
@@ -51,11 +55,28 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
         .collect())
 }
 
+/// Replaces the stats of the smart playlists by their evaluation under `accessible` (rule 52).
+async fn smart_stats(
+    db: &PgPool,
+    stats: &mut Stats,
+    playlists: &[&Playlist],
+    accessible: &[i32],
+) -> sqlx::Result<()> {
+    for p in playlists.iter().copied() {
+        if let Some(Json(rules)) = &p.rules {
+            let ids = smart::evaluate(db, p.owner_id, accessible, rules).await?;
+            stats.insert(p.id, smart::stats(db, &ids).await?);
+        }
+    }
+    Ok(())
+}
+
 /// `findOneForUser`: the view with the caller's role, saved flag and ACL stats.
 pub async fn view_for(db: &PgPool, a: &Authed, id: i32) -> Result<PlaylistView, AppError> {
     let (playlist, role) = assert_role(db, a.user.id, id, Role::Viewer).await?;
     let accessible = accessible_library_ids(db, a).await?;
     let mut stats = stats(db, &[id], &accessible).await?;
+    smart_stats(db, &mut stats, &[&playlist], &accessible).await?;
     let saved = role != Role::Owner
         && sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM playlist_saves WHERE "userId" = $1 AND "playlistId" = $2) AS "e!""#,
@@ -81,6 +102,7 @@ pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppE
                   p."ownerId" AS owner_id, p."autoRemoveWatched" AS auto_remove_watched,
                   p."autoDownload" AS auto_download, p."autoPlay" AS auto_play,
                   p.visibility::text AS "visibility!", p."coverImageUrl" AS cover_image_url,
+                  p.rules AS "rules?: Json<SmartRules>",
                   x.role AS "role!", x.saved AS "saved!"
            FROM (
              SELECT id, 'owner' AS role, false AS saved, 1 AS prec FROM playlists WHERE "ownerId" = $1
@@ -102,8 +124,9 @@ pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppE
     .fetch_all(db)
     .await?;
     let ids: Vec<i32> = rows.iter().map(|r| r.id).collect();
-    let mut stats = stats(db, &ids, &accessible_library_ids(db, a).await?).await?;
-    let mut views: Vec<PlaylistView> = rows
+    let accessible = accessible_library_ids(db, a).await?;
+    let mut stats = stats(db, &ids, &accessible).await?;
+    let entries: Vec<(Playlist, Role, bool)> = rows
         .into_iter()
         .map(|r| {
             let role = match r.role.as_str() {
@@ -121,8 +144,23 @@ pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppE
                 auto_play: r.auto_play,
                 visibility: r.visibility,
                 cover_image_url: r.cover_image_url,
+                rules: r.rules,
             };
-            PlaylistView::new(p, role, r.saved, stats.remove(&r.id))
+            (p, role, r.saved)
+        })
+        .collect();
+    smart_stats(
+        db,
+        &mut stats,
+        &entries.iter().map(|e| &e.0).collect::<Vec<_>>(),
+        &accessible,
+    )
+    .await?;
+    let mut views: Vec<PlaylistView> = entries
+        .into_iter()
+        .map(|(p, role, saved)| {
+            let s = stats.remove(&p.id);
+            PlaylistView::new(p, role, saved, s)
         })
         .collect();
     by_name(&mut views);
@@ -146,7 +184,8 @@ pub async fn visible_for_owner(
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, "ownerId" AS owner_id,
                   "autoRemoveWatched" AS auto_remove_watched, "autoDownload" AS auto_download,
                   "autoPlay" AS auto_play, visibility::text AS "visibility!",
-                  "coverImageUrl" AS cover_image_url
+                  "coverImageUrl" AS cover_image_url,
+                  rules AS "rules?: Json<SmartRules>"
            FROM playlists WHERE "ownerId" = $1 AND visibility::text = ANY($2)"#,
         owner,
         visibilities as &[&str]
@@ -155,6 +194,13 @@ pub async fn visible_for_owner(
     .await?;
     let ids: Vec<i32> = playlists.iter().map(|p| p.id).collect();
     let mut stats = stats(db, &ids, viewer_libraries).await?;
+    smart_stats(
+        db,
+        &mut stats,
+        &playlists.iter().collect::<Vec<_>>(),
+        viewer_libraries,
+    )
+    .await?;
     let mut views: Vec<PlaylistView> = playlists
         .into_iter()
         .map(|p| {

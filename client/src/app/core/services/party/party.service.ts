@@ -12,6 +12,7 @@ import {
   type PartyDto,
   type PartyIntentAction,
   type PartyItem,
+  type PartyItemIn,
   type PartyMember,
   type PartyMessage,
   type PartyPlayState,
@@ -33,6 +34,8 @@ import { ServerConfigService } from '../server-config.service';
 import { mediaQuerySignal } from '../../utils/viewport';
 import { ClockService } from './clock.service';
 import { ReactionsService } from './reactions.service';
+import { AudioPartyHost } from './audio-party-host';
+import { sameItem } from './party-item';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -367,8 +370,10 @@ export class PartyService {
   private async loadQueue(): Promise<void> {
     const party = this.party();
     if (!party) return;
-    const items = await this.api.queue(party.id).catch(() => null);
-    if (!items) return;
+    const rows = await this.api.queue(party.id).catch(() => null);
+    if (!rows) return;
+    // Tracks play in the audio player, which has no video queue to show.
+    const items = rows.filter((i) => i.itemId == null);
     this.queuedFor = this.item();
     if (!items.length) {
       if (this.queue.source() === 'party') this.queue.clear();
@@ -376,7 +381,7 @@ export class PartyService {
     }
     const cur = this.item();
     // Off the programme, the cursor sits before row 0, where the server's `next` lands.
-    const at = cur ? items.findIndex((i) => i.mediaId === cur.mediaId && i.episodeId === cur.episodeId) : 0;
+    const at = cur ? items.findIndex((i) => sameItem(i, cur)) : 0;
     this.queue.start(
       items.map((i) => ({
         mediaId: i.mediaId,
@@ -392,13 +397,18 @@ export class PartyService {
   /** The server derives the queue from the current item, so another show, a movie or an edited playlist needs a reload. */
   private syncQueue(item: PartyItem): void {
     const q = this.queuedFor;
-    if (!q || (q.mediaId === item.mediaId && q.episodeId === item.episodeId)) return;
+    if (!q || item.itemId != null || sameItem(q, item)) return;
     if (this.queue.items().some((i) => i.mediaId === item.mediaId && (i.episodeId ?? null) === item.episodeId)) return;
     void this.loadQueue();
   }
 
-  private async openPlayer(item: PartyItem): Promise<void> {
+  /** A track opens the audio player, anything else the video player's route. */
+  async openPlayer(item: PartyItem): Promise<void> {
     await this.loadQueue();
+    if (item.itemId != null) {
+      if (!(await this.injector.get(AudioPartyHost).openItem(item))) await this.leave();
+      return;
+    }
     let fileId = item.mediaFileId;
     if (fileId == null) {
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
@@ -635,7 +645,7 @@ export class PartyService {
   /** Local engine actions are routed here in a party; the server decides and answers with `party.state`. */
   async sendIntent(
     action: PartyIntentAction,
-    extra: { position?: number; item?: { mediaId: number; mediaFileId?: number; episodeId?: number } } = {},
+    extra: { position?: number; item?: PartyItemIn } = {},
   ): Promise<void> {
     const id = this.party()?.id;
     if (id == null) return;

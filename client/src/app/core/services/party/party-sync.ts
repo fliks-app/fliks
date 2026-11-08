@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, Injector, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { MediaService } from '../api/media.service';
@@ -7,19 +7,22 @@ import { ClockService } from './clock.service';
 import { PartyService, type PartyLiveState } from './party.service';
 import { DeviceService } from '../device.service';
 import { PlayerStateService } from '../player-state.service';
-import type { PlaybackEngine } from '../playback-engine/playback-engine';
 import { PlaybackQueueService, type QueueItem } from '../playback-queue.service';
 import { ToastService } from '../toast.service';
 import { VoiceService } from './voice.service';
-import { VoiceDucker } from './party-ducking';
+import { VoiceDucker, type DuckEngine } from './party-ducking';
+import { AudioPartyHost } from './audio-party-host';
+import type { AudioPartyCommand } from '../audio-player/audio-player.service';
+import { itemIn, sameItem, type PartyPlayable } from './party-item';
 import { PlaybackSession, type PlaybackCommand } from '../playback/playback-session';
-import type { PlaybackOutput } from '../playback/playback-output';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { DRIFT_CHECK_MS, driftAction, driftProfile, groupPosition } from './party-drift';
 
 /** What a mounted player lends the party sync; cleared when the player goes. */
 export interface PartyHost {
-  engine(): PlaybackEngine | null;
+  engine(): DuckEngine | null;
+  /** A host that is not the video player brings its own output (the audio player). */
+  output?(): PartyPlayable | null;
   /** The `party=` of the player's URL, 0 when absent. */
   urlPartyId(): number;
   /** The party no longer drives playback (its rejoin failed): play as a solo player would. */
@@ -49,12 +52,15 @@ export class PartySync {
   private readonly router = inject(Router);
   private readonly session = inject(PlaybackSession);
   private readonly mediaService = inject(MediaService);
+  private readonly injector = inject(Injector);
   private readonly host = signal<PartyHost | null>(null);
   private readonly ducker = new VoiceDucker(
     () => this.host()?.engine() ?? null,
-    () => this.state.volume(),
-    (level) => this.state.noteDuckWrite(level),
+    () => (this.isAudio() ? 1 : this.state.volume()),
+    (level) => this.isAudio() || this.state.noteDuckWrite(level),
   );
+  private audioHost: AudioPartyHost | null = null;
+  private unroute: (() => void) | null = null;
 
   private generation = 0;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,7 +77,7 @@ export class PartySync {
 
   constructor() {
     this.session.setPartyRouter(this.takeCommand);
-    this.party.closed.subscribe(() => this.host() && this.goHome());
+    this.party.closed.subscribe(() => this.host() && !this.isAudio() && this.goHome());
     const drift = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     inject(DestroyRef).onDestroy(() => clearInterval(drift));
   }
@@ -82,9 +88,24 @@ export class PartySync {
   }
 
   /** The active output, or null once the player closed and nothing else plays. */
-  private out(): PlaybackOutput | null {
-    return this.session.output();
+  private out(): PartyPlayable | null {
+    return this.host()?.output?.() ?? this.session.output();
   }
+
+  private isAudio(): boolean {
+    return this.audioHost !== null && this.host() === this.audioHost;
+  }
+
+  /** The audio player takes the party's transport while it is the host. */
+  private readonly takeAudio = (c: AudioPartyCommand): boolean => {
+    if (c.type === 'drives') return this.party.active();
+    if (c.type === 'external') {
+      if (this.party.active()) this.toast.info(this.translate.instant('party.audio_busy'));
+      return this.party.active();
+    }
+    // The audio queue holds only the party's track: the server owns the rest.
+    return c.type === 'item' || this.takeCommand(c);
+  };
 
   private readonly takeCommand = (c: PlaybackCommand): boolean => {
     switch (c.type) {
@@ -133,8 +154,9 @@ export class PartySync {
 
   /** A member leaves the party (the host ends it instead) and goes home. */
   async leave(): Promise<void> {
+    const audio = this.isAudio();
     await this.party.leave();
-    this.goHome();
+    if (!audio) this.goHome();
   }
 
   private goHome(): void {
@@ -211,6 +233,32 @@ export class PartySync {
 
   // ── Party state -> engine ──
 
+  /** A track on the programme hands the party to the audio player, a film hands it back to the video player. */
+  private readonly hostEffect = effect(() => {
+    const item = this.party.active() ? (this.party.live()?.item ?? null) : null;
+    untracked(() => this.followKind(item));
+  });
+
+  private followKind(item: PartyItem | null): void {
+    if (item?.itemId != null) {
+      const audio = (this.audioHost ??= this.injector.get(AudioPartyHost));
+      const prev = this.host();
+      if (prev === audio) return;
+      this.host.set(audio);
+      this.unroute = audio.route(this.takeAudio);
+      prev?.onBack();
+      return;
+    }
+    if (!this.isAudio()) return;
+    const audio = this.audioHost!;
+    this.ducker.stop();
+    this.unroute?.();
+    this.unroute = null;
+    this.host.set(null);
+    audio.onBack();
+    if (item) void this.party.openPlayer(item);
+  }
+
   private readonly duckEffect = effect(() => {
     const duck = this.voice.duck() && this.voice.othersSpeaking();
     const host = this.host();
@@ -218,9 +266,9 @@ export class PartySync {
   });
 
   /** A new output (a handoff, a reopened player) is brought to the group's position; none left, the group stops waiting on us. */
-  private lastOutput: PlaybackOutput | null = null;
+  private lastOutput: PartyPlayable | null = null;
   private readonly outputEffect = effect(() => {
-    const out = this.session.output();
+    const out = this.out();
     untracked(() => {
       const previous = this.lastOutput;
       this.lastOutput = out;
@@ -266,8 +314,7 @@ export class PartySync {
     if (!out?.ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      const { mediaId, episodeId } = out.item();
-      void this.party.sendIntent('ended', { item: { mediaId, ...(episodeId != null && { episodeId }) } });
+      void this.party.sendIntent('ended', { item: itemIn(out.item()) });
     });
   });
 
@@ -321,18 +368,18 @@ export class PartySync {
 
   private itemDiffers(live: PartyLiveState): boolean {
     const cur = this.out()?.item();
-    return !cur || live.item.mediaId !== cur.mediaId || (live.item.episodeId ?? undefined) !== cur.episodeId;
+    return !cur || !sameItem(live.item, cur);
   }
 
   /** idle, paused and waiting all hold the engine paused at the anchor; waiting then reports `ready` once the seek has landed. */
-  private async applyHeld(out: PlaybackOutput, live: PartyLiveState, gen: number, force: boolean): Promise<void> {
+  private async applyHeld(out: PartyPlayable, live: PartyLiveState, gen: number, force: boolean): Promise<void> {
     await out.pause();
     if (gen !== this.generation) return;
     if (!(await this.seekIfFar(out, live.anchor.position, gen, force))) return;
     this.reportReady(live.anchor.position);
   }
 
-  private async applyPlaying(out: PlaybackOutput, live: PartyLiveState, gen: number, force: boolean): Promise<void> {
+  private async applyPlaying(out: PartyPlayable, live: PartyLiveState, gen: number, force: boolean): Promise<void> {
     const startAt = live.whenMs ?? live.anchor.serverTimeMs;
     const wait = startAt - this.clock.serverNow();
     if (wait > 0) {
@@ -351,7 +398,7 @@ export class PartySync {
   }
 
   /** False when a newer apply superseded this one while waiting. */
-  private async seekIfFar(out: PlaybackOutput, target: number, gen: number, force: boolean): Promise<boolean> {
+  private async seekIfFar(out: PartyPlayable, target: number, gen: number, force: boolean): Promise<boolean> {
     if (force || Math.abs(out.position() - target) > out.sync.slackS + (out.sync.stepS?.() ?? 0)) {
       out.seek(target);
       this.lastCorrectiveSeek = Date.now();
@@ -374,7 +421,7 @@ export class PartySync {
     return false;
   }
 
-  private async untilUnlocked(out: PlaybackOutput, gen: number): Promise<void> {
+  private async untilUnlocked(out: PartyPlayable, gen: number): Promise<void> {
     const deadline = Date.now() + UNLOCK_TIMEOUT_MS;
     while (gen === this.generation && out.seekLocked() && Date.now() < deadline) {
       await new Promise<void>((r) => setTimeout(r, POLL_MS));
