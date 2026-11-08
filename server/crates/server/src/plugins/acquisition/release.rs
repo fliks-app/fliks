@@ -29,7 +29,8 @@ pub async fn matches(
     )))
     .fetch_all(db)
     .await?;
-    let (library, identified) = identify(library, titles).await;
+    let artists = album_artists(db, &library).await?;
+    let (library, identified) = identify(library, artists, titles).await;
     let mut out = vec![];
     let mut scenes: HashMap<i32, Mapping> = HashMap::new();
     for (entry, se, coverage, hits) in identified {
@@ -50,6 +51,30 @@ pub async fn matches(
     Ok(out)
 }
 
+/// The names of the album artists of each album of `library`: a title must name one of them too.
+async fn album_artists(
+    db: &PgPool,
+    library: &[MediaRow],
+) -> sqlx::Result<HashMap<i32, Vec<String>>> {
+    let ids: Vec<i32> = library
+        .iter()
+        .filter(|m| m.kind == MediaKind::Album)
+        .map(|m| m.id)
+        .collect();
+    let rows: Vec<(i32, String)> = sqlx::query_as(
+        r#"SELECT c."mediaId", p.name FROM media_credits c JOIN persons p ON p.id = c."personId"
+            WHERE c."mediaId" = ANY($1) AND c.role = 'artist' ORDER BY c."mediaId", c.position"#,
+    )
+    .bind(&ids)
+    .fetch_all(db)
+    .await?;
+    let mut out: HashMap<i32, Vec<String>> = HashMap::new();
+    for (id, name) in rows {
+        out.entry(id).or_default().push(name);
+    }
+    Ok(out)
+}
+
 /// The library media a title names: the first, and every comic volume when the first is a comic.
 type Hits = Vec<usize>;
 
@@ -63,6 +88,7 @@ type Identified = (
 /// Each title with its parsed season and episode, its coverage and the library media it names.
 async fn identify(
     library: Vec<MediaRow>,
+    artists: HashMap<i32, Vec<String>>,
     titles: Vec<t::ReleaseTitle>,
 ) -> (Vec<MediaRow>, Vec<Identified>) {
     // Index and identification are CPU-bound over owned data; only the DB reads stay async.
@@ -78,6 +104,10 @@ async fn identify(
                 index_title_expectations(&names)
             })
             .collect();
+        let by_artist: Vec<_> = library
+            .iter()
+            .map(|m| index_title_expectations(artists.get(&m.id).map_or(&[][..], Vec::as_slice)))
+            .collect();
         let identified: Vec<_> = titles
             .into_iter()
             .map(|entry| {
@@ -86,9 +116,18 @@ async fn identify(
                 let tokens = release_title_tokens(&entry.title);
                 let named =
                     |idx: &_| matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch);
+                let by = |i: &usize| {
+                    named(&indexed[*i])
+                        && (library[*i].kind != MediaKind::Album
+                            || matches_indexed_expectation(
+                                &tokens,
+                                &by_artist[*i],
+                                WhenUnreadable::NoMatch,
+                            ))
+                };
                 let fits = fitting_kinds(&entry.title, se.season.is_some() || se.episode.is_some());
                 let fit = |i: &usize| fits.is_none_or(|k| k.contains(&library[*i].kind));
-                let all: Vec<usize> = (0..indexed.len()).filter(|i| named(&indexed[*i])).collect();
+                let all: Vec<usize> = (0..indexed.len()).filter(by).collect();
                 let first = all.iter().copied().find(fit);
                 let mut hits: Hits = first.into_iter().collect();
                 if let Some(first) = hits.first().copied()
@@ -145,6 +184,12 @@ async fn match_one(
         .filter(|m| m.kind == MediaKind::Book)
     {
         return super::book::match_one(db, book, min_age, entry).await;
+    }
+    if let Some(album) = hit
+        .map(|i| &library[i])
+        .filter(|m| m.kind == MediaKind::Album)
+    {
+        return super::album::match_one(db, album, min_age, entry).await;
     }
     if hit.is_some_and(|i| library[i].kind == MediaKind::Comic) {
         return super::comic::match_one(db, library, &hits, min_age, entry).await;

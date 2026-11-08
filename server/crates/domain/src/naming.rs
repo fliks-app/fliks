@@ -15,6 +15,10 @@ pub struct NamingFormats {
     pub season_folder: String,
     pub book: String,
     pub book_folder: String,
+    pub artist_folder: String,
+    pub album_folder: String,
+    pub track: String,
+    pub multi_disc_track: String,
 }
 
 /// What a format names: a file, the title's folder, or the folder of one group of items.
@@ -23,10 +27,20 @@ pub enum Scope {
     File,
     Folder,
     GroupFolder,
+    /// The folder above an album's, named for its artist.
+    ArtistFolder,
+    /// The file of a track of an album that has several discs.
+    MultiDiscFile,
 }
 
 impl Scope {
-    pub const ALL: [Self; 3] = [Self::File, Self::Folder, Self::GroupFolder];
+    pub const ALL: [Self; 5] = [
+        Self::File,
+        Self::Folder,
+        Self::GroupFolder,
+        Self::ArtistFolder,
+        Self::MultiDiscFile,
+    ];
 }
 
 /// The `app_settings` key of a format; `None` where the kind has no such scope.
@@ -40,7 +54,11 @@ pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str> 
         (MediaKind::Movie, Scope::GroupFolder) => None,
         (MediaKind::Book, Scope::File) => Some("naming_book_format"),
         (MediaKind::Book, Scope::Folder) => Some("naming_book_folder_format"),
-        (MediaKind::Book, Scope::GroupFolder) | (MediaKind::Comic | MediaKind::Album, _) => None,
+        (MediaKind::Album, Scope::File) => Some("naming_track_format"),
+        (MediaKind::Album, Scope::Folder) => Some("naming_album_folder_format"),
+        (MediaKind::Album, Scope::ArtistFolder) => Some("naming_artist_folder_format"),
+        (MediaKind::Album, Scope::MultiDiscFile) => Some("naming_multi_disc_track_format"),
+        _ => None,
     }
 }
 
@@ -54,6 +72,10 @@ pub fn default_formats() -> NamingFormats {
         season_folder: "Season {season:00}".into(),
         book: "{Title} ({Year})".into(),
         book_folder: "{Title}".into(),
+        artist_folder: "{Artist Name}".into(),
+        album_folder: "{Album Title} ({Release Year})".into(),
+        track: "{track:00} - {Track Title}".into(),
+        multi_disc_track: "{medium:00}-{track:00} - {Track Title}".into(),
     }
 }
 
@@ -76,6 +98,10 @@ pub fn formats_from_rows(rows: &[(String, Option<String>)]) -> NamingFormats {
         season_folder: get(MediaKind::Series, Scope::GroupFolder, d.season_folder),
         book: get(MediaKind::Book, Scope::File, d.book),
         book_folder: get(MediaKind::Book, Scope::Folder, d.book_folder),
+        artist_folder: get(MediaKind::Album, Scope::ArtistFolder, d.artist_folder),
+        album_folder: get(MediaKind::Album, Scope::Folder, d.album_folder),
+        track: get(MediaKind::Album, Scope::File, d.track),
+        multi_disc_track: get(MediaKind::Album, Scope::MultiDiscFile, d.multi_disc_track),
     }
 }
 
@@ -259,6 +285,47 @@ pub fn apply_book_format(format: &str, d: &BookNameTokens) -> String {
             ("{Narrator}", text(&d.narrator)),
             ("{Language}", text(&d.language)),
             ("{Format}", text(&d.format)),
+        ],
+    )
+}
+
+data!(AlbumNameTokens {
+    artist_name: Option<String>,
+    artist_sort_name: Option<String>,
+    #[serde(deserialize_with = "nullable")] album_title: String,
+    release_year: Option<i64>,
+    album_type: Option<String>,
+    medium_format: Option<String>,
+    medium: Option<i64>,
+    track: Option<i64>,
+    track_title: Option<String>,
+    track_artist: Option<String>,
+    quality: Option<String>,
+    release_group: Option<String>,
+});
+
+/// The folders and files of an album share one token set; the caller adds the extension.
+pub fn apply_album_format(format: &str, d: &AlbumNameTokens) -> String {
+    let text = |o: &Option<String>| o.clone().unwrap_or_default();
+    let n = |o: Option<i64>| o.map(pad2).unwrap_or_default();
+    let plain = |o: Option<i64>| o.map(|v| v.to_string()).unwrap_or_default();
+    fill(
+        format,
+        &[
+            ("{Artist SortName}", text(&d.artist_sort_name)),
+            ("{Artist Name}", text(&d.artist_name)),
+            ("{Album Title}", d.album_title.clone()),
+            ("{Release Year}", opt_num(d.release_year)),
+            ("{Album Type}", text(&d.album_type)),
+            ("{Medium Format}", text(&d.medium_format)),
+            ("{medium:00}", n(d.medium)),
+            ("{medium}", plain(d.medium)),
+            ("{track:00}", n(d.track)),
+            ("{track}", plain(d.track)),
+            ("{Track Title}", text(&d.track_title)),
+            ("{Track Artist}", text(&d.track_artist)),
+            ("{Quality Full}", text(&d.quality)),
+            ("{Release Group}", text(&d.release_group)),
         ],
     )
 }
@@ -579,5 +646,46 @@ mod tests {
         assert_eq!(stem(".mkv", false), ".mkv");
         assert_eq!(stem("a.", false), "a");
         assert_eq!(stem("..", false), "..");
+    }
+}
+
+#[cfg(test)]
+mod album_tests {
+    use super::*;
+
+    #[test]
+    fn the_default_formats_name_an_album_and_its_tracks() {
+        let d = default_formats();
+        let t = AlbumNameTokens {
+            artist_name: Some("Cora Vell".into()),
+            album_title: "Salt Meadows".into(),
+            release_year: Some(2019),
+            medium: Some(2),
+            track: Some(5),
+            track_title: Some("Low Tide: Part 1".into()),
+            ..Default::default()
+        };
+        assert_eq!(apply_album_format(&d.artist_folder, &t), "Cora Vell");
+        assert_eq!(
+            apply_album_format(&d.album_folder, &t),
+            "Salt Meadows (2019)"
+        );
+        assert_eq!(apply_album_format(&d.track, &t), "05 - Low Tide Part 1");
+        assert_eq!(
+            apply_album_format(&d.multi_disc_track, &t),
+            "02-05 - Low Tide Part 1"
+        );
+    }
+
+    #[test]
+    fn a_missing_year_leaves_no_empty_brackets() {
+        let t = AlbumNameTokens {
+            album_title: "Salt Meadows".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            apply_album_format(&default_formats().album_folder, &t),
+            "Salt Meadows"
+        );
     }
 }

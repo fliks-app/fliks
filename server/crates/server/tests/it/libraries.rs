@@ -237,6 +237,65 @@ async fn validation_conflicts_and_acl(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_library_of_albums_carries_a_metadata_profile(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, lib) = call(
+        &c,
+        "POST",
+        "/api/libraries",
+        &c.admin,
+        json!({"name": "M", "mediaTypes": ["album"]}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let default =
+        json!({"primaryTypes": ["album", "ep"], "secondaryTypes": [], "statuses": ["official"]});
+    assert_eq!(lib["metadataProfile"], default, "the default is answered");
+    let id = lib["id"].as_i64().unwrap();
+    let mine = json!({"primaryTypes": ["Album", "single", "album"], "secondaryTypes": ["live"],
+                      "statuses": ["official", "unknown"]});
+    let (s, lib) = call(
+        &c,
+        "PATCH",
+        &format!("/api/libraries/{id}"),
+        &c.admin,
+        json!({"metadataProfile": mine}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        lib["metadataProfile"],
+        json!({"primaryTypes": ["album", "single"], "secondaryTypes": ["live"], "statuses": ["official", "unknown"]})
+    );
+    for bad in [
+        json!({"primaryTypes": [], "secondaryTypes": [], "statuses": []}),
+        json!({"primaryTypes": ["opera"], "secondaryTypes": [], "statuses": []}),
+        json!("x"),
+    ] {
+        let (s, _) = call(
+            &c,
+            "PATCH",
+            &format!("/api/libraries/{id}"),
+            &c.admin,
+            json!({"metadataProfile": bad}),
+        )
+        .await;
+        assert_eq!(s, 400);
+    }
+    let (_, lib) = call(
+        &c,
+        "PATCH",
+        &format!("/api/libraries/{id}"),
+        &c.admin,
+        json!({"metadataProfile": null}),
+    )
+    .await;
+    assert_eq!(lib["metadataProfile"], default, "null clears it");
+    let (_, other) = call(&c, "POST", "/api/libraries", &c.admin, json!({"name": "V"})).await;
+    assert!(other["metadataProfile"].is_null());
+}
+
+#[sqlx::test(migrations = false)]
 async fn acl_helpers(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     for n in ["A", "B"] {

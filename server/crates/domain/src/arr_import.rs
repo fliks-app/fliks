@@ -516,3 +516,71 @@ mod tests {
         assert_eq!(resolve_cutoff(None, &remote), 16);
     }
 }
+
+/// The audio quality (`AUDIO_QUALITIES` id) a Lidarr quality name (`FLAC 24bit`, `MP3-VBR-V0`, `AAC-320`) maps to;
+/// `None` for one with no equivalent (`Unknown`, `WMA`).
+pub fn audio_quality_id(name: &str) -> Option<u32> {
+    let n = name.to_lowercase();
+    let digits: u32 = n
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|d| d.parse().ok())
+        .find(|d| *d >= 64)
+        .unwrap_or(0);
+    let q = if ["flac", "alac", "wav", "ape", "wavpack", "dsd"]
+        .iter()
+        .any(|c| n.contains(c))
+    {
+        if n.contains("24") { 115 } else { 114 }
+    } else if n.contains("mp3") {
+        match (n.contains("v0"), n.contains("v2"), digits) {
+            (true, _, _) => 117,
+            (_, true, _) => 103,
+            (_, _, d) if d >= 288 => 116,
+            (_, _, d) if d >= 224 => 104,
+            (_, _, d) if d >= 96 => 103,
+            (_, _, 64..) => 102,
+            _ => return None,
+        }
+    } else if n.contains("aac") {
+        if digits >= 192 || n.contains("vbr") {
+            110
+        } else {
+            109
+        }
+    } else if n.contains("vorbis") || n.contains("ogg") {
+        if n.contains("q10") || n.contains("q9") || n.contains("q8") {
+            107
+        } else {
+            106
+        }
+    } else if n.contains("opus") {
+        if digits >= 192 { 113 } else { 112 }
+    } else {
+        return None;
+    };
+    Some(q)
+}
+
+#[cfg(test)]
+mod audio_tests {
+    use super::audio_quality_id;
+
+    #[test]
+    fn lidarr_names_map_to_the_audio_rows() {
+        for (name, id) in [
+            ("FLAC", 114),
+            ("FLAC 24bit", 115),
+            ("MP3-320", 116),
+            ("MP3-VBR-V0", 117),
+            ("MP3-256", 104),
+            ("MP3-192", 103),
+            ("MP3-128", 103),
+            ("AAC-320", 110),
+            ("OGG Vorbis Q10", 107),
+        ] {
+            assert_eq!(audio_quality_id(name), Some(id), "{name}");
+        }
+        assert_eq!(audio_quality_id("Unknown"), None);
+        assert_eq!(audio_quality_id("WMA"), None);
+    }
+}

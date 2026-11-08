@@ -52,6 +52,27 @@ export interface UpdateLibraryFolderBody {
   position?: number;
 }
 
+/** Which release groups and releases of a provider a library of albums wants. */
+export interface MetadataProfile {
+  primaryTypes: string[];
+  secondaryTypes: string[];
+  statuses: string[];
+}
+
+export const PRIMARY_TYPES = ['album', 'ep', 'single', 'broadcast', 'other'] as const;
+export const SECONDARY_TYPES = [
+  'compilation', 'soundtrack', 'spokenword', 'interview', 'audiobook', 'audio drama', 'live',
+  'remix', 'dj-mix', 'mixtape/street', 'demo', 'field recording',
+] as const;
+export const RELEASE_STATUSES = [
+  'official', 'promotion', 'bootleg', 'pseudo-release', 'withdrawn', 'expunged', 'cancelled', 'unknown',
+] as const;
+export const DEFAULT_METADATA_PROFILE: MetadataProfile = {
+  primaryTypes: ['album', 'ep'],
+  secondaryTypes: [],
+  statuses: ['official'],
+};
+
 export interface Library {
   id: number;
   name: string;
@@ -68,6 +89,8 @@ export interface Library {
   optimizeProfileId: number | null;
   optimizeNewFiles: boolean;
   allowRename: boolean;
+  /** Set for a library of albums: the stored profile, else the default. */
+  metadataProfile?: MetadataProfile | null;
   /** First folder, kept for older clients: `folders` is the list. */
   path: string | null;
   label: string | null;
@@ -91,6 +114,7 @@ export interface CreateLibraryBody {
   optimizeProfileId?: number | null;
   optimizeNewFiles?: boolean;
   allowRename?: boolean;
+  metadataProfile?: MetadataProfile | null;
   path?: string;
   userIds?: number[];
 }

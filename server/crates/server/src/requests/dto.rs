@@ -108,7 +108,12 @@ const BOOK_KEYS: [&str; 7] = [
 
 pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
     let o = object(v);
-    let book = o.get("mediaType").and_then(Value::as_str) == Some(MediaKind::Book.as_str());
+    let work_kind = o
+        .get("mediaType")
+        .and_then(Value::as_str)
+        .and_then(MediaKind::parse)
+        .filter(|k| matches!(k, MediaKind::Book | MediaKind::Album));
+    let book = work_kind.is_some();
     let mut c = Check::new(&o, if book { &BOOK_KEYS } else { &VIDEO_KEYS }, "");
     let media_type = c.kind("mediaType", false);
     let kind = c.one_of("kind", &KINDS, true);
@@ -118,7 +123,7 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         Some(m) if !m.is_video() => {
             c.err(
                 "mediaType",
-                "must be one of the following values: movie, series, book",
+                "must be one of the following values: movie, series, book, album",
             );
             None
         }
@@ -135,17 +140,19 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         c.errs.push("property wants should not exist".into());
     }
     let wants = match o.get("wants") {
-        Some(w) if book && !delete => match parse_wants_profiled(w, MediaKind::Book) {
-            Ok(w) => Some(w),
-            Err(m) if m == PROFILE_REQUIRED => {
-                c.errs.push(m);
-                None
+        Some(w) if book && !delete => {
+            match parse_wants_profiled(w, work_kind.unwrap_or(MediaKind::Book)) {
+                Ok(w) => Some(w),
+                Err(m) if m == PROFILE_REQUIRED => {
+                    c.errs.push(m);
+                    None
+                }
+                Err(m) => {
+                    c.err("wants", &m);
+                    None
+                }
             }
-            Err(m) => {
-                c.err("wants", &m);
-                None
-            }
-        },
+        }
         None if book && !delete => {
             c.err("wants", "must be an array");
             None
@@ -287,6 +294,20 @@ fn book_key(
     o: &Map<String, Value>,
     media_type: MediaKind,
 ) -> Option<super::TitleKey> {
+    if media_type == MediaKind::Album {
+        let id = o
+            .get("externalId")
+            .and_then(Value::as_str)
+            .and_then(|v| Namespace::MUSICBRAINZ.core()?.normalize(v));
+        if id.is_none() {
+            c.err("externalId", "must be a MusicBrainz release group id");
+        }
+        return id.map(|external_id| super::TitleKey {
+            media_type,
+            provider: Namespace::MUSICBRAINZ,
+            external_id,
+        });
+    }
     let work = o
         .get("externalId")
         .and_then(Value::as_str)
@@ -489,6 +510,18 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
 /// The title `title-state` asks about: `tmdbId` of a video kind (canonical integer) or `externalId` of a book.
 pub fn title_state(known: &Namespaces, q: &[(String, String)]) -> Res<super::TitleKey> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+    if one("mediaType") == Some(MediaKind::Album.as_str()) {
+        let id = one("externalId")
+            .and_then(|v| Namespace::MUSICBRAINZ.core()?.normalize(v))
+            .ok_or_else(|| {
+                AppError::bad_request(vec!["externalId must be a MusicBrainz release group id"])
+            })?;
+        return Ok(super::TitleKey {
+            media_type: MediaKind::Album,
+            provider: Namespace::MUSICBRAINZ,
+            external_id: id,
+        });
+    }
     if one("mediaType") == Some(MediaKind::Book.as_str()) {
         let work = one("externalId").and_then(work_id).ok_or_else(|| {
             AppError::bad_request(vec!["externalId must be an Open Library work id"])
@@ -666,6 +699,30 @@ mod tests {
     }
 
     #[test]
+    fn an_album_is_requested_by_its_release_group() {
+        let ok = create_request(
+            &Namespaces::default(),
+            json!({
+                "mediaType": "album", "title": "Salt Meadows",
+                "externalId": "11111111-1111-1111-1111-111111111111",
+                "wants": [{"family": "audio", "qualityProfileId": 1}]
+            }),
+        )
+        .unwrap();
+        assert_eq!(ok.media_type, MediaKind::Album);
+        assert_eq!(ok.key.provider, Namespace::MUSICBRAINZ);
+        assert_eq!(ok.wants.unwrap().len(), 1);
+        let bad = msgs(create_request(
+            &Namespaces::default(),
+            json!({"mediaType": "album", "title": "t", "externalId": "tt1", "wants": [{"family": "audio", "qualityProfileId": 1}]}),
+        ));
+        assert_eq!(
+            bad,
+            json!(["externalId must be a MusicBrainz release group id"])
+        );
+    }
+
+    #[test]
     fn a_comic_cannot_be_requested() {
         let m = msgs(create_request(
             &Namespaces::default(),
@@ -673,7 +730,7 @@ mod tests {
         ));
         assert_eq!(
             m,
-            json!(["mediaType must be one of the following values: movie, series, book"])
+            json!(["mediaType must be one of the following values: movie, series, book, album"])
         );
     }
 

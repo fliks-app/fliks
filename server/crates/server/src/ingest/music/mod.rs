@@ -2,7 +2,9 @@
 //! track item per file, the tags read into `track_details` and the credits. Metadata is written by
 //! `metadata::music`, never here.
 pub mod identify;
+pub mod naming;
 pub mod tags;
+pub mod tagwrite;
 
 use super::{
     books::{KnownFile, Placed, Registered, Registration},
@@ -802,6 +804,11 @@ pub async fn settled(st: &AppState, media: i32) {
             "Post-import[album #{media}]: identification failed: {}",
             e.text()
         );
+    }
+    if tagwrite::enabled(st).await
+        && let Err(e) = tagwrite::write_album_tags(st, media).await
+    {
+        tracing::warn!("Post-import[album #{media}]: tags not written: {e}");
     }
 }
 

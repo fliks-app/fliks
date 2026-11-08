@@ -35,6 +35,8 @@ const SETTING_RADARR_URL = 'radarr_url';
 const SETTING_RADARR_API_KEY = 'radarr_api_key';
 const SETTING_SONARR_URL = 'sonarr_url';
 const SETTING_SONARR_API_KEY = 'sonarr_api_key';
+const SETTING_LIDARR_URL = 'lidarr_url';
+const SETTING_LIDARR_API_KEY = 'lidarr_api_key';
 
 interface SeerrSummary {
   users: number;
@@ -68,7 +70,7 @@ interface PreviewImportResult {
   localLibraries: { id: number; name: string; path: string | null }[];
 }
 
-type Provider = 'radarr' | 'sonarr';
+type Provider = 'radarr' | 'sonarr' | 'lidarr';
 
 /** Sentinel passed through the mapping select in place of a numeric library id. */
 const IGNORE_VALUE = '__ignore__' as const;
@@ -102,6 +104,7 @@ class ArrState {
 const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
   radarr: { url: SETTING_RADARR_URL, apiKey: SETTING_RADARR_API_KEY },
   sonarr: { url: SETTING_SONARR_URL, apiKey: SETTING_SONARR_API_KEY },
+  lidarr: { url: SETTING_LIDARR_URL, apiKey: SETTING_LIDARR_API_KEY },
 };
 
 @Component({
@@ -161,8 +164,16 @@ export class DataImportsSettingsComponent implements OnInit {
     this.libraries().filter((l) => l.mediaTypes.includes('series')),
   );
 
-  readonly arr: Record<Provider, ArrState> = { radarr: new ArrState(), sonarr: new ArrState() };
-  readonly providers = ['radarr', 'sonarr'] as const;
+  readonly albumLibraries = computed(() =>
+    this.libraries().filter((l) => (l.mediaTypes as readonly string[]).includes('album')),
+  );
+
+  readonly arr: Record<Provider, ArrState> = {
+    radarr: new ArrState(),
+    sonarr: new ArrState(),
+    lidarr: new ArrState(),
+  };
+  readonly providers = ['radarr', 'sonarr', 'lidarr'] as const;
   readonly arrCards = [
     {
       provider: 'radarr',
@@ -177,6 +188,13 @@ export class DataImportsSettingsComponent implements OnInit {
       descKey: 'import.sonarr_desc',
       urlPlaceholderKey: 'import.sonarr_url_placeholder',
       libraries: this.seriesLibraries,
+    },
+    {
+      provider: 'lidarr',
+      titleKey: 'import.lidarr_title',
+      descKey: 'import.lidarr_desc',
+      urlPlaceholderKey: 'import.lidarr_url_placeholder',
+      libraries: this.albumLibraries,
     },
   ] as const;
 
@@ -245,12 +263,15 @@ export class DataImportsSettingsComponent implements OnInit {
       this.storedKeys.set(
         new Set([
           ...settingsSecretsSet(all),
-          ...[SETTING_SEERR_API_KEY, SETTING_RADARR_API_KEY, SETTING_SONARR_API_KEY].filter(
-            (k) => !!all[k],
-          ),
+          ...[
+            SETTING_SEERR_API_KEY,
+            SETTING_RADARR_API_KEY,
+            SETTING_SONARR_API_KEY,
+            SETTING_LIDARR_API_KEY,
+          ].filter((k) => !!all[k]),
         ]),
       );
-      for (const p of ['radarr', 'sonarr'] as const) {
+      for (const p of ['radarr', 'sonarr', 'lidarr'] as const) {
         this.arr[p].url.set(all[ARR_SETTINGS[p].url] ?? '');
         this.arr[p].apiKey.set(all[ARR_SETTINGS[p].apiKey] ?? '');
       }

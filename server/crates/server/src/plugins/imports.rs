@@ -325,6 +325,47 @@ impl host::Host for Ctx {
             }
         )
     }
+    async fn music_want_recording(
+        &mut self,
+        recording: t::RecordingRef,
+        library_id: Option<u32>,
+    ) -> Result<t::WantedTrack, HostError> {
+        let app = self.app();
+        let plugin_id = self.sh.id.to_string();
+        call!(
+            self,
+            "music.wantRecording",
+            ["media:create", "media:read"],
+            CREATE_CALL,
+            async {
+                let app = app?;
+                tokio::spawn(async move {
+                    super::acquisition::want_recording(&app, &plugin_id, recording, library_id)
+                        .await
+                })
+                .await
+                .map_err(|e| host_err("ERR", e.to_string()))?
+            }
+        )
+    }
+    async fn playlist_sync(
+        &mut self,
+        user_id: u32,
+        name: String,
+        item_ids: Vec<u32>,
+    ) -> Result<u32, HostError> {
+        let app = self.app();
+        call!(
+            self,
+            "playlist.sync",
+            ["playlists:write"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::playlist_sync(&app, user_id, &name, &item_ids).await
+            }
+        )
+    }
     async fn library_ingest(&mut self, r: t::IngestRequest) -> Result<t::IngestResult, HostError> {
         let app = self.app();
         let id = self.sh.id.clone();

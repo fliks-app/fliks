@@ -22,7 +22,7 @@ const fn q(
     }
 }
 
-pub static AUDIO_QUALITIES: [AppQuality; 15] = [
+pub static AUDIO_QUALITIES: [AppQuality; 17] = [
     q(101, "Unknown-audio", 0, "unknown", 5),
     q(102, "MP3-64k", 64, "mp3", 10),
     q(103, "MP3-128k", 128, "mp3", 20),
@@ -38,7 +38,12 @@ pub static AUDIO_QUALITIES: [AppQuality; 15] = [
     q(113, "Opus-256k", 256, "opus", 35),
     q(114, "Lossless-16bit", 16, "lossless", 50),
     q(115, "Lossless-24bit", 24, "lossless", 60),
+    q(116, "MP3-320", 320, "mp3", 34),
+    q(117, "MP3-V0", V0_KBPS, "mp3", 31),
 ];
+
+/// The average bitrate of an MP3 `V0` encode, and the `resolution` of its row.
+const V0_KBPS: u32 = 245;
 
 pub fn audio_quality_by_id(id: i64) -> Option<&'static AppQuality> {
     AUDIO_QUALITIES.iter().find(|q| i64::from(q.id) == id)
@@ -73,15 +78,16 @@ fn format_of(t: &str) -> Option<(&'static str, &'static str)> {
 }
 
 fn bitrate_of(t: &str, codec: Option<&str>) -> Option<u32> {
-    let kbps = rx!(r"\b(\d{2,3}) ?(?:kbps|kb/s|kbit/s|kbit|kb|k)\b")
+    let kbps = rx!(r"\b(\d{2,3}) ?(?:kbps|kb/s|kbit/s|kbit|kb|k)\b|\bmp3[ -](\d{3})\b")
         .captures(t)
-        .and_then(|c| c[1].parse().ok())
+        .and_then(|c| c.get(1).or_else(|| c.get(2)).map(|m| m.as_str().to_owned()))
+        .and_then(|n| n.parse().ok())
         .filter(|k| (32..=512).contains(k));
     if kbps.is_some() || codec != Some("mp3") {
         return kbps;
     }
     match rx!(r"\bv([02])\b").captures(t) {
-        Some(c) if &c[1] == "0" => Some(245),
+        Some(c) if &c[1] == "0" => Some(V0_KBPS),
         Some(_) => Some(190),
         None => None,
     }
@@ -105,6 +111,9 @@ fn quality_of(
                 match b {
                     ..96 => 64,
                     96..192 => 128,
+                    192..288 if c == "mp3" && b == V0_KBPS => V0_KBPS,
+                    192..288 => 256,
+                    _ if c == "mp3" => 320,
                     _ => 256,
                 },
                 c,
@@ -119,9 +128,10 @@ pub fn parse_audio_release(title: &str) -> AudioRelease {
     let (format, codec) = format_of(&t).unzip();
     let bitrate_kbps = bitrate_of(&t, codec);
     let bit_depth = (codec == Some("lossless")).then(|| {
-        match rx!(r"\b(16|24|32) ?-?bit\b")
+        match rx!(r"\b(16|24|32) ?-?bit\b|\b(16|24|32)-(?:44|48|88|96|176|192)\b")
             .captures(&t)
-            .map(|c| c[1].to_owned())
+            .and_then(|c| c.get(1).or_else(|| c.get(2)))
+            .map(|m| m.as_str().to_owned())
             .as_deref()
         {
             Some("24" | "32") => 24,

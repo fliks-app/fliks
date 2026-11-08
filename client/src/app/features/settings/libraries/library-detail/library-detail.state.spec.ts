@@ -159,4 +159,39 @@ describe('LibraryDetailState.save', () => {
     expect(await state.save()).toBe(true);
     expect(updated).toEqual([expect.objectContaining({ mediaTypes: ['book'], mergeM4b: true, mergeM4bReplace: true })]);
   });
+
+  it('sends the metadata profile of a library of albums and no other', async () => {
+    const { state, updated } = setup();
+    state.hydrate({
+      id: 7,
+      name: 'Music',
+      mediaTypes: ['book', 'album'],
+      metadataProfile: { primaryTypes: ['album'], secondaryTypes: [], statuses: ['official'] },
+      userIds: [],
+    } as unknown as Library);
+    state.libraryId.set(7);
+    state.toggleProfile('primaryTypes', 'ep', true);
+    state.toggleProfile('secondaryTypes', 'live', true);
+    state.toggleProfile('statuses', 'official', false);
+
+    expect(await state.save()).toBe(true);
+    expect(updated).toEqual([
+      expect.objectContaining({
+        metadataProfile: { primaryTypes: ['album', 'ep'], secondaryTypes: ['live'], statuses: [] },
+      }),
+    ]);
+
+    state.formKinds.set(new Set(['book']));
+    await state.save();
+    expect(updated[1]).not.toHaveProperty('metadataProfile');
+  });
+
+  it('refuses a library of albums that wants no type of release', () => {
+    const { state } = setup();
+    state.formName.set('Music');
+    state.formKinds.set(new Set(['book', 'album'] as never));
+    state.toggleProfile('primaryTypes', 'album', false);
+    state.toggleProfile('primaryTypes', 'ep', false);
+    expect(state.validate()).toBe(false);
+  });
 });

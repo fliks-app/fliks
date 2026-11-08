@@ -21,6 +21,7 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     media::{family::Family, kind::MediaKind},
+    music::profile::MetadataProfile,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -41,6 +42,7 @@ struct CreateDto {
     default_language_profile_id: Option<i32>,
     merge_m4b: Option<bool>,
     merge_m4b_replace: Option<bool>,
+    metadata_profile: Option<Value>,
     path: Option<String>,
     user_ids: Option<Vec<i32>>,
 }
@@ -70,6 +72,8 @@ struct UpdateDto {
     default_language_profile_id: Patch<i32>,
     merge_m4b: Option<bool>,
     merge_m4b_replace: Option<bool>,
+    #[serde(default, deserialize_with = "present")]
+    metadata_profile: Patch<Value>,
     #[serde(default, deserialize_with = "present")]
     optimize_profile_id: Patch<i32>,
     optimize_new_files: Option<bool>,
@@ -127,6 +131,16 @@ fn check_media_types(v: &[String]) -> Result<(), AppError> {
 /// Empty string and `0` clear the override (rules 11-12).
 fn or_null(s: Option<&str>) -> Option<&str> {
     s.filter(|s| !s.is_empty())
+}
+
+/// The normalised metadata profile of a body value; `null` clears it (the default applies).
+fn metadata_profile(v: Option<&Value>) -> Result<Option<Value>, AppError> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => MetadataProfile::parse(v)
+            .map(|p| Some(serde_json::to_value(p).expect("profile serialises")))
+            .map_err(bad),
+    }
 }
 
 fn profile(id: Option<i32>) -> Option<i32> {
@@ -213,6 +227,7 @@ pub async fn create(
             .collect()
     });
     check_media_types(&media_types)?;
+    let metadata_profile = metadata_profile(dto.metadata_profile.as_ref())?;
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO libraries (name, icon, color, "mediaTypes", "preferredProvider", "metadataLanguage",
@@ -233,6 +248,13 @@ pub async fn create(
     .fetch_one(&mut *tx)
     .await
     .map_err(db::constraint)?;
+    if let Some(p) = metadata_profile {
+        sqlx::query(r#"UPDATE libraries SET "metadataProfile" = $2 WHERE id = $1"#)
+            .bind(id)
+            .bind(p)
+            .execute(&mut *tx)
+            .await?;
+    }
     // Access before path: a rejected request must not leave a directory behind.
     if let Some(ids) = dto.user_ids.filter(|ids| !ids.is_empty()) {
         replace_access(&mut tx, id, &ids).await?;
@@ -266,6 +288,10 @@ pub async fn update(
     if let Some(Some(t)) = &dto.media_types {
         check_media_types(t)?;
     }
+    let profile_value = match &dto.metadata_profile {
+        Some(v) => Some(metadata_profile(v.as_ref())?),
+        None => None,
+    };
     max_len("icon", dto.icon.clone().flatten().as_deref(), 48)?;
     max_len("color", dto.color.clone().flatten().as_deref(), 32)?;
     max_len(
@@ -306,7 +332,9 @@ pub async fn update(
         dto.preferred_provider.clone().flatten().as_deref(),
         stored.as_deref(),
     )?;
-    patch(&mut tx, id, &dto).await.map_err(db::constraint)?;
+    patch(&mut tx, id, &dto, profile_value)
+        .await
+        .map_err(db::constraint)?;
     let orphan_new_files = sqlx::query_scalar::<_, bool>(
         r#"SELECT "optimizeNewFiles" AND "optimizeProfileId" IS NULL FROM libraries WHERE id = $1"#,
     )
@@ -335,7 +363,12 @@ pub async fn update(
 }
 
 /// `UPDATE ... SET <given fields>, "updatedAt" = now()`, skipped when no field is given (rule 12).
-async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sqlx::Error> {
+async fn patch(
+    c: &mut PgConnection,
+    id: i32,
+    dto: &UpdateDto,
+    metadata_profile: Option<Option<Value>>,
+) -> Result<(), sqlx::Error> {
     let mut q = QueryBuilder::new("UPDATE libraries SET ");
     let mut sets = q.separated(", ");
     macro_rules! set {
@@ -382,6 +415,7 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         sets.push(r#""optimizeNewFilesSince" = CASE WHEN "optimizeNewFiles" THEN "optimizeNewFilesSince" ELSE now() END"#);
     }
     set!("allowRename", dto.allow_rename);
+    set!("metadataProfile", metadata_profile.clone());
     let given = dto.name.is_some()
         || dto.icon.is_some()
         || dto.color.is_some()
@@ -395,7 +429,8 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
         || dto.merge_m4b_replace.is_some()
         || dto.optimize_profile_id.is_some()
         || dto.optimize_new_files.is_some()
-        || dto.allow_rename.is_some();
+        || dto.allow_rename.is_some()
+        || metadata_profile.is_some();
     if !given {
         return Ok(());
     }

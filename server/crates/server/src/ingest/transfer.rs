@@ -13,7 +13,8 @@ pub enum Method {
     Move,
 }
 
-const DEFAULT_COMPANIONS: &str = ".srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp,.edl";
+const DEFAULT_COMPANIONS: &str =
+    ".srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp,.edl,.lrc";
 
 /// Rule 16: a stored empty value means no companions at all.
 pub async fn companion_exts(db: &PgPool) -> Result<Vec<String>, sqlx::Error> {
@@ -77,7 +78,7 @@ pub struct Companions<'a> {
     pub allowed: &'a [String],
 }
 
-/// The files of `dir` that ride along with the video whose stem is `base` (rules 14-15).
+/// The files of `dir` that ride along with the video or the track whose stem is `base` (rules 14-15).
 pub fn companion_names(dir: &Path, base: &str, allowed: &[String]) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
@@ -87,7 +88,7 @@ pub fn companion_names(dir: &Path, base: &str, allowed: &[String]) -> Vec<String
     let longer: Vec<String> = entries
         .iter()
         .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|n| super::is_video(n))
+        .filter(|n| super::is_media(n))
         .map(|n| split_ext(&n).0.to_lowercase())
         .filter(|s| s.len() > base.len() && s.starts_with(&base))
         .collect();
@@ -104,11 +105,11 @@ pub fn companion_names(dir: &Path, base: &str, allowed: &[String]) -> Vec<String
         if !allowed.contains(&ext_l) || !stem_l.starts_with(&base) {
             continue;
         }
-        if (ext_l == ".edl" && stem_l != base) || super::is_video(&name) {
+        if (ext_l == ".edl" && stem_l != base) || super::is_media(&name) {
             continue;
         }
         if longer.iter().any(|l| stem_l.starts_with(l.as_str())) {
-            tracing::warn!("companion \"{name}\" belongs to a longer-named video, skipped");
+            tracing::warn!("companion \"{name}\" belongs to a longer-named file, skipped");
             continue;
         }
         names.push(name);
@@ -133,6 +134,28 @@ pub fn transfer_companions(c: &Companions) {
                 tracing::warn!("companion \"{dest_name}\" already exists, \"{name}\" kept")
             }
             Err(err) => tracing::warn!("companion \"{name}\" not transferred: {err}"),
+        }
+    }
+}
+
+const ART_STEMS: [&str; 6] = ["cover", "folder", "front", "back", "albumart", "disc"];
+
+/// The artwork of an album's folder (`cover.jpg`, `folder.png`, ...) goes once to the destination folder;
+/// one already there is kept.
+pub fn transfer_folder_art(src_dir: &Path, dest_dir: &Path, method: Method, allowed: &[String]) {
+    let Ok(entries) = fs::read_dir(src_dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let Ok(name) = e.file_name().into_string() else {
+            continue;
+        };
+        let (stem, ext) = split_ext(&name);
+        let art = e.file_type().is_ok_and(|t| t.is_file())
+            && allowed.contains(&ext.to_lowercase())
+            && ART_STEMS.contains(&stem.to_lowercase().as_str());
+        if art && let Err(err) = transfer_file(&e.path(), &dest_dir.join(&name), method, false) {
+            tracing::warn!("album art \"{name}\" not transferred: {err}");
         }
     }
 }

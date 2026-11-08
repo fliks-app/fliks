@@ -340,6 +340,9 @@ mod api {
         )
         .await;
         assert_eq!(s, 400);
-        assert!(b.to_string().contains("movie, series, book"), "{b}");
+        assert!(
+            b.to_string().contains("MusicBrainz release group id"),
+            "{b}"
+        );
     }
 }

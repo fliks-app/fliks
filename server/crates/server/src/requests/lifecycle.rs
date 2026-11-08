@@ -158,6 +158,10 @@ impl Lifecycle {
                 (MediaKind::Book, Some(w)) => {
                     db::wants_covered(&self.st.db, media_id, &w.0).await?
                 }
+                (MediaKind::Album, _) => crate::media::wants::list(&self.st.db, media_id)
+                    .await?
+                    .iter()
+                    .all(|w| w.satisfied),
                 (MediaKind::Series, _) => scope_covered(r.scope(), &eps),
                 _ => files > 0,
             };

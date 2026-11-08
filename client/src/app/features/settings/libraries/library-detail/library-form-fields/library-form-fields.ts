@@ -21,6 +21,12 @@ import {
   metadataRegionOptions,
 } from '../../../../../core/constants/metadata-locale';
 import { LucideIconComponent } from '../../../../../shared/components/lucide-icon';
+import {
+  MetadataProfile,
+  PRIMARY_TYPES,
+  RELEASE_STATUSES,
+  SECONDARY_TYPES,
+} from '../../../../../core/services/api/libraries-api.service';
 import { LibraryDetailState } from '../library-detail.state';
 
 @Component({
@@ -39,6 +45,12 @@ export class LibraryFormFieldsComponent {
 
   readonly kinds = MEDIA_KINDS;
   readonly registry = KIND_REGISTRY;
+
+  readonly profileGroups: { list: keyof MetadataProfile; titleKey: string; values: readonly string[] }[] = [
+    { list: 'primaryTypes', titleKey: 'settings.libraries.profile_primary', values: PRIMARY_TYPES },
+    { list: 'secondaryTypes', titleKey: 'settings.libraries.profile_secondary', values: SECONDARY_TYPES },
+    { list: 'statuses', titleKey: 'settings.libraries.profile_statuses', values: RELEASE_STATUSES },
+  ];
 
   private readonly serving = signal<Record<MediaType, ServingProvider[]> | null>(null);
 

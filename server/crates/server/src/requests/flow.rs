@@ -278,7 +278,7 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
         "lockedQualityProfileId": locked.and_then(|l| l.0),
         "lockedLanguageProfileId": locked.and_then(|l| l.1),
     });
-    if key.media_type == MediaKind::Book {
+    if super::is_work(key.media_type) {
         let wants: Vec<&WantSpec> = active
             .iter()
             .flat_map(|r| r.wants.iter().flat_map(|w| w.0.iter()))
@@ -318,7 +318,7 @@ pub async fn ensure_media(
 ) -> Res<Option<i32>> {
     let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
         Ok(id) => id,
-        Err(e) if e.status != 409 || spec.title.media_type == MediaKind::Book => {
+        Err(e) if e.status != 409 || super::is_work(spec.title.media_type) => {
             return Err(e.into());
         }
         Err(_) => {
@@ -476,7 +476,7 @@ async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<
         seasons: n.seasons.clone(),
     });
     if auto {
-        if let Some(m) = media_id.filter(|_| media_type == MediaKind::Book) {
+        if let Some(m) = media_id.filter(|_| super::is_work(media_type)) {
             // the book import runs no request hook, which is what asks the acquisition for a video title
             st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
                 media_ids: vec![i64::from(m)],
@@ -776,13 +776,26 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         falsy(&dto.language_profile_id),
         dto.library_id.touched(),
     );
-    if row.media_type == MediaKind::Book && (quality.is_some() || language.is_some()) {
+    if super::is_work(row.media_type) && (quality.is_some() || language.is_some()) {
         return Err(AppError::bad_request(
-            "A book request takes its profiles per want",
+            "A book or album request takes its profiles per want",
         ));
     }
-    if dto.wants.is_some() && row.media_type != MediaKind::Book {
-        return Err(AppError::bad_request("Only a book request has wants"));
+    if dto.wants.is_some() && !super::is_work(row.media_type) {
+        return Err(AppError::bad_request(
+            "Only a book or album request has wants",
+        ));
+    }
+    if row.media_type == MediaKind::Album
+        && dto
+            .wants
+            .iter()
+            .flatten()
+            .any(|w| w.family != fliks_domain::media::family::Family::Audio)
+    {
+        return Err(AppError::bad_request(
+            "An album request wants the audio family",
+        ));
     }
     if let Some(Some(l)) = library {
         assert_can_use_library(st, a, l).await?;

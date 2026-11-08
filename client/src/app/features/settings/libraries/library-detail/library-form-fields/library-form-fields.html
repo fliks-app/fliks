@@ -87,6 +87,27 @@
   }
 }
 
+@if (state.holdsAlbums()) {
+  <div class="divider my-0"></div>
+  <h2 class="card-title text-lg">{{ 'settings.libraries.section_profile' | translate }}</h2>
+  <p class="text-sm opacity-70 max-w-md -mt-2">{{ 'settings.libraries.profile_hint' | translate }}</p>
+  @for (group of profileGroups; track group.list) {
+    <fieldset class="max-w-md">
+      <legend class="label-text text-base mb-1">{{ group.titleKey | translate }}</legend>
+      <div class="flex flex-wrap gap-x-4 gap-y-1">
+        @for (v of group.values; track v) {
+          <label class="label cursor-pointer justify-start gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="state.formMetadataProfile()[group.list].includes(v)"
+              (ngModelChange)="state.toggleProfile(group.list, v, $event)" />
+            <span class="label-text">{{ v }}</span>
+          </label>
+        }
+      </div>
+    </fieldset>
+  }
+}
+
 <div class="divider my-0"></div>
 <h2 class="card-title text-lg">{{ 'settings.libraries.section_metadata' | translate }}</h2>
 

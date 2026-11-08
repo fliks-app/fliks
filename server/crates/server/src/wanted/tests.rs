@@ -273,6 +273,56 @@ async fn the_wanted_list_holds_unsatisfied_wants_of_monitored_media(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_follow_names_its_role_or_takes_the_one_of_the_person(pool: PgPool) {
+    let c = ctx(pool).await;
+    let uri = "/api/persons/1/follow";
+    let (s, v) = c.admin("GET", &format!("{uri}?role=artist"), None).await;
+    assert_eq!(
+        (s, v["canFollow"].clone()),
+        (200, json!(false)),
+        "an author is no artist"
+    );
+    let (_, v) = c.admin("GET", &format!("{uri}?role=author"), None).await;
+    assert_eq!(
+        (v["canFollow"].clone(), v["role"].clone()),
+        (json!(true), json!("author"))
+    );
+    assert_eq!(
+        c.admin("GET", &format!("{uri}?role=reader"), None).await.0,
+        400
+    );
+    for body in [
+        json!({"libraryId": 1, "role": "artist"}),
+        json!({"libraryId": 1, "role": "reader"}),
+        json!({"libraryId": 1, "role": 5}),
+    ] {
+        assert_eq!(c.admin("PUT", uri, Some(body)).await.0, 400);
+    }
+    let (s, v) = c
+        .admin("PUT", uri, Some(json!({"libraryId": 1, "role": "author"})))
+        .await;
+    assert_eq!((s, v["follow"]["role"].clone()), (200, json!("author")));
+    assert_eq!(
+        c.admin("DELETE", &format!("{uri}?role=artist"), None)
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        c.admin("GET", uri, None).await.1["follow"]["role"],
+        "author",
+        "another role is not deleted"
+    );
+    assert_eq!(
+        c.admin("DELETE", &format!("{uri}?role=author"), None)
+            .await
+            .0,
+        204
+    );
+    assert!(c.admin("GET", uri, None).await.1["follow"].is_null());
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_follow_is_saved_per_user_and_checked(pool: PgPool) {
     let c = ctx(pool).await;
     let uri = "/api/persons/1/follow";

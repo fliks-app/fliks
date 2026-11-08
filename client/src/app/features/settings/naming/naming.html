@@ -210,6 +210,46 @@
         </div>
       </div>
 
+      <!-- Album naming -->
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-base">{{ 'settings.naming.albums' | translate }}</h2>
+
+          @for (f of albumFields; track f.field) {
+            <label class="form-control w-full">
+              <div class="label">
+                <span class="label-text">{{ f.labelKey | translate }}</span>
+              </div>
+              <input
+                type="text"
+                class="input input-bordered input-sm w-full font-mono"
+                [ngModel]="albumFormats[f.field]()"
+                (ngModelChange)="albumFormats[f.field].set($event)"
+              />
+              <div class="flex flex-wrap gap-1 mt-2">
+                @for (token of albumTokens; track token) {
+                  <button
+                    type="button"
+                    class="badge badge-ghost badge-sm font-mono cursor-pointer hover:badge-primary"
+                    (click)="insertAlbumToken(f.field, token)"
+                  >{{ token }}</button>
+                }
+              </div>
+            </label>
+          }
+
+          <div class="space-y-1">
+            <p class="text-sm text-base-content/50">{{ 'settings.naming.preview' | translate }}</p>
+            <div class="bg-base-200/50 rounded p-3 text-sm font-mono text-base-content/80">
+              <span class="text-base-content/40">/root/</span>{{ albumPreview().artistFolder || '…' }}/{{ albumPreview().albumFolder || '…' }}/{{ albumPreview().track || '…' }}<span class="text-base-content/30">.flac</span>
+            </div>
+            <div class="bg-base-200/50 rounded p-3 text-sm font-mono text-base-content/80">
+              <span class="text-base-content/40">/root/</span>{{ albumPreview().artistFolder || '…' }}/{{ albumPreview().albumFolder || '…' }}/{{ albumPreview().multiDiscTrack || '…' }}<span class="text-base-content/30">.flac</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       }

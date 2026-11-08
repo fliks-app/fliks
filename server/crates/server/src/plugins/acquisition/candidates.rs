@@ -154,6 +154,11 @@ pub async fn context(
             .await
             .map_err(db_err);
     }
+    if m.kind == MediaKind::Album {
+        return super::album::context(db, &m, season_id, episode_id)
+            .await
+            .map_err(db_err);
+    }
     if m.kind == MediaKind::Book {
         return super::book::context(db, &m, family, language.as_deref(), season_id, episode_id)
             .await
@@ -428,6 +433,9 @@ pub(super) async fn targets_for(
     }
     if kind.is_none_or(|k| k == MediaKind::Comic) && family.is_none_or(|f| f == Family::Image) {
         targets.extend(super::comic::targets(db, ids, on).await?);
+    }
+    if kind.is_none_or(|k| k == MediaKind::Album) && family.is_none_or(|f| f == Family::Audio) {
+        targets.extend(super::album::targets(db, ids, on).await?);
     }
     if family.is_some_and(|f| f != Family::Video) {
         targets.sort_by_key(key);

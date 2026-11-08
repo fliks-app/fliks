@@ -125,3 +125,11 @@ pub fn router() -> Router<AppState> {
                 .delete(rules::rule_remove),
         )
 }
+
+/// A request of a book or an album names its work by id and wishes it per want, not per profile.
+pub(crate) fn is_work(kind: fliks_domain::media::kind::MediaKind) -> bool {
+    matches!(
+        kind,
+        fliks_domain::media::kind::MediaKind::Book | fliks_domain::media::kind::MediaKind::Album
+    )
+}

@@ -118,9 +118,13 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             Some("naming_movie_format"),
             Some("naming_movie_folder_format"),
             None,
+            None,
+            None,
             Some("naming_series_format"),
             Some("naming_series_folder_format"),
             Some("naming_season_folder_format"),
+            None,
+            None,
             Some("naming_book_format"),
             Some("naming_book_folder_format"),
             None,
@@ -130,6 +134,12 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             None,
             None,
             None,
+            None,
+            Some("naming_track_format"),
+            Some("naming_album_folder_format"),
+            None,
+            Some("naming_artist_folder_format"),
+            Some("naming_multi_disc_track_format"),
         ]
     );
     let rows = [(

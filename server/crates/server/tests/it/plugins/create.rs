@@ -123,7 +123,7 @@ async fn resolve_or_create_refuses_what_it_does_not_serve_and_finds_what_exists(
     .execute(&s.pool)
     .await
     .unwrap();
-    for kind in ["comic", "album", "artist", "", "Movie"] {
+    for kind in ["comic", "artist", "", "Movie"] {
         let r = call(&h, "create", &[("kind", kind), ("tmdb", "603")]).await;
         assert_eq!(r["error"], "unsupported-kind", "{kind}: {r}");
     }
@@ -131,6 +131,8 @@ async fn resolve_or_create_refuses_what_it_does_not_serve_and_finds_what_exists(
     assert_eq!(r["error"], "unsupported-provider", "no tmdb id: {r}");
     let r = call(&h, "create", &[("kind", "book"), ("tmdb", "603")]).await;
     assert_eq!(r["error"], "unsupported-provider", "no book provider: {r}");
+    let r = call(&h, "create", &[("kind", "album"), ("tmdb", "603")]).await;
+    assert_eq!(r["error"], "unsupported-provider", "no album provider: {r}");
     let r = call(&h, "create", &[("tmdb", "012")]).await;
     assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
     assert_eq!(

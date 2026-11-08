@@ -28,6 +28,7 @@ type Res<T> = Result<T, AppError>;
 pub(super) enum Arr {
     Radarr,
     Sonarr,
+    Lidarr,
 }
 
 impl Arr {
@@ -35,36 +36,45 @@ impl Arr {
         match self {
             Self::Radarr => "Radarr",
             Self::Sonarr => "Sonarr",
+            Self::Lidarr => "Lidarr",
         }
     }
-    fn key_setting(self) -> &'static str {
+    /// The version of the API the product speaks.
+    fn api(self) -> &'static str {
+        if self == Self::Lidarr { "v1" } else { "v3" }
+    }
+    pub(super) fn key_setting(self) -> &'static str {
         match self {
             Self::Radarr => "radarr_api_key",
             Self::Sonarr => "sonarr_api_key",
+            Self::Lidarr => "lidarr_api_key",
         }
     }
     pub(super) fn url_setting(self) -> &'static str {
         match self {
             Self::Radarr => "radarr_url",
             Self::Sonarr => "sonarr_url",
+            Self::Lidarr => "lidarr_url",
         }
     }
     fn media_type(self) -> MediaKind {
         match self {
             Self::Radarr => MediaKind::Movie,
             Self::Sonarr => MediaKind::Series,
+            Self::Lidarr => MediaKind::Album,
         }
     }
     fn list_path(self) -> &'static str {
         match self {
             Self::Radarr => "movie",
             Self::Sonarr => "series",
+            Self::Lidarr => "artist",
         }
     }
     fn status(self) -> &'static str {
         match self {
             Self::Radarr => "released",
-            Self::Sonarr => "continuing",
+            Self::Sonarr | Self::Lidarr => "continuing",
         }
     }
 }
@@ -148,7 +158,7 @@ pub(super) async fn test(st: &AppState, arr: Arr, a: Authed, body: Value) -> Res
     let c = dto::connection(body, true)?;
     let key =
         super::resolve_key(st, c.api_key, &c.url, arr.key_setting(), arr.url_setting()).await?;
-    let url = format!("{}/api/v3/system/status", base_url(&c.url, true));
+    let url = format!("{}/api/{}/system/status", base_url(&c.url, true), arr.api());
     let name = arr.name();
     let out = match fetch(url, &key, TEST_TIMEOUT).await {
         Err(e) => json!({"ok": false, "message": error_text(e)}),
@@ -172,7 +182,7 @@ pub(super) async fn preview(st: &AppState, arr: Arr, a: Authed, body: Value) -> 
     let c = dto::connection(body, false)?;
     let key =
         super::resolve_key(st, c.api_key, &c.url, arr.key_setting(), arr.url_setting()).await?;
-    let url = format!("{}/api/v3/rootfolder", base_url(&c.url, true));
+    let url = format!("{}/api/{}/rootfolder", base_url(&c.url, true), arr.api());
     let body = fetch_json(arr, url, &key, LIST_TIMEOUT).await?;
     let decode =
         |what: &str| AppError::bad_request(format!("Cannot connect to {}: {what}", arr.name()));

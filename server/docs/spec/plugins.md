@@ -137,6 +137,7 @@ The contract is `provider-plugins.md`; these rules are the part the plugin pipel
 59. Registration of the block checks the declared namespaces in order (`provider-plugins.md` rules 19-21): `namespace-not-owned`, `unknown-provider-namespace`, `core-namespace-not-official`, `invalid-namespace-pattern`; the claim of the namespaces against `provider_namespaces` (`namespace-signer-changed`) follows the handshake of step (10). The first failure ends the registration with that reason.
 60. A provider is served on its own `provider` lane and its outbound requests take the limiter semantics of `provider-plugins.md` rules 50-55 instead of the plain outbound guard alone.
 61. A provider's config fields may declare `"default": "fliks:<key>"`; the `hello` config and `config.get` resolve the stored override, else the Fliks default (`provider-plugins.md` rules 34-40). Rule 24's ownership applies to the override.
+62. `media.resolveOrCreate` also serves `album`, `music.wantRecording` and `playlist.sync` are host imports of the plugin `host` interface (`music.md` rule 58). The scope `playlists:write` joins the manifest scopes.
 
 ## SQL
 
@@ -203,7 +204,7 @@ interface types {
 
   /// A kind of work is a string of the documented set `movie`, `series`, `book`, `comic`, `album`
   /// (a person, an artist included, is not a work); the host answers `unsupported-kind` for any
-  /// it does not serve, and serves `movie`, `series`, `book` and `comic`, but `media.resolve-or-create` only `movie`, `series` and `book`.
+  /// it does not serve, and serves `movie`, `series`, `book`, `comic` and `album`, but `media.resolve-or-create` only `movie`, `series`, `book` and `album`.
   type kind = string;
   /// Each family has its own quality table; the host serves every family.
   enum family { video, audio, text, image }
@@ -221,6 +222,11 @@ interface types {
     label: option<string>,
     absolute: option<f64>,
   }
+  /// A track of a list, by its ISRC or its MusicBrainz recording id.
+  variant recording-ref { isrc(string), mbid(string) }
+  /// A track wanted on its album: the album's media and the track's item.
+  record wanted-track { media-id: u32, item-id: u32 }
+
   record unit {
     ref: unit-ref,
     group-id: option<u32>,
@@ -398,7 +404,7 @@ interface host {
     target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
     ingest-result, acquisition-event, audience, download-progress, family, unit-ref, host-error,
-    json, kind, external-id,
+    json, kind, external-id, recording-ref, wanted-track,
   };
 
   /// `family` none is the media's first want; `language` picks among the wants of a book's family.
@@ -419,6 +425,15 @@ interface host {
   media-resolve-or-create: func(
     kind: kind, external-ids: list<external-id>, library-id: option<u32>, folder-id: option<u32>,
   ) -> result<u32, host-error>;
+
+  /// The track `recording` wanted on its album (an `isrc` goes through the music provider's `find-by`, an `mbid`
+  /// names a track the library already knows); the album is created when the library has none, with only that
+  /// track monitored. Needs `media:create` and `media:read`.
+  music-want-recording: func(recording: recording-ref, library-id: option<u32>)
+    -> result<wanted-track, host-error>;
+  /// The playlist `name` of user `user-id`, created when missing, holding exactly `item-ids` in that order.
+  /// Needs `playlists:write`.
+  playlist-sync: func(user-id: u32, name: string, item-ids: list<u32>) -> result<u32, host-error>;
 
   library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
 

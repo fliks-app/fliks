@@ -2,6 +2,7 @@
 mod arr;
 mod db;
 mod dto;
+mod lidarr;
 pub mod nfo;
 mod seerr;
 mod subtitles;
@@ -26,6 +27,9 @@ use utoipa::OpenApi;
     sonarr_test,
     sonarr_preview,
     sonarr_import,
+    lidarr_test,
+    lidarr_preview,
+    lidarr_import,
     seerr_test,
     seerr_import_requests
 ))]
@@ -39,6 +43,9 @@ pub fn router() -> Router<AppState> {
         .route("/api/imports/sonarr/test", post(sonarr_test))
         .route("/api/imports/sonarr/preview", post(sonarr_preview))
         .route("/api/imports/sonarr", post(sonarr_import))
+        .route("/api/imports/lidarr/test", post(lidarr_test))
+        .route("/api/imports/lidarr/preview", post(lidarr_preview))
+        .route("/api/imports/lidarr", post(lidarr_import))
         .route("/api/imports/seerr/test", post(seerr_test))
         .route(
             "/api/imports/seerr/import-requests",
@@ -91,6 +98,27 @@ async fn resolve_key(
     }
 }
 
+macro_rules! arr_routes_no_import {
+    ($arr:expr, $test:ident, $test_path:literal, $preview:ident, $preview_path:literal) => {
+        #[utoipa::path(post, path = $test_path, responses((status = 201)))]
+        pub(crate) async fn $test(
+            State(st): State<AppState>,
+            a: Authed,
+            ValidJson(body): ValidJson<Value>,
+        ) -> Result<(StatusCode, Json<Value>), AppError> {
+            Ok((StatusCode::CREATED, arr::test(&st, $arr, a, body).await?))
+        }
+        #[utoipa::path(post, path = $preview_path, responses((status = 201)))]
+        pub(crate) async fn $preview(
+            State(st): State<AppState>,
+            a: Authed,
+            ValidJson(body): ValidJson<Value>,
+        ) -> Result<(StatusCode, Json<Value>), AppError> {
+            Ok((StatusCode::CREATED, arr::preview(&st, $arr, a, body).await?))
+        }
+    };
+}
+
 macro_rules! arr_routes {
     ($arr:expr, $test:ident, $test_path:literal, $preview:ident, $preview_path:literal, $import:ident, $import_path:literal) => {
         #[utoipa::path(post, path = $test_path, responses((status = 201)))]
@@ -129,6 +157,13 @@ arr_routes!(
     radarr_import,
     "/api/imports/radarr"
 );
+arr_routes_no_import!(
+    Arr::Lidarr,
+    lidarr_test,
+    "/api/imports/lidarr/test",
+    lidarr_preview,
+    "/api/imports/lidarr/preview"
+);
 arr_routes!(
     Arr::Sonarr,
     sonarr_test,
@@ -138,6 +173,15 @@ arr_routes!(
     sonarr_import,
     "/api/imports/sonarr"
 );
+
+#[utoipa::path(post, path = "/api/imports/lidarr", responses((status = 201)))]
+pub(crate) async fn lidarr_import(
+    State(st): State<AppState>,
+    a: Authed,
+    ValidJson(body): ValidJson<Value>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    lidarr::import(&st, a, body).await
+}
 
 #[utoipa::path(post, path = "/api/imports/seerr/test", responses((status = 201)))]
 pub(crate) async fn seerr_test(

@@ -493,7 +493,7 @@ async fn seed_is_idempotent_under_concurrency(pool: PgPool) {
         .unwrap()
     };
     let seeded = [
-        ("audio".to_owned(), 15),
+        ("audio".to_owned(), 17),
         ("image".to_owned(), 5),
         ("text".to_owned(), 7),
         ("video".to_owned(), 24),
@@ -512,7 +512,7 @@ async fn seed_is_idempotent_under_concurrency(pool: PgPool) {
     assert_eq!(
         counts().await,
         [
-            ("audio".to_owned(), 15),
+            ("audio".to_owned(), 17),
             ("image".to_owned(), 5),
             ("text".to_owned(), 7),
             ("video".to_owned(), 1)
@@ -788,5 +788,5 @@ async fn definitions_are_read_and_written_per_family(pool: PgPool) {
         json!(null),
     )
     .await;
-    assert_eq!(qualities.as_array().unwrap().len(), 15);
+    assert_eq!(qualities.as_array().unwrap().len(), 17);
 }

@@ -245,6 +245,11 @@ pub fn is_video(name: &str) -> bool {
     fliks_domain::media::VIDEO_EXTS.contains(&ext_lower(name).as_str())
 }
 
+/// A video or a music file: what a sidecar rides along with.
+pub fn is_media(name: &str) -> bool {
+    is_video(name) || music::is_music_file(name)
+}
+
 /// W11 `thumbnails.deleteForFile`, detached: engine invalidate then the sprite cache dir.
 pub fn drop_thumbnails(st: &AppState, file_id: i32) {
     let st = st.clone();

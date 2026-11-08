@@ -10,23 +10,23 @@ use fliks_domain::release::text::quality::parse_text_release;
 
 /// A want of a book with its profile and whether it is satisfied.
 #[derive(FromRow)]
-struct WantRow {
-    media_id: i32,
-    family: String,
-    language: Option<String>,
-    qp_id: Option<i32>,
-    qp_items: Option<Value>,
-    qp_min_cf: Option<i32>,
-    satisfied: bool,
-    released: Option<NaiveDate>,
+pub(super) struct WantRow {
+    pub(super) media_id: i32,
+    pub(super) family: String,
+    pub(super) language: Option<String>,
+    pub(super) qp_id: Option<i32>,
+    pub(super) qp_items: Option<Value>,
+    pub(super) qp_min_cf: Option<i32>,
+    pub(super) satisfied: bool,
+    pub(super) released: Option<NaiveDate>,
 }
 
 impl WantRow {
-    fn family(&self) -> Family {
+    pub(super) fn family(&self) -> Family {
         Family::parse(&self.family).unwrap_or(Family::Text)
     }
     /// The profile's qualities, else every known one of the family.
-    fn allowed(&self) -> BTreeSet<u32> {
+    pub(super) fn allowed(&self) -> BTreeSet<u32> {
         match &self.qp_items {
             Some(v) => serde_json::from_value::<Vec<QualityProfileItem>>(v.clone())
                 .map(|i| build_allowed_quality_ids(&i))
@@ -40,7 +40,7 @@ impl WantRow {
             None => default_allowed(self.family()).into_iter().collect(),
         }
     }
-    fn languages(&self) -> BTreeSet<u32> {
+    pub(super) fn languages(&self) -> BTreeSet<u32> {
         let items: Vec<_> = self
             .language
             .iter()
@@ -53,7 +53,7 @@ impl WantRow {
 }
 
 /// The wants of the books in the order of rule 31: text before audio, no language first.
-fn want_sql(filter: &str) -> String {
+pub(super) fn want_sql(filter: &str) -> String {
     format!(
         r#"SELECT w."mediaId" AS media_id, w.family, w.language, qp.id AS qp_id, qp.items AS qp_items,
     qp."minCustomFormatScore" AS qp_min_cf, {sat} AS satisfied, rel.date AS released
@@ -61,7 +61,7 @@ fn want_sql(filter: &str) -> String {
   LEFT JOIN quality_profiles qp ON qp.id = w."qualityProfileId"
   LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d."editionId" IS NULL
       ORDER BY (d.kind = 'release') DESC, d.date LIMIT 1) rel ON true
-  WHERE m.type IN ('book', 'comic') AND w."mediaId" = ANY($1) AND w.family = ANY($2) {filter}
+  WHERE m.type IN ('book', 'comic', 'album') AND w."mediaId" = ANY($1) AND w.family = ANY($2) {filter}
   ORDER BY w."mediaId", CASE w.family WHEN 'text' THEN 0 ELSE 1 END, w.language NULLS FIRST, w.id"#,
         sat = crate::media::wants::satisfied_sql()
     )
@@ -71,7 +71,11 @@ fn names(families: &[Family]) -> Vec<&'static str> {
     families.iter().map(|f| f.as_str()).collect()
 }
 
-async fn wants(db: &PgPool, media: i32, families: &[Family]) -> sqlx::Result<Vec<WantRow>> {
+pub(super) async fn wants(
+    db: &PgPool,
+    media: i32,
+    families: &[Family],
+) -> sqlx::Result<Vec<WantRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(want_sql("")))
         .bind([media])
         .bind(names(families))
@@ -80,7 +84,7 @@ async fn wants(db: &PgPool, media: i32, families: &[Family]) -> sqlx::Result<Vec
 }
 
 /// The want of `language` among `wanted` (the first one without a language).
-fn pick(wanted: Vec<WantRow>, language: Option<&str>) -> Option<WantRow> {
+pub(super) fn pick(wanted: Vec<WantRow>, language: Option<&str>) -> Option<WantRow> {
     wanted
         .into_iter()
         .find(|w| language.is_none_or(|l| w.language.as_deref() == Some(l)))
@@ -94,21 +98,21 @@ pub async fn first_family(db: &PgPool, media: i32, language: Option<&str>) -> sq
 
 /// What a target adds to its media row, read once for a batch of media.
 #[derive(Default)]
-struct Extras {
-    creators: HashMap<i32, Vec<t::Creator>>,
+pub(super) struct Extras {
+    pub(super) creators: HashMap<i32, Vec<t::Creator>>,
     /// Per media: the edition (family, language) and its external ids.
     editions: HashMap<i32, Vec<(String, Option<String>, t::ExternalId)>>,
     /// The longest audio edition of a media, in minutes.
-    minutes: HashMap<i32, u32>,
+    pub(super) minutes: HashMap<i32, u32>,
 }
 
-async fn extras(db: &PgPool, media: &[i32]) -> sqlx::Result<Extras> {
+pub(super) async fn extras(db: &PgPool, media: &[i32]) -> sqlx::Result<Extras> {
     let mut out = Extras::default();
     let rows: Vec<(i32, String, String)> = sqlx::query_as(
         r#"SELECT "mediaId", name, role FROM (
              SELECT DISTINCT ON (c."mediaId", c.role, p.id) c."mediaId", p.name, c.role, c.position
                FROM media_credits c JOIN persons p ON p.id = c."personId"
-              WHERE c."mediaId" = ANY($1) AND c.role IN ('author', 'narrator')
+              WHERE c."mediaId" = ANY($1) AND c.role IN ('author', 'narrator', 'artist')
               ORDER BY c."mediaId", c.role, p.id, c.position) x
            ORDER BY "mediaId", role, position, name"#,
     )
@@ -148,10 +152,21 @@ async fn extras(db: &PgPool, media: &[i32]) -> sqlx::Result<Extras> {
             out.minutes.insert(id, (s / 60) as u32);
         }
     }
+    let rows: Vec<(i32, i64)> = sqlx::query_as(
+        r#"SELECT ad."mediaId", (COALESCE(SUM(td."durationMs"), 0) / 60000)::bigint FROM album_details ad
+             JOIN items i ON i."editionId" = ad."targetEditionId" JOIN track_details td ON td."itemId" = i.id
+            WHERE ad."mediaId" = ANY($1) GROUP BY ad."mediaId""#,
+    )
+    .bind(media)
+    .fetch_all(db)
+    .await?;
+    for (id, minutes) in rows.into_iter().filter(|(_, m)| *m > 0) {
+        out.minutes.insert(id, minutes as u32);
+    }
     Ok(out)
 }
 
-fn target(m: &MediaRow, w: &WantRow, x: &Extras) -> Option<t::Target> {
+pub(super) fn target(m: &MediaRow, w: &WantRow, x: &Extras) -> Option<t::Target> {
     let library_id = m.library_id?;
     let family = w.family();
     let titles = resolve_search_titles(&m.search(), None);
@@ -333,7 +348,7 @@ pub(super) async fn match_one(
 }
 
 /// The size limits per quality of the family: the stored definitions over the defaults.
-async fn sizes(db: &PgPool, family: Family) -> sqlx::Result<BTreeMap<u32, SizeLimits>> {
+pub(super) async fn sizes(db: &PgPool, family: Family) -> sqlx::Result<BTreeMap<u32, SizeLimits>> {
     let mut out: BTreeMap<u32, SizeLimits> = fliks_domain::profiles::table(family)
         .iter()
         .map(|q| {
@@ -424,7 +439,15 @@ pub async fn score(
     })
     .await
     .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
-    Ok(scored
+    Ok(wit_scored(&ids, scored))
+}
+
+/// The scored releases of the book pipeline as the guest reads them; `ids` is by candidate source index.
+pub(super) fn wit_scored(
+    ids: &[String],
+    scored: Vec<fliks_domain::release::scoring::ScoredBookRelease>,
+) -> Vec<t::ScoredRelease> {
+    scored
         .into_iter()
         .map(|s| t::ScoredRelease {
             id: ids[s.candidate.source_id as usize].clone(),
@@ -442,7 +465,7 @@ pub async fn score(
             video_codec: None,
             rejections: wit_rejections(s.rejections),
         })
-        .collect())
+        .collect()
 }
 
 #[cfg(test)]

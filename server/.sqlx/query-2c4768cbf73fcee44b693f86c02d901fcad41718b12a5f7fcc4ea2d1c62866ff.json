@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id, l.\"mergeM4b\" AS merge_m4b,\n        l.\"mergeM4bReplace\" AS merge_m4b_replace, l.\"optimizeProfileId\" AS optimize_profile_id,\n        l.\"optimizeNewFiles\" AS optimize_new_files, l.\"allowRename\" AS allow_rename,\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
+  "query": "SELECT l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n        l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n        \"metadataLanguage\" AS metadata_language, \"metadataRegion\" AS metadata_region,\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id, l.\"mergeM4b\" AS merge_m4b,\n        l.\"mergeM4bReplace\" AS merge_m4b_replace, l.\"optimizeProfileId\" AS optimize_profile_id,\n        l.\"optimizeNewFiles\" AS optimize_new_files, l.\"allowRename\" AS allow_rename,\n        NULL::jsonb AS \"metadata_profile: Json<Value>\",\n        df.path AS \"path?\", NULL::text AS label\n        FROM libraries l LEFT JOIN library_default_folders df ON df.\"libraryId\" = l.id\n        WHERE l.id = ANY($1) ORDER BY name COLLATE \"C\", l.id",
   "describe": {
     "columns": [
       {
@@ -192,6 +192,12 @@
       },
       {
         "ordinal": 17,
+        "name": "metadata_profile: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
         "name": "path?",
         "type_info": "Text",
         "origin": {
@@ -202,7 +208,7 @@
         }
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "label",
         "type_info": "Text",
         "origin": "Expression"
@@ -231,9 +237,10 @@
       true,
       false,
       false,
+      null,
       true,
       null
     ]
   },
-  "hash": "1933f14ff1aad35b5b8abc1476e1fdd60e121c57de04e7736577b0f52d1b6166"
+  "hash": "2c4768cbf73fcee44b693f86c02d901fcad41718b12a5f7fcc4ea2d1c62866ff"
 }

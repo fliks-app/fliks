@@ -303,6 +303,20 @@ impl MonitoredChange {
                 media_id: i64::from(m.id),
                 monitored: self.monitored,
             });
+            if self.monitored && m.media_type == MediaKind::Album {
+                let (st, id) = (st.clone(), m.id);
+                tokio::spawn(async move {
+                    if let Err(e) = crate::metadata::music::target::ensure(
+                        &st,
+                        id,
+                        fliks_domain::metadata::limiter::Priority::Interactive,
+                    )
+                    .await
+                    {
+                        tracing::warn!("album #{id}: no target edition yet: {}", e.text());
+                    }
+                });
+            }
             lifecycle.on_media_monitor_change(m, !self.monitored).await;
         }
         for (m, number) in self.seasons {

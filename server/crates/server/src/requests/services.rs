@@ -5,10 +5,10 @@ use crate::{
     images::paths::{Target, Variant},
     libraries::library_ids_of,
     media::write::{
-        all_library_ids, import_book_for_request, import_in, remove_media_with_dir,
-        resolve_target_in,
+        all_library_ids, import_album_for_request, import_book_for_request, import_in,
+        remove_media_with_dir, resolve_target_in,
     },
-    metadata::{books::ANCHOR, service::Details},
+    metadata::service::Details,
     notifications,
     state::AppState,
 };
@@ -76,7 +76,7 @@ pub async fn title_facts(st: &AppState, key: &TitleKey) -> Result<TitleFacts, St
 /// Stores the art of a title (`request/<key>`) unless already stored; best effort.
 pub async fn request_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
     let media_type = key.media_type;
-    if media_type == MediaKind::Book {
+    if super::is_work(media_type) {
         return book_art(st, key).await;
     }
     let slots = [
@@ -135,7 +135,7 @@ async fn book_art(st: &AppState, key: &TitleKey) -> Result<Art, String> {
     let record = st
         .metadata
         .work(
-            ANCHOR,
+            key.provider,
             key.media_type,
             &key.external_id,
             &lang,
@@ -189,6 +189,20 @@ pub async fn import_title(
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
 ) -> Result<i32, PortError> {
+    if spec.title.media_type == MediaKind::Album {
+        let readable = libraries_of(st, added_by.filter(|u| *u != 0).unwrap_or(approver))
+            .await
+            .map_err(|e| port(e.into()))?;
+        return import_album_for_request(
+            st,
+            &spec.title.external_id,
+            spec.wants.as_deref().unwrap_or_default(),
+            (spec.library_id, spec.folder_id),
+            (added_by, &readable),
+        )
+        .await
+        .map_err(port);
+    }
     if spec.title.media_type == MediaKind::Book {
         let readable = libraries_of(st, added_by.filter(|u| *u != 0).unwrap_or(approver))
             .await

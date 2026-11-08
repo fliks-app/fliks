@@ -27,7 +27,9 @@ pub const CAPABILITIES: [&str; 11] = [
     "scene",
 ];
 /// The resources `snapshotTtlSecs` may name.
-pub const RESOURCES: [&str; 5] = ["work", "children", "edition", "person", "chapters"];
+pub const RESOURCES: [&str; 6] = [
+    "work", "children", "edition", "person", "chapters", "credits",
+];
 
 /// The longest `snapshotTtlSecs` value: ten years.
 const MAX_TTL_SECS: u64 = 315_360_000;

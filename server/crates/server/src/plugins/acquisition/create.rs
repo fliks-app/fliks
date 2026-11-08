@@ -20,8 +20,17 @@ pub async fn resolve_or_create(
     folder_id: Option<u32>,
 ) -> Result<u32, HostError> {
     let kind = MediaKind::parse(kind)
-        .filter(|k| k.families().contains(&Family::Video) || *k == MediaKind::Book)
+        .filter(|k| {
+            k.families().contains(&Family::Video) || matches!(k, MediaKind::Book | MediaKind::Album)
+        })
         .ok_or_else(|| host_err("unsupported-kind", format!("kind \"{kind}\" is not served")))?;
+    let grouped;
+    let ids = if kind == MediaKind::Album {
+        grouped = super::music::with_group(st, ids).await?;
+        &grouped[..]
+    } else {
+        ids
+    };
     let entries = served_entries(st, kind, ids)?;
     let library = library_id
         .map(i32::try_from)
