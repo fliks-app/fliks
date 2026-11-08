@@ -15,4 +15,10 @@
     <string name="notification_stop">Stop</string>
     <string name="notification_like">Like</string>
     <string name="notification_unlike">Unlike</string>
+    <string name="auto_root">Fliks</string>
+    <string name="auto_recent">Recently played</string>
+    <string name="auto_favourites">Favourites</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_albums">Albums</string>
+    <string name="auto_artists">Artists</string>
 </resources>

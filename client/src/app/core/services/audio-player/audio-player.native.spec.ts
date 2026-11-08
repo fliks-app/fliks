@@ -1,0 +1,148 @@
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BrowserDeviceProfileService } from '../browser-device-profile.service';
+import { MediaService } from '../api/media.service';
+import { StreamingApiService } from '../api/streaming-api.service';
+import { ServerConfigService } from '../server-config.service';
+import { StorageScopeService } from '../storage-scope.service';
+import { CastService } from '../cast.service';
+import { CastPlayerService } from '../cast-player.service';
+import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
+import { AudioPlayerService, type AudioPartyRouter } from './audio-player.service';
+import type { MusicTrackRequest } from './music-queue';
+
+const track = (id: number): MusicTrackRequest => ({
+  itemId: id,
+  mediaId: 1,
+  title: `T${id}`,
+  artists: 'A',
+  albumTitle: 'Al',
+  coverUrl: null,
+  durationSeconds: 100,
+  gain: null,
+  peak: null,
+  albumGain: null,
+  albumPeak: null,
+});
+
+describe('AudioPlayerService on the native player', () => {
+  const handlers = new Map<string, (e: unknown) => void>();
+  const plugin = Object.fromEntries(
+    ['configure', 'attach', 'detach', 'setQueue', 'updateQueue', 'loadParts', 'play', 'pause', 'seek', 'skipTo', 'setRate', 'setGain', 'setRepeat', 'setRouted', 'stop'].map(
+      (m) => [m, vi.fn().mockResolvedValue(undefined)],
+    ),
+  ) as Record<string, ReturnType<typeof vi.fn>>;
+  const updatePlaybackState = vi.fn();
+  const getItemPlaybackInfo = vi.fn();
+  const emit = (event: string, e: unknown) => handlers.get(event)!(e);
+
+  beforeEach(() => {
+    localStorage.clear();
+    handlers.clear();
+    for (const fn of Object.values(plugin)) fn.mockClear();
+    updatePlaybackState.mockReset().mockResolvedValue(null);
+    getItemPlaybackInfo.mockReset();
+    (plugin as unknown as { addListener: unknown }).addListener = vi.fn(async (event: string, fn: (e: unknown) => void) => {
+      handlers.set(event, fn);
+      return { remove: async () => undefined };
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: NATIVE_AUDIO, useValue: plugin },
+        { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
+        { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
+        { provide: CastPlayerService, useValue: {} },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x' }) } },
+        { provide: MediaService, useValue: {} },
+        { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
+        { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true, scope: () => 's' } },
+      ],
+    });
+  });
+
+  it('attaches with the device profile and hands the music queue over without resolving streams', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
+    expect(plugin['configure']).toHaveBeenCalledWith({ deviceProfile: '{"deviceType":"x"}' });
+    await audio.playTracks([track(1), track(2)], 1);
+    expect(getItemPlaybackInfo).not.toHaveBeenCalled();
+    expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, autoplay: true });
+    expect(audio.track()?.itemId).toBe(2);
+  });
+
+  it('follows the native track, position and play state, and beats with the resolved session', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    emit('position', { index: 0, position: 12, duration: 98 });
+    expect(audio.playing()).toBe(true);
+    expect(audio.position()).toBe(12);
+    expect(audio.duration()).toBe(98);
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 's1' }));
+    emit('track', { index: 1, itemId: 2, mediaFileId: 20, sessionId: 's2' });
+    expect(audio.track()?.itemId).toBe(2);
+    expect(audio.queueIndex()).toBe(1);
+    expect(audio.position()).toBe(0);
+  });
+
+  it('skips and seeks through the native player', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    audio.next();
+    await vi.waitFor(() => expect(plugin['skipTo']).toHaveBeenCalledWith({ index: 1 }));
+    await audio.seek(30);
+    expect(plugin['seek']).toHaveBeenCalledWith({ position: 30 });
+    audio.setShuffle(true);
+    expect(plugin['updateQueue']).toHaveBeenCalled();
+  });
+
+  it('adopts a queue the native side built', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
+    emit('queue', { tracks: [track(5), track(6)], index: 1 });
+    expect(audio.musicMode()).toBe(true);
+    expect(audio.track()?.itemId).toBe(6);
+    expect(audio.queue().length).toBe(2);
+  });
+
+  it('routes controls from outside the app to the party', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const seen: string[] = [];
+    const router: AudioPartyRouter = (c) => {
+      seen.push(c.type);
+      return true;
+    };
+    audio.setPartyRouter(router);
+    await vi.waitFor(() => expect(plugin['setRouted']).toHaveBeenCalledWith({ routed: true }));
+    await audio.openForParty(track(1));
+    emit('command', { command: 'next', value: 0 });
+    emit('command', { command: 'seek', value: 9 });
+    expect(seen).toContain('next');
+    expect(seen).toContain('seek');
+  });
+
+  it('plays an audiobook through its parts and maps the part position onto the book timeline', async () => {
+    getItemPlaybackInfo.mockResolvedValue({
+      playMethod: 'DirectPlay',
+      playUrl: '/a',
+      mediaFileId: 7,
+      sessionId: 'b',
+      durationSeconds: 200,
+      startAtSeconds: 130,
+      parts: [
+        { index: 0, playUrl: '/p0', offsetS: 0, durationS: 100, contentType: 'audio/mpeg' },
+        { index: 1, playUrl: '/p1', offsetS: 100, durationS: 100, contentType: 'audio/mpeg' },
+      ],
+    });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play({ mediaId: 3, itemId: 9, title: 'Book' });
+    expect(plugin['loadParts']).toHaveBeenCalledWith(expect.objectContaining({ index: 1, startAt: 30, parts: [{ url: '/p0' }, { url: '/p1' }] }));
+    emit('position', { index: 1, position: 40, duration: 100 });
+    expect(audio.position()).toBe(140);
+    await audio.seek(10);
+    expect(plugin['seek']).toHaveBeenCalledWith({ position: 10, index: 0 });
+  });
+});

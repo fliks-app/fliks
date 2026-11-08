@@ -42,6 +42,7 @@
 		F1000001AAAA0000000000F2 /* SaveFilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */; };
 		F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A01 /* WebAuthPlugin.swift */; };
 		F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C1 /* CalendarPlugin.swift */; };
+		F1000001AAAA000000000B02 /* AudioPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,6 +110,7 @@
 		F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFilePlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000A01 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000C1 /* CalendarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -187,6 +189,7 @@
 				F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */,
 				F1000001AAAA000000000A01 /* WebAuthPlugin.swift */,
 				F1000001AAAA0000000000C1 /* CalendarPlugin.swift */,
+				F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -405,6 +408,7 @@
 				F1000001AAAA0000000000F2 /* SaveFilePlugin.swift in Sources */,
 				F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */,
 				F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */,
+				F1000001AAAA000000000B02 /* AudioPlayerPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

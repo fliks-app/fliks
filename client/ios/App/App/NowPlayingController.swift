@@ -8,6 +8,9 @@ import UIKit
 final class NowPlayingController {
     private let emitEvent: (String) -> Void
     private let didSeek: () -> Void
+    private let mediaType: MPNowPlayingInfoMediaType
+    /// Offered each play, pause, toggle and seek first; true means the owner took the command (a party drives playback).
+    var intercept: ((_ command: String, _ value: Double) -> Bool)?
 
     private weak var player: AVPlayer?
     private var active = false
@@ -24,9 +27,10 @@ final class NowPlayingController {
     private var interrupted = false
     private var wasPlaying = false
 
-    init(emitEvent: @escaping (String) -> Void, didSeek: @escaping () -> Void) {
+    init(emitEvent: @escaping (String) -> Void, didSeek: @escaping () -> Void, mediaType: MPNowPlayingInfoMediaType = .video) {
         self.emitEvent = emitEvent
         self.didSeek = didSeek
+        self.mediaType = mediaType
     }
 
     // MARK: - Lifecycle
@@ -112,7 +116,7 @@ final class NowPlayingController {
         let advancing = player.currentItem != nil && player.timeControlStatus == .playing
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
-            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyMediaType: mediaType.rawValue,
             MPNowPlayingInfoPropertyPlaybackRate: advancing ? Double(player.rate) : 0.0,
         ]
         if let artist = artist { info[MPMediaItemPropertyArtist] = artist }
@@ -165,11 +169,13 @@ final class NowPlayingController {
 
         add(center.playCommand) { [weak self] _ in
             guard let player = self?.player, player.currentItem != nil else { return .noActionableNowPlayingItem }
+            if self?.intercept?("play", 0) == true { return .success }
             player.play()
             return .success
         }
         add(center.pauseCommand) { [weak self] _ in
             guard let player = self?.player, player.currentItem != nil else { return .noActionableNowPlayingItem }
+            if self?.intercept?("pause", 0) == true { return .success }
             player.pause()
             return .success
         }
@@ -177,6 +183,7 @@ final class NowPlayingController {
             guard let self = self, let player = self.player, player.currentItem != nil else {
                 return .noActionableNowPlayingItem
             }
+            if self.intercept?(self.isPlaying ? "pause" : "play", 0) == true { return .success }
             if self.isPlaying { player.pause() } else { player.play() }
             return .success
         }
@@ -235,6 +242,7 @@ final class NowPlayingController {
 
     private func seek(to seconds: Double) {
         guard let player = player, player.currentItem != nil, seconds.isFinite else { return }
+        if intercept?("seek", seconds) == true { return }
         var target = max(seconds, 0)
         let duration = player.currentItem?.duration.seconds ?? 0
         if duration.isFinite, duration > 0 { target = min(target, duration) }
