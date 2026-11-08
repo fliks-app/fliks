@@ -3,4 +3,11 @@
     <string name="notification_stop">Parar</string>
     <string name="notification_like">Gosto</string>
     <string name="notification_unlike">Já não gosto</string>
+    <string name="auto_recent">Recentes</string>
+    <string name="auto_favourites">Favoritos</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_albums">Álbuns</string>
+    <string name="auto_artists">Artistas</string>
+    <string name="auto_disc">Disco %1$d</string>
+    <string name="auto_tracks">Faixas</string>
 </resources>
