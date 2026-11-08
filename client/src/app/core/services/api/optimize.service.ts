@@ -7,7 +7,10 @@ import type {
   JobState,
   OptimizeJob,
   OptimizeSettings,
+  IssuedWorkerToken,
   OptimizeWorker,
+  WorkerToken,
+  WorkerTokenPatch,
   Queued,
   QueueStatus,
   OptimizePreset,
@@ -137,5 +140,21 @@ export class OptimizeService {
 
   workers() {
     return firstValueFrom(this.http.get<OptimizeWorker[]>('/api/optimize/workers'));
+  }
+
+  workerTokens() {
+    return firstValueFrom(this.http.get<WorkerToken[]>('/api/optimize/workers/tokens'));
+  }
+
+  createWorkerToken(name: string) {
+    return firstValueFrom(this.http.post<IssuedWorkerToken>('/api/optimize/workers/tokens', { name }));
+  }
+
+  patchWorkerToken(id: number, body: WorkerTokenPatch) {
+    return firstValueFrom(this.http.patch<void>(`/api/optimize/workers/tokens/${id}`, body));
+  }
+
+  revokeWorkerToken(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/optimize/workers/tokens/${id}`));
   }
 }

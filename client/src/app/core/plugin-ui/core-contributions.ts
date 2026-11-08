@@ -55,6 +55,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.quality_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.quality_profiles', action: { kind: 'route', path: '/admin/settings/quality-profiles' } },
       { id: 'core.language_profiles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.language_profiles', action: { kind: 'route', path: '/admin/settings/language-profiles' } },
       { id: 'core.optimize_profiles', slot: 'settings.page', weight: 250, labelKey: 'settings.nav.optimize_profiles', action: { kind: 'route', path: '/admin/settings/optimize-profiles' } },
+      { id: 'core.optimize_workers', slot: 'settings.page', weight: 270, labelKey: 'settings.nav.optimize_workers', action: { kind: 'route', path: '/admin/settings/optimize-workers' } },
       { id: 'core.optimize_settings', slot: 'settings.page', weight: 260, labelKey: 'settings.nav.optimize', action: { kind: 'route', path: '/admin/settings/optimize' } },
       { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
       { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },

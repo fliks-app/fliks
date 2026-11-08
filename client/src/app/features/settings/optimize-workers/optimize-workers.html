@@ -1,0 +1,168 @@
+@if (loading()) {
+  <div class="flex justify-center py-16">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else {
+  <div class="flex flex-col gap-6 max-w-2xl">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.optimize.workers.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{ 'settings.optimize.workers.desc' | translate }}
+      </p>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.workers.connected' | translate }}</h2>
+        @if (workers().length === 0) {
+          <p class="text-sm text-base-content/60">
+            {{ 'settings.optimize.workers.none_connected' | translate }}
+          </p>
+        }
+        @for (w of workers(); track w.instance) {
+          <div class="flex flex-col gap-1 border-b border-base-200 pb-3 last:border-0 last:pb-0">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <span class="font-medium">{{ ownerOf(w) }}</span>
+              <span class="text-sm text-base-content/60">{{ seen(w.lastSeenAt) }}</span>
+            </div>
+            <span class="text-sm text-base-content/60">v{{ w.engineVersion }}</span>
+            <div class="flex flex-wrap gap-2">
+              @for (d of w.devices; track d.id) {
+                <span class="badge badge-ghost text-sm"
+                  >{{ d.id }} · {{ d.encoders.join(', ') || '-' }} · {{ d.maxJobs }}</span
+                >
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'settings.optimize.workers.tokens' | translate }}</h2>
+        <p class="text-sm text-base-content/60">
+          {{ 'settings.optimize.workers.tokens_hint' | translate }}
+        </p>
+
+        <div class="flex items-end gap-3">
+          <div class="flex-1">
+            <app-input-field
+              [label]="'settings.optimize.workers.new_name' | translate"
+              [value]="newName()"
+              (valueChange)="newName.set($event)"
+            />
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary mb-1"
+            [disabled]="creating() || !newName().trim()"
+            (click)="create()"
+          >
+            {{ 'settings.optimize.workers.create' | translate }}
+          </button>
+        </div>
+
+        @if (issued(); as i) {
+          <div role="alert" class="alert alert-success flex-col items-start gap-2 text-sm">
+            <span>{{ 'settings.optimize.workers.issued' | translate: { name: i.name } }}</span>
+            <code class="break-all">{{ i.token }}</code>
+            <button type="button" class="btn btn-sm" (click)="copyIssued()">
+              {{ 'common.copy' | translate }}
+            </button>
+          </div>
+        }
+
+        @for (t of tokens(); track t.id) {
+          <div class="flex flex-col gap-3 border-t border-base-200 pt-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-medium truncate">{{ t.name }}</div>
+                <div class="text-sm text-base-content/60">
+                  {{ 'settings.optimize.workers.last_seen' | translate }}: {{ seen(t.lastSeenAt) }}
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <app-enabled-switch
+                  [enabled]="t.enabled"
+                  [busy]="busy() === t.id"
+                  (toggle)="toggle(t)"
+                />
+                <button type="button" class="btn btn-sm btn-ghost text-error" (click)="revoke(t)">
+                  {{ 'settings.optimize.workers.revoke' | translate }}
+                </button>
+              </div>
+            </div>
+
+            <app-select-field
+              [label]="'settings.optimize.workers.access' | translate"
+              [hint]="'settings.optimize.workers.access_' + draft(t).access | translate"
+              [value]="draft(t).access"
+              (valueChange)="setAccess(t, $event)"
+            >
+              <option value="none">
+                {{ 'settings.optimize.workers.access_label_none' | translate }}
+              </option>
+              <option value="shared">
+                {{ 'settings.optimize.workers.access_label_shared' | translate }}
+              </option>
+            </app-select-field>
+
+            @if (draft(t).access === 'shared') {
+              <div class="flex flex-col gap-2">
+                <span class="text-sm font-medium">{{
+                  'settings.optimize.workers.mappings' | translate
+                }}</span>
+                <span class="text-sm text-base-content/60">{{
+                  'settings.optimize.workers.mappings_hint' | translate
+                }}</span>
+                @for (m of draft(t).mappings; track $index) {
+                  <div class="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                    <app-input-field
+                      size="sm"
+                      [label]="'settings.optimize.workers.map_from' | translate"
+                      [value]="m.from"
+                      (valueChange)="setMapping(t, $index, 'from', $event)"
+                    />
+                    <app-input-field
+                      size="sm"
+                      [label]="'settings.optimize.workers.map_to' | translate"
+                      [value]="m.to"
+                      (valueChange)="setMapping(t, $index, 'to', $event)"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-ghost mb-1"
+                      [attr.aria-label]="'common.delete' | translate"
+                      (click)="removeMapping(t, $index)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                }
+                <div>
+                  <button type="button" class="btn btn-sm" (click)="addMapping(t)">
+                    {{ 'settings.optimize.workers.add_mapping' | translate }}
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (dirty(t)) {
+              <div class="flex justify-end">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  [disabled]="busy() === t.id"
+                  (click)="save(t)"
+                >
+                  {{ 'common.save' | translate }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+}

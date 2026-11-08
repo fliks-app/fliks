@@ -2092,7 +2092,8 @@
       "email": "E-Mail-Versand",
       "sso": "Single Sign-on",
       "optimize_profiles": "Optimierungsprofile",
-      "optimize": "Optimierungseinstellungen"
+      "optimize": "Optimierungseinstellungen",
+      "optimize_workers": "Optimierungs-Worker"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -3658,6 +3659,33 @@
         "verify_days_hint": "Optimierte Dateien werden in diesem Abstand erneut geprüft. 0 schaltet die Prüfung aus.",
         "verify_batch": "Dateien pro Durchlauf",
         "verify_batch_hint": "Höchstens so viele Dateien werden pro Durchlauf geprüft."
+      },
+      "workers": {
+        "title": "Optimierungs-Worker",
+        "desc": "Rechner, die Bibliotheksdateien neu kodieren und remuxen. Die Engine des Servers arbeitet immer; entfernte Worker verbinden sich mit einem Token.",
+        "connected": "Verbundene Worker",
+        "none_connected": "Seit dem Serverstart hat sich kein Worker verbunden.",
+        "local": "Lokale Engine",
+        "never": "nie",
+        "tokens": "Worker-Token",
+        "tokens_hint": "Ein Token erlaubt einem entfernten Worker, Jobs zu übernehmen. Es wird einmal angezeigt, gehasht gespeichert und kann widerrufen werden.",
+        "new_name": "Name",
+        "create": "Token erstellen",
+        "issued": "Token von {{name}}, einmalig angezeigt:",
+        "last_seen": "Zuletzt gesehen",
+        "revoke": "Widerrufen",
+        "access": "Zugriff auf die Bibliothek",
+        "access_label_none": "Keiner (HTTP und Upload)",
+        "access_label_shared": "Geteilte Ordner",
+        "access_none": "Der Worker liest Dateien über HTTP und lädt seine Ausgabe hoch. Braucht die öffentliche URL.",
+        "access_shared": "Der Worker bindet die Bibliothek ein; Pfade werden durch die Zuordnungen übersetzt.",
+        "mappings": "Pfadzuordnungen",
+        "mappings_hint": "Der Serverpfad eines Ordners, dann derselbe Ordner auf dem Worker.",
+        "map_from": "Serverpfad",
+        "map_to": "Worker-Pfad",
+        "add_mapping": "Zuordnung hinzufügen",
+        "mapping_invalid": "Jede Zuordnung braucht beide Pfade.",
+        "confirm_revoke": "Token von {{name}} widerrufen? Seine Jobs kehren in die Warteschlange zurück."
       }
     }
   },

@@ -10,14 +10,15 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{post, put},
 };
 use fliks_engine_core::api::{
     JobHeartbeatRequest, JobHeartbeatResponse, JobResultRequest, LeaseRequest, LeasedJob,
-    UPLOAD_CHUNK_BYTES, WorkerHello, WorkerHelloResponse, WorkerSettings,
+    PathMapping, UPLOAD_CHUNK_BYTES, WorkerHello, WorkerHelloResponse, WorkerSettings,
+    apply_path_mappings,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -29,6 +30,12 @@ pub fn worker_router() -> Router<AppState> {
         .route("/engine/jobs/lease", post(lease))
         .route("/engine/jobs/{id}/heartbeat", post(heartbeat))
         .route("/engine/jobs/{id}/result", post(result))
+        .route(
+            "/engine/jobs/{id}/output",
+            put(super::remote::put_output).layer(DefaultBodyLimit::max(
+                UPLOAD_CHUNK_BYTES as usize + 64 * 1024,
+            )),
+        )
 }
 
 /// The codecs a device encodes in hardware and in software (`lib*` encoders).
@@ -111,23 +118,55 @@ pub async fn hello(
     }))
 }
 
-fn leased(t: store::Taken) -> Result<LeasedJob, AppError> {
+/// How a worker reaches the files of a lease.
+enum Reach {
+    /// By path, translated by the mappings of its token (none for the local engine).
+    Path(Vec<PathMapping>),
+    /// Over HTTP: the main engine's data plane at this base, and an upload for the output.
+    Http(String),
+}
+
+fn leased(t: store::Taken, reach: &Reach, token: Option<String>) -> Result<LeasedJob, AppError> {
     let tag = if t.kind == "verify" {
         "Verify"
     } else {
         "Optimize"
     };
-    let kind = serde_json::from_value(json!({ "type": tag, "payload": t.payload }))
+    let mut payload = t.payload;
+    let map = |p: String| match reach {
+        Reach::Path(m) if !m.is_empty() => apply_path_mappings(m, &p),
+        _ => p,
+    };
+    if let Reach::Path(m) = reach
+        && !m.is_empty()
+        && let Some(Value::Array(subs)) = payload.pointer_mut("/plan/extraSubtitles")
+    {
+        for x in subs {
+            if let Some(Value::String(p)) = x.get_mut("path") {
+                *p = apply_path_mappings(m, p);
+            }
+        }
+    }
+    let kind = serde_json::from_value(json!({ "type": tag, "payload": payload }))
         .map_err(|e| AppError::internal(format!("job {} payload: {e}", t.id)))?;
+    let (input_path, staged_path, input_url) = match reach {
+        Reach::Path(_) => (t.in_path.map(&map), t.staged_path.map(&map), None),
+        Reach::Http(base) => (
+            None,
+            None,
+            t.media_file_id
+                .map(|f| format!("{}/api/stream/{f}?download=1", base.trim_end_matches('/'))),
+        ),
+    };
     Ok(LeasedJob {
         id: t.id as u32,
         attempt: t.attempt as u32,
         lease_s: store::LEASE_S,
         kind,
-        input_path: t.in_path,
-        staged_path: t.staged_path,
-        input_url: None,
-        input_token: None,
+        input_path,
+        staged_path,
+        input_url,
+        input_token: token,
     })
 }
 
@@ -146,13 +185,28 @@ pub async fn lease(
         return Err(AppError::not_found("unknown device"));
     };
     let deadline = Instant::now() + Duration::from_secs(u64::from(store::LONG_POLL_S));
-    // ponytail: a remote worker reads the library over `inputUrl`, which W1 wires; until then it gets no job.
-    let local = who == Principal::Local;
+    let reach = match who {
+        Principal::Local => Reach::Path(vec![]),
+        Principal::Token(id) => {
+            let a = tokens::access(&st.db, id).await.map_err(db)?;
+            if a.shared {
+                Reach::Path(a.mappings)
+            } else {
+                // A worker without the library reads over the main engine's public data plane.
+                let base = crate::auth::oidc::db::public_url(&st.db)
+                    .await
+                    .map_err(db)?;
+                Reach::Http(base.unwrap_or_default())
+            }
+        }
+    };
+    let local = matches!(reach, Reach::Path(_));
+    let serving = !matches!(&reach, Reach::Http(b) if b.is_empty());
     loop {
         let mut woken = std::pin::pin!(st.queue.wake.notified());
         woken.as_mut().enable();
         let conf = settings::load(&st.db).await.map_err(db)?;
-        if local && !conf.paused && conf.open_now() {
+        if serving && !conf.paused && conf.open_now() {
             let (hw, sw) = codec_split(&device.encoders);
             let anywhere = st.queue.hardware_codecs();
             let fallback: Vec<String> = sw
@@ -173,7 +227,11 @@ pub async fn lease(
                 if let Some(old) = t.old_staged.clone() {
                     super::cleanup::remove_staged(t.id, old).await;
                 }
-                return Ok(Json(leased(t)?).into_response());
+                let token = match (&reach, t.media_file_id) {
+                    (Reach::Http(_), Some(f)) => Some(st.queue.mint(t.id, t.attempt, f)),
+                    _ => None,
+                };
+                return Ok(Json(leased(t, &reach, token)?).into_response());
             }
         }
         let wait = deadline
@@ -203,8 +261,11 @@ pub async fn heartbeat(
         req.paused,
     )
     .await
-    .map_err(db)?
-    .ok_or_else(conflict)?;
+    .map_err(db)?;
+    let Some(beat) = beat else {
+        super::remote::sweep(&st).await;
+        return Err(conflict());
+    };
     super::emit_managers(
         &st,
         SseEvent::OptimizeJobProgress {
@@ -255,7 +316,7 @@ pub async fn result(
     let failure = match (req.ok, req.error) {
         (false, Some(e)) => Some(e),
         (false, None) => Some(missing("failed without an error")),
-        (true, _) => local_output_error(&st, who, id, &req.out_sha256, out_size).await?,
+        (true, _) => output_error(&st, who, id, attempt, &req.out_sha256, out_size).await?,
     };
     let settled = match failure {
         Some(e) => store::fail(&st.db, id, &key, attempt, &e).await,
@@ -282,8 +343,12 @@ pub async fn result(
     }
     .map_err(db)?;
     match settled {
-        store::Settled::Stale => Err(conflict()),
+        store::Settled::Stale => {
+            super::remote::sweep(&st).await;
+            Err(conflict())
+        }
         store::Settled::Done => {
+            super::remote::sweep(&st).await;
             st.queue.wake.notify_waiters();
             Ok(Json(json!({})))
         }
@@ -298,11 +363,13 @@ fn missing(message: &str) -> fliks_engine_core::api::JobError {
     }
 }
 
-/// An optimize result needs its output: a local worker's staged file must match the size it reports.
-async fn local_output_error(
+/// An optimize result needs its output: a path-reading worker's staged file must match the size it
+/// reports, a remote worker's upload its size and SHA-256.
+async fn output_error(
     st: &AppState,
     who: Principal,
     id: i64,
+    attempt: i32,
     sha: &Option<String>,
     size: i64,
 ) -> Result<Option<fliks_engine_core::api::JobError>, AppError> {
@@ -314,11 +381,15 @@ async fn local_output_error(
     if kind.as_deref() != Some("optimize") {
         return Ok(None);
     }
-    if sha.is_none() || size <= 0 {
+    let Some(sha) = sha.as_deref().filter(|_| size > 0) else {
         return Ok(Some(missing("optimize result without an output")));
-    }
-    if who != Principal::Local {
-        return Ok(None);
+    };
+    let by_path = match who {
+        Principal::Local => true,
+        Principal::Token(t) => tokens::access(&st.db, t).await.map_err(db)?.shared,
+    };
+    if !by_path {
+        return Ok(super::remote::output_error(st, id, attempt, size, sha).await);
     }
     let Some(path) = store::staged_of(&st.db, id).await.map_err(db)? else {
         return Ok(None);

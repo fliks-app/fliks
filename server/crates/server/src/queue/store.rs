@@ -61,7 +61,7 @@ pub struct Want<'a> {
     pub sw: &'a [String],
     pub fallback: &'a [String],
     pub max_jobs: u32,
-    /// The worker reads the library by path; only then can the server check the target disk.
+    /// The worker reads the library by path: only then can it run a verification.
     pub local: bool,
 }
 
@@ -71,6 +71,7 @@ pub struct Taken {
     pub kind: String,
     pub payload: Value,
     pub in_path: Option<String>,
+    pub media_file_id: Option<i32>,
     pub staged_path: Option<String>,
     /// The previous attempt's staging file, to delete.
     pub old_staged: Option<String>,
@@ -156,8 +157,8 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
         return Ok(None);
     }
     let rows = sqlx::query(
-        r#"SELECT id, kind, "inPath", "inSize" FROM jobs
-           WHERE state = 'queued' AND "notBefore" <= now()
+        r#"SELECT id, kind, "inPath", "inSize", "mediaFileId" FROM jobs
+           WHERE state = 'queued' AND "notBefore" <= now() AND (kind <> 'verify' OR $4)
              AND (payload #>> '{plan,codec}' IS NULL OR CASE
                     WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)
                     ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)
@@ -166,6 +167,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     .bind(w.hw)
     .bind(w.sw)
     .bind(w.fallback)
+    .bind(w.local)
     .fetch_all(&mut *tx)
     .await?;
     let mut trash: Option<HashMap<u64, i64>> = None;
@@ -173,7 +175,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     for r in rows {
         let (id, kind): (i64, String) = (r.get("id"), r.get("kind"));
         let in_path: Option<String> = r.get("inPath");
-        if w.local && kind == "optimize" {
+        if kind == "optimize" {
             let need: i64 = r.get::<Option<i64>, _>("inSize").unwrap_or(0);
             if trash.is_none() {
                 trash = Some(unpurged_trash(pool).await?);
@@ -192,10 +194,10 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
                 }
             }
         }
-        chosen = Some((id, kind, in_path));
+        chosen = Some((id, kind, in_path, r.get::<Option<i32>, _>("mediaFileId")));
         break;
     }
-    let Some((id, kind, in_path)) = chosen else {
+    let Some((id, kind, in_path, media_file_id)) = chosen else {
         return Ok(None);
     };
     let row = sqlx::query(
@@ -212,10 +214,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     .fetch_one(&mut *tx)
     .await?;
     let attempt: i32 = row.get("attempt");
-    let staged = match (
-        w.local && kind == "optimize",
-        in_path.as_deref().and_then(parent_of),
-    ) {
+    let staged = match (kind == "optimize", in_path.as_deref().and_then(parent_of)) {
         (true, Some(dir)) => Some(
             dir.join(staged_name(id, attempt))
                 .to_string_lossy()
@@ -236,6 +235,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
         kind,
         payload: row.get("payload"),
         in_path,
+        media_file_id,
         old_staged: old.filter(|o| Some(o) != staged.as_ref()),
         staged_path: staged,
     }))

@@ -2092,7 +2092,8 @@
       "email": "Posta in uscita",
       "sso": "Single sign-on",
       "optimize_profiles": "Profili di ottimizzazione",
-      "optimize": "Impostazioni di ottimizzazione"
+      "optimize": "Impostazioni di ottimizzazione",
+      "optimize_workers": "Worker di ottimizzazione"
     },
     "engine": {
       "title": "Motore di streaming remoto",
@@ -3658,6 +3659,33 @@
         "verify_days_hint": "I file ottimizzati vengono ricontrollati a questo intervallo. 0 la disattiva.",
         "verify_batch": "File per passaggio",
         "verify_batch_hint": "Al massimo questo numero di file viene controllato per passaggio."
+      },
+      "workers": {
+        "title": "Worker di ottimizzazione",
+        "desc": "Macchine che ricodificano e remuxano i file della libreria. Il motore del server lavora sempre; i worker remoti si collegano con un token.",
+        "connected": "Worker connessi",
+        "none_connected": "Nessun worker si è connesso dall'avvio del server.",
+        "local": "Motore locale",
+        "never": "mai",
+        "tokens": "Token dei worker",
+        "tokens_hint": "Un token permette a un worker remoto di prendere lavori. Viene mostrato una sola volta, salvato con hash e può essere revocato.",
+        "new_name": "Nome",
+        "create": "Crea token",
+        "issued": "Token di {{name}}, mostrato una sola volta:",
+        "last_seen": "Ultima attività",
+        "revoke": "Revoca",
+        "access": "Accesso alla libreria",
+        "access_label_none": "Nessuno (HTTP e invio)",
+        "access_label_shared": "Cartelle condivise",
+        "access_none": "Il worker legge i file via HTTP e invia il suo output. Richiede l'URL pubblico.",
+        "access_shared": "Il worker monta la libreria; i percorsi sono tradotti dalle corrispondenze.",
+        "mappings": "Corrispondenze dei percorsi",
+        "mappings_hint": "Il percorso sul server di una cartella e la stessa cartella sul worker.",
+        "map_from": "Percorso server",
+        "map_to": "Percorso worker",
+        "add_mapping": "Aggiungi una corrispondenza",
+        "mapping_invalid": "Ogni corrispondenza richiede entrambi i percorsi.",
+        "confirm_revoke": "Revocare il token di {{name}}? I suoi lavori tornano in coda."
       }
     }
   },

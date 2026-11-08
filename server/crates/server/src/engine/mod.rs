@@ -292,6 +292,12 @@ impl Engine {
         self.revoke(serde_json::json!({"mediaFileIds": ids})).await;
     }
 
+    /// `POST /v1/revoke` of one credential's cached resolver answers; never fails.
+    pub async fn revoke_credential(&self, credential: &str) {
+        self.revoke(serde_json::json!({ "credential": credential }))
+            .await;
+    }
+
     async fn revoke(&self, body: serde_json::Value) {
         let (client, revoke) = {
             let s = self.state();

@@ -510,6 +510,7 @@ export const routes: Routes = [
           { path: 'quality-profiles', loadComponent: () => import('./features/settings/quality-profiles/quality-profiles').then((m) => m.QualityProfilesComponent) },
           { path: 'language-profiles', loadComponent: () => import('./features/settings/language-profiles/language-profiles').then((m) => m.LanguageProfilesComponent) },
           { path: 'optimize', loadComponent: () => import('./features/settings/optimize/optimize-settings').then((m) => m.OptimizeSettingsComponent) },
+          { path: 'optimize-workers', loadComponent: () => import('./features/settings/optimize-workers/optimize-workers').then((m) => m.OptimizeWorkersComponent) },
           { path: 'optimize-profiles', loadComponent: () => import('./features/settings/optimize-profiles/optimize-profiles').then((m) => m.OptimizeProfilesComponent) },
           { path: 'optimize-profiles/:id', loadComponent: () => import('./features/settings/optimize-profiles/profile-editor/profile-editor').then((m) => m.OptimizeProfileEditorComponent) },
           { path: 'quality-definitions', loadComponent: () => import('./features/settings/quality-definitions/quality-definitions').then((m) => m.QualityDefinitionsComponent) },

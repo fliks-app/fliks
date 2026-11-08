@@ -2092,7 +2092,8 @@
       "email": "E-mail de saída",
       "sso": "Início de sessão único",
       "optimize_profiles": "Perfis de otimização",
-      "optimize": "Definições de otimização"
+      "optimize": "Definições de otimização",
+      "optimize_workers": "Workers de otimização"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -3658,6 +3659,33 @@
         "verify_days_hint": "Os ficheiros otimizados são verificados de novo neste intervalo. 0 desativa.",
         "verify_batch": "Ficheiros por passagem",
         "verify_batch_hint": "No máximo este número de ficheiros é verificado por passagem."
+      },
+      "workers": {
+        "title": "Workers de otimização",
+        "desc": "Máquinas que recodificam e remuxam os ficheiros da biblioteca. O motor do servidor trabalha sempre; os workers remotos ligam-se com um token.",
+        "connected": "Workers ligados",
+        "none_connected": "Nenhum worker se ligou desde que o servidor arrancou.",
+        "local": "Motor local",
+        "never": "nunca",
+        "tokens": "Tokens de worker",
+        "tokens_hint": "Um token permite a um worker remoto receber tarefas. É mostrado uma só vez, guardado com hash e pode ser revogado.",
+        "new_name": "Nome",
+        "create": "Criar token",
+        "issued": "Token de {{name}}, mostrado uma só vez:",
+        "last_seen": "Última atividade",
+        "revoke": "Revogar",
+        "access": "Acesso à biblioteca",
+        "access_label_none": "Nenhum (HTTP e envio)",
+        "access_label_shared": "Pastas partilhadas",
+        "access_none": "O worker lê os ficheiros por HTTP e envia a sua saída. Requer o URL público.",
+        "access_shared": "O worker monta a biblioteca; os caminhos são traduzidos pelas correspondências.",
+        "mappings": "Correspondências de caminhos",
+        "mappings_hint": "O caminho no servidor de uma pasta e a mesma pasta no worker.",
+        "map_from": "Caminho do servidor",
+        "map_to": "Caminho do worker",
+        "add_mapping": "Adicionar uma correspondência",
+        "mapping_invalid": "Cada correspondência precisa dos dois caminhos.",
+        "confirm_revoke": "Revogar o token de {{name}}? As suas tarefas voltam à fila."
       }
     }
   },

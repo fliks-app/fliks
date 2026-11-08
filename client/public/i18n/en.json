@@ -2092,7 +2092,8 @@
       "email": "Outgoing mail",
       "sso": "Single sign-on",
       "optimize_profiles": "Optimization profiles",
-      "optimize": "Optimization settings"
+      "optimize": "Optimization settings",
+      "optimize_workers": "Optimization workers"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -3658,6 +3659,33 @@
         "verify_days_hint": "Optimized files are checked again at this interval. 0 turns it off.",
         "verify_batch": "Files per pass",
         "verify_batch_hint": "At most this many files are checked per pass."
+      },
+      "workers": {
+        "title": "Optimization workers",
+        "desc": "Machines that re-encode and remux library files. The server's own engine always works; remote workers connect with a token.",
+        "connected": "Connected workers",
+        "none_connected": "No worker has connected since the server started.",
+        "local": "Local engine",
+        "never": "never",
+        "tokens": "Worker tokens",
+        "tokens_hint": "A token lets one remote worker lease jobs. It is shown once, stored hashed and can be revoked.",
+        "new_name": "Name",
+        "create": "Create token",
+        "issued": "Token of {{name}}, shown once:",
+        "last_seen": "Last seen",
+        "revoke": "Revoke",
+        "access": "Library access",
+        "access_label_none": "None (HTTP and upload)",
+        "access_label_shared": "Shared folders",
+        "access_none": "The worker reads files over HTTP and uploads its output. Needs the public URL.",
+        "access_shared": "The worker mounts the library; paths are translated by the mappings.",
+        "mappings": "Path mappings",
+        "mappings_hint": "The server path of a folder, then the same folder on the worker.",
+        "map_from": "Server path",
+        "map_to": "Worker path",
+        "add_mapping": "Add a mapping",
+        "mapping_invalid": "Each mapping needs both paths.",
+        "confirm_revoke": "Revoke the token of {{name}}? Its jobs return to the queue."
       }
     }
   },

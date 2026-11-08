@@ -258,6 +258,35 @@ export interface OptimizeWorker {
   devices: WorkerDevice[];
 }
 
+export interface PathMapping {
+  from: string;
+  to: string;
+}
+
+export type WorkerPathAccess = 'none' | 'shared';
+
+export interface WorkerToken {
+  id: number;
+  name: string;
+  enabled: boolean;
+  pathAccess: WorkerPathAccess;
+  pathMappings: PathMapping[];
+  createdAt: string;
+  lastSeenAt: string | null;
+}
+
+/** The creation answer: the plaintext token is shown once. */
+export interface IssuedWorkerToken extends WorkerToken {
+  token: string;
+}
+
+export interface WorkerTokenPatch {
+  name?: string;
+  enabled?: boolean;
+  pathAccess?: WorkerPathAccess;
+  pathMappings?: PathMapping[];
+}
+
 export type QueueOutcome =
   | 'queued'
   | 'active'

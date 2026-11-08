@@ -2092,7 +2092,8 @@
       "email": "Correo saliente",
       "sso": "Inicio de sesión único",
       "optimize_profiles": "Perfiles de optimización",
-      "optimize": "Ajustes de optimización"
+      "optimize": "Ajustes de optimización",
+      "optimize_workers": "Workers de optimización"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -3658,6 +3659,33 @@
         "verify_days_hint": "Los archivos optimizados se vuelven a comprobar con este intervalo. 0 lo desactiva.",
         "verify_batch": "Archivos por pasada",
         "verify_batch_hint": "Como máximo este número de archivos se comprueba por pasada."
+      },
+      "workers": {
+        "title": "Workers de optimización",
+        "desc": "Máquinas que recodifican y remuxean los archivos de la biblioteca. El motor del servidor siempre trabaja; los workers remotos se conectan con un token.",
+        "connected": "Workers conectados",
+        "none_connected": "Ningún worker se ha conectado desde que arrancó el servidor.",
+        "local": "Motor local",
+        "never": "nunca",
+        "tokens": "Tokens de worker",
+        "tokens_hint": "Un token permite a un worker remoto tomar trabajos. Se muestra una sola vez, se guarda con hash y se puede revocar.",
+        "new_name": "Nombre",
+        "create": "Crear token",
+        "issued": "Token de {{name}}, mostrado una sola vez:",
+        "last_seen": "Última actividad",
+        "revoke": "Revocar",
+        "access": "Acceso a la biblioteca",
+        "access_label_none": "Ninguno (HTTP y subida)",
+        "access_label_shared": "Carpetas compartidas",
+        "access_none": "El worker lee los archivos por HTTP y sube su salida. Requiere la URL pública.",
+        "access_shared": "El worker monta la biblioteca; las rutas se traducen con las correspondencias.",
+        "mappings": "Correspondencias de rutas",
+        "mappings_hint": "La ruta del servidor de una carpeta y la misma carpeta en el worker.",
+        "map_from": "Ruta del servidor",
+        "map_to": "Ruta del worker",
+        "add_mapping": "Añadir una correspondencia",
+        "mapping_invalid": "Cada correspondencia necesita las dos rutas.",
+        "confirm_revoke": "¿Revocar el token de {{name}}? Sus trabajos vuelven a la cola."
       }
     }
   },
