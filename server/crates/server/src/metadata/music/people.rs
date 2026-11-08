@@ -22,6 +22,10 @@ pub async fn person(
     mbid: Option<&str>,
     sort_name: Option<&str>,
 ) -> sqlx::Result<i32> {
+    // Lookup and insert are one step: two writers never both create the artist.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('music:persons'))")
+        .execute(&mut *c)
+        .await?;
     let by_id = match mbid {
         Some(id) => super::aliases::person_of(&mut *c, id).await?,
         None => None,
@@ -157,4 +161,30 @@ pub async fn replace_track_credits(
         .await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+    use std::time::Duration;
+
+    #[sqlx::test(migrations = false)]
+    async fn two_writers_never_create_the_same_artist(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let write = |db: PgPool| async move {
+            let mut tx = db.begin().await.unwrap();
+            let id = person(&mut tx, "Ana", None, None).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            tx.commit().await.unwrap();
+            id
+        };
+        let (a, b) = tokio::join!(write(db.clone()), write(db.clone()));
+        assert_eq!(a, b);
+        let n: i64 = sqlx::query_scalar("SELECT count(*) FROM persons WHERE name = 'Ana'")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+    }
 }

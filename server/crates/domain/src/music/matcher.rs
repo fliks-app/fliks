@@ -368,15 +368,12 @@ pub fn score(local: &Local, remote: &Remote, cfg: &Config) -> Scored {
         }
     }
     let matched = assignment.iter().flatten().count();
-    let ratio = |n: usize, of: usize| if of == 0 { 0.0 } else { n as f64 / of as f64 };
-    p.add(
-        W_UNMATCHED,
-        ratio(local.tracks.len() - matched, local.tracks.len()),
-    );
-    p.add(
-        W_MISSING,
-        ratio(remote.tracks.len() - matched, remote.tracks.len()),
-    );
+    for _ in matched..local.tracks.len() {
+        p.add(W_UNMATCHED, 1.0);
+    }
+    for _ in matched..remote.tracks.len() {
+        p.add(W_MISSING, 1.0);
+    }
     Scored {
         distance: p.distance(),
         worst_track: worst,

@@ -42,10 +42,25 @@ pub async fn carry_poster(st: &AppState, from: i32, into: i32) {
     }
 }
 
+/// Whether two media sit in the same library (both in none counts): another library's media is never folded in.
+pub async fn same_library(c: &mut PgConnection, a: i32, b: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT (SELECT "libraryId" FROM media WHERE id = $1)
+              IS NOT DISTINCT FROM (SELECT "libraryId" FROM media WHERE id = $2)"#,
+    )
+    .bind(a)
+    .bind(b)
+    .fetch_one(c)
+    .await
+}
+
 /// Moves what `from` owns onto `into`, fills the facts `into` lacks, then deletes `from`. The caller
 /// `orphans::release`s the result once its transaction commits.
 pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<Refs> {
     let (a, b) = (from.min(into), from.max(into));
+    // `item_parts` rows change media: no version writer of either runs meanwhile (`items.md` rule 23).
+    crate::media::items::lock_versions(c, a).await?;
+    crate::media::items::lock_versions(c, b).await?;
     sqlx::query!(
         "SELECT id FROM media WHERE id IN ($1, $2) ORDER BY id FOR UPDATE",
         a,
@@ -53,14 +68,17 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .fetch_all(&mut *c)
     .await?;
-    // `item_parts` rows change media: no version writer of either runs meanwhile (`items.md` rule 23).
-    crate::media::items::lock_versions(c, a).await?;
-    crate::media::items::lock_versions(c, b).await?;
+    // The target edition of the duplicate would point at an edition that changes media.
+    sqlx::query!(r#"DELETE FROM album_details WHERE "mediaId" = $1"#, from)
+        .execute(&mut *c)
+        .await?;
     // One statement: the composite foreign keys on (id, "mediaId") are checked at its end.
     sqlx::query!(
         r#"WITH e AS (UPDATE editions SET "mediaId" = $2 WHERE "mediaId" = $1),
              g AS (UPDATE item_groups SET "mediaId" = $2 WHERE "mediaId" = $1),
              i AS (UPDATE items SET "mediaId" = $2 WHERE "mediaId" = $1),
+             td AS (UPDATE track_details SET "mediaId" = $2 WHERE "mediaId" = $1),
+             ci AS (UPDATE comic_issues SET "mediaId" = $2 WHERE "mediaId" = $1),
              p AS (UPDATE item_parts SET "mediaId" = $2 WHERE "mediaId" = $1),
              f AS (UPDATE media_files SET "mediaId" = $2 WHERE "mediaId" = $1),
              c AS (UPDATE media_credits SET "mediaId" = $2
@@ -220,6 +238,82 @@ mod tests {
         let mut listed: Vec<String> = MOVED.iter().chain(DROPPED).map(|t| (*t).into()).collect();
         listed.sort();
         assert_eq!(found, listed);
+    }
+
+    /// Tables with a composite foreign key onto `items`, `editions` or `media_files` by `(id, "mediaId")`:
+    /// each must change media with its parent, in the one statement of `absorb`.
+    const MOVED_WITH_PARENT: &[&str] = &[
+        "collection_entries",
+        "comic_issues",
+        "edition_external_ids",
+        "item_parts",
+        "items",
+        "media_credits",
+        "media_release_dates",
+        "track_details",
+    ];
+
+    #[sqlx::test(migrations = false)]
+    async fn every_composite_key_on_a_media_child_moves_with_it(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut found: Vec<String> = sqlx::query_scalar(
+            r#"SELECT DISTINCT c.conrelid::regclass::text FROM pg_constraint c
+               WHERE c.contype = 'f' AND cardinality(c.conkey) = 2
+                 AND c.confrelid IN ('items'::regclass, 'editions'::regclass, 'item_groups'::regclass,
+                                     'media_files'::regclass)"#,
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        found.sort();
+        let mut listed: Vec<String> = MOVED_WITH_PARENT
+            .iter()
+            .chain(&["album_details"])
+            .map(|t| (*t).into())
+            .collect();
+        listed.sort();
+        assert_eq!(found, listed);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_album_with_tracks_folds_into_another(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO persons (name) VALUES ('Ana');
+               INSERT INTO libraries (name, "mediaTypes") VALUES ('l', '["album"]');
+               INSERT INTO library_folders ("libraryId", path) VALUES (1, '/x');
+               INSERT INTO collections (name) VALUES ('c');
+               INSERT INTO media (id, title, type) VALUES (1, 'Dup', 'album'), (2, 'Held', 'album');
+               INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'audio'), (2, 2, 'audio');
+               INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 1, 1), (2, 2, 2);
+               INSERT INTO track_details ("itemId", "mediaId", position) VALUES (1, 1, 1), (2, 2, 1);
+               INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+                 VALUES (1, 1, 1, 'a.flac', 1, 'flac');
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version) VALUES (1, 1, 1, 0);
+               INSERT INTO album_details ("mediaId", "targetEditionId") VALUES (1, 1), (2, 2);
+               INSERT INTO media_credits ("mediaId", "editionId", "personId", role) VALUES (1, 1, 1, 'artist');
+               INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (1, 1, 'release', '1999-01-01');
+               INSERT INTO collection_entries ("collectionId", "mediaId", "itemId") VALUES (1, 1, 1);"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut tx = db.begin().await.unwrap();
+        absorb(&mut tx, 1, 2).await.unwrap();
+        tx.commit().await.unwrap();
+        let counts: (i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
+            r#"SELECT (SELECT count(*) FROM editions WHERE "mediaId" = 2),
+                      (SELECT count(*) FROM track_details WHERE "mediaId" = 2),
+                      (SELECT count(*) FROM item_parts WHERE "mediaId" = 2),
+                      (SELECT count(*) FROM media_credits WHERE "mediaId" = 2 AND "editionId" IS NOT NULL),
+                      (SELECT count(*) FROM media_release_dates WHERE "mediaId" = 2 AND "editionId" IS NOT NULL),
+                      (SELECT count(*) FROM collection_entries WHERE "mediaId" = 2),
+                      (SELECT count(*) FROM album_details WHERE "targetEditionId" = 2)"#,
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(counts, (2, 2, 1, 1, 1, 1, 1));
     }
 
     #[sqlx::test(migrations = false)]

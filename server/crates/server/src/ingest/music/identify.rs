@@ -297,14 +297,17 @@ async fn apply(
     found: Found,
     lang: &Resolved,
     prio: Priority,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     let group = found.fetched.album.external_id.clone();
     if let Some(other) = aliases::album_of(&st.db, &group).await?
         && other != media
     {
-        aliases::absorb_into(st, media, other).await?;
-        st.ingest.settle.schedule(st, other);
-        return Ok(());
+        if aliases::absorb_into(st, media, other).await? {
+            st.ingest.settle.schedule(st, other);
+            return Ok(true);
+        }
+        tracing::warn!("album #{media}: an album of another library holds the group {group}");
+        return Ok(false);
     }
     let linked = {
         let mut c = st.db.acquire().await?;
@@ -319,10 +322,10 @@ async fn apply(
         .await?
     };
     if linked != Link::Linked {
-        return Ok(());
+        return Ok(true);
     }
     if write_album(st, media, NS, &found.fetched, &group, lang, prio).await? != Written::Done {
-        return Ok(());
+        return Ok(true);
     }
     let release = &found.edition.release.external_id;
     let edition: Option<i32> = sqlx::query_scalar(
@@ -338,19 +341,19 @@ async fn apply(
     if let Some(edition) = edition {
         write_edition(st, media, edition, &found.edition, false).await?;
     }
-    Ok(())
+    Ok(true)
 }
 
-/// The release groups the ids of the tags name, the group's own id first; a release id alone is resolved by
-/// the provider's search.
+/// The release group the ids of the tags name, the group's own id first, else the one a search of the release
+/// id finds (`true`: the group is only a guess, to be checked against its releases).
 async fn tagged_group(
     st: &AppState,
     tags: &[TrackTags],
     prio: Priority,
     local: &Local,
-) -> Result<Option<String>, AppError> {
+) -> Result<Option<(String, bool)>, AppError> {
     if let Some(g) = common(tags.iter().filter_map(|t| t.release_group.clone())) {
-        return Ok(Some(g));
+        return Ok(Some((g, false)));
     }
     let Some(r) = common(tags.iter().filter_map(|t| t.release.clone())) else {
         return Ok(None);
@@ -359,7 +362,7 @@ async fn tagged_group(
     let hits = walk(st, [NS].into_iter(), &search, prio).await?;
     Ok(hits
         .first()
-        .and_then(|h| h["externalId"].as_str().map(str::to_owned)))
+        .and_then(|h| h["externalId"].as_str().map(|g| (g.to_owned(), true))))
 }
 
 /// Identifies an album that holds no id (`identify_media` of the settle), or reads the files of one again
@@ -411,29 +414,30 @@ pub async fn identify(
     let lang = language(st, media).await?;
     let release = common(tags.iter().filter_map(|t| t.release.clone()));
     let decided = match group {
-        Some(g) => Some(g.to_owned()),
+        Some(g) => Some((g.to_owned(), false)),
         None => tagged_group(st, &tags, prio, &local).await?,
     };
-    if let Some(g) = decided.filter(|_| apply_best) {
+    if let Some((g, guessed)) = decided.filter(|_| apply_best) {
         let fetched = fetch(st, NS, &g, &lang, prio).await?;
-        let Some((edition, scored)) =
-            best_release(st, &fetched, &local, release.as_deref(), &cfg, &lang, prio).await
-        else {
-            return Ok(Outcome::Nothing);
-        };
-        apply(
-            st,
-            media,
-            Found {
+        let wanted = release
+            .as_deref()
+            .filter(|r| fetched.releases.iter().any(|x| x.external_id == *r));
+        if wanted.is_some() || !guessed {
+            let Some((edition, scored)) =
+                best_release(st, &fetched, &local, wanted, &cfg, &lang, prio).await
+            else {
+                return Ok(Outcome::Nothing);
+            };
+            let found = Found {
                 fetched,
                 edition,
                 scored,
-            },
-            &lang,
-            prio,
-        )
-        .await?;
-        return Ok(Outcome::Applied);
+            };
+            return Ok(match apply(st, media, found, &lang, prio).await? {
+                true => Outcome::Applied,
+                false => Outcome::Nothing,
+            });
+        }
     }
     let artist_id = tags
         .iter()
@@ -482,8 +486,10 @@ pub async fn identify(
     review.sort_by(|a, b| b.similarity.total_cmp(&a.similarity));
     match best {
         Some(b) if apply_best && b.scored.verdict(&cfg) == Verdict::Auto => {
-            apply(st, media, b, &lang, prio).await?;
-            Ok(Outcome::Applied)
+            Ok(match apply(st, media, b, &lang, prio).await? {
+                true => Outcome::Applied,
+                false => Outcome::Nothing,
+            })
         }
         _ if !review.is_empty() => Ok(Outcome::Review(review)),
         _ => Ok(Outcome::Nothing),

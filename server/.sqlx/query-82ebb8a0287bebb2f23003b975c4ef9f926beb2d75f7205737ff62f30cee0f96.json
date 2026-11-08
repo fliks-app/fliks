@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM album_details WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "82ebb8a0287bebb2f23003b975c4ef9f926beb2d75f7205737ff62f30cee0f96"
+}

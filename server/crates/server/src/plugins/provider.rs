@@ -1,5 +1,6 @@
 //! A provider plugin as a `MetadataProvider` (`docs/spec/provider-plugins.md`): calls on its
 //! `provider` lane, errors mapped by rule 15, records validated by rule 14.
+use super::outbound::Gate;
 use super::runtime::{
     Budget, CallError, Inst, PluginRt, State, fliks::plugin::types::ExternalId, wit_provider as wit,
 };
@@ -24,6 +25,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
+
+/// The gate of the latest request of an export, if it made one.
+type Seen = Option<Arc<Gate>>;
 
 /// Rule 49: a call that arrives while the provider starts waits this long for `ready`.
 const READY_WAIT: Duration = Duration::from_secs(30);
@@ -194,9 +198,10 @@ impl PluginProvider {
             .ok_or_else(undeclared)
     }
 
-    /// Rule 14, for the breaker: every record the plugin answered is counted once.
-    fn checked<T>(&self, r: Result<T, Upstream>) -> Result<T, Upstream> {
-        if let Some(gate) = &self.rt.sh.gate {
+    /// Rule 14, for the breaker: every record the plugin answered is counted once, by the host of the
+    /// latest request of its export.
+    fn checked<T>(&self, seen: &Seen, r: Result<T, Upstream>) -> Result<T, Upstream> {
+        if let Some(gate) = seen {
             gate.record_checked(r.is_ok());
         }
         r
@@ -221,12 +226,13 @@ impl PluginProvider {
         v
     }
 
-    fn record(&self, json: &str, array: bool) -> Result<Value, Upstream> {
-        self.checked(parse(json, array)).map(|v| self.sanitized(v))
+    fn record(&self, seen: &Seen, json: &str, array: bool) -> Result<Value, Upstream> {
+        self.checked(seen, parse(json, array))
+            .map(|v| self.sanitized(v))
     }
 
     /// `record` for a work: a `comic` one that breaks rule 60 is malformed (rule 14).
-    fn work_record(&self, kind: MediaKind, json: &str) -> Result<Value, Upstream> {
+    fn work_record(&self, seen: &Seen, kind: MediaKind, json: &str) -> Result<Value, Upstream> {
         let checked = parse(json, false).and_then(|v| {
             match kind {
                 MediaKind::Comic => drop(comics::work(&v).map_err(bad)?),
@@ -235,7 +241,7 @@ impl PluginProvider {
             }
             Ok(v)
         });
-        self.checked(checked).map(|v| self.sanitized(v))
+        self.checked(seen, checked).map(|v| self.sanitized(v))
     }
 
     /// Rule 61: the children of a comic that pass, normalised; the rest is dropped and warned.
@@ -279,13 +285,17 @@ impl PluginProvider {
     }
 
     /// `record` for an answer that may be absent (`fetch-edition`, `fetch-chapters`).
-    fn optional_record(&self, json: Option<String>) -> Result<Option<Value>, Upstream> {
-        let parsed = self.checked(json.map(|j| parse(&j, false)).transpose())?;
+    fn optional_record(
+        &self,
+        seen: &Seen,
+        json: Option<String>,
+    ) -> Result<Option<Value>, Upstream> {
+        let parsed = self.checked(seen, json.map(|j| parse(&j, false)).transpose())?;
         Ok(parsed.map(|v| self.sanitized(v)))
     }
 
-    fn array(&self, json: &str) -> Result<Vec<Value>, Upstream> {
-        let list = self.checked(parse_list(json))?;
+    fn array(&self, seen: &Seen, json: &str) -> Result<Vec<Value>, Upstream> {
+        let list = self.checked(seen, parse_list(json))?;
         Ok(list.into_iter().map(|v| self.sanitized(v)).collect())
     }
 
@@ -307,7 +317,7 @@ impl PluginProvider {
             -> BoxFuture<'a, wasmtime::Result<Result<R, wit::ProviderError>>>
         + Send
         + 'static,
-    ) -> Result<R, Upstream> {
+    ) -> Result<(R, Seen), Upstream> {
         let (secs, queue) = match (p, long) {
             (Priority::Interactive, false) => (20, 5),
             (Priority::Interactive, true) => (120, 5),
@@ -323,14 +333,15 @@ impl PluginProvider {
         };
         let cfg_gen = self.rt.config_gen();
         match self.rt.provider_call(budget, READY_WAIT, p, f).await {
-            Ok(Ok(r)) => Ok(r),
-            Ok(Err(e)) => Err(self.upstream(e, cfg_gen)),
+            Ok((Ok(r), seen)) => Ok((r, seen)),
+            Ok((Err(e), seen)) => Err(self.upstream(e, cfg_gen, seen.as_deref())),
             Err(e) => Err(call_error(e)),
         }
     }
 
-    /// `cfg_gen`: the settings generation the call began under; a 401 of an older one is stale.
-    fn upstream(&self, e: wit::ProviderError, cfg_gen: u64) -> Upstream {
+    /// `cfg_gen`: the settings generation the call began under; a 401 of an older one is stale. `seen`: the
+    /// gate of the export's latest request, the one a `rate-limited` is about.
+    fn upstream(&self, e: wit::ProviderError, cfg_gen: u64, seen: Option<&Gate>) -> Upstream {
         use wit::ProviderError as E;
         match e {
             E::NotFound | E::Unsupported => Upstream::new(Some(404), "not found"),
@@ -342,7 +353,7 @@ impl PluginProvider {
                 Upstream::new(Some(401), "unauthorized")
             }
             E::RateLimited(retry) => {
-                if let (Some(secs), Some(gate)) = (retry, &self.rt.sh.gate) {
+                if let (Some(secs), Some(gate)) = (retry, seen) {
                     gate.pause_secs(secs);
                 }
                 Upstream::new(Some(429), "rate limited")
@@ -413,7 +424,7 @@ impl MetadataProvider for PluginProvider {
                 extra: vec![],
             };
             let lang = lang_of(lang);
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -421,7 +432,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.array(&json)
+            self.array(&seen, &json)
         }
         .boxed()
     }
@@ -436,7 +447,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(Some(kind), "work")?;
             let (id, lang) = (self.own(id), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -445,7 +456,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.work_record(kind, &json)
+            self.work_record(&seen, kind, &json)
         }
         .boxed()
     }
@@ -461,7 +472,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(Some(kind), "children")?;
             let (id, lang) = (self.own(id), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(true, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -470,7 +481,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let list = self.array(&json)?;
+            let list = self.array(&seen, &json)?;
             Ok(match kind {
                 MediaKind::Comic => self.comic_children(list),
                 MediaKind::Album => self.album_children(list),
@@ -490,7 +501,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(Some(kind), "childStubs")?;
             let (id, lang) = (self.own(id), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -499,7 +510,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.array(&json)
+            self.array(&seen, &json)
         }
         .boxed()
     }
@@ -526,7 +537,7 @@ impl MetadataProvider for PluginProvider {
                 value: id.to_owned(),
             };
             let lang = lang_of(lang);
-            let found = self
+            let (found, _) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -553,7 +564,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(None, "person")?;
             let (id, lang) = (self.own(id), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -561,9 +572,9 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let v = self.record(&json, false)?;
+            let v = self.record(&seen, &json, false)?;
             if self.declares(Some(MediaKind::Album), "person") {
-                let m = self.checked(music::person(&v).map_err(bad))?;
+                let m = self.checked(&seen, music::person(&v).map_err(bad))?;
                 let day = |d: Option<chrono::NaiveDate>| d.map(|d| d.to_string());
                 return Ok(PersonDetails {
                     name: m.name,
@@ -603,7 +614,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(None, "credits")?;
             let (id, lang) = (self.own(id), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -611,35 +622,39 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let v = self.record(&json, false)?;
+            let v = self.record(&seen, &json, false)?;
             if self.declares(Some(MediaKind::Album), "credits") {
                 let albums = v["albums"]
                     .as_array()
                     .filter(|a| a.len() <= MAX_LIST)
                     .ok_or_else(|| bad("credits without albums"));
-                return self.checked(albums.map(|a| {
-                    Credits {
+                return self.checked(
+                    &seen,
+                    albums.map(|a| Credits {
                         albums: a
                             .iter()
                             .filter(|r| music::album(r).is_ok())
                             .cloned()
                             .collect(),
                         ..Credits::default()
-                    }
-                }));
+                    }),
+                );
             }
             let side = |k: &str| {
                 v[k].as_array()
                     .cloned()
                     .ok_or_else(|| bad("credits without cast and crew"))
             };
-            self.checked(side("cast").and_then(|cast| {
-                Ok(Credits {
-                    cast,
-                    crew: side("crew")?,
-                    ..Credits::default()
-                })
-            }))
+            self.checked(
+                &seen,
+                side("cast").and_then(|cast| {
+                    Ok(Credits {
+                        cast,
+                        crew: side("crew")?,
+                        ..Credits::default()
+                    })
+                }),
+            )
         }
         .boxed()
     }
@@ -657,7 +672,7 @@ impl MetadataProvider for PluginProvider {
             if !self.has_scene() {
                 return Err(undeclared());
             }
-            let ids = self
+            let (ids, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.scene();
@@ -665,11 +680,14 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.checked(if ids.len() > MAX_SCENE_IDS {
-                Err(bad("too many ids"))
-            } else {
-                Ok(ids)
-            })
+            self.checked(
+                &seen,
+                if ids.len() > MAX_SCENE_IDS {
+                    Err(bad("too many ids"))
+                } else {
+                    Ok(ids)
+                },
+            )
         }
         .boxed()
     }
@@ -683,7 +701,7 @@ impl MetadataProvider for PluginProvider {
                 provider: "tvdb".to_owned(),
                 value: id.to_owned(),
             };
-            let pairs = self
+            let (pairs, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.scene();
@@ -691,10 +709,13 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let pairs = self.checked(match pairs {
-                Some(p) if p.len() > MAX_SCENE_PAIRS => Err(bad("too many pairs")),
-                p => Ok(p),
-            })?;
+            let pairs = self.checked(
+                &seen,
+                match pairs {
+                    Some(p) if p.len() > MAX_SCENE_PAIRS => Err(bad("too many pairs")),
+                    p => Ok(p),
+                },
+            )?;
             Ok(pairs.filter(|p| !p.is_empty()).map(|p| {
                 p.into_iter()
                     .map(|x| Entry {
@@ -724,7 +745,7 @@ impl MetadataProvider for PluginProvider {
         async move {
             self.has(Some(kind), "lists")?;
             let (name, params, lang) = (name.to_owned(), params.to_vec(), lang_of(lang));
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -733,7 +754,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.array(&json).map(Value::Array)
+            self.array(&seen, &json).map(Value::Array)
         }
         .boxed()
     }
@@ -759,7 +780,7 @@ impl MetadataProvider for PluginProvider {
                 value: e.value.to_owned(),
             };
             let lang = lang_of(lang);
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -767,9 +788,9 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            let record = self.optional_record(json)?;
+            let record = self.optional_record(&seen, json)?;
             if let (Some(r), true) = (&record, e.namespace == Namespace::MUSICBRAINZ) {
-                self.checked(music::edition(r).map(drop).map_err(bad))?;
+                self.checked(&seen, music::edition(r).map(drop).map_err(bad))?;
             }
             Ok(record)
         }
@@ -792,7 +813,7 @@ impl MetadataProvider for PluginProvider {
                 value: asin.to_owned(),
             };
             let lang = lang_of(lang);
-            let json = self
+            let (json, seen) = self
                 .call(false, p, move |i| {
                     Box::pin(async move {
                         let (g, s) = i.provider();
@@ -800,7 +821,7 @@ impl MetadataProvider for PluginProvider {
                     })
                 })
                 .await?;
-            self.optional_record(json)
+            self.optional_record(&seen, json)
         }
         .boxed()
     }

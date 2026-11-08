@@ -470,10 +470,20 @@ async fn refresh_any_with(
     Ok(None)
 }
 
-async fn finish_identify(st: &AppState, id: i32, changed: bool) -> Result<String, AppError> {
+async fn finish_identify(
+    st: &AppState,
+    id: i32,
+    changed: bool,
+    group: Option<String>,
+) -> Result<String, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
+    if let Some(group) = group {
+        // The pick also matches the files to a release of the group (`music.md` rule 41).
+        crate::ingest::music::identify::identify(st, id, Some(&group), Priority::Interactive, true)
+            .await?;
+    }
     if let Some(found) = refresh_any_with(st, &media, true, Priority::Interactive, changed).await?
         && media.has_seasons()
     {
@@ -632,6 +642,10 @@ pub async fn identify(
     }
     let acl = crate::libraries::accessible_library_ids(&st.db, &a).await?;
     let mut changed = false;
+    let group = (media.media_type == MediaKind::Album)
+        .then(|| pin.as_ref().filter(|(ns, _)| *ns == Namespace::MUSICBRAINZ))
+        .flatten()
+        .map(|(_, v)| v.clone());
     let applied = async {
         match (media.media_type, pin) {
             (MediaKind::Book, Some((ns, value))) => {
@@ -664,7 +678,7 @@ pub async fn identify(
         .upsert_running(&key, "Identify", Some(subj), None, None, None);
     let st2 = st.clone();
     tokio::spawn(async move {
-        let r = finish_identify(&st2, id, changed).await;
+        let r = finish_identify(&st2, id, changed, group).await;
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(body)))
