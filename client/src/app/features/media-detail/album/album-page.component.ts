@@ -11,10 +11,11 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
-import { AuthService } from '../../../core/services/auth.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { ToastService } from '../../../core/services/toast.service';
+import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
+import { heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
 import { FactsGridComponent, type Fact } from '../../../shared/components/facts-grid/facts-grid';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -22,6 +23,7 @@ import { LikeController } from '../../../shared/utils/like-controller';
 import {
   artistLine, formatDuration, groupByWork, groupDiscs, nextRating, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
 } from '../../music/music-utils';
+import { TrackLineComponent } from '../../music/track-line.component';
 import { asAlbumMedia, defaultEditionId } from './album-media';
 
 interface DiscView {
@@ -35,7 +37,7 @@ const STARS = [1, 2, 3, 4, 5] as const;
 @Component({
   selector: 'app-album-page',
   imports: [
-    FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, DetailSectionComponent, FactsGridComponent,
+    FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
     LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucidePlay, LucideShuffle, LucideStar,
   ],
   templateUrl: './album-page.component.html',
@@ -51,7 +53,6 @@ export class AlbumPageComponent {
   private readonly player = inject(AudioPlayerService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
-  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   protected readonly like = new LikeController(
@@ -77,7 +78,9 @@ export class AlbumPageComponent {
   );
   protected readonly playable = computed(() => this.tracks().filter((t) => t.hasFile));
   protected readonly orphaned = computed(() => !!this.album()?.orphaned || !!this.edition()?.orphaned);
-  protected readonly canIdentify = computed(() => !this.media().providers?.length && this.auth.hasPermission('media.edit'));
+  protected readonly desktop = heroDesktopLayout();
+  /** Identify lists the releases the files may be, instead of the title search of the other kinds. */
+  protected readonly actions: MediaActionHandlers = { 'media.identify': () => void this.review() };
   protected readonly artistsText = computed(() => artistLine(this.album()?.artists ?? []));
   protected readonly coverUrl = computed(() => this.edition()?.coverUrl ?? this.media().posterUrl);
   protected readonly duration = computed(() => formatDuration(this.tracks().reduce((s, t) => s + (t.durationSeconds ?? 0), 0)));
@@ -93,7 +96,6 @@ export class AlbumPageComponent {
     ];
   });
   protected readonly stars = STARS;
-  protected readonly fmt = formatDuration;
   protected readonly line = artistLine;
 
   protected editionLabel(e: AlbumEdition): string {

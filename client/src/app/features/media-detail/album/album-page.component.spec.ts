@@ -49,6 +49,20 @@ describe('AlbumPageComponent', () => {
     expect(reqs[0]).toMatchObject({ albumGain: -6, artists: 'Band' });
   });
 
+  it('puts Play and Shuffle in the hero action row', () => {
+    const { el } = setup([track(1)]);
+    const row = el.querySelector('[data-hero-actions]')!;
+    expect(row.querySelector('[data-testid="play"]')).not.toBeNull();
+    expect(row.querySelector('[data-testid="shuffle"]')).not.toBeNull();
+  });
+
+  it('identifies from the actions menu by listing the candidate releases', () => {
+    const { fixture, http } = setup([track(1)]);
+    const actions = (fixture.componentInstance as unknown as { actions: Record<string, () => void> }).actions;
+    actions['media.identify']!();
+    http.expectOne('/api/media/9/music/candidates').flush([]);
+  });
+
   it('skips the tracks without a file when playing', () => {
     const { el, player } = setup([track(1, { hasFile: false }), track(2)]);
     (el.querySelector('[data-testid="play"]') as HTMLButtonElement).click();

@@ -10,48 +10,23 @@
       {{ 'persons.title' | translate }}
     </button>
 
-    <!-- Person header -->
-    <div class="flex flex-col sm:flex-row gap-6 items-start">
-      <div class="avatar">
-        <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
-          @if (d.person.avatarUrl) {
-            <img [cachedSrc]="d.person.avatarUrl | resolveUrl:'medium'" [alt]="d.person.name" />
-          } @else {
-            <div class="bg-base-300 flex items-center justify-center w-full h-full text-4xl font-bold text-base-content/30">
-              {{ d.person.name.charAt(0) }}
-            </div>
+    <app-person-header [name]="d.person.name" [avatarUrl]="d.person.avatarUrl" [biography]="d.person.biography">
+      @if (d.person.knownForDepartment) {
+        <span class="badge badge-ghost">{{ d.person.knownForDepartment }}</span>
+      }
+      @if (d.person.birthday) {
+        <p class="text-sm text-base-content/60">
+          {{ d.person.birthday }}
+          @if (d.person.placeOfBirth) {
+            - {{ d.person.placeOfBirth }}
           }
-        </div>
-      </div>
-      <div class="flex flex-col gap-2">
-        <h1 class="text-3xl font-bold">{{ d.person.name }}</h1>
-        @if (d.person.knownForDepartment) {
-          <span class="badge badge-ghost">{{ d.person.knownForDepartment }}</span>
-        }
-        @if (d.person.birthday) {
-          <p class="text-sm text-base-content/60">
-            {{ d.person.birthday }}
-            @if (d.person.placeOfBirth) {
-              - {{ d.person.placeOfBirth }}
-            }
-            @if (d.person.deathday) {
-              - {{ d.person.deathday }}
-            }
-          </p>
-        }
-        @if (d.person.biography) {
-          <p [appClampToggle]="d.person.biography" #bio="clampToggle" class="text-sm leading-relaxed" [class.line-clamp-4]="!bio.expanded()">{{ d.person.biography }}</p>
-          @if (bio.showToggle()) {
-            <div class="flex justify-end">
-              <button class="btn btn-xs btn-ghost mt-1" (click)="bio.toggle()">
-                {{ bio.expanded() ? ('common.show_less' | translate) : ('common.show_more' | translate) }}
-              </button>
-            </div>
+          @if (d.person.deathday) {
+            - {{ d.person.deathday }}
           }
-        }
-        <app-follow-toggle kind="person" [targetId]="id" />
-      </div>
-    </div>
+        </p>
+      }
+      <app-follow-toggle headerActions kind="person" [targetId]="id" />
+    </app-person-header>
 
     @if (bookRole; as role) {
       <app-person-books [personId]="id" [role]="role" />

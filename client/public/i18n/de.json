@@ -5199,7 +5199,6 @@
   "music": {
     "play": "Abspielen",
     "shuffle": "Zufällig",
-    "identify": "Identifizieren",
     "candidates": "Mögliche Veröffentlichungen für diese Dateien",
     "no_candidates": "Keine passende Veröffentlichung gefunden",
     "editions": "Editionen",

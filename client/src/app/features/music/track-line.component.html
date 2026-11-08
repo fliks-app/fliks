@@ -1,0 +1,11 @@
+<ng-content select="[lead]" />
+<span class="min-w-0 flex-1">
+  <span class="block truncate font-medium">{{ title() }}@if (explicit()) { <span class="badge badge-ghost badge-sm ml-2">{{ 'music.explicit' | translate }}</span> }</span>
+  @if (subtitle()) {
+    <span class="block truncate text-sm text-base-content/60">{{ subtitle() }}</span>
+  }
+</span>
+<ng-content />
+@if (duration()) {
+  <span class="hidden sm:inline text-sm tabular-nums text-base-content/60">{{ duration() }}</span>
+}

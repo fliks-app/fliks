@@ -677,23 +677,13 @@
     } @else {
       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 tv:gap-8 p-1">
         @for (p of authorsList(); track p.id) {
-          <a [routerLink]="['/persons', p.id]" [queryParams]="{ role: 'author' }" class="flex flex-col items-center gap-2 group cursor-pointer">
-            <div class="avatar">
-              <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
-                @if (p.avatarUrl) {
-                  <img [cachedSrc]="p.avatarUrl | resolveUrl:'thumb'" [alt]="p.name" loading="lazy" />
-                } @else {
-                  <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">
-                    {{ p.name.charAt(0) }}
-                  </div>
-                }
-              </div>
-            </div>
-            <span class="text-sm text-center font-medium truncate w-full">{{ p.name }}</span>
-            <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">
-              {{ 'books_library.books_count' | translatePlural: p.workCount }}
-            </span>
-          </a>
+          <app-person-avatar-card
+            [link]="['/persons', p.id]"
+            [queryParams]="{ role: 'author' }"
+            [name]="p.name"
+            [avatarUrl]="p.avatarUrl"
+            [subtitle]="'books_library.books_count' | translatePlural: p.workCount"
+          />
         }
       </div>
     }

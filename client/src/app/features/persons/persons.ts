@@ -8,7 +8,7 @@ import {
   ElementRef,
   ViewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -19,15 +19,13 @@ import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideUsers } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [TranslatePluralPipe, TvSelectDirective, 
-    CachedSrcDirective,FormsModule, TranslatePipe, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
+  imports: [TranslatePluralPipe, TvSelectDirective, FormsModule, TranslatePipe, PersonAvatarCardComponent, LucideSearch, LucideUsers],
   templateUrl: './persons.html',
 })
 export class PersonsComponent implements OnInit, OnDestroy {

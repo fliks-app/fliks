@@ -16,17 +16,21 @@
       [revealLabel]="'spoilers.reveal' | translate"
       [class.scale-110]="posterSpoiler.masked()"
       class="w-full rounded-xl object-cover bg-base-300"
-      [class.aspect-2/3]="mode() === 'poster'"
+      [class.aspect-2/3]="mode() === 'poster' && !square()"
+      [class.aspect-square]="square()"
       [class.aspect-video]="mode() === 'still'"
       [style.view-transition-name]="viewTransitionName()"
     />
   } @else {
     <div
       class="rounded-xl bg-base-300 flex items-center justify-center text-base-content/30"
-      [class.aspect-2/3]="mode() === 'poster'"
+      [class.aspect-2/3]="mode() === 'poster' && !square()"
+      [class.aspect-square]="square()"
       [class.aspect-video]="mode() === 'still'"
     >
-      @if (bookLike()) {
+      @if (square()) {
+        <svg lucideMusic class="h-20 w-20" [strokeWidth]="1.5"></svg>
+      } @else if (bookLike()) {
         <svg lucideBookOpen class="h-20 w-20" [strokeWidth]="1.5"></svg>
       } @else {
         <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>

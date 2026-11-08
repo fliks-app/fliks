@@ -12,16 +12,14 @@ import {
 } from '../../core/services/api/persons-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { LucideChevronLeft } from '@lucide/angular';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
+import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { PersonBooksComponent } from './person-books';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-person-detail',
   imports: [
-    CachedSrcDirective, PersonBooksComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
+    PersonBooksComponent, PersonHeaderComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideChevronLeft],
   templateUrl: './person-detail.html',
 })
 export class PersonDetailComponent implements OnInit {

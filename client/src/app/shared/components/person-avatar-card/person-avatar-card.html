@@ -1,0 +1,15 @@
+<a [routerLink]="link()" [queryParams]="queryParams()" class="flex flex-col items-center gap-2 group cursor-pointer">
+  <div class="avatar">
+    <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+      @if (avatarUrl(); as url) {
+        <img [cachedSrc]="url | resolveUrl:'thumb'" [alt]="name()" loading="lazy" />
+      } @else {
+        <div class="bg-base-300 flex items-center justify-center w-full h-full text-2xl font-bold text-base-content/30">{{ name().charAt(0) }}</div>
+      }
+    </div>
+  </div>
+  <span class="text-sm text-center font-medium truncate w-full">{{ name() }}</span>
+  @if (subtitle(); as sub) {
+    <span class="text-sm text-base-content/50 -mt-1.5 truncate w-full text-center">{{ sub }}</span>
+  }
+</a>

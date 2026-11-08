@@ -1,0 +1,26 @@
+<div class="flex flex-col sm:flex-row gap-6 items-start">
+  <div class="avatar">
+    <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
+      @if (avatarUrl(); as url) {
+        <img [cachedSrc]="url | resolveUrl:'medium'" [alt]="name()" />
+      } @else {
+        <div class="bg-base-300 flex items-center justify-center w-full h-full text-4xl font-bold text-base-content/30">{{ name().charAt(0) }}</div>
+      }
+    </div>
+  </div>
+  <div class="flex min-w-0 flex-col gap-2">
+    <h1 class="text-3xl font-bold" data-testid="person-name">{{ name() }}</h1>
+    <ng-content />
+    @if (biography(); as bio) {
+      <p [appClampToggle]="bio" #clamp="clampToggle" class="text-sm leading-relaxed" [class.line-clamp-4]="!clamp.expanded()" data-testid="biography">{{ bio }}</p>
+      @if (clamp.showToggle()) {
+        <div class="flex justify-end">
+          <button type="button" class="btn btn-sm btn-ghost" (click)="clamp.toggle()">
+            {{ (clamp.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+          </button>
+        </div>
+      }
+    }
+    <ng-content select="[headerActions]" />
+  </div>
+</div>

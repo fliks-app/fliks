@@ -8,6 +8,8 @@ import { MusicApiService } from '../../core/services/api/music-api.service';
 import type { TrackRow, TracksQuery } from '../../core/services/api/music.models';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { artistLine, formatDuration, toTrackRequest } from './music-utils';
+import { PagedList } from './paged-list';
+import { TrackLineComponent } from './track-line.component';
 
 const PAGE = 50;
 type Sort = NonNullable<TracksQuery['sortBy']>;
@@ -15,7 +17,7 @@ type Sort = NonNullable<TracksQuery['sortBy']>;
 /** Every track of a library, searchable and sortable; a click plays the list from that track. */
 @Component({
   selector: 'app-music-tracks',
-  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, LucidePlay],
+  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucidePlay],
   templateUrl: './music-tracks.component.html',
   host: { class: 'block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,16 +27,25 @@ export class MusicTracksComponent {
 
   private readonly api = inject(MusicApiService);
   private readonly player = inject(AudioPlayerService);
-  protected readonly rows = signal<TrackRow[]>([]);
   protected readonly query = signal('');
   protected readonly sortBy = signal<Sort>('title');
   protected readonly filter = signal<'' | 'favourite' | 'rated'>('');
-  protected readonly loading = signal(false);
-  protected readonly more = signal(false);
   protected readonly sorts: Sort[] = ['title', 'album', 'added', 'played', 'rating'];
   protected readonly fmt = formatDuration;
   protected readonly line = artistLine;
-  private generation = 0;
+  protected readonly list = new PagedList<TrackRow>((page) => {
+    const sortBy = this.sortBy();
+    return this.api.tracks({
+      libraryId: this.libraryId(),
+      q: this.query() || undefined,
+      favourite: this.filter() === 'favourite',
+      rated: this.filter() === 'rated',
+      sortBy,
+      sortOrder: sortBy === 'title' || sortBy === 'album' ? 'asc' : 'desc',
+      page,
+      limit: PAGE,
+    });
+  }, PAGE);
 
   constructor() {
     effect((onCleanup) => {
@@ -42,49 +53,20 @@ export class MusicTracksComponent {
       this.sortBy();
       this.filter();
       const q = this.query();
-      const t = setTimeout(() => untracked(() => void this.load(false)), q ? 300 : 0);
+      const t = setTimeout(() => untracked(() => void this.list.load()), q ? 300 : 0);
       onCleanup(() => clearTimeout(t));
     });
   }
 
-  protected loadMore(): void {
-    void this.load(true);
-  }
-
   protected play(index: number): Promise<void> {
-    const playable = this.rows().filter((r) => r.hasFile);
-    const start = playable.indexOf(this.rows()[index]!);
+    const rows = this.list.rows();
+    const playable = rows.filter((r) => r.hasFile);
+    const start = playable.indexOf(rows[index]!);
     return this.player.playTracks(
       playable.map((r) =>
         toTrackRequest(r, { mediaId: r.mediaId, title: r.albumTitle, coverUrl: r.posterUrl, artists: '', albumGain: null, albumPeak: null }),
       ),
       Math.max(0, start),
     );
-  }
-
-  private async load(append: boolean): Promise<void> {
-    const gen = ++this.generation;
-    this.loading.set(true);
-    const f = this.filter();
-    const sortBy = this.sortBy();
-    try {
-      const got = await this.api.tracks({
-        libraryId: this.libraryId(),
-        q: this.query() || undefined,
-        favourite: f === 'favourite',
-        rated: f === 'rated',
-        sortBy,
-        sortOrder: sortBy === 'title' || sortBy === 'album' ? 'asc' : 'desc',
-        page: append ? Math.floor(this.rows().length / PAGE) + 1 : 1,
-        limit: PAGE,
-      });
-      if (gen !== this.generation) return;
-      this.rows.set(append ? [...this.rows(), ...got] : got);
-      this.more.set(got.length === PAGE);
-    } catch {
-      if (gen === this.generation && !append) this.rows.set([]);
-    } finally {
-      if (gen === this.generation) this.loading.set(false);
-    }
   }
 }

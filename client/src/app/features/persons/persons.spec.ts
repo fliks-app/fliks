@@ -27,7 +27,7 @@ describe('PersonsComponent book mode', () => {
     http.expectOne((r) => r.url === '/api/persons' && r.params.get('role') === 'author').flush([personListItemFixture]);
     await new Promise((r) => setTimeout(r));
     fixture.detectChanges();
-    const a: HTMLAnchorElement = fixture.nativeElement.querySelector('a[id^="person-"]');
+    const a: HTMLAnchorElement = fixture.nativeElement.querySelector('[id^="person-"] a');
     expect(a.getAttribute('href')).toBe('/persons/1?role=author');
     expect(fixture.componentInstance.workCounts.get(1)).toBe(2);
   });
