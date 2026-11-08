@@ -5203,7 +5203,7 @@ mod music_ingest {
         .fetch_all(&c.st.db)
         .await
         .unwrap();
-        assert_eq!(ids.len(), 2);
+        assert_eq!(ids.len(), 3, "the written file is read back as a sidecar");
         for id in &ids {
             let (s, _) = call(
                 &c,

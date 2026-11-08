@@ -63,7 +63,7 @@ async fn facts(st: &AppState, item: i32) -> sqlx::Result<Option<Facts>> {
 async fn lookup_fresh(st: &AppState, item: i32, provider: &str) -> bool {
     sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM lyrics_lookups WHERE "itemId" = $1 AND provider = $2
-             AND "checkedAt" > now() - make_interval(days => $3))"#,
+             AND status <> 'found' AND "checkedAt" > now() - make_interval(days => $3))"#,
     )
     .bind(item)
     .bind(provider)
