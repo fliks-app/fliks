@@ -53,6 +53,9 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .fetch_all(&mut *c)
     .await?;
+    // `item_parts` rows change media: no version writer of either runs meanwhile (`items.md` rule 23).
+    crate::media::items::lock_versions(c, a).await?;
+    crate::media::items::lock_versions(c, b).await?;
     // One statement: the composite foreign keys on (id, "mediaId") are checked at its end.
     sqlx::query!(
         r#"WITH e AS (UPDATE editions SET "mediaId" = $2 WHERE "mediaId" = $1),

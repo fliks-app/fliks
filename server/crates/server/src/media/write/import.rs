@@ -586,6 +586,9 @@ pub async fn import_media(
     if v.get("type").and_then(Value::as_str) == Some(MediaKind::Book.as_str()) {
         return super::book_import::import_book(&st, &a, v).await;
     }
+    if v.get("type").and_then(Value::as_str) == Some(MediaKind::Album.as_str()) {
+        return super::album_import::import_album(&st, &a, v).await;
+    }
     if v.get("type").and_then(Value::as_str) == Some(MediaKind::Comic.as_str()) {
         return super::comic_import::import_comic(&st, &a, v).await;
     }

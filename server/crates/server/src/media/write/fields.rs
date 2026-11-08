@@ -170,9 +170,12 @@ pub async fn merge_unmatched(st: &AppState, media: i32) -> sqlx::Result<bool> {
         .fetch_optional(&st.db)
         .await?
         .and_then(|t| MediaKind::parse(&t));
-    let Some(kind) =
-        kind.filter(|k| matches!(k, MediaKind::Movie | MediaKind::Series | MediaKind::Comic))
-    else {
+    let Some(kind) = kind.filter(|k| {
+        matches!(
+            k,
+            MediaKind::Movie | MediaKind::Series | MediaKind::Comic | MediaKind::Album
+        )
+    }) else {
         return Ok(false);
     };
     let records = file_records(st, media).await;

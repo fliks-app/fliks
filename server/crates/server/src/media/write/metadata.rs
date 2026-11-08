@@ -447,6 +447,9 @@ async fn refresh_any_with(
         MediaKind::Comic => {
             crate::metadata::comics::refresh(st, id, prio).await?;
         }
+        MediaKind::Album => {
+            crate::metadata::music::refresh(st, id, prio).await?;
+        }
         MediaKind::Book => {
             crate::ingest::books::refresh_media(st, id, prio)
                 .await
@@ -505,6 +508,24 @@ fn settle(st: &AppState, key: String, id: i32, old_title: String, r: Result<Stri
             });
         }
     }
+}
+
+/// `GET /api/media/:id/music/candidates`: the releases the files of an album may be (`music.md` rule 33).
+#[utoipa::path(get, path = "/api/media/{id}/music/candidates", responses((status = 200)))]
+pub async fn album_candidates(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Result<Json<Value>, AppError> {
+    let id = gate(&st, &a, Action::Update, id).await?;
+    let media = load_media(&st.db, id)
+        .await?
+        .ok_or_else(|| crate::libraries::media_not_found(id))?;
+    if media.media_type != MediaKind::Album {
+        return Err(AppError::bad_request("Candidates are read for an album"));
+    }
+    let list = crate::ingest::music::identify::candidates(&st, id).await?;
+    Ok(Json(serde_json::to_value(list).map_err(|e| AppError::internal(e.to_string()))?))
 }
 
 /// `POST /api/media/:id/identify` (rules 47-50).
@@ -581,6 +602,22 @@ pub async fn identify(
         return Err(AppError::bad_request(
             "Provide the id of a comic provider (provider and externalId) to identify this media against",
         ));
+    }
+    if media.media_type == MediaKind::Album {
+        let Some((ns, value)) = &pin else {
+            return Err(AppError::bad_request(
+                "Provide the id of an album provider (provider and externalId) to identify this media against",
+            ));
+        };
+        let other = external_ids::find(&st.db, MediaKind::Album, *ns, value)
+            .await?
+            .filter(|o| *o != id);
+        if let Some(o) = other {
+            return Err(AppError::conflict(format!(
+                "Album #{o} already uses this {} id",
+                known.label(*ns)
+            )));
+        }
     }
     let key = format!("Identify:{id}");
     let subj = crate::events::Subject::media(id, &media.title, Some(media.media_type));

@@ -198,6 +198,7 @@ impl MetadataProvider for Scripted {
             place_of_birth: text(&v, "placeOfBirth"),
             avatar_url: text(&v, "avatarUrl"),
             known_for_department: text(&v, "knownForDepartment"),
+            ..PersonDetails::default()
         })
     }
     fn person_credits<'a>(

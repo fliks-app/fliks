@@ -109,8 +109,7 @@ pub(crate) fn hit(known: &Namespaces, kind: MediaKind, ns: Namespace, v: &Value)
     match kind {
         MediaKind::Book => book_hits::hit(known, ns, v),
         MediaKind::Comic => comic_hits::hit(known, ns, v),
-        // The album search route comes with the music client; `kind_of` does not name it.
-        MediaKind::Album => None,
+        MediaKind::Album => super::music::routes::hit(known, ns, v),
         MediaKind::Movie | MediaKind::Series => {
             let mut one = [v.clone()];
             stamp(&mut one, ns, kind);
@@ -176,6 +175,23 @@ pub(crate) async fn mark_existing(
         .bind(&vs)
         .fetch_all(db)
         .await?;
+        if kind == MediaKind::Album {
+            // A merged id still names the album that absorbed it.
+            held.extend(
+                sqlx::query_as::<_, (i32, String, String)>(
+                    r#"SELECT min(m.id), a.provider, a.value FROM media_external_id_aliases a
+                       JOIN media m ON m.id = a."mediaId" AND m.type = 'album'
+                       WHERE m."libraryId" = ANY($1)
+                         AND (a.provider, a.value) IN (SELECT * FROM unnest($2::text[], $3::text[]))
+                       GROUP BY a.provider, a.value"#,
+                )
+                .bind(&libs)
+                .bind(&ps)
+                .bind(&vs)
+                .fetch_all(db)
+                .await?,
+            );
+        }
         if kind == MediaKind::Book {
             held.extend(
                 sqlx::query_as::<_, (i32, String, String)>(

@@ -2,6 +2,7 @@
 pub(crate) mod body;
 pub(crate) mod book_import;
 pub use book_import::import_book_for_request;
+mod album_import;
 mod comic_edit;
 mod comic_import;
 mod companions;
@@ -52,6 +53,7 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
         .route("/api/media/{id}/move", post(move_media))
         .route("/api/media/{id}/profiles", patch(patch_profiles))
         .route("/api/media/{id}/identify", post(identify))
+        .route("/api/media/{id}/music/candidates", get(album_candidates))
         .route("/api/media/{id}/refresh", post(refresh))
         .route(
             "/api/media/{id}/episodes/{episodeId}/refresh",
