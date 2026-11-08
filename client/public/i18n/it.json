@@ -5268,5 +5268,32 @@
     "section_albums": "Album",
     "section_artists": "Artisti",
     "recently_played": "Ascoltati di recente"
+  },
+  "lyrics": {
+    "title": "Testo",
+    "open_full": "Schermo intero",
+    "close_full": "Esci da schermo intero",
+    "none": "Nessun testo per questo brano.",
+    "instrumental": "Strumentale",
+    "error": "Impossibile caricare o salvare il testo.",
+    "kind_translation": "Traduzione",
+    "kind_pronunciation": "Pronuncia",
+    "kind_main": "Testo",
+    "offset_reset": "Reimposta",
+    "prefer": "Imposta come predefinito",
+    "delete": "Elimina",
+    "import": "Aggiungi testo",
+    "fetch": "Cerca dai fornitori",
+    "paste": "Incolla qui il testo",
+    "file": "File (.lrc, .elrc, .ttml, .srt, .txt)",
+    "format": "Formato",
+    "kind": "Tipo",
+    "lang": "Lingua (es. it)",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "tap_sync": "Sincronizza a tocchi",
+    "tap_hint": "Premi Segna quando inizia ogni riga; Indietro annulla l'ultima.",
+    "tap_stamp": "Segna riga",
+    "tap_back": "Indietro"
   }
 }

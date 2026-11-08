@@ -1120,6 +1120,41 @@
         }
       }
     },
+    "/api/items/{itemId}/lyrics": {
+      "get": {
+        "tags": [
+          "crate::lyrics"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      },
+      "put": {
+        "tags": [
+          "crate::lyrics"
+        ],
+        "operationId": "put",
+        "responses": {
+          "200": {},
+          "400": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/items/{itemId}/lyrics/fetch": {
+      "post": {
+        "tags": [
+          "crate::lyrics"
+        ],
+        "operationId": "fetch",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      }
+    },
     "/api/items/{itemId}/playback-info": {
       "post": {
         "tags": [
@@ -1704,6 +1739,29 @@
         "operationId": "status",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/lyrics/{id}": {
+      "delete": {
+        "tags": [
+          "crate::lyrics"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      },
+      "patch": {
+        "tags": [
+          "crate::lyrics"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {},
+          "400": {},
+          "404": {}
         }
       }
     },

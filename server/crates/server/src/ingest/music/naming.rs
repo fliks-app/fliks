@@ -19,7 +19,8 @@ pub async fn track_base(
     let (id, title, year) = media;
     let p = probe(st, src, false).await?;
     let seps = separators_of(st).await;
-    let t = TrackTags::read(&p.info, &seps, stem(&file_name(src)));
+    let t = TrackTags::read(&p.info, &seps, stem(&file_name(src)))
+        .with_folder_disc(&src.to_string_lossy());
     let Some(track) = t.track else {
         return Ok(None);
     };

@@ -1,6 +1,7 @@
 //! A music provider that answers what a test puts in it, for the apply and identify tests.
 use crate::metadata::{
-    Call, Credits, EditionRef, MetadataProvider, PersonDetails, Search, Upstream,
+    Call, Credits, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, PersonDetails, Search,
+    Upstream,
 };
 use fliks_domain::{
     external_id::Namespace,
@@ -26,6 +27,8 @@ pub(crate) struct MusicFake {
     /// The discography `person_credits` answers.
     pub albums: Mutex<Vec<Value>>,
     pub calls: Mutex<Vec<String>>,
+    /// What `fetch_lyrics` answers; none means the provider declares no lyrics.
+    pub lyrics: Mutex<Option<Option<LyricsHit>>>,
 }
 
 impl MusicFake {
@@ -47,6 +50,17 @@ impl MetadataProvider for MusicFake {
     }
     fn has_persons(&self) -> bool {
         false
+    }
+    fn has_lyrics(&self) -> bool {
+        self.lyrics.lock().unwrap().is_some()
+    }
+    fn fetch_lyrics<'a>(&'a self, q: &'a LyricsQuery, _: Priority) -> Call<'a, Option<LyricsHit>> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("lyrics {}", q.title));
+        let r = self.lyrics.lock().unwrap().clone().flatten();
+        Box::pin(async move { Ok(r) })
     }
     fn limits(&self) -> Limits {
         Limits::new(100.0, 100)

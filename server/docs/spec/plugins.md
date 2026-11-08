@@ -548,6 +548,32 @@ interface scene {
   scene-mapping: func(id: external-id) -> result<option<list<scene-pair>>, provider-error>;
 }
 
+/// An optional export of a provider that declares the `lyrics` capability under `album`.
+interface lyrics-provider {
+  use metadata-provider.{provider-error};
+
+  /// The track to find lyrics for: duration, recording id and isrc are given when the library knows them.
+  record lyrics-query {
+    title: string,
+    artist: string,
+    album: option<string>,
+    duration-ms: option<u32>,
+    recording-id: option<string>,
+    isrc: option<string>,
+    language: option<string>,
+  }
+  /// One document. `format` is `lrc`, `elrc`, `ttml`, `srt` or `plain`; `document` is empty when `instrumental`.
+  record lyrics-hit {
+    format: string,
+    document: string,
+    instrumental: bool,
+    lang: option<string>,
+    source-ref: option<string>,
+  }
+  /// None is a miss: the provider has no lyrics for the track.
+  fetch-lyrics: func(q: lyrics-query) -> result<option<lyrics-hit>, provider-error>;
+}
+
 world plugin {
   include wasi:cli/imports@0.2.12;
   import wasi:http/types@0.2.12;
@@ -566,6 +592,13 @@ world provider {
 world scene-provider {
   include provider;
   export scene;
+}
+
+/// The world a provider built with the SDK exports: `metadata-provider`, `scene` and `lyrics-provider`; the host
+/// reads the last two only for a manifest that declares the capability.
+world full-provider {
+  include scene-provider;
+  export lyrics-provider;
 }
 ```
 

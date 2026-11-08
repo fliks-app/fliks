@@ -5268,5 +5268,32 @@
     "section_albums": "Albums",
     "section_artists": "Artistes",
     "recently_played": "Écoutés récemment"
+  },
+  "lyrics": {
+    "title": "Paroles",
+    "open_full": "Plein écran",
+    "close_full": "Quitter le plein écran",
+    "none": "Aucune parole pour ce titre.",
+    "instrumental": "Instrumental",
+    "error": "Impossible de charger ou d'enregistrer les paroles.",
+    "kind_translation": "Traduction",
+    "kind_pronunciation": "Prononciation",
+    "kind_main": "Paroles",
+    "offset_reset": "Réinitialiser",
+    "prefer": "Définir par défaut",
+    "delete": "Supprimer",
+    "import": "Ajouter des paroles",
+    "fetch": "Chercher chez les fournisseurs",
+    "paste": "Collez les paroles ici",
+    "file": "Fichier (.lrc, .elrc, .ttml, .srt, .txt)",
+    "format": "Format",
+    "kind": "Type",
+    "lang": "Langue (ex. fr)",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "tap_sync": "Synchroniser au tap",
+    "tap_hint": "Appuyez sur Marquer au début de chaque ligne chantée ; Retour annule la dernière.",
+    "tap_stamp": "Marquer la ligne",
+    "tap_back": "Retour"
   }
 }

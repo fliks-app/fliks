@@ -5268,5 +5268,32 @@
     "section_albums": "Alben",
     "section_artists": "Künstler",
     "recently_played": "Zuletzt gespielt"
+  },
+  "lyrics": {
+    "title": "Songtext",
+    "open_full": "Vollbild",
+    "close_full": "Vollbild beenden",
+    "none": "Kein Songtext für diesen Titel.",
+    "instrumental": "Instrumental",
+    "error": "Songtext konnte nicht geladen oder gespeichert werden.",
+    "kind_translation": "Übersetzung",
+    "kind_pronunciation": "Aussprache",
+    "kind_main": "Songtext",
+    "offset_reset": "Zurücksetzen",
+    "prefer": "Als Standard festlegen",
+    "delete": "Löschen",
+    "import": "Songtext hinzufügen",
+    "fetch": "Bei Anbietern suchen",
+    "paste": "Songtext hier einfügen",
+    "file": "Datei (.lrc, .elrc, .ttml, .srt, .txt)",
+    "format": "Format",
+    "kind": "Typ",
+    "lang": "Sprache (z. B. de)",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "tap_sync": "Per Tippen synchronisieren",
+    "tap_hint": "Drücke Markieren, sobald jede Zeile beginnt; Zurück macht die letzte rückgängig.",
+    "tap_stamp": "Zeile markieren",
+    "tap_back": "Zurück"
   }
 }

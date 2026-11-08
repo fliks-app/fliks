@@ -9,6 +9,7 @@ pub mod external_id;
 pub mod js;
 pub mod language;
 pub mod livetv;
+pub mod lyrics;
 pub mod media;
 pub mod metadata;
 pub mod music;

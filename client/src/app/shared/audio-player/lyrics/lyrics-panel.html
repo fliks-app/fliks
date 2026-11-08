@@ -1,0 +1,130 @@
+<section class="flex h-full min-h-0 flex-col gap-3" [class.p-4]="fullscreen()" data-testid="lyrics-panel">
+  @if (fullscreen()) {
+    <div class="flex items-center gap-2" appTvSection>
+      <button type="button" class="btn btn-ghost btn-circle" (click)="closed.emit()" [attr.aria-label]="'lyrics.close_full' | translate">
+        <svg lucideChevronDown class="h-6 w-6"></svg>
+      </button>
+      <span class="min-w-0 flex-1 truncate text-center text-lg font-semibold">{{ audio.track()?.title }}</span>
+      <button type="button" class="btn btn-primary btn-circle" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
+        @if (audio.playing()) {
+          <svg lucidePause class="h-6 w-6"></svg>
+        } @else {
+          <svg lucidePlay class="h-6 w-6"></svg>
+        }
+      </button>
+    </div>
+  }
+
+  @if (mains().length > 1 || layers().length) {
+    <div class="scroll-ring-safe flex flex-wrap gap-2" appTvSection>
+      @for (d of mains(); track d.id) {
+        @if (mains().length > 1) {
+          <button type="button" class="btn btn-sm" [class.btn-primary]="d.id === main()?.id" [attr.aria-pressed]="d.id === main()?.id" (click)="pick(d.id)">
+            {{ label(d) }}
+          </button>
+        }
+      }
+      @for (d of layers(); track d.id) {
+        <button type="button" class="btn btn-sm" [class.btn-primary]="d.id === layerId()" [attr.aria-pressed]="d.id === layerId()" (click)="toggleLayer(d.id)">
+          {{ 'lyrics.kind_' + d.kind | translate }} {{ d.lang === 'und' ? '' : d.lang }}
+        </button>
+      }
+    </div>
+  }
+
+  @if (failed()) {
+    <p class="text-sm text-error" role="alert">{{ 'lyrics.error' | translate }}</p>
+  }
+
+  <div class="min-h-0 flex-1" [class.min-h-64]="!fullscreen()">
+    @if (mode() === 'view') {
+      @if (loading() && !res()) {
+        <span class="loading loading-spinner"></span>
+      } @else if (shown(); as d) {
+        <app-lyrics-view [doc]="d" [layer]="under()" [large]="fullscreen()" />
+      } @else if (res()?.instrumental) {
+        <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
+      } @else {
+        <p class="text-base text-base-content/60" data-testid="lyrics-empty">{{ 'lyrics.none' | translate }}</p>
+      }
+    }
+
+    @if (mode() === 'import') {
+      <div class="flex flex-col gap-2" data-testid="lyrics-import">
+        <textarea
+          class="textarea textarea-bordered h-40 w-full text-base"
+          [ngModel]="importText()"
+          (ngModelChange)="importText.set($event)"
+          [placeholder]="'lyrics.paste' | translate"
+          [attr.aria-label]="'lyrics.paste' | translate"
+        ></textarea>
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="file" class="file-input file-input-sm" accept=".lrc,.elrc,.ttml,.xml,.srt,.txt" (change)="onFile($event)" [attr.aria-label]="'lyrics.file' | translate" />
+          <select class="select select-sm" [ngModel]="importFormat()" (ngModelChange)="importFormat.set($event)" [attr.aria-label]="'lyrics.format' | translate">
+            @for (f of formats; track f) {
+              <option [value]="f">{{ f }}</option>
+            }
+          </select>
+          <select class="select select-sm" [ngModel]="importKind()" (ngModelChange)="importKind.set($event)" [attr.aria-label]="'lyrics.kind' | translate">
+            <option value="main">{{ 'lyrics.kind_main' | translate }}</option>
+            <option value="translation">{{ 'lyrics.kind_translation' | translate }}</option>
+            <option value="pronunciation">{{ 'lyrics.kind_pronunciation' | translate }}</option>
+          </select>
+          <input
+            type="text"
+            class="input input-sm w-24"
+            maxlength="8"
+            [ngModel]="importLang()"
+            (ngModelChange)="importLang.set($event)"
+            [placeholder]="'lyrics.lang' | translate"
+            [attr.aria-label]="'lyrics.lang' | translate"
+          />
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() || !importText().trim()" (click)="saveImport()">{{ 'lyrics.save' | translate }}</button>
+          <button type="button" class="btn btn-sm" [disabled]="!importText().trim() && !main()" (click)="startTap()">{{ 'lyrics.tap_sync' | translate }}</button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="mode.set('view')">{{ 'lyrics.cancel' | translate }}</button>
+        </div>
+      </div>
+    }
+
+    @if (mode() === 'tap') {
+      <div class="flex h-full flex-col gap-2" data-testid="lyrics-tap">
+        <p class="text-sm text-base-content/60">{{ 'lyrics.tap_hint' | translate }}</p>
+        <ol class="scroll-ring-safe min-h-0 flex-1 overflow-y-auto text-base">
+          @for (l of tap().lines; track $index; let i = $index) {
+            <li class="rounded px-2 py-0.5" [class.bg-base-300]="i === tap().next" [class.opacity-50]="l.start === undefined && i !== tap().next">
+              @if (l.start !== undefined) {
+                <span class="tabular-nums text-base-content/60">{{ (l.start / 1000).toFixed(2) }}</span>
+              }
+              {{ l.text }}
+            </li>
+          }
+        </ol>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary btn-sm" [disabled]="tap().next >= tap().lines.length" (click)="stamp()" data-testid="lyrics-stamp">{{ 'lyrics.tap_stamp' | translate }}</button>
+          <button type="button" class="btn btn-sm" [disabled]="tap().next === 0" (click)="back()">{{ 'lyrics.tap_back' | translate }}</button>
+          <button type="button" class="btn btn-sm" [disabled]="busy() || !tapReady()" (click)="saveTap()">{{ 'lyrics.save' | translate }}</button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="mode.set('import')">{{ 'lyrics.cancel' | translate }}</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (canEdit && !fullscreen() && mode() === 'view') {
+    <div class="flex flex-wrap items-center gap-2" appTvSection data-testid="lyrics-tools">
+      @if (shown(); as d) {
+        <span class="text-sm text-base-content/60" aria-hidden="true">{{ d.offset }} ms</span>
+        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, -500)">-500</button>
+        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, -100)">-100</button>
+        <button type="button" class="btn btn-sm" [disabled]="busy() || d.offset === 0" (click)="nudge(d, 'reset')">{{ 'lyrics.offset_reset' | translate }}</button>
+        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, 100)">+100</button>
+        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, 500)">+500</button>
+        <button type="button" class="btn btn-sm" [disabled]="busy() || d.preferred" (click)="prefer(d)">{{ 'lyrics.prefer' | translate }}</button>
+        <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="remove(d)">{{ 'lyrics.delete' | translate }}</button>
+      }
+      <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="mode.set('import')">{{ 'lyrics.import' | translate }}</button>
+      <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="fetchFromProviders()">{{ 'lyrics.fetch' | translate }}</button>
+    </div>
+  }
+</section>

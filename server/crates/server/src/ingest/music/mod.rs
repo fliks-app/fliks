@@ -13,6 +13,7 @@ use super::{
     record::Record,
     rescan::{PROBE_VERSION, mtime_ms},
 };
+use crate::lyrics::discover::Embedded;
 use crate::{
     media::items::lock_versions,
     metadata::music::{
@@ -155,7 +156,7 @@ pub async fn stored_tags(st: &AppState, media: i32) -> sqlx::Result<Vec<(i32, St
             let info = info
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_else(empty_info);
-            let t = TrackTags::read(&info, &seps, stem(&rel));
+            let t = TrackTags::read(&info, &seps, stem(&rel)).with_folder_disc(&rel);
             (id, rel, t)
         })
         .collect())
@@ -188,6 +189,7 @@ pub async fn register_with(
 ) -> Result<Registration, String> {
     let mut out = vec![];
     let mut conflicts = vec![];
+    let mut found = vec![];
     for f in files {
         let name = file_name(&f.abs);
         let Some(format) = format_of(&name) else {
@@ -232,6 +234,7 @@ pub async fn register_with(
             conflicts.push(format!("{name}: file already linked to another media"));
             continue;
         };
+        found.push((id, f.abs.clone(), embedded(&p.info)));
         out.push(Registered {
             file_id: id,
             rel: f.rel.clone(),
@@ -247,6 +250,7 @@ pub async fn register_with(
     }
     let ids: Vec<i32> = out.iter().map(|r| r.file_id).collect();
     lay_out(st, media, &ids, force).await?;
+    crate::lyrics::discover::after_layout(st, &found).await;
     for r in &out {
         st.ingest.queue.enqueue(st, r.file_id).await;
     }
@@ -257,6 +261,22 @@ pub async fn register_with(
     })
 }
 
+/// The lyrics tags of a file, probed again (`streamInfo` keeps none).
+pub async fn embedded_of(st: &AppState, path: &Path) -> Embedded {
+    match probe(st, path, false).await {
+        Ok(p) => embedded(&p.info),
+        Err(_) => Embedded::default(),
+    }
+}
+
+fn embedded(info: &fliks_engine_core::api::MediaInfo) -> Embedded {
+    let t = info.tags.as_ref();
+    Embedded {
+        lyrics: t.and_then(|t| t.lyrics.clone()),
+        synced: t.and_then(|t| t.synced_lyrics.clone()),
+    }
+}
+
 /// A file changed on disk: its probe and its technical facts again; `force` reads its tags into the track too.
 pub async fn refresh(
     st: &AppState,
@@ -265,6 +285,7 @@ pub async fn refresh(
     rows: &[&KnownFile],
 ) -> Result<i64, String> {
     let mut changed = vec![];
+    let mut found = vec![];
     for r in rows {
         let abs: PathBuf = base.join(r.rel.replace('\\', "/"));
         let Ok(meta) = tokio::fs::metadata(&abs).await else {
@@ -291,9 +312,11 @@ pub async fn refresh(
         .await
         .map_err(|e| e.to_string())?;
         changed.push(r.id);
+        found.push((r.id, abs, embedded(&p.info)));
     }
     if !changed.is_empty() {
         lay_out(st, media, &changed, false).await?;
+        crate::lyrics::discover::after_layout(st, &found).await;
         st.ingest.settle.schedule(st, media);
     }
     Ok(changed.len() as i64)
@@ -503,7 +526,10 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
                 .clone()
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_else(empty_info);
-            (r, TrackTags::read(&info, &seps, stem(&r.rel)))
+            (
+                r,
+                TrackTags::read(&info, &seps, stem(&r.rel)).with_folder_disc(&r.rel),
+            )
         })
         .collect();
     todo.sort_by_key(|(r, t)| {
@@ -639,6 +665,9 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
+        crate::lyrics::store::rebind(&mut tx, item, r.id, t.duration_ms)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     let all: Vec<TrackTags> = todo.iter().map(|(_, t)| t.clone()).collect();
     album_facts(&mut tx, media, &all, &editions)
@@ -805,6 +834,7 @@ pub async fn settled(st: &AppState, media: i32) {
             e.text()
         );
     }
+    crate::lyrics::providers::auto_fetch(st, media).await;
     if tagwrite::enabled(st).await
         && let Err(e) = tagwrite::write_album_tags(st, media).await
     {

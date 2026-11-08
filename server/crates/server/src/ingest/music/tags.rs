@@ -216,6 +216,14 @@ impl TrackTags {
         })
     }
 
+    /// The disc of the folder a file sits in, when the tags name none.
+    pub fn with_folder_disc(mut self, rel: &str) -> Self {
+        if self.disc.is_none() {
+            self.disc = fliks_domain::music::group::disc_of_folder(rel);
+        }
+        self
+    }
+
     pub fn disc_number(&self) -> i32 {
         self.disc.filter(|d| (1..=999).contains(d)).unwrap_or(1)
     }

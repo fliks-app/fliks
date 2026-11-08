@@ -13,7 +13,7 @@ pub const EXPORT: &str = "fliks:plugin/metadata-provider@3.0.0";
 /// The kinds of work a provider may serve (the documented set of the WIT `kind`).
 pub const KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
 /// The capabilities a kind lists, one per `metadata-provider` function family.
-pub const CAPABILITIES: [&str; 11] = [
+pub const CAPABILITIES: [&str; 12] = [
     "search",
     "work",
     "children",
@@ -25,6 +25,7 @@ pub const CAPABILITIES: [&str; 11] = [
     "findBy",
     "lists",
     "scene",
+    "lyrics",
 ];
 /// The resources `snapshotTtlSecs` may name.
 pub const RESOURCES: [&str; 6] = [
@@ -216,6 +217,17 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
                 "provider.kinds: credits under album cannot go with credits under another kind",
             );
         }
+    }
+    // `fetch-lyrics` takes no kind: a lyrics provider is told by `lyrics` under `album`, nowhere else.
+    if let Some(k) = o.get("kinds").and_then(Value::as_object)
+        && k.iter().any(|(kind, caps)| {
+            kind != "album"
+                && caps
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|c| c == "lyrics"))
+        })
+    {
+        return Err("provider.kinds: lyrics goes under album only");
     }
     let scene = o.get("kinds").and_then(Value::as_object).is_some_and(|k| {
         k.values()

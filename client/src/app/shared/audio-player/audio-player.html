@@ -68,6 +68,9 @@
         </button>
       </div>
 
+      @if (lyricsMode() === 'full' && audio.musicMode()) {
+        <app-lyrics-panel class="min-h-0 flex-1" [itemId]="t.itemId" [fullscreen]="true" (closed)="lyricsMode.set('panel')" />
+      } @else {
       <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-ring-safe sm:flex-row" appTvSection>
         <div class="flex shrink-0 flex-col items-center gap-3 sm:w-64">
           <div class="flex aspect-square w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20">
@@ -94,7 +97,9 @@
         </div>
 
         <div class="flex min-w-0 flex-1 flex-col gap-4">
-          @if (audio.musicMode()) {
+          @if (audio.musicMode() && lyricsMode() === 'panel') {
+            <app-lyrics-panel class="h-96" [itemId]="t.itemId" />
+          } @else if (audio.musicMode()) {
             <section class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">
               <h3 class="menu-title flex items-center gap-2 px-0">
                 <svg lucideListMusic class="h-4 w-4"></svg>
@@ -194,6 +199,7 @@
         </div>
       </div>
 
+      }
       <div class="flex flex-col gap-1">
         <input
           type="range"
@@ -279,6 +285,23 @@
             </button>
           }
         </div>
+        <button
+          type="button"
+          class="btn btn-sm gap-1"
+          [class.btn-primary]="lyricsMode() !== 'off'"
+          [attr.aria-pressed]="lyricsMode() !== 'off'"
+          (click)="toggleLyrics()"
+          data-testid="lyrics-toggle"
+        >
+          <svg lucideMicVocal class="h-4 w-4"></svg>
+          {{ 'lyrics.title' | translate }}
+        </button>
+        @if (lyricsMode() === 'panel') {
+          <button type="button" class="btn btn-sm gap-1" (click)="lyricsMode.set('full')" data-testid="lyrics-full">
+            <svg lucideMaximize class="h-4 w-4"></svg>
+            {{ 'lyrics.open_full' | translate }}
+          </button>
+        }
         <button type="button" class="btn btn-sm gap-1" (click)="cycleReplayGain()">
           <svg lucideVolume2 class="h-4 w-4"></svg>
           {{ 'music_player.replay_gain_' + audio.replayGain() | translate }}
