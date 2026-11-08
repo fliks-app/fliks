@@ -63,6 +63,7 @@ pub struct PlaylistView {
     cover_image_url: Option<String>,
     item_count: i32,
     posters: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     rules: Option<SmartRules>,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,

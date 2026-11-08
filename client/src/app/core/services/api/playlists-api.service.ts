@@ -36,7 +36,7 @@ export interface Playlist {
   /** First up-to-4 poster URLs for the card mosaic (per-viewer). */
   posters: string[];
   /** Smart rules; null for a static playlist. */
-  rules: SmartRules | null;
+  rules?: SmartRules | null;
   /** ISO timestamp of the last edit (rename, flag or item change). */
   updatedAt: string;
 }
