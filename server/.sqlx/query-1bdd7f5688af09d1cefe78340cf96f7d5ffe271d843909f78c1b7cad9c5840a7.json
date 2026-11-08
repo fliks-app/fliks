@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playlist_items (\"playlistId\", \"itemId\", \"addedById\", position)\n           SELECT $1, t.i, $2, (t.n - 1)::int FROM unnest($3::int[]) WITH ORDINALITY AS t(i, n)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1bdd7f5688af09d1cefe78340cf96f7d5ffe271d843909f78c1b7cad9c5840a7"
+}

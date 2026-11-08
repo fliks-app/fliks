@@ -1,0 +1,227 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-3xl">
+    <app-modal-header [title]="(playlist() ? 'playlists.smart_edit' : 'playlists.smart_new') | translate" />
+    <div class="flex flex-col gap-4">
+      @if (!playlist()) {
+        <input
+          type="text"
+          class="input input-bordered w-full"
+          name="smartName"
+          [placeholder]="'playlists.new_placeholder' | translate"
+          [ngModel]="name()"
+          (ngModelChange)="name.set($event)"
+        />
+      }
+
+      <label class="flex items-center gap-2">
+        <span class="text-sm">{{ 'playlists.match_label' | translate }}</span>
+        <select
+          appTvSelect
+          class="select select-bordered select-sm"
+          [ngModel]="rules().match"
+          (ngModelChange)="patch({ match: $event })"
+        >
+          <option value="all">{{ 'playlists.match_all' | translate }}</option>
+          <option value="any">{{ 'playlists.match_any' | translate }}</option>
+        </select>
+      </label>
+
+      <ul class="flex flex-col gap-2 max-h-[40vh] overflow-y-auto scroll-ring-safe">
+        @for (c of rules().criteria; track $index; let i = $index) {
+          <li class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 p-2" [class.ring-1]="!rowValid(c)" [class.ring-warning]="!rowValid(c)">
+            <select
+              appTvSelect
+              class="select select-bordered select-sm w-44"
+              [attr.aria-label]="'playlists.rule_type' | translate"
+              [ngModel]="c.type"
+              (ngModelChange)="setType(i, $event)"
+            >
+              @for (t of types; track t) {
+                <option [value]="t">{{ 'playlists.crit_' + t | translate }}</option>
+              }
+            </select>
+
+            @for (f of fields[c.type]; track f.key) {
+              @switch (f.kind) {
+                @case ('text') {
+                  <input
+                    type="text"
+                    maxlength="255"
+                    class="input input-bordered input-sm flex-1 min-w-40"
+                    [placeholder]="'playlists.' + f.label | translate"
+                    [value]="value(c, f.key) ?? ''"
+                    (input)="setField(i, f.key, txt.value)"
+                    #txt
+                  />
+                }
+                @case ('int') {
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="input input-bordered input-sm w-32"
+                    [placeholder]="'playlists.' + f.label | translate"
+                    [attr.aria-label]="'playlists.' + f.label | translate"
+                    [value]="value(c, f.key) ?? ''"
+                    (input)="setNumber(i, f, int.value)"
+                    #int
+                  />
+                }
+                @case ('float') {
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    class="input input-bordered input-sm w-32"
+                    [placeholder]="'playlists.' + f.label | translate"
+                    [attr.aria-label]="'playlists.' + f.label | translate"
+                    [value]="value(c, f.key) ?? ''"
+                    (input)="setNumber(i, f, flt.value)"
+                    #flt
+                  />
+                }
+                @case ('bool') {
+                  <select
+                    appTvSelect
+                    class="select select-bordered select-sm"
+                    [ngModel]="value(c, f.key)"
+                    (ngModelChange)="setField(i, f.key, $event)"
+                  >
+                    <option [ngValue]="true">{{ 'playlists.value_true' | translate }}</option>
+                    <option [ngValue]="false">{{ 'playlists.value_false' | translate }}</option>
+                  </select>
+                }
+                @case ('types') {
+                  <div class="flex flex-wrap gap-x-4 gap-y-1 flex-1">
+                    @for (r of releaseTypes; track r.value) {
+                      <label class="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          class="checkbox checkbox-xs"
+                          [checked]="has(c, f.key, r.value)"
+                          (change)="toggle(i, f.key, r.value)"
+                        />
+                        {{ 'playlists.rtype_' + r.key | translate }}
+                      </label>
+                    }
+                  </div>
+                }
+                @case ('codecs') {
+                  <input
+                    type="text"
+                    class="input input-bordered input-sm flex-1 min-w-40"
+                    [placeholder]="'playlists.' + f.label | translate"
+                    [value]="codecsText(c)"
+                    (input)="setCodecs(i, cod.value)"
+                    #cod
+                  />
+                }
+                @case ('libraries') {
+                  <div class="flex flex-wrap gap-x-4 gap-y-1 flex-1">
+                    @for (l of libraries(); track l.id) {
+                      <label class="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          class="checkbox checkbox-xs"
+                          [checked]="has(c, f.key, l.id)"
+                          (change)="toggle(i, f.key, l.id)"
+                        />
+                        {{ l.name }}
+                      </label>
+                    }
+                  </div>
+                }
+              }
+            }
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm btn-square text-error ml-auto"
+              [disabled]="rules().criteria.length <= 1"
+              [attr.aria-label]="'playlists.remove_rule' | translate"
+              (click)="removeRule(i)"
+            >
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          </li>
+        }
+      </ul>
+
+      <div>
+        <button type="button" class="btn btn-ghost btn-sm gap-2" [disabled]="rules().criteria.length >= 50" (click)="addRule()">
+          <svg lucidePlus class="h-4 w-4"></svg>
+          {{ 'playlists.add_rule' | translate }}
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <label class="flex items-center gap-2 text-sm">
+          {{ 'playlists.sort_by' | translate }}
+          <select
+            appTvSelect
+            class="select select-bordered select-sm"
+            [ngModel]="rules().sort.by"
+            (ngModelChange)="setSort($event, rules().sort.descending)"
+          >
+            @for (s of sorts; track s) {
+              <option [value]="s">{{ 'playlists.sort_' + s | translate }}</option>
+            }
+          </select>
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [checked]="rules().sort.descending"
+            (change)="setSort(rules().sort.by, !rules().sort.descending)"
+          />
+          {{ 'playlists.sort_desc' | translate }}
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          {{ 'playlists.limit' | translate }}
+          <input
+            #lim
+            type="number"
+            min="1"
+            max="5000"
+            step="1"
+            class="input input-bordered input-sm w-28"
+            [placeholder]="'playlists.limit_none' | translate"
+            [value]="rules().limit ?? ''"
+            (input)="setLimit(lim.value)"
+          />
+        </label>
+      </div>
+
+      <p class="text-sm text-base-content/60 min-h-5" aria-live="polite">
+        @switch (preview().status) {
+          @case ('loading') {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          @case ('ready') {
+            {{
+              (preview().count === 1 ? 'playlists.preview_one' : 'playlists.preview_other')
+                | translate: { count: preview().count }
+            }}
+          }
+          @case ('error') {
+            {{ 'playlists.preview_error' | translate }}
+          }
+          @default {
+            {{ 'playlists.preview_incomplete' | translate }}
+          }
+        }
+      </p>
+    </div>
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" [disabled]="busy() || !valid()" (click)="save()">
+        @if (busy()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

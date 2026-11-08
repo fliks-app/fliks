@@ -25,6 +25,8 @@ export interface MediaPick {
   title: string;
   /** The title's poster, for a caller that shows the picks. */
   posterUrl: string | null;
+  /** Set for an album, which a caller expands into its tracks. */
+  type?: 'album';
 }
 
 /** A title already in the target list, greyed out in the picker. */
@@ -324,7 +326,7 @@ export class MediaPickerComponent implements OnDestroy {
 
   protected addMovie(): void {
     const m = this.selected();
-    if (m && !this.isTaken(m.id, null)) this.emit([{ mediaId: m.id, episodeId: null, title: m.title, posterUrl: m.posterUrl }]);
+    if (m && !this.isTaken(m.id, null)) this.emit([{ mediaId: m.id, episodeId: null, title: m.title, posterUrl: m.posterUrl, ...(m.type === 'album' && { type: 'album' as const }) }]);
   }
 
   protected collapse(): void {

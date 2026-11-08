@@ -4,8 +4,9 @@ use crate::{
     social::follows,
 };
 use chrono::{DateTime, Utc};
+use fliks_domain::music::playlist_rules::SmartRules;
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::{PgPool, types::Json};
 
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -38,6 +39,13 @@ pub struct Playlist {
     pub auto_play: bool,
     pub visibility: String,
     pub cover_image_url: Option<String>,
+    pub rules: Option<Json<SmartRules>>,
+}
+
+impl Playlist {
+    pub fn is_smart(&self) -> bool {
+        self.rules.is_some()
+    }
 }
 
 #[derive(Serialize)]
@@ -55,6 +63,7 @@ pub struct PlaylistView {
     cover_image_url: Option<String>,
     item_count: i32,
     posters: Vec<String>,
+    rules: Option<SmartRules>,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
@@ -85,6 +94,7 @@ impl PlaylistView {
             cover_image_url: p.cover_image_url,
             item_count,
             posters,
+            rules: p.rules.map(|r| r.0),
             created_at: p.created_at,
             updated_at: p.updated_at,
         }
@@ -101,7 +111,8 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Playlist>> {
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, "ownerId" AS owner_id,
                   "autoRemoveWatched" AS auto_remove_watched, "autoDownload" AS auto_download,
                   "autoPlay" AS auto_play, visibility::text AS "visibility!",
-                  "coverImageUrl" AS cover_image_url
+                  "coverImageUrl" AS cover_image_url,
+                  rules AS "rules?: Json<SmartRules>"
            FROM playlists WHERE id = $1"#,
         id
     )

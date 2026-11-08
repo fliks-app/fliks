@@ -17,8 +17,18 @@ export interface PartyReactionCatalog {
   defaults: string[];
 }
 
+/** The wire identity of a programme row; `itemId` names a track of an album. */
+export interface PartyItemIn {
+  mediaId: number;
+  mediaFileId?: number;
+  episodeId?: number;
+  itemId?: number;
+}
+
 export interface PartyItem {
   mediaId: number;
+  /** Present only for a track: the album is `mediaId`, the title is the track's. */
+  itemId?: number;
   mediaFileId: number | null;
   episodeId: number | null;
   title: string;
@@ -160,7 +170,7 @@ export interface CreatePartyBody {
   linkSharing?: boolean;
   public?: boolean;
   inviteeIds?: number[];
-  items?: { mediaId: number; mediaFileId?: number; episodeId?: number }[];
+  items?: PartyItemIn[];
   cover?: PartyCoverChoice;
 }
 
@@ -168,7 +178,7 @@ export interface PartyIntentBody {
   deviceId: string;
   action: PartyIntentAction;
   position?: number;
-  item?: { mediaId: number; mediaFileId?: number; episodeId?: number };
+  item?: PartyItemIn;
   baseRev: number;
 }
 
@@ -196,11 +206,11 @@ export class PartyApiService {
     return firstValueFrom(this.http.post<PartyDto>('/api/parties', body));
   }
 
-  select(id: number, body: { mediaId: number; mediaFileId?: number; episodeId?: number }) {
+  select(id: number, body: PartyItemIn) {
     return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/select`, body));
   }
 
-  programme(id: number, items: { mediaId: number; mediaFileId?: number; episodeId?: number }[]) {
+  programme(id: number, items: PartyItemIn[]) {
     return firstValueFrom(this.http.put<PartyDto>(`/api/parties/${id}/programme`, { items }));
   }
 

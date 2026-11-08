@@ -9,13 +9,14 @@ import {
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlus } from '@lucide/angular';
+import { LucidePlus, LucideUpload } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
-import { Playlist, PlaylistsApiService } from '../../core/services/api/playlists-api.service';
+import { M3uImportResult, Playlist, PlaylistsApiService } from '../../core/services/api/playlists-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
+import { SmartPlaylistEditorComponent } from './smart-playlist-editor/smart-playlist-editor';
 
 @Component({
   selector: 'app-playlists',
@@ -25,7 +26,9 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
     TranslatePipe,
     FormsModule,
     LucidePlus,
+    LucideUpload,
     ModalHeaderComponent,
+    SmartPlaylistEditorComponent,
   ],
   templateUrl: './playlists.html',
 })
@@ -35,12 +38,15 @@ export class PlaylistsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
+  private readonly importDialog = viewChild<ElementRef<HTMLDialogElement>>('importDialog');
   private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
 
   readonly playlists = signal<Playlist[]>([]);
   readonly loading = signal(false);
   readonly creating = signal(false);
   readonly newName = signal('');
+  readonly importing = signal(false);
+  readonly importResult = signal<M3uImportResult | null>(null);
 
   /** Cached route: revalidate on return so a playlist created or deleted
    *  elsewhere shows up behind the DOM the cache paints instantly. */
@@ -89,5 +95,37 @@ export class PlaylistsComponent implements OnInit {
     } finally {
       this.creating.set(false);
     }
+  }
+
+  openSmart(editor: SmartPlaylistEditorComponent) {
+    editor.open();
+  }
+
+  smartSaved(p: Playlist) {
+    void this.router.navigate(['/playlists', p.id]);
+  }
+
+  /** An M3U file becomes a playlist named after it; the unmatched lines are listed. */
+  async importFile(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.importing.set(true);
+    try {
+      const content = await file.text();
+      const result = await this.api.importM3u(file.name.replace(/\.[^.]*$/, '') || file.name, content);
+      this.importResult.set(result);
+      void this.load(true);
+      this.importDialog()?.nativeElement.showModal();
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    } finally {
+      this.importing.set(false);
+    }
+  }
+
+  openImported(r: M3uImportResult) {
+    this.importDialog()?.nativeElement.close();
+    this.openPlaylist(r.playlist.id);
   }
 }

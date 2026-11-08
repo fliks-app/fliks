@@ -3,10 +3,21 @@
     <!-- Hidden below lg where the mobile topbar already shows the page title;
          kept sr-only so it stays a landmark and the create button stays right. -->
     <h1 class="page-title">{{ 'playlists.title' | translate }}</h1>
-    <button type="button" class="btn btn-primary btn-sm gap-2" (click)="openCreate()">
-      <svg lucidePlus class="w-4 h-4" [strokeWidth]="2"></svg>
-      {{ 'playlists.create' | translate }}
-    </button>
+    <div class="flex items-center gap-2">
+      <input #m3u type="file" accept=".m3u,.m3u8,audio/x-mpegurl" class="hidden" (change)="importFile(m3u)" />
+      <button type="button" class="btn btn-ghost btn-sm gap-2" [disabled]="importing()" (click)="m3u.click()">
+        <svg lucideUpload class="w-4 h-4" [strokeWidth]="2"></svg>
+        {{ 'playlists.import_m3u' | translate }}
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openSmart(smartEditor)">
+        <svg lucidePlus class="w-4 h-4" [strokeWidth]="2"></svg>
+        {{ 'playlists.smart_new' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary btn-sm gap-2" (click)="openCreate()">
+        <svg lucidePlus class="w-4 h-4" [strokeWidth]="2"></svg>
+        {{ 'playlists.create' | translate }}
+      </button>
+    </div>
   </div>
 
   @if (loading() && !playlists().length) {
@@ -61,6 +72,37 @@
         </button>
       </app-modal-footer>
     </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>
+
+<app-smart-playlist-editor #smartEditor (saved)="smartSaved($event)" />
+
+<dialog #importDialog class="modal">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'playlists.import_title' | translate" />
+    @if (importResult(); as r) {
+      <p class="mb-2">
+        {{ (r.matched === 1 ? 'playlists.import_done_one' : 'playlists.import_done_other') | translate: { count: r.matched } }}
+      </p>
+      @if (r.unmatched.length) {
+        <p class="text-sm font-semibold mb-1">
+          {{ 'playlists.import_unmatched' | translate: { count: r.unmatched.length } }}
+        </p>
+        <ul class="flex flex-col gap-1 max-h-52 overflow-y-auto scroll-ring-safe text-sm">
+          @for (u of r.unmatched; track u.line) {
+            <li class="flex gap-2">
+              <span class="shrink-0 text-base-content/60">{{ 'playlists.import_line' | translate: { line: u.line } }}</span>
+              <span class="min-w-0 break-all">{{ u.text }}</span>
+            </li>
+          }
+        </ul>
+      }
+      <app-modal-footer>
+        <button type="button" class="btn" (click)="importDialog.close()">{{ 'common.close' | translate }}</button>
+        <button type="button" class="btn btn-primary" (click)="openImported(r)">{{ 'playlists.import_open' | translate }}</button>
+      </app-modal-footer>
+    }
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

@@ -19,6 +19,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { ToastService } from '../toast.service';
 import { LocalPlaybackOutput, type LocalOutputHost } from '../../../features/player/local-playback-output';
 import { PartySync, type PartyHost } from './party-sync';
+import { AudioPartyHost } from './audio-party-host';
 import { PlaybackQueueService } from '../playback-queue.service';
 
 function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean; opens?: boolean } = {}) {
@@ -34,6 +35,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
     leave: vi.fn(),
+    openPlayer: vi.fn(),
     drives: signal(true),
   };
   const cast = {
@@ -60,11 +62,40 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     index: () => 0,
   };
   const openItem = vi.fn().mockResolvedValue(opts.opens ?? true);
+  const audio = {
+    route: vi.fn((r: unknown) => {
+      audio.router = r as (c: { type: string }) => boolean;
+      return () => undefined;
+    }),
+    router: null as null | ((c: { type: string }) => boolean),
+    openItem: vi.fn().mockResolvedValue(true),
+    onBack: vi.fn(),
+    engine: () => ({ volume: 1, supportsVolume: true }),
+    urlPartyId: () => 0,
+    releasePlayback: vi.fn(),
+    showControls: vi.fn(),
+    output: () => audio.playable,
+    playable: {
+      ready: () => true,
+      item: () => ({ mediaId: -1, episodeId: undefined }),
+      paused: () => true,
+      uiPaused: signal(true),
+      buffering: signal(false),
+      ended: signal(false),
+      seekLocked: signal(false),
+      position: () => 0,
+      seek: vi.fn(),
+      play: vi.fn(),
+      pause: vi.fn().mockResolvedValue(undefined),
+      sync: { slackS: 0.5 },
+    },
+  };
   const toast = { info: vi.fn(), error: vi.fn() };
   const router = { navigate: vi.fn(), navigateByUrl: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
       PartySync,
+      { provide: AudioPartyHost, useValue: audio },
       PlayerStateService,
       { provide: PartyService, useValue: party },
       { provide: ClockService, useValue: { serverNow: () => Date.now(), rttMs: signal(0) } },
@@ -74,7 +105,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false) } },
-      { provide: MediaService, useValue: {} },
+      { provide: MediaService, useValue: { getOne: vi.fn().mockRejectedValue(new Error('x')) } },
       { provide: PlayerSettingsService, useValue: { settings: () => ({ autoPlayNext: false }) } },
       { provide: DeviceService, useValue: { tvPlatform: () => null, isTv: () => false } },
       { provide: ToastService, useValue: toast },
@@ -105,7 +136,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   const session = TestBed.inject(PlaybackSession);
   const detachLocal = session.attachLocal(new LocalPlaybackOutput(host, state));
   const detach = ctl.attach(host);
-  return { closed, ctl, party, state, engine, host, queue, toast, cast, router, session, detachLocal, detach, openItem };
+  return { closed, ctl, party, state, engine, host, queue, toast, cast, router, session, detachLocal, detach, openItem, audio };
 }
 
 describe('PartySync user actions', () => {
@@ -405,5 +436,73 @@ describe('PartySync outside the player', () => {
     party.live.set(held);
     TestBed.tick();
     expect(newer.showControls).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PartySync with a track item', () => {
+  const track = { mediaId: 4, itemId: 70, episodeId: null, mediaFileId: null };
+  const live = (state: string, item: unknown = track) => ({ state, item, anchor: { position: 0, serverTimeMs: Date.now() }, whenMs: null });
+
+  it('hands the party to the audio player and leaves the video one', () => {
+    const { party, host, audio } = setup();
+    party.live.set(live('paused'));
+    TestBed.tick();
+    expect(audio.route).toHaveBeenCalledTimes(1);
+    expect(host.onBack).toHaveBeenCalled();
+  });
+
+  it('opens the track on the audio player and reports ready once it is held at the anchor', async () => {
+    const { party, audio } = setup();
+    party.live.set(live('paused'));
+    TestBed.tick();
+    await vi.waitFor(() => expect(audio.openItem).toHaveBeenCalledWith(track));
+    await vi.waitFor(() => expect(party.reportStatus).toHaveBeenCalledWith('ready', 0));
+  });
+
+  it('turns audio transport into intents', () => {
+    const { party, audio } = setup();
+    party.live.set(live('playing'));
+    TestBed.tick();
+    const route = audio.router!;
+    expect(route({ type: 'drives' })).toBe(true);
+    expect(route({ type: 'toggle' })).toBe(true);
+    expect(party.sendIntent).toHaveBeenCalledWith('play');
+    expect(route({ type: 'seek', at: 33 } as never)).toBe(true);
+    expect(party.sendIntent).toHaveBeenCalledWith('seek', { position: 33 });
+    route({ type: 'next' });
+    route({ type: 'prev' });
+    expect(party.sendIntent).toHaveBeenCalledWith('next');
+    expect(party.sendIntent).toHaveBeenCalledWith('previous');
+    expect(route({ type: 'item', index: 2 } as never)).toBe(true);
+  });
+
+  it('refuses an outside play with a toast while the party drives the audio player', () => {
+    const { party, audio, toast } = setup();
+    party.live.set(live('paused'));
+    TestBed.tick();
+    expect(audio.router!({ type: 'external' })).toBe(true);
+    expect(toast.info).toHaveBeenCalledWith('party.audio_busy');
+  });
+
+  it('reports the natural end of a track with its item id', () => {
+    const { party, audio } = setup();
+    party.isHost.set(true);
+    party.live.set(live('playing'));
+    TestBed.tick();
+    audio.playable.item = () => ({ mediaId: 4, episodeId: undefined, itemId: 70 }) as never;
+    (audio.playable.ended as unknown as ReturnType<typeof signal<boolean>>).set(true);
+    TestBed.tick();
+    expect(party.sendIntent).toHaveBeenCalledWith('ended', { item: { mediaId: 4, itemId: 70 } });
+  });
+
+  it('closes the audio player and opens the film when the group moves to a film', () => {
+    const { party, audio } = setup();
+    party.live.set(live('paused'));
+    TestBed.tick();
+    const film = { mediaId: 1, itemId: undefined, episodeId: null };
+    party.live.set(live('paused', film));
+    TestBed.tick();
+    expect(audio.onBack).toHaveBeenCalled();
+    expect(party.openPlayer).toHaveBeenCalledWith(film);
   });
 });

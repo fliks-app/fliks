@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { Media } from './media.service';
+import type { SmartRules } from './smart-rules';
 
 export type PlaylistRole = 'owner' | 'administrator' | 'editor' | 'viewer';
 /** Roles that can be granted to a member (owner is not grantable). */
@@ -34,6 +35,8 @@ export interface Playlist {
   itemCount: number;
   /** First up-to-4 poster URLs for the card mosaic (per-viewer). */
   posters: string[];
+  /** Smart rules; null for a static playlist. */
+  rules: SmartRules | null;
   /** ISO timestamp of the last edit (rename, flag or item change). */
   updatedAt: string;
 }
@@ -48,7 +51,22 @@ export interface PlaylistEpisode {
   season?: { seasonNumber: number } | null;
 }
 
+/** The track of a music entry. */
+export interface PlaylistTrack {
+  /** The track's item id (the entry id is the row's `itemId`). */
+  itemId: number;
+  title: string;
+  artists: string[];
+  albumTitle: string;
+  /** The album. */
+  mediaId: number;
+  posterUrl: string | null;
+  durationSeconds: number | null;
+  mediaFileId: number | null;
+}
+
 export interface PlaylistItem {
+  /** The entry id on a static playlist (remove/reorder); the track item id on a smart one. */
   itemId: number;
   position: number;
   addedById: number | null;
@@ -60,6 +78,14 @@ export interface PlaylistItem {
   progressPercent: number;
   /** Whether the viewer finished this item. */
   watched: boolean;
+  /** Set for a music entry. */
+  track?: PlaylistTrack;
+}
+
+export interface M3uImportResult {
+  playlist: Playlist;
+  matched: number;
+  unmatched: { line: number; text: string }[];
 }
 
 export interface CreatePlaylistBody {
@@ -67,6 +93,7 @@ export interface CreatePlaylistBody {
   autoRemoveWatched?: boolean;
   autoPlay?: boolean;
   visibility?: PlaylistVisibility;
+  rules?: SmartRules;
 }
 
 export type UpdatePlaylistBody = Partial<CreatePlaylistBody>;
@@ -146,6 +173,26 @@ export class PlaylistsApiService {
         `/api/playlists/${id}/items/by-media/${mediaId}`,
       ),
     );
+  }
+
+  /** Count of tracks the rules match for the caller. */
+  async preview(rules: SmartRules): Promise<number> {
+    return (await firstValueFrom(this.http.post<{ count: number }>('/api/playlists/preview', { rules }))).count;
+  }
+
+  importM3u(name: string, content: string) {
+    return firstValueFrom(this.http.post<M3uImportResult>('/api/playlists/import-m3u', { name, content }));
+  }
+
+  /** The M3U8 file; the name comes from Content-Disposition, null when the header is hidden. */
+  async exportM3u(id: number): Promise<{ blob: Blob; filename: string | null }> {
+    const res = await firstValueFrom(
+      this.http.get(`/api/playlists/${id}/export.m3u`, { responseType: 'blob', observe: 'response' }),
+    );
+    const cd = res.headers.get('Content-Disposition') ?? '';
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
+    const plain = /filename="?([^";]+)"?/i.exec(cd)?.[1];
+    return { blob: res.body as Blob, filename: star ? decodeURIComponent(star) : (plain ?? null) };
   }
 
   // ── Members (collaboration) ──

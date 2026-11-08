@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, \"ownerId\" AS owner_id,\n                  \"autoRemoveWatched\" AS auto_remove_watched, \"autoDownload\" AS auto_download,\n                  \"autoPlay\" AS auto_play, visibility::text AS \"visibility!\",\n                  \"coverImageUrl\" AS cover_image_url\n           FROM playlists WHERE \"ownerId\" = $1 AND visibility::text = ANY($2)",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, \"ownerId\" AS owner_id,\n                  \"autoRemoveWatched\" AS auto_remove_watched, \"autoDownload\" AS auto_download,\n                  \"autoPlay\" AS auto_play, visibility::text AS \"visibility!\",\n                  \"coverImageUrl\" AS cover_image_url,\n                  rules AS \"rules?: Json<SmartRules>\"\n           FROM playlists WHERE \"ownerId\" = $1 AND visibility::text = ANY($2)",
   "describe": {
     "columns": [
       {
@@ -107,6 +107,17 @@
             "name": "coverImageUrl"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "rules?: Json<SmartRules>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "rules"
+          }
+        }
       }
     ],
     "parameters": {
@@ -125,8 +136,9 @@
       false,
       false,
       null,
+      true,
       true
     ]
   },
-  "hash": "5732988a9e6da64b1cce8abb124e929c44bb0c23bc0ef06fed1a52b2e39ad519"
+  "hash": "a996f86312900fb526044a2cb79362d4c397431de7b2f61bb69725c3f901f2d5"
 }

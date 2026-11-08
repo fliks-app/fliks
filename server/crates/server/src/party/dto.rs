@@ -109,6 +109,7 @@ pub struct ItemIn {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    pub item_id: Option<i32>,
 }
 
 impl From<ItemIn> for Item {
@@ -117,7 +118,7 @@ impl From<ItemIn> for Item {
             media_id: i.media_id,
             media_file_id: i.media_file_id,
             episode_id: i.episode_id,
-            item_id: None,
+            item_id: i.item_id,
         }
     }
 }
@@ -255,6 +256,9 @@ pub struct PartyItem {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    /// A track only: the track's item id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_id: Option<i32>,
     pub title: String,
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,

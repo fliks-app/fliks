@@ -42,6 +42,7 @@ mod roles;
 mod routes;
 mod session;
 mod settings;
+mod smart_playlists;
 mod social;
 mod subsonic;
 mod topology;
