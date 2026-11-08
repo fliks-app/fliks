@@ -9,6 +9,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
 import { PartySync } from './core/services/party/party-sync';
 import { CastPartyRelayService } from './core/services/party/cast-party-relay.service';
+import { CastLyricsRelayService } from './core/services/cast-lyrics-relay.service';
 import { SseService } from './core/services/sse.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
@@ -68,6 +69,7 @@ export class App implements OnInit, OnDestroy {
   private readonly remote = inject(RemoteService);
   /** Injected so party reactions reach the Chromecast from any page. */
   private readonly castPartyRelay = inject(CastPartyRelayService);
+  private readonly castLyricsRelay = inject(CastLyricsRelayService);
   private readonly partySync = inject(PartySync);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);

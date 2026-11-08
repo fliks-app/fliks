@@ -42,9 +42,17 @@ export class KaraokeApiService {
     return firstValueFrom(this.http.delete<void>(`/api/items/${itemId}/karaoke`));
   }
 
+  /** The CD+G graphics of a track's file, with the same credential rules as a stem. */
+  cdgUrl(mediaFileId: number): string {
+    return this.credentialed(`/api/media-files/${mediaFileId}/cdg`, mediaFileId);
+  }
+
   /** A same-origin path rides the session cookie; a shell with an absolute server URL carries the file-bound stream token. */
   stemUrl(mediaFileId: number, kind: StemKind): string {
-    const path = `/api/media-files/${mediaFileId}/stems/${kind}`;
+    return this.credentialed(`/api/media-files/${mediaFileId}/stems/${kind}`, mediaFileId);
+  }
+
+  private credentialed(path: string, mediaFileId: number): string {
     if (!this.serverConfig.isNative) return path;
     const token = this.auth.playbackTokenFor(mediaFileId);
     return `${this.serverConfig.resolveUrl(path)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;

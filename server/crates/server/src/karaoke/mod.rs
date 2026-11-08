@@ -1,5 +1,6 @@
 //! Karaoke core (`docs/spec/karaoke.md`): models, stems, preparation and the background pass.
 mod background;
+pub mod cdg;
 pub mod run;
 pub mod store;
 
@@ -92,6 +93,7 @@ pub fn router() -> Router<AppState> {
             get(item_state).post(prepare).delete(remove),
         )
         .route("/api/media-files/{mediaFileId}/stems/{kind}", get(stem))
+        .route("/api/media-files/{mediaFileId}/cdg", get(cdg_file))
 }
 
 pub(crate) async fn flag(st: &AppState, key: &str, default: bool) -> bool {
@@ -262,7 +264,9 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
             json!({"size": r.size, "durationMs": r.duration_ms}),
         );
     }
-    let ready = store::KINDS.iter().all(|k| stems.contains_key(*k));
+    let imported = |k: &str| rows.iter().any(|r| r.kind == k && r.provider == store::IMPORT);
+    let ready = store::KINDS.iter().all(|k| stems.contains_key(*k))
+        || (imported("vocals") && imported("instrumental"));
     let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);
     let run = st
         .karaoke
@@ -275,8 +279,16 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     let melody = run::melody_target(st, item)
         .await?
         .is_some_and(|r| run::has_pitch(&r.doc.0));
+    let cdg = match file {
+        Some(f) => match crate::ingest::post_import::file_path(st, f).await? {
+            Some((p, _)) => cdg::sidecar(&p).await.is_some(),
+            None => false,
+        },
+        None => false,
+    };
     let mut out = json!({
         "state": run.as_ref().map_or(if ready { "ready" } else { "none" }, |r| r.state),
+        "cdg": cdg,
         "stems": stems,
         "lyrics": lyrics.iter().any(|r| r.source == "generated"),
         "melody": melody,
@@ -426,7 +438,7 @@ pub async fn stem(
     let path = store::serve(&st.db, file, &kind, from_start)
         .await?
         .ok_or_else(not_found)?;
-    let mime = "audio/ogg".parse().expect("mime");
+    let mime = mime_of(&path).parse().expect("mime");
     let mut res = ServeFile::new_with_mime(&path, &mime)
         .oneshot(req)
         .await
@@ -436,6 +448,56 @@ pub async fn stem(
         HeaderValue::from_static("private, max-age=0"),
     );
     Ok(res)
+}
+
+/// Rule 32: the `.cdg` of the track of `file`, served whole like a stem (same credentials).
+#[utoipa::path(get, path = "/api/media-files/{mediaFileId}/cdg", responses((status = 200), (status = 206), (status = 404)))]
+pub async fn cdg_file(
+    State(st): State<AppState>,
+    auth: FileBoundAuthed,
+    Path(file): Path<i32>,
+    req: Request,
+) -> Result<Response, AppError> {
+    let FileBoundAuthed { auth, bound_file } = auth;
+    if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
+        return Err(AppError::bare(StatusCode::UNAUTHORIZED));
+    }
+    auth.require(Action::Read, Subject::Media)?;
+    let not_found = || AppError::not_found("Graphics not found");
+    let item: i32 = sqlx::query_scalar(
+        r#"SELECT ip."itemId" FROM item_parts ip JOIN track_details td ON td."itemId" = ip."itemId"
+           WHERE ip."mediaFileId" = $1 LIMIT 1"#,
+    )
+    .bind(file)
+    .fetch_optional(&st.db)
+    .await?
+    .ok_or_else(not_found)?;
+    crate::music::assert_track(&st, &auth, item).await?;
+    let (audio, _) = crate::ingest::post_import::file_path(&st, file)
+        .await?
+        .ok_or_else(not_found)?;
+    let path = cdg::sidecar(&audio).await.ok_or_else(not_found)?;
+    let mime = "application/octet-stream".parse().expect("mime");
+    let mut res = ServeFile::new_with_mime(&path, &mime)
+        .oneshot(req)
+        .await
+        .map_or_else(|e| match e {}, |r| r.map(Body::new));
+    res.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=0"),
+    );
+    Ok(res)
+}
+
+/// The type of a stem file: Ogg Opus from a run, whatever an UltraStar import named.
+fn mime_of(path: &str) -> &'static str {
+    match path.rsplit('.').next().map(str::to_lowercase).as_deref() {
+        Some("mp3") => "audio/mpeg",
+        Some("m4a" | "aac") => "audio/mp4",
+        Some("flac") => "audio/flac",
+        Some("wav") => "audio/wav",
+        _ => "audio/ogg",
+    }
 }
 
 /// Model events carry the engine's error strings: settings managers only.

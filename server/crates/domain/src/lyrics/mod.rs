@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 
 pub use lrc::to_lrc;
 
+/// `#VOCALS` and `#INSTRUMENTAL` of an UltraStar text (`None` when it is not one).
+pub fn ultrastar_stems(text: &str) -> Option<(Option<String>, Option<String>)> {
+    ultrastar::stems(text)
+}
+
 pub const MAX_LINES: usize = 5000;
 pub const MAX_CUES: usize = 200_000;
 pub const MAX_LINE_CHARS: usize = 2000;

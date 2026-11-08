@@ -399,3 +399,85 @@ async fn a_generated_row_does_not_stop_a_provider_fetch(pool: PgPool) {
             .unwrap()
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn ultrastar_stems_are_imported_kept_and_dropped_with_their_header(pool: PgPool) {
+    let (app, st, t) = ctx(&pool).await;
+    let dir = Dir::new();
+    let song = |head: &str| format!("#TITLE:T\n#BPM:120\n{head}\n: 0 4 0 la\nE\n");
+    std::fs::write(dir.path().join("1.flac"), b"x").unwrap();
+    std::fs::write(dir.path().join("v.mp3"), b"vocals").unwrap();
+    std::fs::write(dir.path().join("i.mp3"), b"instr").unwrap();
+    let run = |text: String| {
+        std::fs::write(dir.path().join("1.txt"), text).unwrap();
+        let st = st.clone();
+        let audio = dir.path().join("1.flac");
+        async move {
+            let listing = fliks_server::lyrics::discover::listing(audio.parent().unwrap()).await;
+            fliks_server::lyrics::discover::file(
+                &st,
+                1,
+                1,
+                &audio,
+                Some(200_000),
+                &Default::default(),
+                &listing,
+            )
+            .await
+            .unwrap();
+        }
+    };
+    run(song(
+        "#VOCALS:v.mp3\n#INSTRUMENTAL:i.mp3\n#INSTRUMENTAL2:../x",
+    ))
+    .await;
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    let state = json_of(&body);
+    assert_eq!(state["state"], "ready");
+    assert!(state["stems"]["vocals"].is_object() && state["stems"]["instrumental"].is_object());
+    assert!(state["stems"]["guide"].is_null());
+    assert_eq!(
+        call(&app, &t, "GET", "/api/media-files/1/stems/vocals", None)
+            .await
+            .1,
+        b"vocals"
+    );
+    assert!(store::valid(&st.db, 1, "m", "1").await.unwrap());
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(store::evict(&st.db, 0).await.unwrap(), 0);
+    assert_eq!(
+        store::invalidate_stale_models(&st.db, "other", "2")
+            .await
+            .unwrap(),
+        0
+    );
+    // A header naming a path or a missing file imports nothing; one kind dropped removes its row.
+    run(song("#VOCALS:v.mp3\n#INSTRUMENTAL:../i.mp3")).await;
+    assert_eq!(store::rows(&st.db, 1).await.unwrap().len(), 1);
+    run(song("")).await;
+    assert!(store::rows(&st.db, 1).await.unwrap().is_empty());
+    let _ = std::fs::remove_dir_all(store::file_dir(1));
+}
+
+#[sqlx::test(migrations = false)]
+async fn without_a_cdg_the_state_says_so_and_the_route_is_404_or_401(pool: PgPool) {
+    let (app, st, t) = ctx(&pool).await;
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    assert_eq!(json_of(&body)["cdg"], false);
+    assert_eq!(
+        call(&app, &t, "GET", "/api/media-files/1/cdg", None)
+            .await
+            .0,
+        404
+    );
+    let own = session::stream_for(&st, 1, "admin", 2).await;
+    assert_eq!(
+        call(&app, &own, "GET", "/api/media-files/1/cdg", None)
+            .await
+            .0,
+        401
+    );
+}

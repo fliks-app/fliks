@@ -1,7 +1,7 @@
 //! Sidecar and embedded lyrics of a file (`docs/spec/music.md` rule 64).
 use super::store::{self, New};
 use crate::{settings::setting_value, state::AppState};
-use fliks_domain::lyrics::{Format, Parsed, lang_infix, parse};
+use fliks_domain::lyrics::{Format, Parsed, lang_infix, parse, ultrastar_stems};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -102,6 +102,14 @@ pub async fn sidecars(
     out
 }
 
+/// A `#VOCALS`/`#INSTRUMENTAL` name that is a plain file name of the track's own folder.
+fn stem_path(dir: &Path, name: &str, listing: &[String]) -> Option<PathBuf> {
+    let plain = !name.is_empty() && Path::new(name).file_name().is_some_and(|f| f == name);
+    let found = listing.iter().find(|n| n.as_str() == name)?;
+    let path = dir.join(found);
+    (plain && path.symlink_metadata().is_ok_and(|m| m.is_file())).then_some(path)
+}
+
 fn lang_of(p: &Parsed, given: &str) -> String {
     if given != "und" {
         return given.to_owned();
@@ -124,7 +132,25 @@ pub async fn file(
 ) -> sqlx::Result<()> {
     let order = sidecar_order(st).await;
     let mut kept: Vec<(String, String)> = vec![];
+    let mut imported: Vec<&str> = vec![];
     for (lang, name, format, text) in sidecars(audio, listing, &order).await {
+        if let (Some(dir), Some((v, i))) = (audio.parent(), ultrastar_stems(&text)) {
+            for (kind, n) in [("vocals", v), ("instrumental", i)] {
+                if let Some(src) = n.and_then(|n| stem_path(dir, &n, listing))
+                    && crate::karaoke::store::import(
+                        &st.db,
+                        file,
+                        kind,
+                        &src,
+                        duration_ms.unwrap_or(0),
+                    )
+                    .await
+                    .is_ok()
+                {
+                    imported.push(kind);
+                }
+            }
+        }
         let Ok(p) = parse(format, &text) else {
             tracing::debug!("lyrics sidecar \"{name}\" not read");
             continue;
@@ -173,6 +199,7 @@ pub async fn file(
         .await?;
         kept.push((lang, "embedded".into()));
     }
+    crate::karaoke::store::drop_imports(&st.db, file, &imported).await?;
     let (langs, sources): (Vec<String>, Vec<String>) = kept.into_iter().unzip();
     sqlx::query(
         r#"DELETE FROM lyrics WHERE "mediaFileId" = $1 AND source IN ('sidecar', 'embedded')

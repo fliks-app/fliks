@@ -7,6 +7,21 @@ pub(super) fn looks_like(text: &str) -> bool {
         .any(|l| l.get(..5).is_some_and(|h| h.eq_ignore_ascii_case("#BPM:")))
 }
 
+/// The `#VOCALS` and `#INSTRUMENTAL` file names of an UltraStar text, when it is one.
+pub(super) fn stems(text: &str) -> Option<(Option<String>, Option<String>)> {
+    if !looks_like(text) {
+        return None;
+    }
+    let header = |key: &str| {
+        text.lines()
+            .filter_map(|l| l.strip_prefix('#')?.split_once(':'))
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    Some((header("VOCALS"), header("INSTRUMENTAL")))
+}
+
 struct Open {
     text: String,
     cues: Vec<Cue>,
@@ -165,6 +180,13 @@ mod tests {
         assert_eq!(l2.agent_id.as_deref(), Some("v2"));
         assert_eq!(l2.cues[0].pitch, None);
         assert_eq!(l2.cues[0].end, 1000 + 22 * 125);
+    }
+
+    #[test]
+    fn stem_headers() {
+        let t = "#BPM:100\n#VOCALS:v.mp3\n#instrumental: i.ogg \n: 0 1 0 a\n";
+        assert_eq!(stems(t), Some((Some("v.mp3".into()), Some("i.ogg".into()))));
+        assert_eq!(stems("#VOCALS:v.mp3\n"), None);
     }
 
     #[test]

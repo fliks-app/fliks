@@ -146,6 +146,7 @@ final class MusicHost {
     private String mode;
     private int preamp;
     private double duck = 1;
+    private final StemCompanions stems;
 
     private MusicHost(Context context) {
         this.context = context;
@@ -178,6 +179,7 @@ final class MusicHost {
                 .build();
         player = new RoutedPlayer(exo);
         exo.addListener(new Listener());
+        stems = new StemCompanions(context, source, exo, this::applyGain, () -> emit("stems", new JSObject().put("state", "failed")));
     }
 
     // ---- web layer ----
@@ -206,6 +208,19 @@ final class MusicHost {
         this.duck = duck;
         prefs.edit().putString("replayGain", mode).putInt("preamp", preamp).apply();
         applyGain();
+    }
+
+    /** Rule 30 of the karaoke spec: stems mixed by two players slaved to `exo`. */
+    void setStems(String key, String instrumentalUrl, String vocalsUrl) {
+        stems.load(key, instrumentalUrl, vocalsUrl);
+    }
+
+    void setStemMix(float mainLevel, float instrumental, float vocals) {
+        stems.setMix(new StemCompanions.Mix(mainLevel, instrumental, vocals));
+    }
+
+    void clearStems() {
+        stems.clear();
     }
 
     void setRouted(boolean routed) {
@@ -262,6 +277,7 @@ final class MusicHost {
 
     void stop() {
         beat(false);
+        stems.clear();
         edit(() -> {
             exo.stop();
             exo.clearMediaItems();
@@ -501,7 +517,8 @@ final class MusicHost {
                 factor = (float) (peak > 0 && f * peak > 1 ? 1 / peak : f);
             }
         }
-        gain.setFactor((float) (factor * duck));
+        gain.setFactor((float) (factor * duck) * stems.mainLevel());
+        stems.setVolumes((float) (factor * duck));
     }
 
     private boolean singleAlbum() {
@@ -518,6 +535,10 @@ final class MusicHost {
     private final class Listener implements Player.Listener {
         @Override
         public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
+            if (stems.active()) {
+                stems.clear();
+                emit("stems", new JSObject().put("state", "cleared"));
+            }
             applyGain();
             int index = exo.getCurrentMediaItemIndex();
             if (index != lastIndex) {

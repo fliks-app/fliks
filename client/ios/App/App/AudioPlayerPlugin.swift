@@ -22,6 +22,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "skipTo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setGain", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setStems", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setStemMix", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearStems", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRepeat", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setRouted", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
@@ -76,6 +79,12 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var ended = false
     private var loading = false
     private var lastItem: ObjectIdentifier?
+
+    private var stemPlayers: [AVPlayer] = []
+    private var stemKey: String?
+    private var stemMix = (main: 1.0, instrumental: 0.0, vocals: 0.0)
+    private var stemTimer: Timer?
+    private var stemObservers: [NSKeyValueObservation] = []
 
     private var timeObserver: Any?
     private var itemObserver: NSKeyValueObservation?
@@ -273,6 +282,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func stopAll() {
         generation += 1
+        clearStems()
         loading = false
         player.pause()
         player.removeAllItems()
@@ -380,6 +390,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             DispatchQueue.main.async { self?.recover(item) }
         }
         index = i
+        if stemKey != nil {
+            clearStems()
+            notifyListeners("stems", data: ["state": "cleared"])
+        }
         let live = Set(player.items().map(ObjectIdentifier.init))
         indexOfItem = indexOfItem.filter { live.contains($0.key) }
         applyGain()
@@ -556,19 +570,101 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// A ReplayGain boost has no AVPlayer path: the volume only attenuates, as in the browser.
     private func applyGain() {
-        guard isMusic, entries.indices.contains(index), gainMode != "off" else {
-            player.volume = Float(min(1, duck))
-            return
+        var scale = min(1, duck)
+        if isMusic, entries.indices.contains(index), gainMode != "off" {
+            let e = entries[index]
+            let oneAlbum = Set(entries.compactMap { $0.mediaId }).count == 1
+            let album = gainMode == "album" && oneAlbum && e.albumGain != nil
+            var factor = 1.0
+            if let g = album ? e.albumGain : e.gain {
+                factor = pow(10, (g + Double(preamp)) / 20)
+                if let peak = album ? e.albumPeak : e.peak, peak > 0, factor * peak > 1 { factor = 1 / peak }
+            }
+            scale = min(1, factor * duck)
         }
-        let e = entries[index]
-        let oneAlbum = Set(entries.compactMap { $0.mediaId }).count == 1
-        let album = gainMode == "album" && oneAlbum && e.albumGain != nil
-        var factor = 1.0
-        if let g = album ? e.albumGain : e.gain {
-            factor = pow(10, (g + Double(preamp)) / 20)
-            if let peak = album ? e.albumPeak : e.peak, peak > 0, factor * peak > 1 { factor = 1 / peak }
+        let ready = stemsReady
+        player.volume = Float(scale * (ready ? stemMix.main : 1))
+        stemPlayers.first?.volume = Float(ready ? min(1, stemMix.instrumental * scale) : 0)
+        stemPlayers.last?.volume = Float(ready ? min(1, stemMix.vocals * scale) : 0)
+    }
+
+    // MARK: - Stems (karaoke spec rule 30)
+
+    /// True once both stems can play: the queue's player stays audible until then.
+    private var stemsReady: Bool {
+        stemPlayers.count == 2 && stemPlayers.allSatisfy { $0.currentItem?.status == .readyToPlay }
+    }
+
+    @objc func setStems(_ call: CAPPluginCall) {
+        guard let key = call.getString("key"), let i = call.getString("instrumentalUrl").flatMap(URL.init(string:)),
+              let v = call.getString("vocalsUrl").flatMap(URL.init(string:)) else { return call.reject("bad stems") }
+        DispatchQueue.main.async {
+            if self.stemKey != key { self.loadStems(key, i, v) }
+            call.resolve()
         }
-        player.volume = Float(min(1, factor * duck))
+    }
+
+    @objc func setStemMix(_ call: CAPPluginCall) {
+        let mix = (main: call.getDouble("main") ?? 1, instrumental: call.getDouble("instrumental") ?? 0, vocals: call.getDouble("vocals") ?? 0)
+        DispatchQueue.main.async {
+            self.stemMix = mix
+            self.applyGain()
+            call.resolve()
+        }
+    }
+
+    @objc func clearStems(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.clearStems()
+            call.resolve()
+        }
+    }
+
+    private func loadStems(_ key: String, _ instrumental: URL, _ vocals: URL) {
+        clearStems()
+        stemKey = key
+        stemPlayers = [instrumental, vocals].map { url in
+            let item = AVPlayerItem(url: url)
+            item.audioTimePitchAlgorithm = .spectral
+            let p = AVPlayer(playerItem: item)
+            p.volume = 0
+            p.automaticallyWaitsToMinimizeStalling = false
+            stemObservers.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if item.status == .failed {
+                        self.clearStems()
+                        self.notifyListeners("stems", data: ["state": "failed"])
+                    } else {
+                        self.applyGain()
+                        self.syncStems()
+                    }
+                }
+            })
+            return p
+        }
+        stemTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.syncStems() }
+    }
+
+    private func clearStems() {
+        stemTimer?.invalidate()
+        stemTimer = nil
+        stemObservers = []
+        let had = !stemPlayers.isEmpty
+        stemPlayers.forEach { $0.pause(); $0.replaceCurrentItem(with: nil) }
+        stemPlayers = []
+        stemKey = nil
+        if had { applyGain() }
+    }
+
+    /// Follows the queue's player: play or pause, rate, and a seek past 150 ms of drift.
+    private func syncStems() {
+        let run = player.timeControlStatus == .playing
+        let at = player.currentTime()
+        for p in stemPlayers where p.currentItem?.status == .readyToPlay {
+            if abs(p.currentTime().seconds - at.seconds) > 0.15 { p.seek(to: at, toleranceBefore: .zero, toleranceAfter: .zero) }
+            if run { if p.rate != rate { p.rate = rate } } else if p.rate != 0 { p.pause() }
+        }
     }
 
     private func activateSession() {
