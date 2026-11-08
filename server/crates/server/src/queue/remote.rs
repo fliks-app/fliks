@@ -28,6 +28,9 @@ pub struct Grant {
     pub file: i32,
 }
 
+/// The upload of one attempt, locked while a chunk is written.
+pub type Slot = Arc<Mutex<Upload>>;
+
 /// Bytes received for one attempt, hashed as they arrive.
 pub struct Upload {
     len: u64,
@@ -60,7 +63,7 @@ impl super::Shared {
         self.grants.lock_clean().get(token).cloned()
     }
 
-    fn upload(&self, job: i64, attempt: i32) -> Arc<Mutex<Upload>> {
+    fn upload(&self, job: i64, attempt: i32) -> Slot {
         let mut g = self.uploads.lock_clean();
         if let Some((a, u)) = g.get(&job)
             && *a == attempt

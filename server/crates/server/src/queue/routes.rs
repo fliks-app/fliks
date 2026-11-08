@@ -150,7 +150,7 @@ fn leased(t: store::Taken, reach: &Reach, token: Option<String>) -> Result<Lease
     let kind = serde_json::from_value(json!({ "type": tag, "payload": payload }))
         .map_err(|e| AppError::internal(format!("job {} payload: {e}", t.id)))?;
     let (input_path, staged_path, input_url) = match reach {
-        Reach::Path(_) => (t.in_path.map(&map), t.staged_path.map(&map), None),
+        Reach::Path(_) => (t.in_path.map(map), t.staged_path.map(map), None),
         Reach::Http(base) => (
             None,
             None,
