@@ -1,11 +1,11 @@
-//! Provider plugins: the `scene-provider` world, which adds `metadata-provider` and `scene` to the
-//! `plugin` world (a provider without the `scene` capability is also a valid `provider` world).
+//! Provider plugins: the `full-provider` world, which adds `metadata-provider`, `scene` and `lyrics-provider` to
+//! the `plugin` world (a provider without those capabilities is also a valid `provider` world).
 //! Its imports are those of `fliks_plugin_sdk::bindings`; only the new exports are generated here.
 
 pub mod bindings {
     wit_bindgen::generate!({
         path: "../wit",
-        world: "scene-provider",
+        world: "full-provider",
         generate_all,
         pub_export_macro: true,
         export_macro_name: "__export_provider_world",
@@ -51,6 +51,7 @@ pub mod bindings {
 pub use bindings::exports::fliks::plugin::metadata_provider::{
     Lang, ProviderError, SearchQuery, UpstreamError,
 };
+pub use bindings::exports::fliks::plugin::lyrics_provider::{LyricsHit, LyricsQuery};
 pub use bindings::exports::fliks::plugin::scene::ScenePair;
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;
@@ -130,6 +131,10 @@ pub trait MetadataProvider {
     fn scene_mapping(
         _id: fliks_plugin_sdk::ExternalId,
     ) -> Result<Option<Vec<ScenePair>>, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
+    /// The lyrics of a track; none is a miss. Called only for a manifest that declares `lyrics` under `album`.
+    fn fetch_lyrics(_q: LyricsQuery) -> Result<Option<LyricsHit>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
 }
@@ -222,6 +227,13 @@ macro_rules! export_provider {
                 <$t as $crate::MetadataProvider>::scene_mapping(id)
             }
         }
+        impl $crate::bindings::exports::fliks::plugin::lyrics_provider::Guest for __FliksProvider {
+            fn fetch_lyrics(
+                q: $crate::LyricsQuery,
+            ) -> Result<Option<$crate::LyricsHit>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::fetch_lyrics(q)
+            }
+        }
         // Native builds (unit tests, clippy) cannot link the component export names.
         #[cfg(target_arch = "wasm32")]
         $crate::bindings::__export_provider_world!(
@@ -232,6 +244,7 @@ macro_rules! export_provider {
         const _: () = {
             use $crate::bindings::exports::fliks::plugin::guest::Guest as G;
             use $crate::bindings::exports::fliks::plugin::metadata_provider::Guest as P;
+            use $crate::bindings::exports::fliks::plugin::lyrics_provider::Guest as L;
             use $crate::bindings::exports::fliks::plugin::scene::Guest as S;
             let _ = (
                 <__FliksProvider as G>::hello,
@@ -255,6 +268,7 @@ macro_rules! export_provider {
                 <__FliksProvider as P>::list,
                 <__FliksProvider as S>::scene_mapped_ids,
                 <__FliksProvider as S>::scene_mapping,
+                <__FliksProvider as L>::fetch_lyrics,
             );
         };
     };

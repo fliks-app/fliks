@@ -25,6 +25,7 @@ pub mod kobo;
 pub mod kosync;
 pub mod libraries;
 pub mod livetv;
+pub mod lyrics;
 pub mod markers;
 pub mod media;
 pub mod media_servers;

@@ -142,7 +142,7 @@ pub struct RatingDto {
     rating: i32,
 }
 
-async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
+pub(crate) async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
     let acl = accessible_library_ids(&st.db, a).await?;
     let ok: bool = sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'

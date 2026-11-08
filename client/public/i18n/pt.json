@@ -5268,5 +5268,32 @@
     "section_albums": "Álbuns",
     "section_artists": "Artistas",
     "recently_played": "Reproduzidos recentemente"
+  },
+  "lyrics": {
+    "title": "Letra",
+    "open_full": "Ecrã inteiro",
+    "close_full": "Sair do ecrã inteiro",
+    "none": "Sem letra para esta faixa.",
+    "instrumental": "Instrumental",
+    "error": "Não foi possível carregar ou guardar a letra.",
+    "kind_translation": "Tradução",
+    "kind_pronunciation": "Pronúncia",
+    "kind_main": "Letra",
+    "offset_reset": "Repor",
+    "prefer": "Definir como predefinida",
+    "delete": "Eliminar",
+    "import": "Adicionar letra",
+    "fetch": "Procurar nos fornecedores",
+    "paste": "Cole a letra aqui",
+    "file": "Ficheiro (.lrc, .elrc, .ttml, .srt, .txt)",
+    "format": "Formato",
+    "kind": "Tipo",
+    "lang": "Idioma (ex. pt)",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "tap_sync": "Sincronizar por toques",
+    "tap_hint": "Prima Marcar quando cada linha começar; Voltar anula a última.",
+    "tap_stamp": "Marcar linha",
+    "tap_back": "Voltar"
   }
 }

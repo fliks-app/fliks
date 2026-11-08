@@ -2,11 +2,13 @@
 //! `provider` lane, errors mapped by rule 15, records validated by rule 14.
 use super::outbound::Gate;
 use super::runtime::{
-    Budget, CallError, Inst, PluginRt, State, fliks::plugin::types::ExternalId, wit_provider as wit,
+    Budget, CallError, Inst, PluginRt, State, fliks::plugin::types::ExternalId, wit_lyrics,
+    wit_provider as wit,
 };
 use super::{Plugins, packages};
 use crate::metadata::{
-    Call, Credits, EditionRef, MetadataProvider, PersonDetails, Search, Upstream,
+    Call, Credits, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, PersonDetails, Search,
+    Upstream,
 };
 use fliks_domain::{
     comics::provider as comics,
@@ -38,6 +40,8 @@ const MAX_LIST: usize = 10_000;
 /// Rule 18a: the ids and the pairs a scene answer may hold.
 const MAX_SCENE_IDS: usize = 200_000;
 const MAX_SCENE_PAIRS: usize = 100_000;
+/// `music.md` rule 68: the bytes of a lyrics document.
+const MAX_LYRICS: usize = 1 << 20;
 
 /// What the manifest's `provider` block says, read once.
 struct Block {
@@ -372,7 +376,7 @@ impl MetadataProvider for PluginProvider {
         self.block
             .kinds
             .iter()
-            .any(|(k, caps)| *k == kind && caps.iter().any(|c| c != "scene"))
+            .any(|(k, caps)| *k == kind && caps.iter().any(|c| c != "scene" && c != "lyrics"))
     }
 
     fn has_persons(&self) -> bool {
@@ -726,6 +730,51 @@ impl MetadataProvider for PluginProvider {
                     })
                     .collect()
             }))
+        }
+        .boxed()
+    }
+
+    fn has_lyrics(&self) -> bool {
+        self.declares(Some(MediaKind::Album), "lyrics")
+    }
+
+    fn fetch_lyrics<'a>(&'a self, q: &'a LyricsQuery, p: Priority) -> Call<'a, Option<LyricsHit>> {
+        async move {
+            self.has(Some(MediaKind::Album), "lyrics")?;
+            let query = wit_lyrics::LyricsQuery {
+                title: q.title.clone(),
+                artist: q.artist.clone(),
+                album: q.album.clone(),
+                duration_ms: q.duration_ms,
+                recording_id: q.recording_id.clone(),
+                isrc: q.isrc.clone(),
+                language: q.language.clone(),
+            };
+            let (hit, seen) = self
+                .call(false, p, move |i| {
+                    Box::pin(async move {
+                        let (g, s) = i.lyrics();
+                        g.call_fetch_lyrics(s, &query).await
+                    })
+                })
+                .await?;
+            let hit = hit.map(|h| LyricsHit {
+                format: h.format,
+                document: h.document,
+                instrumental: h.instrumental,
+                lang: h.lang,
+                source_ref: h.source_ref,
+            });
+            self.checked(
+                &seen,
+                match hit {
+                    Some(h) if h.document.len() > MAX_LYRICS => Err(bad("lyrics over 1 MiB")),
+                    Some(h) if fliks_domain::lyrics::Format::parse(&h.format).is_none() => {
+                        Err(bad("unknown lyrics format"))
+                    }
+                    h => Ok(h),
+                },
+            )
         }
         .boxed()
     }

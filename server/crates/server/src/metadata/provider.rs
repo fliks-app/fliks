@@ -45,6 +45,28 @@ impl<'a> Search<'a> {
     }
 }
 
+/// What a lyrics provider is asked: the track's facts (`music.md` rule 68).
+#[derive(Debug, Clone, Default)]
+pub struct LyricsQuery {
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub duration_ms: Option<u32>,
+    pub recording_id: Option<String>,
+    pub isrc: Option<String>,
+    pub language: Option<String>,
+}
+
+/// One document of a format of `fliks_domain::lyrics::Format`, or the word that the track is instrumental.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LyricsHit {
+    pub format: String,
+    pub document: String,
+    pub instrumental: bool,
+    pub lang: Option<String>,
+    pub source_ref: Option<String>,
+}
+
 /// An edition named by an id namespace: `(Isbn, "978...")`, `(Asin, "B0...")`, `(OpenLibrary, "OL...M")`.
 pub struct EditionRef<'a> {
     pub namespace: Namespace,
@@ -170,6 +192,18 @@ pub trait MetadataProvider: Send + Sync {
                 "the provider has no scene mapping",
             ))
         })
+    }
+    /// Whether `fetch_lyrics` answers (the `lyrics` capability under `album`).
+    fn has_lyrics(&self) -> bool {
+        false
+    }
+    /// The lyrics of a track; `None` is a miss.
+    fn fetch_lyrics<'a>(
+        &'a self,
+        _q: &'a LyricsQuery,
+        _p: Priority,
+    ) -> Call<'a, Option<LyricsHit>> {
+        Box::pin(async { Err(Upstream::new(Some(404), "the provider has no lyrics")) })
     }
     /// Chapters of an audio edition (`audnexus::Chapters` JSON); `None` when unsupported.
     fn fetch_chapters<'a>(

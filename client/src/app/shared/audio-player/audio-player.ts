@@ -8,6 +8,8 @@ import {
   LucideGauge,
   LucideHeart,
   LucideListMusic,
+  LucideMaximize,
+  LucideMicVocal,
   LucideRepeat,
   LucideRepeat1,
   LucideShuffle,
@@ -36,6 +38,7 @@ import type { AlbumDetail } from '../../core/services/api/music.models';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { formatTime } from '../../core/utils/player.utils';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { LyricsPanelComponent } from './lyrics/lyrics-panel';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
 
@@ -48,6 +51,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     TranslatePipe,
     ResolveUrlPipe,
     CachedSrcDirective,
+    LyricsPanelComponent,
     TvRowDirective,
     TvSectionDirective,
     LucideBookmarkPlus,
@@ -57,6 +61,8 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideGauge,
     LucideHeart,
     LucideListMusic,
+    LucideMaximize,
+    LucideMicVocal,
     LucideRepeat,
     LucideRepeat1,
     LucideShuffle,
@@ -97,6 +103,7 @@ export class AudioPlayerComponent {
     return s?.kind === 'duration' ? this.clock(this.audio.sleepLeft()) : null;
   });
 
+  protected readonly lyricsMode = signal<'off' | 'panel' | 'full'>('off');
   protected readonly stars = [1, 2, 3, 4, 5];
   protected readonly fav = signal(false);
   protected readonly rating = signal<number | null>(null);
@@ -118,6 +125,10 @@ export class AudioPlayerComponent {
   protected onSeek(e: Event): void {
     void this.audio.seek((Number((e.target as HTMLInputElement).value) / 1000) * this.audio.duration());
     this.scrub.set(null);
+  }
+
+  protected toggleLyrics(): void {
+    this.lyricsMode.set(this.lyricsMode() === 'off' ? 'panel' : 'off');
   }
 
   protected cycleRate(): void {

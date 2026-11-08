@@ -39,6 +39,15 @@ pub fn album_dir(rel: &str) -> String {
     segs.join("/")
 }
 
+/// The number of the innermost disc folder above a file (`CD 2/01.flac` is 2), when it has one.
+pub fn disc_of_folder(rel: &str) -> Option<i32> {
+    let mut segs: Vec<&str> = rel.split(['/', '\\']).collect();
+    segs.pop();
+    let seg = segs.pop().filter(|s| is_disc_folder(s))?;
+    let n: String = seg.chars().filter(char::is_ascii_digit).collect();
+    n.parse().ok().filter(|d| (1..=999).contains(d))
+}
+
 /// Digit runs compare as numbers, so `2` sorts before `10`.
 fn natural(s: &str) -> Vec<(u64, String)> {
     let mut out = vec![];
@@ -115,6 +124,10 @@ mod tests {
         assert!(a.iter().all(|x| x.anchored));
         assert_eq!(album_dir("x/Disque 3/a.mp3"), "x");
         assert_eq!(album_dir("x/CDs/a.mp3"), "x/CDs");
+        assert_eq!(disc_of_folder("x/Disque 3/a.mp3"), Some(3));
+        assert_eq!(disc_of_folder("x/CD2\\a.mp3"), Some(2));
+        assert_eq!(disc_of_folder("x/CDs/a.mp3"), None);
+        assert_eq!(disc_of_folder("a.mp3"), None);
     }
 
     #[test]

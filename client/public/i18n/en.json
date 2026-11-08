@@ -5268,5 +5268,32 @@
     "section_albums": "Albums",
     "section_artists": "Artists",
     "recently_played": "Recently played"
+  },
+  "lyrics": {
+    "title": "Lyrics",
+    "open_full": "Full screen",
+    "close_full": "Close full screen",
+    "none": "No lyrics for this track.",
+    "instrumental": "Instrumental",
+    "error": "Lyrics could not be loaded or saved.",
+    "kind_translation": "Translation",
+    "kind_pronunciation": "Pronunciation",
+    "kind_main": "Lyrics",
+    "offset_reset": "Reset",
+    "prefer": "Make default",
+    "delete": "Delete",
+    "import": "Add lyrics",
+    "fetch": "Fetch from providers",
+    "paste": "Paste the lyrics here",
+    "file": "File (.lrc, .elrc, .ttml, .srt, .txt)",
+    "format": "Format",
+    "kind": "Type",
+    "lang": "Language (e.g. en)",
+    "save": "Save",
+    "cancel": "Cancel",
+    "tap_sync": "Tap to sync",
+    "tap_hint": "Press Stamp as each line starts to sing; Back undoes the last one.",
+    "tap_stamp": "Stamp line",
+    "tap_back": "Back"
   }
 }

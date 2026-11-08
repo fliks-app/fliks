@@ -4864,6 +4864,257 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_track_without_a_disc_tag_takes_the_disc_of_its_folder(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Ana/Alpha").await;
+        let bare = |t: &str, n: u32| track(t, n, 1, json!({"disc": null, "lyrics": null}));
+        c.fake
+            .script("POST", "/v1/probe", vec![bare("One", 1), bare("Two", 1)]);
+        let files = place(&c, &["Ana/Alpha/CD1/01.flac", "Ana/Alpha/CD2/01.flac"]);
+        music::register(&c.st, m, &files).await.unwrap();
+        let discs: Vec<(String, i32)> = sqlx::query_as(
+            r#"SELECT i.title, td."discNumber" FROM items i JOIN track_details td ON td."itemId" = i.id ORDER BY i.title"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(discs, [("One".into(), 1), ("Two".into(), 2)]);
+        // Both files go and come back: each takes the track of its own disc, not the first with number 1.
+        sqlx::query(r#"DELETE FROM media_files WHERE "mediaId" = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        c.fake
+            .script("POST", "/v1/probe", vec![bare("Two", 1), bare("One", 1)]);
+        let again = place(
+            &c,
+            &["Ana/Alpha/CD2/01 - Two.flac", "Ana/Alpha/CD1/01 - One.flac"],
+        );
+        music::register(&c.st, m, &again).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 2);
+        let held: Vec<(String, String)> = sqlx::query_as(
+            r#"SELECT i.title, f."relativePath" FROM items i JOIN item_parts p ON p."itemId" = i.id
+               JOIN media_files f ON f.id = p."mediaFileId" ORDER BY i.title"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            held,
+            [
+                ("One".into(), "Ana/Alpha/CD1/01 - One.flac".into()),
+                ("Two".into(), "Ana/Alpha/CD2/01 - Two.flac".into())
+            ]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn lyrics_are_found_served_edited_and_carried_to_the_new_file(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        let embedded = track(
+            "One",
+            1,
+            1,
+            json!({"lyrics": "plain one\nplain two", "syncedLyrics": "[00:01.00]sung one\n[00:03.00]sung two"}),
+        );
+        c.fake.script("POST", "/v1/probe", vec![embedded]);
+        let files = place(&c, &["Alpha/01.flac"]);
+        std::fs::write(
+            c.dir.join("music/Alpha/01.fr.lrc"),
+            "[00:02.00]<00:02.00>un <00:02.50>deux\n",
+        )
+        .unwrap();
+        music::register(&c.st, m, &files).await.unwrap();
+        let item: i32 = sqlx::query_scalar("SELECT id FROM items")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let uri = format!("/api/items/{item}/lyrics?enhanced=true");
+        let (s, v) = call(&c, "GET", &uri, &c.admin, Value::Null).await;
+        assert_eq!(s, 200, "{v}");
+        let list = v["structuredLyrics"].as_array().unwrap();
+        assert_eq!(list.len(), 2, "{v}");
+        // The sidecar outranks the embedded text; its words come as cues.
+        assert_eq!(list[0]["source"], "sidecar");
+        assert_eq!(list[0]["lang"], "fr");
+        assert_eq!(list[0]["cueLine"][0]["cue"][1]["value"], "deux");
+        assert_eq!(list[1]["source"], "embedded");
+        assert_eq!(list[1]["line"][1]["value"], "sung two");
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media_files WHERE "streamInfo"::text LIKE '%sung one%'"#
+            )
+            .await,
+            0
+        );
+        let (s, _) = call(&c, "GET", &uri, "nope", Value::Null).await;
+        assert_eq!(s, 401);
+        // A paste is the user's, the offset nudge is kept, .
+        let put = json!({"kind": "main", "lang": "en", "format": "lrc", "body": "[00:05.00]mine"});
+        let (s, _) = call(
+            &c,
+            "PUT",
+            &format!("/api/items/{item}/lyrics"),
+            &c.admin,
+            put,
+        )
+        .await;
+        assert_eq!(s, 200);
+        let (s, _) = call(
+            &c,
+            "PUT",
+            &format!("/api/items/{item}/lyrics"),
+            &c.admin,
+            json!({"format": "lrc", "body": "no lyrics here at all [x"}),
+        )
+        .await;
+        assert_eq!(s, 200, "a text with no time tag is plain, not refused");
+        let (s, _) = call(
+            &c,
+            "PUT",
+            &format!("/api/items/{item}/lyrics"),
+            &c.admin,
+            json!({"format": "ttml", "body": "<html/>"}),
+        )
+        .await;
+        assert_eq!(s, 400);
+        let id: i32 =
+            sqlx::query_scalar(r#"SELECT id FROM lyrics WHERE source = 'user' AND lang = 'en'"#)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        let (s, v) = call(
+            &c,
+            "PATCH",
+            &format!("/api/lyrics/{id}"),
+            &c.admin,
+            json!({"offsetMs": 250, "preferred": true}),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert_eq!(v["structuredLyrics"][0]["offset"], 250);
+        assert_eq!(v["structuredLyrics"][0]["source"], "user");
+        // The file is replaced by one of the same length: every row follows the track, user text included.
+        sqlx::query(r#"DELETE FROM media_files WHERE "mediaId" = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track("One", 1, 1, json!({"lyrics": null}))],
+        );
+        music::register(&c.st, m, &place(&c, &["Alpha/01 - One.flac"]))
+            .await
+            .unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 1);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM lyrics WHERE source = 'user' AND "mediaFileId" IS NOT NULL"#
+            )
+            .await,
+            2
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM lyrics WHERE source = 'embedded'").await,
+            0
+        );
+        // A file 30 s longer drops the timing of what stays and keeps the text.
+        sqlx::query(
+            r#"UPDATE lyrics SET "audioDurationMs" = 100000 WHERE source = 'user' AND lang = 'en'"#,
+        )
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        sqlx::query(r#"DELETE FROM media_files WHERE "mediaId" = $1"#)
+            .bind(m)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track("One", 1, 1, json!({"lyrics": null}))],
+        );
+        music::register(&c.st, m, &place(&c, &["Alpha/01 - One again.flac"]))
+            .await
+            .unwrap();
+        let (sync, off): (String, i32) = sqlx::query_as(
+            r#"SELECT sync, "offsetMs" FROM lyrics WHERE source = 'user' AND lang = 'en'"#,
+        )
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!((sync.as_str(), off), ("none", 0));
+        let (s, _) = call(
+            &c,
+            "DELETE",
+            &format!("/api/lyrics/{id}"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 204);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_provider_fills_missing_lyrics_and_a_miss_is_remembered(pool: PgPool) {
+        let fake = Arc::new(MusicFake::default());
+        let hit = crate::metadata::LyricsHit {
+            format: "lrc".into(),
+            document: "[00:01.00]hello\n[00:02.00]world".into(),
+            instrumental: false,
+            lang: Some("en".into()),
+            source_ref: Some("42".into()),
+        };
+        *fake.lyrics.lock().unwrap() = Some(Some(hit.clone()));
+        let c = ctx_music(pool, Some(fake.clone())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track("One", 1, 1, json!({"lyrics": null}))],
+        );
+        music::register(&c.st, m, &place(&c, &["Alpha/01.flac"]))
+            .await
+            .unwrap();
+        let item: i32 = sqlx::query_scalar("SELECT id FROM items")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let fetch = format!("/api/items/{item}/lyrics/fetch");
+        let (s, v) = call(&c, "POST", &fetch, &c.admin, json!({})).await;
+        assert_eq!(s, 200, "{v}");
+        assert_eq!(v["structuredLyrics"][0]["source"], "provider:musicbrainz");
+        assert_eq!(v["structuredLyrics"][0]["lang"], "en");
+        assert_eq!(v["structuredLyrics"][0]["synced"], true);
+        // A synced document ends the asking; a miss is cached against the provider, `force` ignores it.
+        let asked = |f: &MusicFake| f.calls().iter().filter(|c| c.starts_with("lyrics")).count();
+        call(&c, "POST", &fetch, &c.admin, json!({})).await;
+        assert_eq!(asked(&fake), 1);
+        sqlx::query("DELETE FROM lyrics")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        *fake.lyrics.lock().unwrap() = Some(None);
+        call(&c, "POST", &fetch, &c.admin, json!({})).await;
+        *fake.lyrics.lock().unwrap() = Some(Some(hit));
+        let (_, v) = call(&c, "POST", &fetch, &c.admin, json!({})).await;
+        assert_eq!(v["structuredLyrics"].as_array().unwrap().len(), 0);
+        assert_eq!(asked(&fake), 2);
+        let (_, v) = call(&c, "POST", &fetch, &c.admin, json!({"force": true})).await;
+        assert_eq!(v["structuredLyrics"].as_array().unwrap().len(), 1);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_release_id_in_the_tags_makes_its_own_edition(pool: PgPool) {
         let c = ctx_music(pool, None).await;
         let l = album_lib(&c).await;

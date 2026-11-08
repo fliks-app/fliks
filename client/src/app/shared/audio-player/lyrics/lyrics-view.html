@@ -1,0 +1,37 @@
+<div
+  #scroller
+  class="scroll-ring-safe relative flex h-full flex-col gap-3 overflow-y-auto"
+  appTvSection
+  data-testid="lyrics-lines"
+  (wheel)="onManualScroll()"
+  (touchmove)="onManualScroll()"
+>
+  @for (r of rows(); track $index; let i = $index) {
+    <div [attr.data-line]="i" [class.mt-6]="!r.text">
+      <button
+        type="button"
+        class="block w-full rounded-lg px-2 py-1 text-left transition-opacity disabled:cursor-default"
+        [class]="colour(r.agentId) + (bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : large() ? ' text-4xl font-bold' : ' text-2xl font-semibold')"
+        [class.opacity-40]="timed() && i !== active() && !r.cues"
+        [class.opacity-100]="!timed() || i === active() || r.cues"
+        [attr.aria-current]="i === active() ? 'true' : null"
+        [disabled]="!timed()"
+        (click)="seekTo(i)"
+      >
+        @if (r.cues && r.cues.length) {
+          @for (c of r.cues; track $index; let k = $index) {
+            <span class="relative inline-block whitespace-pre">
+              <span class="opacity-40">{{ c.value }}</span>
+              <span class="absolute inset-y-0 left-0 overflow-hidden whitespace-pre" aria-hidden="true" [style.width.%]="fill(i, k)">{{ c.value }}</span>
+            </span>
+          }
+        } @else {
+          {{ r.text }}
+        }
+      </button>
+      @if (layerRows(); as lr) {
+        <p class="px-2 text-base text-base-content/60" [class.text-xl]="large()" data-testid="lyrics-layer">{{ lr[i]?.text }}</p>
+      }
+    </div>
+  }
+</div>

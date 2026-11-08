@@ -261,11 +261,16 @@ pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
         want.push("fliks:plugin/metadata-provider@3.0.0");
     }
     want.sort_unstable();
-    // A provider built from the `scene-provider` world also exports the `scene` interface.
+    // A provider built from the `scene-provider` world also exports `scene`, one from `full-provider` `lyrics-provider` too.
     let mut with_scene = want.clone();
     with_scene.push("fliks:plugin/scene@3.0.0");
     with_scene.sort_unstable();
-    if exports.iter().ne(want.iter()) && !(provider && exports.iter().eq(with_scene.iter())) {
+    let mut with_lyrics = with_scene.clone();
+    with_lyrics.push("fliks:plugin/lyrics-provider@3.0.0");
+    with_lyrics.sort_unstable();
+    let extended = provider
+        && (exports.iter().eq(with_scene.iter()) || exports.iter().eq(with_lyrics.iter()));
+    if exports.iter().ne(want.iter()) && !extended {
         return Err(format!(
             "exports {} instead of {}",
             exports.into_iter().collect::<Vec<_>>().join(", "),

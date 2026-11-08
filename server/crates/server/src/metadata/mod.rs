@@ -18,7 +18,7 @@ mod types;
 pub use language::{LanguageCache, Override};
 pub use orchestrator::{Key, prune_snapshots};
 use provider::Absent;
-pub use provider::{Call, EditionRef, MetadataProvider, Search};
+pub use provider::{Call, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, Search};
 pub use routes::*;
 pub use search::*;
 pub use types::{Credits, MetaError, PersonDetails, Upstream};
@@ -91,6 +91,29 @@ impl Metadata {
             .filter_map(|id| d.providers.get(id))
             .find(|p| p.available() && p.has_scene())
             .cloned()
+    }
+
+    /// The available providers that declare `lyrics`: the named ones first (in that order), then the rest in
+    /// registration order.
+    pub fn lyrics_providers(&self, named: &[String]) -> Vec<Arc<dyn MetadataProvider>> {
+        let d = self.dynamic.read_clean();
+        let ready = |id: &Namespace| {
+            d.providers
+                .get(id)
+                .filter(|p| p.available() && p.has_lyrics())
+                .cloned()
+        };
+        let mut ids: Vec<Namespace> = vec![];
+        for id in named
+            .iter()
+            .filter_map(|n| Namespace::parse(n))
+            .chain(d.added.iter().copied())
+        {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        ids.iter().filter_map(ready).collect()
     }
 
     /// The provider registered under `id`, available or not.

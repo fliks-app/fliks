@@ -37,11 +37,12 @@ wasmtime::component::bindgen!({
     require_store_data_send: true,
 });
 
-/// The `scene-provider` world, for the `metadata-provider` and `scene` exports only: its other interfaces are the `plugin` world's.
+/// The `full-provider` world, for the `metadata-provider`, `scene` and `lyrics-provider` exports only: its other
+/// interfaces are the `plugin` world's.
 mod provider_world {
     wasmtime::component::bindgen!({
         path: "../plugin-sdk/wit",
-        world: "fliks:plugin/scene-provider",
+        world: "fliks:plugin/full-provider",
         imports: { default: async },
         exports: { default: async },
         with: {
@@ -66,7 +67,7 @@ pub use fliks::plugin::types::{
     HealthReport, HostError, HttpRequest, HttpResponse, ManifestCheck, Principal,
 };
 pub use provider_world::exports::fliks::plugin::{
-    metadata_provider as wit_provider, scene as wit_scene,
+    lyrics_provider as wit_lyrics, metadata_provider as wit_provider, scene as wit_scene,
 };
 
 /// Whether the manifest's `provider` block declares the `scene` capability.
@@ -79,6 +80,13 @@ fn has_scene(manifest: &Json) -> bool {
             caps.as_array()
                 .is_some_and(|c| c.iter().any(|c| c == "scene"))
         })
+}
+
+/// Whether the manifest's `provider` block declares the `lyrics` capability under `album`.
+fn has_lyrics(manifest: &Json) -> bool {
+    manifest["provider"]["kinds"]["album"]
+        .as_array()
+        .is_some_and(|c| c.iter().any(|c| c == "lyrics"))
 }
 
 pub const EPOCH_TICK: Duration = Duration::from_millis(100);
@@ -380,6 +388,8 @@ pub struct Inst {
     prov: Option<wit_provider::Guest>,
     /// The optional `scene` export, of a provider that declares the capability.
     scene: Option<wit_scene::Guest>,
+    /// The optional `lyrics-provider` export, of a provider that declares the capability.
+    lyrics: Option<wit_lyrics::Guest>,
     cfg_gen: u64,
 }
 
@@ -392,6 +402,11 @@ impl Inst {
     pub fn scene(&mut self) -> (&wit_scene::Guest, &mut Store<Ctx>) {
         let scene = self.scene.as_ref().expect("a scene provider instance");
         (scene, &mut self.store)
+    }
+
+    pub fn lyrics(&mut self) -> (&wit_lyrics::Guest, &mut Store<Ctx>) {
+        let lyrics = self.lyrics.as_ref().expect("a lyrics provider instance");
+        (lyrics, &mut self.store)
     }
 }
 
@@ -488,6 +503,7 @@ pub struct PluginRt {
     pub provider: Option<Lane>,
     provider_idx: Option<wit_provider::GuestIndices>,
     scene_idx: Option<wit_scene::GuestIndices>,
+    lyrics_idx: Option<wit_lyrics::GuestIndices>,
     pub jobs: HashMap<String, Lane>,
     sup: Mutex<Sup>,
     state: watch::Sender<State>,
@@ -547,6 +563,9 @@ impl PluginRt {
         let scene_idx = (sh.provider && has_scene(&manifest))
             .then(|| wit_scene::GuestIndices::new(&instance_pre))
             .transpose()?;
+        let lyrics_idx = (sh.provider && has_lyrics(&manifest))
+            .then(|| wit_lyrics::GuestIndices::new(&instance_pre))
+            .transpose()?;
         let pre = PluginPre::new(instance_pre)?;
         let jobs = manifest["jobs"]
             .as_array()
@@ -570,6 +589,7 @@ impl PluginRt {
                 .then(|| Lane::new(LaneKind::Provider, PROVIDER_INSTANCES, PROVIDER_QUEUE)),
             provider_idx,
             scene_idx,
+            lyrics_idx,
             jobs,
             sup: Mutex::new(Sup {
                 crashes: VecDeque::new(),
@@ -704,12 +724,13 @@ impl PluginRt {
             .unwrap_or_default();
         let fail = |e: String| SpawnError::Failed(e);
         let work = async {
-            let (guest, prov, scene) = match &self.provider_idx {
+            let (guest, prov, scene, lyrics) = match &self.provider_idx {
                 None => (
                     self.pre
                         .instantiate_async(&mut store)
                         .await
                         .map_err(|e| fail(format!("{e:?}")))?,
+                    None,
                     None,
                     None,
                 ),
@@ -731,7 +752,13 @@ impl PluginRt {
                         .map(|i| i.load(&mut store, &instance))
                         .transpose()
                         .map_err(|e| fail(format!("{e:?}")))?;
-                    (guest, Some(prov), scene)
+                    let lyrics = self
+                        .lyrics_idx
+                        .as_ref()
+                        .map(|i| i.load(&mut store, &instance))
+                        .transpose()
+                        .map_err(|e| fail(format!("{e:?}")))?;
+                    (guest, Some(prov), scene, lyrics)
                 }
             };
             let check = guest
@@ -740,9 +767,9 @@ impl PluginRt {
                 .await
                 .map_err(|e| fail(format!("{e:?}")))?
                 .map_err(fail)?;
-            Ok::<_, SpawnError>((guest, prov, scene, check))
+            Ok::<_, SpawnError>((guest, prov, scene, lyrics, check))
         };
-        let (guest, prov, scene, check) = match tokio::time::timeout(hello, work).await {
+        let (guest, prov, scene, lyrics, check) = match tokio::time::timeout(hello, work).await {
             Ok(r) => r?,
             Err(_) => return Err(fail("hello deadline".into())),
         };
@@ -765,6 +792,7 @@ impl PluginRt {
             guest,
             prov,
             scene,
+            lyrics,
             cfg_gen: self.cfg_gen.load(Ordering::SeqCst),
         })
     }
