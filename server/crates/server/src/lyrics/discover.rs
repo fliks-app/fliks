@@ -1,8 +1,11 @@
 //! Sidecar and embedded lyrics of a file (`docs/spec/music.md` rule 64).
 use super::store::{self, New};
 use crate::{settings::setting_value, state::AppState};
-use fliks_domain::lyrics::{Format, Parsed, parse};
-use std::path::Path;
+use fliks_domain::lyrics::{Format, Parsed, lang_infix, parse};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 const MAX_BYTES: u64 = 1 << 20;
 const DEFAULT_ORDER: [&str; 5] = ["ttml", "elrc", "lrc", "srt", "txt"];
@@ -24,25 +27,27 @@ pub async fn sidecar_order(st: &AppState) -> Vec<String> {
         .unwrap_or_else(|| DEFAULT_ORDER.iter().map(|s| (*s).to_owned()).collect())
 }
 
-/// `<lang>` of `song.<lang>.lrc`: two or three letters, a region after `-` dropped.
-fn lang_infix(s: &str) -> Option<String> {
-    let base = s.split('-').next()?.to_lowercase();
-    ((2..=3).contains(&base.len()) && base.bytes().all(|b| b.is_ascii_lowercase())).then_some(base)
-}
-
-/// The sidecar texts of `audio`: for each language, the first extension of `order` that exists.
-pub async fn sidecars(audio: &Path, order: &[String]) -> Vec<(String, String, Format, String)> {
-    let (Some(dir), Some(stem)) = (audio.parent(), audio.file_stem()) else {
-        return vec![];
-    };
-    let stem = stem.to_string_lossy().to_lowercase();
+/// The file names of `dir`, read once for every track of the folder.
+pub async fn listing(dir: &Path) -> Vec<String> {
     let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
         return vec![];
     };
+    let mut names = vec![];
+    while let Ok(Some(e)) = rd.next_entry().await {
+        names.push(e.file_name().to_string_lossy().into_owned());
+    }
+    names
+}
+
+/// The sidecar names of `audio` in `listing`, one per language (the first extension of `order`): `(lang, name)`.
+pub fn candidates(audio: &Path, listing: &[String], order: &[String]) -> Vec<(String, String)> {
+    let Some(stem) = audio.file_stem() else {
+        return vec![];
+    };
+    let stem = stem.to_string_lossy().to_lowercase();
     // (lang, extension rank, file name)
     let mut found: Vec<(String, usize, String)> = vec![];
-    while let Ok(Some(e)) = rd.next_entry().await {
-        let name = e.file_name().to_string_lossy().into_owned();
+    for name in listing {
         let lower = name.to_lowercase();
         let Some(rest) = lower.strip_prefix(&stem).and_then(|r| r.strip_prefix('.')) else {
             continue;
@@ -55,17 +60,30 @@ pub async fn sidecars(audio: &Path, order: &[String]) -> Vec<(String, String, Fo
             None => ("und".to_owned(), rest),
         };
         if let Some(rank) = order.iter().position(|o| o == ext) {
-            found.push((lang, rank, name));
+            found.push((lang, rank, name.clone()));
         }
     }
     found.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
     found.dedup_by(|b, a| a.0 == b.0);
+    found.into_iter().map(|(l, _, n)| (l, n)).collect()
+}
+
+/// The sidecar texts of `audio`: for each language, the first extension of `order` that exists as a regular
+/// file (a link is not followed out of the library).
+pub async fn sidecars(
+    audio: &Path,
+    listing: &[String],
+    order: &[String],
+) -> Vec<(String, String, Format, String)> {
+    let Some(dir) = audio.parent() else {
+        return vec![];
+    };
     let mut out = vec![];
-    for (lang, _, name) in found {
+    for (lang, name) in candidates(audio, listing, order) {
         let path = dir.join(&name);
-        let ok = tokio::fs::metadata(&path)
+        let ok = tokio::fs::symlink_metadata(&path)
             .await
-            .is_ok_and(|m| m.len() <= MAX_BYTES);
+            .is_ok_and(|m| m.is_file() && m.len() <= MAX_BYTES);
         let Some(ext) = name.rsplit_once('.').map(|(_, e)| e.to_owned()) else {
             continue;
         };
@@ -102,10 +120,11 @@ pub async fn file(
     audio: &Path,
     duration_ms: Option<i32>,
     emb: &Embedded,
+    listing: &[String],
 ) -> sqlx::Result<()> {
     let order = sidecar_order(st).await;
     let mut kept: Vec<(String, String)> = vec![];
-    for (lang, name, format, text) in sidecars(audio, &order).await {
+    for (lang, name, format, text) in sidecars(audio, listing, &order).await {
         let Ok(p) = parse(format, &text) else {
             tracing::debug!("lyrics sidecar \"{name}\" not read");
             continue;
@@ -168,8 +187,14 @@ pub async fn file(
 }
 
 /// The lyrics of the files just laid out, read from `(file id, path, probe tags)`.
-pub async fn after_layout(st: &AppState, files: &[(i32, std::path::PathBuf, Embedded)]) {
+pub async fn after_layout(st: &AppState, files: &[(i32, PathBuf, Embedded)]) {
+    let mut listings: HashMap<PathBuf, Vec<String>> = HashMap::new();
     for (id, path, emb) in files {
+        let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
+        if !listings.contains_key(&dir) {
+            let names = listing(&dir).await;
+            listings.insert(dir.clone(), names);
+        }
         let row: Option<(i32, Option<i32>)> = sqlx::query_as(
             r#"SELECT ip."itemId", td."durationMs" FROM item_parts ip
                LEFT JOIN track_details td ON td."itemId" = ip."itemId"
@@ -183,7 +208,7 @@ pub async fn after_layout(st: &AppState, files: &[(i32, std::path::PathBuf, Embe
         let Some((item, duration)) = row else {
             continue;
         };
-        if let Err(e) = file(st, item, *id, path, duration, emb).await {
+        if let Err(e) = file(st, item, *id, path, duration, emb, &listings[&dir]).await {
             tracing::warn!("lyrics of file #{id} not stored: {e}");
         }
     }

@@ -134,6 +134,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     if let Err(e) = plugins::namespaces::load(&state.db, &state.plugins.namespaces).await {
         tracing::warn!("provider namespaces not loaded: {e}");
     }
+    lyrics::queue::spawn_sweep(state.clone());
     presence::spawn(
         state.presence.clone(),
         state.engine.clone(),

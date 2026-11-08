@@ -29,6 +29,10 @@ pub(crate) struct MusicFake {
     pub calls: Mutex<Vec<String>>,
     /// What `fetch_lyrics` answers; none means the provider declares no lyrics.
     pub lyrics: Mutex<Option<Option<LyricsHit>>>,
+    /// `fetch_lyrics` fails with a 503.
+    pub lyrics_down: std::sync::atomic::AtomicBool,
+    /// The registry key; the MusicBrainz one when none.
+    pub key: Mutex<Option<Namespace>>,
 }
 
 impl MusicFake {
@@ -43,7 +47,7 @@ fn missing<T: Send + 'static>() -> Call<'static, T> {
 
 impl MetadataProvider for MusicFake {
     fn id(&self) -> Namespace {
-        Namespace::MUSICBRAINZ
+        self.key.lock().unwrap().unwrap_or(Namespace::MUSICBRAINZ)
     }
     fn supports(&self, kind: MediaKind) -> bool {
         kind == MediaKind::Album
@@ -60,7 +64,13 @@ impl MetadataProvider for MusicFake {
             .unwrap()
             .push(format!("lyrics {}", q.title));
         let r = self.lyrics.lock().unwrap().clone().flatten();
-        Box::pin(async move { Ok(r) })
+        let down = self.lyrics_down.load(std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move {
+            if down {
+                return Err(Upstream::new(Some(503), "down"));
+            }
+            Ok(r)
+        })
     }
     fn limits(&self) -> Limits {
         Limits::new(100.0, 100)

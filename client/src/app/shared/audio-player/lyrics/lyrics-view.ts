@@ -2,7 +2,7 @@ import { Component, DestroyRef, ElementRef, computed, effect, inject, input, sig
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
-import { activeIndex, cueFills, toRows } from './lyrics-logic';
+import { activeIndex, cueFills, cueSegments, toRows } from './lyrics-logic';
 
 const AGENT_COLOURS = ['text-primary', 'text-secondary', 'text-accent', 'text-info'];
 const MANUAL_SCROLL_MS = 3000;
@@ -23,6 +23,7 @@ export class LyricsViewComponent {
   readonly large = input(false);
 
   protected readonly rows = computed(() => toRows(this.doc()));
+  protected readonly segments = computed(() => this.rows().map((r) => (r.cues?.length ? cueSegments(r.text, r.cues) : null)));
   protected readonly layerRows = computed(() => (this.layer() ? toRows(this.layer()!) : null));
   protected readonly timed = computed(() => this.doc().synced && this.rows().every((r) => r.start !== undefined));
   protected readonly bgAgents = computed(() => new Set((this.doc().agents ?? []).filter((a) => a.role === 'bg').map((a) => a.id)));
@@ -79,6 +80,11 @@ export class LyricsViewComponent {
   protected fill(i: number, k: number): number {
     const a = this.active();
     return i < a ? 100 : i === a ? (this.fills()[k] ?? 0) : 0;
+  }
+
+  /** The text between two words is lit once the word before it is, and a leading one with the first word. */
+  protected gapLit(i: number, prev: number): boolean {
+    return this.fill(i, Math.max(prev, 0)) >= (prev < 0 ? 1 : 100);
   }
 
   protected colour(agentId?: string): string {
