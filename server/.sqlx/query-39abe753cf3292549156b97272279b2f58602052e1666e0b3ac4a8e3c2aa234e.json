@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM requests r\n        WHERE ($1::int IS NULL OR r.id = $1) AND ($2::int IS NULL OR r.\"userId\" = $2)\n        AND ($3::int[] IS NULL OR r.\"libraryId\" IS NULL OR r.\"libraryId\" = ANY($3))\n        AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)\n        AND ($6::text IS NULL OR (r.provider = $6 AND r.\"externalId\" = $8))\n        AND ($7::text IS NULL OR r.\"mediaType\" = $7)\n        AND ($9::text[] IS NULL OR r.\"mediaType\" = ANY($9))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "39abe753cf3292549156b97272279b2f58602052e1666e0b3ac4a8e3c2aa234e"
+}

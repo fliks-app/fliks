@@ -163,7 +163,8 @@ pub async fn recommendations(
     Query(q): Q,
 ) -> Result<Response, AppError> {
     let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
-    let items = recommend::recommendations(&st.db, a.user.id, &libs, limit_param(&q)).await?;
+    let items =
+        recommend::recommendations(&st.db, a.user.id, &libs, &a.kinds, limit_param(&q)).await?;
     Ok(Json(items).into_response())
 }
 
@@ -213,7 +214,9 @@ pub async fn continue_watching(
     Query(q): Q,
 ) -> Result<Json<Vec<db::ContinueItem>>, AppError> {
     let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
-    Ok(Json(db::continue_watching(&st.db, a.user.id, &libs).await?))
+    Ok(Json(
+        db::continue_watching(&st.db, a.user.id, &libs, &a.kinds).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/playback/history", responses((status = 200)))]
@@ -225,7 +228,7 @@ pub async fn history(
     let (page, limit) = history_window(&q)?;
     let libs = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(
-        db::history(&st.db, a.user.id, page, limit, &libs).await?,
+        db::history(&st.db, a.user.id, page, limit, &libs, &a.kinds).await?,
     ))
 }
 

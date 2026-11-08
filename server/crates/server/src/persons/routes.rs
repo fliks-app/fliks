@@ -15,6 +15,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
+    media::kind::MediaKind,
     persons::tsquery,
 };
 use serde_json::Value;
@@ -116,11 +117,19 @@ pub async fn list(
     if matches!(tsq, Some(None)) {
         return Ok(Json(Value::Array(vec![])));
     }
+    let music = matches!(role.as_str(), "artist" | "composer");
+    if !a.kinds.has(if music {
+        MediaKind::Album
+    } else {
+        MediaKind::Book
+    }) {
+        return Ok(Json(Value::Array(vec![])));
+    }
     let acl = accessible_library_ids(&st.db, &a).await?;
     let scope = aggregates::scope(&acl, library.map(|l| l.to_string()).as_deref());
     let by_works = sort.as_deref() == Some("works");
     let tsq = tsq.flatten();
-    if matches!(role.as_str(), "artist" | "composer") {
+    if music {
         return Ok(Json(Value::Array(
             service::music_people(
                 &st.db,
@@ -160,7 +169,11 @@ pub async fn works(
     let mut r = Reader::new(&q, &["role"]);
     let role = role_of(&mut r, &ROLES);
     r.finish()?;
-    let acl = accessible_library_ids(&st.db, &a).await?;
+    let acl = if a.kinds.has(MediaKind::Book) {
+        accessible_library_ids(&st.db, &a).await?
+    } else {
+        vec![]
+    };
     let role = role.unwrap_or_default();
     Ok(Json(
         service::works(&st.db, id, &role, a.user.id, &acl).await?,

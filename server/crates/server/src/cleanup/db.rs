@@ -288,14 +288,20 @@ pub async fn library_names(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
 }
 
 /// `(media id, deleteAt ISO)` of the dated whole-media candidates in `libraries`, soonest first.
-pub async fn leaving_soon(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<(i32, String)>> {
+pub async fn leaving_soon(
+    db: &PgPool,
+    libraries: &[i32],
+    kinds: &[String],
+) -> sqlx::Result<Vec<(i32, String)>> {
     sqlx::query_as(
         r#"SELECT m.id, iso_ms(c."deleteAt") FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
         JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
         WHERE c."deleteAt" IS NOT NULL AND c."groupId" IS NULL AND c."itemId" IS NULL AND m."libraryId" = ANY($1)
+        AND m.type = ANY($2)
         ORDER BY c."deleteAt", m.id"#,
     )
     .bind(libraries)
+    .bind(kinds)
     .fetch_all(db)
     .await
 }

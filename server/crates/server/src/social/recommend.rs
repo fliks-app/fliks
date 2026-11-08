@@ -88,7 +88,7 @@ pub async fn following_popular(
            JOIN media m ON m.id = pi."mediaId"
            WHERE ps."userId" = ANY($1)
              AND ps.completed = true
-             AND m."libraryId" = ANY($2)
+             AND m."libraryId" = ANY($2) AND m.type = ANY($5)
              AND NOT EXISTS (
                SELECT 1 FROM playback_states mine JOIN items mi ON mi.id = mine."itemId"
                WHERE mine."userId" = $3 AND mi."mediaId" = pi."mediaId"
@@ -99,7 +99,8 @@ pub async fn following_popular(
         &followed,
         &libs,
         me,
-        limit
+        limit,
+        &a.kinds.names()
     )
     .fetch_all(&st.db)
     .await?;
@@ -309,7 +310,9 @@ async fn cards(
         .into_iter()
         .filter_map(|(r, kind)| {
             let (media_id, library_id) = (r.media_id?, r.library_id?);
-            if !accessible.contains(&library_id)
+            let kind = kind.filter(|k| a.kinds.has(*k));
+            if kind.is_none()
+                || !accessible.contains(&library_id)
                 || !super::graph::listable(r.other_enabled, r.other_share_disabled)
             {
                 return None;

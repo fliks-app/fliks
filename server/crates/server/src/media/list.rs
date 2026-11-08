@@ -4,6 +4,7 @@ use super::{
     params::{Recent, Search},
     wants::video_want_join,
 };
+use crate::http::kinds::Kinds;
 use chrono::{NaiveDate, Utc};
 use fliks_domain::{
     media::{kind::MediaKind, search::prefix_tsquery},
@@ -54,6 +55,7 @@ fn push_scope(
     qb: &mut QueryBuilder<Postgres>,
     p: &Search,
     ids: &[i32],
+    kinds: &Kinds,
     uid: i32,
     cutoff: Option<&QualityMap>,
     today: NaiveDate,
@@ -81,6 +83,8 @@ fn push_scope(
     }
     qb.push(" WHERE media.\"libraryId\" = ANY(")
         .push_bind(ids.to_vec())
+        .push(") AND media.type = ANY(")
+        .push_bind(kinds.names())
         .push(")");
     if let Some(l) = p.library_id.filter(|l| *l != 0) {
         qb.push(" AND media.\"libraryId\" = ").push_bind(l);
@@ -331,10 +335,11 @@ pub async fn find_all(
     db: &PgPool,
     p: &Search,
     ids: &[i32],
+    kinds: &Kinds,
     uid: i32,
     see_paths: bool,
 ) -> Result<Page, sqlx::Error> {
-    let (page_ids, total) = find_ids(db, p, ids, uid).await?;
+    let (page_ids, total) = find_ids(db, p, ids, kinds, uid).await?;
     let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
@@ -348,6 +353,7 @@ pub(crate) async fn find_ids(
     db: &PgPool,
     p: &Search,
     ids: &[i32],
+    kinds: &Kinds,
     uid: i32,
 ) -> Result<(Vec<i32>, i64), sqlx::Error> {
     if ids.is_empty() {
@@ -362,7 +368,7 @@ pub(crate) async fn find_ids(
     let paging = p.paging().ok().flatten();
 
     let mut qb = QueryBuilder::new("SELECT media.id");
-    push_scope(&mut qb, p, ids, uid, map.as_ref(), today);
+    push_scope(&mut qb, p, ids, kinds, uid, map.as_ref(), today);
     let query = p.q.as_deref().filter(|q| !q.is_empty());
     match (query, p.sort_by.is_some()) {
         (Some(q), false) => {
@@ -391,7 +397,7 @@ pub(crate) async fn find_ids(
         page_ids.len() as i64
     } else {
         let mut qb = QueryBuilder::new("SELECT COUNT(*)");
-        push_scope(&mut qb, p, ids, uid, map.as_ref(), today);
+        push_scope(&mut qb, p, ids, kinds, uid, map.as_ref(), today);
         qb.build_query_scalar().fetch_one(db).await?
     };
 
@@ -442,6 +448,7 @@ pub async fn recently_added(
     db: &PgPool,
     p: &Recent,
     ids: &[i32],
+    kinds: &Kinds,
     uid: i32,
     see_paths: bool,
 ) -> Result<Vec<Value>, sqlx::Error> {
@@ -456,6 +463,8 @@ pub async fn recently_added(
     }
     qb.push(" WHERE media.\"libraryId\" = ANY(")
         .push_bind(ids.to_vec())
+        .push(") AND media.type = ANY(")
+        .push_bind(kinds.names())
         .push(")");
     if let Some(l) = p.library_id.filter(|l| *l != 0) {
         qb.push(" AND media.\"libraryId\" = ").push_bind(l);

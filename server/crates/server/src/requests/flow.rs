@@ -380,6 +380,7 @@ async fn row_json(st: &AppState, id: i32) -> Res<Map<String, Value>> {
         kind: None,
         title: None,
         media_type: None,
+        kinds: None,
     };
     match db::rows(&st.db, &f, 1, 0).await?.into_iter().next() {
         Some(Value::Object(o)) => Ok(o),
@@ -1080,6 +1081,7 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
         };
         (q.user_id.filter(|u| *u != 0), libraries)
     };
+    let kinds = a.kinds.names();
     let f = db::Filter {
         id: None,
         user_id,
@@ -1088,6 +1090,7 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
         kind: q.kind.as_deref(),
         title: q.title.as_ref().map(|(p, e)| (p.as_str(), e.as_str())),
         media_type: q.media_type,
+        kinds: Some(&kinds),
     };
     let offset = (q.page - 1).saturating_mul(q.limit);
     let data = db::rows(&st.db, &f, q.limit, offset).await?;

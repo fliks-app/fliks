@@ -1,4 +1,5 @@
 //! Counts, genres, collections and the quality table (`media-query.md` rules 35-38).
+use crate::http::kinds::Kinds;
 use fliks_domain::{
     media::{family::Family, kind::MediaKind, query::js_parse_int},
     profiles::table,
@@ -31,8 +32,13 @@ pub async fn kind_counts(
         .collect())
 }
 
-pub async fn counts(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
-    Ok(Value::Object(kind_counts(db, Some(ids)).await?))
+/// The count of an undeclared kind is 0, as if its media were absent.
+pub async fn counts(db: &PgPool, ids: &[i32], kinds: &Kinds) -> Result<Value, sqlx::Error> {
+    let mut counts = kind_counts(db, Some(ids)).await?;
+    for k in MediaKind::ALL.into_iter().filter(|k| !kinds.has(*k)) {
+        counts.insert(k.count_key().to_owned(), 0.into());
+    }
+    Ok(Value::Object(counts))
 }
 
 /// A JSON object whose keys keep the numeric order of the library ids (JS integer-key order).
@@ -48,11 +54,17 @@ impl Serialize for ByLibrary {
     }
 }
 
-pub async fn counts_by_library(db: &PgPool, ids: &[i32]) -> Result<ByLibrary, sqlx::Error> {
+pub async fn counts_by_library(
+    db: &PgPool,
+    ids: &[i32],
+    kinds: &Kinds,
+) -> Result<ByLibrary, sqlx::Error> {
     let rows = sqlx::query!(
         r#"SELECT m."libraryId" AS "library_id!", COUNT(*)::int AS "count!" FROM media m
-           WHERE m."libraryId" IS NOT NULL AND m."libraryId" = ANY($1) GROUP BY m."libraryId" ORDER BY m."libraryId""#,
-        ids
+           WHERE m."libraryId" IS NOT NULL AND m."libraryId" = ANY($1) AND m.type = ANY($2)
+           GROUP BY m."libraryId" ORDER BY m."libraryId""#,
+        ids,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;
@@ -78,7 +90,7 @@ pub fn scope(ids: &[i32], raw: Option<&str>) -> Vec<i32> {
     }
 }
 
-pub async fn genres(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
+pub async fn genres(db: &PgPool, ids: &[i32], kinds: &Kinds) -> Result<Value, sqlx::Error> {
     let rows = sqlx::query!(
         r#"SELECT g.genre AS "genre!",
        COUNT(*)::int AS "count!",
@@ -90,11 +102,13 @@ pub async fn genres(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
 FROM media m
 CROSS JOIN LATERAL jsonb_array_elements_text(m.genres) AS g(genre)
 WHERE m."libraryId" = ANY($1)
+  AND m.type = ANY($2)
   AND m.genres IS NOT NULL
   AND m.genres::text != '[]'
 GROUP BY g.genre
 ORDER BY g.genre ASC"#,
-        ids
+        ids,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;
@@ -104,7 +118,7 @@ ORDER BY g.genre ASC"#,
         .collect())
 }
 
-pub async fn collections(db: &PgPool, ids: &[i32]) -> Result<Value, sqlx::Error> {
+pub async fn collections(db: &PgPool, ids: &[i32], kinds: &Kinds) -> Result<Value, sqlx::Error> {
     let rows = sqlx::query!(
         r#"SELECT x.value::int AS "id!",
        c.name AS "name!",
@@ -119,11 +133,13 @@ JOIN collection_entries e ON e."mediaId" = m.id AND e."itemId" IS NULL
 JOIN collections c ON c.id = e."collectionId"
 JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
 WHERE m."libraryId" = ANY($1)
+  AND m.type = ANY($2)
   AND c.name <> ''
 GROUP BY c.id, x.value, c.name
 HAVING COUNT(*) >= 2
 ORDER BY c.name ASC, x.value::int ASC"#,
-        ids
+        ids,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;

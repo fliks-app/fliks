@@ -1,6 +1,6 @@
 //! `GET /api/media/calendar` (`media-query.md` rules 47-51).
 use super::params::Calendar;
-use crate::http::AppError;
+use crate::http::{AppError, kinds::Kinds};
 use chrono::{Datelike, Local, NaiveDate};
 use fliks_domain::media::{kind::MediaKind, release::ReleaseKind};
 use serde_json::{Value, json};
@@ -42,6 +42,7 @@ pub async fn calendar(
     db: &PgPool,
     p: &Calendar,
     ids: &[i32],
+    declared: &Kinds,
     uid: i32,
 ) -> Result<Vec<Value>, AppError> {
     if ids.is_empty() {
@@ -54,7 +55,9 @@ pub async fn calendar(
     if p.media_type.is_none_or(|t| !t.has_seasons()) {
         let kinds: Vec<&str> = MediaKind::ALL
             .into_iter()
-            .filter(|k| !k.has_seasons() && p.media_type.is_none_or(|t| t == *k))
+            .filter(|k| {
+                !k.has_seasons() && declared.has(*k) && p.media_type.is_none_or(|t| t == *k)
+            })
             .map(MediaKind::as_str)
             .collect();
         let rows = sqlx::query!(
@@ -109,7 +112,7 @@ ORDER BY m.id"#,
         }
     }
 
-    if p.media_type.is_none_or(MediaKind::has_seasons) {
+    if declared.has(MediaKind::Series) && p.media_type.is_none_or(MediaKind::has_seasons) {
         let rows = sqlx::query!(
             r#"SELECT ep.id AS "id!", ep."number" AS "episode_number!", ep.title, to_char(ep."airDate", 'YYYY-MM-DD') AS "date!",
   season."number" AS "season_number!", media.id AS "media_id!", media.title AS "media_title!",
@@ -139,7 +142,7 @@ ORDER BY ep."airDate" ASC, ep.id ASC"#,
                 "episodeTitle": e.title, "hasFile": e.on_disk})
         }));
     }
-    if p.media_type.is_none_or(|t| t == MediaKind::Comic) {
+    if declared.has(MediaKind::Comic) && p.media_type.is_none_or(|t| t == MediaKind::Comic) {
         #[derive(sqlx::FromRow)]
         struct Issue {
             id: i32,
@@ -214,7 +217,9 @@ mod tests {
             monitored_only,
             requested_by_me: false,
         };
-        let all = calendar(&db, &params(None, false), &[1], 1).await.unwrap();
+        let all = calendar(&db, &params(None, false), &[1], &Kinds::all(), 1)
+            .await
+            .unwrap();
         let got: Vec<_> = all
             .iter()
             .map(|e| {
@@ -244,13 +249,25 @@ mod tests {
             ]
         );
         assert_eq!(all[0]["hasFile"], false);
-        let monitored = calendar(&db, &params(Some(MediaKind::Comic), true), &[1], 1)
-            .await
-            .unwrap();
+        let monitored = calendar(
+            &db,
+            &params(Some(MediaKind::Comic), true),
+            &[1],
+            &Kinds::all(),
+            1,
+        )
+        .await
+        .unwrap();
         assert_eq!(monitored.len(), 1);
-        let none = calendar(&db, &params(Some(MediaKind::Movie), false), &[1], 1)
-            .await
-            .unwrap();
+        let none = calendar(
+            &db,
+            &params(Some(MediaKind::Movie), false),
+            &[1],
+            &Kinds::all(),
+            1,
+        )
+        .await
+        .unwrap();
         assert!(none.is_empty());
     }
 }

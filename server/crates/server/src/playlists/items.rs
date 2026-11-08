@@ -204,7 +204,7 @@ pub async fn items(
                   ps."durationSeconds" AS duration_seconds
            FROM pi
            JOIN items e ON e.id = pi."itemId"
-           JOIN media m ON m.id = e."mediaId"
+           JOIN media m ON m.id = e."mediaId" AND m.type = ANY($8)
            JOIN libraries l ON l.id = m."libraryId" AND l.id = ANY($2)
            LEFT JOIN library_default_folders df ON df."libraryId" = l.id
            LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $4)::int AS tmdb,
@@ -234,7 +234,8 @@ pub async fn items(
         external_ids::TMDB,
         external_ids::TVDB,
         external_ids::IMDB,
-        smart_ids.as_deref() as Option<&[i32]>
+        smart_ids.as_deref() as Option<&[i32]>,
+        &a.kinds.names()
     )
     .fetch_all(&st.db)
     .await?;

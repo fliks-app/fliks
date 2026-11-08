@@ -13,7 +13,7 @@ use axum::{
 
 pub use acl::{
     HIDDEN_FILES_FROM, accessible_library_ids, assert_file_accessible, assert_media_accessible,
-    library_ids_of, media_not_found, readable_file,
+    assert_media_visible, library_ids_of, media_not_found, readable_file,
 };
 pub use db::{Folder, metadata_profile, paths_visible};
 pub use folders::assert_in_library as assert_folder_in_library;

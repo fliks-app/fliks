@@ -220,6 +220,7 @@ impl Ctx {
         let mut req = Request::builder()
             .method(method)
             .uri(uri)
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {token}"));
         let body = match body {
             Some(b) => {

@@ -6,6 +6,9 @@ enum MediaKind: Hashable, Codable {
     /// A kind this build doesn't know yet; keeps the raw value.
     case unknown(String)
 
+    /// The kinds this build renders, sent as `X-Fliks-Kinds`: the server omits any other kind.
+    static let known: [MediaKind] = [.movie, .series, .book, .comic]
+
     /// Kinds offered by the type filters.
     static let filterable: [MediaKind] = [.movie, .series, .album]
 

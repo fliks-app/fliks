@@ -106,6 +106,15 @@ pub async fn wanted(
     let limit = i64::from(limit.unwrap_or(25).clamp(1, 100));
     let offset = (i64::from(page.unwrap_or(1)) - 1) * limit;
     let libraries = accessible_library_ids(&st.db, &a).await?;
-    let (data, total) = wants::wanted(&st.db, &libraries, kind, released, offset, limit).await?;
+    let (data, total) = wants::wanted(
+        &st.db,
+        &libraries,
+        &a.kinds.names(),
+        kind,
+        released,
+        offset,
+        limit,
+    )
+    .await?;
     Ok(Json(json!({"data": data, "total": total})))
 }

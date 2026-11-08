@@ -79,45 +79,58 @@ pub async fn profile(
     ]
     .map(|(k, flag)| (k, is_self || flag));
     let on = |k: &str| shown.iter().any(|(s, v)| *s == k && *v);
-    let (playlists, top_genres, recommendations, recent, likes) = tokio::try_join!(
-        async {
-            Ok(playlists::visible_for_owner(db, target, &viewer, is_self || is_following).await?)
-        },
-        async {
-            Ok::<_, AppError>(if on("tastes") {
-                playback::top_genres(db, target, TOP_GENRES, &viewer).await?
-            } else {
-                vec![]
-            })
-        },
-        async {
-            Ok::<_, AppError>(if on("recommendations") {
-                let mut items =
-                    playback::user_recommendations(db, target, &viewer, Some(RECOMMENDATIONS))
-                        .await?;
-                items.iter_mut().for_each(|i| i.because_title.clear());
-                items
-            } else {
-                vec![]
-            })
-        },
-        async {
-            Ok::<_, AppError>(if on("recentlyWatched") {
-                playback::user_history(db, target, 1, RECENT, &viewer)
-                    .await?
-                    .data
-            } else {
-                vec![]
-            })
-        },
-        async {
-            Ok::<_, AppError>(if on("likes") {
-                list_likes(db, target, &viewer, None, Some(LIKES)).await?
-            } else {
-                vec![]
-            })
-        },
-    )?;
+    let (playlists, top_genres, recommendations, recent, likes) =
+        tokio::try_join!(
+            async {
+                Ok(playlists::visible_for_owner(
+                    db,
+                    target,
+                    &viewer,
+                    &a.kinds,
+                    is_self || is_following,
+                )
+                .await?)
+            },
+            async {
+                Ok::<_, AppError>(if on("tastes") {
+                    playback::top_genres(db, target, TOP_GENRES, &viewer).await?
+                } else {
+                    vec![]
+                })
+            },
+            async {
+                Ok::<_, AppError>(if on("recommendations") {
+                    let mut items = playback::user_recommendations(
+                        db,
+                        target,
+                        &viewer,
+                        &a.kinds,
+                        Some(RECOMMENDATIONS),
+                    )
+                    .await?;
+                    items.iter_mut().for_each(|i| i.because_title.clear());
+                    items
+                } else {
+                    vec![]
+                })
+            },
+            async {
+                Ok::<_, AppError>(if on("recentlyWatched") {
+                    playback::user_history(db, target, 1, RECENT, &viewer, &a.kinds)
+                        .await?
+                        .data
+                } else {
+                    vec![]
+                })
+            },
+            async {
+                Ok::<_, AppError>(if on("likes") {
+                    list_likes(db, target, &viewer, None, &a.kinds, Some(LIKES)).await?
+                } else {
+                    vec![]
+                })
+            },
+        )?;
     out["followerCount"] = count(true).into();
     out["followingCount"] = count(false).into();
     out["shown"] = json!({"playlists": true});

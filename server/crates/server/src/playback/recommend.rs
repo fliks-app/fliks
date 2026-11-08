@@ -1,4 +1,5 @@
 //! Recommendation queries around `fliks_domain::recommend` (rules 19-29).
+use crate::http::kinds::Kinds;
 use fliks_domain::recommend::{
     Candidate, GenreWeight, HistoryMedia, RecommendationItem, Taste, rank_by_score, stratify,
 };
@@ -53,6 +54,7 @@ pub async fn recommendations(
     db: &PgPool,
     user: i32,
     libs: &[i32],
+    kinds: &Kinds,
     limit: Option<usize>,
 ) -> sqlx::Result<Vec<RecommendationItem>> {
     if libs.is_empty() {
@@ -86,9 +88,10 @@ pub async fn recommendations(
                   m.genres AS "genres: Json<Vec<String>>"
            FROM media m
            WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'
-             AND m.id != ALL($1) AND m."libraryId" = ANY($2)"#,
+             AND m.id != ALL($1) AND m."libraryId" = ANY($2) AND m.type = ANY($3)"#,
         &excluded,
-        libs
+        libs,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?

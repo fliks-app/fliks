@@ -42,7 +42,7 @@ pub async fn list(
     let ids = accessible_library_ids(&st.db, &a).await?;
     let scope = aggregates::scope(&ids, library.map(|l| l.to_string()).as_deref());
     Ok(Json(
-        service::list(&st.db, &scope, kind, name.as_deref(), paging).await?,
+        service::list(&st.db, &scope, &a.kinds, kind, name.as_deref(), paging).await?,
     ))
 }
 
@@ -55,7 +55,7 @@ pub async fn detail(
     a.require(Action::Read, Subject::Media)?;
     let id = id?.0;
     let acl = accessible_library_ids(&st.db, &a).await?;
-    service::detail(&st.db, id, a.user.id, &acl)
+    service::detail(&st.db, id, a.user.id, &acl, &a.kinds)
         .await?
         .map(Json)
         .ok_or_else(|| AppError::not_found(format!("Collection #{id} not found")))

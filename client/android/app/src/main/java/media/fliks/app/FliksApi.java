@@ -22,6 +22,9 @@ import java.util.Map;
 /** The fliks API from native code, with the session the web layer stores in Capacitor
  *  Preferences. While a WebView exists it owns token refresh. */
 final class FliksApi {
+    /** The kinds of the bundled web registry (`KIND_REGISTRY`), declared to the server. */
+    private static final String KINDS = "movie,series,book,comic,album";
+
     private static final String CAPACITOR_PREFS = "CapacitorStorage";
     private static final String SESSIONS_KEY = "fliks_sessions";
     private static final String ACTIVE_KEY = "fliks_active_session";
@@ -183,6 +186,7 @@ final class FliksApi {
             c.setReadTimeout(30_000);
             c.setRequestProperty("Authorization", "Bearer " + token);
             c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("X-Fliks-Kinds", KINDS);
             if (body != null) {
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "application/json");

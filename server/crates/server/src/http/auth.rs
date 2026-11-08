@@ -6,6 +6,7 @@ use super::{
     AppError,
     cookies::{ACCESS_COOKIE, cookie_value},
     json::iso_ms,
+    kinds::Kinds,
 };
 use crate::{auth_token::TokenScope, state::AppState};
 use axum::{
@@ -220,6 +221,8 @@ pub struct Authed {
     pub scope: Option<TokenScope>,
     /// The `sessions` row of the token; `None` for an owner resolved from a device token.
     pub session: Option<i32>,
+    /// The kinds the client declared (`X-Fliks-Kinds`); every kind off the request path.
+    pub kinds: Kinds,
 }
 
 impl Authed {
@@ -228,6 +231,7 @@ impl Authed {
         role: Option<RoleRow>,
         scope: Option<TokenScope>,
         session: Option<i32>,
+        kinds: Kinds,
     ) -> Self {
         let perms = Permissions::from(
             role.as_ref().map_or(&[][..], |r| &r.permissions),
@@ -239,6 +243,7 @@ impl Authed {
             perms,
             scope,
             session,
+            kinds,
         }
     }
 
@@ -252,7 +257,7 @@ impl Authed {
     pub async fn load(db: &PgPool, id: i32) -> Result<Option<Self>, sqlx::Error> {
         Ok(load_enabled(db, id)
             .await?
-            .map(|(user, role)| Self::new(user, role, None, None)))
+            .map(|(user, role)| Self::new(user, role, None, None, Kinds::all())))
     }
 
     /// The handler's first line: 403 with the 4.x policy body unless the role grants it at class level.
@@ -349,7 +354,13 @@ async fn authenticate_bound(
         .await?
         .ok_or_else(unauthorized)?;
     Ok(Some((
-        Authed::new(user, role, claims.scope, Some(sid)),
+        Authed::new(
+            user,
+            role,
+            claims.scope,
+            Some(sid),
+            Kinds::from_headers(&parts.headers),
+        ),
         claims.mf,
     )))
 }

@@ -188,6 +188,7 @@ final class APIClient {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(MediaKind.known.map(\.rawValue).joined(separator: ","), forHTTPHeaderField: "X-Fliks-Kinds")
 
         // The refresh endpoint itself never gets a Bearer header or a retry —
         // if it 401s, it's terminal (matches the Angular interceptor).

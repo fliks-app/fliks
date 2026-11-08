@@ -56,6 +56,7 @@ async fn call(
     let mut b = Request::builder()
         .method(method)
         .uri(uri)
+        .header("x-fliks-kinds", "movie,series,book,comic,album")
         .header("authorization", format!("Bearer {t}"));
     let body = match body {
         Some(v) => {

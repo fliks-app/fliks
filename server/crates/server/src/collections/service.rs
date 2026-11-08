@@ -1,4 +1,4 @@
-use crate::media::books;
+use crate::{http::kinds::Kinds, media::books};
 use fliks_domain::media::kind::MediaKind;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -32,6 +32,7 @@ fn contains_pattern(q: &str) -> String {
 pub async fn list(
     db: &PgPool,
     scope: &[i32],
+    kinds: &Kinds,
     kind: Option<MediaKind>,
     q: Option<&str>,
     paging: Option<(i64, i64)>,
@@ -45,12 +46,14 @@ FROM collections c
 JOIN collection_entries e ON e."collectionId" = c.id AND e."itemId" IS NULL
 JOIN media m ON m.id = e."mediaId"
 WHERE m."libraryId" = ANY($1) AND ($2::text IS NULL OR m.type = $2) AND ($3::text IS NULL OR c.name ILIKE $3)
+  AND m.type = ANY($6)
 GROUP BY c.id ORDER BY c.name ASC, c.id ASC LIMIT $4 OFFSET $5"#,
         scope,
         kind.map(MediaKind::as_str),
         q.map(contains_pattern),
         paging.map(|p| p.0),
-        paging.map(|p| p.1)
+        paging.map(|p| p.1),
+        &kinds.names()
     )
     .fetch_all(db)
     .await
@@ -74,6 +77,7 @@ pub async fn detail(
     id: i32,
     uid: i32,
     acl: &[i32],
+    kinds: &Kinds,
 ) -> Result<Option<Value>, sqlx::Error> {
     let Some(head) = sqlx::query!(
         r#"SELECT c.name AS "name!",
@@ -93,9 +97,11 @@ FROM collections c WHERE c.id = $1"#,
 FROM collection_entries e JOIN media m ON m.id = e."mediaId"
 LEFT JOIN media_release_dates d ON d."mediaId" = m.id AND d."editionId" IS NULL AND d.kind = 'release'
 WHERE e."collectionId" = $1 AND e."itemId" IS NULL AND m."libraryId" = ANY($2)
+  AND m.type = ANY($3)
 ORDER BY e.position ASC NULLS LAST, d.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
         id,
-        acl
+        acl,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;

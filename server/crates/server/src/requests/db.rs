@@ -837,6 +837,8 @@ pub struct Filter<'a> {
     pub kind: Option<&'a str>,
     pub title: Option<(&'a str, &'a str)>,
     pub media_type: Option<MediaKind>,
+    /// The request kinds a client renders; `None` is every kind.
+    pub kinds: Option<&'a [String]>,
 }
 
 pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
@@ -846,7 +848,8 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
         AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
         AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $8))
-        AND ($7::text IS NULL OR r."mediaType" = $7)"#,
+        AND ($7::text IS NULL OR r."mediaType" = $7)
+        AND ($9::text[] IS NULL OR r."mediaType" = ANY($9))"#,
         f.id,
         f.user_id,
         f.libraries,
@@ -854,7 +857,8 @@ pub async fn count(db: &PgPool, f: &Filter<'_>) -> sqlx::Result<i64> {
         f.kind,
         f.title.map(|t| t.0),
         f.media_type.map(MediaKind::as_str),
-        f.title.map(|t| t.1)
+        f.title.map(|t| t.1),
+        f.kinds
     )
     .fetch_one(db)
     .await
@@ -922,6 +926,7 @@ AND ($3::int[] IS NULL OR r."libraryId" IS NULL OR r."libraryId" = ANY($3))
 AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::text = $5)
 AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $13))
 AND ($7::text IS NULL OR r."mediaType" = $7)
+AND ($14::text[] IS NULL OR r."mediaType" = ANY($14))
 ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
         f.user_id,
@@ -935,7 +940,8 @@ ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         external_ids::TMDB,
         external_ids::TVDB,
         external_ids::IMDB,
-        f.title.map(|t| t.1)
+        f.title.map(|t| t.1),
+        f.kinds
     )
     .fetch_all(db)
     .await

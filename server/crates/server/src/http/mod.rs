@@ -3,6 +3,7 @@ pub mod cookies;
 pub mod csp;
 pub mod error;
 pub mod json;
+pub mod kinds;
 pub mod layers;
 pub mod static_files;
 pub mod validate;

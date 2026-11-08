@@ -76,6 +76,7 @@ impl Ctx {
             .method(method)
             .uri(uri)
             .header("content-type", "application/json")
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {tok}"))
             .body(Body::from(body.to_string()))
             .unwrap();
@@ -177,6 +178,7 @@ async fn concurrent_requests_cannot_pass_the_quota_together(pool: PgPool) {
                 .method("POST")
                 .uri("/api/requests")
                 .header("content-type", "application/json")
+                .header("x-fliks-kinds", "movie,series,book,comic,album")
                 .header("authorization", format!("Bearer {tok}"))
                 .body(Body::from(body.to_string()))
                 .unwrap();
@@ -454,6 +456,7 @@ async fn an_auto_approved_import_holds_no_lock_while_the_provider_answers(pool: 
                 .method("POST")
                 .uri("/api/requests")
                 .header("content-type", "application/json")
+                .header("x-fliks-kinds", "movie,series,book,comic,album")
                 .header("authorization", format!("Bearer {tok}"))
                 .body(Body::from(body.to_string()))
                 .unwrap();
@@ -651,6 +654,7 @@ async fn an_approval_holds_no_title_lock_while_the_provider_answers(pool: PgPool
                 .method("POST")
                 .uri(uri)
                 .header("content-type", "application/json")
+                .header("x-fliks-kinds", "movie,series,book,comic,album")
                 .header("authorization", format!("Bearer {tok}"))
                 .body(Body::empty())
                 .unwrap();
