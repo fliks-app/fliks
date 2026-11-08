@@ -103,6 +103,8 @@ services:
   # ---- Intel QSV / VAAPI ---- add to the fliks service:
   #   devices:
   #     - /dev/dri:/dev/dri
+  # Every render node under /dev/dri becomes a GPU (gpu0, gpu1...) shared by playback and
+  # optimization jobs. To expose only some, list them: - /dev/dri/renderD128 - /dev/dri/renderD129
 
   # ---- NVIDIA NVENC ---- needs nvidia-container-toolkit on the host. Add to
   # the fliks service:
