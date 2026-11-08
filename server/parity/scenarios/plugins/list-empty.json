@@ -138,6 +138,19 @@
             "statusMessage": "",
             "statusReason": null,
             "verifiedByKeyId": "release-2026"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "LRCLIB",
+            "origin": "bundled",
+            "pluginId": "fliks.lrclib",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026"
           }
         ],
         "status": 200

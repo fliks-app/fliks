@@ -149,6 +149,55 @@
               {
                 "fields": [
                   {
+                    "kind": "caption",
+                    "textKey": "lrclib.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "lrclib.config.title",
+                "subtitleKey": "lrclib.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.lrclib/general"
+                },
+                "id": "fliks-lrclib.settings.general",
+                "labelKey": "lrclib.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net).",
+                "lrclib.config.subtitle": "Synced and plain lyrics from LRCLIB. No account or key needed.",
+                "lrclib.config.title": "LRCLIB"
+              },
+              "fr": {
+                "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net).",
+                "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
+                "lrclib.config.title": "LRCLIB"
+              }
+            },
+            "name": "LRCLIB",
+            "pluginId": "fliks.lrclib",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "fliks.lrclib:lrclib"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
                     "hasDefault": false,
                     "hint": "musicbrainz.config.baseUrl_hint",
                     "key": "baseUrl",
@@ -544,6 +593,55 @@
               ],
               "namespaces": [
                 "googlebooks"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "kind": "caption",
+                    "textKey": "lrclib.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "lrclib.config.title",
+                "subtitleKey": "lrclib.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.lrclib/general"
+                },
+                "id": "fliks-lrclib.settings.general",
+                "labelKey": "lrclib.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net).",
+                "lrclib.config.subtitle": "Synced and plain lyrics from LRCLIB. No account or key needed.",
+                "lrclib.config.title": "LRCLIB"
+              },
+              "fr": {
+                "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net).",
+                "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
+                "lrclib.config.title": "LRCLIB"
+              }
+            },
+            "name": "LRCLIB",
+            "pluginId": "fliks.lrclib",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "fliks.lrclib:lrclib"
               ]
             }
           },
