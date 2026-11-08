@@ -135,6 +135,8 @@ A party steps through its programme (`watch_party_items`), the one queue it has:
 - The `PartyDto.playlist` name follows renames; the row's `playlistId` drops to null with the playlist, and the programme stays.
 - Uploaded cover files are deleted when the cover is replaced or reset, when the party ends (an ended party is gone for users), and when the owner's account is deleted (the rows cascade). Rows are never deleted otherwise; media deletion cascades a live party's row and leaves its file (not handled).
 
+Karaoke pitch frames travel on their own socket, `GET /api/parties/{id}/karaoke/ws` (`karaoke.md` rule 30), not in the voice mesh: a client without WebRTC takes part.
+
 ## Voice
 
 Peer-to-peer WebRTC audio, full mesh between the members in the voice channel; the server only relays signaling and never sees media.

@@ -127,6 +127,7 @@ export class AudioPlayerService {
   private readonly _buffering = signal(false);
   private readonly _stemMode = signal<StemMode>('original');
   private readonly _vocalLevel = signal(0);
+  private readonly _pitch = signal(0);
   private readonly _stemsAvailable = signal(false);
 
   readonly track = this._track.asReadonly();
@@ -153,6 +154,8 @@ export class AudioPlayerService {
   readonly stemMode = this._stemMode.asReadonly();
   /** Vocal stem gain, 0 to 1, applied whenever the mode is not `original`. */
   readonly vocalLevel = this._vocalLevel.asReadonly();
+  /** Key change in semitones of the playing track; the engine transcodes it, so the stems are dropped while it is not 0. */
+  readonly pitch = this._pitch.asReadonly();
   /** True when the playing music track has its stems ready and this player can mix them. */
   readonly stemsAvailable = this._stemsAvailable.asReadonly();
   /** The native player has no processors for stems. */
@@ -461,6 +464,7 @@ export class AudioPlayerService {
   private async startMusic(req: MusicTrackRequest, autoplay = true): Promise<void> {
     const generation = ++this.generation;
     await this.release();
+    this._pitch.set(0);
     this._musicMode.set(true);
     this._track.set(this.audioOf(req));
     this._loading.set(true);
@@ -530,7 +534,7 @@ export class AudioPlayerService {
   /** Loads the next track's stream on the standby element once the current one nears its end. */
   private preloadNext(): void {
     const next = this.mq.peekNext();
-    if (!next || this.casting || this.routed({ type: 'drives' }) || this.preTried === next || this.info?.playMethod !== 'DirectPlay') return;
+    if (!next || this.casting || this.routed({ type: 'drives' }) || this.preTried === next || this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
     this.preTried = next;
     const generation = this.generation;
     void this.streaming
@@ -572,6 +576,7 @@ export class AudioPlayerService {
     if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
     this.pre = null;
     this.preTried = null;
+    this._pitch.set(0);
     this.current = 1 - this.current;
     this.info = pre.info;
     this.sessionId = pre.info.sessionId;
@@ -688,7 +693,7 @@ export class AudioPlayerService {
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const itemId = this._musicMode() && !this.casting && !this.nativeAudio ? this._track()?.itemId : undefined;
+    const itemId = this._musicMode() && !this.casting && !this.nativeAudio && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
       const api = this.injector.get(KaraokeApiService);
@@ -704,6 +709,34 @@ export class AudioPlayerService {
     } catch {
       if (run === this.stemsRun) this.dropStems();
     }
+  }
+
+  /** Re-opens the playing track in another key (clamped to +-12 semitones) at the same position. */
+  async setPitch(semitones: number): Promise<void> {
+    const n = Math.min(12, Math.max(-12, Math.round(semitones)));
+    const req = this.mq.current;
+    if (n === this._pitch() || !req || !this._musicMode() || this.casting || this.nativeAudio) return;
+    const generation = ++this.generation;
+    const position = this._position();
+    const autoplay = this._playing();
+    const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: position, pitchSemitones: n }).catch(() => null);
+    if (!info || generation !== this.generation) {
+      if (info?.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+      return;
+    }
+    this._pitch.set(n);
+    this.dropPreload();
+    this.dropStems();
+    this._stemMode.set('original');
+    this.applyGains();
+    await this.hls?.destroy().catch(() => undefined);
+    this.hls = null;
+    if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+    this.info = info;
+    this.sessionId = info.sessionId;
+    this.parts = this.partsOf(info);
+    await this.load(position, autoplay);
+    if (n === 0) void this.refreshStems();
   }
 
   /** A stem that errors (evicted, token expired) hands the sound back to the original. */

@@ -525,12 +525,13 @@ export class StreamingApiService {
   getItemPlaybackInfo(
     itemId: number,
     deviceProfile: DeviceProfile,
-    opts: { startAt?: number; version?: number } = {},
+    opts: { startAt?: number; version?: number; pitchSemitones?: number } = {},
   ): Promise<PlaybackInfoResponse> {
     const query = this.buildQuery({
       token: this.playbackToken ?? undefined,
       startAt: opts.startAt ?? undefined,
       version: opts.version ?? undefined,
+      pitchSemitones: opts.pitchSemitones || undefined,
     });
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(

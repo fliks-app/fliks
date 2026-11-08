@@ -97,6 +97,19 @@ describe('AudioPlayerService music mode', () => {
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 'sid1' }));
   });
 
+  it('re-opens the track in another key at the same position, and back to the original', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    (audio as unknown as { _position: { set(n: number): void } })._position.set(30);
+    await audio.setPitch(40);
+    expect(audio.pitch()).toBe(12);
+    expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 30, pitchSemitones: 12 });
+    expect(stopSession).toHaveBeenCalledWith('sid1');
+    await audio.setPitch(0);
+    expect(audio.pitch()).toBe(0);
+    expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 30, pitchSemitones: 0 });
+  });
+
   it('goes to the next track, and restarts the current one when past 3 seconds', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)], 1);

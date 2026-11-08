@@ -43,6 +43,7 @@ pub struct Params {
     pub replaces: Option<String>,
     pub pre_roll_first: bool,
     pub version: Option<i32>,
+    pub pitch_semitones: Option<i32>,
 }
 
 /// JS `parseInt(v, 10)`: the leading integer, `None` for NaN.
@@ -103,6 +104,10 @@ pub(super) fn parse_query(pairs: &[(String, String)]) -> Result<Params, AppError
         version: first("version")
             .and_then(parse_int)
             .and_then(|v| i32::try_from(v).ok()),
+        pitch_semitones: first("pitchSemitones")
+            .and_then(parse_int)
+            .map(|n| n.clamp(-12, 12) as i32)
+            .filter(|n| *n != 0),
     })
 }
 
@@ -160,7 +165,10 @@ pub async fn playback_info(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let device = device_profile(body)?;
-    let q = parse_query(&pairs)?;
+    let q = Params {
+        pitch_semitones: None,
+        ..parse_query(&pairs)?
+    };
     let header = |n: &str| {
         headers
             .get(n)
@@ -204,6 +212,17 @@ pub async fn item_playback_info(
         pre_roll_first: false,
         ..q
     };
+    if q.pitch_semitones.is_some()
+        && !st
+            .engine
+            .engine_features()
+            .iter()
+            .any(|f| f == "pitch-shift")
+    {
+        return Err(unavailable(
+            "Pitch shift needs an engine built with rubberband",
+        ));
+    }
     let out = run(
         &st,
         &a,
@@ -379,7 +398,7 @@ async fn run(
                 burn_in_is_text: Some(burn_in.as_ref().is_some_and(|b| b.is_text)),
                 requested_quality: q.start_quality.clone(),
                 audio_stream_index: audio_index(q.audio_stream_index.as_deref(), audio_count),
-                pitch_semitones: None,
+                pitch_semitones: q.pitch_semitones.map(f64::from),
             },
         },
         owner_id: Some(a.user.id.to_string()),

@@ -64,6 +64,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/reactions", post(reaction))
         .route("/api/parties/{id}/voice", post(voice))
         .route("/api/parties/{id}/signal", post(signal))
+        .route("/api/parties/{id}/karaoke/ws", get(super::karaoke_ws))
         .route("/api/parties/{id}/members/{userId}/kick", post(kick))
         .route("/api/parties/{id}/members/{userId}/host", post(transfer))
         .route("/api/parties/{id}/invitees", post(invite))

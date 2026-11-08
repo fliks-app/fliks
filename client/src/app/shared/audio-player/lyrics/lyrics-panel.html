@@ -5,6 +5,11 @@
         <svg lucideChevronDown class="h-6 w-6"></svg>
       </button>
       <span class="min-w-0 flex-1 truncate text-center text-lg font-semibold">{{ audio.track()?.title }}</span>
+      @if (karaokeOn() && shown()) {
+        <button type="button" class="btn btn-circle" [class.btn-primary]="stage()" [attr.aria-pressed]="stage()" (click)="stage.set(!stage())" [attr.aria-label]="'karaoke.view' | translate" data-testid="karaoke-view-toggle">
+          <svg lucideMicVocal class="h-6 w-6"></svg>
+        </button>
+      }
       <button type="button" class="btn btn-primary btn-circle" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
         @if (audio.playing()) {
           <svg lucidePause class="h-6 w-6"></svg>
@@ -98,7 +103,11 @@
       @if (loading() && !res()) {
         <span class="loading loading-spinner"></span>
       } @else if (shown(); as d) {
-        <app-lyrics-view [doc]="d" [layer]="under()" [large]="fullscreen()" />
+        @if (stage() && fullscreen() && karaokeOn()) {
+          <app-karaoke-stage [doc]="d" [title]="audio.track()?.title ?? ''" />
+        } @else {
+          <app-lyrics-view [doc]="d" [layer]="under()" [large]="fullscreen()" />
+        }
       } @else if (res()?.instrumental) {
         <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
       } @else {
