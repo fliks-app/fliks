@@ -585,6 +585,7 @@ export const routes: Routes = [
           { path: 'cleanup', loadComponent: () => import('./features/settings/cleanup/cleanup').then((m) => m.CleanupSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },
           { path: 'engine', loadComponent: () => import('./features/settings/engine/engine').then((m) => m.EngineSettingsComponent) },
+          { path: 'karaoke', loadComponent: () => import('./features/settings/karaoke/karaoke-settings').then((m) => m.KaraokeSettingsComponent) },
           {
             path: 'live-tv',
             loadComponent: () =>

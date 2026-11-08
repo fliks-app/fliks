@@ -23,6 +23,8 @@ import {
   type NativeAudioState,
   type NativeAudioTrack,
 } from '../../plugins/audio-player.plugin';
+import { KaraokeApiService } from '../api/karaoke-api.service';
+import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -123,6 +125,9 @@ export class AudioPlayerService {
   private readonly _repeat = signal<Repeat>('off');
   private readonly _ended = signal(false);
   private readonly _buffering = signal(false);
+  private readonly _stemMode = signal<StemMode>('original');
+  private readonly _vocalLevel = signal(0);
+  private readonly _stemsAvailable = signal(false);
 
   readonly track = this._track.asReadonly();
   readonly playing = this._playing.asReadonly();
@@ -145,6 +150,13 @@ export class AudioPlayerService {
   /** A party's track played to its end: the queue does not advance, the server picks what follows. */
   readonly ended = this._ended.asReadonly();
   readonly buffering = this._buffering.asReadonly();
+  readonly stemMode = this._stemMode.asReadonly();
+  /** Vocal stem gain, 0 to 1, applied whenever the mode is not `original`. */
+  readonly vocalLevel = this._vocalLevel.asReadonly();
+  /** True when the playing music track has its stems ready and this player can mix them. */
+  readonly stemsAvailable = this._stemsAvailable.asReadonly();
+  /** The native player has no processors for stems. */
+  readonly stemsNative = !!this.nativeAudio;
   readonly replayGain = computed(() => this._prefs().replayGain);
   readonly preamp = computed(() => this._prefs().preamp);
   readonly active = computed(() => this._track() !== null);
@@ -173,6 +185,8 @@ export class AudioPlayerService {
   private preTried: MusicTrackRequest | null = null;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
+  private stems: StemMix | null = null;
+  private stemsRun = 0;
   private partyRouter: AudioPartyRouter | null = null;
   /** Voice-chat ducking factor, never persisted. */
   private duck = 1;
@@ -469,6 +483,7 @@ export class AudioPlayerService {
       this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
       this.setupMediaSession(this._track()!);
       await this.load(0, autoplay);
+      void this.refreshStems();
     } catch {
       if (generation === this.generation) await this.close();
     } finally {
@@ -571,6 +586,8 @@ export class AudioPlayerService {
     void standby.play().catch(() => undefined);
     old.pause();
     old.removeAttribute('src');
+    this.dropStems();
+    void this.refreshStems();
   }
 
   /** Moves on after a track ends: repeat one replays it, else the next track, else stops. */
@@ -611,17 +628,37 @@ export class AudioPlayerService {
     if (cur) this.applyGain(cur, this._musicMode() ? this.mq.current : null, cur.src);
     const standby = this.els[1 - this.current];
     if (standby && this.pre) this.applyGain(standby, this.pre.req, this.pre.url);
+    this.applyStemGains();
+  }
+
+  private applyStemGains(): void {
+    if (!this.stems?.loaded) return;
+    this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck);
+    void this.audioCtx?.resume().catch(() => undefined);
+  }
+
+  private mix() {
+    return mixGains(this._stemMode(), this._vocalLevel(), !!this.stems?.loaded);
+  }
+
+  private context(): AudioContext | null {
+    if (typeof AudioContext === 'undefined') return null;
+    try {
+      return (this.audioCtx ??= new AudioContext());
+    } catch {
+      return null;
+    }
   }
 
   /** A GainNode when the stream is same-origin (a cross-origin element would go silent through Web Audio), else attenuation by `volume`. */
   private applyGain(el: HTMLAudioElement, req: MusicTrackRequest | null, url: string): void {
-    const factor = this.gainOf(req) * this.duck;
+    const factor = this.gainOf(req) * this.duck * this.mix().main;
     let node = this.gainNodes.get(el);
-    if (!node && factor !== 1 && typeof AudioContext !== 'undefined' && sameOrigin(url)) {
+    const ctx = !node && factor !== 1 && sameOrigin(url) ? this.context() : null;
+    if (ctx) {
       try {
-        this.audioCtx ??= new AudioContext();
-        node = this.audioCtx.createGain();
-        this.audioCtx.createMediaElementSource(el).connect(node).connect(this.audioCtx.destination);
+        node = ctx.createGain();
+        ctx.createMediaElementSource(el).connect(node).connect(ctx.destination);
         this.gainNodes.set(el, node);
       } catch {
         node = undefined;
@@ -632,6 +669,52 @@ export class AudioPlayerService {
       el.volume = 1;
       void this.audioCtx?.resume().catch(() => undefined);
     } else el.volume = Math.min(1, factor);
+  }
+
+  setStemMode(mode: StemMode): void {
+    this._stemMode.set(mode);
+    if (mode !== 'original') this._vocalLevel.set(mode === 'guide' ? GUIDE_VOCAL_LEVEL : 0);
+    this.applyGains();
+  }
+
+  /** Sets the vocal stem gain; from `original` it only stores the level for the next stem mode. */
+  setVocalLevel(level: number): void {
+    const v = Math.min(1, Math.max(0, level));
+    this._vocalLevel.set(v);
+    if (this._stemMode() !== 'original') this._stemMode.set(v === 0 ? 'instrumental' : 'guide');
+    this.applyGains();
+  }
+
+  /** Looks the playing track's stems up again, e.g. once a preparation finished. */
+  async refreshStems(): Promise<void> {
+    const run = ++this.stemsRun;
+    const itemId = this._musicMode() && !this.casting && !this.nativeAudio ? this._track()?.itemId : undefined;
+    if (itemId === undefined) return this.dropStems();
+    try {
+      const api = this.injector.get(KaraokeApiService);
+      const state = await api.itemState(itemId);
+      if (run !== this.stemsRun) return;
+      const ready = state.state === 'ready' && !!state.stems.instrumental && !!state.stems.vocals;
+      if (!ready || !sameOrigin(api.stemUrl(state.fileId, 'vocals'))) return this.dropStems();
+      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady());
+      if (!this.stems.load(state.fileId)) return this.dropStems();
+      this._stemsAvailable.set(true);
+    } catch {
+      if (run === this.stemsRun) this.dropStems();
+    }
+  }
+
+  private onStemsReady(): void {
+    this.applyGains();
+    this.stems?.sync(this.el());
+  }
+
+  private dropStems(): void {
+    this.stemsRun++;
+    this._stemsAvailable.set(false);
+    if (!this.stems) return;
+    this.stems.clear();
+    this.applyGains();
   }
 
   toggle(): void {
@@ -792,6 +875,9 @@ export class AudioPlayerService {
       el.addEventListener('ended', mine(() => void this.onEnded()));
       el.addEventListener('error', mine(() => this.onError()));
       el.addEventListener('waiting', mine(() => this._buffering.set(true)));
+      for (const e of ['play', 'pause', 'playing', 'waiting', 'seeked', 'ratechange', 'timeupdate'] as const) {
+        el.addEventListener(e, mine(() => this.stems?.sync(el)));
+      }
       for (const e of ['playing', 'canplay', 'pause', 'emptied'] as const) el.addEventListener(e, mine(() => this._buffering.set(false)));
     }
   }
@@ -1025,6 +1111,7 @@ export class AudioPlayerService {
       this.beat();
     }
     this.dropPreload();
+    this.dropStems();
     await this.hls?.destroy().catch(() => undefined);
     this.hls = null;
     for (const e of this.els) {
