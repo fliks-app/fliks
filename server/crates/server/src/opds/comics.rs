@@ -2,7 +2,7 @@
 use super::{OpdsAuthed, PAGE, Params, ROOT, links, missing, nav_entry, page_of, xml};
 use crate::{
     comics::{MAX_WIDTH, serve_page},
-    http::{AppError, validate::PathParams},
+    http::{AppError, kinds::Kinds, validate::PathParams},
     libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
     media::{list::find_ids, params::Search},
     state::AppState,
@@ -93,7 +93,7 @@ pub async fn volume_list(
     (id, title, href, up): (&str, String, &str, &str),
     page: i64,
 ) -> Result<Response, AppError> {
-    let (ids, total) = find_ids(&st.db, s, acl, uid).await?;
+    let (ids, total) = find_ids(&st.db, s, acl, &Kinds::all(), uid).await?;
     let feed = Feed {
         id: id.to_owned(),
         title,

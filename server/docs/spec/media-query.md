@@ -2,6 +2,8 @@
 
 Scope: the 15 read routes of `/api/media`. Library ACL rules live in `libraries.md` (rules 30-36, cited "libraries rule N"); auth, CASL and error-body rules in `auth.md` ("auth rule N"). Release-quality subset: rules 69-70.
 
+Kind filter: every read route also drops the media of a kind the client did not declare in `X-Fliks-Kinds` (default `movie`, `series`), `client-kinds.md`.
+
 Not covered here: the `/api/media` write routes, the four companions routes and `DELETE /api/libraries/:id` (`media-write.md`); the 14 `/api/media/:id/subtitles*` routes and `GET /api/media/sync-queue` (`subtitles.md`).
 
 ## Routes

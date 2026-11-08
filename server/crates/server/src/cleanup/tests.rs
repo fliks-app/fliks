@@ -2,7 +2,7 @@ use super::{
     db::{self, Scope},
     dto, job, routes, rules,
 };
-use crate::{config::Config, state::AppState};
+use crate::{config::Config, http::kinds::Kinds, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::{fs, path::PathBuf};
@@ -432,14 +432,24 @@ async fn a_disabled_rule_hides_its_dates_before_the_next_run(pool: PgPool) {
     )
     .await;
     assert!(db::delete_at(&pool, s.m1).await.unwrap().is_some());
-    assert!(!db::leaving_soon(&pool, &[lib1]).await.unwrap().is_empty());
+    assert!(
+        !db::leaving_soon(&pool, &[lib1], &Kinds::all().names())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     exec(
         &pool,
         &format!("UPDATE cleanup_rules SET enabled = false WHERE id = {id}"),
     )
     .await;
     assert_eq!(db::delete_at(&pool, s.m1).await.unwrap(), None);
-    assert!(db::leaving_soon(&pool, &[lib1]).await.unwrap().is_empty());
+    assert!(
+        db::leaving_soon(&pool, &[lib1], &Kinds::all().names())
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[sqlx::test]

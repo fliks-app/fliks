@@ -4,6 +4,7 @@ use crate::{
     http::{
         AppError,
         auth::Authed,
+        kinds::Kinds,
         validate::{PathParams, ValidJson},
     },
     libraries::accessible_library_ids,
@@ -88,6 +89,7 @@ pub async fn list_likes(
     user: i32,
     accessible: &[i32],
     library: Option<f64>,
+    kinds: &Kinds,
     limit: Option<i64>,
 ) -> sqlx::Result<Vec<LikedItem>> {
     if accessible.is_empty() {
@@ -128,6 +130,7 @@ pub async fn list_likes(
             if !accessible.contains(&library_id) || !in_library {
                 return None;
             }
+            let kind = kind.filter(|k| kinds.has(*k))?;
             let title = r.title?;
             let label = label(
                 &title,
@@ -137,7 +140,7 @@ pub async fn list_likes(
             );
             Some(LikedItem {
                 media_id,
-                media_type: kind?,
+                media_type: kind,
                 title,
                 poster_url: r.poster_url,
                 fanart_url: r.fanart_url,
@@ -183,7 +186,7 @@ pub async fn likes_list(
         .map(|(_, v)| v.as_str());
     let ids = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(
-        list_likes(&st.db, a.user.id, &ids, library_filter(raw), None).await?,
+        list_likes(&st.db, a.user.id, &ids, library_filter(raw), &a.kinds, None).await?,
     ))
 }
 

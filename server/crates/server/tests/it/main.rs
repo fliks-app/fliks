@@ -8,6 +8,7 @@ mod books_api;
 mod books_reader;
 mod burn_in;
 mod cleanup_bulk;
+mod client_kinds;
 mod comics_api;
 mod comics_pages;
 mod device_tokens;

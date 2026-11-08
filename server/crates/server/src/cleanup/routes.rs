@@ -306,7 +306,7 @@ pub async fn exclusion_remove(
 pub async fn leaving_soon(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     a.require(Action::Read, Subject::Media)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    let rows = db::leaving_soon(&st.db, &ids).await?;
+    let rows = db::leaving_soon(&st.db, &ids, &a.kinds.names()).await?;
     let page: Vec<i32> = rows.iter().map(|r| r.0).collect();
     let mut items = hydrate::items(&st.db, &page, paths_visible(&a.perms)).await?;
     with_delete_at(&mut items, &rows);

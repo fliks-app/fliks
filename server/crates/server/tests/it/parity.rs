@@ -444,6 +444,16 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
                 .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string())),
         );
     }
+    // Every kind unless the step declares its own: the scenarios cover all kinds.
+    if !headers
+        .iter()
+        .any(|(k, _)| k.eq_ignore_ascii_case("x-fliks-kinds"))
+    {
+        headers.push((
+            "x-fliks-kinds".into(),
+            fliks_domain::media::kind::MediaKind::NAMES.join(","),
+        ));
+    }
     let token = match actor {
         "anon" => None,
         "engine" => Some(env("PARITY_HOST_TOKEN", "")),

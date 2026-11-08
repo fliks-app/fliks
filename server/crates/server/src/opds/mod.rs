@@ -9,7 +9,7 @@ pub use comics::{
 
 use crate::{
     collections::service as series,
-    http::AppError,
+    http::{AppError, kinds::Kinds},
     libraries::accessible_library_ids,
     media::{list::find_ids, params::Search},
     persons::service as persons,
@@ -188,7 +188,7 @@ async fn listed(
     s: &Search,
     acl: &[i32],
 ) -> Result<(Vec<i32>, i64), AppError> {
-    Ok(find_ids(&st.db, s, acl, uid).await?)
+    Ok(find_ids(&st.db, s, acl, &Kinds::all(), uid).await?)
 }
 
 #[utoipa::path(get, path = "/api/opds", responses((status = 200)))]
@@ -408,6 +408,7 @@ pub async fn series_list(
     let rows = series::list(
         &st.db,
         &acl,
+        &Kinds::all(),
         Some(MediaKind::Book),
         None,
         Some((PAGE + 1, (page - 1) * PAGE)),
@@ -446,7 +447,7 @@ pub async fn series_one(
 ) -> Result<Response, AppError> {
     let page = page_of(&q)?;
     let acl = accessible_library_ids(&st.db, &a).await?;
-    let d = series::detail(&st.db, id, a.user.id, &acl)
+    let d = series::detail(&st.db, id, a.user.id, &acl, &Kinds::all())
         .await?
         .ok_or_else(|| missing("Series", id))?;
     let all: Vec<i32> = d["entries"]

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id AS \"id!\" FROM media WHERE id = ANY($1) AND \"libraryId\" = ANY($2)",
+  "query": "SELECT id AS \"id!\" FROM media WHERE id = ANY($1) AND \"libraryId\" = ANY($2) AND type = ANY($3)",
   "describe": {
     "columns": [
       {
@@ -18,12 +18,13 @@
     "parameters": {
       "Left": [
         "Int4Array",
-        "Int4Array"
+        "Int4Array",
+        "TextArray"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "e43d5c4c928597aa6e5981fd9ba6d2ac82c5f2653da47c27439be68ef1f65256"
+  "hash": "a106d6964b371b760bcfeaf34ac8f48e87dc13a3397f5c29bd2bd284882ae96a"
 }

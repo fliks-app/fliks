@@ -84,6 +84,10 @@ impl Ctx {
         let mut req = Request::builder()
             .method(method)
             .uri(uri)
+            .header(
+                "x-fliks-kinds",
+                fliks_domain::media::kind::MediaKind::NAMES.join(","),
+            )
             .header("authorization", format!("Bearer {token}"));
         let body = match body {
             Some(b) => {

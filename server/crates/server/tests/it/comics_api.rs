@@ -57,6 +57,7 @@ async fn ctx(pool: &PgPool) -> (Router, String, String) {
 async fn get(app: &Router, token: &str, uri: &str) -> Value {
     let req = Request::builder()
         .uri(uri)
+        .header("x-fliks-kinds", "movie,series,book,comic,album")
         .header("authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
@@ -208,6 +209,7 @@ async fn patch(app: &Router, token: &str, uri: &str, body: Value) -> (u16, Value
     let req = Request::builder()
         .method("PATCH")
         .uri(uri)
+        .header("x-fliks-kinds", "movie,series,book,comic,album")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
@@ -459,6 +461,7 @@ async fn deleting_the_last_file_of_an_issue_unmonitors_it(pool: PgPool) {
         let req = Request::builder()
             .method("DELETE")
             .uri(format!("/api/media/{media}/files/{file}"))
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {admin}"))
             .body(Body::empty())
             .unwrap();

@@ -331,6 +331,7 @@ async fn acl_helpers(pool: PgPool) {
                 role: u.1,
                 scope: None,
                 session: None,
+                kinds: fliks_server::http::kinds::Kinds::all(),
             }
         }
     };

@@ -227,6 +227,7 @@ pub struct Wanted {
 pub async fn wanted(
     db: &sqlx::PgPool,
     libraries: &[i32],
+    kinds: &[String],
     kind: Option<MediaKind>,
     released: Option<bool>,
     offset: i64,
@@ -237,7 +238,7 @@ pub async fn wanted(
            LEFT JOIN LATERAL (SELECT d.date FROM media_release_dates d WHERE d."mediaId" = m.id AND d."editionId" IS NULL
                               ORDER BY (d.kind = 'release') DESC, d.date LIMIT 1) rel ON true
            WHERE m.monitored = true AND m."libraryId" = ANY($1) AND NOT {sat}
-             AND ($2::text IS NULL OR m.type = $2)
+             AND ($2::text IS NULL OR m.type = $2) AND m.type = ANY($4)
              AND ($3::bool IS NULL OR $3 = (rel.date IS NULL OR rel.date <= (now() AT TIME ZONE 'UTC')::date))"#,
         sat = satisfied_sql()
     );
@@ -245,11 +246,12 @@ pub async fn wanted(
     let rows = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT m.id AS "mediaId", m.type AS "type", m.title, m.year, m."posterUrl", rel.date AS "releaseDate",
                   w.family, w.language, w.id AS "wantId" {filter}
-           ORDER BY rel.date DESC NULLS LAST, m.id, w.family, w.language NULLS FIRST, w.id OFFSET $4 LIMIT $5"#
+           ORDER BY rel.date DESC NULLS LAST, m.id, w.family, w.language NULLS FIRST, w.id OFFSET $5 LIMIT $6"#
     )))
     .bind(libraries)
     .bind(kind)
     .bind(released)
+    .bind(kinds)
     .bind(offset)
     .bind(limit)
     .fetch_all(db)
@@ -258,6 +260,7 @@ pub async fn wanted(
         .bind(libraries)
         .bind(kind)
         .bind(released)
+        .bind(kinds)
         .fetch_one(db)
         .await?;
     Ok((rows, total))

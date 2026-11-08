@@ -64,6 +64,7 @@ impl Ctx {
         let req = Request::builder()
             .method(method)
             .uri(uri)
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {token}"))
             .header("content-type", "application/json")
             .body(body.map_or_else(Body::empty, |b| Body::from(b.to_string())))
@@ -300,12 +301,11 @@ async fn removing_a_media_removes_its_external_ids(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_kind_without_a_special_case_lists_with_its_watched_state(pool: PgPool) {
+async fn a_media_with_two_items_lists_with_its_watched_state(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     sqlx::raw_sql(
         r#"
-        ALTER TABLE media DROP CONSTRAINT "CK_media_type";
-        INSERT INTO media (id, title, year, type, "libraryId") VALUES (5, 'Third', 2001, 'third', 1);
+        INSERT INTO media (id, title, year, type, "libraryId") VALUES (5, 'Third', 2001, 'movie', 1);
         INSERT INTO editions (id, "mediaId", family) VALUES (50, 5, 'video');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (500, 5, 50), (501, 5, 50);
         INSERT INTO playback_states ("userId", "itemId", completed, "positionSeconds", "durationSeconds")

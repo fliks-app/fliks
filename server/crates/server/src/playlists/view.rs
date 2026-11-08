@@ -3,7 +3,11 @@ use super::{
     access::{Playlist, PlaylistView, Role, assert_role},
     smart,
 };
-use crate::{http::AppError, http::auth::Authed, libraries::accessible_library_ids};
+use crate::{
+    http::{AppError, auth::Authed, kinds::Kinds},
+    libraries::accessible_library_ids,
+};
+use fliks_domain::media::kind::MediaKind;
 use fliks_domain::music::playlist_rules::SmartRules;
 use sqlx::{PgPool, types::Json};
 use std::collections::HashMap;
@@ -11,7 +15,7 @@ use std::collections::HashMap;
 type Stats = HashMap<i32, (i32, Vec<String>)>;
 
 /// `itemCount` and up to 4 distinct posters per playlist (rule 12); empty inputs give no stats.
-async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Stats> {
+async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32], kinds: &Kinds) -> sqlx::Result<Stats> {
     if ids.is_empty() || accessible.is_empty() {
         return Ok(HashMap::new());
     }
@@ -25,7 +29,7 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
              JOIN items it ON it.id = pi."itemId"
              JOIN media m ON m.id = it."mediaId"
              WHERE pi."playlistId" = ANY($1)
-               AND m."libraryId" = ANY($2)
+               AND m."libraryId" = ANY($2) AND m.type = ANY($3)
              GROUP BY pi."playlistId"
            ) c
            LEFT JOIN (
@@ -38,14 +42,15 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
                JOIN items it ON it.id = pi."itemId"
                JOIN media m ON m.id = it."mediaId"
                WHERE pi."playlistId" = ANY($1)
-                 AND m."libraryId" = ANY($2)
+                 AND m."libraryId" = ANY($2) AND m.type = ANY($3)
                  AND m."posterUrl" IS NOT NULL
                GROUP BY pi."playlistId", m."posterUrl"
              ) d
              GROUP BY "playlistId"
            ) p ON p."playlistId" = c."playlistId""#,
         ids,
-        accessible
+        accessible,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;
@@ -55,16 +60,22 @@ async fn stats(db: &PgPool, ids: &[i32], accessible: &[i32]) -> sqlx::Result<Sta
         .collect())
 }
 
-/// Replaces the stats of the smart playlists by their evaluation under `accessible` (rule 52).
+/// Replaces the stats of the smart playlists by their evaluation under `accessible` (rule 52);
+/// they hold albums' tracks only, so they are empty for a client without `album`.
 async fn smart_stats(
     db: &PgPool,
     stats: &mut Stats,
     playlists: &[&Playlist],
     accessible: &[i32],
+    kinds: &Kinds,
 ) -> sqlx::Result<()> {
     for p in playlists.iter().copied() {
         if let Some(Json(rules)) = &p.rules {
-            let ids = smart::evaluate(db, p.owner_id, accessible, rules).await?;
+            let ids = if kinds.has(MediaKind::Album) {
+                smart::evaluate(db, p.owner_id, accessible, rules).await?
+            } else {
+                vec![]
+            };
             stats.insert(p.id, smart::stats(db, &ids).await?);
         }
     }
@@ -75,8 +86,8 @@ async fn smart_stats(
 pub async fn view_for(db: &PgPool, a: &Authed, id: i32) -> Result<PlaylistView, AppError> {
     let (playlist, role) = assert_role(db, a.user.id, id, Role::Viewer).await?;
     let accessible = accessible_library_ids(db, a).await?;
-    let mut stats = stats(db, &[id], &accessible).await?;
-    smart_stats(db, &mut stats, &[&playlist], &accessible).await?;
+    let mut stats = stats(db, &[id], &accessible, &a.kinds).await?;
+    smart_stats(db, &mut stats, &[&playlist], &accessible, &a.kinds).await?;
     let saved = role != Role::Owner
         && sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM playlist_saves WHERE "userId" = $1 AND "playlistId" = $2) AS "e!""#,
@@ -125,7 +136,7 @@ pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppE
     .await?;
     let ids: Vec<i32> = rows.iter().map(|r| r.id).collect();
     let accessible = accessible_library_ids(db, a).await?;
-    let mut stats = stats(db, &ids, &accessible).await?;
+    let mut stats = stats(db, &ids, &accessible, &a.kinds).await?;
     let entries: Vec<(Playlist, Role, bool)> = rows
         .into_iter()
         .map(|r| {
@@ -154,6 +165,7 @@ pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppE
         &mut stats,
         &entries.iter().map(|e| &e.0).collect::<Vec<_>>(),
         &accessible,
+        &a.kinds,
     )
     .await?;
     let mut views: Vec<PlaylistView> = entries
@@ -172,6 +184,7 @@ pub async fn visible_for_owner(
     db: &PgPool,
     owner: i32,
     viewer_libraries: &[i32],
+    kinds: &Kinds,
     include_followers: bool,
 ) -> sqlx::Result<Vec<PlaylistView>> {
     let visibilities: &[&str] = if include_followers {
@@ -193,12 +206,13 @@ pub async fn visible_for_owner(
     .fetch_all(db)
     .await?;
     let ids: Vec<i32> = playlists.iter().map(|p| p.id).collect();
-    let mut stats = stats(db, &ids, viewer_libraries).await?;
+    let mut stats = stats(db, &ids, viewer_libraries, kinds).await?;
     smart_stats(
         db,
         &mut stats,
         &playlists.iter().collect::<Vec<_>>(),
         viewer_libraries,
+        kinds,
     )
     .await?;
     let mut views: Vec<PlaylistView> = playlists

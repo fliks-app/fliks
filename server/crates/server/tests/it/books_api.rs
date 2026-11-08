@@ -82,6 +82,7 @@ impl Ctx {
     async fn get(&self, token: &str, uri: &str) -> (u16, Value) {
         let req = Request::builder()
             .uri(uri)
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();

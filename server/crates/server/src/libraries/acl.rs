@@ -1,5 +1,5 @@
 //! Library ACL (`libraries.md` rules 30-34), shared by every route that reads library-scoped data.
-use crate::http::{AppError, auth::Authed};
+use crate::http::{AppError, auth::Authed, kinds::Kinds};
 use fliks_domain::acl::{Action, Subject};
 use sqlx::PgPool;
 
@@ -67,6 +67,24 @@ pub async fn assert_media_accessible(
         .flatten();
     match library {
         Some(l) if ids.contains(&l) => Ok(()),
+        _ => Err(media_not_found(media_id)),
+    }
+}
+
+/// `assert_media_accessible` that also refuses a media of a kind the client did not declare.
+pub async fn assert_media_visible(
+    db: &PgPool,
+    media_id: i32,
+    ids: &[i32],
+    kinds: &Kinds,
+) -> Result<(), AppError> {
+    let row: Option<(Option<i32>, String)> =
+        sqlx::query_as(r#"SELECT "libraryId", type FROM media WHERE id = $1"#)
+            .bind(media_id)
+            .fetch_optional(db)
+            .await?;
+    match row {
+        Some((Some(l), kind)) if ids.contains(&l) && kinds.has_name(&kind) => Ok(()),
         _ => Err(media_not_found(media_id)),
     }
 }

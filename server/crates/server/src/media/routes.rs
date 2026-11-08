@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
-    libraries::{accessible_library_ids, assert_media_accessible, media_not_found, paths_visible},
+    libraries::{accessible_library_ids, assert_media_visible, media_not_found, paths_visible},
     metadata::attribution,
     state::AppState,
 };
@@ -57,7 +57,7 @@ async fn gate(
     a.require(Action::Read, Subject::Media)?;
     let PathParams(id) = id?;
     let ids = accessible_library_ids(&st.db, a).await?;
-    assert_media_accessible(&st.db, id, &ids).await?;
+    assert_media_visible(&st.db, id, &ids, &a.kinds).await?;
     Ok((id, ids))
 }
 
@@ -70,7 +70,15 @@ pub async fn find(
     a.require(Action::Read, Subject::Media)?;
     let p = Search::parse(&q)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    let page = list::find_all(&st.db, &p, &ids, a.user.id, paths_visible(&a.perms)).await?;
+    let page = list::find_all(
+        &st.db,
+        &p,
+        &ids,
+        &a.kinds,
+        a.user.id,
+        paths_visible(&a.perms),
+    )
+    .await?;
     Ok(Json(json!({"data": page.data, "total": page.total})))
 }
 
@@ -84,7 +92,15 @@ pub async fn recent(
     let p = Recent::parse(&q)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(
-        list::recently_added(&st.db, &p, &ids, a.user.id, paths_visible(&a.perms)).await?,
+        list::recently_added(
+            &st.db,
+            &p,
+            &ids,
+            &a.kinds,
+            a.user.id,
+            paths_visible(&a.perms),
+        )
+        .await?,
     ))
 }
 
@@ -92,7 +108,7 @@ pub async fn recent(
 pub async fn count(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     a.require(Action::Read, Subject::Media)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    Ok(Json(aggregates::counts(&st.db, &ids).await?))
+    Ok(Json(aggregates::counts(&st.db, &ids, &a.kinds).await?))
 }
 
 #[utoipa::path(get, path = "/api/media/counts-by-library", responses((status = 200)))]
@@ -102,7 +118,9 @@ pub async fn count_by_library(
 ) -> Result<Json<aggregates::ByLibrary>, AppError> {
     a.require(Action::Read, Subject::Media)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    Ok(Json(aggregates::counts_by_library(&st.db, &ids).await?))
+    Ok(Json(
+        aggregates::counts_by_library(&st.db, &ids, &a.kinds).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/media/qualities", params(crate::profiles::FamilyQuery), responses((status = 200)))]
@@ -126,7 +144,7 @@ pub async fn genre_list(
     if scope.is_empty() {
         return Ok(Json(json!([])));
     }
-    Ok(Json(aggregates::genres(&st.db, &scope).await?))
+    Ok(Json(aggregates::genres(&st.db, &scope, &a.kinds).await?))
 }
 
 #[utoipa::path(get, path = "/api/media/collections", responses((status = 200)))]
@@ -141,7 +159,9 @@ pub async fn collection_list(
     if scope.is_empty() {
         return Ok(Json(json!([])));
     }
-    Ok(Json(aggregates::collections(&st.db, &scope).await?))
+    Ok(Json(
+        aggregates::collections(&st.db, &scope, &a.kinds).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/media/calendar", responses((status = 200)))]
@@ -153,7 +173,9 @@ pub async fn calendar_entries(
     a.require(Action::Read, Subject::Media)?;
     let p = Calendar::parse(&q)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    Ok(Json(cal::calendar(&st.db, &p, &ids, a.user.id).await?))
+    Ok(Json(
+        cal::calendar(&st.db, &p, &ids, &a.kinds, a.user.id).await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/media/{id}/tracking", responses((status = 200)))]
@@ -258,7 +280,7 @@ pub async fn media_streams(
     a.require(Action::Read, Subject::Media)?;
     let PathParams((id, file)) = ids?;
     let libs = accessible_library_ids(&st.db, &a).await?;
-    assert_media_accessible(&st.db, id, &libs).await?;
+    assert_media_visible(&st.db, id, &libs, &a.kinds).await?;
     crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
     Ok(Json(streams::streams(&st, id, file).await?))
 }
@@ -281,7 +303,7 @@ pub async fn edition_chapters(
         })
         .transpose()?;
     let acl = accessible_library_ids(&st.db, &a).await?;
-    assert_media_accessible(&st.db, id, &acl).await?;
+    assert_media_visible(&st.db, id, &acl, &a.kinds).await?;
     Ok(Json(
         books::chapters(&st.db, a.user.id, id, edition, version, &acl).await?,
     ))
@@ -295,9 +317,10 @@ pub async fn sidebar_counts(
 ) -> Result<Json<Value>, AppError> {
     let pending = async {
         let all = a.perms.can(Action::Manage, &Subject::FliksRequest);
-        sqlx::query_scalar::<_, i32>(r#"SELECT count(*)::int FROM requests WHERE status = 'pending' AND ($1 OR "userId" = $2)"#)
+        sqlx::query_scalar::<_, i32>(r#"SELECT count(*)::int FROM requests WHERE status = 'pending' AND ($1 OR "userId" = $2) AND "mediaType" = ANY($3)"#)
             .bind(all)
             .bind(a.user.id)
+            .bind(a.kinds.names())
             .fetch_one(&st.db)
             .await
     };
@@ -306,7 +329,7 @@ pub async fn sidebar_counts(
             return Ok(aggregates::ByLibrary(vec![]));
         }
         let ids = accessible_library_ids(&st.db, &a).await?;
-        aggregates::counts_by_library(&st.db, &ids).await
+        aggregates::counts_by_library(&st.db, &ids, &a.kinds).await
     };
     let (pending, by_library) = tokio::try_join!(pending, by_library)?;
     let mut badges = serde_json::Map::new();

@@ -296,9 +296,10 @@ FROM media_credits mc WHERE mc."personId" = $1 AND mc.role = 'cast' ORDER BY mc.
         .collect();
     let libs = accessible_library_ids(&st.db, a).await?;
     let readable = sqlx::query_scalar!(
-        r#"SELECT id AS "id!" FROM media WHERE id = ANY($1) AND "libraryId" = ANY($2)"#,
+        r#"SELECT id AS "id!" FROM media WHERE id = ANY($1) AND "libraryId" = ANY($2) AND type = ANY($3)"#,
         &wanted,
-        &libs
+        &libs,
+        &a.kinds.names()
     )
     .fetch_all(&st.db)
     .await?;
@@ -354,10 +355,12 @@ async fn link_credits(
             r#"SELECT m.id AS "id!", m.type AS "kind!", e.value::int AS "ext!"
                FROM media_external_ids e JOIN media m ON m.id = e."mediaId"
                WHERE e.provider = $3 AND e.value = ANY($1) AND m."libraryId" = ANY($2)
+                 AND m.type = ANY($4)
                ORDER BY m.id ASC"#,
             &wanted,
             &libs,
-            served.as_str()
+            served.as_str(),
+            &a.kinds.names()
         )
         .fetch_all(&st.db)
         .await?
@@ -425,6 +428,9 @@ pub async fn provider_credits(st: &AppState, a: &Authed, id: i32) -> Result<Valu
 /// `GET /api/persons/:id/bibliography` (`persons.md` rule 23).
 pub async fn bibliography(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let p = find(&st.db, id).await?;
+    if !a.kinds.has(MediaKind::Book) {
+        return Ok(json!([]));
+    }
     let olid: Option<String> = sqlx::query_scalar(
         r#"SELECT value FROM person_external_ids WHERE "personId" = $1 AND provider = 'openlibrary'"#,
     )
@@ -600,7 +606,11 @@ pub async fn discography(st: &AppState, a: &Authed, id: i32) -> Result<Value, Ap
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
     ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, &mut p).await;
-    let acl = accessible_library_ids(&st.db, a).await?;
+    let acl = if a.kinds.has(MediaKind::Album) {
+        accessible_library_ids(&st.db, a).await?
+    } else {
+        vec![]
+    };
     let artist: Value = sqlx::query_scalar(
         r#"SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName",
   'disambiguation', p.disambiguation, 'artistType', p."artistType", 'biography', p.biography,

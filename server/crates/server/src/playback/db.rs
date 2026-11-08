@@ -1,5 +1,5 @@
 //! Playback state queries (`docs/spec/playback-state.md` SQL section).
-use crate::http::{AppError, json::iso_ms};
+use crate::http::{AppError, json::iso_ms, kinds::Kinds};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -315,6 +315,7 @@ pub async fn continue_watching(
     db: &PgPool,
     user: i32,
     libs: &[i32],
+    kinds: &Kinds,
 ) -> sqlx::Result<Vec<ContinueItem>> {
     if libs.is_empty() {
         return Ok(vec![]);
@@ -396,7 +397,7 @@ pub async fn continue_watching(
                               || COALESCE(' - ' || e.title, '') END AS label
              FROM (SELECT id, "mediaId", "itemId", "mediaFileId", "version", "positionSeconds" AS pos,
                           "durationSeconds" AS dur, "lastPlayedAt" FROM picked) c
-             JOIN media m ON m.id = c."mediaId" AND m."libraryId" = ANY($2)
+             JOIN media m ON m.id = c."mediaId" AND m."libraryId" = ANY($2) AND m.type = ANY($4)
              JOIN items e ON e.id = c."itemId"
              LEFT JOIN item_groups s ON s.id = e."groupId"
              LEFT JOIN LATERAL (
@@ -413,6 +414,7 @@ pub async fn continue_watching(
     .bind(user)
     .bind(libs)
     .bind(CONTINUE_MAX as i64)
+    .bind(kinds.names())
     .fetch_all(db)
     .await?;
     for i in &mut items {
@@ -430,6 +432,7 @@ pub async fn history(
     page: i64,
     limit: i64,
     libs: &[i32],
+    kinds: &Kinds,
 ) -> sqlx::Result<History> {
     if libs.is_empty() {
         return Ok(History {
@@ -441,9 +444,11 @@ pub async fn history(
         r#"SELECT COUNT(*) AS "cnt!"
            FROM playback_states ps JOIN items i ON i.id = ps."itemId"
            WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
-             AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = i."mediaId" AND mAcl."libraryId" = ANY($2))"#,
+             AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = i."mediaId" AND mAcl."libraryId" = ANY($2)
+                         AND mAcl.type = ANY($3))"#,
         user,
-        libs
+        libs,
+        &kinds.names()
     )
     .fetch_one(db)
     .await?;
@@ -469,13 +474,14 @@ pub async fn history(
            JOIN media m ON m.id = e."mediaId"
            LEFT JOIN item_groups s ON s.id = e."groupId"
            WHERE ps."userId" = $1 AND ps."playedAt" IS NOT NULL
-             AND m."libraryId" = ANY($4)
+             AND m."libraryId" = ANY($4) AND m.type = ANY($5)
            ORDER BY ps."playedAt" DESC
            LIMIT $2 OFFSET $3"#,
         user,
         limit,
         (page - 1).saturating_mul(limit),
-        libs
+        libs,
+        &kinds.names()
     )
     .fetch_all(db)
     .await?;

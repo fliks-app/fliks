@@ -179,7 +179,9 @@ pub async fn mine(State(st): State<AppState>, a: Authed) -> Result<Json<Vec<Summ
     if ids.is_empty() {
         return Ok(Json(vec![]));
     }
-    Ok(Json(db::summaries(&st.db, &ids).await?))
+    let mut rows = db::summaries(&st.db, &ids).await?;
+    rows.retain(|l| a.kinds.sees_library(&l.media_types.0));
+    Ok(Json(rows))
 }
 
 #[utoipa::path(get, path = "/api/libraries", responses((status = 200)))]
@@ -189,7 +191,9 @@ pub async fn list(State(st): State<AppState>, a: Authed) -> Result<Json<Vec<Valu
     if ids.is_empty() {
         return Ok(Json(vec![]));
     }
-    let rows = db::detail(&st.db, db::list(&st.db, &ids).await?).await?;
+    let mut libs = db::list(&st.db, &ids).await?;
+    libs.retain(|l| a.kinds.sees_library(&l.media_types.0));
+    let rows = db::detail(&st.db, libs).await?;
     let paths = db::paths_visible(&a.perms);
     Ok(Json(rows.into_iter().map(|r| r.json(paths)).collect()))
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id AS \"media_id!\", e.position::float8 AS position, e.\"positionEnd\"::float8 AS position_end,\n  e.\"positionLabel\" AS position_label\nFROM collection_entries e JOIN media m ON m.id = e.\"mediaId\"\nLEFT JOIN media_release_dates d ON d.\"mediaId\" = m.id AND d.\"editionId\" IS NULL AND d.kind = 'release'\nWHERE e.\"collectionId\" = $1 AND e.\"itemId\" IS NULL AND m.\"libraryId\" = ANY($2)\nORDER BY e.position ASC NULLS LAST, d.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
+  "query": "SELECT m.id AS \"media_id!\", e.position::float8 AS position, e.\"positionEnd\"::float8 AS position_end,\n  e.\"positionLabel\" AS position_label\nFROM collection_entries e JOIN media m ON m.id = e.\"mediaId\"\nLEFT JOIN media_release_dates d ON d.\"mediaId\" = m.id AND d.\"editionId\" IS NULL AND d.kind = 'release'\nWHERE e.\"collectionId\" = $1 AND e.\"itemId\" IS NULL AND m.\"libraryId\" = ANY($2)\n  AND m.type = ANY($3)\nORDER BY e.position ASC NULLS LAST, d.date ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,8 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4Array"
+        "Int4Array",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -51,5 +52,5 @@
       true
     ]
   },
-  "hash": "8b7e73aade3854a62cacd4cbae0ce349bb8fb133badad21ab43d4a677f28dcbe"
+  "hash": "c38f80efd9d811d27ec1b2dd83784b597e44a8bfd58ce02f7ccde0822cd1edd7"
 }

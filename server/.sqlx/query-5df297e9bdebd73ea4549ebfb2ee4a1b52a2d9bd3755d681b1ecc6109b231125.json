@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.type AS \"kind!\", m.year, m.\"posterUrl\" AS poster_url,\n                  m.\"fanartUrl\" AS fanart_url, m.\"additionalFanartUrls\" AS additional_fanart_urls,\n                  m.genres AS \"genres: Json<Vec<String>>\"\n           FROM media m\n           WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'\n             AND m.id != ALL($1) AND m.\"libraryId\" = ANY($2)",
+  "query": "SELECT m.id, m.title, m.type AS \"kind!\", m.year, m.\"posterUrl\" AS poster_url,\n                  m.\"fanartUrl\" AS fanart_url, m.\"additionalFanartUrls\" AS additional_fanart_urls,\n                  m.genres AS \"genres: Json<Vec<String>>\"\n           FROM media m\n           WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'\n             AND m.id != ALL($1) AND m.\"libraryId\" = ANY($2) AND m.type = ANY($3)",
   "describe": {
     "columns": [
       {
@@ -95,7 +95,8 @@
     "parameters": {
       "Left": [
         "Int4Array",
-        "Int4Array"
+        "Int4Array",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -109,5 +110,5 @@
       true
     ]
   },
-  "hash": "22e04a9ffcd5b6b41f8245b6b5caf2c0cb6b337d905d3e2bc5e5c3a2ca61de29"
+  "hash": "5df297e9bdebd73ea4549ebfb2ee4a1b52a2d9bd3755d681b1ecc6109b231125"
 }
