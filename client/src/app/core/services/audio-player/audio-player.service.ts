@@ -1,8 +1,10 @@
-import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal, untracked } from '@angular/core';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
+import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
-import { BrowserDeviceProfileService } from '../browser-device-profile.service';
+import { BrowserDeviceProfileService, type DeviceProfile } from '../browser-device-profile.service';
+import { Capacitor } from '@capacitor/core';
 import { MediaService } from '../api/media.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
 import { PlaybackQueueService } from '../playback-queue.service';
@@ -101,6 +103,7 @@ export class AudioPlayerService {
   private readonly sync = inject(OfflinePlaybackSyncService);
   private readonly injector = inject(Injector);
   private readonly nativeAudio = inject(NATIVE_AUDIO);
+  private readonly auth = inject(AuthService);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -186,6 +189,18 @@ export class AudioPlayerService {
     window.addEventListener('pagehide', () => this.beatOnExit());
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
+    let signedIn = !!this.auth.user();
+    effect(() => {
+      const now = !!this.auth.user();
+      if (signedIn && !now) untracked(() => this.dropForSession());
+      signedIn = now;
+    });
+  }
+
+  /** The account left: its queue goes without a progress beat, which would reach the next account. */
+  private dropForSession(): void {
+    this.info = null;
+    void this.close();
   }
 
   /** Starts the item, or resumes it when it is the one loaded. */
@@ -674,11 +689,14 @@ export class AudioPlayerService {
     void this.seek(this._position() + seconds);
   }
 
+  /** Without chapters it steps back like the skip button: it never rewinds a book to its start. */
   previousChapter(): void {
+    if (!this._chapters().length) return this.skip(-this.skipBack());
     void this.seek(previousChapterStart(this._chapters(), this._position()));
   }
 
   nextChapter(): void {
+    if (!this._chapters().length) return this.skip(this.skipForward());
     const next = nextChapterStart(this._chapters(), this._position());
     if (next !== null) void this.seek(next);
   }
@@ -1098,9 +1116,17 @@ export class AudioPlayerService {
     void n.addListener('queue', (e) => this.onNativeQueue(e));
     void n.addListener('command', (e) => this.onNativeCommand(e));
     void n.addListener('error', () => this.onError());
-    await n.configure({ deviceProfile: JSON.stringify(this.deviceProfile.getProfile()) });
+    void n.addListener('refresh', () => void this.auth.refreshAccessToken());
+    await n.configure({ deviceProfile: JSON.stringify(this.nativeProfile()) });
     this.pushGain();
     await n.attach();
+  }
+
+  /** The browser profile lists video containers only: the native player also direct-plays the audio files itself. */
+  private nativeProfile(): DeviceProfile {
+    const profile = this.deviceProfile.getProfile();
+    const audio = Capacitor.getPlatform() === 'ios' ? NATIVE_AUDIO_IOS : NATIVE_AUDIO_ANDROID;
+    return { ...profile, directPlayProfiles: [...profile.directPlayProfiles, { ...audio, videoCodecs: [] }] };
   }
 
   private pushGain(): void {
@@ -1156,6 +1182,16 @@ export class AudioPlayerService {
       artist: req.artist,
       album: req.album,
       artworkUrl: req.coverUrl ? new URL(this.serverConfig.resolveUrl(req.coverUrl), document.baseURI).href : null,
+      book: this.info
+        ? {
+            mediaId: req.mediaId,
+            itemId: req.itemId,
+            mediaFileId: this.info.mediaFileId,
+            sessionId: this.sessionId,
+            durationSeconds: this._duration(),
+            offsets: this.parts.map((p) => p.offset),
+          }
+        : undefined,
     });
   }
 
@@ -1306,6 +1342,15 @@ export class AudioPlayerService {
     }
   }
 }
+
+const NATIVE_AUDIO_ANDROID = {
+  containers: ['mp3', 'flac', 'ogg', 'aac', 'wav', 'mp4'],
+  audioCodecs: ['mp3', 'flac', 'aac', 'opus', 'vorbis', 'pcm_s16le', 'pcm_s24le'],
+};
+const NATIVE_AUDIO_IOS = {
+  containers: ['mp3', 'flac', 'aac', 'wav', 'mp4'],
+  audioCodecs: ['mp3', 'flac', 'aac', 'alac', 'pcm_s16le', 'pcm_s24le'],
+};
 
 function sameOrigin(url: string): boolean {
   try {

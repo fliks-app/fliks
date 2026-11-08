@@ -8,6 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthService, type User } from './auth.service';
 import { SessionStoreService } from './session-store.service';
+import { NATIVE_AUDIO } from '../plugins/audio-player.plugin';
 
 const user = (id: number): User =>
   ({ id, username: `user${id}`, avatar: null, permissions: [] }) as unknown as User;
@@ -32,9 +33,11 @@ describe('AuthService session switching', () => {
   let auth: AuthService;
   let sessions: SessionStoreService;
   let http: HttpTestingController;
+  const stopNative = vi.fn().mockResolvedValue(undefined);
 
   beforeEach(async () => {
     localStorage.clear();
+    stopNative.mockClear();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -42,6 +45,7 @@ describe('AuthService session switching', () => {
         provideHttpClientTesting(),
         // dropActiveSession() sends the user back to the picker.
         provideRouter([{ path: 'select-user', children: [] }]),
+        { provide: NATIVE_AUDIO, useValue: { stop: stopNative } },
       ],
     });
     auth = TestBed.inject(AuthService);
@@ -99,6 +103,23 @@ describe('AuthService session switching', () => {
     expect(auth.user()).toBeNull();
     expect(sessions.active()).toBeNull();
     expect(sessions.get('', 1)?.refreshToken).toBe('refresh-1');
+  });
+
+  it('stops the native player when the account is left', async () => {
+    await switchUser();
+
+    expect(stopNative).toHaveBeenCalled();
+  });
+
+  it('stops the native player when the server refuses the session', async () => {
+    const rotation = auth.refreshAccessToken();
+    await settle();
+    http
+      .expectOne('/api/auth/refresh')
+      .flush({ message: 'Invalid refresh token' }, { status: 401, statusText: '' });
+    await rotation;
+
+    expect(stopNative).toHaveBeenCalled();
   });
 
   it('forgets a session the server refuses', async () => {

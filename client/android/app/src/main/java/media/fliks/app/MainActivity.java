@@ -21,6 +21,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
     private boolean immersiveMode = false;
@@ -62,6 +63,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CalendarPlugin.class);
         registerPlugin(WebAuthPlugin.class);
         super.onCreate(savedInstanceState);
+        // A dead renderer must not take the process, and the native audio player with it.
+        getBridge().addWebViewListener(new WebViewListener() {
+            @Override
+            public boolean onRenderProcessGone(android.webkit.WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                runOnUiThread(MainActivity.this::recreate);
+                return true;
+            }
+        });
         if (savedInstanceState == null) handleDownloadsIntent(getIntent());
 
         // Request notification permission (Android 13+)

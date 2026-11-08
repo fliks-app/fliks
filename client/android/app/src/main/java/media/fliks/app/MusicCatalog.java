@@ -81,7 +81,7 @@ final class MusicCatalog {
         }
         if (id.startsWith("album:")) {
             JSONObject m = api.getJson("/api/media/" + id.substring(6));
-            return folder(id, m.optString("title"), artists(m.optJSONObject("album")), m.optString("posterUrl", null),
+            return folder(id, m.optString("title"), artists(m.optJSONObject("album")), url(m, "posterUrl"),
                     MediaMetadata.MEDIA_TYPE_ALBUM);
         }
         if (id.indexOf('|') > 0) {
@@ -128,7 +128,7 @@ final class MusicCatalog {
                 for (int i = 0; i < lists.length(); i++) {
                     JSONObject p = lists.getJSONObject(i);
                     out.add(folder("playlist:" + p.getInt("id"), p.optString("name"), null,
-                            p.optString("coverImageUrl", null), MediaMetadata.MEDIA_TYPE_PLAYLIST));
+                            url(p, "coverImageUrl"), MediaMetadata.MEDIA_TYPE_PLAYLIST));
                 }
                 return out;
             case ALBUMS:
@@ -140,7 +140,7 @@ final class MusicCatalog {
                 for (int i = 0; i < people.length(); i++) {
                     JSONObject p = people.getJSONObject(i);
                     out.add(folder("artist:" + p.getInt("id"), p.optString("name"), null,
-                            p.optString("avatarUrl", null), MediaMetadata.MEDIA_TYPE_ARTIST));
+                            url(p, "avatarUrl"), MediaMetadata.MEDIA_TYPE_ARTIST));
                 }
                 return out;
             default:
@@ -152,7 +152,7 @@ final class MusicCatalog {
                 JSONObject a = owned.getJSONObject(i);
                 if (!a.optBoolean("owned") || a.isNull("mediaId")) continue;
                 out.add(folder("album:" + a.getInt("mediaId"), a.optString("title"), null,
-                        a.optString("posterUrl", null), MediaMetadata.MEDIA_TYPE_ALBUM));
+                        url(a, "posterUrl"), MediaMetadata.MEDIA_TYPE_ALBUM));
             }
             return out;
         }
@@ -195,7 +195,7 @@ final class MusicCatalog {
                 }
             }
             JSONArray tracks = album.getJSONArray("tracks");
-            String cover = m.optString("posterUrl", null);
+            String cover = url(m, "posterUrl");
             for (int i = 0; i < tracks.length(); i++) {
                 JSONObject t = tracks.getJSONObject(i);
                 if (t.getInt("editionId") != edition || !t.optBoolean("hasFile")) continue;
@@ -212,7 +212,7 @@ final class MusicCatalog {
                 List<String> parts = new ArrayList<>();
                 for (int j = 0; names != null && j < names.length(); j++) parts.add(names.getString(j));
                 items.add(track(parent, t.getLong("itemId"), t.getLong("mediaId"), t.optString("title"),
-                        String.join(", ", parts), t.optString("albumTitle"), t.optString("posterUrl", null),
+                        String.join(", ", parts), t.optString("albumTitle"), url(t, "posterUrl"),
                         optDouble(t, "durationSeconds"), Double.NaN, Double.NaN, Double.NaN, Double.NaN));
             }
         } else if (FAVOURITES.equals(parent)) {
@@ -256,7 +256,7 @@ final class MusicCatalog {
     private MediaItem track(String parent, long itemId, long mediaId, String title, String artist, String album,
                             @Nullable String cover, double duration, double gain, double peak, double albumGain,
                             double albumPeak) {
-        MediaItem q = queueItem(itemId, mediaId, title, artist, album, cover == null ? null : api.absolute(cover, true),
+        MediaItem q = queueItem(itemId, mediaId, title, artist, album, cover == null ? null : api.absolute(cover),
                 duration, gain, peak, albumGain, albumPeak);
         MediaItem item = q.buildUpon().setMediaId(parent + "|" + itemId).build();
         if (SEARCH.equals(parent)) seen.put(item.mediaId, item);
@@ -268,7 +268,7 @@ final class MusicCatalog {
             JSONObject t = rows.getJSONObject(i);
             if (!t.optBoolean("hasFile", true)) continue;
             out.add(track(parent, t.getLong("itemId"), t.getLong("mediaId"), t.optString("title"), artists(t, null),
-                    t.optString("albumTitle"), t.optString("posterUrl", null), optDouble(t, "durationSeconds"),
+                    t.optString("albumTitle"), url(t, "posterUrl"), optDouble(t, "durationSeconds"),
                     optDouble(t, "gain"), optDouble(t, "peak"), Double.NaN, Double.NaN));
         }
     }
@@ -277,7 +277,7 @@ final class MusicCatalog {
         for (int i = 0; i < rows.length(); i++) {
             JSONObject m = rows.getJSONObject(i);
             out.add(folder("album:" + m.getInt("id"), m.optString("title"), artists(m.optJSONObject("album")),
-                    m.optString("posterUrl", null), MediaMetadata.MEDIA_TYPE_ALBUM));
+                    url(m, "posterUrl"), MediaMetadata.MEDIA_TYPE_ALBUM));
         }
     }
 
@@ -285,7 +285,7 @@ final class MusicCatalog {
         MediaMetadata.Builder md = new MediaMetadata.Builder()
                 .setTitle(title).setIsBrowsable(true).setIsPlayable(false).setMediaType(type);
         if (subtitle != null && !subtitle.isEmpty()) md.setSubtitle(subtitle);
-        if (art != null && !art.isEmpty() && !"null".equals(art)) md.setArtworkUri(Uri.parse(api.absolute(art, true)));
+        if (art != null && !art.isEmpty() && !"null".equals(art)) md.setArtworkUri(Uri.parse(api.absolute(art)));
         return new MediaItem.Builder().setMediaId(id).setMediaMetadata(md.build()).build();
     }
 
@@ -314,6 +314,12 @@ final class MusicCatalog {
             return "";
         }
         return artists(wrap);
+    }
+
+    /** A JSON null is no URL: `optString` would turn it into the text "null". */
+    @Nullable
+    private static String url(JSONObject o, String key) {
+        return o.isNull(key) ? null : o.optString(key, null);
     }
 
     private static double optDouble(JSONObject o, String key) {

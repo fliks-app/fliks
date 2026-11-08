@@ -50,6 +50,7 @@ public class PlaybackService extends MediaLibraryService {
 
     static void start(Context context) {
         if (instance == null) context.startService(new Intent(context, PlaybackService.class));
+        else instance.ensureLibrary();
     }
 
     @OptIn(markerClass = UnstableApi.class)
@@ -74,9 +75,22 @@ public class PlaybackService extends MediaLibraryService {
         super.onCreate();
         instance = this;
         setMediaNotificationProvider(new DetachAwareProvider(new DefaultMediaNotificationProvider(this)));
-        library = MusicHost.get(this).createSession(this);
-        addSession(library);
         for (MediaSession s : sessions) addSession(s);
+    }
+
+    /** The library session exists once a controller connects or a queue is loaded: an idle one would show as an active, empty session. */
+    private MediaLibrarySession ensureLibrary() {
+        if (library == null) {
+            library = MusicHost.get(this).createSession(this);
+            addSession(library);
+        }
+        return library;
+    }
+
+    @Override
+    public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
+        if (MusicHost.loaded()) ensureLibrary();
+        return super.onStartCommand(intent, flags, startId);
     }
 
     @Override
@@ -92,7 +106,7 @@ public class PlaybackService extends MediaLibraryService {
     @Nullable
     @Override
     public MediaLibrarySession onGetSession(MediaSession.ControllerInfo controllerInfo) {
-        return library;
+        return ensureLibrary();
     }
 
     /** Media3 finishes an update (the artwork loads asynchronously) without checking
@@ -126,13 +140,14 @@ public class PlaybackService extends MediaLibraryService {
         }
     }
 
-    /** The WebView driving both sessions goes with the task. The local player
-     *  pauses; a remote target keeps playing, only its notification goes. */
+    /** The WebView driving the video sessions goes with the task: they pause (a remote target keeps
+     *  playing, only its notification goes). Music that is playing carries on for Auto and the notification. */
     @Override
     public void onTaskRemoved(@Nullable Intent rootIntent) {
         for (MediaSession s : getSessions()) {
             if (!(s.getPlayer() instanceof RemoteStatePlayer) && !MUSIC_SESSION_ID.equals(s.getId())) s.getPlayer().pause();
         }
+        if (MusicHost.loaded() && MusicHost.get(this).exo().isPlaying()) return;
         if (MusicHost.loaded()) MusicHost.get(this).exo().pause();
         stopSelf();
     }

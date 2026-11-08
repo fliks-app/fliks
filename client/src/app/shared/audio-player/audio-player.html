@@ -11,9 +11,15 @@
       [attr.aria-label]="'audio_player.open' | translate"
       (click)="audio.expand()"
     >
-      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-base-300 text-base-content/20">
         @if (t.coverUrl | resolveUrl: 'thumb'; as cover) {
-          <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" />
+          @if (!coverFailed()) {
+            <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" (error)="coverFailed.set(true)" />
+          } @else {
+            <svg lucideMusic class="h-6 w-6" [strokeWidth]="1.5"></svg>
+          }
+        } @else {
+          <svg lucideMusic class="h-6 w-6" [strokeWidth]="1.5"></svg>
         }
       </div>
       <span class="min-w-0 flex-1">
@@ -64,9 +70,15 @@
 
       <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-ring-safe sm:flex-row" appTvSection>
         <div class="flex shrink-0 flex-col items-center gap-3 sm:w-64">
-          <div class="aspect-square w-full max-w-64 overflow-hidden rounded-xl bg-base-300">
+          <div class="flex aspect-square w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
-              <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" />
+              @if (!coverFailed()) {
+                <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" (error)="coverFailed.set(true)" />
+              } @else {
+                <svg lucideMusic class="h-16 w-16" [strokeWidth]="1.5"></svg>
+              }
+            } @else {
+              <svg lucideMusic class="h-16 w-16" [strokeWidth]="1.5"></svg>
             }
           </div>
           <div class="text-center">

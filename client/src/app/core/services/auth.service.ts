@@ -13,6 +13,7 @@ import {
   type SessionTokens,
 } from './session-store.service';
 import { IS_STANDALONE_BUNDLE, restartApp } from '../utils/standalone-bundle';
+import { NATIVE_AUDIO } from '../plugins/audio-player.plugin';
 import { holdsPermission } from '../permissions';
 import { grantSatisfies, parsePluginGrant } from '../utils/plugin-grant';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
@@ -160,6 +161,7 @@ export class AuthService {
   private readonly serverCache = inject(ServerCacheService);
   private readonly sessions = inject(SessionStoreService);
   private readonly tv = inject(TvService);
+  private readonly nativeAudio = inject(NATIVE_AUDIO);
 
   /** Web authenticates with one origin-wide cookie, read by the backend BEFORE
    *  the Bearer header: only the active session is signed in at a time. */
@@ -703,6 +705,7 @@ export class AuthService {
     }
     this.clearInMemorySession();
     await this.serverCache.clearAll();
+    await this.stopNativeAudio();
     restartApp();
   }
 
@@ -1037,12 +1040,18 @@ export class AuthService {
 
   /** Drop everything session-bound from memory, leaving stored sessions alone. */
   private clearInMemorySession(): void {
+    void this.stopNativeAudio();
     this._refreshInFlight = null;
     this._streamTokensInFlight.clear();
     this.adoptSessionTokens(null, null);
     this._user.set(null);
     this._serverFeatures.set([]);
     this._sessionEpoch.update((n) => n + 1);
+  }
+
+  /** The native player outlives the WebView and holds the queue of the account being left. */
+  private stopNativeAudio(): Promise<void> {
+    return this.nativeAudio?.stop().catch(() => undefined) ?? Promise.resolve();
   }
 
   /** The stream token authenticates playback URLs as one account — it must
