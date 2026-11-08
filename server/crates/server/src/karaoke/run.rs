@@ -349,20 +349,18 @@ async fn steps(
     if opts.align
         && caps.align
         && let Some(model) = pick(ModelKind::Alignment)
+        && let Err(e) = align(st, item, &t, &vocals, model, priority).await
     {
-        if let Err(e) = align(st, item, &t, &vocals, model, priority).await {
-            tracing::warn!("karaoke align of item #{item} failed: {e}");
-            out.lyrics_error = Some(e);
-        }
+        tracing::warn!("karaoke align of item #{item} failed: {e}");
+        out.lyrics_error = Some(e);
     }
     if opts.melody
         && caps.melody
         && let Some(model) = pick(ModelKind::Melody)
+        && let Err(e) = melody(st, item, &t, &vocals, model, priority).await
     {
-        if let Err(e) = melody(st, item, &t, &vocals, model, priority).await {
-            tracing::warn!("karaoke melody of item #{item} failed: {e}");
-            out.lyrics_error.get_or_insert(e);
-        }
+        tracing::warn!("karaoke melody of item #{item} failed: {e}");
+        out.lyrics_error.get_or_insert(e);
     }
     Ok(out)
 }
