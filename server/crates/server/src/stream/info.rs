@@ -379,6 +379,7 @@ async fn run(
                 burn_in_is_text: Some(burn_in.as_ref().is_some_and(|b| b.is_text)),
                 requested_quality: q.start_quality.clone(),
                 audio_stream_index: audio_index(q.audio_stream_index.as_deref(), audio_count),
+                pitch_semitones: None,
             },
         },
         owner_id: Some(a.user.id.to_string()),
