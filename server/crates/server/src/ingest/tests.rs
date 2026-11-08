@@ -5755,6 +5755,11 @@ mod music_ingest {
     #[sqlx::test(migrations = false)]
     async fn a_manual_pick_matches_the_files_to_a_release(pool: PgPool) {
         let f = provider();
+        f.found
+            .lock()
+            .unwrap()
+            .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
+            "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f)).await;
         let l = album_lib(&c).await;
         let m = album(&c, l, "Alpha").await;
@@ -5774,12 +5779,22 @@ mod music_ingest {
         )
         .await
         .unwrap();
+        // The client's flow: the candidates, then the chosen release group.
+        let (s, cands) = call(
+            &c,
+            "GET",
+            &format!("/api/media/{m}/music/candidates"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 200, "{cands}");
         let (s, b) = call(
             &c,
             "POST",
             &format!("/api/media/{m}/identify"),
             &c.admin,
-            json!({"provider": "musicbrainz", "externalId": GROUP}),
+            json!({"provider": "musicbrainz", "externalId": cands[0]["group"]}),
         )
         .await;
         assert_eq!(s, 201, "{b}");
