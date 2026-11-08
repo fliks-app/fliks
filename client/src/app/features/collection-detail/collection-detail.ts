@@ -6,7 +6,7 @@ import { OptimizeModalService } from '../../core/services/optimize-modal.service
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import type { CollectionDetail } from '../../core/services/api/books.models';
-import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { mediaDetailLink, kindOf } from '../../core/media-kinds';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 
@@ -47,7 +47,7 @@ export class CollectionDetailComponent {
   private readonly videoIds = computed(
     () =>
       this.detail()?.entries
-        .filter((e) => KIND_REGISTRY[e.media.type].families.includes('video'))
+        .filter((e) => kindOf(e.media.type).families.includes('video'))
         .map((e) => e.media.id) ?? [],
   );
 

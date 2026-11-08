@@ -132,7 +132,7 @@ import { isMutedAt, muteRangesOf } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { KIND_REGISTRY, isMediaKind, mediaDetailLink } from '../../core/media-kinds';
+import { isMediaKind, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
@@ -3141,7 +3141,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       landingEpisodeId: this.episodeFinished() && next ? next.episodeId : this.episodeId,
     });
     // Same handoff as a media card: the detail page paints from the record the player holds.
-    const handoff = this.media && target.startsWith(`/${KIND_REGISTRY[kind].segment}/${this.mediaId}`) ? { media: this.media } : undefined;
+    const handoff = this.media && target.startsWith(`/${kindOf(kind).segment}/${this.mediaId}`) ? { media: this.media } : undefined;
     // Landing on the origin pops /watch (replaceUrl would stack a duplicate); another target replaces it. Either
     // way the NavigationEnd is marked a back-pop so /watch isn't pushed on NavbarService's history.
     this.navbar.markAsBackNavigation();
@@ -3186,7 +3186,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.detachLocalOutput();
     this.savePosition();
     const kind = this.media?.type ?? 'movie';
-    if (this.episodeId && KIND_REGISTRY[kind].hasSeasons) {
+    if (this.episodeId && kindOf(kind).hasSeasons) {
       this.router.navigate(
         [...mediaDetailLink(kind, this.mediaId), 'episode', this.episodeId],
         { replaceUrl: true },

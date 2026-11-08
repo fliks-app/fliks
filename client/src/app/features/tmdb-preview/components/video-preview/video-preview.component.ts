@@ -25,7 +25,7 @@ import { TrailerDialogComponent } from '../../../../shared/components/trailer-di
 import { MediaCastComponent, providerCast } from '../../../media-detail/components/media-cast/media-cast.component';
 import { bestTrailerKey } from '../../../../shared/utils/trailer.util';
 import { previewPosterName } from '../../../../shared/utils/view-transition';
-import { KIND_REGISTRY, mediaDetailLink } from '../../../../core/media-kinds';
+import { KIND_REGISTRY, mediaDetailLink, kindOf } from '../../../../core/media-kinds';
 import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 
 /** The add preview of a movie or a series: its facts, seasons and cast, and Add, Request or the manager's pending requests. */
@@ -75,11 +75,11 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
 
   /** A film fills more of the facts grid (release dates, budget, revenue) than a series. */
   readonly skeletonFacts = computed(() =>
-    Array.from({ length: KIND_REGISTRY[this.type()].hasSeasons ? 4 : 8 }, (_, i) => i),
+    Array.from({ length: kindOf(this.type()).hasSeasons ? 4 : 8 }, (_, i) => i),
   );
 
   readonly posterTransitionName = computed(() =>
-    previewPosterName(KIND_REGISTRY[this.type()].providerSegment, this.provider(), this.externalId()),
+    previewPosterName(kindOf(this.type()).providerSegment, this.provider(), this.externalId()),
   );
 
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
@@ -146,12 +146,12 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   );
 
   readonly typeLabelKey = computed(() =>
-    KIND_REGISTRY[this.type()].requestLabelKey,
+    kindOf(this.type()).requestLabelKey,
   );
 
   readonly seasonsLabel = computed(() => {
     const m = this.media();
-    if (!KIND_REGISTRY[this.type()].hasSeasons || !m?.seasonCount) return '';
+    if (!kindOf(this.type()).hasSeasons || !m?.seasonCount) return '';
     const plural = (key: string, count: number) =>
       this.translate.instant(
         `media_detail.${key}_${count <= 1 ? 'one' : 'other'}`,

@@ -16,7 +16,7 @@ import { ModalHeaderComponent } from '../modal-header';
 import { SynopsisComponent } from '../synopsis/synopsis';
 import { ContentTypeToggleComponent } from '../search-filters/content-type-toggle';
 import { DEFAULT_SORT, SearchContentType, SearchFiltersComponent, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters';
-import { KIND_REGISTRY, kindOfListFilter } from '../../../core/media-kinds';
+import { KIND_REGISTRY, kindOfListFilter, kindOf } from '../../../core/media-kinds';
 
 export interface MediaPick {
   mediaId: number;
@@ -42,7 +42,7 @@ export type EpisodePickMode = 'this' | 'untilEnd' | 'season' | 'multiple';
 export const SEARCH_DEBOUNCE_MS = 300;
 
 /** A series opens to its playable episodes; a movie needs a file, which a missing or monitored one lacks. */
-const pickable = (m: Media) => KIND_REGISTRY[m.type].hasSeasons || (m.files?.length ?? m.fileCount ?? 0) > 0;
+const pickable = (m: Media) => kindOf(m.type).hasSeasons || (m.files?.length ?? m.fileCount ?? 0) > 0;
 
 const MODE_KEY: Record<EpisodePickMode, string> = {
   this: 'this',
@@ -164,7 +164,7 @@ export class MediaPickerComponent implements OnDestroy {
     this.multiple() ? ['this', 'untilEnd', 'season', 'multiple'] : ['this']);
   protected readonly isSeries = computed(() => {
     const m = this.selected();
-    return !!m && KIND_REGISTRY[m.type].hasSeasons;
+    return !!m && kindOf(m.type).hasSeasons;
   });
   protected readonly seasons = computed(() => pickerSeasons(this.selected()?.seasons));
   protected readonly episodes = computed(() =>
@@ -310,15 +310,15 @@ export class MediaPickerComponent implements OnDestroy {
     try {
       const [full, watched] = await Promise.all([
         this.media.getOne(m.id),
-        KIND_REGISTRY[m.type].hasSeasons ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
+        kindOf(m.type).hasSeasons ? this.streaming.getWatchedEpisodeIds(m.id).catch(() => [] as number[]) : [],
       ]);
       if (seq !== this.chooseSeq) return;
       this.watchedEpisodes.set(new Set(watched));
       this.selected.set(full);
       this.seasonNumber.set(this.seasons()[0]?.seasonNumber ?? null);
-      if (KIND_REGISTRY[full.type].hasSeasons) this.focusView();
+      if (kindOf(full.type).hasSeasons) this.focusView();
     } catch {
-      if (seq === this.chooseSeq && KIND_REGISTRY[m.type].hasSeasons) this.selected.set(null);
+      if (seq === this.chooseSeq && kindOf(m.type).hasSeasons) this.selected.set(null);
     } finally {
       if (seq === this.chooseSeq) this.detailLoading.set(false);
     }

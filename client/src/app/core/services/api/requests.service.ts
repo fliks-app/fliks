@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
-import { KIND_REGISTRY } from '../../media-kinds';
+import { kindOf } from '../../media-kinds';
 import type { WantSpec } from './wants-api.service';
 
 export interface RequestUser {
@@ -150,7 +150,7 @@ export interface ListRequestsParams {
 
 /** The add page of a request's title, for a request whose media is not in the library yet. */
 export function requestAddLink(r: FliksRequestRow): (string | number)[] {
-  const base = ['/add', KIND_REGISTRY[r.mediaType].providerSegment];
+  const base = ['/add', kindOf(r.mediaType).providerSegment];
   return [...base, r.provider ?? 'tmdb', r.externalId ?? r.tmdbId ?? ''];
 }
 

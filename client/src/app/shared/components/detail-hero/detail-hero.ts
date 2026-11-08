@@ -46,7 +46,7 @@ import {
 } from '../../../core/utils/player.utils';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 import { hasProviderId } from '../../../core/utils/media-identity';
-import { KIND_REGISTRY } from '../../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import type { CoreMediaActionId, MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import type { ResolvedMenuRow } from '../../../core/plugin-ui/resolve-menu-contributions';
@@ -308,7 +308,7 @@ export class DetailHeroComponent {
   /** A series root marks every episode at once, so it needs no selected file;
    *  a movie or a single episode toggles one file and does need one. */
   readonly canToggleWatched = computed(
-    () => (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) || !!this.selectedFileId(),
+    () => (kindOf(this.mediaType()).hasSeasons && !this.episodeId()) || !!this.selectedFileId(),
   );
 
   // ── Internal state ──
@@ -316,7 +316,7 @@ export class DetailHeroComponent {
   readonly watched = signal(false);
 
   protected readonly overviewMasked = computed(() => {
-    if (KIND_REGISTRY[this.mediaType()].hasSeasons) return this.spoilerOverview();
+    if (kindOf(this.mediaType()).hasSeasons) return this.spoilerOverview();
     return this.isVideo() && this.spoilers.overview(this.watched());
   });
   readonly resumePositionSeconds = signal<number | null>(null);
@@ -352,7 +352,7 @@ export class DetailHeroComponent {
     }
 
     // A series root toggle marks every episode, so it reads the aggregate `seriesFullyWatched`, keyed on the episode input rather than the resume fallback.
-    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
+    if (kindOf(this.mediaType()).hasSeasons && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
     } else {
       this.playable.loadWatchedState(mediaId, episodeId).then((v) => {
@@ -361,7 +361,7 @@ export class DetailHeroComponent {
       });
     }
 
-    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !episodeId) {
+    if (kindOf(this.mediaType()).hasSeasons && !episodeId) {
       // A series' own row is never its resume target; the parent resolves `resumeEpisodeId` shortly and re-runs this.
       return;
     }
@@ -495,7 +495,7 @@ export class DetailHeroComponent {
   async onToggleWatched() {
     const mediaId = this.mediaId();
     // Series root toggle: bulk mark every episode as (un)watched.
-    if (KIND_REGISTRY[this.mediaType()].hasSeasons && !this.episodeId()) {
+    if (kindOf(this.mediaType()).hasSeasons && !this.episodeId()) {
       const target = !this.watched();
       try {
         const result = await this.streamingApi.toggleSeriesWatched(mediaId, target);
@@ -673,7 +673,7 @@ export class DetailHeroComponent {
 
   // ── Playlist, recommendation, library ──
 
-  private readonly isVideo = computed(() => KIND_REGISTRY[this.mediaType()].families.includes('video'));
+  private readonly isVideo = computed(() => kindOf(this.mediaType()).families.includes('video'));
 
   protected addToPlaylist(): void {
     const episodeId = this.episodeId();
@@ -705,7 +705,7 @@ export class DetailHeroComponent {
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
-      const needsFile = !KIND_REGISTRY[this.mediaType()].hasSeasons || !!this.episodeId();
+      const needsFile = !kindOf(this.mediaType()).hasSeasons || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
     },
     // Pending deletion request is per-title async state fetched by the page, not a permission.

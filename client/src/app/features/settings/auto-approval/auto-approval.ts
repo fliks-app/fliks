@@ -29,7 +29,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 import type { MediaType } from '../../../core/enums/media-type.enum';
-import { KIND_REGISTRY } from '../../../core/media-kinds';
+import { kindOf } from '../../../core/media-kinds';
 import type { WantFamily } from '../../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 
@@ -89,7 +89,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   };
   protected readonly showMaxSeasons = computed(() => {
     const type = this.formMediaType();
-    return !type || KIND_REGISTRY[type].hasSeasons;
+    return !type || kindOf(type).hasSeasons;
   });
   readonly formLibraryIds = signal<number[]>([]);
   readonly formGenreIds = signal<number[]>([]);
@@ -253,7 +253,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   setMediaType(value: RuleMediaType) {
     this.formMediaType.set(value);
-    if (value && !KIND_REGISTRY[value].hasSeasons) this.formMaxSeasons.set(null);
+    if (value && !kindOf(value).hasSeasons) this.formMaxSeasons.set(null);
     if (value && value !== 'book') {
       this.formFamilies.set([]);
       this.formLanguages.set([]);

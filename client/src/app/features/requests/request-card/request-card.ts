@@ -14,7 +14,7 @@ import { RequestStatusBadgeComponent } from '../request-status-badge/request-sta
 import { FliksRequestRow, requestAddLink } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { clearPosterStamps } from '../../../shared/utils/view-transition';
-import { KIND_REGISTRY } from '../../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
 
 /** Compact presentational request card for the home scroller: fanart backdrop, summary, and Approuver / Refuser for managers on pending requests.
  *  The parent owns data and actions. */
@@ -80,7 +80,7 @@ export class RequestCardComponent {
     const r = this.request();
     const id = r.media?.id;
     if (id) {
-      return ['/' + KIND_REGISTRY[r.mediaType].segment, id];
+      return ['/' + kindOf(r.mediaType).segment, id];
     }
     return requestAddLink(r);
   });

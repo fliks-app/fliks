@@ -65,7 +65,7 @@ import {
 } from '@angular/cdk/scrolling';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
-import { KIND_REGISTRY, canMarkWatched, mediaDetailLink } from '../../core/media-kinds';
+import { canMarkWatched, mediaDetailLink, kindOf } from '../../core/media-kinds';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -1074,7 +1074,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   async toggleMediaWatched(m: Media, watched: boolean) {
     try {
-      if (KIND_REGISTRY[m.type].hasSeasons) {
+      if (kindOf(m.type).hasSeasons) {
         await this.streamingApi.toggleSeriesWatched(m.id, watched);
       } else {
         const fileId = m.files?.[0]?.id;

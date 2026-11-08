@@ -5,7 +5,7 @@ import type { MediaResumeInfo } from '../../core/services/api/streaming-api.serv
 import type { SpoilerService } from '../../core/services/spoiler.service';
 import { episodeBadgeLabel, filesForEpisode, hideShadowedEpisodes } from './media-detail.utils';
 import type { MediaFileRow } from './media-detail.utils';
-import { KIND_REGISTRY } from '../../core/media-kinds';
+import { kindOf } from '../../core/media-kinds';
 
 export interface EpisodeViewHost {
   media(): Media | null;
@@ -129,7 +129,7 @@ export class EpisodeViewController {
     file: { id: number };
   } | null>(() => {
     const m = this.host.media();
-    if (!m || !KIND_REGISTRY[m.type].hasSeasons || !m.seasons?.length) return null;
+    if (!m || !kindOf(m.type).hasSeasons || !m.seasons?.length) return null;
 
     const seasons = [...m.seasons]
       .filter((s) => (s.seasonNumber ?? 0) > 0)

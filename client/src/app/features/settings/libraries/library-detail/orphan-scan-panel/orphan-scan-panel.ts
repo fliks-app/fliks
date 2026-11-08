@@ -29,7 +29,7 @@ import {
   RelinkOrphansBody,
   TransferMethod,
 } from '../../../../../core/services/api/imports-api.service';
-import { KIND_REGISTRY } from '../../../../../core/media-kinds';
+import { KIND_REGISTRY, kindOf } from '../../../../../core/media-kinds';
 
 const PAGE_SIZE = 20;
 const SEARCH_CONCURRENCY = 8;
@@ -306,7 +306,7 @@ export class OrphanScanPanelComponent {
       transfer: this.transfer() ?? undefined,
       scanRoot: this.scanRoot,
       folderId: group.folderId,
-      files: KIND_REGISTRY[group.mediaType].hasSeasons ? undefined : group.files.map((f) => ({
+      files: kindOf(group.mediaType).hasSeasons ? undefined : group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
         episodeNumber: f.episodeNumber ?? undefined,

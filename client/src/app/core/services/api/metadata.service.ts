@@ -4,7 +4,7 @@ import { API_TIMEOUT_MS, SKIP_ERROR_TOAST } from '../../interceptors/error.inter
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
-import { KIND_REGISTRY, assertNever } from '../../media-kinds';
+import { assertNever, kindOf } from '../../media-kinds';
 
 /** What every search answers (`/api/metadata/search/{kind}`), plus the extras of the hit's kind. */
 export interface SearchHit {
@@ -204,7 +204,7 @@ export class MetadataService {
     // The server tries providers in turn, each allowed 10 s, until one answers hits.
     const context = new HttpContext().set(API_TIMEOUT_MS, 60_000);
     return firstValueFrom(
-      this.http.get<SearchHit[]>(`/api/metadata/search/${KIND_REGISTRY[kind].providerSegment}`, { params, context }),
+      this.http.get<SearchHit[]>(`/api/metadata/search/${kindOf(kind).providerSegment}`, { params, context }),
     );
   }
 
@@ -317,7 +317,7 @@ export class MetadataService {
 
   /** Provider-aware detail fetch */
   getDetails(provider: string, mediaType: MediaType, externalId: string, opts: { silent?: boolean } = {}) {
-    const segment = KIND_REGISTRY[mediaType].providerSegment;
+    const segment = kindOf(mediaType).providerSegment;
     const context = new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent);
     return firstValueFrom(
       this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${encodeURIComponent(externalId)}`, { context }),
