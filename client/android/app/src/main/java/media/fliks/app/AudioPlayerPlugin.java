@@ -16,6 +16,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -34,12 +35,14 @@ public class AudioPlayerPlugin extends Plugin {
     public void load() {
         host = MusicHost.get(getContext());
         host.setEmitter((event, data) -> notifyListeners(event, data));
+        host.setWebLoaded(true);
     }
 
     @Override
     protected void handleOnDestroy() {
         host.setEmitter(null);
         host.setObserved(false);
+        host.setWebLoaded(false);
     }
 
     private void run(PluginCall call, Runnable r) {
@@ -118,8 +121,10 @@ public class AudioPlayerPlugin extends Plugin {
         long startMs = (long) (call.getDouble("startAt", 0.0) * 1000);
         boolean autoplay = call.getBoolean("autoplay", true);
         float rate = call.getFloat("rate", 1f);
+        MusicHost.Book book = book(call.getObject("book"), parts.length());
         run(call, () -> {
             host.setQueue(items, index, startMs, autoplay);
+            host.setBook(book);
             host.exo().setPlaybackParameters(new PlaybackParameters(rate, 1f));
         });
     }
@@ -184,6 +189,21 @@ public class AudioPlayerPlugin extends Plugin {
 
     private android.net.Uri artwork(String url) {
         return url == null || url.isEmpty() ? null : android.net.Uri.parse(host.absolute(url));
+    }
+
+    /** What native progress beats need for the parts, null when the web layer did not send it. */
+    private static MusicHost.Book book(JSObject o, int parts) {
+        if (o == null) return null;
+        try {
+            JSONArray offsets = o.getJSONArray("offsets");
+            if (offsets.length() != parts) return null;
+            double[] at = new double[parts];
+            for (int i = 0; i < parts; i++) at[i] = offsets.getDouble(i);
+            return new MusicHost.Book(o.getLong("mediaId"), o.getLong("itemId"), o.getLong("mediaFileId"),
+                    o.optString("sessionId"), o.getDouble("durationSeconds"), at);
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     private List<MediaItem> tracks(JSArray array) {

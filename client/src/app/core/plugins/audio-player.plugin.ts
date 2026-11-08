@@ -42,10 +42,21 @@ export interface NativeAudioPart {
   url: string;
 }
 
+/** What the native side needs to save an audiobook's progress while no web layer runs. */
+export interface NativeAudioBook {
+  mediaId: number;
+  itemId: number;
+  mediaFileId: number;
+  sessionId?: string;
+  durationSeconds: number;
+  /** Start of each part within the book, in seconds. */
+  offsets: number[];
+}
+
 export interface AudioPlayerPlugin {
   /** The device profile native code sends to resolve a track's stream. */
   configure(o: { deviceProfile: string }): Promise<void>;
-  /** The web layer observes the player: it beats progress and refreshes tokens. */
+  /** The web layer observes the player: it beats progress itself. */
   attach(): Promise<void>;
   detach(): Promise<void>;
   /** Tracks are named by item; the native side resolves each stream when it loads. */
@@ -62,6 +73,7 @@ export interface AudioPlayerPlugin {
     artist?: string;
     album?: string;
     artworkUrl?: string | null;
+    book?: NativeAudioBook;
   }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
@@ -79,6 +91,8 @@ export interface AudioPlayerPlugin {
   addListener(event: 'queue', fn: (e: NativeAudioQueue) => void): Promise<PluginListenerHandle>;
   addListener(event: 'command', fn: (e: NativeAudioCommand) => void): Promise<PluginListenerHandle>;
   addListener(event: 'error', fn: (e: { message: string }) => void): Promise<PluginListenerHandle>;
+  /** The native side got a 401: the web layer refreshes the session, which it persists for native to read. */
+  addListener(event: 'refresh', fn: () => void): Promise<PluginListenerHandle>;
 }
 
 const AudioPlayer = registerPlugin<AudioPlayerPlugin>('AudioPlayer');

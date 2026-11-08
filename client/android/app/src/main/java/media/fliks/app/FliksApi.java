@@ -16,9 +16,11 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 /** The fliks API from native code, with the session the web layer stores in Capacitor
- *  Preferences. While the web layer observes the player it owns token refresh. */
+ *  Preferences. While a WebView exists it owns token refresh. */
 final class FliksApi {
     private static final String CAPACITOR_PREFS = "CapacitorStorage";
     private static final String SESSIONS_KEY = "fliks_sessions";
@@ -33,15 +35,43 @@ final class FliksApi {
         }
     }
 
-    private final SharedPreferences prefs;
-    private volatile boolean webOwnsRefresh;
-
-    FliksApi(Context context) {
-        prefs = context.getApplicationContext().getSharedPreferences(CAPACITOR_PREFS, Context.MODE_PRIVATE);
+    /** The session a queue started under is no longer the signed-in one. */
+    static final class SessionChanged extends IOException {
+        SessionChanged() {
+            super("session changed");
+        }
     }
 
-    void setWebOwnsRefresh(boolean owns) {
+    private static final long REFRESH_WAIT_MS = 10_000;
+    private static final long STREAM_TOKEN_MIN_LIFE_MS = 30 * 60 * 1000;
+
+    private final SharedPreferences prefs;
+    private volatile boolean webOwnsRefresh;
+    @Nullable private volatile Runnable refreshRequest;
+    private final Map<String, StreamToken> streamTokens = new HashMap<>();
+
+    private static final class StreamToken {
+        final String token;
+        final long expiresAt;
+
+        StreamToken(String token, long expiresAt) {
+            this.token = token;
+            this.expiresAt = expiresAt;
+        }
+    }
+
+    FliksApi(Context context) {
+        this(context.getApplicationContext().getSharedPreferences(CAPACITOR_PREFS, Context.MODE_PRIVATE));
+    }
+
+    FliksApi(SharedPreferences prefs) {
+        this.prefs = prefs;
+    }
+
+    /** While a WebView exists it owns token rotation; `request` asks it to refresh through this. */
+    void setWebOwnsRefresh(boolean owns, @Nullable Runnable request) {
         webOwnsRefresh = owns;
+        refreshRequest = request;
     }
 
     private static String key(JSONObject s) {
@@ -49,7 +79,7 @@ final class FliksApi {
     }
 
     @Nullable
-    private synchronized JSONObject active() {
+    private JSONObject active() {
         try {
             String activeKey = prefs.getString(ACTIVE_KEY, null);
             String raw = prefs.getString(SESSIONS_KEY, null);
@@ -65,9 +95,15 @@ final class FliksApi {
         return null;
     }
 
-    boolean signedIn() {
+    /** Server and user of the signed-in session, null when signed out. */
+    @Nullable
+    String activeKey() {
         JSONObject s = active();
-        return s != null && !s.optString("accessToken").isEmpty();
+        return s == null || s.optString("accessToken").isEmpty() ? null : key(s);
+    }
+
+    boolean signedIn() {
+        return activeKey() != null;
     }
 
     @Nullable
@@ -76,52 +112,70 @@ final class FliksApi {
         return s == null ? null : s.optString("serverUrl");
     }
 
-    @Nullable
-    String accessToken() {
-        JSONObject s = active();
-        String t = s == null ? "" : s.optString("accessToken");
-        return t.isEmpty() ? null : t;
-    }
-
-    /** Server-relative path made absolute, with the access token as `token` (images, streams). */
-    String absolute(String path, boolean withToken) {
+    /** Server-relative path made absolute; images are public, so no token rides along. */
+    String absolute(String path) {
         String base = serverUrl();
-        String token = accessToken();
-        if (base == null) return path;
-        String url = path.startsWith("http") ? path : base + path;
-        if (!withToken || token == null || !url.startsWith(base)) return url;
-        return url + (url.contains("?") ? "&" : "?") + "token=" + android.net.Uri.encode(token);
+        return base == null || path.startsWith("http") ? path : base + path;
     }
 
-    JSONObject getJson(String path) throws IOException, JSONException {
-        return new JSONObject(request("GET", path, null));
+    /** A stream URL bound to `mediaFileId`, minted (and reused while it has life left) on the stream scope. */
+    String streamUrl(String path, String sessionId, long mediaFileId, String boundKey) throws IOException {
+        String base = serverUrl();
+        if (base == null) throw new HttpError(401, "signed out");
+        return base + path + "?sid=" + android.net.Uri.encode(sessionId) + "&token="
+                + android.net.Uri.encode(streamToken(mediaFileId, boundKey));
     }
 
-    JSONArray getArray(String path) throws IOException, JSONException {
-        return new JSONArray(request("GET", path, null));
-    }
-
-    JSONObject postJson(String path, String body) throws IOException, JSONException {
-        return new JSONObject(request("POST", path, body));
-    }
-
-    void send(String method, String path, @Nullable String body) throws IOException {
-        request(method, path, body);
-    }
-
-    private String request(String method, String path, @Nullable String body) throws IOException {
+    private synchronized String streamToken(long mediaFileId, String boundKey) throws IOException {
+        String id = boundKey + "#" + mediaFileId;
+        StreamToken known = streamTokens.get(id);
+        if (known != null && known.expiresAt - System.currentTimeMillis() > STREAM_TOKEN_MIN_LIFE_MS) return known.token;
         try {
-            return once(method, path, body);
-        } catch (HttpError e) {
-            if (e.status != 401 || !refresh()) throw e;
-            return once(method, path, body);
+            JSONObject res = new JSONObject(request("POST", "/api/auth/stream-token",
+                    new JSONObject().put("mediaFileId", mediaFileId).toString(), boundKey));
+            StreamToken minted = new StreamToken(res.getString("streamToken"), res.getLong("expiresAt"));
+            streamTokens.put(id, minted);
+            return minted.token;
+        } catch (JSONException e) {
+            throw new IOException(e);
         }
     }
 
-    private String once(String method, String path, @Nullable String body) throws IOException {
-        String base = serverUrl();
-        String token = accessToken();
-        if (base == null || token == null) throw new HttpError(401, "signed out");
+    JSONObject getJson(String path) throws IOException, JSONException {
+        return new JSONObject(request("GET", path, null, null));
+    }
+
+    JSONArray getArray(String path) throws IOException, JSONException {
+        return new JSONArray(request("GET", path, null, null));
+    }
+
+    /** Playback calls name the session the queue started under: none is made for another one. */
+    JSONObject postJson(String path, String body, String boundKey) throws IOException, JSONException {
+        return new JSONObject(request("POST", path, body, boundKey));
+    }
+
+    void send(String method, String path, @Nullable String body, String boundKey) throws IOException {
+        request(method, path, body, boundKey);
+    }
+
+    private String request(String method, String path, @Nullable String body, @Nullable String boundKey)
+            throws IOException {
+        JSONObject s = active();
+        for (int attempt = 0; ; attempt++) {
+            if (s == null || s.optString("accessToken").isEmpty()) throw new HttpError(401, "signed out");
+            if (boundKey != null && !boundKey.equals(key(s))) throw new SessionChanged();
+            String sent = s.optString("accessToken");
+            try {
+                return once(s.optString("serverUrl"), sent, method, path, body);
+            } catch (HttpError e) {
+                if (e.status != 401 || attempt > 0 || !refresh(key(s), sent)) throw e;
+                s = active();
+            }
+        }
+    }
+
+    private String once(String base, String token, String method, String path, @Nullable String body)
+            throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(base + path).openConnection();
         try {
             c.setRequestMethod(method);
@@ -153,21 +207,47 @@ final class FliksApi {
         return out.toString("UTF-8");
     }
 
-    /** Rotates the stored pair when the web layer is not running; with it running, true once
-     *  the store holds a token other than the rejected one (the web layer refreshes and persists). */
-    private synchronized boolean refresh() {
-        JSONObject s = active();
-        if (s == null) return false;
-        if (webOwnsRefresh) {
-            try {
-                Thread.sleep(1500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
+    @Nullable
+    private JSONObject session(String key) {
+        try {
+            JSONArray list = new JSONArray(prefs.getString(SESSIONS_KEY, "[]"));
+            for (int i = 0; i < list.length(); i++) {
+                if (key.equals(key(list.getJSONObject(i)))) return list.getJSONObject(i);
             }
-            JSONObject now = active();
-            return now != null && !now.optString("accessToken").equals(s.optString("accessToken"));
+        } catch (JSONException | RuntimeException ignored) {
+            // A malformed store has no session.
         }
+        return null;
+    }
+
+    /** True once the session `key` holds a token other than `sent`, the one that was rejected: another
+     *  caller or the web layer already rotated it. Otherwise the web layer, while it exists, is asked to
+     *  refresh and awaited; with none, the stored pair is rotated here. */
+    private synchronized boolean refresh(String key, String sent) {
+        JSONObject s = session(key);
+        if (s == null) return false;
+        if (!sent.equals(s.optString("accessToken"))) return true;
+        if (webOwnsRefresh) {
+            Runnable ask = refreshRequest;
+            if (ask != null) ask.run();
+            long deadline = System.currentTimeMillis() + REFRESH_WAIT_MS;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+                JSONObject now = session(key);
+                if (now == null) return false;
+                if (!sent.equals(now.optString("accessToken"))) return true;
+            }
+            return false;
+        }
+        return rotate(s);
+    }
+
+    private boolean rotate(JSONObject s) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(s.optString("serverUrl") + "/api/auth/refresh").openConnection();
             try {

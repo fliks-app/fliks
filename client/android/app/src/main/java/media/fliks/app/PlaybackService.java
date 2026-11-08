@@ -126,13 +126,14 @@ public class PlaybackService extends MediaLibraryService {
         }
     }
 
-    /** The WebView driving both sessions goes with the task. The local player
-     *  pauses; a remote target keeps playing, only its notification goes. */
+    /** The WebView driving the video sessions goes with the task: they pause (a remote target keeps
+     *  playing, only its notification goes). Music that is playing carries on for Auto and the notification. */
     @Override
     public void onTaskRemoved(@Nullable Intent rootIntent) {
         for (MediaSession s : getSessions()) {
             if (!(s.getPlayer() instanceof RemoteStatePlayer) && !MUSIC_SESSION_ID.equals(s.getId())) s.getPlayer().pause();
         }
+        if (MusicHost.loaded() && MusicHost.get(this).exo().isPlaying()) return;
         if (MusicHost.loaded()) MusicHost.get(this).exo().pause();
         stopSelf();
     }

@@ -46,6 +46,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,6 +82,32 @@ final class MusicHost {
         }
     }
 
+    /** An audiobook's parts: what native progress beats need, as the web layer computes them. */
+    static final class Book {
+        final long mediaId;
+        final long itemId;
+        final long mediaFileId;
+        final String sessionId;
+        final double duration;
+        final double[] offsets;
+
+        Book(long mediaId, long itemId, long mediaFileId, String sessionId, double duration, double[] offsets) {
+            this.mediaId = mediaId;
+            this.itemId = itemId;
+            this.mediaFileId = mediaFileId;
+            this.sessionId = sessionId;
+            this.duration = duration;
+            this.offsets = offsets;
+        }
+    }
+
+    /** A track native playback cannot serve; a FileNotFoundException is never retried by ExoPlayer. */
+    private static final class NotPlayable extends FileNotFoundException {
+        NotPlayable(String message) {
+            super(message);
+        }
+    }
+
     private static MusicHost instance;
 
     static synchronized MusicHost get(Context context) {
@@ -108,6 +135,10 @@ final class MusicHost {
     @Nullable private Emitter emitter;
     @Nullable private MediaLibraryService.MediaLibrarySession session;
     private volatile boolean observed;
+    /** Server and user the queue started under; a different signed-in session never reaches it. */
+    @Nullable private volatile String sessionKey;
+    @Nullable private volatile Book book;
+    private int skipped;
     private boolean jsEditing;
     private boolean externalQueue;
     private int lastIndex = -1;
@@ -155,8 +186,12 @@ final class MusicHost {
 
     void setObserved(boolean observed) {
         this.observed = observed;
-        api.setWebOwnsRefresh(observed);
         if (!observed) player.routed = false;
+    }
+
+    /** A WebView exists: it refreshes tokens when native asks, so native never rotates them. */
+    void setWebLoaded(boolean loaded) {
+        api.setWebOwnsRefresh(loaded, loaded ? () -> main.post(() -> emit("refresh", new JSObject())) : null);
     }
 
     void setDeviceProfile(String profile) {
@@ -176,7 +211,7 @@ final class MusicHost {
     }
 
     String absolute(String path) {
-        return api.absolute(path, true);
+        return api.absolute(path);
     }
 
     ExoPlayer exo() {
@@ -194,6 +229,8 @@ final class MusicHost {
 
     void setQueue(List<MediaItem> items, int index, long startMs, boolean autoplay) {
         lastIndex = -1;
+        book = null;
+        sessionKey = api.activeKey();
         edit(() -> exo.setMediaItems(items, index, startMs));
         exo.prepare();
         exo.setPlayWhenReady(autoplay);
@@ -217,6 +254,10 @@ final class MusicHost {
         applyGain();
     }
 
+    void setBook(@Nullable Book book) {
+        this.book = book;
+    }
+
     void stop() {
         beat(false);
         edit(() -> {
@@ -224,6 +265,8 @@ final class MusicHost {
             exo.clearMediaItems();
         });
         stopSessions(null, null);
+        sessionKey = null;
+        book = null;
         lastIndex = -1;
         PlaybackService.musicStopped(context);
     }
@@ -248,18 +291,32 @@ final class MusicHost {
 
     private DataSpec resolve(DataSpec spec) throws IOException {
         if (!MusicCatalog.SCHEME.equals(spec.uri.getScheme())) return spec;
-        Resolved r = resolveTrack(Long.parseLong(spec.uri.getHost()));
-        return spec.withUri(Uri.parse(api.absolute(r.path + "?sid=" + Uri.encode(r.sessionId), true)));
+        String key = boundKey();
+        Resolved r = resolveTrack(Long.parseLong(spec.uri.getHost()), key);
+        return spec.withUri(Uri.parse(api.streamUrl(r.path, r.sessionId, r.mediaFileId, key)));
     }
 
-    private Resolved resolveTrack(long itemId) throws IOException {
+    /** The session the queue started under, once it is still the signed-in one; otherwise the queue ends. */
+    private String boundKey() throws IOException {
+        String key = sessionKey;
+        if (key == null || !key.equals(api.activeKey())) {
+            main.post(this::stop);
+            throw new FliksApi.SessionChanged();
+        }
+        return key;
+    }
+
+    private Resolved resolveTrack(long itemId, String key) throws IOException {
         Resolved known = resolved.get(itemId);
         if (known != null) return known;
         String profile = prefs.getString("deviceProfile", null);
         if (profile == null) throw new IOException("no device profile");
         try {
-            JSONObject info = api.postJson("/api/items/" + itemId + "/playback-info?startAt=0", profile);
-            if (!"DirectPlay".equals(info.optString("playMethod"))) throw new IOException("audio needs a transcode");
+            JSONObject info = api.postJson("/api/items/" + itemId + "/playback-info?startAt=0", profile, key);
+            if (!"DirectPlay".equals(info.optString("playMethod"))) {
+                endSession(info.optString("sessionId"), key);
+                throw new NotPlayable("audio needs a transcode");
+            }
             JSONArray parts = info.optJSONArray("parts");
             String url = parts != null && parts.length() > 0 ? parts.getJSONObject(0).getString("playUrl")
                     : info.getString("playUrl");
@@ -274,18 +331,22 @@ final class MusicHost {
         }
     }
 
+    private void endSession(String sessionId, String key) {
+        if (sessionId.isEmpty()) return;
+        try {
+            api.send("DELETE", "/api/stream/sessions/" + Uri.encode(sessionId), null, key);
+        } catch (IOException ignored) {
+            // The server expires an abandoned session.
+        }
+    }
+
     private void stopSessions(@Nullable Long keep, @Nullable Long alsoKeep) {
+        String key = sessionKey;
         for (Map.Entry<Long, Resolved> e : resolved.entrySet()) {
             if (e.getKey().equals(keep) || e.getKey().equals(alsoKeep)) continue;
             resolved.remove(e.getKey());
             String sid = e.getValue().sessionId;
-            if (!sid.isEmpty()) io.execute(() -> {
-                try {
-                    api.send("DELETE", "/api/stream/sessions/" + Uri.encode(sid), null);
-                } catch (IOException ignored) {
-                    // The server expires an abandoned session.
-                }
-            });
+            if (key != null) io.execute(() -> endSession(sid, key));
         }
     }
 
@@ -379,25 +440,41 @@ final class MusicHost {
         }
     };
 
-    /** Progress to the server for a track the web layer does not observe. */
+    /** Progress to the server for what the web layer does not observe. */
     private void beat(boolean playing) {
         lastBeat = System.currentTimeMillis();
-        Long item = observed ? null : itemOf(exo.getCurrentMediaItem());
+        MediaItem current = exo.getCurrentMediaItem();
+        if (observed || current == null) return;
+        Book b = book;
+        Long item = itemOf(current);
         Resolved r = item == null ? null : resolved.get(item);
-        if (r == null) return;
-        long media = exo.getCurrentMediaItem().mediaMetadata.extras.getLong(MusicCatalog.X_MEDIA);
+        if (b == null && r == null) return;
+        String key = sessionKey;
+        if (key == null || !key.equals(api.activeKey())) {
+            main.post(this::stop);
+            return;
+        }
         long d = exo.getDuration();
+        double position = exo.getCurrentPosition() / 1000.0;
         try {
-            String body = new JSONObject()
-                    .put("positionSeconds", exo.getCurrentPosition() / 1000.0)
-                    .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
-                    .put("mediaFileId", r.mediaFileId)
-                    .put("itemId", item)
-                    .put("sessionId", r.sessionId)
-                    .put("state", playing ? "playing" : "paused").toString();
+            JSONObject body = new JSONObject().put("state", playing ? "playing" : "paused");
+            long media;
+            if (b != null) {
+                int i = exo.getCurrentMediaItemIndex();
+                media = b.mediaId;
+                body.put("positionSeconds", (i < b.offsets.length ? b.offsets[i] : 0) + position)
+                        .put("durationSeconds", b.duration).put("mediaFileId", b.mediaFileId)
+                        .put("itemId", b.itemId).put("sessionId", b.sessionId);
+            } else {
+                media = current.mediaMetadata.extras.getLong(MusicCatalog.X_MEDIA);
+                body.put("positionSeconds", position)
+                        .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
+                        .put("mediaFileId", r.mediaFileId).put("itemId", item).put("sessionId", r.sessionId);
+            }
+            String payload = body.toString();
             io.execute(() -> {
                 try {
-                    api.send("PUT", "/api/playback/media/" + media + "/state", body);
+                    api.send("PUT", "/api/playback/media/" + media + "/state", payload, key);
                 } catch (IOException ignored) {
                     // The next beat carries the position.
                 }
@@ -463,8 +540,10 @@ final class MusicHost {
         @Override
         public void onIsPlayingChanged(boolean playing) {
             main.removeCallbacks(tick);
-            if (playing) main.post(tick);
-            else beat(false);
+            if (playing) {
+                skipped = 0;
+                main.post(tick);
+            } else beat(false);
             emitState();
         }
 
@@ -484,6 +563,17 @@ final class MusicHost {
             JSObject o = new JSObject();
             o.put("message", String.valueOf(error.getMessage()));
             emit("error", o);
+            if (isNotPlayable(error) && exo.hasNextMediaItem() && ++skipped < exo.getMediaItemCount()) {
+                exo.seekToNextMediaItem();
+                exo.prepare();
+            }
+        }
+
+        private boolean isNotPlayable(PlaybackException error) {
+            for (Throwable t = error; t != null; t = t.getCause()) {
+                if (t instanceof NotPlayable) return true;
+            }
+            return false;
         }
     }
 
@@ -496,12 +586,23 @@ final class MusicHost {
             super(p);
         }
 
+        boolean routing() {
+            return routed && observed;
+        }
+
         private boolean route(String command, double value) {
-            if (!routed || !observed) return false;
+            if (!routing()) return false;
             JSObject o = new JSObject();
             o.put("command", command);
             o.put("value", value);
             emit("command", o);
+            return true;
+        }
+
+        /** A party has one current track: a jump to another queue entry has no intent, so it is dropped. */
+        private boolean routeSeek(int index, long ms) {
+            if (!routing()) return false;
+            if (index == getCurrentMediaItemIndex()) route("seek", ms == C.TIME_UNSET ? 0 : ms / 1000.0);
             return true;
         }
 
@@ -511,8 +612,16 @@ final class MusicHost {
         @Override public void seekToNextMediaItem() { if (!route("next", 0)) super.seekToNextMediaItem(); }
         @Override public void seekToPrevious() { if (!route("previous", 0)) super.seekToPrevious(); }
         @Override public void seekToPreviousMediaItem() { if (!route("previous", 0)) super.seekToPreviousMediaItem(); }
-        @Override public void seekTo(long ms) { if (!route("seek", ms / 1000.0)) super.seekTo(ms); }
-        @Override public void seekTo(int index, long ms) { if (!route("seek", ms / 1000.0)) super.seekTo(index, ms); }
+        @Override public void seekTo(long ms) { if (!routeSeek(getCurrentMediaItemIndex(), ms)) super.seekTo(ms); }
+        @Override public void seekTo(int index, long ms) { if (!routeSeek(index, ms)) super.seekTo(index, ms); }
+        @Override public void seekToDefaultPosition() { if (!routeSeek(getCurrentMediaItemIndex(), C.TIME_UNSET)) super.seekToDefaultPosition(); }
+        @Override public void seekToDefaultPosition(int index) { if (!routeSeek(index, C.TIME_UNSET)) super.seekToDefaultPosition(index); }
+        @Override public void seekBack() {
+            if (!routeSeek(getCurrentMediaItemIndex(), Math.max(0, getCurrentPosition() - getSeekBackIncrement()))) super.seekBack();
+        }
+        @Override public void seekForward() {
+            if (!routeSeek(getCurrentMediaItemIndex(), getCurrentPosition() + getSeekForwardIncrement())) super.seekForward();
+        }
     }
 
     private final class LibraryCallback implements MediaLibraryService.MediaLibrarySession.Callback {
@@ -586,15 +695,32 @@ final class MusicHost {
         @Override
         public ListenableFuture<List<MediaItem>> onAddMediaItems(
                 MediaSession s, MediaSession.ControllerInfo c, List<MediaItem> items) {
+            if (player.routing() || !bindSession()) return refused();
             return Futures.transform(expandAll(items), q -> q.items, io);
         }
 
         @Override
         public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onSetMediaItems(
                 MediaSession s, MediaSession.ControllerInfo c, List<MediaItem> items, int startIndex, long startPositionMs) {
+            if (player.routing()) return refused();
+            sessionKey = api.activeKey();
             externalQueue = true;
             return Futures.transform(expandAll(items), q -> new MediaSession.MediaItemsWithStartPosition(
                     q.items, items.size() == 1 ? q.start : startIndex, startPositionMs), io);
+        }
+
+        private <T> ListenableFuture<T> refused() {
+            return Futures.immediateFailedFuture(new UnsupportedOperationException("a party drives the audio"));
+        }
+
+        /** An empty queue takes the signed-in session; a queue of another session takes nothing. */
+        private boolean bindSession() {
+            String key = sessionKey;
+            if (key == null) {
+                sessionKey = api.activeKey();
+                return sessionKey != null;
+            }
+            return key.equals(api.activeKey());
         }
 
         private ListenableFuture<MusicCatalog.Queue> expandAll(List<MediaItem> items) {

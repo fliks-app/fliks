@@ -6,6 +6,7 @@ import { MediaService } from '../api/media.service';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
+import { AuthService } from '../auth.service';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
@@ -35,6 +36,7 @@ describe('AudioPlayerService on the native player', () => {
   ) as Record<string, ReturnType<typeof vi.fn>>;
   const updatePlaybackState = vi.fn();
   const getItemPlaybackInfo = vi.fn();
+  const refreshAccessToken = vi.fn().mockResolvedValue(true);
   const emit = (event: string, e: unknown) => handlers.get(event)!(e);
 
   beforeEach(() => {
@@ -43,6 +45,7 @@ describe('AudioPlayerService on the native player', () => {
     for (const fn of Object.values(plugin)) fn.mockClear();
     updatePlaybackState.mockReset().mockResolvedValue(null);
     getItemPlaybackInfo.mockReset();
+    refreshAccessToken.mockClear();
     (plugin as unknown as { addListener: unknown }).addListener = vi.fn(async (event: string, fn: (e: unknown) => void) => {
       handlers.set(event, fn);
       return { remove: async () => undefined };
@@ -52,6 +55,7 @@ describe('AudioPlayerService on the native player', () => {
         provideZonelessChangeDetection(),
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
+        { provide: AuthService, useValue: { refreshAccessToken, user: signal(null) } },
         { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
         { provide: CastPlayerService, useValue: {} },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x' }) } },
@@ -139,10 +143,23 @@ describe('AudioPlayerService on the native player', () => {
     });
     const audio = TestBed.inject(AudioPlayerService);
     await audio.play({ mediaId: 3, itemId: 9, title: 'Book' });
-    expect(plugin['loadParts']).toHaveBeenCalledWith(expect.objectContaining({ index: 1, startAt: 30, parts: [{ url: '/p0' }, { url: '/p1' }] }));
+    expect(plugin['loadParts']).toHaveBeenCalledWith(expect.objectContaining({
+        index: 1,
+        startAt: 30,
+        parts: [{ url: '/p0' }, { url: '/p1' }],
+        book: { mediaId: 3, itemId: 9, mediaFileId: 7, sessionId: 'b', durationSeconds: 200, offsets: [0, 100] },
+      }),
+    );
     emit('position', { index: 1, position: 40, duration: 100 });
     expect(audio.position()).toBe(140);
     await audio.seek(10);
     expect(plugin['seek']).toHaveBeenCalledWith({ position: 10, index: 0 });
+  });
+
+  it('has the web layer refresh the session when the native side gets a 401', async () => {
+    TestBed.inject(AudioPlayerService);
+    await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
+    emit('refresh', undefined);
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
   });
 });

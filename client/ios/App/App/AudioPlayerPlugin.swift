@@ -42,9 +42,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private struct Resolved {
-        let url: URL
+        let path: String
         let sessionId: String
         let mediaFileId: Int
+    }
+
+    private enum StreamFailure: Error {
+        /// The server would transcode: not served natively, never retried.
+        case notPlayable
+        case unavailable
     }
 
     private static let capacitorFile = "capacitor://localhost/_capacitor_file_/"
@@ -54,6 +60,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var index = 0
     private var indexOfItem: [ObjectIdentifier: Int] = [:]
     private var resolved: [Int: Resolved] = [:]
+    private var streamTokens: [Int: (token: String, expiresAt: Double)] = [:]
+    /// Server and user the queue started under; a different signed-in session never reaches it.
+    private var boundKey: String?
+    private var recoveredAt: Int?
     private var generation = 0
     private var repeatMode = "off"
     private var rate: Float = 1
@@ -70,6 +80,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var timeObserver: Any?
     private var itemObserver: NSKeyValueObservation?
     private var statusObserver: NSKeyValueObservation?
+    private var failureObserver: NSKeyValueObservation?
     private var readyObserver: NSKeyValueObservation?
 
     private lazy var nowPlaying: NowPlayingController = {
@@ -99,6 +110,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         statusObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async {
+                if self?.player.timeControlStatus == .playing { self?.recoveredAt = nil }
                 self?.emitState()
                 self?.nowPlaying.refresh()
             }
@@ -131,6 +143,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let autoplay = call.getBool("autoplay") ?? true
         DispatchQueue.main.async {
             self.isMusic = true
+            self.boundKey = self.session()?.key
             self.entries = tracks
             self.begin(at: index, startAt: startAt, autoplay: autoplay)
             call.resolve()
@@ -253,16 +266,22 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func stop(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.generation += 1
-            self.loading = false
-            self.player.pause()
-            self.player.removeAllItems()
-            self.entries = []
-            self.indexOfItem = [:]
-            self.endSessions(keeping: [])
-            self.nowPlaying.deactivate(releaseSession: true)
+            self.stopAll()
             call.resolve()
         }
+    }
+
+    private func stopAll() {
+        generation += 1
+        loading = false
+        player.pause()
+        player.removeAllItems()
+        entries = []
+        indexOfItem = [:]
+        endSessions(keeping: [])
+        boundKey = nil
+        streamTokens = [:]
+        nowPlaying.deactivate(releaseSession: true)
     }
 
     // MARK: - Queue
@@ -282,8 +301,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         activateSession()
         player.defaultRate = rate
         Task { @MainActor in
-            guard let item = await self.makeItem(index), mine == self.generation else { return }
-            self.indexOfItem[ObjectIdentifier(item)] = index
+            guard let (item, found) = await self.makeItem(from: index), mine == self.generation else { return }
+            self.index = found
+            self.indexOfItem[ObjectIdentifier(item)] = found
             self.player.insert(item, after: nil)
             self.loading = false
             if startAt > 0 {
@@ -304,25 +324,43 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let mine = generation
         let current = index
         Task { @MainActor in
-            guard let item = await self.makeItem(next), mine == self.generation, current == self.index, self.player.items().count < 2 else { return }
-            self.indexOfItem[ObjectIdentifier(item)] = next
+            guard let (item, found) = await self.makeItem(from: next), mine == self.generation, current == self.index, self.player.items().count < 2 else { return }
+            self.indexOfItem[ObjectIdentifier(item)] = found
             self.player.insert(item, after: self.player.items().last)
         }
     }
 
-    private func makeItem(_ i: Int) async -> AVPlayerItem? {
+    /// The first playable entry from `start` on: an entry the server would transcode is skipped.
+    private func makeItem(from start: Int) async -> (AVPlayerItem, Int)? {
+        var i = start
+        while entries.indices.contains(i) {
+            switch await makeItem(i) {
+            case .success(let item): return (item, i)
+            case .failure(.notPlayable): i += 1
+            case .failure(.unavailable): return nil
+            }
+        }
+        return nil
+    }
+
+    private func makeItem(_ i: Int) async -> Result<AVPlayerItem, StreamFailure> {
         let entry = entries[i]
         var url = entry.url
         if url == nil, let id = entry.itemId {
-            url = await resolve(itemId: id)?.url
+            switch await resolve(itemId: id) {
+            case .success(let r): url = await streamUrl(r)
+            case .failure(let failure):
+                notifyListeners("error", data: ["message": "no stream for track \(i)"])
+                return .failure(failure)
+            }
         }
         guard let url = url else {
             notifyListeners("error", data: ["message": "no stream for track \(i)"])
-            return nil
+            return .failure(.unavailable)
         }
         let item = AVPlayerItem(url: url)
         item.audioTimePitchAlgorithm = .timeDomain
-        return item
+        return .success(item)
     }
 
     /// The item the player moved on to: its entry becomes the current one and the next is lined up.
@@ -337,6 +375,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let id = ObjectIdentifier(item)
         guard id != lastItem, let i = indexOfItem[id] else { return }
         lastItem = id
+        failureObserver = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard item.status == .failed else { return }
+            DispatchQueue.main.async { self?.recover(item) }
+        }
         index = i
         let live = Set(player.items().map(ObjectIdentifier.init))
         indexOfItem = indexOfItem.filter { live.contains($0.key) }
@@ -357,7 +399,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Streams
 
-    private func session() -> (server: String, token: String)? {
+    private func session() -> (key: String, server: String, token: String)? {
         let defaults = UserDefaults.standard
         guard let key = defaults.string(forKey: "CapacitorStorage.fliks_active_session"),
               let raw = defaults.string(forKey: "CapacitorStorage.fliks_sessions"),
@@ -365,56 +407,123 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         for s in list {
             let server = s["serverUrl"] as? String ?? ""
             let user = ((s["user"] as? [String: Any])?["id"] as? NSNumber)?.intValue ?? 0
-            if "\(server)::\(user)" == key, let token = s["accessToken"] as? String, !token.isEmpty { return (server, token) }
+            if "\(server)::\(user)" == key, let token = s["accessToken"] as? String, !token.isEmpty { return (key, server, token) }
         }
         return nil
     }
 
-    private func resolve(itemId: Int) async -> Resolved? {
-        if let known = resolved[itemId] { return known }
-        guard let (server, token) = session(), let profile = deviceProfile,
-              let url = URL(string: "\(server)/api/items/\(itemId)/playback-info?startAt=0") else { return nil }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = Data(profile.utf8)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              info["playMethod"] as? String == "DirectPlay" else { return nil }
-        let parts = info["parts"] as? [[String: Any]]
-        guard var path = (parts?.first?["playUrl"] as? String) ?? (info["playUrl"] as? String) else { return nil }
-        if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
+    /// A call under session `key`; a 401 has the web layer refresh the session, then runs once more.
+    /// Under another signed-in session nothing is sent and the queue ends.
+    @MainActor
+    private func apiCall(_ key: String, _ method: String, _ path: String, body: Data? = nil) async -> (data: Data, status: Int)? {
+        for attempt in 0..<2 {
+            guard let s = session(), s.key == key, let url = URL(string: s.server + path) else {
+                if key == boundKey { stopAll() }
+                return nil
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.httpBody = body
+            if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+            request.setValue("Bearer \(s.token)", forHTTPHeaderField: "Authorization")
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  let status = (response as? HTTPURLResponse)?.statusCode else { return nil }
+            if status == 401, attempt == 0, await refreshed(key, rejected: s.token) { continue }
+            return (data, status)
+        }
+        return nil
+    }
+
+    /// True once session `key` stores a token other than the rejected one: the web layer, asked to
+    /// refresh, persists it. Waits at most 10 s.
+    @MainActor
+    private func refreshed(_ key: String, rejected: String) async -> Bool {
+        if let s = session(), s.key == key, s.token != rejected { return true }
+        notifyListeners("refresh", data: [:])
+        for _ in 0..<50 {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let s = session(), s.key == key else { return false }
+            if s.token != rejected { return true }
+        }
+        return false
+    }
+
+    @MainActor
+    private func resolve(itemId: Int) async -> Result<Resolved, StreamFailure> {
+        if let known = resolved[itemId] { return .success(known) }
+        guard let key = boundKey, let profile = deviceProfile,
+              let (data, status) = await apiCall(key, "POST", "/api/items/\(itemId)/playback-info?startAt=0", body: Data(profile.utf8)),
+              status == 200,
+              let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return .failure(.unavailable) }
         let sid = info["sessionId"] as? String ?? ""
-        var comps = URLComponents(string: server + path)
-        comps?.queryItems = [URLQueryItem(name: "token", value: token), URLQueryItem(name: "sid", value: sid)]
-        guard let stream = comps?.url else { return nil }
-        let r = Resolved(url: stream, sessionId: sid, mediaFileId: (info["mediaFileId"] as? NSNumber)?.intValue ?? 0)
+        let mediaFileId = (info["mediaFileId"] as? NSNumber)?.intValue ?? 0
+        guard info["playMethod"] as? String == "DirectPlay" else {
+            endSession(Resolved(path: "", sessionId: sid, mediaFileId: mediaFileId))
+            return .failure(.notPlayable)
+        }
+        let parts = info["parts"] as? [[String: Any]]
+        guard var path = (parts?.first?["playUrl"] as? String) ?? (info["playUrl"] as? String) else { return .failure(.unavailable) }
+        if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
+        let r = Resolved(path: path, sessionId: sid, mediaFileId: mediaFileId)
         resolved[itemId] = r
-        return r
+        return .success(r)
+    }
+
+    /// The stream URL, bound to its file by a stream token reused while it has 30 min of life left.
+    @MainActor
+    private func streamUrl(_ r: Resolved) async -> URL? {
+        guard let key = boundKey else { return nil }
+        var token = streamTokens[r.mediaFileId].flatMap { $0.expiresAt - Date().timeIntervalSince1970 * 1000 > 30 * 60 * 1000 ? $0.token : nil }
+        if token == nil {
+            let body = try? JSONSerialization.data(withJSONObject: ["mediaFileId": r.mediaFileId])
+            guard let (data, status) = await apiCall(key, "POST", "/api/auth/stream-token", body: body), (200..<300).contains(status),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let minted = json["streamToken"] as? String,
+                  let expiresAt = (json["expiresAt"] as? NSNumber)?.doubleValue else { return nil }
+            streamTokens[r.mediaFileId] = (minted, expiresAt)
+            token = minted
+        }
+        guard let server = session()?.server else { return nil }
+        var comps = URLComponents(string: server + r.path)
+        comps?.queryItems = [URLQueryItem(name: "token", value: token), URLQueryItem(name: "sid", value: r.sessionId)]
+        return comps?.url
     }
 
     /// Ends the sessions of tracks that are no longer playing or lined up.
     private func endSessions(keeping keep: [Int]) {
-        guard let (server, token) = session() else { resolved = [:]; return }
         for (id, r) in resolved where !keep.contains(id) {
             resolved[id] = nil
-            guard !r.sessionId.isEmpty,
-                  let sid = r.sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-                  let url = URL(string: "\(server)/api/stream/sessions/\(sid)") else { continue }
-            var request = URLRequest(url: url)
-            request.httpMethod = "DELETE"
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            URLSession.shared.dataTask(with: request).resume()
+            endSession(r)
         }
     }
 
+    private func endSession(_ r: Resolved) {
+        guard let key = boundKey, !r.sessionId.isEmpty,
+              let sid = r.sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return }
+        Task { @MainActor in _ = await self.apiCall(key, "DELETE", "/api/stream/sessions/\(sid)") }
+    }
+
+    /// The current item failed to load (a stream URL outlived its token while paused): it is rebuilt at the
+    /// same position once, with the stream session and token minted again.
+    private func recover(_ item: AVPlayerItem) {
+        guard item === player.currentItem, recoveredAt != index, entries.indices.contains(index) else {
+            notifyListeners("error", data: ["message": "playback failed"])
+            return
+        }
+        recoveredAt = index
+        if let id = entries[index].itemId, let r = resolved.removeValue(forKey: id) {
+            endSession(r)
+            streamTokens[r.mediaFileId] = nil
+        }
+        let wasPlaying = player.timeControlStatus != .paused
+        begin(at: index, startAt: max(player.currentTime().seconds, 0), autoplay: wasPlaying)
+    }
+
+    /// Images are public: no token rides along.
     private func artworkUrl(_ path: String?) -> String? {
         guard let path = path, !path.isEmpty else { return nil }
-        guard let (server, token) = session(), path.hasPrefix(server) || path.hasPrefix("/") else { return path }
-        let absolute = path.hasPrefix("/") ? server + path : path
-        return absolute + (absolute.contains("?") ? "&" : "?") + "token=" + token
+        guard path.hasPrefix("/"), let server = session()?.server else { return path }
+        return server + path
     }
 
     private static func fileUrl(_ url: String) -> URL? {

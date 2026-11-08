@@ -1,6 +1,7 @@
 import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal } from '@angular/core';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
+import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { MediaService } from '../api/media.service';
@@ -101,6 +102,7 @@ export class AudioPlayerService {
   private readonly sync = inject(OfflinePlaybackSyncService);
   private readonly injector = inject(Injector);
   private readonly nativeAudio = inject(NATIVE_AUDIO);
+  private readonly auth = inject(AuthService);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -1098,6 +1100,7 @@ export class AudioPlayerService {
     void n.addListener('queue', (e) => this.onNativeQueue(e));
     void n.addListener('command', (e) => this.onNativeCommand(e));
     void n.addListener('error', () => this.onError());
+    void n.addListener('refresh', () => void this.auth.refreshAccessToken());
     await n.configure({ deviceProfile: JSON.stringify(this.deviceProfile.getProfile()) });
     this.pushGain();
     await n.attach();
@@ -1156,6 +1159,16 @@ export class AudioPlayerService {
       artist: req.artist,
       album: req.album,
       artworkUrl: req.coverUrl ? new URL(this.serverConfig.resolveUrl(req.coverUrl), document.baseURI).href : null,
+      book: this.info
+        ? {
+            mediaId: req.mediaId,
+            itemId: req.itemId,
+            mediaFileId: this.info.mediaFileId,
+            sessionId: this.sessionId,
+            durationSeconds: this._duration(),
+            offsets: this.parts.map((p) => p.offset),
+          }
+        : undefined,
     });
   }
 

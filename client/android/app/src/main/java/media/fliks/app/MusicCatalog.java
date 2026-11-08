@@ -256,7 +256,7 @@ final class MusicCatalog {
     private MediaItem track(String parent, long itemId, long mediaId, String title, String artist, String album,
                             @Nullable String cover, double duration, double gain, double peak, double albumGain,
                             double albumPeak) {
-        MediaItem q = queueItem(itemId, mediaId, title, artist, album, cover == null ? null : api.absolute(cover, true),
+        MediaItem q = queueItem(itemId, mediaId, title, artist, album, cover == null ? null : api.absolute(cover),
                 duration, gain, peak, albumGain, albumPeak);
         MediaItem item = q.buildUpon().setMediaId(parent + "|" + itemId).build();
         if (SEARCH.equals(parent)) seen.put(item.mediaId, item);
@@ -285,7 +285,7 @@ final class MusicCatalog {
         MediaMetadata.Builder md = new MediaMetadata.Builder()
                 .setTitle(title).setIsBrowsable(true).setIsPlayable(false).setMediaType(type);
         if (subtitle != null && !subtitle.isEmpty()) md.setSubtitle(subtitle);
-        if (art != null && !art.isEmpty() && !"null".equals(art)) md.setArtworkUri(Uri.parse(api.absolute(art, true)));
+        if (art != null && !art.isEmpty() && !"null".equals(art)) md.setArtworkUri(Uri.parse(api.absolute(art)));
         return new MediaItem.Builder().setMediaId(id).setMediaMetadata(md.build()).build();
     }
 
