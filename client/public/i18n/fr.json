@@ -2187,7 +2187,8 @@
       "optimize_profiles": "Profils",
       "optimize": "Réglages",
       "optimize_workers": "Workers",
-      "karaoke": "Karaoké"
+      "karaoke": "Karaoké",
+      "lyrics": "Paroles"
     },
     "engine": {
       "title": "Moteur de streaming distant",
@@ -3797,6 +3798,22 @@
         "start_command": "Lancez-le avec :",
         "confirm_revoke": "Révoquer le jeton de {{name}} ? Ses jobs retournent dans la file."
       }
+    },
+    "lyrics": {
+      "title": "Paroles",
+      "subtitle": "D'où viennent les paroles et ce qu'on en fait.",
+      "section_fetch": "Récupération",
+      "auto_fetch": "Récupération automatique",
+      "auto_fetch_hint": "Demande les paroles de chaque nouveau titre aux fournisseurs une fois son album importé.",
+      "provider_order": "Ordre des fournisseurs",
+      "provider_order_hint": "Un espace de noms de fournisseur par ligne, interrogés du premier au dernier. Vide : ordre d'enregistrement.",
+      "section_files": "Fichiers",
+      "write_back": "Écrire les paroles récupérées à côté du titre",
+      "write_back_hint": "Enregistre les paroles synchronisées d'un fournisseur ou saisies par un utilisateur en fichier .lrc ou .elrc. Un fichier existant n'est jamais écrasé.",
+      "sidecars": "Extensions des fichiers associés",
+      "sidecars_hint": "Extensions lues à côté d'un titre, dans l'ordre, séparées par des virgules. Vide : ttml, elrc, lrc, srt, txt.",
+      "load_error": "Impossible de charger les réglages des paroles.",
+      "saved": "Réglages des paroles enregistrés."
     }
   },
   "roles": {

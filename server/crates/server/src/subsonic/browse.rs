@@ -26,6 +26,7 @@ pub fn extensions() -> Answer {
         vec![
             json!({"name": "apiKeyAuthentication", "versions": [1]}),
             json!({"name": "formPost", "versions": [1]}),
+            json!({"name": "songLyrics", "versions": [1, 2]}),
         ],
     )
 }

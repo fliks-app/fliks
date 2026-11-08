@@ -2187,7 +2187,8 @@
       "optimize_profiles": "Profiles",
       "optimize": "Settings",
       "optimize_workers": "Workers",
-      "karaoke": "Karaoke"
+      "karaoke": "Karaoke",
+      "lyrics": "Lyrics"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -3797,6 +3798,22 @@
         "start_command": "Start it with:",
         "confirm_revoke": "Revoke the token of {{name}}? Its jobs return to the queue."
       }
+    },
+    "lyrics": {
+      "title": "Lyrics",
+      "subtitle": "Where lyrics come from and what is done with them.",
+      "section_fetch": "Fetching",
+      "auto_fetch": "Automatic fetch",
+      "auto_fetch_hint": "Ask the providers for the lyrics of every new track once its album is imported.",
+      "provider_order": "Provider order",
+      "provider_order_hint": "One provider namespace per line, asked first to last. Empty uses the registration order.",
+      "section_files": "Files",
+      "write_back": "Write fetched lyrics next to the track",
+      "write_back_hint": "Saves synced lyrics from a provider or typed by a user as an .lrc or .elrc file. An existing sidecar is never overwritten.",
+      "sidecars": "Sidecar extensions",
+      "sidecars_hint": "Extensions read next to a track, in order, separated by commas. Empty uses ttml, elrc, lrc, srt, txt.",
+      "load_error": "Lyrics settings could not be loaded.",
+      "saved": "Lyrics settings saved."
     }
   },
   "roles": {

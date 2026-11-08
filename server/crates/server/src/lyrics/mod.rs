@@ -34,8 +34,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/lyrics/{id}", patch(update).delete(remove))
 }
 
-/// The entry of rule 66; `enhanced` adds the agents and the word cues.
-fn entry(r: &Row, enhanced: bool, artist: &str, title: &str) -> Value {
+/// The entry of rule 66; `enhanced` adds the agents and the word cues, `bg` the background lines.
+fn entry(r: &Row, enhanced: bool, bg: bool, artist: &str, title: &str) -> Value {
     let synced = r.sync != "none";
     let mut o = Map::new();
     o.insert("id".into(), json!(r.id));
@@ -64,37 +64,21 @@ fn entry(r: &Row, enhanced: bool, artist: &str, title: &str) -> Value {
     o.insert("line".into(), Value::Array(lines));
     if enhanced {
         o.insert("agents".into(), json!(r.doc.0.agents));
-        let cue_lines: Vec<Value> = r
-            .doc
-            .0
+        let doc = &r.doc.0;
+        let mut cue_lines: Vec<Value> = doc
             .lines
             .iter()
             .enumerate()
             .filter(|(_, l)| !l.cues.is_empty())
-            .map(|(i, l)| {
-                let cues: Vec<Value> = l
-                    .cues
-                    .iter()
-                    .map(|c| {
-                        let mut cue = json!({"start": c.start, "end": c.end,
-                            "value": l.text.get(c.byte_start..c.byte_end).unwrap_or(""),
-                            "byteStart": c.byte_start, "byteEnd": c.byte_end});
-                        if let Some(p) = c.pitch {
-                            cue["pitch"] = json!(p);
-                        }
-                        if c.golden {
-                            cue["golden"] = json!(true);
-                        }
-                        cue
-                    })
-                    .collect();
-                let mut cl = json!({"index": i, "start": l.start, "end": l.end, "value": l.text, "cue": cues});
-                if let Some(a) = &l.agent_id {
-                    cl["agentId"] = json!(a);
-                }
-                cl
-            })
+            .map(|(i, l)| cue_line(i, l))
             .collect();
+        // A background line belongs to the last line that started before it.
+        if bg {
+            cue_lines.extend(doc.bg.iter().map(|b| {
+                let at = doc.lines.iter().rposition(|l| l.start <= b.start);
+                cue_line(at.unwrap_or(0), b)
+            }));
+        }
         if !cue_lines.is_empty() {
             o.insert("cueLine".into(), Value::Array(cue_lines));
         }
@@ -102,14 +86,46 @@ fn entry(r: &Row, enhanced: bool, artist: &str, title: &str) -> Value {
     Value::Object(o)
 }
 
+/// One `cueLine`; a line with no word cues is a single cue over its whole text.
+fn cue_line(index: usize, l: &lyrics::Line) -> Value {
+    let cue = |start, end, bs: usize, be: usize| {
+        json!({"start": start, "end": end, "value": l.text.get(bs..be).unwrap_or(""),
+            "byteStart": bs, "byteEnd": be})
+    };
+    let cues: Vec<Value> = if l.cues.is_empty() {
+        vec![cue(l.start, l.end, 0, l.text.len())]
+    } else {
+        l.cues
+            .iter()
+            .map(|c| {
+                let mut v = cue(Some(c.start), Some(c.end), c.byte_start, c.byte_end);
+                if let Some(p) = c.pitch {
+                    v["pitch"] = json!(p);
+                }
+                if c.golden {
+                    v["golden"] = json!(true);
+                }
+                v
+            })
+            .collect()
+    };
+    let mut cl =
+        json!({"index": index, "start": l.start, "end": l.end, "value": l.text, "cue": cues});
+    if let Some(a) = &l.agent_id {
+        cl["agentId"] = json!(a);
+    }
+    cl
+}
+
 async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
     crate::music::assert_track(st, a, item).await
 }
 
-async fn body(
+pub(crate) async fn body(
     st: &AppState,
     item: i32,
     enhanced: bool,
+    bg: bool,
     kind: Option<&str>,
     lang: Option<&str>,
 ) -> Result<Value, AppError> {
@@ -126,7 +142,7 @@ async fn body(
     .await?;
     let (title, artist) = (title.unwrap_or_default(), artist.unwrap_or_default());
     let mut out = json!({
-        "structuredLyrics": rows.iter().map(|r| entry(r, enhanced, &artist, &title)).collect::<Vec<_>>(),
+        "structuredLyrics": rows.iter().map(|r| entry(r, enhanced, bg, &artist, &title)).collect::<Vec<_>>(),
     });
     if rows.iter().all(|r| r.kind != "main") {
         let instrumental: bool = sqlx::query_scalar(
@@ -163,6 +179,7 @@ pub async fn list(
             &st,
             item,
             q.enhanced == Some(true),
+            false,
             q.kind.as_deref(),
             q.lang.as_deref(),
         )
@@ -275,7 +292,7 @@ pub async fn put(
         .execute(&st.db)
         .await?;
     providers::write_back(&st, id).await;
-    Ok(Json(body(&st, item, false, None, None).await?))
+    Ok(Json(body(&st, item, false, false, None, None).await?))
 }
 
 #[derive(Deserialize)]
@@ -345,7 +362,9 @@ pub async fn update(
             .await?;
         tx.commit().await?;
     }
-    Ok(Json(body(&st, row.item_id, false, None, None).await?))
+    Ok(Json(
+        body(&st, row.item_id, false, false, None, None).await?,
+    ))
 }
 
 #[utoipa::path(delete, path = "/api/lyrics/{id}", responses((status = 204), (status = 404)))]
@@ -412,5 +431,5 @@ pub async fn fetch(
     providers::fetch(&st, item, dto.force == Some(true), Priority::Interactive)
         .await
         .map_err(AppError::internal)?;
-    Ok(Json(body(&st, item, false, None, None).await?))
+    Ok(Json(body(&st, item, false, false, None, None).await?))
 }

@@ -236,7 +236,7 @@ async fn every_credential_form_authenticates_and_a_wrong_one_does_not(pool: PgPo
     let ext = c.call("getOpenSubsonicExtensions", "", "").await;
     assert_eq!(
         names(&ext["openSubsonicExtensions"], "name"),
-        ["apiKeyAuthentication", "formPost"]
+        ["apiKeyAuthentication", "formPost", "songLyrics"]
     );
 
     // A renewed password replaces the old one; a revoked row stops working at once.
@@ -1101,4 +1101,109 @@ async fn info_endpoints_give_notes_and_image_urls(pool: PgPool) {
     assert_eq!(code(&c.alice("getUser", "username=bob").await), 50);
     assert_eq!(c.alice("getLicense", "").await["license"]["valid"], true);
     assert_eq!(code(&c.alice("getNothing", "").await), 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn lyrics_are_served_with_background_lines_behind_the_track_acl(pool: PgPool) {
+    let c = ctx(pool).await;
+    let parsed = fliks_domain::lyrics::parse(
+        fliks_domain::lyrics::Format::Lrc,
+        "[00:01.00]<00:01.00>Hello <00:01.50>world<00:02.00>\n[bg:oh oh]\n[00:05.00]next",
+    )
+    .unwrap();
+    for item in [100, 103] {
+        fliks_server::lyrics::store::upsert(
+            &c.pool,
+            &fliks_server::lyrics::store::New {
+                item,
+                file: None,
+                kind: "main",
+                lang: "en",
+                source: "user",
+                source_ref: None,
+                parsed: &parsed,
+                raw: None,
+                duration_ms: None,
+                reviewed: true,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let ext = c.call("getOpenSubsonicExtensions", "", "").await;
+    assert!(
+        ext["openSubsonicExtensions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["name"] == "songLyrics")
+    );
+
+    let got = c.alice("getLyricsBySongId", "id=tr-100").await;
+    let entry = &got["lyricsList"]["structuredLyrics"][0];
+    assert_eq!(
+        (entry["synced"].clone(), entry["line"][0]["value"].clone()),
+        (json!(true), json!("Hello world"))
+    );
+    let agents: Vec<&Value> = entry["cueLine"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| &l["agentId"])
+        .collect();
+    assert!(agents.contains(&&json!("bg")), "{entry}");
+
+    assert_eq!(code(&c.bob("getLyricsBySongId", "id=tr-103").await), 70);
+    assert_eq!(
+        c.alice("getLyricsBySongId", "id=tr-103").await["status"],
+        "ok"
+    );
+    assert_eq!(code(&c.alice("getLyricsBySongId", "id=al-10").await), 70);
+
+    let legacy = c.alice("getLyrics", "artist=Solo&title=Opening").await;
+    assert_eq!(legacy["lyrics"]["value"], "Hello world\nnext");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_smart_playlist_lists_its_evaluated_tracks_and_refuses_song_writes(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO playlists (id, name, "ownerId", visibility, rules) VALUES
+             (1, 'Recent', 1, 'public',
+              '{"match":"all","criteria":[{"type":"year","min":2005,"max":null}],
+                "sort":{"by":"title","descending":false},"limit":null}');
+           INSERT INTO playlist_items ("playlistId", "itemId", position, "addedById") VALUES (1, 100, 0, 1);"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let titles = |v: Value| names(&v["playlist"]["entry"], "title");
+    assert_eq!(
+        titles(c.alice("getPlaylist", "id=pl-1").await),
+        ["Hidden", "Other"]
+    );
+    assert_eq!(
+        titles(c.bob("getPlaylist", "id=pl-1").await),
+        ["Other"],
+        "the viewer's libraries bound the evaluation"
+    );
+    let listed = c.alice("getPlaylists", "").await;
+    assert_eq!(listed["playlists"]["playlist"][0]["songCount"], 2);
+
+    for (endpoint, params) in [
+        ("updatePlaylist", "playlistId=pl-1&songIdToAdd=tr-101"),
+        ("updatePlaylist", "playlistId=pl-1&songIndexToRemove=0"),
+        ("createPlaylist", "playlistId=pl-1&songId=tr-101"),
+    ] {
+        assert_eq!(code(&c.alice(endpoint, params).await), 50, "{params}");
+    }
+    assert_eq!(
+        c.alice("updatePlaylist", "playlistId=pl-1&name=Newer")
+            .await["status"],
+        "ok"
+    );
+    assert_eq!(
+        titles(c.alice("getPlaylist", "id=pl-1").await),
+        ["Hidden", "Other"]
+    );
 }

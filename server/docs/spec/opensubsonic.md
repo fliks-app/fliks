@@ -1,6 +1,6 @@
 # Spec: OpenSubsonic API
 
-Scope: the music API third-party players speak (OpenSubsonic, a superset of Subsonic 1.16.1) over the `album` kind of `music.md`: routes, authentication, the response envelope in JSON and XML, ids, the endpoints and their shapes, the stream credential. Credentials are `device-tokens.md` (kind `subsonic`). Not in this spec: lyrics (`songLyrics`), smart playlists, the play queue, transcoding. The plan is `plans/music-library.plan.md` section "OpenSubsonic API", batch F7a.
+Scope: the music API third-party players speak (OpenSubsonic, a superset of Subsonic 1.16.1) over the `album` kind of `music.md`: routes, authentication, the response envelope in JSON and XML, ids, the endpoints and their shapes, the stream credential. Credentials are `device-tokens.md` (kind `subsonic`). Lyrics (`songLyrics`) and smart playlists are rules 33-34. Not in this spec: the play queue, transcoding. The plan is `plans/music-library.plan.md` section "OpenSubsonic API", batch F7a.
 
 ## Routes
 
@@ -22,7 +22,7 @@ Scope: the music API third-party players speak (OpenSubsonic, a superset of Subs
 10. A hit sets `lastUsedAt` at most once a minute. Revoking or renewing the row takes effect on the next call.
 11. OIDC users have no password: they use an app password like everyone else, which is why it is the only credential.
 12. Failures are throttled like the login (`auth.md` rule 39, the same limiter) per client network and `u` (without case), `apiKey` calls in one bucket per network no username can equal: 60 failures per window, and only a failed credential counts, so a success never adds up however many run at once. A call over the limit is error 40 `Too many failed attempts, try again later`, checked before any lookup.
-13. `getOpenSubsonicExtensions` answers `openSubsonicExtensions` with `apiKeyAuthentication` and `formPost`, each `versions: [1]`. `songLyrics` is the next batch's. `transcodeOffset` is not advertised: the engine has no raw audio transcode, so `timeOffset` could not be honoured (rule 30).
+13. `getOpenSubsonicExtensions` answers `openSubsonicExtensions` with `apiKeyAuthentication` and `formPost` (`versions: [1]`) and `songLyrics` (`versions: [1, 2]`, rule 33). `transcodeOffset` is not advertised: the engine has no raw audio transcode, so `timeOffset` could not be honoured (rule 30).
 
 ## Ids and visibility
 
@@ -54,3 +54,8 @@ Scope: the music API third-party players speak (OpenSubsonic, a superset of Subs
 ## Migration
 
 32. `1789000000940_device-token-subsonic.sql` adds the `subsonic` value to `device_token_kind`; `1789000000941_device-token-secret.sql` adds `device_tokens."secret" bytea` with `CK_device_tokens_secret CHECK ("secret" IS NULL OR "kind" = 'subsonic')`. Two files because a new enum value cannot be used in the transaction that adds it.
+
+## Lyrics and smart playlists
+
+33. `songLyrics`: `getLyricsBySongId` (`id` of a track) answers `lyricsList {structuredLyrics[]}`, the entries of `music.md` rule 66 (`enhanced`, so with `agents` and `cueLine`) of every layer, preferred first. A track the caller cannot read, or any other id, is error 70 (`lyrics::body` checks nothing itself). Unlike `/api`, `cueLine` also carries the background lines (`doc.bg`): each has `agentId` `bg`, the `index` of the last line that started before it, and its word cues, or one cue over its whole text. `getLyrics` (`artist` optional, `title`) is the legacy form: the plain text (`value`, lines joined by newlines) of the first visible track with that title (and artist credit, without case) that has a `main` row, preferred first; none is an empty `lyrics`.
+34. A playlist with `playlists.rules` is smart (`playlists.md` rules 50-54) and read-only here: `getPlaylists` and `getPlaylist` list the tracks its rules select, evaluated with the owner's ratings, favourites and plays and the caller's libraries, in the rules' order, never `playlist_items`. `createPlaylist` with its `playlistId`, and `updatePlaylist` with `songIdToAdd` or `songIndexToRemove`, are error 50; a rename, `public` and `deletePlaylist` follow rule 27.

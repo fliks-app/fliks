@@ -2187,7 +2187,8 @@
       "optimize_profiles": "Profile",
       "optimize": "Einstellungen",
       "optimize_workers": "Worker",
-      "karaoke": "Karaoke"
+      "karaoke": "Karaoke",
+      "lyrics": "Songtexte"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -3797,6 +3798,22 @@
         "start_command": "Starte ihn mit:",
         "confirm_revoke": "Token von {{name}} widerrufen? Seine Jobs kehren in die Warteschlange zurück."
       }
+    },
+    "lyrics": {
+      "title": "Songtexte",
+      "subtitle": "Woher die Songtexte kommen und was damit geschieht.",
+      "section_fetch": "Abruf",
+      "auto_fetch": "Automatischer Abruf",
+      "auto_fetch_hint": "Fragt die Anbieter nach den Songtexten jedes neuen Titels, sobald sein Album importiert ist.",
+      "provider_order": "Reihenfolge der Anbieter",
+      "provider_order_hint": "Ein Anbieter-Namensraum pro Zeile, vom ersten zum letzten abgefragt. Leer: Reihenfolge der Registrierung.",
+      "section_files": "Dateien",
+      "write_back": "Abgerufene Songtexte neben den Titel schreiben",
+      "write_back_hint": "Speichert synchronisierte Songtexte eines Anbieters oder von Nutzern eingegebene als .lrc- oder .elrc-Datei. Eine vorhandene Datei wird nie überschrieben.",
+      "sidecars": "Endungen der Begleitdateien",
+      "sidecars_hint": "Neben einem Titel gelesene Endungen, der Reihe nach, durch Kommas getrennt. Leer: ttml, elrc, lrc, srt, txt.",
+      "load_error": "Die Songtext-Einstellungen konnten nicht geladen werden.",
+      "saved": "Songtext-Einstellungen gespeichert."
     }
   },
   "roles": {
