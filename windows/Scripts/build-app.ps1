@@ -71,6 +71,14 @@ $engine = Join-Path $bin 'fliks-engine.exe'
 Invoke-WebRequest "https://github.com/fliks-app/engine/releases/download/v$($lock['version'])/fliks-engine-windows-x64.exe" -OutFile $engine
 if ((Get-FileHash $engine -Algorithm SHA256).Hash -ne $lock['sha256_windows_x64']) { throw 'fliks-engine sha256 mismatch' }
 
+# Karaoke pack (ONNX Runtime, whisper-cli, ffmpeg-pitch): the engine looks for karaoke\ next to itself.
+if (-not $lock['sha256_karaoke_windows_x64']) { throw 'engine.lock has no sha256_karaoke_windows_x64 (run scripts/bump-engine.sh).' }
+$karaokeZip = Join-Path $build 'fliks-engine-karaoke-windows-x64.zip'
+Invoke-WebRequest "https://github.com/fliks-app/engine/releases/download/v$($lock['version'])/fliks-engine-karaoke-windows-x64.zip" -OutFile $karaokeZip
+if ((Get-FileHash $karaokeZip -Algorithm SHA256).Hash -ne $lock['sha256_karaoke_windows_x64']) { throw 'karaoke pack sha256 mismatch' }
+Expand-Archive $karaokeZip -DestinationPath $bin -Force
+Remove-Item $karaokeZip
+
 # fliks-server (Rust) sits beside the engine.
 Push-Location (Join-Path $repo 'server')
 try { cargo build --release --locked -p fliks-server; if ($LASTEXITCODE) { throw 'cargo build failed' } } finally { Pop-Location }
@@ -85,7 +93,7 @@ Copy-Tree (Join-Path $repo 'server\public') (Join-Path $bundle 'cast')
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
 Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')
 
-foreach ($f in 'bin\fliks-engine.exe', 'bin\fliks-server.exe', 'cast\emoji\1f525.webp', 'client\index.html') {
+foreach ($f in 'bin\fliks-engine.exe', 'bin\karaoke\whisper-cli.exe', 'bin\fliks-server.exe', 'cast\emoji\1f525.webp', 'client\index.html') {
     if (-not (Test-Path (Join-Path $bundle $f))) { throw "bundle is missing $f" }
 }
 
