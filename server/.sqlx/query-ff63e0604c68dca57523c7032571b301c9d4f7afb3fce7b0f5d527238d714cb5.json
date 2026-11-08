@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET progress = $4, paused = $5, \"updatedAt\" = now(),\n             \"leaseUntil\" = CASE WHEN state = 'leased' THEN now() + make_interval(secs => $6)\n                                 ELSE \"leaseUntil\" END\n           WHERE id = $1 AND \"workerId\" = $2 AND attempt = $3 AND state IN ('leased', 'cancelled')\n           RETURNING state, COALESCE(\"leaseUntil\", now()) AS \"lease!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "lease!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int4",
+        "Float4",
+        "Bool",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "ff63e0604c68dca57523c7032571b301c9d4f7afb3fce7b0f5d527238d714cb5"
+}

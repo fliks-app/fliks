@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.name, p.document, p.\"createdAt\" AS created_at, p.\"updatedAt\" AS updated_at,\n               (SELECT count(*) FROM libraries l WHERE l.\"optimizeProfileId\" = p.id) AS \"library_count!\"\n        FROM optimize_profiles p\n        WHERE p.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "optimize_profiles",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "optimize_profiles",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "document",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "optimize_profiles",
+            "name": "document"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "optimize_profiles",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "optimize_profiles",
+            "name": "updatedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "library_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "96857945f8fc52526f377ff0c5ab50cf1a9f4ee881f34a28f57e2f9efb60d8fa"
+}

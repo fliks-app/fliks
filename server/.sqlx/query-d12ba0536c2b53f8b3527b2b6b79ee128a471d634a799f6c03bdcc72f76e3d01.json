@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET state = 'skipped', progress = 1, result = $2, \"leaseUntil\" = NULL,\n                 error = '{\"class\": \"nothing_to_do\", \"message\": \"the video was kept and nothing else changes\"}'::jsonb,\n                 \"finishedAt\" = now(), \"updatedAt\" = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d12ba0536c2b53f8b3527b2b6b79ee128a471d634a799f6c03bdcc72f76e3d01"
+}

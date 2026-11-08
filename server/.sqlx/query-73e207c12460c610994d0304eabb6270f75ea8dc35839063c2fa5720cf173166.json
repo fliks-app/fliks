@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET state = $2, progress = 1, \"outSize\" = $3, \"outSha256\" = $4, result = $5,\n             \"leaseUntil\" = NULL, \"finishedAt\" = CASE WHEN $2 = 'done' THEN now() END,\n             \"encodedAt\" = now(), \"updatedAt\" = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73e207c12460c610994d0304eabb6270f75ea8dc35839063c2fa5720cf173166"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET state = 'cancelled', \"finishedAt\" = now(), \"updatedAt\" = now(),\n             error = '{\"class\":\"cancelled\",\"message\":\"cancelled by an admin\"}'::jsonb\n           WHERE id = $1 AND state IN ('queued', 'leased', 'staged')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f12946e62ec68b2cfa9bf31a4744fff7ced5d3c85259228189477949182bd33"
+}

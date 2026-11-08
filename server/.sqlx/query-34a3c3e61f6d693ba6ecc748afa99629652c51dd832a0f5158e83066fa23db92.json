@@ -1,0 +1,139 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.id, mf.\"relativePath\" AS relative_path, mf.size, mf.\"streamInfo\" AS \"stream_info!\", mf.\"probeVersion\" AS probe_version,\n                  (EXTRACT(EPOCH FROM now() - mf.\"createdAt\") / 86400)::float8 AS \"age_days!\",\n                  COALESCE(movie.\"originalLanguage\", series.\"originalLanguage\") AS original,\n                  lp.\"audioLanguages\" AS \"audio_languages?\", lp.\"subtitleLanguages\" AS \"subtitle_languages?\",\n                  EXISTS (SELECT 1 FROM playback_qoe_sessions q\n                          WHERE q.\"mediaFileId\" = mf.id AND q.\"startedAt\" > now() - interval '30 days'\n                            AND q.\"transcodeReasons\" <> '[]'::jsonb) AS \"transcoded!\",\n                  COALESCE((SELECT array_agg(DISTINCT o.\"sourceStreamIndex\") FROM subtitle_files o\n                            WHERE o.\"mediaFileId\" = mf.id AND o.\"providerType\" = 'ocr' AND o.status = 'failed'\n                              AND o.\"sourceStreamIndex\" IS NOT NULL\n                              AND NOT EXISTS (SELECT 1 FROM subtitle_files n WHERE n.\"mediaFileId\" = mf.id\n                                AND n.\"providerType\" = 'ocr' AND n.\"sourceStreamIndex\" = o.\"sourceStreamIndex\"\n                                AND n.id > o.id)), '{}') AS \"ocr_failed!\",\n                  EXISTS (SELECT 1 FROM jobs j WHERE j.\"mediaFileId\" = mf.id AND j.kind = 'optimize'\n                            AND j.state IN ('done', 'skipped') AND j.result ? 'copyReason'\n                            AND (j.\"outSize\" = mf.size OR j.\"inSize\" = mf.size)\n                            AND j.payload #>> '{plan,codec}' IS NOT DISTINCT FROM $4::text\n                            AND COALESCE((j.payload #>> '{plan,minSavingsPct}')::float8, -1) = $5::float8) AS \"video_copied!\"\n           FROM media_files mf\n           JOIN media m ON m.id = mf.\"mediaId\"\n           JOIN libraries l ON l.id = m.\"libraryId\"\n           LEFT JOIN movie_details movie ON movie.\"mediaId\" = m.id\n           LEFT JOIN series_details series ON series.\"mediaId\" = m.id\n           LEFT JOIN language_profiles lp ON lp.id = COALESCE(m.\"languageProfileId\", l.\"defaultLanguageProfileId\")\n           WHERE m.\"libraryId\" = $1\n             AND ($2::int[] IS NULL OR mf.id = ANY($2))\n             AND mf.\"streamInfo\" IS NOT NULL\n             AND ($2::int[] IS NOT NULL OR (mf.\"probeVersion\" >= $3\n               AND mf.\"streamInfo\"->>'error' IS NULL\n               AND jsonb_array_length(COALESCE(mf.\"streamInfo\"->'video', '[]'::jsonb)) > 0))\n             AND ($2::int[] IS NOT NULL OR NOT EXISTS (SELECT 1 FROM jobs j WHERE j.\"mediaFileId\" = mf.id AND j.state IN ('queued', 'leased', 'staged', 'committing')))\n             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.\"mediaFileId\" = mf.id AND j.state = 'failed'\n                               AND j.error->>'class' IN ('corrupt', 'damaged')\n                               AND j.\"inSize\" = mf.size AND j.\"inMtimeMs\" IS NOT DISTINCT FROM mf.\"mtimeMs\")\n           ORDER BY mf.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "relative_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "stream_info!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "probe_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "probeVersion"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "age_days!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "original",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "audio_languages?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "audioLanguages"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "subtitle_languages?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "subtitleLanguages"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "transcoded!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "ocr_failed!",
+        "type_info": "Int4Array",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "video_copied!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "34a3c3e61f6d693ba6ecc748afa99629652c51dd832a0f5158e83066fa23db92"
+}

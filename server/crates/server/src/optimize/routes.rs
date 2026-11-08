@@ -21,14 +21,14 @@ use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{FromRow, PgPool};
+use sqlx::PgPool;
 use std::{
     collections::HashMap,
     sync::{LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
-#[derive(Serialize, FromRow)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileOut {
     id: i32,
@@ -46,14 +46,6 @@ pub struct ProfileOut {
 pub struct ProfileDto {
     name: String,
     document: Value,
-}
-
-macro_rules! select {
-    () => {
-        r#"SELECT p.id, p.name, p.document, p."createdAt" AS created_at, p."updatedAt" AS updated_at,
-    (SELECT count(*) FROM libraries l WHERE l."optimizeProfileId" = p.id) AS library_count
-    FROM optimize_profiles p"#
-    };
 }
 
 fn bad(msg: impl Into<String>) -> AppError {
@@ -97,16 +89,28 @@ pub async fn list(
     a: Authed,
 ) -> Result<Json<Vec<ProfileOut>>, AppError> {
     a.require(Action::Read, Subject::Settings)?;
-    let rows = sqlx::query_as(concat!(select!(), " ORDER BY p.name, p.id"))
-        .fetch_all(&st.db)
+    let rows = sqlx::query_as!(
+        ProfileOut,
+        r#"SELECT p.id, p.name, p.document, p."createdAt" AS created_at, p."updatedAt" AS updated_at,
+               (SELECT count(*) FROM libraries l WHERE l."optimizeProfileId" = p.id) AS "library_count!"
+        FROM optimize_profiles p
+        ORDER BY p.name, p.id"#
+    )
+    .fetch_all(&st.db)
         .await?;
     Ok(Json(rows))
 }
 
 async fn find(db: &PgPool, id: i32) -> Result<ProfileOut, AppError> {
-    sqlx::query_as(concat!(select!(), " WHERE p.id = $1"))
-        .bind(id)
-        .fetch_optional(db)
+    sqlx::query_as!(
+        ProfileOut,
+        r#"SELECT p.id, p.name, p.document, p."createdAt" AS created_at, p."updatedAt" AS updated_at,
+               (SELECT count(*) FROM libraries l WHERE l."optimizeProfileId" = p.id) AS "library_count!"
+        FROM optimize_profiles p
+        WHERE p.id = $1"#,
+        id
+    )
+    .fetch_optional(db)
         .await?
         .ok_or_else(|| missing(id))
 }
@@ -129,11 +133,11 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<ProfileOut>), AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     let (name, doc) = checked(dto)?;
-    let id: i32 = sqlx::query_scalar(
+    let id = sqlx::query_scalar!(
         r#"INSERT INTO optimize_profiles (name, document) VALUES ($1, $2) RETURNING id"#,
+        name,
+        serde_json::to_value(doc).expect("profile serialises")
     )
-    .bind(name)
-    .bind(serde_json::to_value(doc).expect("profile serialises"))
     .fetch_one(&st.db)
     .await?;
     Ok((StatusCode::CREATED, Json(find(&st.db, id).await?)))
@@ -149,11 +153,13 @@ pub async fn update(
     a.require(Action::Manage, Subject::Settings)?;
     let id = int_param(&id.0)?;
     let (name, doc) = checked(dto)?;
-    let n = sqlx::query(r#"UPDATE optimize_profiles SET name = $2, document = $3, "updatedAt" = now() WHERE id = $1"#)
-        .bind(id)
-        .bind(name)
-        .bind(serde_json::to_value(doc).expect("profile serialises"))
-        .execute(&st.db)
+    let n = sqlx::query!(
+        r#"UPDATE optimize_profiles SET name = $2, document = $3, "updatedAt" = now() WHERE id = $1"#,
+        id,
+        name,
+        serde_json::to_value(doc).expect("profile serialises")
+    )
+    .execute(&st.db)
         .await?
         .rows_affected();
     if n == 0 {
@@ -171,14 +177,13 @@ pub async fn remove(
     a.require(Action::Manage, Subject::Settings)?;
     let id = int_param(&id.0)?;
     let mut tx = st.db.begin().await?;
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE libraries SET "optimizeNewFiles" = false WHERE "optimizeProfileId" = $1"#,
+        id
     )
-    .bind(id)
     .execute(&mut *tx)
     .await?;
-    let n = sqlx::query("DELETE FROM optimize_profiles WHERE id = $1")
-        .bind(id)
+    let n = sqlx::query!("DELETE FROM optimize_profiles WHERE id = $1", id)
         .execute(&mut *tx)
         .await?
         .rows_affected();
@@ -206,31 +211,35 @@ async fn library(
     if !accessible_library_ids(&st.db, a).await?.contains(&id) {
         return Err(AppError::not_found(format!("Library #{id} not found")));
     }
-    let (assigned, allow_rename, lib_stamp): (Option<i32>, bool, DateTime<Utc>) = sqlx::query_as(
-        r#"SELECT "optimizeProfileId", "allowRename", "updatedAt" FROM libraries WHERE id = $1"#,
+    let lib = sqlx::query!(
+        r#"SELECT "optimizeProfileId" AS optimize_profile_id, "allowRename" AS allow_rename, "updatedAt" AS updated_at FROM libraries WHERE id = $1"#,
+        id
     )
-    .bind(id)
     .fetch_one(&st.db)
     .await?;
+    let (assigned, allow_rename, lib_stamp) =
+        (lib.optimize_profile_id, lib.allow_rename, lib.updated_at);
     let profile_id = profile_id.or(assigned);
     let row: Option<(Value, DateTime<Utc>)> = match profile_id {
-        Some(p) => {
-            sqlx::query_as(r#"SELECT document, "updatedAt" FROM optimize_profiles WHERE id = $1"#)
-                .bind(p)
-                .fetch_optional(&st.db)
-                .await?
-        }
+        Some(p) => sqlx::query!(
+            r#"SELECT document, "updatedAt" AS updated_at FROM optimize_profiles WHERE id = $1"#,
+            p
+        )
+        .fetch_optional(&st.db)
+        .await?
+        .map(|r| (r.document, r.updated_at)),
         None => None,
     };
     if profile_id.is_some() && row.is_none() {
         return Err(bad("profileId must reference an existing optimize profile"));
     }
-    let (files, last): (i64, Option<DateTime<Utc>>) = sqlx::query_as(
-        r#"SELECT count(*), max(mf."updatedAt") FROM media_files mf JOIN media m ON m.id = mf."mediaId" WHERE m."libraryId" = $1"#,
+    let stats = sqlx::query!(
+        r#"SELECT count(*) AS "files!", max(mf."updatedAt") AS last FROM media_files mf JOIN media m ON m.id = mf."mediaId" WHERE m."libraryId" = $1"#,
+        id
     )
-    .bind(id)
     .fetch_one(&st.db)
     .await?;
+    let (files, last) = (stats.files, stats.last);
     let profile = row
         .as_ref()
         .map(|(d, _)| {

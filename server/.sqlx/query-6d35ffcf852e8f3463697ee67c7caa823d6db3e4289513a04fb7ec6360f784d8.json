@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"directPlayProfiles\" FROM client_codecs WHERE \"lastSeenAt\" > now() - interval '90 days'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "directPlayProfiles",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "client_codecs",
+            "name": "directPlayProfiles"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6d35ffcf852e8f3463697ee67c7caa823d6db3e4289513a04fb7ec6360f784d8"
+}

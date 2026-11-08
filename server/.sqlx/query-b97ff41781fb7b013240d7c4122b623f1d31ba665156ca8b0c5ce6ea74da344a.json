@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE libraries SET \"optimizeNewFiles\" = false WHERE \"optimizeProfileId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b97ff41781fb7b013240d7c4122b623f1d31ba665156ca8b0c5ce6ea74da344a"
+}

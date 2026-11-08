@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET state = 'queued', \"workerId\" = NULL, \"deviceId\" = NULL, \"leaseUntil\" = NULL,\n             progress = 0, \"updatedAt\" = now() WHERE id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc1ccaabed87f9073b463847ebb8972dd57ce61db06340498249b7ed42e44be3"
+}
