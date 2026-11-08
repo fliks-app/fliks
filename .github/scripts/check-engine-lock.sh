@@ -31,3 +31,8 @@ for p in linux-x64 linux-arm64 darwin-arm64 windows-x64; do
     have="$(sed -n "s/^sha256_${p//-/_}=//p" engine.lock)"
     [ "$have" = "$want" ] || fail "engine.lock sha256_${p//-/_} is $have, the release has $want"
 done
+for p in darwin-arm64 windows-x64; do
+    want="$(awk '{print $1}' "$tmp/fliks-engine-karaoke-$p".*.sha256)"
+    have="$(sed -n "s/^sha256_karaoke_${p//-/_}=//p" engine.lock)"
+    [ "$have" = "$want" ] || fail "engine.lock sha256_karaoke_${p//-/_} is $have, the release has $want"
+done

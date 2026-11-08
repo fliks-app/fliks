@@ -1,4 +1,5 @@
 //! Lyrics documents and their formats (`docs/spec/music.md`, Lyrics). Pure.
+pub mod karaoke;
 mod lrc;
 mod ttml;
 

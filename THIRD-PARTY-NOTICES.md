@@ -58,13 +58,19 @@ page, which shows each licence before the download:
 ## Server: Windows and macOS apps
 
 Both bundle the programs below; `fliks-engine` starts `fliks-server`, and the other programs run as
-separate processes.
+separate processes. The `karaoke/` programs ship with the engine's karaoke pack (macOS arm64 and
+Windows x64 only, pinned in `engine.lock`).
 
 | Component | License | Source |
 |---|---|---|
 | fliks-engine (release binary pinned in `engine.lock`) | AGPL-3.0-or-later | https://github.com/fliks-app/engine |
 | jellyfin-ffmpeg (portable build) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | PostgreSQL (Windows: EDB binaries; macOS: Homebrew bottle) | PostgreSQL License | https://www.postgresql.org |
+| ONNX Runtime (official release 1.31.1 in `karaoke/`, loaded at run time by `fliks-engine`; macOS build with the CoreML provider, Windows build CPU only; `LICENSE` and `ThirdPartyNotices.txt` beside it) | MIT | https://github.com/microsoft/onnxruntime |
+| whisper.cpp (`whisper-cli` v1.9.5 in `karaoke/`, Metal on macOS, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
+| ffmpeg-pitch (`karaoke/ffmpeg-pitch`, FFmpeg built with `--enable-gpl --enable-librubberband` and libopus, for key changes and stem encoding; license texts and source offer in `karaoke/licenses/ffmpeg-pitch/SOURCE`) | GPL-3.0-or-later | https://ffmpeg.org |
+| Rubber Band Library (linked statically into ffmpeg-pitch) | GPL-2.0-or-later | https://breakfastquay.com/rubberband/ |
+| Opus (`libopus`, linked statically into ffmpeg-pitch) | BSD-3-Clause | https://opus-codec.org |
 | Microsoft Visual C++ runtime DLLs (Windows only) | Microsoft redistributable license | https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
 
 ## Desktop client

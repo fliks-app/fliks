@@ -78,6 +78,9 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     }
     st.plugins.settings_changed(keys, origin);
     st.metadata.lang.settings_changed(keys);
+    if keys.iter().any(|k| k.starts_with("karaoke.")) {
+        st.karaoke.wake.notify_one();
+    }
     let known = st.namespaces();
     tokio::join!(
         st.engine.settings_changed(keys),

@@ -1,16 +1,22 @@
 import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideChevronDown, LucidePause, LucidePlay } from '@lucide/angular';
+import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
+import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
+import type { StemMode } from '../../../core/services/audio-player/stem-mix';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
 const OFFSET_LIMIT = 60000;
+const STEM_MODES: StemMode[] = ['original', 'guide', 'instrumental'];
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
 const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttml: 'ttml', xml: 'ttml', srt: 'srt', txt: 'plain' };
 
@@ -22,6 +28,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 })
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
+  private readonly karaoke = inject(KaraokeApiService);
   protected readonly audio = inject(AudioPlayerService);
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
@@ -62,9 +69,34 @@ export class LyricsPanelComponent {
   protected readonly tap = signal<TapState>({ lines: [], next: 0 });
   protected readonly tapReady = computed(() => tapLines(this.tap()) !== null);
 
+  protected readonly kStatus = signal<KaraokeStatus | null>(null);
+  protected readonly kState = signal<KaraokeItemState | null>(null);
+  protected readonly kBusy = signal(false);
+  protected readonly stemModes = STEM_MODES;
+  /** Karaoke controls apply to the track that is playing, in a library with the feature ready. */
+  protected readonly karaokeOn = computed(
+    () => !!this.kStatus()?.ready && this.audio.musicMode() && this.audio.track()?.itemId === this.itemId(),
+  );
+
   private anchor = { pos: 0, at: 0 };
 
   constructor() {
+    void this.karaoke.status().then((s) => this.kStatus.set(s), () => undefined);
+    inject(SseService)
+      .karaokeEvents.pipe(takeUntilDestroyed())
+      .subscribe((e) => {
+        if (e.type !== 'karaoke.job_changed') return;
+        const j = e as unknown as KaraokeJobChanged;
+        if (j.itemId === this.itemId()) void this.onJob(j);
+      });
+    effect(() => {
+      const id = this.itemId();
+      const on = this.karaokeOn();
+      untracked(() => {
+        this.kState.set(null);
+        if (on) void this.loadKaraoke(id);
+      });
+    });
     effect(() => {
       const id = this.itemId();
       untracked(() => void this.load(id));
@@ -72,6 +104,40 @@ export class LyricsPanelComponent {
     effect(() => {
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
     });
+  }
+
+  private async loadKaraoke(id: number): Promise<void> {
+    try {
+      const s = await this.karaoke.itemState(id);
+      if (this.itemId() === id) this.kState.set(s);
+    } catch {
+      // No state: the block stays hidden.
+    }
+  }
+
+  private async onJob(j: KaraokeJobChanged): Promise<void> {
+    if (j.state === 'ready' || j.state === 'failed') {
+      await this.loadKaraoke(j.itemId);
+      if (j.state === 'ready') {
+        void this.audio.refreshStems();
+        void this.reload();
+      }
+      return;
+    }
+    this.kState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
+  }
+
+  protected async prepare(): Promise<void> {
+    this.kBusy.set(true);
+    try {
+      const s = await this.karaoke.prepare(this.itemId());
+      this.kState.set(s);
+      if (s.state === 'ready') void this.audio.refreshStems();
+    } catch {
+      // The interceptor toasts the reason.
+    } finally {
+      this.kBusy.set(false);
+    }
   }
 
   private async load(id: number, run: () => Promise<LyricsResponse> = () => this.api.get(id)): Promise<void> {

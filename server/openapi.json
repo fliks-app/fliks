@@ -1120,6 +1120,40 @@
         }
       }
     },
+    "/api/items/{itemId}/karaoke": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "item_state",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "prepare",
+        "responses": {
+          "200": {},
+          "202": {},
+          "409": {},
+          "503": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      }
+    },
     "/api/items/{itemId}/lyrics": {
       "get": {
         "tags": [
@@ -1184,6 +1218,55 @@
         "operationId": "unrate",
         "responses": {
           "204": {}
+        }
+      }
+    },
+    "/api/karaoke/models": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "models",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      }
+    },
+    "/api/karaoke/models/{id}": {
+      "delete": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "delete_model",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/karaoke/models/{id}/download": {
+      "post": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "download",
+        "responses": {
+          "200": {},
+          "202": {},
+          "400": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/karaoke/status": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {}
         }
       }
     },
@@ -1858,6 +1941,20 @@
         "operationId": "create",
         "responses": {
           "201": {}
+        }
+      }
+    },
+    "/api/media-files/{mediaFileId}/stems/{kind}": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "summary": "Rule 20.",
+        "operationId": "stem",
+        "responses": {
+          "200": {},
+          "206": {},
+          "404": {}
         }
       }
     },

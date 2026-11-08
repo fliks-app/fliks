@@ -173,10 +173,10 @@ pub async fn rebind(
     Ok(())
 }
 
-/// Whether the track already holds a synced main document that needs no provider.
+/// Whether the track already holds a synced main document that needs no provider: a `generated` one does not count.
 pub async fn has_synced_main(db: &PgPool, item: i32) -> sqlx::Result<bool> {
     sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM lyrics WHERE "itemId" = $1 AND kind = 'main' AND sync <> 'none')"#,
+        r#"SELECT EXISTS (SELECT 1 FROM lyrics WHERE "itemId" = $1 AND kind = 'main' AND sync <> 'none' AND source <> 'generated')"#,
     )
     .bind(item)
     .fetch_one(db)

@@ -14,6 +14,8 @@ Item delivery: [`spec/item-delivery.md`](spec/item-delivery.md) (audio and text 
 
 Music: [`spec/music.md`](spec/music.md) (the `album` kind, release groups, releases and tracks, credits, works, ratings, the music id namespaces, the records a music provider answers and the resolution of an artist).
 
+Karaoke: [`spec/karaoke.md`](spec/karaoke.md) (models, stems, on-demand and background preparation, generated lyrics, reference melody, stem delivery).
+
 Comics: [`spec/comics.md`](spec/comics.md) (the `comic` kind, volumes and issues, `comic_details`, `comic_issues`, the detail and list shapes, archive ingest, the page routes and local metadata).
 
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash). KEPUB conversion: [`spec/kepub.md`](spec/kepub.md).

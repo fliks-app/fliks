@@ -311,6 +311,11 @@ pub async fn refresh(
         .execute(&st.db)
         .await
         .map_err(|e| e.to_string())?;
+        if let Some(ms) = p.info.duration_seconds.map(|s| (s * 1000.0) as i32) {
+            crate::karaoke::store::invalidate_if_replaced(&st.db, r.id, ms)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
         changed.push(r.id);
         found.push((r.id, abs, embedded(&p.info)));
     }

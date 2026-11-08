@@ -32,6 +32,46 @@
     </div>
   }
 
+  @if (kStatus()?.ready && audio.musicMode() && audio.stemsNative) {
+    <p class="text-sm text-base-content/60" data-testid="karaoke-native">{{ 'karaoke.native_hint' | translate }}</p>
+  } @else if (karaokeOn() && kState(); as k) {
+    <div class="scroll-ring-safe flex flex-wrap items-center gap-2" appTvSection data-testid="karaoke-block">
+      <span class="text-sm font-medium">{{ 'karaoke.title' | translate }}</span>
+      @switch (k.state) {
+        @case ('none') {
+          <button type="button" class="btn btn-sm" [disabled]="kBusy()" (click)="prepare()" data-testid="karaoke-prepare">{{ 'karaoke.prepare' | translate }}</button>
+        }
+        @case ('queued') {
+          <span class="text-sm text-base-content/60" role="status">{{ 'karaoke.queued' | translate }}</span>
+        }
+        @case ('running') {
+          <span class="text-sm text-base-content/60" role="status">{{ 'karaoke.stage_' + (k.stage ?? 'separate') | translate }}</span>
+          <progress class="progress progress-primary w-32" [value]="k.progress ?? 0" max="100" [attr.aria-label]="'karaoke.progress' | translate"></progress>
+        }
+        @case ('failed') {
+          <span class="text-sm text-error" role="alert">{{ 'karaoke.failed' | translate }}{{ k.error ? ' ' + k.error : '' }}</span>
+          <button type="button" class="btn btn-sm" [disabled]="kBusy()" (click)="prepare()" data-testid="karaoke-retry">{{ 'karaoke.retry' | translate }}</button>
+        }
+        @case ('ready') {
+          <div class="join" role="group" [attr.aria-label]="'karaoke.mix' | translate">
+            @for (m of stemModes; track m) {
+              <button
+                type="button"
+                class="btn btn-sm join-item"
+                [class.btn-primary]="audio.stemMode() === m"
+                [attr.aria-pressed]="audio.stemMode() === m"
+                [disabled]="m !== 'original' && !audio.stemsAvailable()"
+                (click)="audio.setStemMode(m)"
+              >
+                {{ 'karaoke.mode_' + m | translate }}
+              </button>
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+
   @if (failed()) {
     <p class="text-sm text-error" role="alert">{{ 'lyrics.error' | translate }}</p>
   }

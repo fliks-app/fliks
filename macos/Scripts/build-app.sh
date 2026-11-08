@@ -103,6 +103,19 @@ curl -fsSL -o "$RESOURCES/bin/fliks-engine" \
 echo "$ENGINE_SHA  $RESOURCES/bin/fliks-engine" | shasum -a 256 -c -
 chmod +x "$RESOURCES/bin/fliks-engine"
 
+# Karaoke pack (ONNX Runtime, whisper-cli, ffmpeg-pitch): the engine looks for karaoke/ next to itself.
+KARAOKE_SHA="$(sed -n 's/^sha256_karaoke_darwin_arm64=//p' "$REPO_ROOT/engine.lock")"
+if [ -z "$KARAOKE_SHA" ]; then
+    echo "Error: engine.lock has no sha256_karaoke_darwin_arm64 (run scripts/bump-engine.sh)." >&2
+    exit 1
+fi
+KARAOKE_TGZ="$(mktemp)"
+curl -fsSL -o "$KARAOKE_TGZ" \
+    "https://github.com/fliks-app/engine/releases/download/v$ENGINE_VERSION/fliks-engine-karaoke-darwin-arm64.tar.gz"
+echo "$KARAOKE_SHA  $KARAOKE_TGZ" | shasum -a 256 -c -
+tar -xzf "$KARAOKE_TGZ" -C "$RESOURCES/bin"
+rm -f "$KARAOKE_TGZ"
+
 # ── fliks-server (Rust, built here; runs behind the engine) ──
 echo "    [server] Building fliks-server..."
 (cd "$REPO_ROOT/server" && cargo build --release --locked -p fliks-server)
@@ -272,6 +285,16 @@ for filt in zscale tonemap_videotoolbox; do
     fi
 done
 echo "    [verify] ffmpeg has zscale + tonemap_videotoolbox"
+
+# 4. The karaoke pack must be present and its tools must run once signed (hardened runtime).
+for f in whisper-cli ffmpeg-pitch libonnxruntime.dylib; do
+    [ -f "$RESOURCES/bin/karaoke/$f" ] || { echo "Error: bin/karaoke/$f is missing."; exit 1; }
+done
+"$RESOURCES/bin/karaoke/ffmpeg-pitch" -hide_banner -filters 2>/dev/null | grep -qw rubberband \
+    || { echo "Error: bundled ffmpeg-pitch has no 'rubberband' filter."; exit 1; }
+"$RESOURCES/bin/karaoke/whisper-cli" --help >/dev/null 2>&1 \
+    || { echo "Error: bundled whisper-cli does not run once signed."; exit 1; }
+echo "    [verify] karaoke pack present, ffmpeg-pitch has rubberband, whisper-cli runs"
 
 echo ""
 echo "==> Build complete: $APP_BUNDLE"

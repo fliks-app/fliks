@@ -258,6 +258,18 @@ pub enum SseEvent {
         progress: Num,
         paused: bool,
     },
+    /// An engine model (`ModelInfo`) started or ended a download, progressed, or was deleted.
+    #[serde(rename = "karaoke.model_changed")]
+    KaraokeModelChanged { model: Value },
+    #[serde(rename = "karaoke.job_changed")]
+    KaraokeJobChanged {
+        item_id: i64,
+        state: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stage: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        progress: Option<Num>,
+    },
     #[serde(rename = "activity.changed")]
     ActivityChanged {},
     #[serde(rename = "command.started")]

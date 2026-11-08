@@ -1,0 +1,118 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="flex max-w-3xl flex-col gap-6">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'karaoke.admin.title' | translate }}</h1>
+      <p class="mt-1 text-sm text-base-content/60">{{ 'karaoke.admin.desc' | translate }}</p>
+    </div>
+
+    <div class="card border border-base-200 bg-base-100">
+      <div class="card-body gap-4">
+        <app-toggle-field [label]="'karaoke.admin.enabled' | translate" [hint]="'karaoke.admin.enabled_hint' | translate" [value]="enabled()" (valueChange)="enabled.set($event)" />
+        <app-toggle-field [label]="'karaoke.admin.background' | translate" [hint]="'karaoke.admin.background_hint' | translate" [value]="background()" (valueChange)="background.set($event)" />
+        <div>
+          <app-input-field type="number" [label]="'karaoke.admin.budget' | translate" [hint]="'karaoke.admin.budget_hint' | translate: { min: minBudget }" [value]="budget()" (valueChange)="budget.set($event)" />
+          @if (!budgetValid()) {
+            <p class="text-sm text-error" role="alert">{{ 'karaoke.admin.budget_invalid' | translate: { min: minBudget } }}</p>
+          }
+        </div>
+        <fieldset class="flex flex-col gap-2">
+          <legend class="font-medium">{{ 'karaoke.admin.verified' | translate }}</legend>
+          <p class="text-sm text-base-content/60">{{ 'karaoke.admin.verified_hint' | translate }}</p>
+          <div class="flex flex-wrap gap-4">
+            @for (p of providers; track p) {
+              <label class="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" class="checkbox checkbox-sm" [checked]="verified().includes(p)" (change)="toggleProvider(p, $any($event.target).checked)" />
+                <span>{{ p }}</span>
+              </label>
+            }
+          </div>
+        </fieldset>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" [disabled]="saving() || !budgetValid()" (click)="save()">
+            @if (saving()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border border-base-200 bg-base-100">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">{{ 'karaoke.admin.models' | translate }}</h2>
+        @if (unavailable()) {
+          <div class="flex flex-col items-start gap-1 rounded-lg bg-base-200 p-4" role="status" data-testid="karaoke-unavailable">
+            <p class="font-medium">{{ 'karaoke.admin.unavailable' | translate }}</p>
+            <p class="text-sm text-base-content/60">{{ 'karaoke.admin.unavailable_hint' | translate }}</p>
+          </div>
+        } @else if (catalogue(); as c) {
+          <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" data-testid="karaoke-runtime">
+            <dt class="text-base-content/60">{{ 'karaoke.admin.runtime' | translate }}</dt>
+            <dd>{{ (c.runtime.onnx ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}@if (c.runtime.onnxError) { <span class="text-error"> {{ c.runtime.onnxError }}</span> }</dd>
+            <dt class="text-base-content/60">{{ 'karaoke.admin.providers' | translate }}</dt>
+            <dd>{{ c.runtime.providers.length ? c.runtime.providers.join(', ') : '-' }}</dd>
+            <dt class="text-base-content/60">{{ 'karaoke.admin.speech' | translate }}</dt>
+            <dd>{{ (c.runtime.whisper ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}</dd>
+            <dt class="text-base-content/60">{{ 'karaoke.admin.key_change' | translate }}</dt>
+            <dd>{{ (c.runtime.rubberband ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}</dd>
+          </dl>
+
+          <ul class="flex flex-col gap-3" data-testid="karaoke-models">
+            @for (m of c.models; track m.id) {
+              <li class="flex flex-col gap-2 rounded-lg bg-base-200 p-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium">{{ m.name }} <span class="text-sm font-normal text-base-content/60">{{ m.version }}</span></p>
+                    <p class="text-sm text-base-content/60">{{ 'karaoke.kind_' + m.kind | translate }} · {{ size(m) }} · {{ 'karaoke.state_' + m.state | translate }}</p>
+                  </div>
+                  <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="review(m)">{{ m.licence.name }}</button>
+                    @if (canDownload(m)) {
+                      <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === m.id" (click)="review(m)">{{ 'karaoke.admin.download' | translate }}</button>
+                    }
+                    @if (m.state === 'installed' || m.state === 'downloading') {
+                      <button type="button" class="btn btn-error btn-outline btn-sm" [disabled]="busy() === m.id" (click)="remove(m)">{{ 'common.delete' | translate }}</button>
+                    }
+                  </div>
+                </div>
+                @if (m.state === 'downloading') {
+                  <progress class="progress progress-primary w-full" [value]="percent(m)" max="100" [attr.aria-label]="'karaoke.admin.progress' | translate"></progress>
+                }
+                @if (m.state === 'failed' && m.error) {
+                  <p class="text-sm text-error" role="alert">{{ m.error }}</p>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </div>
+  </div>
+}
+
+<dialog #licence class="modal" role="dialog" aria-modal="true" (close)="closeReview()">
+  @if (reviewing(); as m) {
+    <div class="modal-box max-w-2xl">
+      <app-modal-header [title]="m.licence.name" />
+      <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded bg-base-200 p-3 text-sm" tabindex="0">{{ m.licence.text }}</pre>
+      @if (canDownload(m)) {
+        <label class="mt-4 flex cursor-pointer items-start gap-3">
+          <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" [checked]="accepted()" (change)="accepted.set($any($event.target).checked)" />
+          <span>{{ 'karaoke.admin.accept' | translate: { name: m.name } }}</span>
+        </label>
+      }
+      <app-modal-footer>
+        <button type="button" class="btn" (click)="closeReview()">{{ 'common.close' | translate }}</button>
+        @if (canDownload(m)) {
+          <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="download()">{{ 'karaoke.admin.download' | translate }}</button>
+        }
+      </app-modal-footer>
+    </div>
+  }
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeReview()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

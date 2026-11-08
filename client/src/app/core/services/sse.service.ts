@@ -198,6 +198,8 @@ export class SseService implements OnDestroy {
   readonly partyEvents = new Subject<PartyEvent>();
   /** Optimizer queue events, on their own Subject: progress ticks every heartbeat and must not flood `lastEvent`. */
   readonly optimizeEvents = new Subject<SseEvent>();
+  /** Karaoke model downloads and track jobs: progress ticks every second and must not flood `lastEvent`. */
+  readonly karaokeEvents = new Subject<SseEvent>();
   /** Pairing requests and cancellations, routed on their own Subject: two in one tick must both reach the approver. */
   readonly pairingEvents = new Subject<SseEvent>();
   /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
@@ -374,6 +376,7 @@ export class SseService implements OnDestroy {
           // A reconnect means we don't know what we missed while disconnected.
           void invalidatePrefix('/api/media');
           this.optimizeEvents.next(data);
+          this.karaokeEvents.next(data);
           return;
         }
         if (data.type === 'remote.command') {
@@ -390,6 +393,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type.startsWith('optimize.')) {
           this.optimizeEvents.next(data);
+          return;
+        }
+        if (data.type.startsWith('karaoke.')) {
+          this.karaokeEvents.next(data);
           return;
         }
         if (data.type === 'pairing.requested' || data.type === 'pairing.cancelled') {
