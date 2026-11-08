@@ -3653,6 +3653,7 @@
         "no_devices": "Ningún worker se ha anunciado todavía.",
         "devices_hint": "Deje un campo vacío para conservar el valor que declara el dispositivo.",
         "max_jobs": "Trabajos simultáneos",
+        "device_reserve": "Reproducciones por hardware antes de pausar (este dispositivo)",
         "saved": "Ajustes guardados",
         "verify": "Verificación",
         "verify_days": "Verificar cada (días)",

@@ -51,6 +51,8 @@ pub struct Settings {
     pub device_max_jobs: BTreeMap<String, u32>,
     /// Hardware playback reads on a device that pause its background GPU jobs; 0 never pauses.
     pub gpu_playback_before_pause: u32,
+    /// Per device: overrides `gpu_playback_before_pause`.
+    pub device_gpu_playback_before_pause: BTreeMap<String, u32>,
     /// CPU weight of a software optimization against the playback budget.
     pub cpu_weight: u32,
     /// No new lease while set; running jobs finish.
@@ -70,6 +72,7 @@ impl Default for Settings {
             trash_min_free_gb: 20,
             device_max_jobs: BTreeMap::new(),
             gpu_playback_before_pause: 1,
+            device_gpu_playback_before_pause: BTreeMap::new(),
             cpu_weight: 2,
             paused: false,
             verify_interval_days: 0,

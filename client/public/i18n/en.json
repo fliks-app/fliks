@@ -3653,6 +3653,7 @@
         "no_devices": "No worker has announced itself yet.",
         "devices_hint": "Leave a field empty to keep the value the device declares.",
         "max_jobs": "Simultaneous jobs",
+        "device_reserve": "Hardware playbacks before pausing (this device)",
         "saved": "Settings saved",
         "verify": "Verification",
         "verify_days": "Verify every (days)",

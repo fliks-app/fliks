@@ -37,7 +37,7 @@
             <div class="flex flex-wrap gap-2">
               @for (d of w.devices; track d.id) {
                 <span class="badge badge-ghost text-sm"
-                  >{{ d.id }} · {{ d.encoders.join(', ') || '-' }} ·
+                  >{{ d.id }}{{ d.name ? ' (' + d.name + ')' : '' }} · {{ d.encoders.join(', ') || '-' }} ·
                   {{
                     'settings.optimize.workers.device_jobs' | translate: { count: d.maxJobs }
                   }}</span

@@ -175,6 +175,8 @@ export interface OptimizeSettings {
   trashMinFreeGb: number;
   deviceMaxJobs: Record<string, number>;
   gpuPlaybackBeforePause: number;
+  /** Per device id: overrides `gpuPlaybackBeforePause` for that device. */
+  deviceGpuPlaybackBeforePause: Record<string, number>;
   cpuWeight: number;
   verifyIntervalDays: number;
   verifyBatch: number;
@@ -243,6 +245,7 @@ export interface OptimizeJob {
 
 export interface WorkerDevice {
   id: string;
+  name?: string;
   encoders: string[];
   decoders: string[];
   maxJobs: number;
