@@ -55,10 +55,10 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
 }
 
 describe('SettingsSectionsService', () => {
-  it('resolves the 8 core sections with 32 items total, and nothing else, with an empty registry', () => {
+  it('resolves the 9 core sections with 32 items total, and nothing else, with an empty registry', () => {
     const svc = createService({ permissions: ALL_PERMISSIONS });
     const sections = svc.sections();
-    expect(sections).toHaveLength(8);
+    expect(sections).toHaveLength(9);
     expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(32);
   });
 
@@ -107,7 +107,7 @@ describe('SettingsSectionsService', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('nav', 100, { slot: 'nav.main' })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(8);
+    expect(svc.sections()).toHaveLength(9);
   });
 
   it('drops a plugin settings.page contribution with an unrecognised action kind', () => {
@@ -115,7 +115,7 @@ describe('SettingsSectionsService', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('broken', 100, { action: { kind: 'bogus' } as never })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(8);
+    expect(svc.sections()).toHaveLength(9);
   });
 
   it('gives an admin the same sections as a non-admin holding the same permissions, plus Single sign-on', () => {
