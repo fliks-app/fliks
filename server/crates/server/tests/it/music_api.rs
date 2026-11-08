@@ -49,6 +49,7 @@ async fn call(app: &Router, t: &str, method: &str, uri: &str, body: Option<Value
     let mut b = Request::builder()
         .method(method)
         .uri(uri)
+        .header("x-fliks-kinds", "movie,series,book,comic,album")
         .header("authorization", format!("Bearer {t}"));
     let body = match body {
         Some(v) => {

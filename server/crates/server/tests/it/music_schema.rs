@@ -297,6 +297,7 @@ mod api {
         let req = Request::builder()
             .method(method)
             .uri(uri)
+            .header("x-fliks-kinds", "movie,series,book,comic,album")
             .header("authorization", format!("Bearer {t}"))
             .header("content-type", "application/json")
             .body(Body::from(body.to_string()))
