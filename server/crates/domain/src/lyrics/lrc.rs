@@ -1,5 +1,5 @@
 //! LRC and enhanced LRC (`<mm:ss.xx>` word tags).
-use super::{Agent, Cue, Doc, Line, Parsed, main_agent};
+use super::{Agent, Cue, Doc, Line, MAX_CUES, MAX_LINE_CHARS, MAX_LINES, Parsed, main_agent};
 
 /// `mm:ss`, `mm:ss.x` to `mm:ss.xxx` in milliseconds.
 fn time(s: &str) -> Option<i64> {
@@ -37,6 +37,9 @@ fn meta(line: &str) -> Option<(&str, &str)> {
     (!k.is_empty() && k.bytes().all(|b| b.is_ascii_alphabetic())).then_some((k, v.trim()))
 }
 
+/// The longest `<mmmm:ss.xxx>` tag, so a run of `<` is not searched to its end.
+const TAG_MAX: usize = 13;
+
 /// The text of a line with its `<mm:ss.xx>` tags taken out, and the cues they made.
 fn words(rest: &str) -> (String, Vec<Cue>) {
     let (mut text, mut cues): (String, Vec<Cue>) = (String::new(), vec![]);
@@ -50,7 +53,7 @@ fn words(rest: &str) -> (String, Vec<Cue>) {
             if from + lead < to {
                 cues.push(Cue {
                     start,
-                    end: end.max(start),
+                    end: if end == i64::MIN { end } else { end.max(start) },
                     byte_start: from + lead,
                     byte_end: to,
                     agent_id: None,
@@ -61,7 +64,10 @@ fn words(rest: &str) -> (String, Vec<Cue>) {
     };
     while i < rest.len() {
         if rest.as_bytes()[i] == b'<'
-            && let Some(j) = rest[i..].find('>')
+            && let Some(j) = rest.as_bytes()[i..]
+                .iter()
+                .take(TAG_MAX)
+                .position(|&b| b == b'>')
             && let Some(t) = time(&rest[i + 1..i + j])
         {
             close(&text, &mut open, t, &mut cues);
@@ -78,15 +84,20 @@ fn words(rest: &str) -> (String, Vec<Cue>) {
     (text, cues)
 }
 
-pub(super) fn parse(text: &str) -> Parsed {
+/// Fails as soon as a document limit is passed, before a repeated line is cloned.
+pub(super) fn parse(text: &str) -> Result<Parsed, String> {
     let mut out = Parsed::default();
     let mut lines: Vec<Line> = vec![];
     let mut bg: Vec<Line> = vec![];
+    let mut cue_total = 0;
     for raw in text.split('\n') {
         let mut rest = raw.trim_start();
         let mut starts = vec![];
         while let Some((t, r)) = leading_time(rest) {
             starts.push(t);
+            if lines.len() + starts.len() > MAX_LINES {
+                return Err(too_many_lines());
+            }
             rest = r.trim_start_matches(' ');
         }
         if starts.is_empty() {
@@ -98,6 +109,9 @@ pub(super) fn parse(text: &str) -> Parsed {
                     "lang" => out.lang = Some(v.to_lowercase()).filter(|v| !v.is_empty()),
                     "bg" => {
                         if let Some(prev) = lines.last() {
+                            if lines.len() + bg.len() >= MAX_LINES {
+                                return Err(too_many_lines());
+                            }
                             bg.push(Line {
                                 start: prev.start,
                                 text: v.to_owned(),
@@ -111,6 +125,9 @@ pub(super) fn parse(text: &str) -> Parsed {
                 continue;
             }
             // A line with no tag: kept as plain text, so a half-synced file is not lost.
+            if lines.len() >= MAX_LINES {
+                return Err(too_many_lines());
+            }
             lines.push(Line {
                 text: rest.trim_end().to_owned(),
                 ..Line::default()
@@ -128,6 +145,13 @@ pub(super) fn parse(text: &str) -> Parsed {
             })
             .collect();
         let text = body.trim().to_owned();
+        cue_total += cues.len() * starts.len();
+        if cue_total > MAX_CUES {
+            return Err("too many cues".into());
+        }
+        if text.chars().count() > MAX_LINE_CHARS {
+            continue;
+        }
         for s in starts {
             lines.push(Line {
                 start: Some(s),
@@ -172,7 +196,11 @@ pub(super) fn parse(text: &str) -> Parsed {
             name: None,
         });
     }
-    out
+    Ok(out)
+}
+
+fn too_many_lines() -> String {
+    format!("more than {MAX_LINES} lines")
 }
 
 /// A repeated line (several tags) keeps its word times relative to its first word.
@@ -300,5 +328,34 @@ mod tests {
         let text = super::to_lrc(&p.doc, 0, true);
         assert_eq!(parse_any(Format::Elrc, &text).unwrap().doc, p.doc);
         assert!(!super::to_lrc(&p.doc, 100, false).contains('<'));
+    }
+
+    #[test]
+    fn an_unclosed_last_word_ends_with_its_line() {
+        let p = parse_any(
+            Format::Elrc,
+            "[00:01.00]<00:01.00>la <00:01.50>la\n[00:03.00]<00:03.00>lo",
+        )
+        .unwrap();
+        let c = &p.doc.lines[0].cues;
+        assert_eq!((c[0].end, c[1].end), (1500, 3000));
+    }
+
+    #[test]
+    fn hostile_documents_fail_fast() {
+        let t = std::time::Instant::now();
+        let tags = "[00:01.00]".repeat(70_000);
+        assert!(parse_any(Format::Lrc, &format!("{tags}x")).is_err());
+        let words = "<00:01.00>a ".repeat(20_000);
+        let line = format!("{}{words}", "[00:01.00]".repeat(4000));
+        assert!(parse_any(Format::Elrc, &line).is_err());
+        assert!(parse_any(Format::Elrc, &format!("[00:01.00]{}", "<".repeat(1 << 20))).is_err());
+        assert!(parse_any(Format::Lrc, &format!("[00:01.00]a{}", "\n".repeat(1 << 20))).is_err());
+        assert!(parse_any(Format::Plain, &"a\n".repeat(1 << 19)).is_err());
+        assert!(
+            t.elapsed() < std::time::Duration::from_secs(5),
+            "{:?}",
+            t.elapsed()
+        );
     }
 }

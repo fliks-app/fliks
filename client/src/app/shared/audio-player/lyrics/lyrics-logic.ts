@@ -19,6 +19,31 @@ export function toRows(doc: StructuredLyrics): LyricsRow[] {
   });
 }
 
+export interface CueSegment {
+  text: string;
+  /** Index of the cue this text is, or null for the text between cues. */
+  cue: number | null;
+  /** Index of the cue before this text, -1 for none. */
+  prev: number;
+}
+
+/** A line cut at its cues' UTF-8 byte ranges: the cues and the text between them, so no word is glued to the next. */
+export function cueSegments(text: string, cues: readonly LyricsCue[]): CueSegment[] {
+  const bytes = new TextEncoder().encode(text);
+  const slice = (a: number, b: number) => new TextDecoder().decode(bytes.slice(a, b));
+  const out: CueSegment[] = [];
+  let at = 0;
+  cues.forEach((c, k) => {
+    const from = Math.min(Math.max(c.byteStart, at), bytes.length);
+    const to = Math.min(Math.max(c.byteEnd, from), bytes.length);
+    if (from > at) out.push({ text: slice(at, from), cue: null, prev: k - 1 });
+    out.push({ text: slice(from, to), cue: k, prev: k - 1 });
+    at = to;
+  });
+  if (at < bytes.length) out.push({ text: slice(at, bytes.length), cue: null, prev: cues.length - 1 });
+  return out;
+}
+
 /** The last line started at `posMs`; -1 before the first. A positive offset shows the text sooner. */
 export function activeIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
   const t = posMs + offsetMs;

@@ -765,16 +765,18 @@ impl MetadataProvider for PluginProvider {
                 lang: h.lang,
                 source_ref: h.source_ref,
             });
-            self.checked(
-                &seen,
-                match hit {
-                    Some(h) if h.document.len() > MAX_LYRICS => Err(bad("lyrics over 1 MiB")),
-                    Some(h) if fliks_domain::lyrics::Format::parse(&h.format).is_none() => {
-                        Err(bad("unknown lyrics format"))
-                    }
-                    h => Ok(h),
+            let checked = match hit {
+                Some(h) if h.document.len() > MAX_LYRICS => Err(bad("lyrics over 1 MiB")),
+                Some(h) => match fliks_domain::lyrics::Format::parse(&h.format) {
+                    None => Err(bad("unknown lyrics format")),
+                    Some(_) if h.instrumental => Ok(Some(h)),
+                    Some(f) => fliks_domain::lyrics::parse(f, &h.document)
+                        .map(|_| Some(h))
+                        .map_err(|e| bad(&format!("unreadable lyrics: {e}"))),
                 },
-            )
+                None => Ok(None),
+            };
+            self.checked(&seen, checked)
         }
         .boxed()
     }

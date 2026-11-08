@@ -131,6 +131,18 @@ pub fn clean(text: &str) -> String {
     t.replace("\r\n", "\n").replace('\r', "\n").nfc().collect()
 }
 
+/// A language tag as the stored code: lower case, the region after `-` or `_` dropped, 1 to 8 letters or digits.
+pub fn lang_code(s: &str) -> Option<String> {
+    let base = s.split(['-', '_']).next()?.to_lowercase();
+    ((1..=8).contains(&base.len()) && base.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .then_some(base)
+}
+
+/// `<lang>` of `song.<lang>.lrc`: two or three letters, a region dropped.
+pub fn lang_infix(s: &str) -> Option<String> {
+    lang_code(s).filter(|b| (2..=3).contains(&b.len()) && b.bytes().all(|b| b.is_ascii_lowercase()))
+}
+
 /// Whether some line of `text` starts with an LRC time tag.
 pub fn looks_synced(text: &str) -> bool {
     text.lines()
@@ -141,8 +153,8 @@ pub fn looks_synced(text: &str) -> bool {
 pub fn parse(format: Format, text: &str) -> Result<Parsed, String> {
     let text = clean(text);
     let p = match format {
-        Format::Lrc | Format::Elrc => lrc::parse(&text),
-        Format::Plain if looks_synced(&text) => lrc::parse(&text),
+        Format::Lrc | Format::Elrc => lrc::parse(&text)?,
+        Format::Plain if looks_synced(&text) => lrc::parse(&text)?,
         Format::Plain => plain(&text),
         Format::Srt => srt(&text),
         Format::Ttml => ttml::parse(&text)?,
@@ -166,6 +178,7 @@ fn check(mut p: Parsed) -> Result<Parsed, String> {
     if p.doc.agents.is_empty() {
         p.doc.agents.push(main_agent());
     }
+    p.lang = p.lang.as_deref().and_then(lang_code);
     p.sync = sync_of(&p.doc);
     p.offset_ms = p.offset_ms.clamp(-MAX_OFFSET_MS, MAX_OFFSET_MS);
     Ok(p)
@@ -184,6 +197,7 @@ pub fn sync_of(d: &Doc) -> Sync {
 fn plain(text: &str) -> Parsed {
     let mut lines: Vec<Line> = text
         .split('\n')
+        .take(MAX_LINES + 1)
         .map(|l| Line {
             text: l.trim_end().to_owned(),
             ..Line::default()
@@ -225,6 +239,9 @@ fn srt_time(s: &str) -> Option<i64> {
 fn srt(text: &str) -> Parsed {
     let mut lines = vec![];
     for block in text.split("\n\n") {
+        if lines.len() > MAX_LINES {
+            break;
+        }
         let mut it = block.lines().map(str::trim).filter(|l| !l.is_empty());
         let mut head = it.next();
         if head.is_some_and(|h| h.bytes().all(|b| b.is_ascii_digit())) {
@@ -361,5 +378,13 @@ mod tests {
         let d = without_timing(&p.doc);
         assert_eq!(sync_of(&d), Sync::None);
         assert_eq!(d.lines[0].text, "la la");
+    }
+
+    #[test]
+    fn a_region_language_is_reduced_to_its_code() {
+        let p = parse(Format::Lrc, "[lang:en-US]\n[00:01.00]la").unwrap();
+        assert_eq!(p.lang.as_deref(), Some("en"));
+        assert_eq!(lang_code("PT_br").as_deref(), Some("pt"));
+        assert_eq!((lang_code("toolonglang"), lang_infix("live")), (None, None));
     }
 }

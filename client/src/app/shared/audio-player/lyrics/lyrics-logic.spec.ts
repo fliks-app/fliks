@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import { activeIndex, cueFills, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
+import { activeIndex, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
 
 const doc = (o: Partial<StructuredLyrics>): StructuredLyrics =>
   ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [], ...o }) as StructuredLyrics;
@@ -28,6 +28,13 @@ describe('lyrics logic', () => {
     const cues = [{ start: 0, end: 100 }, { start: 100, end: 300 }, { start: 300, end: 400 }] as never[];
     expect(cueFills(cues, 200, 0)).toEqual([100, 50, 0]);
     expect(cueFills(cues, 100, 100)).toEqual([100, 50, 0]);
+  });
+
+  it('cuts a line at the UTF-8 byte ranges of its cues and keeps the text between them', () => {
+    const cue = (byteStart: number, byteEnd: number) => ({ start: 0, end: 1, value: '', byteStart, byteEnd });
+    // "caf\u00e9" is 5 bytes, so the second word starts at byte 7 though it is at index 6.
+    const segs = cueSegments('caf\u00e9, noir!', [cue(0, 5), cue(7, 11)]);
+    expect(segs.map((s) => [s.text, s.cue])).toEqual([['caf\u00e9', 0], [', ', null], ['noir', 1], ['!', null]]);
   });
 
   it('aligns a layer only on equal line counts', () => {

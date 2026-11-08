@@ -1,6 +1,7 @@
 //! Lyrics of tracks (`docs/spec/music.md` rules 61-70).
 pub mod discover;
 pub mod providers;
+pub mod queue;
 pub mod store;
 
 use crate::{
@@ -20,6 +21,7 @@ use axum::{
 use fliks_domain::{
     acl::{Action, Subject},
     lyrics::{self, Format, Parsed},
+    metadata::limiter::Priority,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -189,10 +191,11 @@ fn layer(kind: Option<&str>, lang: Option<&str>) -> Result<(String, String), App
     if !["main", "translation", "pronunciation"].contains(&kind) {
         return Err(bad("kind must be main, translation or pronunciation"));
     }
-    let lang = lang.map(str::to_lowercase).unwrap_or_else(|| "und".into());
-    if !(1..=8).contains(&lang.len()) || !lang.bytes().all(|b| b.is_ascii_alphanumeric()) {
-        return Err(bad("lang must be 1 to 8 letters or digits"));
-    }
+    let lang = match lang {
+        Some(l) => lyrics::lang_code(l)
+            .ok_or_else(|| bad("lang must be 1 to 8 letters or digits, then an optional region"))?,
+        None => "und".into(),
+    };
     Ok((kind.to_owned(), lang))
 }
 
@@ -313,6 +316,14 @@ pub async fn update(
     if let Some(p) = dto.preferred {
         let mut tx = st.db.begin().await?;
         sqlx::query(
+            r#"SELECT id FROM lyrics WHERE "itemId" = $1 AND kind = $2 AND lang = $3 FOR UPDATE"#,
+        )
+        .bind(row.item_id)
+        .bind(&row.kind)
+        .bind(&row.lang)
+        .fetch_all(&mut *tx)
+        .await?;
+        sqlx::query(
             r#"UPDATE lyrics SET preferred = false WHERE "itemId" = $1 AND kind = $2 AND lang = $3"#,
         )
         .bind(row.item_id)
@@ -371,7 +382,17 @@ pub async fn fetch(
     .into_iter()
     .map(|(id, folder, rel)| (id, std::path::Path::new(&folder).join(rel)))
     .collect();
+    let mut listings: std::collections::HashMap<std::path::PathBuf, Vec<String>> =
+        Default::default();
     for (id, path) in files {
+        let dir = path
+            .parent()
+            .unwrap_or(std::path::Path::new(""))
+            .to_path_buf();
+        if !listings.contains_key(&dir) {
+            let names = discover::listing(&dir).await;
+            listings.insert(dir.clone(), names);
+        }
         let emb = crate::ingest::music::embedded_of(&st, &path).await;
         let duration: Option<i32> =
             sqlx::query_scalar(r#"SELECT "durationMs" FROM track_details WHERE "itemId" = $1"#)
@@ -379,9 +400,9 @@ pub async fn fetch(
                 .fetch_optional(&st.db)
                 .await?
                 .flatten();
-        discover::file(&st, item, id, &path, duration, &emb).await?;
+        discover::file(&st, item, id, &path, duration, &emb, &listings[&dir]).await?;
     }
-    providers::fetch(&st, item, dto.force == Some(true))
+    providers::fetch(&st, item, dto.force == Some(true), Priority::Interactive)
         .await
         .map_err(AppError::internal)?;
     Ok(Json(body(&st, item, false, None, None).await?))

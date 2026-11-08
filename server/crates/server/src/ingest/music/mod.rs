@@ -898,7 +898,7 @@ pub async fn settled(st: &AppState, media: i32) {
             e.text()
         );
     }
-    crate::lyrics::providers::auto_fetch(st, media).await;
+    crate::lyrics::providers::enqueue_missing(st, Some(media)).await;
     if tagwrite::enabled(st).await
         && let Err(e) = tagwrite::write_album_tags(st, media).await
     {

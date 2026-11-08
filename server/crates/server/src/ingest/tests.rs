@@ -5185,6 +5185,154 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_plugin_namespace_hit_is_stored_and_written_beside_the_files_it_must_not_replace(
+        pool: PgPool,
+    ) {
+        let fake = Arc::new(MusicFake::default());
+        *fake.key.lock().unwrap() = Namespace::parse("fliks.lrclib:lrclib");
+        *fake.lyrics.lock().unwrap() = Some(Some(crate::metadata::LyricsHit {
+            format: "lrc".into(),
+            document: "[00:01.00]hello\n[00:02.00]world".into(),
+            instrumental: false,
+            lang: Some("en-US".into()),
+            source_ref: None,
+        }));
+        let c = ctx_music(pool, Some(fake)).await;
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('lyrics.write_back', 'true')")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One", 1, 1, json!({"lyrics": null})),
+                track("Two", 2, 1, json!({"lyrics": null})),
+            ],
+        );
+        let music_dir = c.dir.join("music/Alpha");
+        fs::create_dir_all(&music_dir).unwrap();
+        fs::write(music_dir.join("01.lrc"), "[00:09.00]mine\n").unwrap();
+        let outside = c.dir.join("outside.lrc");
+        fs::write(&outside, "[00:05.00]secret\n").unwrap();
+        std::os::unix::fs::symlink(&outside, music_dir.join("02.lrc")).unwrap();
+        music::register(&c.st, m, &place(&c, &["Alpha/01.flac", "Alpha/02.flac"]))
+            .await
+            .unwrap();
+        let item: i32 = sqlx::query_scalar("SELECT i.id FROM items i JOIN track_details t ON t.\"itemId\" = i.id WHERE t.\"trackNumber\" = 1")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM lyrics WHERE source = 'sidecar'").await,
+            1,
+            "a linked sidecar is not read"
+        );
+        let fetch = format!("/api/items/{item}/lyrics/fetch");
+        let (s, v) = call(&c, "POST", &fetch, &c.admin, json!({"force": true})).await;
+        assert_eq!(s, 200, "{v}");
+        let list = v["structuredLyrics"].as_array().unwrap();
+        let hit = list
+            .iter()
+            .find(|e| e["source"] == "provider:fliks.lrclib:lrclib")
+            .unwrap_or_else(|| panic!("{v}"));
+        assert_eq!(hit["lang"], "en");
+        // The language-less sidecar stays; the row of a language goes to its own file, once.
+        assert_eq!(
+            fs::read_to_string(music_dir.join("01.lrc")).unwrap(),
+            "[00:09.00]mine\n"
+        );
+        assert!(
+            fs::read_to_string(music_dir.join("01.en.lrc"))
+                .unwrap()
+                .contains("hello")
+        );
+        fs::write(music_dir.join("01.en.lrc"), "edited").unwrap();
+        call(&c, "POST", &fetch, &c.admin, json!({"force": true})).await;
+        assert_eq!(
+            fs::read_to_string(music_dir.join("01.en.lrc")).unwrap(),
+            "edited"
+        );
+        // A region on a pasted text's language is dropped; one preferred row per layer.
+        let put = json!({"lang": "en-US", "format": "lrc", "body": "[00:05.00]mine too"});
+        let (s, v) = call(
+            &c,
+            "PUT",
+            &format!("/api/items/{item}/lyrics"),
+            &c.admin,
+            put,
+        )
+        .await;
+        assert_eq!(s, 200, "{v}");
+        let ids: Vec<i32> = sqlx::query_scalar(
+            r#"SELECT id FROM lyrics WHERE "itemId" = $1 AND lang = 'en' ORDER BY id"#,
+        )
+        .bind(item)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(ids.len(), 3, "the written file is read back as a sidecar");
+        for id in &ids {
+            let (s, _) = call(
+                &c,
+                "PATCH",
+                &format!("/api/lyrics/{id}"),
+                &c.admin,
+                json!({"preferred": true}),
+            )
+            .await;
+            assert_eq!(s, 200);
+        }
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM lyrics WHERE preferred").await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_sweep_retries_a_provider_error_and_leaves_a_cached_miss(pool: PgPool) {
+        let fake = Arc::new(MusicFake::default());
+        *fake.lyrics.lock().unwrap() = Some(None);
+        fake.lyrics_down
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let c = ctx_music(pool, Some(fake.clone())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track("One", 1, 1, json!({"lyrics": null}))],
+        );
+        music::register(&c.st, m, &place(&c, &["Alpha/01.flac"]))
+            .await
+            .unwrap();
+        let asked = |f: &MusicFake| f.calls().iter().filter(|c| c.starts_with("lyrics")).count();
+        let sweep = async || {
+            crate::lyrics::providers::enqueue_missing(&c.st, None).await;
+            assert!(eventually(|| c.st.lyrics.idle()).await);
+        };
+        sweep().await;
+        assert_eq!(asked(&fake), 1);
+        assert_eq!(count(&c, "SELECT count(*) FROM lyrics_lookups").await, 0);
+        fake.lyrics_down
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        sweep().await;
+        assert_eq!(asked(&fake), 2);
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM lyrics_lookups WHERE status = 'miss'"
+            )
+            .await,
+            1
+        );
+        sweep().await;
+        assert_eq!(asked(&fake), 2);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_release_id_in_the_tags_makes_its_own_edition(pool: PgPool) {
         let c = ctx_music(pool, None).await;
         let l = album_lib(&c).await;

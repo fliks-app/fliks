@@ -1,4 +1,4 @@
-//! Provider orchestration, negative cache, auto-fetch and write-back (`docs/spec/music.md` rules 68-70).
+//! Provider orchestration, negative cache, the fetch sweep and write-back (`docs/spec/music.md` rules 68-70).
 use super::store::{self, New};
 use crate::{
     metadata::{LyricsHit, LyricsQuery},
@@ -10,6 +10,7 @@ use fliks_domain::{
     metadata::limiter::Priority,
 };
 use std::path::PathBuf;
+use tokio::io::AsyncWriteExt;
 
 /// A miss or an instrumental answer is not asked again of the same provider for this long.
 const MISS_DAYS: i32 = 30;
@@ -22,7 +23,7 @@ async fn flag(st: &AppState, key: &str, default: bool) -> bool {
     }
 }
 
-async fn order(st: &AppState) -> Vec<String> {
+pub(super) async fn order(st: &AppState) -> Vec<String> {
     setting_value(&st.db, "lyrics.provider_order")
         .await
         .ok()
@@ -86,7 +87,12 @@ async fn record(st: &AppState, item: i32, provider: &str, status: &str) {
 
 /// Asks the providers for one track until one gives a synced document (a plain one is kept as the fallback).
 /// `force` ignores the negative cache and an existing synced document.
-pub async fn fetch(st: &AppState, item: i32, force: bool) -> Result<(), String> {
+pub async fn fetch(
+    st: &AppState,
+    item: i32,
+    force: bool,
+    priority: Priority,
+) -> Result<(), String> {
     if !force
         && store::has_synced_main(&st.db, item)
             .await
@@ -115,7 +121,7 @@ pub async fn fetch(st: &AppState, item: i32, force: bool) -> Result<(), String> 
         if !force && lookup_fresh(st, item, &ns).await {
             continue;
         }
-        let hit = match p.fetch_lyrics(&q, Priority::Background).await {
+        let hit = match p.fetch_lyrics(&q, priority).await {
             Ok(h) => h,
             Err(e) => {
                 tracing::debug!("lyrics provider {ns}: {e}");
@@ -137,17 +143,29 @@ pub async fn fetch(st: &AppState, item: i32, force: bool) -> Result<(), String> 
             tracing::warn!("lyrics provider {ns} answered a document that does not parse");
             continue;
         };
-        record(st, item, &ns, "found").await;
         if parsed.sync == Sync::None {
             fallback.get_or_insert((ns, hit, parsed));
             continue;
         }
-        return keep(st, item, &ns, &hit, &parsed).await;
+        return stored(st, item, &ns, &hit, &parsed).await;
     }
     match fallback {
-        Some((ns, hit, parsed)) => keep(st, item, &ns, &hit, &parsed).await,
+        Some((ns, hit, parsed)) => stored(st, item, &ns, &hit, &parsed).await,
         None => Ok(()),
     }
+}
+
+/// Keeps the hit and caches it as `found`; a hit that cannot be stored is cached as a `miss`, not retried at once.
+async fn stored(
+    st: &AppState,
+    item: i32,
+    ns: &str,
+    hit: &LyricsHit,
+    parsed: &Parsed,
+) -> Result<(), String> {
+    let r = keep(st, item, ns, hit, parsed).await;
+    record(st, item, ns, if r.is_ok() { "found" } else { "miss" }).await;
+    r
 }
 
 async fn keep(
@@ -161,8 +179,7 @@ async fn keep(
     let lang = hit
         .lang
         .as_deref()
-        .map(str::to_lowercase)
-        .filter(|l| (1..=8).contains(&l.len()) && l.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .and_then(lyrics::lang_code)
         .or_else(|| parsed.lang.clone())
         .unwrap_or_else(|| "und".into());
     let file: Option<(i32, Option<i32>)> = sqlx::query_as(
@@ -232,34 +249,75 @@ pub async fn write_back(st: &AppState, id: i32) {
                 .join("\n"),
         ),
     };
-    let taken = super::discover::sidecars(&audio, &super::discover::sidecar_order(st).await).await;
-    if taken.iter().any(|(lang, ..)| *lang == row.lang) {
+    let Some(dir) = audio.parent() else { return };
+    let order = super::discover::sidecar_order(st).await;
+    let listing = super::discover::listing(dir).await;
+    if super::discover::candidates(&audio, &listing, &order)
+        .iter()
+        .any(|(lang, _)| *lang == row.lang)
+    {
         return;
     }
-    let target = audio.with_extension(ext);
-    if let Err(e) = tokio::fs::write(&target, body).await {
+    // A language the discovery would not read back from a file name is not written.
+    let infix = match row.lang.as_str() {
+        "und" => String::new(),
+        l => match lyrics::lang_infix(l) {
+            Some(l) => format!(".{l}"),
+            None => return,
+        },
+    };
+    let Some(stem) = audio.file_stem() else {
+        return;
+    };
+    let target = dir.join(format!("{}{infix}.{ext}", stem.to_string_lossy()));
+    let mut file = match tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .await
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return,
+        Err(e) => {
+            tracing::warn!("lyrics not written to \"{}\": {e}", target.display());
+            return;
+        }
+    };
+    if let Err(e) = file.write_all(body.as_bytes()).await {
         tracing::warn!("lyrics not written to \"{}\": {e}", target.display());
     }
 }
 
-/// Rule 69: every track of the album with a file and no synced main document, one at a time.
-pub async fn auto_fetch(st: &AppState, media: i32) {
+/// Rule 69: the tracks of `media` (every album when `None`) with a file, no synced main document and a provider
+/// that has not answered within the negative cache, queued for the fetch worker.
+pub async fn enqueue_missing(st: &AppState, media: Option<i32>) {
     if !flag(st, "lyrics.auto_fetch", true).await {
         return;
     }
+    let ns: Vec<String> = st
+        .metadata
+        .lyrics_providers(&order(st).await)
+        .iter()
+        .map(|p| p.id().as_str().to_owned())
+        .collect();
+    if ns.is_empty() {
+        return;
+    }
     let items: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT i.id FROM items i WHERE i."mediaId" = $1
+        r#"SELECT i.id FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
+           WHERE ($1::int IS NULL OR i."mediaId" = $1)
              AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-             AND NOT EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = i.id AND l.kind = 'main' AND l.sync <> 'none')
+             AND NOT EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = i.id AND l.kind = 'main' AND l.sync <> 'none' AND l.source <> 'generated')
+             AND EXISTS (SELECT 1 FROM unnest($2::text[]) p WHERE NOT EXISTS (
+               SELECT 1 FROM lyrics_lookups k WHERE k."itemId" = i.id AND k.provider = p
+                 AND k."checkedAt" > now() - make_interval(days => $3)))
            ORDER BY i.id"#,
     )
     .bind(media)
+    .bind(&ns)
+    .bind(MISS_DAYS)
     .fetch_all(&st.db)
     .await
     .unwrap_or_default();
-    for item in items {
-        if let Err(e) = fetch(st, item, false).await {
-            tracing::warn!("lyrics of track #{item} not fetched: {e}");
-        }
-    }
+    super::queue::enqueue(st, items);
 }
