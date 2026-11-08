@@ -5307,6 +5307,7 @@
     "native_hint": "Le karaoké demande le lecteur web ou bureau.",
     "mode_original": "Original",
     "mode_guide": "Guide",
+    "vocal_level": "Voix",
     "mode_instrumental": "Instrumental",
     "stage_separate": "Séparation de la voix",
     "stage_align": "Synchronisation des paroles",
