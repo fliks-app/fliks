@@ -676,11 +676,14 @@ export class AudioPlayerService {
     void this.seek(this._position() + seconds);
   }
 
+  /** Without chapters it steps back like the skip button: it never rewinds a book to its start. */
   previousChapter(): void {
+    if (!this._chapters().length) return this.skip(-this.skipBack());
     void this.seek(previousChapterStart(this._chapters(), this._position()));
   }
 
   nextChapter(): void {
+    if (!this._chapters().length) return this.skip(this.skipForward());
     const next = nextChapterStart(this._chapters(), this._position());
     if (next !== null) void this.seek(next);
   }

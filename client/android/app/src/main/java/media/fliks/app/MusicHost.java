@@ -170,6 +170,8 @@ final class MusicHost {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(context).setDataSourceFactory(source))
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
+                .setSeekBackIncrementMs(15_000)
+                .setSeekForwardIncrementMs(30_000)
                 .setHandleAudioBecomingNoisy(true)
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .setLooper(Looper.getMainLooper())
@@ -608,10 +610,15 @@ final class MusicHost {
 
         @Override public void play() { if (!route("play", 0)) super.play(); }
         @Override public void pause() { if (!route("pause", 0)) super.pause(); }
-        @Override public void seekToNext() { if (!route("next", 0)) super.seekToNext(); }
-        @Override public void seekToNextMediaItem() { if (!route("next", 0)) super.seekToNextMediaItem(); }
-        @Override public void seekToPrevious() { if (!route("previous", 0)) super.seekToPrevious(); }
-        @Override public void seekToPreviousMediaItem() { if (!route("previous", 0)) super.seekToPreviousMediaItem(); }
+        /** Audiobook parts have no tracks to skip: next and previous step like the skip buttons. */
+        private boolean isBook() {
+            return itemOf(getCurrentMediaItem()) == null;
+        }
+
+        @Override public void seekToNext() { if (isBook()) seekForward(); else if (!route("next", 0)) super.seekToNext(); }
+        @Override public void seekToNextMediaItem() { if (isBook()) seekForward(); else if (!route("next", 0)) super.seekToNextMediaItem(); }
+        @Override public void seekToPrevious() { if (isBook()) seekBack(); else if (!route("previous", 0)) super.seekToPrevious(); }
+        @Override public void seekToPreviousMediaItem() { if (isBook()) seekBack(); else if (!route("previous", 0)) super.seekToPreviousMediaItem(); }
         @Override public void seekTo(long ms) { if (!routeSeek(getCurrentMediaItemIndex(), ms)) super.seekTo(ms); }
         @Override public void seekTo(int index, long ms) { if (!routeSeek(index, ms)) super.seekTo(index, ms); }
         @Override public void seekToDefaultPosition() { if (!routeSeek(getCurrentMediaItemIndex(), C.TIME_UNSET)) super.seekToDefaultPosition(); }

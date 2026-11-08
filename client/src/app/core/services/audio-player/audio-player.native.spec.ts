@@ -156,6 +156,23 @@ describe('AudioPlayerService on the native player', () => {
     expect(plugin['seek']).toHaveBeenCalledWith({ position: 10, index: 0 });
   });
 
+  it('steps back instead of rewinding a book without chapters to its start', async () => {
+    getItemPlaybackInfo.mockResolvedValue({
+      playMethod: 'DirectPlay',
+      playUrl: '/a',
+      mediaFileId: 7,
+      sessionId: 'b',
+      durationSeconds: 1000,
+      startAtSeconds: 500,
+    });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play({ mediaId: 3, itemId: 9, title: 'Book' });
+    emit('position', { index: 0, position: 500, duration: 1000 });
+    plugin['seek']!.mockClear();
+    audio.previousChapter();
+    await vi.waitFor(() => expect(plugin['seek']).toHaveBeenCalledWith({ position: 485, index: 0 }));
+  });
+
   it('has the web layer refresh the session when the native side gets a 401', async () => {
     TestBed.inject(AudioPlayerService);
     await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
