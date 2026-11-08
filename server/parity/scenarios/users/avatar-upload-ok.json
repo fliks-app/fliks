@@ -11,6 +11,7 @@
       "as": "user",
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,
@@ -69,6 +70,7 @@
       "as": "user",
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,
           "edlAutoSkipCommercials": true,

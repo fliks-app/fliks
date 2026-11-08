@@ -4,7 +4,7 @@ use crate::{
     libraries::{accessible_library_ids, paths_visible},
     media::{books, hydrate},
     metadata::{
-        Credits, Metadata, Upstream,
+        Credits, Metadata, PersonDetails, Upstream,
         books::{ANCHOR, author_works, routes::hit as book_hit},
         mark_existing, unavailable,
     },
@@ -26,6 +26,8 @@ pub struct Person {
     pub id: i32,
     pub provider: Option<String>,
     pub tmdb_id: Option<i32>,
+    /// The MusicBrainz artist id, held beside (or instead of) a video id.
+    pub musicbrainz: Option<String>,
     pub name: String,
     pub refreshed_ms: Option<i64>,
 }
@@ -36,7 +38,8 @@ fn not_found(id: i32) -> AppError {
 
 pub async fn find(db: &PgPool, id: i32) -> Result<Person, AppError> {
     sqlx::query!(
-        r#"SELECT x.provider AS "provider?", x.value::int AS "tmdb_id?", p.name, p."metadataRefreshedAt" AS refreshed
+        r#"SELECT x.provider AS "provider?", x.value::int AS "tmdb_id?", p.name, p."metadataRefreshedAt" AS refreshed,
+  (SELECT m.value FROM person_external_ids m WHERE m."personId" = p.id AND m.provider = 'musicbrainz') AS musicbrainz
 FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p.id = $1"#,
         id
     )
@@ -46,6 +49,7 @@ FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p.id = $1"#,
         id,
         provider: r.provider,
         tmdb_id: r.tmdb_id,
+        musicbrainz: r.musicbrainz,
         name: r.name,
         refreshed_ms: r.refreshed.map(|t| t.timestamp_millis()),
     })
@@ -134,6 +138,47 @@ where
     Ok((v, other))
 }
 
+/// A MusicBrainz artist: the provider keyed by `musicbrainz` answers the whole record, the next providers
+/// of `metadata.provider_order.album` that serve its ids fill a missing image or biography.
+async fn music_details(
+    md: &Metadata,
+    lang: &Resolved,
+    mbid: &str,
+) -> Result<PersonDetails, String> {
+    let mut providers = md
+        .person_providers(MediaKind::Album, Namespace::MUSICBRAINZ)
+        .into_iter();
+    let first = providers
+        .next()
+        .ok_or("no provider serves MusicBrainz artists")?;
+    let ask = |pr: Namespace| async move {
+        md.of(pr)
+            .fetch_person(mbid, lang, Priority::Interactive)
+            .await
+    };
+    let mut d = ask(first)
+        .await
+        .map_err(|e| format!("{}: {e}", first.as_str()))?;
+    let missing = |s: &Option<String>| s.as_deref().is_none_or(str::is_empty);
+    for pr in providers {
+        if !missing(&d.avatar_url) && !missing(&d.biography) {
+            break;
+        }
+        match ask(pr).await {
+            Ok(f) => {
+                if missing(&d.avatar_url) {
+                    d.avatar_url = f.avatar_url;
+                }
+                if missing(&d.biography) {
+                    d.biography = f.biography;
+                }
+            }
+            Err(e) => tracing::warn!("person fill from {}: {e}", pr.as_str()),
+        }
+    }
+    Ok(d)
+}
+
 async fn try_refresh(
     db: &PgPool,
     md: &Metadata,
@@ -141,17 +186,21 @@ async fn try_refresh(
     lang: &Resolved,
     p: &mut Person,
 ) -> Result<(), String> {
-    let Some(ext) = p.tmdb_id.map(|id| id.to_string()) else {
+    let d = if let Some(ext) = p.tmdb_id.map(|id| id.to_string()) {
+        let ext = &ext;
+        call_provider(md, db, p, |pr| async move {
+            md.of(pr)
+                .fetch_person(ext, lang, Priority::Interactive)
+                .await
+        })
+        .await
+        .map_err(|(pr, e)| format!("{}: {e}", pr.as_str()))?
+        .0
+    } else if let Some(mbid) = &p.musicbrainz {
+        music_details(md, lang, mbid).await?
+    } else {
         return Ok(());
     };
-    let ext = &ext;
-    let (d, _) = call_provider(md, db, p, |pr| async move {
-        md.of(pr)
-            .fetch_person(ext, lang, Priority::Interactive)
-            .await
-    })
-    .await
-    .map_err(|(pr, e)| format!("{}: {e}", pr.as_str()))?;
     let avatar = match d.avatar_url.as_deref().filter(|u| !u.is_empty()) {
         Some(url) => images.download_and_store(url, &Target::person(p.id)).await,
         None => None,

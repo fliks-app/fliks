@@ -127,6 +127,9 @@ fn setting_keys_are_derived_from_kind_and_scope() {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         ]
     );
     let rows = [(

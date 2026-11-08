@@ -40,7 +40,7 @@ pub const fn setting_key(kind: MediaKind, scope: Scope) -> Option<&'static str> 
         (MediaKind::Movie, Scope::GroupFolder) => None,
         (MediaKind::Book, Scope::File) => Some("naming_book_format"),
         (MediaKind::Book, Scope::Folder) => Some("naming_book_folder_format"),
-        (MediaKind::Book, Scope::GroupFolder) | (MediaKind::Comic, _) => None,
+        (MediaKind::Book, Scope::GroupFolder) | (MediaKind::Comic | MediaKind::Album, _) => None,
     }
 }
 

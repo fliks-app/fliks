@@ -18,6 +18,7 @@
             "memberSince": "2026-01-01T00:00:00.000Z"
           },
           "playback": {
+            "albumsFinished": 0,
             "booksFinished": 0,
             "comicsFinished": 0,
             "episodesWatched": 0,
@@ -44,6 +45,7 @@
             "memberSince": "2026-01-01T00:00:00.000Z"
           },
           "playback": {
+            "albumsFinished": 0,
             "booksFinished": 0,
             "comicsFinished": 0,
             "episodesWatched": 0,
@@ -70,6 +72,7 @@
             "memberSince": "2026-01-01T00:00:00.000Z"
           },
           "playback": {
+            "albumsFinished": 0,
             "booksFinished": 0,
             "comicsFinished": 0,
             "episodesWatched": 0,

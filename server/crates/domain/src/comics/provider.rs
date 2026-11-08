@@ -27,14 +27,14 @@ pub struct Work {
 }
 
 /// A trimmed string of 1 to `max` characters with no control character.
-fn text(v: &Value, key: &str, max: usize) -> Option<String> {
+pub(crate) fn text(v: &Value, key: &str, max: usize) -> Option<String> {
     let s = v.get(key)?.as_str()?.trim();
     (!s.is_empty() && s.chars().count() <= max && !s.chars().any(char::is_control))
         .then(|| s.to_owned())
 }
 
 /// `text` for a summary, which may hold line breaks and tabs.
-fn prose(v: &Value, key: &str, max: usize) -> Option<String> {
+pub(crate) fn prose(v: &Value, key: &str, max: usize) -> Option<String> {
     let s = v.get(key)?.as_str()?.trim();
     (!s.is_empty()
         && s.chars().count() <= max
@@ -44,12 +44,12 @@ fn prose(v: &Value, key: &str, max: usize) -> Option<String> {
     .then(|| s.to_owned())
 }
 
-fn int(v: &Value, key: &str, min: i64, max: i64) -> Option<i32> {
+pub(crate) fn int(v: &Value, key: &str, min: i64, max: i64) -> Option<i32> {
     let n = v.get(key)?.as_i64()?;
     i32::try_from(n).ok().filter(|_| (min..=max).contains(&n))
 }
 
-fn https(v: &Value, key: &str) -> Option<String> {
+pub(crate) fn https(v: &Value, key: &str) -> Option<String> {
     text(v, key, MAX_URL).filter(|u| u.starts_with("https://"))
 }
 

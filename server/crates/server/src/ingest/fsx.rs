@@ -52,7 +52,7 @@ impl Root {
         folder_name: Option<&str>,
     ) -> Result<PathBuf, String> {
         let valid = |f| match kind {
-            MediaKind::Book | MediaKind::Comic => validate_folder_path(f),
+            MediaKind::Book | MediaKind::Comic | MediaKind::Album => validate_folder_path(f),
             _ => validate_folder_name(f),
         };
         match folder_name.filter(|f| !f.is_empty()) {

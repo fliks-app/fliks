@@ -394,7 +394,7 @@ fn naming_folder_format(f: &naming::NamingFormats, kind: MediaKind) -> &str {
     match kind {
         MediaKind::Movie => &f.movie_folder,
         MediaKind::Series => &f.series_folder,
-        MediaKind::Book | MediaKind::Comic => &f.book_folder,
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => &f.book_folder,
     }
 }
 
@@ -414,7 +414,9 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
 /// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
 fn folder_error(kind: MediaKind, name: &str) -> bool {
     match kind {
-        MediaKind::Book | MediaKind::Comic => naming::validate_folder_path(name).is_err(),
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
+            naming::validate_folder_path(name).is_err()
+        }
         _ => validate_folder_name(name).is_err(),
     }
 }
@@ -666,7 +668,7 @@ pub(super) async fn find_or_create_unmatched(
 ) -> Result<(MediaRow, bool, String), AppError> {
     let sample = PathBuf::from(resolve(&d.files[0].path, "/"));
     let art_dir = match d.media_type {
-        MediaKind::Movie | MediaKind::Book | MediaKind::Comic => {
+        MediaKind::Movie | MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
             sample.parent().unwrap_or(&sample).to_path_buf()
         }
         MediaKind::Series if d.transfer.is_some() => {
@@ -676,7 +678,7 @@ pub(super) async fn find_or_create_unmatched(
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = match d.media_type {
-        MediaKind::Movie | MediaKind::Book | MediaKind::Comic => {
+        MediaKind::Movie | MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
             Some(split_ext(&file_name(&sample)).0.to_owned())
         }
         MediaKind::Series => None,

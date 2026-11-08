@@ -96,7 +96,7 @@ pub async fn similar(
     let library = match crate::db::kind(&src.kind)? {
         MediaKind::Movie => src.library_id,
         MediaKind::Book => return similar_books(db, id, limit, acl).await,
-        MediaKind::Series | MediaKind::Comic => None,
+        MediaKind::Series | MediaKind::Comic | MediaKind::Album => None,
     };
     let Some(library) = library else {
         return Ok(vec![]);

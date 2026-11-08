@@ -17,6 +17,7 @@
       },
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "avatar": "/api/users/4/avatar?v=1767225600000",
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,
@@ -83,6 +84,7 @@
       },
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "avatar": null,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,

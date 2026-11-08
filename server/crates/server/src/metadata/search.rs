@@ -109,6 +109,8 @@ pub(crate) fn hit(known: &Namespaces, kind: MediaKind, ns: Namespace, v: &Value)
     match kind {
         MediaKind::Book => book_hits::hit(known, ns, v),
         MediaKind::Comic => comic_hits::hit(known, ns, v),
+        // The album search route comes with the music client; `kind_of` does not name it.
+        MediaKind::Album => None,
         MediaKind::Movie | MediaKind::Series => {
             let mut one = [v.clone()];
             stamp(&mut one, ns, kind);

@@ -56,5 +56,6 @@ mod tests {
         }
         assert_eq!(MediaKind::Book.families(), [Family::Text, Family::Audio]);
         assert_eq!(MediaKind::Comic.families(), [Family::Image]);
+        assert_eq!(MediaKind::Album.families(), [Family::Audio]);
     }
 }

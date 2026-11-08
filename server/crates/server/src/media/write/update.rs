@@ -475,10 +475,14 @@ pub async fn update(
             _ => None,
         })
         .unwrap_or(media.media_type);
-    for fixed in [MediaKind::Book, MediaKind::Comic] {
+    for (article, fixed) in [
+        ("A", MediaKind::Book),
+        ("A", MediaKind::Comic),
+        ("An", MediaKind::Album),
+    ] {
         if kind != media.media_type && (kind == fixed || media.media_type == fixed) {
             return Err(AppError::bad_request(format!(
-                "A {fixed} cannot change type"
+                "{article} {fixed} cannot change type"
             )));
         }
     }

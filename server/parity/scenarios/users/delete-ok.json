@@ -19,6 +19,7 @@
       "expect": {
         "body": [
           {
+            "albumQuotaLimit": 0,
             "avatar": null,
             "bookQuotaLimit": 0,
             "comicQuotaLimit": 0,
@@ -57,6 +58,7 @@
             "username": "admin"
           },
           {
+            "albumQuotaLimit": 0,
             "avatar": null,
             "bookQuotaLimit": 0,
             "comicQuotaLimit": 0,
@@ -100,6 +102,7 @@
             "username": "manager"
           },
           {
+            "albumQuotaLimit": 0,
             "avatar": null,
             "bookQuotaLimit": 0,
             "comicQuotaLimit": 0,
@@ -142,6 +145,7 @@
             "username": "readonly"
           },
           {
+            "albumQuotaLimit": 0,
             "avatar": null,
             "bookQuotaLimit": 0,
             "comicQuotaLimit": 0,

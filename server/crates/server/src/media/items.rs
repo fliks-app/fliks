@@ -165,7 +165,7 @@ pub async fn create_shell(
         .execute(&mut *c)
         .await?;
     }
-    if matches!(kind, MediaKind::Book | MediaKind::Comic) {
+    if matches!(kind, MediaKind::Book | MediaKind::Comic | MediaKind::Album) {
         return Ok(());
     }
     let edition = sqlx::query_scalar!(

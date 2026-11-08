@@ -211,6 +211,15 @@ impl Metadata {
         )
     }
 
+    /// The available providers of `kind` that describe the people of `ns`: the one keyed by `ns` first (it
+    /// holds the whole record), then the others in the kind's order (they fill what it lacks).
+    pub fn person_providers(&self, kind: MediaKind, ns: Namespace) -> Vec<Namespace> {
+        let mut order = self.serving(kind);
+        order.sort_by_key(|p| *p != ns);
+        order.retain(|p| self.of(*p).serves_persons_of(kind, ns));
+        order
+    }
+
     /// Reads `metadata.provider_order.<kind>` of every kind; an entry that names no known provider is skipped.
     pub async fn load_orders(&self, known: &Namespaces) -> sqlx::Result<()> {
         let rows: Vec<(String, Option<String>)> = sqlx::query_as(

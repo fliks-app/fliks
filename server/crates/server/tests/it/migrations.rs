@@ -1924,9 +1924,10 @@ async fn kind_and_family_checks_match_the_domain(pool: PgPool) {
     kinds.sort();
 
     let (mut lists, mut per_kind, mut levels) = (vec![], vec![], false);
+    // `primaryType` is the vocabulary of release types, where `album` is one of them.
     for (name, _, values) in checks
         .iter()
-        .filter(|c| c.2.iter().any(|v| kinds.contains(v)))
+        .filter(|c| c.1 != "primaryType" && c.2.iter().any(|v| kinds.contains(v)))
     {
         if values.len() == 1 {
             per_kind.push(values[0].clone());

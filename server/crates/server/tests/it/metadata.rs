@@ -3,7 +3,10 @@
 use crate::fakes::{Images, Scripted};
 use crate::session;
 use axum::{Router, body::Body, http::Request};
-use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
+use fliks_domain::{
+    external_id::{ExternalProvider, Namespace},
+    media::kind::MediaKind,
+};
 use fliks_server::{app, config::Config, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -696,6 +699,91 @@ async fn a_failing_refresh_serves_the_stored_row(pool: PgPool) {
     let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(d["person"]["avatarUrl"], Value::Null);
     assert_eq!(d["person"]["biography"], "fresh bio");
+}
+
+const MBID: &str = "5b11f4ce-a62d-471e-81fc-a69a8278c7da";
+
+async fn artist(pool: &PgPool, id: i32) {
+    artist_with_id(pool, id, MBID).await;
+}
+
+async fn artist_with_id(pool: &PgPool, id: i32, mbid: &str) {
+    sqlx::query(
+        r#"WITH p AS (INSERT INTO persons (id, name) VALUES ($1, 'Stored') RETURNING id)
+           INSERT INTO person_external_ids ("personId", provider, value) SELECT id, 'musicbrainz', $2 FROM p"#,
+    )
+    .bind(id)
+    .bind(mbid)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_musicbrainz_artist_is_read_from_its_provider_and_filled_from_the_next(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let mb = Scripted::new(Namespace::MUSICBRAINZ);
+    let fanart = Scripted::new(Namespace::Core(ExternalProvider::FanartTv));
+    fanart.serve_persons_of(Namespace::MUSICBRAINZ);
+    c.st.metadata.add_plugin(fanart.clone());
+    c.st.metadata.add_plugin(mb.clone());
+    artist(&pool, 1).await;
+    mb.ok(
+        &format!("person/{MBID}"),
+        json!({"name": "Ana", "birthday": "1943-02-01", "placeOfBirth": "Lyon"}),
+    );
+    fanart.ok(
+        &format!("person/{MBID}"),
+        json!({"biography": "from fanart", "avatarUrl": "http://image.tmdb.org/t/p/w500/f.jpg"}),
+    );
+    c.img.put("/t/p/original/f.jpg", crate::fakes::jpeg());
+    let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
+    let p = &d["person"];
+    assert_eq!(
+        (
+            s,
+            p["name"].as_str(),
+            p["biography"].as_str(),
+            p["placeOfBirth"].as_str()
+        ),
+        (200, Some("Ana"), Some("from fanart"), Some("Lyon"))
+    );
+    assert!(
+        p["avatarUrl"]
+            .as_str()
+            .unwrap()
+            .starts_with("/api/images/person/1?v=")
+    );
+    assert_eq!(
+        (mb.seen("person").len(), fanart.seen("person").len()),
+        (1, 1)
+    );
+    // a record that holds an image and a biography asks nobody else
+    mb.ok(
+        &format!("person/{MBID}"),
+        json!({"name": "Ana", "biography": "own", "avatarUrl": "http://image.tmdb.org/t/p/w500/f.jpg"}),
+    );
+    sqlx::query(r#"UPDATE persons SET "metadataRefreshedAt" = NULL WHERE id = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    call(&c, "/api/persons/1", Some(&c.reader)).await;
+    assert_eq!(
+        (mb.seen("person").len(), fanart.seen("person").len()),
+        (2, 1)
+    );
+    // a failing filler never fails the artist
+    fanart.fail(&format!("person/{MBID}"), 500);
+    mb.ok(&format!("person/{MBID}"), json!({"name": "Ana"}));
+    sqlx::query(
+        r#"UPDATE persons SET "metadataRefreshedAt" = NULL, biography = NULL WHERE id = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
+    assert!(d["person"]["metadataRefreshedAt"].is_string());
+    assert_eq!(fanart.seen("person").len(), 2);
 }
 
 #[sqlx::test(migrations = false)]

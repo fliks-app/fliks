@@ -109,14 +109,18 @@ fn check_preferred(st: &AppState, v: Option<&str>, stored: Option<&str>) -> Resu
     }
 }
 
+/// Books and albums both own `.mp3`, `.m4a` and `.flac`, so a library holds one of them.
 fn check_media_types(v: &[String]) -> Result<(), AppError> {
-    if v.iter().all(|t| MediaKind::parse(t).is_some()) {
-        Ok(())
-    } else {
+    let has = |k: MediaKind| v.iter().any(|t| t == k.as_str());
+    if !v.iter().all(|t| MediaKind::parse(t).is_some()) {
         Err(bad(format!(
             "each value in mediaTypes {}",
             MediaKind::one_of_message()
         )))
+    } else if has(MediaKind::Album) && has(MediaKind::Book) {
+        Err(bad("mediaTypes cannot hold both album and book"))
+    } else {
+        Ok(())
     }
 }
 

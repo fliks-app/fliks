@@ -720,7 +720,7 @@ impl Ctx<'_> {
     ) -> (Result<PathBuf, String>, String) {
         let m = self.media;
         match m.media_type {
-            MediaKind::Movie | MediaKind::Book | MediaKind::Comic => {
+            MediaKind::Movie | MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
                 let base = naming::apply_movie_format(
                     &self.formats.movie,
                     &MovieFile {
@@ -1055,7 +1055,9 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
                     }),
                     _ => None,
                 },
-                MediaKind::Movie | MediaKind::Book | MediaKind::Comic => imported.first(),
+                MediaKind::Movie | MediaKind::Book | MediaKind::Comic | MediaKind::Album => {
+                    imported.first()
+                }
             };
             if media.media_type == MediaKind::Series {
                 let (Some(s), Some(e)) = (old.season_number, old.episode_number) else {

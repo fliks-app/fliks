@@ -10,6 +10,7 @@
       "as": "other",
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "avatar": null,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,
@@ -63,6 +64,7 @@
       "as": "other",
       "expect": {
         "body": {
+          "albumQuotaLimit": 0,
           "avatar": null,
           "bookQuotaLimit": 0,
           "comicQuotaLimit": 0,

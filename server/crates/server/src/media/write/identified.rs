@@ -84,6 +84,9 @@ pub async fn create_identified(st: &AppState, c: &Creation<'_>) -> Result<i32, A
         }
         MediaKind::Book => create_book_from(st, c).await,
         MediaKind::Comic => create_comic_from(st, c).await,
+        MediaKind::Album => Err(AppError::bad_request(
+            "an album is not created from a provider yet",
+        )),
     }
 }
 

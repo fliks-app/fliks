@@ -16,6 +16,11 @@ pub const DEFAULTS: &Table = &[
         "apiKey",
         option_env!("FLIKS_DEFAULT_TVDB_API_KEY"),
     ),
+    (
+        ExternalProvider::FanartTv,
+        "apiKey",
+        option_env!("FLIKS_DEFAULT_FANARTTV_API_KEY"),
+    ),
 ];
 
 const IMPORTED: &str = "metadata.env_keys_imported";

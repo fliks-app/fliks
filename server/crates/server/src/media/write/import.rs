@@ -284,7 +284,7 @@ pub(super) async fn folder_format(
     let default = match media_type {
         MediaKind::Movie => "{Original Title} ({Release Year})",
         MediaKind::Series => "{Series Title}",
-        MediaKind::Book | MediaKind::Comic => "{Title}",
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => "{Title}",
     };
     let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
         .fetch_optional(db)
@@ -324,7 +324,7 @@ pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> St
                 tmdb_id: t.tmdb_id,
             },
         ),
-        MediaKind::Book | MediaKind::Comic => naming::apply_book_format(
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => naming::apply_book_format(
             format,
             &naming::BookNameTokens {
                 title,
@@ -360,7 +360,7 @@ pub fn map_status(media_type: MediaKind, status: &str) -> &'static str {
             "announced" => "announced",
             _ => "tba",
         },
-        MediaKind::Book | MediaKind::Comic => "released",
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => "released",
     }
 }
 

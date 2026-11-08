@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT x.provider AS \"provider?\", x.value::int AS \"tmdb_id?\", p.name, p.\"metadataRefreshedAt\" AS refreshed\nFROM persons p LEFT JOIN person_ids x ON x.\"personId\" = p.id WHERE p.id = $1",
+  "query": "SELECT x.provider AS \"provider?\", x.value::int AS \"tmdb_id?\", p.name, p.\"metadataRefreshedAt\" AS refreshed,\n  (SELECT m.value FROM person_external_ids m WHERE m.\"personId\" = p.id AND m.provider = 'musicbrainz') AS musicbrainz\nFROM persons p LEFT JOIN person_ids x ON x.\"personId\" = p.id WHERE p.id = $1",
   "describe": {
     "columns": [
       {
@@ -41,6 +41,12 @@
             "name": "metadataRefreshedAt"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "musicbrainz",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -52,8 +58,9 @@
       true,
       null,
       false,
-      true
+      true,
+      null
     ]
   },
-  "hash": "da8a1415ceaa60b426639732710289a15ec66fc93e26ce46ff4f4476789d5c3f"
+  "hash": "840391ce7a7ac04acc6316c9db40c20045e9b58e24fb988043b6fed5aa168b69"
 }

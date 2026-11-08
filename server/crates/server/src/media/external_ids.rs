@@ -11,7 +11,7 @@ pub const TMDB: &str = ExternalProvider::Tmdb.as_str();
 pub const TVDB: &str = ExternalProvider::Tvdb.as_str();
 pub const IMDB: &str = ExternalProvider::Imdb.as_str();
 
-/// A `preferredProvider` value: a namespace a provider serves, so not `imdb`, `isbn`, `asin` or `file`.
+/// A `preferredProvider` value: a namespace a provider serves, so not `imdb`, `isbn`, `asin`, `isrc`, `spotify`, `deezer` or `file`.
 pub fn preferred(known: &Namespaces, name: &str) -> Option<Namespace> {
     known.parse(name).filter(|n| {
         !matches!(
@@ -20,6 +20,9 @@ pub fn preferred(known: &Namespaces, name: &str) -> Option<Namespace> {
                 ExternalProvider::Imdb
                     | ExternalProvider::Isbn
                     | ExternalProvider::Asin
+                    | ExternalProvider::Isrc
+                    | ExternalProvider::Spotify
+                    | ExternalProvider::Deezer
                     | ExternalProvider::File
             )
         )
@@ -217,12 +220,13 @@ pub async fn unlink(c: &mut PgConnection, media_id: i32, provider: Namespace) ->
 }
 
 /// The id namespaces an edition holds (`edition_external_ids` checks them).
-pub const EDITION_NAMESPACES: [Namespace; 5] = [
+pub const EDITION_NAMESPACES: [Namespace; 6] = [
     Namespace::ISBN,
     Namespace::ASIN,
     Namespace::OPENLIBRARY,
     Namespace::GOOGLEBOOKS,
     Namespace::BNF,
+    Namespace::MUSICBRAINZ,
 ];
 
 /// `value` as an edition id of `provider`, or `None` when the provider names no edition by it

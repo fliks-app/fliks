@@ -57,6 +57,11 @@ pub trait MetadataProvider: Send + Sync {
     fn supports(&self, kind: MediaKind) -> bool;
     /// Whether `fetch_person` and `person_credits` are answered.
     fn has_persons(&self) -> bool;
+    /// Whether `fetch_person` answers the ids of `ns` for `kind`: the provider's own namespace, or one
+    /// its `findBy` lists (an image provider keyed by the artist id of another).
+    fn serves_persons_of(&self, _kind: MediaKind, _ns: Namespace) -> bool {
+        false
+    }
     fn limits(&self) -> Limits;
     /// Whether a call can be made now: a plugin while it is up.
     fn available(&self) -> bool {

@@ -22,7 +22,7 @@ pub fn vote_count(alias: &str) -> String {
     let tables = MediaKind::ALL.into_iter().filter_map(|k| match k {
         MediaKind::Movie => Some("movie_details"),
         MediaKind::Series => Some("series_details"),
-        MediaKind::Book | MediaKind::Comic => None,
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => None,
     });
     let reads: Vec<String> = tables
         .map(|t| format!(r#"(SELECT d."voteCount" FROM {t} d WHERE d."mediaId" = {alias}.id)"#))
@@ -199,6 +199,19 @@ pub async fn write_details(
             sqlx::query!(
                 r#"INSERT INTO comic_details ("mediaId") VALUES ($1) ON CONFLICT ("mediaId") DO NOTHING"#,
                 media_id
+            )
+            .execute(&mut *c)
+            .await?;
+        }
+        MediaKind::Album => {
+            sqlx::query!(
+                r#"INSERT INTO album_details ("mediaId", "originalLanguage", popularity) VALUES ($1, $2, $3)
+                   ON CONFLICT ("mediaId") DO UPDATE SET
+                     "originalLanguage" = COALESCE(EXCLUDED."originalLanguage", album_details."originalLanguage"),
+                     popularity = COALESCE(EXCLUDED.popularity, album_details.popularity)"#,
+                media_id,
+                language,
+                popularity
             )
             .execute(&mut *c)
             .await?;
