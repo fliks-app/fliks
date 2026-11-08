@@ -17,6 +17,7 @@
             <p class="text-sm text-error" role="alert">{{ 'karaoke.admin.budget_invalid' | translate: { min: minBudget } }}</p>
           }
         </div>
+        <app-input-field type="number" [label]="'karaoke.admin.queue_cap' | translate" [hint]="'karaoke.admin.queue_cap_hint' | translate" [value]="queueCap()" (valueChange)="queueCap.set($event)" />
         <fieldset class="flex flex-col gap-2">
           <legend class="font-medium">{{ 'karaoke.admin.verified' | translate }}</legend>
           <p class="text-sm text-base-content/60">{{ 'karaoke.admin.verified_hint' | translate }}</p>

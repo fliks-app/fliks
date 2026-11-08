@@ -92,6 +92,11 @@
       <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'playlists.add_to_playlist_title' | translate" (click)="addToPlaylist(t)">
         <svg lucideListPlus class="size-4"></svg>
       </button>
+      @if (party.active()) {
+        <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'karaoke.queue_sing_this' | translate: { title: t.title }" (click)="sing(t)" data-testid="sing-track">
+          <svg lucideMic class="size-4"></svg>
+        </button>
+      }
       <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'music.play_next' | translate" (click)="enqueue(t, 'next')">
         <svg lucideListStart class="size-4"></svg>
       </button>

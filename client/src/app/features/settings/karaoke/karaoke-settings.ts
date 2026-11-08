@@ -50,6 +50,7 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly enabled = signal(false);
   protected readonly background = signal(true);
   protected readonly budget = signal('4096');
+  protected readonly queueCap = signal('2');
   protected readonly verified = signal<string[]>(['coreml']);
 
   protected readonly catalogue = signal<KaraokeModels | null>(null);
@@ -82,6 +83,7 @@ export class KaraokeSettingsComponent implements OnInit {
       this.enabled.set(all['karaoke.enabled'] === 'true');
       this.background.set(all['karaoke.background'] !== 'false');
       this.budget.set(all['karaoke.disk_budget_mb'] ?? '4096');
+      this.queueCap.set(all['karaoke.queue_cap'] ?? '2');
       this.verified.set(parseProviders(all['karaoke.verified_providers']));
     } catch {
       // The interceptor toasts the reason; the defaults stay.
@@ -117,6 +119,7 @@ export class KaraokeSettingsComponent implements OnInit {
         'karaoke.enabled': String(this.enabled()),
         'karaoke.background': String(this.background()),
         'karaoke.disk_budget_mb': String(Math.round(Number(this.budget()))),
+        'karaoke.queue_cap': String(Math.min(20, Math.max(1, Math.round(Number(this.queueCap()))))),
         'karaoke.verified_providers': JSON.stringify(VERIFIABLE_PROVIDERS.filter((p) => this.verified().includes(p))),
       });
       this.toast.success(this.translate.instant('karaoke.admin.saved'));

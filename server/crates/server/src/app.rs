@@ -154,6 +154,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::vote,
         crate::party::unvote,
         crate::party::choose,
+        crate::party::next_singer,
         remote::targets,
         remote::register,
         remote::commands,

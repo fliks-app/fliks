@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucidePlay, LucideShuffle, LucideStar } from '@lucide/angular';
+import { LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideStar } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -11,6 +11,7 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
+import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { ToastService } from '../../../core/services/toast.service';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
@@ -38,7 +39,7 @@ const STARS = [1, 2, 3, 4, 5] as const;
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucidePlay, LucideShuffle, LucideStar,
+    LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideStar,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -53,6 +54,7 @@ export class AlbumPageComponent {
   private readonly player = inject(AudioPlayerService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
+  protected readonly party = inject(PartyService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   protected readonly like = new LikeController(
@@ -123,6 +125,10 @@ export class AlbumPageComponent {
 
   protected addToPlaylist(t: Track): void {
     this.playlists.open({ itemId: t.itemId });
+  }
+
+  protected sing(t: Track): void {
+    void this.party.proposeTrack(this.media().id, t.itemId);
   }
 
   protected enqueue(t: Track, where: 'next' | 'last'): void {

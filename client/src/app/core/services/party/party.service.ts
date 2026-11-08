@@ -115,6 +115,13 @@ export class PartyService {
   private readonly joined = signal(false);
   readonly members = signal<PartyMember[]>([]);
   readonly proposals = signal<PartyProposal[]>([]);
+  readonly filmProposals = computed(() => this.proposals().filter((p) => p.item.itemId === undefined));
+  /** The songs waiting to be sung, next singer first. */
+  readonly singerQueue = computed(() =>
+    this.proposals()
+      .filter((p) => p.queuePosition !== undefined)
+      .sort((a, b) => a.queuePosition! - b.queuePosition!),
+  );
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
@@ -654,6 +661,36 @@ export class PartyService {
     } catch (err) {
       this.onActionError(err);
     }
+  }
+
+  /** Puts a track forward as a song to sing; false when the server refused (the interceptor toasted it). */
+  async proposeTrack(mediaId: number, itemId: number): Promise<boolean> {
+    const id = this.party()?.id;
+    if (id == null) return false;
+    try {
+      await this.api.proposeTrack(id, mediaId, itemId);
+    } catch {
+      return false;
+    }
+    this.toast.success(this.translate.instant('karaoke.queue_added'));
+    return true;
+  }
+
+  /** Removes a pending song; the interceptor toasts a refusal. */
+  async cancelProposal(partyId: number, proposalId: number): Promise<void> {
+    await this.api.unpropose(partyId, proposalId).catch(() => {});
+  }
+
+  /** Host: plays the head of the singer queue, or the song `proposalId`, now. */
+  async playSinger(proposalId?: number): Promise<void> {
+    const id = this.party()?.id;
+    if (id == null) return;
+    try {
+      await (proposalId === undefined ? this.api.nextSinger(id) : this.api.choose(id, proposalId));
+    } catch {
+      return;
+    }
+    await this.sendIntent('next');
   }
 
   async reportStatus(status: 'ready' | 'buffering', position: number): Promise<void> {

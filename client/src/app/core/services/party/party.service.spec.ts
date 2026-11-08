@@ -38,6 +38,7 @@ function setup(connected = false, confirmed = true) {
   const api = {
     join: vi.fn(), get: vi.fn(), create: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
     leave: vi.fn().mockResolvedValue(undefined), status: vi.fn().mockResolvedValue(undefined), kick: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
+    proposeTrack: vi.fn().mockResolvedValue([]), nextSinger: vi.fn(), intent: vi.fn().mockResolvedValue({ rev: 3 }),
   };
   const confirm = vi.fn().mockResolvedValue(confirmed);
   const sse = { partyEvents: events, connected: signal(connected), targetId: signal('dev') };
@@ -154,6 +155,30 @@ describe('PartyService queue cursor', () => {
     api.join.mockResolvedValue(dto(1, { item: item(1, 101) }));
     await svc.resume(7);
     expect(queue.index()).toBe(1);
+  });
+});
+
+describe('PartyService singer queue', () => {
+  const song = (id: number, queuePosition?: number) => ({
+    id, item: { ...item(9), itemId: 5000 + id }, proposedBy: id, upvoterIds: [id], downvoterIds: [], queuePosition,
+  });
+
+  it('lists the pending songs by queue position and keeps them out of the film proposals', () => {
+    const { svc } = setup();
+    const film = { id: 1, item: item(2), proposedBy: 1, upvoterIds: [1], downvoterIds: [] };
+    svc.proposals.set([song(2, 2), film, song(3, 1)]);
+    expect(svc.singerQueue().map((p) => p.id)).toEqual([3, 2]);
+    expect(svc.filmProposals()).toEqual([film]);
+  });
+
+  it('proposes a track and plays the next singer with a next intent', async () => {
+    const { svc, api } = setup();
+    svc.applySnapshot(dto(1));
+    api.nextSinger.mockResolvedValue(dto(2));
+    expect(await svc.proposeTrack(9, 5001)).toBe(true);
+    expect(api.proposeTrack).toHaveBeenCalledWith(7, 9, 5001);
+    await svc.playSinger();
+    expect(api.intent).toHaveBeenCalledWith(7, expect.objectContaining({ action: 'next' }));
   });
 });
 

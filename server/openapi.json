@@ -3707,6 +3707,18 @@
         }
       }
     },
+    "/api/parties/{id}/proposals/next": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The host plays the head of the singer queue (`karaoke.md` rule 31).",
+        "operationId": "next_singer",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/parties/{id}/proposals/{pid}": {
       "delete": {
         "tags": [

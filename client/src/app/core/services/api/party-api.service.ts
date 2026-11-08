@@ -138,13 +138,15 @@ export interface PartyGuest extends PartyUser {
   source: PartyGuestSource;
 }
 
-/** A film put forward by a member; `item.hidden` when the viewer cannot open it. */
+/** A film or track put forward by a member; `item.hidden` when the viewer cannot open it. */
 export interface PartyProposal {
   id: number;
   item: PartyItem;
   proposedBy: number;
   upvoterIds: number[];
   downvoterIds: number[];
+  /** A pending track proposal's place in the singer queue, from 1 (`karaoke.md` rule 31). */
+  queuePosition?: number;
 }
 
 export interface PartyDto extends PartySummaryDto, PartySwitches {
@@ -265,6 +267,16 @@ export class PartyApiService {
   proposeMany(id: number, items: { mediaId: number; episodeId: number | null }[]) {
     const body = { items: items.map(({ mediaId, episodeId }) => ({ mediaId, ...(episodeId != null && { episodeId }) })) };
     return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals/batch`, body));
+  }
+
+  /** A track put forward as a song to sing, on a scheduled or live party. */
+  proposeTrack(id: number, mediaId: number, itemId: number) {
+    return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals`, { mediaId, itemId }));
+  }
+
+  /** Host: `choose` of the head of the singer queue. */
+  nextSinger(id: number) {
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/proposals/next`, {}));
   }
 
   unpropose(id: number, proposalId: number) {
