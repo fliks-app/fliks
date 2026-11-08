@@ -525,7 +525,9 @@ pub async fn album_candidates(
         return Err(AppError::bad_request("Candidates are read for an album"));
     }
     let list = crate::ingest::music::identify::candidates(&st, id).await?;
-    Ok(Json(serde_json::to_value(list).map_err(|e| AppError::internal(e.to_string()))?))
+    Ok(Json(
+        serde_json::to_value(list).map_err(|e| AppError::internal(e.to_string()))?,
+    ))
 }
 
 /// `POST /api/media/:id/identify` (rules 47-50).

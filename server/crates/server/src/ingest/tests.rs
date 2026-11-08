@@ -5585,7 +5585,10 @@ mod music_ingest {
     #[sqlx::test(migrations = false)]
     async fn the_candidates_of_an_album_are_listed_without_applying_any(pool: PgPool) {
         let f = provider();
-        f.found.lock().unwrap().push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
+        f.found
+            .lock()
+            .unwrap()
+            .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f)).await;
         let l = album_lib(&c).await;
@@ -5593,16 +5596,46 @@ mod music_ingest {
         c.fake.script(
             "POST",
             "/v1/probe",
-            vec![track("One", 1, 1, json!({})), track("Two", 2, 1, json!({})), track("Three", 1, 2, json!({}))],
+            vec![
+                track("One", 1, 1, json!({})),
+                track("Two", 2, 1, json!({})),
+                track("Three", 1, 2, json!({})),
+            ],
         );
-        music::register(&c.st, m, &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/3.flac"])).await.unwrap();
-        let (s, b) = call(&c, "GET", &format!("/api/media/{m}/music/candidates"), &c.admin, Value::Null).await;
+        music::register(
+            &c.st,
+            m,
+            &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/3.flac"]),
+        )
+        .await
+        .unwrap();
+        let (s, b) = call(
+            &c,
+            "GET",
+            &format!("/api/media/{m}/music/candidates"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
         assert_eq!(s, 200, "{b}");
-        assert_eq!((b[0]["group"].as_str(), b[0]["release"].as_str()), (Some(GROUP), Some(RELEASE)));
+        assert_eq!(
+            (b[0]["group"].as_str(), b[0]["release"].as_str()),
+            (Some(GROUP), Some(RELEASE))
+        );
         assert!(b[0]["similarity"].as_f64().unwrap() > 0.9);
-        assert_eq!(count(&c, "SELECT count(*) FROM media_external_ids").await, 0);
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media_external_ids").await,
+            0
+        );
         let book = media(&c, l, "NotAlbum", "book").await;
-        let (s, _) = call(&c, "GET", &format!("/api/media/{book}/music/candidates"), &c.admin, Value::Null).await;
+        let (s, _) = call(
+            &c,
+            "GET",
+            &format!("/api/media/{book}/music/candidates"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
         assert_eq!(s, 400);
     }
 }
