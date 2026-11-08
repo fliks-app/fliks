@@ -174,10 +174,12 @@ export interface OptimizeSettings {
   trashRetentionDays: number;
   trashMinFreeGb: number;
   deviceMaxJobs: Record<string, number>;
-  deviceWeights: Record<string, number>;
   gpuPlaybackBeforePause: number;
   cpuWeight: number;
-  paused: boolean;
+  verifyIntervalDays: number;
+  verifyBatch: number;
+  /** Read only: the PUT ignores it, pause and resume have their own routes. */
+  paused?: boolean;
 }
 
 export interface LevelLeft {
@@ -225,6 +227,8 @@ export interface OptimizeJob {
   workerId: string | null;
   deviceId: string | null;
   error: { class?: string; message?: string } | null;
+  /** The original can be put back: a backup is kept and no restore ran or was purged. */
+  restorable: boolean;
   inPath: string | null;
   inSize: number | null;
   outSize: number | null;
@@ -249,6 +253,8 @@ export interface OptimizeWorker {
   instance: string;
   engineVersion: string;
   tokenId: number | null;
+  /** ISO time of the worker's last hello, lease or heartbeat. */
+  lastSeenAt: string;
   devices: WorkerDevice[];
 }
 
@@ -259,7 +265,8 @@ export type QueueOutcome =
   | 'unprobed'
   | 'nothing_to_do'
   | 'shared'
-  | 'stale';
+  | 'stale'
+  | 'ocr_pending';
 
 export interface Queued {
   mediaFileId: number;
@@ -283,3 +290,22 @@ export function timeToMinutes(t: string): number | null {
   const m = /^(\d{2}):(\d{2})$/.exec(t);
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
+
+/** A worker silent for longer than this counts as offline. */
+export const WORKER_OFFLINE_MS = 2 * 60_000;
+
+/** Error classes the server and the engine emit; each has an `optimize.queue.error_class.*` key. */
+export const ERROR_CLASSES = [
+  'access',
+  'busy',
+  'cancelled',
+  'corrupt',
+  'damaged',
+  'engine',
+  'io',
+  'network',
+  'nospace',
+  'shared',
+  'stale',
+  'verify',
+] as const;

@@ -1900,7 +1900,8 @@
     "secret_reset": "Reset to default",
     "secret_will_reset": "The default key will be used after saving.",
     "secret_default": "Fliks default key.",
-    "secret_required": "Key required."
+    "secret_required": "Key required.",
+    "back": "Back"
   },
   "connectivity": {
     "server_unreachable": "Server unreachable"
@@ -3488,9 +3489,9 @@
         "rename_tokens": "Update the file name",
         "rename_tokens_hint": "Replaces technical words that became wrong, for example \"x264\" by \"AV1\". Only if the library allows renaming.",
         "container": "Container format",
-        "move_up": "Move up",
-        "move_down": "Move down",
-        "remove": "Remove",
+        "move_up": "Move {{label}} up",
+        "move_down": "Move {{label}} down",
+        "remove": "Remove {{label}}",
         "add": "Add a language"
       },
       "opt": {
@@ -3651,8 +3652,12 @@
         "no_devices": "No worker has announced itself yet.",
         "devices_hint": "Leave a field empty to keep the value the device declares.",
         "max_jobs": "Simultaneous jobs",
-        "weight": "Weight",
-        "saved": "Settings saved"
+        "saved": "Settings saved",
+        "verify": "Verification",
+        "verify_days": "Verify every (days)",
+        "verify_days_hint": "Optimized files are checked again at this interval. 0 turns it off.",
+        "verify_batch": "Files per pass",
+        "verify_batch_hint": "At most this many files are checked per pass."
       }
     }
   },
@@ -4921,7 +4926,8 @@
         "free": "Free",
         "busy": "Busy",
         "paused": "Paused by playback",
-        "slots": "{{used}} of {{max}} job(s)"
+        "slots": "{{used}} of {{max}} job(s)",
+        "offline": "Offline"
       },
       "tab": {
         "active": "Running and waiting",
@@ -4937,7 +4943,7 @@
       "selected": "{{count}} selected",
       "to_front": "Move to the front",
       "select_all": "Select all",
-      "select": "Select",
+      "select": "Select {{title}}",
       "col": {
         "title": "Title",
         "level": "Level",
@@ -4948,7 +4954,8 @@
         "state": "State",
         "error": "Error",
         "codec": "Codec",
-        "saved": "Saved"
+        "saved": "Saved",
+        "actions": "Actions"
       },
       "job": {
         "encoding": "Encoding",
@@ -4968,7 +4975,26 @@
       "confirm_cancel": "Cancel {{count}} job(s)?",
       "confirm_restore": "Put the original of \"{{title}}\" back? The optimized file takes its place in the trash.",
       "retried": "Job queued again",
-      "restored": "Original restored"
+      "restored": "Original restored",
+      "cancel_title": "Cancel jobs",
+      "cancel_confirm": "Cancel the jobs",
+      "cancel_keep": "Keep them",
+      "progress_of": "Progress of {{title}}",
+      "error_class": {
+        "access": "Access denied",
+        "busy": "File in use",
+        "cancelled": "Cancelled",
+        "corrupt": "Corrupt source",
+        "damaged": "Damaged output",
+        "engine": "Engine error",
+        "io": "Disk error",
+        "network": "Network error",
+        "nospace": "No space left",
+        "nothing_to_do": "Nothing to change",
+        "shared": "Shared file",
+        "stale": "File changed",
+        "verify": "Verification failed"
+      }
     },
     "action": {
       "menu": "Optimize…",
@@ -4986,7 +5012,18 @@
       "removed": "{{count}} track(s) would be removed. A removal is final once the trash is purged.",
       "too_many": "Too many files to compare one by one: they will all be queued as the profile decides.",
       "open_queue": "Open the queue",
-      "queued": "{{count}} of {{total}} file(s) queued"
+      "queued": "{{count}} of {{total}} file(s) queued",
+      "confirm_title": "Optimize the files",
+      "outcome": {
+        "active": "{{count}} file(s) already in the queue.",
+        "missing": "{{count}} file(s) missing.",
+        "unprobed": "{{count}} file(s) not analyzed yet.",
+        "nothing_to_do": "{{count}} file(s) already up to date.",
+        "shared": "{{count}} file(s) left alone because other files share them.",
+        "stale": "{{count}} file(s) changed since the preview.",
+        "ocr_pending": "{{count}} file(s) waiting for text subtitles."
+      },
+      "confirm_files": "{{count}} file(s) will be rewritten."
     }
   }
 }

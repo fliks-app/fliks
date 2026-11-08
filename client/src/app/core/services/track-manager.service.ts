@@ -103,6 +103,7 @@ export class TrackManagerService {
     const source = streams?.length ? streams : tracks;
     const idx = lang ? pickAudioStreamForLanguage(
       source, lang, settings.audioSelectionMode === 'original', this.deviceProfile.playableAudioCodecs(),
+      this.deviceProfile.maxAudioChannels(),
     ) : undefined;
     const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);

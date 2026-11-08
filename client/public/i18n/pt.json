@@ -1900,7 +1900,8 @@
     "secret_default": "Chave predefinida do Fliks.",
     "secret_required": "Chave obrigatória.",
     "secret_will_clear": "O valor guardado será removido ao guardar.",
-    "label_colon": "{{label}}:"
+    "label_colon": "{{label}}:",
+    "back": "Voltar"
   },
   "connectivity": {
     "server_unreachable": "Servidor inacessível"
@@ -3488,9 +3489,9 @@
         "rename_tokens": "Atualizar o nome do ficheiro",
         "rename_tokens_hint": "Substitui as menções técnicas que deixaram de ser verdadeiras, por exemplo «x264» por «AV1». Só se a biblioteca permitir renomear.",
         "container": "Formato do contentor",
-        "move_up": "Subir",
-        "move_down": "Descer",
-        "remove": "Remover",
+        "move_up": "Subir {{label}}",
+        "move_down": "Descer {{label}}",
+        "remove": "Remover {{label}}",
         "add": "Adicionar um idioma"
       },
       "opt": {
@@ -3651,8 +3652,12 @@
         "no_devices": "Nenhum worker se anunciou ainda.",
         "devices_hint": "Deixe um campo vazio para manter o valor declarado pelo dispositivo.",
         "max_jobs": "Trabalhos simultâneos",
-        "weight": "Peso",
-        "saved": "Definições guardadas"
+        "saved": "Definições guardadas",
+        "verify": "Verificação",
+        "verify_days": "Verificar a cada (dias)",
+        "verify_days_hint": "Os ficheiros otimizados são verificados de novo neste intervalo. 0 desativa.",
+        "verify_batch": "Ficheiros por passagem",
+        "verify_batch_hint": "No máximo este número de ficheiros é verificado por passagem."
       }
     }
   },
@@ -4921,7 +4926,8 @@
         "free": "Livre",
         "busy": "Ocupado",
         "paused": "Em pausa por reprodução",
-        "slots": "{{used}} de {{max}} trabalho(s)"
+        "slots": "{{used}} de {{max}} trabalho(s)",
+        "offline": "Offline"
       },
       "tab": {
         "active": "Em curso e em espera",
@@ -4937,7 +4943,7 @@
       "selected": "{{count}} selecionado(s)",
       "to_front": "Passar para o início",
       "select_all": "Selecionar tudo",
-      "select": "Selecionar",
+      "select": "Selecionar {{title}}",
       "col": {
         "title": "Título",
         "level": "Nível",
@@ -4948,7 +4954,8 @@
         "state": "Estado",
         "error": "Erro",
         "codec": "Codec",
-        "saved": "Poupado"
+        "saved": "Poupado",
+        "actions": "Ações"
       },
       "job": {
         "encoding": "A codificar",
@@ -4968,7 +4975,26 @@
       "confirm_cancel": "Cancelar {{count}} trabalho(s)?",
       "confirm_restore": "Repor o original de «{{title}}»? O ficheiro otimizado ocupa o seu lugar no lixo.",
       "retried": "Trabalho colocado de novo na fila",
-      "restored": "Original restaurado"
+      "restored": "Original restaurado",
+      "cancel_title": "Cancelar trabalhos",
+      "cancel_confirm": "Cancelar os trabalhos",
+      "cancel_keep": "Mantê-los",
+      "progress_of": "Progresso de {{title}}",
+      "error_class": {
+        "access": "Acesso negado",
+        "busy": "Ficheiro em uso",
+        "cancelled": "Cancelado",
+        "corrupt": "Origem corrompida",
+        "damaged": "Saída danificada",
+        "engine": "Erro do motor",
+        "io": "Erro de disco",
+        "network": "Erro de rede",
+        "nospace": "Sem espaço",
+        "nothing_to_do": "Nada a alterar",
+        "shared": "Ficheiro partilhado",
+        "stale": "Ficheiro alterado",
+        "verify": "Verificação falhou"
+      }
     },
     "action": {
       "menu": "Otimizar…",
@@ -4986,7 +5012,18 @@
       "removed": "Seriam removida(s) {{count}} faixa(s). Uma remoção é definitiva quando o lixo é purgado.",
       "too_many": "Demasiados ficheiros para os comparar um a um: todos serão colocados na fila conforme o perfil decidir.",
       "open_queue": "Abrir a fila",
-      "queued": "{{count}} de {{total}} ficheiro(s) colocado(s) na fila"
+      "queued": "{{count}} de {{total}} ficheiro(s) colocado(s) na fila",
+      "confirm_title": "Otimizar os ficheiros",
+      "outcome": {
+        "active": "{{count}} ficheiro(s) já na fila.",
+        "missing": "{{count}} ficheiro(s) em falta.",
+        "unprobed": "{{count}} ficheiro(s) ainda não analisados.",
+        "nothing_to_do": "{{count}} ficheiro(s) já atualizados.",
+        "shared": "{{count}} ficheiro(s) deixados como estão porque outros ficheiros os partilham.",
+        "stale": "{{count}} ficheiro(s) alterados desde a pré-visualização.",
+        "ocr_pending": "{{count}} ficheiro(s) à espera de legendas de texto."
+      },
+      "confirm_files": "{{count}} ficheiro(s) serão reescritos."
     }
   }
 }

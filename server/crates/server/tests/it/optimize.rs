@@ -243,3 +243,101 @@ async fn library_assignment_and_preview(pool: PgPool) {
     .await;
     assert_eq!(sm["filesWithDifference"], 1);
 }
+
+#[sqlx::test(migrations = false)]
+async fn job_routes_follow_library_access(pool: PgPool) {
+    let mut c = ctx(&pool).await;
+    for q in [
+        r#"INSERT INTO libraries (name) VALUES ('a'), ('b')"#,
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('in-a', 'movie', 1), ('in-b', 'movie', 2)"#,
+        r#"INSERT INTO library_folders ("libraryId", path) VALUES (1, '/tmp/a'), (2, '/tmp/b')"#,
+        r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
+           SELECT m.id, f.id, 'x.mkv', 1, '{}'::jsonb FROM media m JOIN library_folders f ON f."libraryId" = m."libraryId""#,
+        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state, "inPath")
+           SELECT 'optimize', id, '{}'::jsonb, 'h', 'queued', '/tmp/p' FROM media_files"#,
+        r#"INSERT INTO roles (name, permissions) VALUES ('s', '["settings.access"]')"#,
+        r#"INSERT INTO users (username, "roleId") VALUES ('u', (SELECT id FROM roles))"#,
+    ] {
+        sqlx::query(q).execute(&pool).await.unwrap();
+    }
+    let uid: i32 = sqlx::query_scalar(r#"SELECT id FROM users WHERE username = 'u'"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 1)"#)
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    c.admin = session::token(&st, uid, "u").await;
+    let (s, jobs) = call(&c, "GET", "/api/optimize/jobs", Value::Null).await;
+    assert_eq!((s, jobs.as_array().unwrap().len()), (200, 1));
+    let other: i32 = sqlx::query_scalar(
+        r#"SELECT f.id FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE m."libraryId" = 2"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/api/optimize/jobs",
+        json!({"mediaFileIds": [other]}),
+    )
+    .await;
+    assert_eq!(s, 404);
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/api/optimize/verify",
+        json!({"mediaFileIds": [other]}),
+    )
+    .await;
+    assert_eq!(s, 404);
+    let job: i64 = sqlx::query_scalar(r#"SELECT j.id FROM jobs j WHERE j."mediaFileId" = $1"#)
+        .bind(other)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for op in ["cancel", "retry", "restore"] {
+        let (s, _) = call(
+            &c,
+            "POST",
+            &format!("/api/optimize/jobs/{job}/{op}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 404, "{op}");
+    }
+    let (_, r) = call(
+        &c,
+        "POST",
+        "/api/optimize/jobs/cancel",
+        json!({"ids": [job]}),
+    )
+    .await;
+    assert_eq!(r["cancelled"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn saving_settings_never_flips_the_pause_and_shared_markers_stay_out_of_the_list(
+    pool: PgPool,
+) {
+    let c = ctx(&pool).await;
+    let (_, mut conf) = call(&c, "GET", "/api/optimize/settings", Value::Null).await;
+    call(&c, "POST", "/api/optimize/queue/pause", json!({})).await;
+    conf["paused"] = false.into();
+    let (s, saved) = call(&c, "PUT", "/api/optimize/settings", conf).await;
+    assert_eq!(s, 200);
+    assert_eq!(saved["paused"], true);
+    sqlx::query(
+        r#"INSERT INTO jobs (kind, payload, "profileHash", state, error, "finishedAt")
+           VALUES ('optimize', '{}'::jsonb, 'shared', 'skipped', '{"class": "shared"}'::jsonb, now())"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, jobs) = call(&c, "GET", "/api/optimize/jobs", Value::Null).await;
+    assert!(jobs.as_array().unwrap().is_empty());
+}

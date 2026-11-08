@@ -277,8 +277,10 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
     let (Some(file_id), Some(staged)) = (j.file_id, j.staged.as_deref().map(PathBuf::from)) else {
         return End::Skip("the file or its output is gone".into());
     };
-    let Ok(Some(f)) = file_row(st, file_id).await else {
-        return End::Skip("the file is gone".into());
+    let f = match file_row(st, file_id).await {
+        Ok(Some(f)) => f,
+        Ok(None) => return End::Skip("the file is gone".into()),
+        Err(e) => return End::Busy(format!("file row: {e}")),
     };
     let Some(abs) = fsx::locate(&f.folder, &f.rel) else {
         return End::Skip("the file left its folder".into());
@@ -305,7 +307,7 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
         Some(Err(m)) => return End::Skip(m),
         None => return End::Pending,
     }
-    let Some(journal) = journal_for(
+    let journal = match journal_for(
         st,
         j,
         &f,
@@ -315,8 +317,9 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
         settings.optimize_original,
     )
     .await
-    else {
-        return End::Skip("the source changed during the job".into());
+    {
+        Ok(j) => j,
+        Err(end) => return end,
     };
     let wrote = sqlx::query(
         r#"UPDATE jobs SET state = 'committing', "updatedAt" = now(),
@@ -375,28 +378,42 @@ async fn journal_for(
     (abs, staged): (&Path, &Path),
     new: &MediaInfo,
     policy: OriginalPolicy,
-) -> Option<Journal> {
+) -> Result<Journal, End> {
     let (root_p, source, staged, id) = (
         root.path().to_owned(),
         abs.to_owned(),
         staged.to_owned(),
         j.id,
     );
-    let allowed = transfer::companion_exts(&st.db).await.ok()?;
-    let (allow, ext, new) = (f.allow_rename, container_ext(j), new.clone());
+    let allowed = transfer::companion_exts(&st.db)
+        .await
+        .map_err(|e| End::Busy(format!("companion extensions: {e}")))?;
+    let rename = plan_of(&j.payload).is_some_and(|p| p.rename);
+    let (allow, ext, new) = (f.allow_rename && rename, container_ext(j), new.clone());
     blocking(move || {
-        let (real, _) = fsx::regular_source(&source).ok()?;
-        let target = allow
+        let stale = || End::Skip("the source changed during the job".into());
+        let busy = |e: std::io::Error| End::Busy(format!("reading the files: {e}"));
+        let (real, _) = fsx::regular_source(&source).map_err(|_| stale())?;
+        let wanted = allow
             .then(|| {
                 let name = real.file_name()?.to_str()?;
                 Some(real.with_file_name(words::renamed(name, &new, ext)?))
             })
-            .flatten()
-            .filter(|t| !t.exists())
-            .unwrap_or_else(|| real.clone());
-        Some(Journal {
-            source_id: swap::ident(&real).ok()?,
-            staged_id: swap::ident(&staged).ok()?,
+            .flatten();
+        let target = match wanted {
+            Some(t) if t != real && t.exists() => {
+                // Bytes of another container must not land under the old extension.
+                if !ext.is_empty() && real.extension().and_then(|e| e.to_str()) != Some(ext) {
+                    return Err(End::Skip("the new file name is taken".into()));
+                }
+                real.clone()
+            }
+            Some(t) => t,
+            None => real.clone(),
+        };
+        Ok(Journal {
+            source_id: swap::ident(&real).map_err(busy)?,
+            staged_id: swap::ident(&staged).map_err(busy)?,
             old: swap::old_path(&real, id),
             backup: swap::backup_path(policy, &root_p, &target, id),
             companions: if target == real {
@@ -411,7 +428,7 @@ async fn journal_for(
         })
     })
     .await
-    .flatten()
+    .unwrap_or(Err(End::Pending))
 }
 
 /// After the swap, from a commit or a recovery: the rows follow the new bytes, then the job is `done`.
@@ -569,6 +586,19 @@ async fn subtitle_rows(
     .await
     .map_err(sql)?
     .and_then(|v| serde_json::from_value(v).ok());
+    // The probe the plan was made from: a retry after the rescan has already stored the new one.
+    let old: Option<MediaInfo> = match ocr_job {
+        Some(job) => sqlx::query_scalar::<_, Option<Value>>(
+            "SELECT payload -> 'info' FROM jobs WHERE id = $1",
+        )
+        .bind(job)
+        .fetch_optional(&st.db)
+        .await
+        .map_err(sql)?
+        .flatten()
+        .and_then(|v| serde_json::from_value(v).ok()),
+        None => None,
+    };
     if let Some(new) = &info {
         let rows = sqlx::query(
             r#"SELECT id, "sourceStreamIndex" AS idx FROM subtitle_files
@@ -580,7 +610,11 @@ async fn subtitle_rows(
         .map_err(sql)?;
         for r in rows {
             let (sid, idx): (i32, i32) = (r.get("id"), r.get("idx"));
-            let to = follow_track(f.info.as_ref().unwrap_or(new), new, idx as u32);
+            let to = follow_track(
+                old.as_ref().or(f.info.as_ref()).unwrap_or(new),
+                new,
+                idx as u32,
+            );
             if to != Some(idx as u32) {
                 sqlx::query(r#"UPDATE subtitle_files SET "sourceStreamIndex" = $2 WHERE id = $1"#)
                     .bind(sid)
@@ -625,6 +659,20 @@ async fn subtitle_rows(
             .join(format!("{job}.ocr-{sid}.srt"));
         match trash_file(&abs, &slot) {
             Ok(()) => {
+                // The row is kept in the job, for a restore to put it back with the file.
+                sqlx::query(
+                    r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrRows}',
+                         COALESCE(result -> 'ocrRows', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+                           'trashed', $3::text, 'row', (SELECT to_jsonb(s) FROM subtitle_files s WHERE s.id = $4))))
+                       WHERE id = $1"#,
+                )
+                .bind(job)
+                .bind(abs.to_string_lossy())
+                .bind(slot.to_string_lossy())
+                .bind(sid)
+                .execute(&st.db)
+                .await
+                .map_err(sql)?;
                 sqlx::query(
                     r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrTrash}',
                          COALESCE(result -> 'ocrTrash', '[]'::jsonb) || jsonb_build_array(jsonb_build_array($2::text, $3::text)))

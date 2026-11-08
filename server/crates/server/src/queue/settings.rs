@@ -49,7 +49,6 @@ pub struct Settings {
     pub trash_min_free_gb: u32,
     /// Caps the `maxJobs` a device declares.
     pub device_max_jobs: BTreeMap<String, u32>,
-    pub device_weights: BTreeMap<String, u32>,
     /// Hardware playback reads on a device that pause its background GPU jobs; 0 never pauses.
     pub gpu_playback_before_pause: u32,
     /// CPU weight of a software optimization against the playback budget.
@@ -70,7 +69,6 @@ impl Default for Settings {
             trash_retention_days: 7,
             trash_min_free_gb: 20,
             device_max_jobs: BTreeMap::new(),
-            device_weights: BTreeMap::new(),
             gpu_playback_before_pause: 1,
             cpu_weight: 2,
             paused: false,

@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use fliks_engine_core::api::{JobError, JobErrorClass};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Row, Transaction, postgres::PgRow};
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 pub const LEASE_S: u32 = 60;
 pub const HEARTBEAT_S: u32 = 15;
@@ -101,21 +101,50 @@ fn parent_of(path: &str) -> Option<&Path> {
         .filter(|p| !p.as_os_str().is_empty())
 }
 
-/// Bytes still held by originals in the trash: `done` jobs whose result names a `trashPath` that is not
-/// purged yet (written by the commit).
-pub async fn unpurged_trash(pool: &PgPool) -> sqlx::Result<i64> {
-    sqlx::query_scalar(
-        r#"SELECT COALESCE(sum("inSize"), 0)::bigint FROM jobs
+/// The filesystem of a path (0 where the OS gives none: everything counts as one).
+fn device_of(path: &Path) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).map_or(0, |m| m.dev())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        0
+    }
+}
+
+/// Bytes still held by originals in the trash, per filesystem: `done` jobs whose result names a
+/// `trashPath` that is not purged yet (written by the commit).
+pub async fn unpurged_trash(pool: &PgPool) -> sqlx::Result<HashMap<u64, i64>> {
+    let rows: Vec<(String, Option<i64>)> = sqlx::query_as(
+        r#"SELECT result ->> 'trashPath', "inSize" FROM jobs
            WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')"#,
     )
-    .fetch_one(pool)
+    .fetch_all(pool)
+    .await?;
+    Ok(tokio::task::spawn_blocking(move || {
+        let mut by_dev: HashMap<u64, i64> = HashMap::new();
+        for (path, size) in rows {
+            let dev = Path::new(&path).parent().map_or(0, device_of);
+            *by_dev.entry(dev).or_default() += size.unwrap_or(0);
+        }
+        by_dev
+    })
     .await
+    .unwrap_or_default())
 }
 
 /// `FOR UPDATE SKIP LOCKED` on the best queued job this device may run: its codec is encodable, `notBefore`
 /// passed, the target disk has room for the source plus the unpurged trash.
 pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let mut tx = pool.begin().await?;
+    // Two takes of one device must not both see a free slot.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("take:{}:{}", w.key, w.device))
+        .execute(&mut *tx)
+        .await?;
     let running: i64 = sqlx::query_scalar(
         r#"SELECT count(*) FROM jobs WHERE state = 'leased' AND "workerId" = $1 AND "deviceId" = $2"#,
     )
@@ -139,23 +168,24 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     .bind(w.fallback)
     .fetch_all(&mut *tx)
     .await?;
-    let mut trash: Option<i64> = None;
+    let mut trash: Option<HashMap<u64, i64>> = None;
     let mut chosen = None;
     for r in rows {
         let (id, kind): (i64, String) = (r.get("id"), r.get("kind"));
         let in_path: Option<String> = r.get("inPath");
         if w.local && kind == "optimize" {
             let need: i64 = r.get::<Option<i64>, _>("inSize").unwrap_or(0);
-            let held = match trash {
-                Some(t) => t,
-                None => {
-                    let t = unpurged_trash(pool).await?;
-                    trash = Some(t);
-                    t
-                }
-            };
+            if trash.is_none() {
+                trash = Some(unpurged_trash(pool).await?);
+            }
             let dir = in_path.as_deref().and_then(parent_of);
             if let Some(dir) = dir {
+                let dev = device_of(dir);
+                let held = trash
+                    .as_ref()
+                    .and_then(|t| t.get(&dev))
+                    .copied()
+                    .unwrap_or(0);
                 let d = disk(&dir.to_string_lossy()).await;
                 if d.accessible && d.free_space - held < need {
                     continue;
@@ -171,7 +201,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let row = sqlx::query(
         r#"WITH old AS (SELECT "stagedPath" FROM jobs WHERE id = $1)
            UPDATE jobs SET state = 'leased', attempt = attempt + 1, "workerId" = $2, "deviceId" = $3,
-             "leaseUntil" = now() + make_interval(secs => $4), "startedAt" = COALESCE("startedAt", now()),
+             "leaseUntil" = now() + make_interval(secs => $4), "startedAt" = now(),
              progress = 0, paused = false, "updatedAt" = now()
            WHERE id = $1 RETURNING attempt, payload, (SELECT "stagedPath" FROM old) AS old"#,
     )
@@ -400,6 +430,34 @@ pub async fn succeed(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    Ok(Settled::Done)
+}
+
+/// The worker found nothing to write (the video was copied and the plan holds nothing else): the job is
+/// `skipped` and remembers what the encode decided.
+pub async fn skip_nothing(
+    pool: &PgPool,
+    id: i64,
+    key: &str,
+    attempt: i32,
+    result: Value,
+) -> sqlx::Result<Settled> {
+    let mut tx = pool.begin().await?;
+    let Some(row) = lock_fenced(&mut tx, id, key, attempt).await? else {
+        return Ok(Settled::Stale);
+    };
+    if row.get::<String, _>("state") == "leased" {
+        sqlx::query(
+            r#"UPDATE jobs SET state = 'skipped', progress = 1, result = $2, "leaseUntil" = NULL,
+                 error = '{"class": "nothing_to_do", "message": "the video was kept and nothing else changes"}'::jsonb,
+                 "finishedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(result)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+    }
     Ok(Settled::Done)
 }
 

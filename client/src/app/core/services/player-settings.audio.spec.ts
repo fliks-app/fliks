@@ -163,6 +163,16 @@ describe('PlayerSettingsService audio selection', () => {
       expect(svc.resolveAudioStreamIndex(1, streams, 1, null, undefined, ['aac'])).toBe(0);
       expect(svc.resolveAudioStreamIndex(1, streams, 1, null)).toBe(0);
     });
+
+    it('does not trade a multichannel default for a stereo track the device decodes', () => {
+      const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+      const multi = [
+        { language: 'eng', codec: 'dts', channels: 8, isDefault: true },
+        { language: 'eng', codec: 'aac', channels: 2 },
+      ];
+      expect(svc.resolveAudioStreamIndex(1, multi, 1, null, undefined, ['aac'], 8)).toBe(0);
+      expect(svc.resolveAudioStreamIndex(1, multi, 1, null, undefined, ['aac'], 2)).toBe(1);
+    });
   });
 
   describe('language variant', () => {

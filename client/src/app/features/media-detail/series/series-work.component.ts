@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { Episode, Media, Season } from '../../../core/services/api/media.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
+import { OptimizeModalService } from '../../../core/services/optimize-modal.service';
 import { RecommendService } from '../../../core/services/recommend.service';
 import { episodeLabel, type DownloadTarget } from '../../../core/services/download-manager.service';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
@@ -63,6 +64,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 export class SeriesWorkComponent extends VideoWorkBase {
   private readonly route = inject(ActivatedRoute);
   private readonly recommend = inject(RecommendService);
+  private readonly optimizeModal = inject(OptimizeModalService);
 
   /** Signal mirror of paramMap: the page is reused across episode URLs, so a snapshot misses changes. */
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -278,6 +280,15 @@ export class SeriesWorkComponent extends VideoWorkBase {
     } finally {
       this.seasonBusy.set(null);
     }
+  }
+
+  protected optimizeSeason(season: Season): void {
+    const m = this.media();
+    this.optimizeModal.open({
+      title: `${m.title} - ${this.translate.instant('media_detail.season_number', { number: season.seasonNumber })}`,
+      mediaIds: [m.id],
+      episodeIds: season.episodes.filter((e) => e.hasFile).map((e) => e.id),
+    });
   }
 
   protected recommendSeason(seasonId: number): void {

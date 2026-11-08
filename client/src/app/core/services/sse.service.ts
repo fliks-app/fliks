@@ -373,6 +373,7 @@ export class SseService implements OnDestroy {
           this.activeProgress.set(new Map());
           // A reconnect means we don't know what we missed while disconnected.
           void invalidatePrefix('/api/media');
+          this.optimizeEvents.next(data);
           return;
         }
         if (data.type === 'remote.command') {

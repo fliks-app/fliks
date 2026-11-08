@@ -1900,7 +1900,8 @@
     "secret_default": "Clave predeterminada de Fliks.",
     "secret_required": "Clave obligatoria.",
     "secret_will_clear": "El valor guardado se eliminará al guardar.",
-    "label_colon": "{{label}}:"
+    "label_colon": "{{label}}:",
+    "back": "Atrás"
   },
   "connectivity": {
     "server_unreachable": "Servidor no disponible"
@@ -3488,9 +3489,9 @@
         "rename_tokens": "Actualizar el nombre del archivo",
         "rename_tokens_hint": "Sustituye las menciones técnicas que dejaron de ser ciertas, por ejemplo «x264» por «AV1». Solo si la biblioteca permite renombrar.",
         "container": "Formato del contenedor",
-        "move_up": "Subir",
-        "move_down": "Bajar",
-        "remove": "Quitar",
+        "move_up": "Subir {{label}}",
+        "move_down": "Bajar {{label}}",
+        "remove": "Quitar {{label}}",
         "add": "Añadir un idioma"
       },
       "opt": {
@@ -3651,8 +3652,12 @@
         "no_devices": "Ningún worker se ha anunciado todavía.",
         "devices_hint": "Deje un campo vacío para conservar el valor que declara el dispositivo.",
         "max_jobs": "Trabajos simultáneos",
-        "weight": "Peso",
-        "saved": "Ajustes guardados"
+        "saved": "Ajustes guardados",
+        "verify": "Verificación",
+        "verify_days": "Verificar cada (días)",
+        "verify_days_hint": "Los archivos optimizados se vuelven a comprobar con este intervalo. 0 lo desactiva.",
+        "verify_batch": "Archivos por pasada",
+        "verify_batch_hint": "Como máximo este número de archivos se comprueba por pasada."
       }
     }
   },
@@ -4921,7 +4926,8 @@
         "free": "Libre",
         "busy": "Ocupado",
         "paused": "En pausa por reproducción",
-        "slots": "{{used}} de {{max}} trabajo(s)"
+        "slots": "{{used}} de {{max}} trabajo(s)",
+        "offline": "Sin conexión"
       },
       "tab": {
         "active": "En curso y en espera",
@@ -4937,7 +4943,7 @@
       "selected": "{{count}} seleccionado(s)",
       "to_front": "Pasar al principio",
       "select_all": "Seleccionar todo",
-      "select": "Seleccionar",
+      "select": "Seleccionar {{title}}",
       "col": {
         "title": "Título",
         "level": "Nivel",
@@ -4948,7 +4954,8 @@
         "state": "Estado",
         "error": "Error",
         "codec": "Códec",
-        "saved": "Ahorrado"
+        "saved": "Ahorrado",
+        "actions": "Acciones"
       },
       "job": {
         "encoding": "Codificando",
@@ -4968,7 +4975,26 @@
       "confirm_cancel": "¿Cancelar {{count}} trabajo(s)?",
       "confirm_restore": "¿Volver a poner el original de «{{title}}»? El archivo optimizado ocupa su lugar en la papelera.",
       "retried": "Trabajo puesto de nuevo en cola",
-      "restored": "Original restaurado"
+      "restored": "Original restaurado",
+      "cancel_title": "Cancelar trabajos",
+      "cancel_confirm": "Cancelar los trabajos",
+      "cancel_keep": "Conservarlos",
+      "progress_of": "Progreso de {{title}}",
+      "error_class": {
+        "access": "Acceso denegado",
+        "busy": "Archivo en uso",
+        "cancelled": "Cancelado",
+        "corrupt": "Origen corrupto",
+        "damaged": "Salida dañada",
+        "engine": "Error del motor",
+        "io": "Error de disco",
+        "network": "Error de red",
+        "nospace": "Sin espacio",
+        "nothing_to_do": "Nada que cambiar",
+        "shared": "Archivo compartido",
+        "stale": "Archivo modificado",
+        "verify": "Verificación fallida"
+      }
     },
     "action": {
       "menu": "Optimizar…",
@@ -4986,7 +5012,18 @@
       "removed": "Se quitarían {{count}} pista(s). Una eliminación es definitiva cuando se purga la papelera.",
       "too_many": "Demasiados archivos para compararlos uno a uno: todos se pondrán en cola según decida el perfil.",
       "open_queue": "Abrir la cola",
-      "queued": "{{count}} de {{total}} archivo(s) puestos en cola"
+      "queued": "{{count}} de {{total}} archivo(s) puestos en cola",
+      "confirm_title": "Optimizar los archivos",
+      "outcome": {
+        "active": "{{count}} archivo(s) ya en la cola.",
+        "missing": "{{count}} archivo(s) no encontrado(s).",
+        "unprobed": "{{count}} archivo(s) aún sin analizar.",
+        "nothing_to_do": "{{count}} archivo(s) ya al día.",
+        "shared": "{{count}} archivo(s) sin tocar porque otros archivos los comparten.",
+        "stale": "{{count}} archivo(s) modificado(s) desde la vista previa.",
+        "ocr_pending": "{{count}} archivo(s) esperando subtítulos de texto."
+      },
+      "confirm_files": "Se reescribirán {{count}} archivo(s)."
     }
   }
 }

@@ -290,7 +290,7 @@ pub fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
     Err(last.expect("one attempt"))
 }
 
-fn busy(e: &io::Error) -> bool {
+pub(crate) fn busy(e: &io::Error) -> bool {
     e.kind() == io::ErrorKind::ResourceBusy
         || (cfg!(windows) && e.kind() == io::ErrorKind::PermissionDenied)
 }

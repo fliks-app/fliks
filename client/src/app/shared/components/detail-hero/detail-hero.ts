@@ -436,7 +436,7 @@ export class DetailHeroComponent {
     if (audio?.length) {
       const idx = this.playerSettings.resolveAudioStreamIndex(
         file.id, audio, mediaId, this.originalLanguage(), undefined,
-        this.deviceProfile.playableAudioCodecs(),
+        this.deviceProfile.playableAudioCodecs(), this.deviceProfile.maxAudioChannels(),
       );
       this.selectedAudioIndex.set(idx ?? null);
     } else {

@@ -77,7 +77,7 @@
         <button
           type="button"
           class="btn btn-outline btn-error btn-sm"
-          [disabled]="busy() || loading() || fileIds().length === 0"
+          [disabled]="busy() || loading() || fileIds().length === 0 || noProfile()"
           (click)="run(true)"
         >
           {{ 'optimize.action.force' | translate }}

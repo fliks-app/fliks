@@ -101,7 +101,7 @@ async fn world(pool: PgPool, extra: Value) -> W {
            VALUES (1, 'optimize', $1, $2, 'h', 'staged', $3, $4, $5, $6, $7, $8, 3, $9) RETURNING id"#,
     )
     .bind(file)
-    .bind(json!({"info": info("h264", 100.0), "plan": {"level": "remux", "container": "mkv", "extraSubtitles": extra}}))
+    .bind(json!({"info": info("h264", 100.0), "plan": {"level": "remux", "container": "mkv", "rename": true, "extraSubtitles": extra}}))
     .bind(dunce::canonicalize(&src).unwrap().to_string_lossy().as_ref())
     .bind(m.len() as i64)
     .bind(mtime)
@@ -220,6 +220,44 @@ async fn ocr_subtitles_of_the_plan_go_with_the_commit(pool: PgPool) {
         srt.exists() && !trashed.exists(),
         "a restore brings it back"
     );
+    assert_eq!(
+        row(
+            &w,
+            "SELECT count(*) n FROM subtitle_files WHERE \"providerType\" = 'ocr'"
+        )
+        .await["n"],
+        1,
+        "and its row"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_job_without_a_rename_never_renames_the_file(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    sqlx::query("UPDATE jobs SET payload = jsonb_set(payload, '{plan,rename}', 'false'::jsonb)")
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    commit::run(&w.st).await;
+    assert_eq!(job(&w).await["state"], "done");
+    assert!(w.dir.join("M/a.h264.mkv").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_taken_name_keeps_the_source_name_and_a_new_extension_is_skipped(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    fs::write(w.dir.join("M/a.h265.mkv"), b"another file").unwrap();
+    commit::run(&w.st).await;
+    assert_eq!(job(&w).await["state"], "done");
+    assert_eq!(
+        fs::read(&w.src).unwrap(),
+        b"new",
+        "same extension: stays in place"
+    );
+    assert_eq!(
+        fs::read(w.dir.join("M/a.h265.mkv")).unwrap(),
+        b"another file"
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -299,12 +337,14 @@ async fn restore_brings_the_original_back_and_the_trash_is_purged_by_retention(p
     let w = world(pool, json!([])).await;
     commit::run(&w.st).await;
     let j = job(&w).await;
-    let bak = PathBuf::from(j["result"]["trashPath"].as_str().unwrap());
+    let orig_bak = PathBuf::from(j["result"]["trashPath"].as_str().unwrap());
     recover::restore(&w.st, w.job).await.unwrap();
     assert_eq!(
         fs::read(w.dir.join("M/a.h264.mkv")).unwrap(),
         b"original bytes"
     );
+    let bak = PathBuf::from(job(&w).await["result"]["trashPath"].as_str().unwrap());
+    assert_ne!(bak, orig_bak, "the optimized file gets its own slot");
     assert_eq!(fs::read(&bak).unwrap(), b"new");
     assert!(recover::restore(&w.st, w.job).await.is_err(), "once");
     sqlx::query(r#"UPDATE jobs SET "finishedAt" = now() - interval '30 days'"#)
@@ -396,14 +436,33 @@ async fn a_restore_under_keep_never_writes_the_optimized_file_to_orig(pool: PgPo
     recover::restore(&w.st, w.job).await.unwrap();
     assert_eq!(fs::read(m.join("a.h264.mkv")).unwrap(), b"original bytes");
     assert!(!orig.exists());
-    let slot = w.dir.join(".fliks-trash").join(format!("{}.bak", w.job));
-    assert_eq!(fs::read(slot).unwrap(), b"new");
+    let slot = w
+        .dir
+        .join(".fliks-trash")
+        .join(format!("{}.optimized.bak", w.job));
+    assert_eq!(fs::read(&slot).unwrap(), b"new");
     assert_eq!(
         job(&w).await["result"]["trashPath"]
             .as_str()
             .map(PathBuf::from),
-        Some(w.dir.join(".fliks-trash").join(format!("{}.bak", w.job)))
+        Some(slot)
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_purge_leaves_the_original_of_an_unfinished_restore(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    commit::run(&w.st).await;
+    let bak = PathBuf::from(job(&w).await["result"]["trashPath"].as_str().unwrap());
+    sqlx::query(
+        r#"UPDATE jobs SET result = result || '{"restore": {}}'::jsonb, "finishedAt" = now() - interval '30 days'"#,
+    )
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    trash::purge(&w.st.db).await;
+    assert!(bak.exists());
+    assert!(job(&w).await["result"]["trashPurgedAt"].is_null());
 }
 
 #[sqlx::test(migrations = false)]

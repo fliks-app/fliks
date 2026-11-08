@@ -28,6 +28,7 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
         r#"SELECT id, result ->> 'trashPath' AS path, result -> 'ocrTrash' AS ocr,
              "finishedAt" < now() - make_interval(days => $1) AS expired
            FROM jobs WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')
+             AND (NOT (result ? 'restore') OR result ? 'restoredAt')
            ORDER BY "finishedAt", id"#,
     )
     .bind(s.trash_retention_days as i32)

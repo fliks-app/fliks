@@ -205,11 +205,15 @@ pub async fn heartbeat(
     .await
     .map_err(db)?
     .ok_or_else(conflict)?;
-    st.hub.emit(SseEvent::OptimizeJobProgress {
-        job_id: id,
-        progress: req.progress.into(),
-        paused: req.paused,
-    });
+    super::emit_managers(
+        &st,
+        SseEvent::OptimizeJobProgress {
+            job_id: id,
+            progress: req.progress.into(),
+            paused: req.paused,
+        },
+    )
+    .await;
     Ok(Json(JobHeartbeatResponse {
         lease_until: beat.lease_until.timestamp_millis() as f64,
         cancel: beat.cancel,
@@ -226,6 +230,28 @@ pub async fn result(
     let key = who.owner_key(&req.worker_id);
     let attempt = req.attempt as i32;
     let out_size = req.out_size as i64;
+    let mut meta = serde_json::Map::new();
+    for (k, v) in [
+        ("level", json!(req.level)),
+        ("copyReason", json!(req.copy_reason)),
+        ("cpuFallback", json!(req.cpu_fallback)),
+    ] {
+        if !v.is_null() {
+            meta.insert(k.into(), v);
+        }
+    }
+    if req.ok && req.nothing_to_do {
+        let r = store::skip_nothing(&st.db, id, &key, attempt, Value::Object(meta))
+            .await
+            .map_err(db)?;
+        return match r {
+            store::Settled::Stale => Err(conflict()),
+            store::Settled::Done => {
+                super::emit_managers(&st, crate::events::SseEvent::OptimizeQueueChanged {}).await;
+                Ok(Json(json!({})))
+            }
+        };
+    }
     let failure = match (req.ok, req.error) {
         (false, Some(e)) => Some(e),
         (false, None) => Some(missing("failed without an error")),
@@ -234,10 +260,14 @@ pub async fn result(
     let settled = match failure {
         Some(e) => store::fail(&st.db, id, &key, attempt, &e).await,
         None => {
-            let info = req
+            let mut info = req
                 .out_info
                 .as_ref()
                 .and_then(|i| serde_json::to_value(i).ok());
+            // The result is the output's probe; what the encode did rides along as extra keys.
+            if let Some(Value::Object(o)) = info.as_mut() {
+                o.extend(meta);
+            }
             store::succeed(
                 &st.db,
                 id,

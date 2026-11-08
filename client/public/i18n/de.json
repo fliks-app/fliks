@@ -1900,7 +1900,8 @@
     "secret_default": "Fliks-Standardschlüssel.",
     "secret_required": "Schlüssel erforderlich.",
     "secret_will_clear": "Der gespeicherte Wert wird beim Speichern entfernt.",
-    "label_colon": "{{label}}:"
+    "label_colon": "{{label}}:",
+    "back": "Zurück"
   },
   "connectivity": {
     "server_unreachable": "Server nicht erreichbar"
@@ -3488,9 +3489,9 @@
         "rename_tokens": "Dateinamen aktualisieren",
         "rename_tokens_hint": "Ersetzt technische Angaben, die falsch geworden sind, z. B. „x264“ durch „AV1“. Nur wenn die Bibliothek das Umbenennen erlaubt.",
         "container": "Containerformat",
-        "move_up": "Nach oben",
-        "move_down": "Nach unten",
-        "remove": "Entfernen",
+        "move_up": "{{label}} nach oben",
+        "move_down": "{{label}} nach unten",
+        "remove": "{{label}} entfernen",
         "add": "Sprache hinzufügen"
       },
       "opt": {
@@ -3651,8 +3652,12 @@
         "no_devices": "Noch kein Worker hat sich gemeldet.",
         "devices_hint": "Lassen Sie ein Feld leer, um den vom Gerät gemeldeten Wert zu behalten.",
         "max_jobs": "Gleichzeitige Aufträge",
-        "weight": "Gewicht",
-        "saved": "Einstellungen gespeichert"
+        "saved": "Einstellungen gespeichert",
+        "verify": "Überprüfung",
+        "verify_days": "Prüfen alle (Tage)",
+        "verify_days_hint": "Optimierte Dateien werden in diesem Abstand erneut geprüft. 0 schaltet die Prüfung aus.",
+        "verify_batch": "Dateien pro Durchlauf",
+        "verify_batch_hint": "Höchstens so viele Dateien werden pro Durchlauf geprüft."
       }
     }
   },
@@ -4921,7 +4926,8 @@
         "free": "Frei",
         "busy": "Belegt",
         "paused": "Durch Wiedergabe pausiert",
-        "slots": "{{used}} von {{max}} Auftrag/Aufträgen"
+        "slots": "{{used}} von {{max}} Auftrag/Aufträgen",
+        "offline": "Offline"
       },
       "tab": {
         "active": "Laufend und wartend",
@@ -4937,7 +4943,7 @@
       "selected": "{{count}} ausgewählt",
       "to_front": "An den Anfang",
       "select_all": "Alle auswählen",
-      "select": "Auswählen",
+      "select": "{{title}} auswählen",
       "col": {
         "title": "Titel",
         "level": "Stufe",
@@ -4948,7 +4954,8 @@
         "state": "Status",
         "error": "Fehler",
         "codec": "Codec",
-        "saved": "Eingespart"
+        "saved": "Eingespart",
+        "actions": "Aktionen"
       },
       "job": {
         "encoding": "Kodierung",
@@ -4968,7 +4975,26 @@
       "confirm_cancel": "{{count}} Auftrag/Aufträge abbrechen?",
       "confirm_restore": "Das Original von „{{title}}“ zurückholen? Die optimierte Datei kommt an seiner Stelle in den Papierkorb.",
       "retried": "Auftrag erneut eingereiht",
-      "restored": "Original wiederhergestellt"
+      "restored": "Original wiederhergestellt",
+      "cancel_title": "Aufträge abbrechen",
+      "cancel_confirm": "Aufträge abbrechen",
+      "cancel_keep": "Behalten",
+      "progress_of": "Fortschritt von {{title}}",
+      "error_class": {
+        "access": "Zugriff verweigert",
+        "busy": "Datei in Benutzung",
+        "cancelled": "Abgebrochen",
+        "corrupt": "Quelle beschädigt",
+        "damaged": "Ausgabe beschädigt",
+        "engine": "Engine-Fehler",
+        "io": "Festplattenfehler",
+        "network": "Netzwerkfehler",
+        "nospace": "Kein Speicherplatz mehr",
+        "nothing_to_do": "Nichts zu ändern",
+        "shared": "Geteilte Datei",
+        "stale": "Datei geändert",
+        "verify": "Überprüfung fehlgeschlagen"
+      }
     },
     "action": {
       "menu": "Optimieren …",
@@ -4986,7 +5012,18 @@
       "removed": "{{count}} Spur(en) würden entfernt. Ein Entfernen ist endgültig, sobald der Papierkorb bereinigt ist.",
       "too_many": "Zu viele Dateien für einen Einzelvergleich: Alle werden nach der Entscheidung des Profils eingereiht.",
       "open_queue": "Warteschlange öffnen",
-      "queued": "{{count}} von {{total}} Datei(en) eingereiht"
+      "queued": "{{count}} von {{total}} Datei(en) eingereiht",
+      "confirm_title": "Dateien optimieren",
+      "outcome": {
+        "active": "{{count}} Datei(en) bereits in der Warteschlange.",
+        "missing": "{{count}} Datei(en) fehlen.",
+        "unprobed": "{{count}} Datei(en) noch nicht analysiert.",
+        "nothing_to_do": "{{count}} Datei(en) bereits aktuell.",
+        "shared": "{{count}} Datei(en) unverändert gelassen, weil andere Dateien sie teilen.",
+        "stale": "{{count}} Datei(en) seit der Vorschau geändert.",
+        "ocr_pending": "{{count}} Datei(en) warten auf Textuntertitel."
+      },
+      "confirm_files": "{{count}} Datei(en) werden neu geschrieben."
     }
   }
 }

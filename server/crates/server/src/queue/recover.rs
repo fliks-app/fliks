@@ -1,10 +1,9 @@
 //! Finishing the commits a crash, a restart or a backup restore left `committing`, and restoring originals.
 use super::{
     commit::{self, COLS, End, Job},
-    settings::OriginalPolicy,
     swap::{self, Restore, Swapped},
 };
-use crate::state::AppState;
+use crate::{ingest::fsx, state::AppState};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -37,7 +36,7 @@ pub async fn recover(st: &AppState, min_age_s: f64) {
     .unwrap_or_default();
     for r in restores {
         let job = Job::from_row(&r);
-        if let Err(e) = finish_restore(st, &job).await {
+        if let Err(e) = finish_restore_locked(st, &job).await {
             tracing::warn!(job = job.id, "restore not finished, tried again later: {e}");
         }
     }
@@ -64,17 +63,28 @@ async fn recover_one(st: &AppState, job: &Job) -> End {
     let swapped = tokio::task::spawn_blocking(move || swap::perform(&jr)).await;
     match swapped {
         Ok(Ok(Swapped::Done)) => {}
-        Ok(Ok(Swapped::Nothing)) if swap::is(&journal.source, &journal.source_id) => {
-            return End::Skip("the commit never reached the disk".into());
-        }
         Ok(Ok(Swapped::Nothing)) => {
-            return End::Fail(
-                "neither the output nor the original is where the journal says".into(),
-            );
+            let jr = journal.clone();
+            let _ = tokio::task::spawn_blocking(move || swap::abort(&jr)).await;
+            return if swap::is(&journal.source, &journal.source_id) {
+                End::Skip("the commit never reached the disk".into())
+            } else {
+                End::Fail("neither the output nor the original is where the journal says".into())
+            };
+        }
+        Ok(Err(e)) if fsx::busy(&e) => {
+            tracing::warn!(job = job.id, "recovery swap busy, tried again later: {e}");
+            return End::Pending;
+        }
+        Ok(Err(e)) if swap::is(&journal.target, &journal.staged_id) => {
+            return End::Fail(format!(
+                "the output is placed but the swap cannot finish: {e}"
+            ));
         }
         Ok(Err(e)) => {
-            tracing::warn!(job = job.id, "recovery swap failed, tried again later: {e}");
-            return End::Pending;
+            let jr = journal.clone();
+            let _ = tokio::task::spawn_blocking(move || swap::abort(&jr)).await;
+            return End::Skip(format!("the swap cannot be done: {e}"));
         }
         Err(_) => return End::Pending,
     }
@@ -127,13 +137,7 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     }
     let _media = st.ingest.media.lock(f.media_id).await;
     let _moves = st.folder_moves.read().await;
-    let slot = swap::backup_path(
-        OriginalPolicy::Trash,
-        Path::new(&f.folder),
-        &journal.source,
-        id,
-    )
-    .ok_or("no trash slot")?;
+    let slot = swap::optimized_slot(Path::new(&f.folder), id);
     let ocr: Vec<(PathBuf, PathBuf)> = job
         .result
         .get("ocrTrash")
@@ -179,6 +183,18 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     finish_restore(st, &job).await
 }
 
+/// `finish_restore` under the media and folder-move locks, as a restore itself holds them.
+async fn finish_restore_locked(st: &AppState, job: &Job) -> Result<(), String> {
+    let file = job.file_id.ok_or("the file is gone")?;
+    let f = commit::file_row(st, file)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the file is gone")?;
+    let _media = st.ingest.media.lock(f.media_id).await;
+    let _moves = st.folder_moves.read().await;
+    finish_restore(st, job).await
+}
+
 /// The disk and database halves of a journaled restore, safe to run again.
 async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
     let r: Restore =
@@ -190,6 +206,7 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
+    reinsert_ocr_rows(st, job, file_id, &r).await?;
     commit::sync_rows(st, file_id, &r.source, &r.companions, None).await?;
     sqlx::query(
         r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now()), "updatedAt" = now()
@@ -199,5 +216,49 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The OCR subtitle rows the commit removed come back with their SRTs, at the restored paths.
+async fn reinsert_ocr_rows(
+    st: &AppState,
+    job: &Job,
+    file_id: i32,
+    r: &Restore,
+) -> Result<(), String> {
+    let Some(rows) = job.result.get("ocrRows").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let f = commit::file_row(st, file_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the file is gone")?;
+    for entry in rows {
+        let (Some(trashed), Some(mut row)) = (
+            entry.get("trashed").and_then(Value::as_str),
+            entry.get("row").cloned(),
+        ) else {
+            continue;
+        };
+        let Some((_, back)) = r
+            .companions
+            .iter()
+            .find(|(from, _)| from == Path::new(trashed))
+        else {
+            continue;
+        };
+        let Some(rel) = crate::ingest::fsx::rel_under(Path::new(&f.folder), back) else {
+            continue;
+        };
+        row["filePath"] = json!(rel);
+        sqlx::query(
+            "INSERT INTO subtitle_files SELECT * FROM jsonb_populate_record(NULL::subtitle_files, $1::jsonb)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(row)
+        .execute(&st.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }

@@ -90,13 +90,15 @@
               <span class="font-medium truncate">{{ d.id }}</span>
               <span
                 class="badge badge-sm"
-                [class.badge-warning]="d.paused"
-                [class.badge-primary]="!d.paused && d.jobs.length > 0"
-                [class.badge-ghost]="d.jobs.length === 0"
+                [class.badge-error]="d.offline"
+                [class.badge-warning]="!d.offline && d.paused"
+                [class.badge-primary]="!d.offline && !d.paused && d.jobs.length > 0"
+                [class.badge-ghost]="!d.offline && d.jobs.length === 0"
               >
                 {{
                   'optimize.queue.device.' +
-                    (d.paused ? 'paused' : d.jobs.length > 0 ? 'busy' : 'free') | translate
+                    (d.offline ? 'offline' : d.paused ? 'paused' : d.jobs.length > 0 ? 'busy' : 'free')
+                    | translate
                 }}
               </span>
             </div>
@@ -158,7 +160,7 @@
                 <th>{{ 'optimize.queue.col.level' | translate }}</th>
                 <th>{{ 'optimize.queue.col.device' | translate }}</th>
                 <th class="min-w-40">{{ 'optimize.queue.col.progress' | translate }}</th>
-                <th></th>
+                <th><span class="sr-only">{{ 'optimize.queue.col.actions' | translate }}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -177,6 +179,7 @@
                         class="progress progress-primary w-24"
                         [value]="j.progress * 100"
                         max="100"
+                        [attr.aria-label]="'optimize.queue.progress_of' | translate: { title: j.title ?? j.inPath }"
                       ></progress>
                       <span class="text-sm tabular-nums">{{ (j.progress * 100).toFixed(0) }}%</span>
                       <span class="badge badge-sm" [class.badge-warning]="j.paused">{{
@@ -261,7 +264,7 @@
                     <input
                       type="checkbox"
                       class="checkbox checkbox-sm"
-                      [attr.aria-label]="'optimize.queue.select' | translate"
+                      [attr.aria-label]="'optimize.queue.select' | translate: { title: j.title ?? j.inPath }"
                       [checked]="selected().includes(j.id)"
                       (change)="toggle(j.id)"
                     />
@@ -293,7 +296,7 @@
               <th>{{ 'optimize.queue.col.title' | translate }}</th>
               <th>{{ 'optimize.queue.col.state' | translate }}</th>
               <th>{{ 'optimize.queue.col.error' | translate }}</th>
-              <th></th>
+              <th><span class="sr-only">{{ 'optimize.queue.col.actions' | translate }}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -306,8 +309,8 @@
                   }}</span>
                 </td>
                 <td class="text-sm max-w-sm">
-                  @if (j.error?.class) {
-                    <span class="font-medium">{{ j.error?.class }}</span>
+                  @if (j.error?.class; as c) {
+                    <span class="font-medium">{{ errorClass(c) ? (errorClass(c)! | translate) : c }}</span>
                   }
                   {{ j.error?.message }}
                 </td>
@@ -340,7 +343,7 @@
               <th>{{ 'optimize.queue.col.codec' | translate }}</th>
               <th>{{ 'optimize.queue.col.device' | translate }}</th>
               <th>{{ 'optimize.queue.col.saved' | translate }}</th>
-              <th></th>
+              <th><span class="sr-only">{{ 'optimize.queue.col.actions' | translate }}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -362,14 +365,16 @@
                   }
                 </td>
                 <td class="text-right">
-                  <button
-                    type="button"
-                    class="btn btn-outline btn-xs"
-                    [disabled]="busy()"
-                    (click)="restore(j)"
-                  >
-                    {{ 'optimize.queue.restore' | translate }}
-                  </button>
+                  @if (j.restorable) {
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-xs"
+                      [disabled]="busy()"
+                      (click)="restore(j)"
+                    >
+                      {{ 'optimize.queue.restore' | translate }}
+                    </button>
+                  }
                 </td>
               </tr>
             }

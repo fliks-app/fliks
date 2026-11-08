@@ -31,6 +31,7 @@ import {
   LucidePackage,
   LucideUserPlus,
   LucideX,
+  LucideZap,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { centerRailOnCard } from '../../../../shared/utils/center-rail';
@@ -81,7 +82,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX, LucideZap],
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
@@ -152,6 +153,7 @@ export class MediaDetailSeasonsComponent {
   readonly viewSeasonTracking = output<number>();
   /** Toggle the viewer's like on this season (emits the season id). */
   readonly downloadSeason = output<Season>();
+  readonly optimizeSeason = output<Season>();
   readonly downloadEpisode = output<{ season: Season; episode: Episode }>();
   /** Selected episodes, regrouped by season. */
   readonly downloadSelected = output<Season[]>();

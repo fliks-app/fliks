@@ -35,6 +35,10 @@ pub struct File<'a> {
     pub languages: &'a Languages,
     /// Transcoded in the last 30 days (`playback_qoe_sessions."transcodeReasons"` not empty).
     pub transcoded_recently: bool,
+    /// Image tracks whose last OCR run failed: the difference does not list them again (`force` does).
+    pub ocr_failed: &'a [u32],
+    /// An earlier job with this video setting copied the video, so a new pass would copy it again.
+    pub video_copied: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -98,6 +102,8 @@ pub enum Change {
     },
     Reorder {
         kind: TrackKind,
+        /// The kept streams in their final order.
+        order: Vec<u32>,
     },
     #[serde(rename_all = "camelCase")]
     Default {
@@ -246,109 +252,149 @@ impl Diff {
             container: None,
             clear_title: false,
             extra_subtitles: vec![],
+            rename: false,
         };
         let mut any = false;
         for c in &self.changes {
-            any |= match c {
-                Change::Reencode {
-                    codec,
-                    crop,
-                    crop_only,
-                    ..
-                } => {
-                    plan.codec = Some(codec.as_str().to_owned());
-                    plan.crop = crop.clone();
-                    plan.quality = Some(match v.quality {
-                        Quality::Small => OptimizeQuality::Small,
-                        Quality::Balanced => OptimizeQuality::Balanced,
-                        Quality::Faithful => OptimizeQuality::Faithful,
-                    });
-                    plan.software = v.prefer_software;
-                    plan.max_software_hours = Some(f64::from(v.software_max_hours));
-                    plan.too_slow = match v.too_slow {
-                        TooSlow::Hardware => OptimizeTooSlow::Hardware,
-                        TooSlow::Skip => OptimizeTooSlow::Skip,
-                    };
-                    plan.min_savings_pct =
-                        (!crop_only).then_some(f64::from(profile.guards.min_savings_pct));
-                    plan.skip_hdr10plus_dv = Some(v.when.skip_hdr10plus_dv);
-                    true
-                }
-                Change::Drop {
-                    stream_index,
-                    reason,
-                    ..
-                } => {
-                    // A replaced track is kept: its encode takes its place (`AddAudio`).
-                    if *reason != DropReason::Replaced {
-                        stream(&mut plan, *stream_index).keep = false;
-                    }
-                    *reason != DropReason::Replaced
-                }
-                Change::Ocr { stream_index } => match extra.iter().find(|(i, _)| i == stream_index)
-                {
-                    Some((_, e)) => {
-                        stream(&mut plan, *stream_index).keep = false;
-                        plan.extra_subtitles.push(e.clone());
+            any |=
+                match c {
+                    Change::Reencode {
+                        codec,
+                        crop,
+                        crop_only,
+                        ..
+                    } => {
+                        plan.codec = Some(codec.as_str().to_owned());
+                        plan.crop = crop.clone();
+                        plan.quality = Some(match v.quality {
+                            Quality::Small => OptimizeQuality::Small,
+                            Quality::Balanced => OptimizeQuality::Balanced,
+                            Quality::Faithful => OptimizeQuality::Faithful,
+                        });
+                        plan.software = v.prefer_software;
+                        plan.max_software_hours = Some(f64::from(v.software_max_hours));
+                        plan.too_slow = match v.too_slow {
+                            TooSlow::Hardware => OptimizeTooSlow::Hardware,
+                            TooSlow::Skip => OptimizeTooSlow::Skip,
+                        };
+                        plan.min_savings_pct =
+                            (!crop_only).then_some(f64::from(profile.guards.min_savings_pct));
+                        plan.skip_hdr10plus_dv = Some(v.when.skip_hdr10plus_dv);
                         true
                     }
-                    None => false,
-                },
-                Change::AddAudio { source_stream } => {
-                    let replaced = self.changes.iter().any(|c| {
+                    Change::Drop {
+                        stream_index,
+                        reason,
+                        ..
+                    } => {
+                        // A replaced track is kept: its encode takes its place (`AddAudio`).
+                        if *reason != DropReason::Replaced {
+                            stream(&mut plan, *stream_index).keep = false;
+                        }
+                        *reason != DropReason::Replaced
+                    }
+                    Change::Ocr { stream_index } => {
+                        match extra.iter().find(|(i, _)| i == stream_index) {
+                            Some((_, e)) => {
+                                stream(&mut plan, *stream_index).keep = false;
+                                plan.extra_subtitles.push(e.clone());
+                                true
+                            }
+                            None => false,
+                        }
+                    }
+                    Change::AddAudio { source_stream } => {
+                        let replaced = self.changes.iter().any(|c| {
                         matches!(c, Change::Drop { stream_index, reason: DropReason::Replaced, .. }
                             if stream_index == source_stream)
                     });
-                    let s = stream(&mut plan, *source_stream);
-                    s.encode = Some(if audio_playable.contains("eac3") {
-                        StreamEncode::Eac3
-                    } else {
-                        StreamEncode::Aac
-                    });
-                    s.keep_original = !replaced;
-                    true
-                }
-                Change::Language {
-                    stream_index, code, ..
-                } => {
-                    let tag = fliks_domain::language::iso639_2(code).unwrap_or(code);
-                    stream(&mut plan, *stream_index).language = Some(tag.to_owned());
-                    true
-                }
-                Change::Default { stream_index } => {
-                    for a in info
-                        .audio
-                        .iter()
-                        .filter(|a| a.is_default == Some(true) && a.stream_index != *stream_index)
-                    {
-                        stream(&mut plan, a.stream_index).default = Some(false);
+                        let eac3 = audio_playable.contains("eac3");
+                        let src = info.audio.iter().find(|a| a.stream_index == *source_stream);
+                        let s = stream(&mut plan, *source_stream);
+                        s.encode = Some(if eac3 {
+                            StreamEncode::Eac3
+                        } else {
+                            StreamEncode::Aac
+                        });
+                        s.keep_original = !replaced;
+                        // The copied title and default flag would describe the source track.
+                        s.title = Some(encoded_title(src, eac3));
+                        if !replaced {
+                            s.default = Some(false);
+                        }
+                        true
                     }
-                    stream(&mut plan, *stream_index).default = Some(true);
-                    true
+                    Change::Language {
+                        stream_index, code, ..
+                    } => {
+                        let tag = fliks_domain::language::iso639_2(code).unwrap_or(code);
+                        stream(&mut plan, *stream_index).language = Some(tag.to_owned());
+                        true
+                    }
+                    Change::Default { stream_index } => {
+                        for a in info.audio.iter().filter(|a| {
+                            a.is_default == Some(true) && a.stream_index != *stream_index
+                        }) {
+                            stream(&mut plan, a.stream_index).default = Some(false);
+                        }
+                        stream(&mut plan, *stream_index).default = Some(true);
+                        true
+                    }
+                    Change::Title { stream_index, .. } => {
+                        stream(&mut plan, *stream_index).title = Some(String::new());
+                        true
+                    }
+                    Change::Container { to } => {
+                        plan.container = Some(if *to == "mp4" {
+                            OptimizeContainer::Mp4
+                        } else {
+                            OptimizeContainer::Mkv
+                        });
+                        true
+                    }
+                    Change::Hvc1 => {
+                        plan.hvc1_tag = true;
+                        true
+                    }
+                    Change::StatisticsTags | Change::SegmentDuration => true,
+                    Change::ClearTitle => {
+                        plan.clear_title = true;
+                        true
+                    }
+                    Change::Reorder { .. } => true,
+                    Change::Flags { stream_index, .. } => {
+                        for a in info.audio.iter().filter(|a| {
+                            a.is_default == Some(true) && a.stream_index != *stream_index
+                        }) {
+                            stream(&mut plan, a.stream_index).default = Some(false);
+                        }
+                        true
+                    }
+                    Change::Rename => {
+                        plan.rename = true;
+                        false
+                    }
+                };
+        }
+        // Every kept stream of a reordered kind is listed, in its final order: the engine sorts by it.
+        for c in &self.changes {
+            if let Change::Reorder { order, .. } = c {
+                for i in order {
+                    stream(&mut plan, *i);
                 }
-                Change::Title { stream_index, .. } => {
-                    stream(&mut plan, *stream_index).title = Some(String::new());
-                    true
+                let mut at: Vec<usize> = order
+                    .iter()
+                    .filter_map(|i| plan.streams.iter().position(|s| s.stream_index == *i))
+                    .collect();
+                let entries: Vec<StreamPlan> = order
+                    .iter()
+                    .filter_map(|i| plan.streams.iter().find(|s| s.stream_index == *i).cloned())
+                    .collect();
+                at.sort_unstable();
+                for (slot, e) in at.into_iter().zip(entries) {
+                    plan.streams[slot] = e;
                 }
-                Change::Container { to } => {
-                    plan.container = Some(if *to == "mp4" {
-                        OptimizeContainer::Mp4
-                    } else {
-                        OptimizeContainer::Mkv
-                    });
-                    true
-                }
-                Change::Hvc1 => {
-                    plan.hvc1_tag = true;
-                    true
-                }
-                Change::StatisticsTags | Change::SegmentDuration => true,
-                Change::ClearTitle => {
-                    plan.clear_title = true;
-                    true
-                }
-                Change::Reorder { .. } | Change::Flags { .. } | Change::Rename => false,
-            };
+            }
         }
         let mkv_out = plan.container.map_or_else(
             || {
@@ -527,6 +573,9 @@ impl Builder<'_> {
             return false;
         };
         let crop_only = !(codec_change || resize);
+        if self.f.video_copied && !self.env.force && !crop_only {
+            return false;
+        }
         if let Some(reason) = hard_stop {
             self.warnings.push(Warning::VideoCopied { reason });
             return false;
@@ -664,6 +713,7 @@ impl Builder<'_> {
             if order != kept {
                 self.changes.push(Change::Reorder {
                     kind: TrackKind::Audio,
+                    order: order.iter().map(|i| info.audio[*i].stream_index).collect(),
                 });
             }
         }
@@ -744,6 +794,7 @@ impl Builder<'_> {
             if t.is_image_based
                 && p.image == ImageSubs::OcrThenDrop
                 && subtitle_flags::is_ocr_supported_codec(Some(&t.codec))
+                && (self.env.force || !self.f.ocr_failed.contains(&t.stream_index))
             {
                 self.changes.push(Change::Ocr {
                     stream_index: t.stream_index,
@@ -768,8 +819,11 @@ impl Builder<'_> {
                     .unwrap_or(keep_langs.len())
             };
             if kept.windows(2).any(|w| rank(w[0]) > rank(w[1])) {
+                let mut sorted = kept.clone();
+                sorted.sort_by_key(|t| rank(t));
                 self.changes.push(Change::Reorder {
                     kind: TrackKind::Subtitle,
+                    order: sorted.iter().map(|t| t.stream_index).collect(),
                 });
             }
         }
@@ -866,12 +920,20 @@ impl Builder<'_> {
             .then_some("mkv"),
         };
         let to_mp4 = wanted == Some("mp4") || (wanted.is_none() && is_mp4(path));
+        let dropped = |i: u32| {
+            self.changes.iter().any(|c| {
+                matches!(c, Change::Drop { stream_index, kind: TrackKind::Audio, .. } if *stream_index == i)
+            })
+        };
         let mp4_unfit = kept_subs.iter().any(|c| {
             matches!(
                 c.as_str(),
                 "ass" | "ssa" | "hdmv_pgs_subtitle" | "dvd_subtitle"
             )
-        });
+        }) || self.f.info.audio.iter().any(|a| {
+            let c = a.codec.to_ascii_lowercase();
+            !dropped(a.stream_index) && (c == "truehd" || c == "mlp" || c.starts_with("pcm_"))
+        }) || self.f.info.video.len() > 1;
         let to = if to_mp4 && mp4_unfit {
             Some("mkv")
         } else {
@@ -916,15 +978,35 @@ impl Builder<'_> {
                 }),
         };
         let name_wrong = word.zip(final_word).is_some_and(|(w, f)| w != f);
-        if name_wrong
-            || self
-                .changes
-                .iter()
-                .any(|c| matches!(c, Change::Container { .. }))
+        let rewriting = self
+            .changes
+            .iter()
+            .any(|c| matches!(c, Change::Reencode { .. } | Change::Container { .. }));
+        // A name alone never starts a job: the plan has nothing else to write.
+        if rewriting
+            && (name_wrong
+                || self
+                    .changes
+                    .iter()
+                    .any(|c| matches!(c, Change::Container { .. })))
         {
             self.changes.push(Change::Rename);
         }
     }
+}
+
+/// "<language> <layout> <codec>" of an encoded track; the engine keeps the source's channels.
+fn encoded_title(src: Option<&fliks_engine_core::api::AudioStreamInfo>, eac3: bool) -> String {
+    let layout = match src.and_then(|a| a.channels) {
+        Some(1) => "Mono".to_owned(),
+        Some(2) | None => "Stereo".to_owned(),
+        Some(6) => "5.1".to_owned(),
+        Some(8) => "7.1".to_owned(),
+        Some(n) => format!("{n}ch"),
+    };
+    let lang = src.map_or("", |a| a.language.as_str());
+    let codec = if eac3 { "E-AC3" } else { "AAC" };
+    format!("{lang} {layout} {codec}").trim_start().to_owned()
 }
 
 /// A title naming a channel layout or codec the stream does not have.
@@ -1014,6 +1096,8 @@ mod tests {
             age_days: 30,
             languages: &languages,
             transcoded_recently: false,
+            ocr_failed: &[],
+            video_copied: false,
         };
         compute(&env, &f)
     }
@@ -1061,6 +1145,8 @@ mod tests {
             age_days: 30,
             languages: &l,
             transcoded_recently: false,
+            ocr_failed: &[],
+            video_copied: false,
         };
         assert!(matches!(
             compute(&env, &f),
@@ -1173,6 +1259,8 @@ mod tests {
             age_days: 30,
             languages: &l,
             transcoded_recently: false,
+            ocr_failed: &[],
+            video_copied: false,
         };
         let d = diff(compute(&env, &f));
         assert!(matches!(
@@ -1208,10 +1296,16 @@ mod tests {
             level: LevelOut::Remux,
             changes: vec![Change::Reorder {
                 kind: TrackKind::Audio,
+                order: vec![1],
             }],
             warnings: vec![],
         };
-        assert!(reorder_only.plan(&profile, &lone, &none, &[]).is_none());
+        assert_eq!(
+            reorder_only
+                .plan(&profile, &lone, &none, &[])
+                .map(|p| p.streams.len()),
+            Some(1)
+        );
     }
 
     #[test]
@@ -1253,6 +1347,98 @@ mod tests {
     }
 
     #[test]
+    fn a_video_copied_by_an_earlier_job_is_not_re_encoded_again() {
+        let profile = Preset::Balanced.document();
+        let playable: HashSet<String> = ["aac"].map(String::from).into();
+        let env = Env {
+            profile: &profile,
+            allow_rename: false,
+            target: Some(Target::Hevc),
+            audio_playable: &playable,
+            force: false,
+        };
+        let i = info("h264", vec![audio(1, "eng", "aac", 2)]);
+        let languages = Languages::default();
+        let mk = |video_copied, ocr_failed: &'static [u32]| File {
+            relative_path: "a.mkv",
+            info: &i,
+            probe_version: Some(PROBE_VERSION),
+            age_days: 30,
+            languages: &languages,
+            transcoded_recently: false,
+            ocr_failed,
+            video_copied,
+        };
+        assert!(matches!(compute(&env, &mk(false, &[])), Outcome::Diff(_)));
+        assert!(matches!(
+            compute(&env, &mk(true, &[])),
+            Outcome::Conform { .. }
+        ));
+    }
+
+    #[test]
+    fn a_reorder_lists_the_kept_streams_in_their_final_order_and_flags_clear_the_extra_defaults() {
+        let profile = Preset::Balanced.document();
+        let mut a = audio(1, "eng", "aac", 2);
+        a.is_default = Some(true);
+        let mut b = audio(2, "fra", "aac", 2);
+        b.is_default = Some(true);
+        let i = info("hevc", vec![a, b, audio(3, "deu", "aac", 2)]);
+        let none = HashSet::new();
+        let d = Diff {
+            level: LevelOut::Remux,
+            changes: vec![
+                Change::Reorder {
+                    kind: TrackKind::Audio,
+                    order: vec![3, 1, 2],
+                },
+                Change::Flags {
+                    kind: TrackKind::Audio,
+                    stream_index: 1,
+                },
+            ],
+            warnings: vec![],
+        };
+        let p = d.plan(&profile, &i, &none, &[]).unwrap();
+        let order: Vec<u32> = p.streams.iter().map(|s| s.stream_index).collect();
+        assert_eq!(order, [3, 1, 2]);
+        let s2 = p.streams.iter().find(|s| s.stream_index == 2).unwrap();
+        assert_eq!(s2.default, Some(false));
+    }
+
+    #[test]
+    fn matroska_only_audio_keeps_the_file_out_of_mp4() {
+        let i = info("h264", vec![audio(1, "eng", "truehd", 8)]);
+        // The only container that holds TrueHD is MKV, which needs the rename permission.
+        assert!(matches!(
+            run(Preset::Balanced, "a.mp4", &i, Some("en")),
+            Outcome::Skipped {
+                why: Skipped::Container
+            }
+        ));
+    }
+
+    #[test]
+    fn an_added_track_is_titled_and_never_default() {
+        let profile = Preset::Balanced.document();
+        let i = info("h264", vec![audio(1, "eng", "dts", 8)]);
+        let playable: HashSet<String> = ["eac3".to_owned()].into();
+        let d = Diff {
+            level: LevelOut::Remux,
+            changes: vec![Change::AddAudio { source_stream: 1 }],
+            warnings: vec![],
+        };
+        let s = d
+            .plan(&profile, &i, &playable, &[])
+            .unwrap()
+            .streams
+            .remove(0);
+        assert!(s.keep_original);
+        assert_eq!(s.default, Some(false));
+        assert_eq!(s.title.as_deref(), Some("eng 7.1 E-AC3"));
+    }
+
+    #[test]
     fn replacing_a_lossless_track_encodes_it_in_place_and_never_leaves_the_file_silent() {
         let mut profile = Preset::Balanced.document();
         profile.audio.incompatible = Incompatible::Replace;
@@ -1274,6 +1460,13 @@ mod tests {
         let p = d.plan(&profile, &i, &playable, &[]).unwrap();
         let s = &p.streams[0];
         assert!(s.keep && s.encode == Some(StreamEncode::Eac3) && !s.keep_original);
+        assert_eq!(s.title.as_deref(), Some("eng 5.1 E-AC3"));
+        assert_eq!(s.default, None, "a replacing encode keeps the source flag");
+        assert!(!title_contradicts(
+            s.title.as_deref().unwrap(),
+            "eac3",
+            Some(6)
+        ));
         let only_drop = Diff {
             changes: vec![Change::Drop {
                 kind: TrackKind::Audio,

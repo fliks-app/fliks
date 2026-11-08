@@ -122,7 +122,28 @@ async fn a_library_that_does_not_optimize_new_files_queues_nothing(pool: PgPool)
         enqueue::queue_new(&w.st, w.file).await.unwrap().outcome,
         Outcome::Queued
     );
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_review_continues_after_its_cursor(pool: PgPool) {
+    let w = world(pool, 0, true).await;
+    assert_eq!(auto::review_new(&w.st, w.file).await.unwrap(), (0, None));
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap(), (1, None));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_older_than_the_flag_is_never_queued_automatically(pool: PgPool) {
+    let w = world(pool, 0, true).await;
+    sqlx::query(r#"UPDATE libraries SET "optimizeNewFilesSince" = now() + interval '1 minute'"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    assert_ne!(
+        enqueue::queue_new(&w.st, w.file).await.unwrap().outcome,
+        Outcome::Queued
+    );
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 0);
 }
 
 #[cfg(unix)]
@@ -133,22 +154,26 @@ async fn a_hard_linked_file_is_reviewed_until_it_is_free(pool: PgPool) {
         .execute(&w.st.db)
         .await
         .unwrap();
+    sqlx::query(r#"UPDATE libraries SET "optimizeNewFilesSince" = now() - interval '100 days'"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
     let link = w.dir.join("seed.mkv");
     fs::hard_link(w.dir.join("M/a.mkv"), &link).unwrap();
     assert_eq!(
         enqueue::queue_new(&w.st, w.file).await.unwrap().outcome,
         Outcome::Shared
     );
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 0);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 0);
     let markers: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM jobs WHERE state = 'skipped'"#)
         .fetch_one(&w.st.db)
         .await
         .unwrap();
     assert_eq!(markers, 1);
     fs::remove_file(link).unwrap();
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 1);
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 0);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 1);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 0);
 }
 
 #[sqlx::test(migrations = false)]
@@ -187,5 +212,5 @@ async fn a_verification_does_not_hide_a_new_file_from_the_review(pool: PgPool) {
         .execute(&w.st.db)
         .await
         .unwrap();
-    assert_eq!(auto::review_new(&w.st).await.unwrap(), 1);
+    assert_eq!(auto::review_new(&w.st, 0).await.unwrap().0, 1);
 }

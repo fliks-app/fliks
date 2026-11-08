@@ -1,15 +1,17 @@
 import { Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { MediaService } from '../../../core/services/api/media.service';
 import { OptimizeService } from '../../../core/services/api/optimize.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { OptimizeConfirmService } from '../../../core/services/optimize-confirm.service';
 import {
   OptimizeModalService,
   type OptimizeModalConfig,
 } from '../../../core/services/optimize-modal.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { LEVELS, type OptimizeLevel } from '../../../core/models/optimize';
+import { LEVELS, type OptimizeLevel, type Queued, type QueueOutcome } from '../../../core/models/optimize';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { ModalHeaderComponent } from '../modal-header';
 
@@ -35,6 +37,8 @@ export class OptimizeModalComponent {
   private readonly service = inject(OptimizeModalService);
   private readonly media = inject(MediaService);
   private readonly api = inject(OptimizeService);
+  private readonly libraries = inject(LibrariesApiService);
+  private readonly rewrite = inject(OptimizeConfirmService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -75,31 +79,34 @@ export class OptimizeModalComponent {
       const items = await Promise.all(config.mediaIds.map((id) => this.media.getOne(id)));
       if (seq !== this.seq) return;
       const episodes = config.episodeIds;
-      const files = items.flatMap((m) =>
+      const all = items.flatMap((m) =>
         (m.files ?? [])
           .filter((f) => !episodes || (f.episodeId != null && episodes.includes(f.episodeId)))
           .map((f) => ({ id: f.id, size: f.size, libraryId: m.libraryId ?? null })),
       );
+      const libraryIds = [...new Set(all.map((f) => f.libraryId).filter((id) => id != null))];
+      const libs = await Promise.all(libraryIds.map((id) => this.libraries.get(id)));
+      if (seq !== this.seq) return;
+      const profiled = new Set(libs.filter((l) => l.optimizeProfileId != null).map((l) => l.id));
+      const files = all.filter((f) => f.libraryId != null && profiled.has(f.libraryId));
       this.fileIds.set(files.map((f) => f.id));
-      const libraryId = files.find((f) => f.libraryId != null)?.libraryId;
-      if (files.length > PREVIEW_MAX || libraryId == null) {
-        this.truncated.set(files.length > PREVIEW_MAX);
+      if (all.length > 0 && files.length === 0) {
+        this.noProfile.set(true);
+        return;
+      }
+      if (files.length > PREVIEW_MAX) {
+        this.truncated.set(true);
         return;
       }
       const outcomes = await Promise.all(
         files.map((f) =>
-          this.api.previewFile(libraryId, f.id).then(
+          this.api.previewFile(f.libraryId!, f.id).then(
             (o) => ({ f, o }),
             () => null,
           ),
         ),
       );
       if (seq !== this.seq) return;
-      // Every comparison refused: the library has no profile.
-      if (outcomes.every((r) => r === null)) {
-        this.noProfile.set(true);
-        return;
-      }
       const s: Summary = {
         files: files.length,
         conform: 0,
@@ -135,6 +142,19 @@ export class OptimizeModalComponent {
     }
   }
 
+  /** "N of M queued", then one sentence per reason the others were not. */
+  private outcomeSummary(out: Queued[]): string {
+    const t = (key: string, params: object) => this.translate.instant(key, params);
+    const counts = new Map<QueueOutcome, number>();
+    for (const q of out) counts.set(q.outcome, (counts.get(q.outcome) ?? 0) + 1);
+    const queued = counts.get('queued') ?? 0;
+    counts.delete('queued');
+    return [
+      t('optimize.action.queued', { count: queued, total: out.length }),
+      ...[...counts].map(([outcome, count]) => t(`optimize.action.outcome.${outcome}`, { count })),
+    ].join(' ');
+  }
+
   close() {
     this.dialog()?.nativeElement.close();
   }
@@ -148,16 +168,17 @@ export class OptimizeModalComponent {
       });
       if (!ok) return;
     }
+    const ids = this.fileIds();
+    if (ids.length > 1) {
+      const label = this.translate.instant('optimize.action.optimize');
+      if (!(await this.rewrite.confirmRewrite(ids.length, label))) return;
+    }
     this.busy.set(true);
     try {
-      const out: { outcome: string }[] = [];
-      const ids = this.fileIds();
+      const out: Queued[] = [];
       for (let i = 0; i < ids.length; i += 500)
         out.push(...(await this.api.enqueue(ids.slice(i, i + 500), force)));
-      const queued = out.filter((q) => q.outcome === 'queued').length;
-      this.toast.success(
-        this.translate.instant('optimize.action.queued', { count: queued, total: out.length }),
-      );
+      this.toast.success(this.outcomeSummary(out));
       this.close();
     } catch {
       // The global interceptor toasts the reason.

@@ -74,6 +74,7 @@ pub async fn enqueue(
     if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
+    super::control::require_files(&st, &authed, &dto.media_file_ids).await?;
     let out = enqueue::queue_files(&st, &dto.media_file_ids, dto.force, dto.priority)
         .await
         .map_err(db)?;
@@ -99,6 +100,7 @@ pub async fn verify(
     if dto.media_file_ids.is_empty() || dto.media_file_ids.len() > 500 {
         return Err(AppError::bad_request("mediaFileIds must hold 1 to 500 ids"));
     }
+    super::control::require_files(&st, &authed, &dto.media_file_ids).await?;
     let out = super::auto::queue_verify(&st, &dto.media_file_ids, dto.priority)
         .await
         .map_err(db)?;
@@ -136,6 +138,8 @@ pub struct JobRow {
     level: Option<String>,
     codec: Option<String>,
     duration_seconds: Option<f64>,
+    /// The original can be brought back: kept, not purged, not restored yet.
+    restorable: bool,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
@@ -149,20 +153,26 @@ pub async fn list_jobs(
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Vec<JobRow>>, AppError> {
     manage_jobs(&authed)?;
+    let libs = super::control::scope(&st, &authed).await?;
     let rows = sqlx::query(
         r#"SELECT j.id, j.kind, j."mediaFileId", j.state, j.priority, j.attempt, j.failures, j.progress, j.paused,
              j."workerId", j."deviceId", j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
              m.title, m."libraryId" AS library_id, j.payload #>> '{plan,level}' AS level,
              j.payload #>> '{plan,codec}' AS codec,
-             (j.payload #>> '{info,durationSeconds}')::float8 AS duration
+             (j.payload #>> '{info,durationSeconds}')::float8 AS duration,
+             (j.kind = 'optimize' AND j.state = 'done' AND j.result #>> '{journal,backup}' IS NOT NULL
+              AND NOT (j.result ? 'trashPurgedAt') AND NOT (j.result ? 'restore')) AS restorable
            FROM jobs j LEFT JOIN media_files f ON f.id = j."mediaFileId" LEFT JOIN media m ON m.id = f."mediaId"
-           WHERE ($1::text IS NULL OR j.state = $1) AND ($3::int IS NULL OR m."libraryId" = $3)
+           WHERE NOT (j.state = 'skipped' AND j.error->>'class' IN ('shared', 'ocr_pending'))
+             AND ($1::text IS NULL OR j.state = $1) AND ($3::int IS NULL OR m."libraryId" = $3)
+             AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            ORDER BY CASE WHEN $1 = 'queued' THEN j.priority END DESC, CASE WHEN $1 = 'queued' THEN j.id END,
                     j.id DESC LIMIT $2"#,
     )
     .bind(q.state)
     .bind(q.limit.unwrap_or(100).clamp(1, 500))
     .bind(q.library_id)
+    .bind(libs)
     .fetch_all(&st.db)
     .await
     .map_err(db)?;
@@ -189,6 +199,7 @@ pub async fn list_jobs(
                 level: r.get("level"),
                 codec: r.get("codec"),
                 duration_seconds: r.get("duration"),
+                restorable: r.get("restorable"),
                 created_at: r.get("createdAt"),
                 updated_at: r.get("updatedAt"),
             })
@@ -203,6 +214,7 @@ pub async fn retry(
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
     manage_jobs(&authed)?;
+    super::control::require_job(&st, &authed, id).await?;
     match enqueue::retry(&st, id).await.map_err(db)? {
         Some(()) => Ok(Json(json!({}))),
         None => Err(AppError::conflict(
@@ -218,6 +230,7 @@ pub async fn cancel(
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
     manage_jobs(&authed)?;
+    super::control::require_job(&st, &authed, id).await?;
     if store::cancel(&st.db, id).await.map_err(db)? {
         Ok(Json(json!({})))
     } else {
@@ -242,6 +255,9 @@ pub async fn put_settings(
 ) -> Result<Json<settings::Settings>, AppError> {
     manage_settings(&authed)?;
     body.check().map_err(AppError::bad_request)?;
+    // Pause and resume have their own routes: a stale form must not flip the queue.
+    let mut body = body;
+    body.paused = settings::load(&st.db).await.map_err(db)?.paused;
     settings::save(&st.db, &body).await.map_err(db)?;
     crate::settings::notify_changed(&st, &[settings::KEY.to_owned()], None).await;
     st.queue.wake.notify_waiters();
@@ -255,6 +271,8 @@ pub struct WorkerRow {
     engine_version: String,
     token_id: Option<i32>,
     devices: Vec<fliks_engine_core::api::WorkerDevice>,
+    #[serde(with = "iso_ms")]
+    last_seen_at: DateTime<Utc>,
 }
 
 /// The instances that said hello since the server started.
@@ -268,7 +286,8 @@ pub async fn list_workers(
         st.queue
             .workers()
             .into_iter()
-            .map(|(key, w)| WorkerRow {
+            .map(|(key, w, silent)| WorkerRow {
+                last_seen_at: Utc::now() - silent,
                 instance: key,
                 engine_version: w.engine_version,
                 token_id: match w.principal {
