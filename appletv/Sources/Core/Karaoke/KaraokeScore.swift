@@ -4,6 +4,8 @@ import Foundation
 enum Difficulty: String, CaseIterable {
     case easy, medium, hard
 
+    var next: Difficulty { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
+
     /// Half-width of the hit window in semitones, once the octave is folded away.
     var tolerance: Double {
         switch self {
@@ -105,6 +107,43 @@ func decodePitchBatch(_ data: String) -> [PitchFrame] {
     }
 }
 
+/// A batch the relay forwards to the display: the singer's `pf` message stamped with their user id.
+func decodeRelayed(_ data: String) -> (userId: Int, frames: [PitchFrame])? {
+    struct Stamp: Decodable { let u: Int }
+    guard let stamp = try? JSONDecoder().decode(Stamp.self, from: Data(data.utf8)) else { return nil }
+    let frames = decodePitchBatch(data)
+    return frames.isEmpty ? nil : (stamp.u, frames)
+}
+
+// MARK: - Calibration
+
+/// Onset times of a take: a voiced frame after at least 200 ms of silence.
+func onsets(_ frames: [PitchFrame]) -> [Double] {
+    var out: [Double] = []
+    var lastVoiced = -Double.infinity
+    for f in frames where f.midi != nil {
+        if f.t - lastVoiced > 200 { out.append(f.t) }
+        lastVoiced = f.t
+    }
+    return out
+}
+
+/// Median offset between detected onsets and the cue starts they answer (ms); nil with fewer than 3 matches.
+func estimateLatency(onsets: [Double], cueStarts: [Double], window: Double = 800) -> Double? {
+    let d = onsets.compactMap { o in
+        cueStarts.map { o - $0 }.filter { abs($0) <= window }.min { abs($0) < abs($1) }
+    }.sorted()
+    return d.count < 3 ? nil : d[d.count / 2]
+}
+
+extension StructuredLyrics {
+    /// Capture delay of a singer's device against the song's pitched cues; nil when too few onsets match.
+    func calibrate(frames: [PitchFrame]) -> Double? {
+        let starts = scoredLines(agentId: nil).flatMap { $0.map { Double($0.start - offset) } }
+        return estimateLatency(onsets: onsets(frames.sorted { $0.t < $1.t }), cueStarts: starts)
+    }
+}
+
 // MARK: - Singers
 
 /// The frames of each singer, kept in arrival order and bounded.
@@ -121,6 +160,11 @@ struct FrameStore {
     }
 
     func frames(_ userId: Int) -> [PitchFrame] { byUser[userId] ?? [] }
+
+    mutating func clear() {
+        byUser = [:]
+        singers = []
+    }
 }
 
 struct SingerResult: Equatable {

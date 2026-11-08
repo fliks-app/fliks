@@ -16,6 +16,8 @@ enum KaraokeAPI {
         let stems: Stems
         let lyrics: Bool
         let melody: Bool
+        /// An MP3+G track: a `.cdg` graphics file sits next to the audio.
+        let cdg: Bool?
 
         var hasStems: Bool { stems.vocals != nil && stems.instrumental != nil }
         var running: Bool { state == "queued" || state == "running" }

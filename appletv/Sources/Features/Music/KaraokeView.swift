@@ -12,18 +12,19 @@ struct KaraokeView: View {
     @State private var party = PartyService.shared
     @FocusState private var focus: Control?
 
-    private enum Control: Hashable { case mode(KaraokeMode), level }
+    private enum Control: Hashable { case mode(KaraokeMode), level, difficulty, keyDown, keyUp, calibrate }
 
     var body: some View {
         VStack(spacing: 36) {
             header
             stage
             if session.phase == .ready { controls }
+            if session.phase == .ready { hint }
         }
         .padding(.horizontal, 90)
         .padding(.vertical, 50)
         .task(id: itemId) { await session.open(itemId: itemId, lyrics: lyrics) }
-        .onChange(of: session.phase) { _, p in if p == .ready { focus = .mode(session.mode) } }
+        .onChange(of: session.phase) { _, p in if p == .ready { focus = session.hasStems ? .mode(session.mode) : .difficulty } }
         .onChange(of: player.current?.itemId) { _, id in if id != itemId { onClose() } }
         .onDisappear { session.close() }
     }
@@ -54,12 +55,16 @@ struct KaraokeView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
-            if let lyrics {
+            if let cdg = session.cdg {
+                CdgView(data: cdg)
+            } else if let lyrics {
                 KaraokeLyricsLines(lyrics: lyrics)
-                PitchLane(lyrics: lyrics, live: session.live)
-                    .frame(height: 170)
             } else {
                 note(tr("lyrics.none"))
+            }
+            if let lyrics {
+                PitchLane(lyrics: lyrics, live: session.live)
+                    .frame(height: 170)
             }
         }
     }
@@ -69,17 +74,58 @@ struct KaraokeView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 28) {
-            ForEach(KaraokeMode.allCases, id: \.self) { m in
-                Button { session.setMode(m) } label: {
-                    Text(tr(m.labelKey)).foregroundStyle(session.mode == m ? Color.accentColor : .primary)
+        VStack(spacing: 24) {
+            if session.hasStems {
+                HStack(spacing: 28) {
+                    ForEach(KaraokeMode.allCases, id: \.self) { m in
+                        Button { session.setMode(m) } label: {
+                            Text(tr(m.labelKey)).foregroundStyle(session.mode == m ? Color.accentColor : .primary)
+                        }
+                        .focused($focus, equals: .mode(m))
+                        .disabled(session.key != 0)
+                    }
+                    levelBar
                 }
-                .focused($focus, equals: .mode(m))
+                .focusSection()
             }
-            levelBar
+            HStack(spacing: 28) {
+                Button { session.setDifficulty(session.difficulty.next) } label: {
+                    Text("\(tr("karaoke.difficulty")): \(tr("karaoke.difficulty_\(session.difficulty.rawValue)"))")
+                }
+                .focused($focus, equals: .difficulty)
+                if session.keyAvailable { keyControl }
+                if session.cdg == nil, lyrics != nil {
+                    Button { session.calibrate() } label: {
+                        Text("\(tr("karaoke.calibrate")) (\(trp("karaoke.latency", ["ms": "\(Int(session.latencyMs))"])))")
+                    }
+                    .focused($focus, equals: .calibrate)
+                }
+            }
+            .focusSection()
         }
         .buttonStyle(.bordered)
-        .focusSection()
+    }
+
+    private var keyControl: some View {
+        HStack(spacing: 14) {
+            Button { Task { await session.setKey(session.key - 1) } } label: { Image(systemName: "minus") }
+                .accessibilityLabel(tr("karaoke.key_down"))
+                .focused($focus, equals: .keyDown)
+            Text("\(tr("karaoke.key")) \(session.key > 0 ? "+" : "")\(session.key)").font(.callout.monospacedDigit())
+            Button { Task { await session.setKey(session.key + 1) } } label: { Image(systemName: "plus") }
+                .accessibilityLabel(tr("karaoke.key_up"))
+                .focused($focus, equals: .keyUp)
+        }
+    }
+
+    @ViewBuilder private var hint: some View {
+        if session.calibrationFailed {
+            Text(tr("karaoke.calibrate_failed")).font(.callout).foregroundStyle(.secondary)
+        } else if session.key != 0, session.hasStems {
+            Text(tr("karaoke.key_stems_off")).font(.callout).foregroundStyle(.secondary)
+        } else if session.relayOpen, session.results.isEmpty {
+            Text(tr("karaoke.phones_hint")).font(.callout).foregroundStyle(.secondary)
+        }
     }
 
     /// Left and right move the vocal level in steps of 10 %.
@@ -195,5 +241,37 @@ private struct PitchLane: View {
                 }
             }
         }
+    }
+}
+
+/// The CD+G graphics of an MP3+G track, drawn on the music player's clock.
+private struct CdgView: View {
+    private final class Box {
+        var screen: CdgScreen
+        init(_ screen: CdgScreen) { self.screen = screen }
+    }
+    private let box: Box
+    @State private var player = MusicPlayer.shared
+
+    init(data: Data) { box = Box(CdgScreen(data)) }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+            Group {
+                if let image = frame(ms: player.livePosition(at: ctx.date) * 1000) {
+                    Image(decorative: image, scale: 1).interpolation(.none).resizable().aspectRatio(contentMode: .fit)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func frame(ms: Double) -> CGImage? {
+        box.screen.seek(ms: ms)
+        guard let provider = CGDataProvider(data: Data(box.screen.rgba()) as CFData) else { return nil }
+        return CGImage(width: CdgScreen.width, height: CdgScreen.height, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: CdgScreen.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue), provider: provider,
+                       decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 }

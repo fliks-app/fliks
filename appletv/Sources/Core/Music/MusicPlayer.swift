@@ -32,6 +32,9 @@ enum MusicTransport: Equatable {
         didSet { applyGain() }
     }
 
+    /// The playing track's key change in semitones; 0 outside karaoke and on any other track.
+    var pitch: Int { current?.uid == pitchedUid ? pitchSemitones : 0 }
+
     /// The Now Playing page is on screen: a second push is not needed.
     @ObservationIgnored var nowPlayingOpen = false
 
@@ -73,6 +76,8 @@ enum MusicTransport: Equatable {
     @ObservationIgnored private var resolved: [Int: Resolved] = [:]
     @ObservationIgnored private var streamTokens: [Int: (token: String, expiresAt: Date)] = [:]
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var pitchSemitones = 0
+    @ObservationIgnored private var pitchedUid: UUID?
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var ended = false
     @ObservationIgnored private var lastItem: ObjectIdentifier?
@@ -142,6 +147,31 @@ enum MusicTransport: Equatable {
     func setRate(_ rate: Float) {
         player.defaultRate = rate
         if player.rate != 0 { player.rate = rate }
+    }
+
+    enum PitchOutcome { case shifted, unsupported, failed }
+
+    /// Re-opens the playing track in another key (clamped to +-12) at the same position. Nothing changes
+    /// unless it answers `.shifted`; `.unsupported` is the engine lacking `pitch-shift` (503).
+    func setPitch(_ semitones: Int) async -> PitchOutcome {
+        let n = max(-12, min(12, semitones))
+        guard let track = current, !loading else { return .failed }
+        guard n != pitch else { return .shifted }
+        let position = livePosition()
+        let autoplay = isPlaying
+        let old = resolved[track.itemId]
+        resolved[track.itemId] = nil
+        let result = await resolve(itemId: track.itemId, pitch: n, at: position)
+        guard case .success = result, track.uid == current?.uid else {
+            resolved[track.itemId] = old
+            if case .failure(.notPlayable) = result { return .unsupported }
+            return .failed
+        }
+        if let sid = old?.sessionId { end(session: sid) }
+        pitchSemitones = n
+        pitchedUid = n == 0 ? nil : track.uid
+        begin(startAt: position, autoplay: autoplay)
+        return .shifted
     }
 
     func togglePlayPause() { perform(isPlaying || isBuffering ? .pause : .play) }
@@ -314,7 +344,7 @@ enum MusicTransport: Equatable {
     private func makeItem(_ i: Int) async -> Result<AVPlayerItem, StreamFailure> {
         guard queue.tracks.indices.contains(i) else { return .failure(.unavailable) }
         let track = queue.tracks[i]
-        switch await resolve(itemId: track.itemId) {
+        switch await resolve(itemId: track.itemId, pitch: track.uid == pitchedUid ? pitchSemitones : 0) {
         case .failure(let failure):
             if failure == .notPlayable { fail(tr("music.not_playable", track.title)) }
             return .failure(failure)
@@ -328,19 +358,23 @@ enum MusicTransport: Equatable {
 
     // MARK: - Streams
 
-    private func resolve(itemId: Int) async -> Result<Resolved, StreamFailure> {
+    /// With a key change the server transcodes: its HLS timeline plays instead of a direct file.
+    private func resolve(itemId: Int, pitch: Int = 0, at startAt: Double = 0) async -> Result<Resolved, StreamFailure> {
         if let known = resolved[itemId] { return .success(known) }
         do {
-            let info: Info = try await api.post("/api/items/\(itemId)/playback-info?startAt=0", body: DeviceProfileBuilder.buildMusic())
-            guard info.playMethod == "DirectPlay" else {
+            let query = pitch == 0 ? "startAt=0" : "startAt=\(startAt)&pitchSemitones=\(pitch)"
+            let info: Info = try await api.post("/api/items/\(itemId)/playback-info?\(query)", body: DeviceProfileBuilder.buildMusic())
+            guard pitch != 0 || info.playMethod == "DirectPlay" else {
                 end(session: info.sessionId)
                 return .failure(.notPlayable)
             }
-            var path = info.parts?.first?.playUrl ?? info.playUrl
+            var path = pitch != 0 ? info.playUrl : info.parts?.first?.playUrl ?? info.playUrl
             if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
             let r = Resolved(path: path, sessionId: info.sessionId, mediaFileId: info.mediaFileId)
             resolved[itemId] = r
             return .success(r)
+        } catch APIError.badStatus(503, _) where pitch != 0 {
+            return .failure(.notPlayable)
         } catch {
             return .failure(.unavailable)
         }
