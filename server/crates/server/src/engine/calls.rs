@@ -6,9 +6,9 @@ use super::{
 use fliks_engine_core::api::{
     CacheDeleteResult, CacheSummary, CapabilitiesResponse, EstimateSizesRequest, HeartbeatRequest,
     HeartbeatResponse, IntroDetectRequest, IntroDetectResponse, JobAccepted, JobRequest,
-    JobSnapshot, LiveSnapshot, MediaFamily, MediaInfo, MediaRef, OpenLiveRequest, OpenLiveResponse,
-    OpenSessionRequest, OpenSessionResponse, ProbeRequest, ProbeResult, QualityEstimate,
-    SessionAction, SessionCommand, SessionSnapshot,
+    JobSnapshot, LiveSnapshot, MediaFamily, MediaInfo, MediaRef, ModelInfo, ModelsResponse,
+    OpenLiveRequest, OpenLiveResponse, OpenSessionRequest, OpenSessionResponse, ProbeRequest,
+    ProbeResult, QualityEstimate, SessionAction, SessionCommand, SessionSnapshot,
 };
 use reqwest::Method;
 use serde::Serialize;
@@ -426,6 +426,33 @@ impl Engine {
     pub async fn submit_job(&self, req: &JobRequest) -> Result<String, EngineError> {
         let accepted: JobAccepted = self.post("POST /v1/jobs", "/v1/jobs", req).await?;
         Ok(accepted.job_id)
+    }
+
+    /// `GET /v1/models`: the manifest with each model's state and what this engine can run.
+    pub async fn models(&self) -> Result<ModelsResponse, EngineError> {
+        self.get("GET /v1/models", "/v1/models", &[]).await
+    }
+
+    /// Starts a model download; an installed or running one answers its state unchanged.
+    pub async fn download_model(&self, id: &str) -> Result<ModelInfo, EngineError> {
+        let path = format!("/v1/models/{}/download", enc(id));
+        let reply = self
+            .need()?
+            .send(Method::POST, &path, &serde_json::json!({}))
+            .await?;
+        expect("POST model download", &reply)
+    }
+
+    pub async fn delete_model(&self, id: &str) -> Result<(), EngineError> {
+        let reply = self
+            .need()?
+            .delete(&format!("/v1/models/{}", enc(id)), &[])
+            .await?;
+        if reply.ok() {
+            Ok(())
+        } else {
+            Err(EngineError::http("DELETE model", &reply))
+        }
     }
 
     /// Idempotent: an ended or unknown job is fine.

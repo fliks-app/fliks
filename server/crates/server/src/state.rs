@@ -32,6 +32,7 @@ pub struct AppState {
     pub subtitles: Arc<crate::subtitles::Shared>,
     pub livetv: Arc<crate::livetv::Shared>,
     pub plugins: Arc<crate::plugins::Plugins>,
+    pub karaoke: Arc<crate::karaoke::Shared>,
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
     /// Wrong pairing codes per approver, apart from login so no username can collide with its key.
     pub pairing_throttle: Arc<crate::auth::LoginThrottle>,
@@ -88,6 +89,7 @@ impl AppState {
             subtitles: Arc::default(),
             livetv: Arc::default(),
             plugins,
+            karaoke: Arc::default(),
             login_throttle: Arc::default(),
             pairing_throttle: Arc::default(),
             oidc: Arc::default(),

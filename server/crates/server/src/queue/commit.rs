@@ -560,6 +560,9 @@ pub async fn sync_rows(
         },
     )
     .await;
+    if let Err(e) = crate::karaoke::store::invalidate_files(&st.db, &[file_id]).await {
+        tracing::warn!("stems of file #{file_id} not invalidated: {e}");
+    }
     st.engine.revoke_files(&[file_id]).await;
     let st2 = st.clone();
     tokio::spawn(async move {

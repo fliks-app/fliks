@@ -21,6 +21,7 @@ pub mod importers;
 pub mod ingest;
 pub mod jobs;
 pub mod jwt_secret;
+pub mod karaoke;
 pub mod kobo;
 pub mod kosync;
 pub mod libraries;
@@ -166,6 +167,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     queue::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
     state.plugins.spawn(&state);
+    karaoke::spawn(&state);
     if let Err(e) = state.metadata.load_orders(&state.namespaces()).await {
         tracing::warn!("metadata provider order not loaded: {e}");
     }

@@ -1,0 +1,52 @@
+# Spec: karaoke core
+
+Scope: what the host does with the engine's karaoke jobs (`fliks-engine` `docs/spec/karaoke.md`): the model admin, the stems of a track (`derived_audio`), the on-demand and background orchestration of `Separate`, `Align` and `Melody`, the lyrics the jobs generate, the reference melody and how the stems are served. The karaoke view, the singer queue, scoring and imports are not here. Lyrics themselves are `music.md` rules 61-71.
+
+## Setting and engine
+
+1. Karaoke is a core feature turned on by the setting `karaoke.enabled` (`true`, default off). Settings read by this spec, all in the generic settings store: `karaoke.enabled`, `karaoke.background` (default `true`), `karaoke.disk_budget_mb` (default 4096, at least 256), `karaoke.verified_providers` (JSON array of `cuda`, `migraphx`, `coreml`; default `["coreml"]`).
+2. A step needs an engine feature: `Separate` needs `karaoke-separate`, `Align` `karaoke-align`, `Melody` `karaoke-melody`, the model routes `models` (`hello.features`). Each also needs an installed model of its kind (the engine's default for the kind).
+3. Only the local engine runs these jobs; the files they write are under `<cache dir>/karaoke/<mediaFileId>/`, a path the host names, never overwritten by the engine (each file name ends in 8 random hex digits).
+
+## Models
+
+4. `GET /api/karaoke/models` (`manage:Settings`) answers the engine's `GET /v1/models` unchanged (`runtime`, `modelsDir`, `models[]` with `licence {name, text, clear}`, `state`, `downloadedBytes`, `error`). 503 when no engine runs or it lacks `models`.
+5. `POST /api/karaoke/models/:id/download` (`manage:Settings`) body `{acceptLicence: true}` (400 otherwise: the client shows the licence first) starts the engine download, answering the model. `DELETE /api/karaoke/models/:id` (`manage:Settings`) deletes it and every `derived_audio` row made by it (rule 12), answering 204. An unknown id is the engine's 404.
+6. The engine's `ModelChanged` events are re-emitted to every SSE connection as `karaoke.model_changed {model}` (the engine's `ModelInfo`). A model that turns `installed` or is deleted also runs the model invalidation of rule 12.
+
+## Status
+
+7. `GET /api/karaoke/status` (any session) answers `{enabled, separate, align, melody, ready, gpu, background}`: `separate`, `align` and `melody` are true when the engine has the feature and an installed model of the kind, `ready` is `enabled && separate`, `gpu` is true when `hello.features` lists `onnx-<p>` for a `p` of `karaoke.verified_providers`, `background` is true while the background pass may run (rule 20). Nothing else of the engine leaks.
+8. `GET /api/items/:itemId/karaoke` (a track the caller can read, 404 otherwise) answers the track's state: `{state, stage?, progress?, error?, fileId, stems, lyrics, melody}`. `state` is `none` (no stems, nothing running), `queued`, `running`, `ready` (every stem present) or `failed` (the last run, until a new one starts); `stage` is `separate`, `align` or `melody` while running; `progress` 0 to 100 of the running job. `stems` holds the kinds present, `{vocals?, instrumental?, guide?}`, each `{size, durationMs}`. `lyrics` is true when a `generated` row exists, `melody` true when the first word-synced `main` row of rule 66's order has a cue with `pitch`. `fileId` is the media file the stems derive from (the one the stem URLs name). A kind absent is absent, never `null`.
+9. `POST /api/items/:itemId/karaoke` (`media.read` on the track) body `{align?, melody?}` (both default true) prepares the track on demand (rule 13) and answers the state of rule 8 with 202; a track already ready or running answers 200 with its state. 409 `karaoke_disabled`, 503 `karaoke_unavailable` (no engine feature or no installed model for `Separate`). `DELETE /api/items/:itemId/karaoke` (`media.edit`) removes the track's stems and its `generated` lyrics, 204.
+10. `karaoke.job_changed {itemId, state, stage?, progress?}` is emitted to every SSE connection when a track's run changes (`queued`, `running` with its `stage`, `ready` when the run ends well, `failed`) and, for a running job, at most once a second.
+
+## Derived audio
+
+11. `derived_audio(id, "mediaFileId" NOT NULL, kind vocals|instrumental|guide, model, "modelVersion", provider, path, size, "durationMs", "lastUsedAt", createdAt, updatedAt)`, unique `(mediaFileId, kind)`, `ON DELETE CASCADE` of the media file. `model` and `modelVersion` are the engine result's, `durationMs` that of the stems, `provider` the one that ran the network (`cuda`, `migraphx`, `coreml`, `cpu`).
+12. **Invalidation** removes the rows and their files:
+    - the file is deleted or an upgrade replaces it: the cascade removes the rows and a sweep (rule 15) removes the files;
+    - the file is replaced in place: the rescan of a music file whose audio duration now differs from `durationMs` by more than 2 s (rule 65 of `music.md` uses the same tolerance), and the optimizer's commit swap always;
+    - the model changed: a row whose `model`/`modelVersion` is not the installed default separation model's, and every row of a deleted model.
+13. **On-demand preparation** runs, for one track at a time (a second request joins the first): `Separate` (all three outputs, priority normal) unless the three rows are valid; then `Align` when `align` is asked, a main lyrics document exists with no word timing and no `generated` row has word sync; then `Melody` when `melody` is asked and a word-synced main row exists. At most two tracks run at once; the others are `queued`. A failure of a step ends the run `failed` with the engine's error (`model_missing`, `unsupported` included); the steps done stay.
+14. **Eviction**: after each `Separate`, rows are removed oldest `lastUsedAt` first until the total `size` is within `karaoke.disk_budget_mb`, never a row younger than 10 minutes. `lastUsedAt` is set when a row is created and on each stem request that starts at byte 0.
+15. **Sweep** (at boot and after each eviction): a directory under `<cache dir>/karaoke/` for a media file that no longer exists, and a file no row names, are removed.
+
+## Background pass
+
+16. A task runs from boot, wakes at each engine adoption and every 10 minutes. It works only while `karaoke.enabled` and `karaoke.background` are not `false`, the engine has `karaoke-separate` and an installed separation model, and `hello.features` lists `onnx-<p>` for a `p` in `karaoke.verified_providers`. It takes tracks of album libraries with a file and no valid stems, newest item first, 20 per wake, at priority low, running rule 13 with `align` and `melody` as asked on demand, while the total `size` is under 90 % of the budget.
+17. When a `Separate` result reports `provider: cpu`, the pass stops until the next engine adoption or a change of `karaoke.*`; the on-demand path is unaffected. The pass never starts on a GPU provider that is not in `karaoke.verified_providers`: `provider-check` of the engine (`examples/provider-check.rs`) is how a provider is verified, by hand, per machine. OpenVINO is never a verified provider.
+
+## Generated lyrics
+
+18. `Align` runs on the vocals stem with the text of the track's best main document (rule 66's order, any source; line times as `startMs`/`endMs` when synced; `language` when `lang` is not `und`). The result becomes the `lyrics` row `(itemId, main, lang, generated)`: `sync` `word`, `reviewed` false, `sourceRef` the model id, `raw` NULL, `audioDurationMs` the track's. One `Line` per `AlignedLine` (a repeated line keeps the request line's text and its own cues), `cues` from the words with the engine's byte ranges, the line's `agentId` kept, the agents of the source. A row the user reviewed, or one of source `user`, is never touched: the unique key keeps `generated` apart.
+19. **Reference melody**: `Melody` runs on the vocals stem with every cue of the target document (the first word-synced main row of rule 66's order) as a span. A cue's `pitch` is the `midi` of the longest note of its span (the earliest on a tie), absent when the span is unvoiced. It is written into that row's `doc` without touching `raw`, `reviewed` or `offsetMs`; a later `upsert` of the row (a discovery that reads another text) drops it and the next preparation recomputes it.
+
+## Serving stems
+
+20. `GET /api/media-files/:mediaFileId/stems/:kind` (`kind` `vocals|instrumental|guide`) serves the Ogg Opus file (`audio/ogg`) with byte ranges, `ETag`, `Last-Modified`, like a direct play. The credential is a session or a stream token bound to that same file (a stream token for another file is 401); the caller must be able to read the track of the file (404 otherwise, also for a file that is not a track and a kind with no row). The engine's data plane is not involved (a resolver purpose would need an engine change); the route is forwarded by the gateway like any other `/api` path. Stems are never offered in a public share, a playlist export, OpenSubsonic or the listen-together programme.
+21. Lyrics, stems and pitch are never sent to Android Auto, CarPlay or any native media session: they carry the track's title, artist and artwork only.
+
+## Wire and migration
+
+22. `1789000000970_karaoke.sql` creates `derived_audio` (an index led by `mediaFileId` through the unique key, `set_updated_at`). Two SSE events join the catalogue, `karaoke.model_changed` and `karaoke.job_changed`; neither is a domain event.
