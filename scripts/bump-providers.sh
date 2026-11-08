@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 lock=server/providers.lock
 catalog_url="${CATALOG_URL:-https://fliks-app.github.io/fliks-plugin-catalog}"
-providers=(fliks.tmdb fliks.tvdb fliks.openlibrary fliks.bnf fliks.googlebooks fliks.audible fliks.audnexus fliks.thexem)
+providers=(fliks.tmdb fliks.tvdb fliks.openlibrary fliks.bnf fliks.googlebooks fliks.audible fliks.audnexus fliks.thexem fliks.musicbrainz fliks.fanarttv)
 api="$(sed -n 's/^pub const SUPPORTED_PLUGIN_API_VERSIONS: \[u32; [0-9]*\] = \[\([0-9]*\)\];/\1/p' server/crates/plugin-manifest/src/manifest.rs)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -53,13 +53,14 @@ accepts() {
     done
 }
 # A bundled archive skips the server's fliks range check, so the range must accept the first release of
-# this major or of the next one (main is versioned ahead of the release that ships the provider).
-major="$(jq -r '.["."]' .github/.release-please-manifest.json | cut -d. -f1)"
+# this major, of the next minor (a feat on main) or of the next major (main is versioned ahead of the release that ships the provider).
+version="$(jq -r '.["."]' .github/.release-please-manifest.json)"
+major="${version%%.*}"; minor="$(cut -d. -f2 <<< "$version")"
 check_range() { # check_range <id> <version>
     local range
     range="$(jq -r --arg id "$1" --arg v "$2" '.plugins[] | select(.id == $id) | .versions[] | select(.version == $v) | .fliks' "$tmp/catalog.json" | head -n1)"
-    accepts "$range" "$major.0.0" || accepts "$range" "$((major + 1)).0.0" ||
-        fail "$1 $2: manifest range \"$range\" excludes fliks $major.0.0 and $((major + 1)).0.0"
+    accepts "$range" "$major.0.0" || accepts "$range" "$major.$((minor + 1)).0" || accepts "$range" "$((major + 1)).0.0" ||
+        fail "$1 $2: manifest range \"$range\" excludes fliks $major.0.0, $major.$((minor + 1)).0 and $((major + 1)).0.0"
 }
 
 if [ "${1:-}" = "--check" ]; then

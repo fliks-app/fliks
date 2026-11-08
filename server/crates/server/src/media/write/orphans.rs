@@ -30,9 +30,12 @@ pub async fn refs_of(c: &mut PgConnection, media: i32) -> sqlx::Result<Refs> {
     let ids = |sql: &'static str| sqlx::query_scalar::<_, i32>(sql).bind(media);
     Ok(Refs {
         media,
-        persons: ids(r#"SELECT DISTINCT "personId" FROM media_credits WHERE "mediaId" = $1"#)
-            .fetch_all(&mut *c)
-            .await?,
+        persons: ids(
+            r#"SELECT "personId" FROM media_credits WHERE "mediaId" = $1
+               UNION SELECT c."personId" FROM item_credits c JOIN items i ON i.id = c."itemId" WHERE i."mediaId" = $1"#,
+        )
+        .fetch_all(&mut *c)
+        .await?,
         collections: ids(
             r#"SELECT DISTINCT "collectionId" FROM collection_entries WHERE "mediaId" = $1"#,
         )
@@ -65,6 +68,7 @@ pub async fn clean(st: &AppState, refs: &Refs) -> sqlx::Result<()> {
     let persons = sqlx::query_scalar::<_, i32>(
         r#"DELETE FROM persons p WHERE p.id = ANY($1)
              AND NOT EXISTS (SELECT 1 FROM media_credits c WHERE c."personId" = p.id)
+             AND NOT EXISTS (SELECT 1 FROM item_credits c WHERE c."personId" = p.id)
              AND NOT EXISTS (SELECT 1 FROM person_follows f WHERE f."personId" = p.id)
            RETURNING id"#,
     )

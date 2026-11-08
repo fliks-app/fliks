@@ -100,7 +100,7 @@ pub struct PluginProvider {
     known: Arc<super::namespaces::Known>,
     key: Namespace,
     block: Block,
-    gate: Arc<super::outbound::Gate>,
+    gate: Arc<super::outbound::Gates>,
 }
 
 fn bad(why: &str) -> Upstream {
@@ -573,6 +573,10 @@ impl MetadataProvider for PluginProvider {
                     place_of_birth: m.place_of_birth,
                     avatar_url: m.avatar_url,
                     known_for_department: None,
+                    sort_name: m.sort_name,
+                    disambiguation: m.disambiguation,
+                    artist_type: m.kind.map(str::to_owned),
+                    canonical_id: m.id,
                 });
             }
             let s = |k: &str| v[k].as_str().map(str::to_owned);
@@ -584,6 +588,7 @@ impl MetadataProvider for PluginProvider {
                 place_of_birth: s("placeOfBirth"),
                 avatar_url: s("avatarUrl"),
                 known_for_department: s("knownForDepartment"),
+                ..PersonDetails::default()
             })
         }
         .boxed()

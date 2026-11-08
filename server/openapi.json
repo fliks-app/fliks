@@ -2199,6 +2199,18 @@
         }
       }
     },
+    "/api/media/{id}/music/candidates": {
+      "get": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`GET /api/media/:id/music/candidates`: the releases the files of an album may be (`music.md` rule 33).",
+        "operationId": "album_candidates",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media/{id}/profiles": {
       "patch": {
         "tags": [
@@ -5693,6 +5705,31 @@
         "operationId": "wanted",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/works": {
+      "get": {
+        "tags": [
+          "metadata::music::works"
+        ],
+        "summary": "`GET /api/works?q=&limit=`: works by title, prefix terms ANDed, those a readable track plays.",
+        "operationId": "search",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/works/{id}": {
+      "get": {
+        "tags": [
+          "metadata::music::works"
+        ],
+        "summary": "`GET /api/works/:id`: 404 for a work no readable track plays.",
+        "operationId": "detail",
+        "responses": {
+          "200": {},
+          "404": {}
         }
       }
     },

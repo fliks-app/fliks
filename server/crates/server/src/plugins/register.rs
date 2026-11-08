@@ -278,7 +278,7 @@ impl Plugins {
             outbound: Arc::new(tokio::sync::Semaphore::new(outbound::MAX_IN_FLIGHT)),
             gate: m
                 .get("provider")
-                .and_then(|b| outbound::Gate::from_block(id, b))
+                .and_then(|b| outbound::Gates::from_block(id, b))
                 .map(Arc::new),
         });
         let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)

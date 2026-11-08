@@ -228,6 +228,16 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     if let Some((family, _)) = super::books::classify(&super::library::file_name(&path)) {
         return enrich_book(st, id, &path, family, info).await;
     }
+    if super::music::is_music_file(&super::library::file_name(&path)) {
+        return enrich_book(
+            st,
+            id,
+            &path,
+            fliks_domain::media::family::Family::Audio,
+            info,
+        )
+        .await;
+    }
     let probed = super::probe(
         st,
         &path,
@@ -372,6 +382,10 @@ async fn settled(st: &AppState, media_id: i32) {
     match book {
         Some(MediaKind::Book) => {
             super::books::settled(st, media_id).await;
+            return;
+        }
+        Some(MediaKind::Album) => {
+            super::music::settled(st, media_id).await;
             return;
         }
         Some(MediaKind::Comic) => {

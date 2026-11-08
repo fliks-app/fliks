@@ -112,6 +112,32 @@
             "statusMessage": "",
             "statusReason": null,
             "verifiedByKeyId": "release-2026"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "MusicBrainz",
+            "origin": "bundled",
+            "pluginId": "fliks.musicbrainz",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026"
+          },
+          {
+            "enabled": true,
+            "kind": "process",
+            "name": "Fanart.tv",
+            "origin": "bundled",
+            "pluginId": "fliks.fanarttv",
+            "processState": "ready",
+            "signature": "official",
+            "status": "active",
+            "statusMessage": "",
+            "statusReason": null,
+            "verifiedByKeyId": "release-2026"
           }
         ],
         "status": 200

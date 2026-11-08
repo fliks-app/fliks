@@ -202,6 +202,7 @@ Creating or importing a book: `book-metadata.md` (import with `type: 'book'`, `a
 
 108. `createUnmatched` makes a shell: `media` with `title`, `year`, `status = 'released'`, `monitored = false`, the library, the folder and the profiles, then the merge of the file record alone (`metadata-orchestrator.md` rules 39-41) writes `originalTitle`, `overview`, `genres`, `runtime`, `rating` and `releaseDate`; rule 19 describes the same values. The nfo is read by the merge, not passed in.
 109. `refreshMetadata` and `POST /api/media/:id/refresh` of a movie or series with no provider id merge its file record (rule 108) and answer 201 (no 400 for a media without a provider id). `refreshMetadata` merges the provider record and the file record: a field the provider leaves empty comes from the file.
+109a. An album (`music.md` rules 38-41) refreshes through its own path (`metadata::music::refresh`): the release group and the releases it holds, never deleting an edition, track or credit, flagging `orphanedAt` on `album_details`, `editions` and `track_details` instead; an album with no id merges its file record. `POST /api/media/import` with `type: album` and `POST /api/media/:id/identify` with a `provider` and an `externalId` create and identify albums.
 
 ## Open questions
 

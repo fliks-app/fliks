@@ -69,6 +69,20 @@
               "restartCount": 0
             },
             "pluginId": "fliks.thexem"
+          },
+          {
+            "kind": "process",
+            "metrics": {
+              "restartCount": 0
+            },
+            "pluginId": "fliks.musicbrainz"
+          },
+          {
+            "kind": "process",
+            "metrics": {
+              "restartCount": 0
+            },
+            "pluginId": "fliks.fanarttv"
           }
         ],
         "status": 200

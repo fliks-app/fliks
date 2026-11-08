@@ -99,3 +99,8 @@ Scenarios (`server/parity/scenarios/persons/`, 25 files, `as` in `admin|user|rea
 ## Open questions
 
 None.
+
+
+## Music artists
+
+A refresh from a provider that serves music artists (`music.md` rules 22 and 25) also stores `sortName` (`persons."sortName"`, which the search vector reads), `disambiguation` and `artistType`; none of them is in `Person` yet. An answer that names another MusicBrainz `id` than the one asked replaces the stored id and keeps the old one as an alias (`music.md` rule 40).

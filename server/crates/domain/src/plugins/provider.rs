@@ -200,6 +200,21 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
     if !kinds_ok {
         return Err("provider.kinds must map documented kinds to non-empty capability sets");
     }
+    // `person-credits` takes no kind: a music provider is told by `credits` under `album`, so no other kind may declare it.
+    if let Some(k) = o.get("kinds").and_then(Value::as_object) {
+        let credits = |caps: &Value| {
+            caps.as_array()
+                .is_some_and(|c| c.iter().any(|c| c == "credits"))
+        };
+        if k.get("album").is_some_and(credits)
+            && k.iter()
+                .any(|(kind, caps)| kind != "album" && credits(caps))
+        {
+            return Err(
+                "provider.kinds: credits under album cannot go with credits under another kind",
+            );
+        }
+    }
     let scene = o.get("kinds").and_then(Value::as_object).is_some_and(|k| {
         k.values()
             .filter_map(Value::as_array)
@@ -492,6 +507,29 @@ mod tests {
         assert_eq!(
             answered_id(&known, Namespace::TMDB, "603").as_deref(),
             Some("603")
+        );
+    }
+
+    #[test]
+    fn credits_under_album_exclude_credits_under_another_kind() {
+        let block = |kinds: Value| {
+            json!({"namespaces": [{"name": "musicbrainz"}], "kinds": kinds,
+                   "limits": {"ratePerSec": 1, "burst": 1}})
+        };
+        assert_eq!(
+            validate_block(&block(json!({"album": ["search", "credits"]}))),
+            Ok(())
+        );
+        assert_eq!(
+            validate_block(&block(json!({"album": ["credits"], "movie": ["search"]}))),
+            Ok(())
+        );
+        assert!(
+            validate_block(&block(json!({"album": ["credits"], "movie": ["credits"]}))).is_err()
+        );
+        assert_eq!(
+            validate_block(&block(json!({"movie": ["credits"], "series": ["credits"]}))),
+            Ok(())
         );
     }
 

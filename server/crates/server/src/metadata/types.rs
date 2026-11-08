@@ -88,6 +88,11 @@ pub struct PersonDetails {
     pub place_of_birth: Option<String>,
     pub avatar_url: Option<String>,
     pub known_for_department: Option<String>,
+    /// A music artist: how it is filed and told apart, and the id the provider holds it under now.
+    pub sort_name: Option<String>,
+    pub disambiguation: Option<String>,
+    pub artist_type: Option<String>,
+    pub canonical_id: Option<String>,
 }
 
 /// `PersonCreditItem` objects (meta rule 34), one list per side; a music provider answers `albums`, the

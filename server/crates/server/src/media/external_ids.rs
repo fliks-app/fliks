@@ -40,20 +40,24 @@ pub fn ids_join(alias: &str) -> String {
     )
 }
 
-/// The media of `kind` holding `value` for `provider`; the lowest id when the provider is not unique.
+/// The media of `kind` holding `value` for `provider`, as its id first, else as the alias of a merged id
+/// (`music.md` rule 15); the lowest id when the provider is not unique.
 pub async fn find(
     db: impl PgExecutor<'_>,
     kind: MediaKind,
     provider: Namespace,
     value: &str,
 ) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar!(
-        r#"SELECT "mediaId" FROM media_external_ids
-           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 1"#,
-        kind.as_str(),
-        provider.as_str(),
-        value
+    sqlx::query_scalar(
+        r#"SELECT "mediaId" FROM (
+             SELECT "mediaId", 0 AS alias FROM media_external_ids WHERE kind = $1 AND provider = $2 AND value = $3
+             UNION ALL
+             SELECT "mediaId", 1 FROM media_external_id_aliases WHERE kind = $1 AND provider = $2 AND value = $3
+           ) x ORDER BY alias, "mediaId" LIMIT 1"#,
     )
+    .bind(kind.as_str())
+    .bind(provider.as_str())
+    .bind(value)
     .fetch_optional(db)
     .await
 }
@@ -67,8 +71,10 @@ pub async fn holder(
     value: &str,
 ) -> sqlx::Result<Option<i32>> {
     let held: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT "mediaId" FROM media_external_ids
-           WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
+        r#"SELECT "mediaId" FROM (
+             SELECT "mediaId" FROM media_external_ids WHERE kind = $1 AND provider = $2 AND value = $3
+             UNION SELECT "mediaId" FROM media_external_id_aliases WHERE kind = $1 AND provider = $2 AND value = $3
+           ) x ORDER BY "mediaId" LIMIT 2"#,
     )
     .bind(kind.as_str())
     .bind(provider.as_str())

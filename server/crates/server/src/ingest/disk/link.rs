@@ -687,14 +687,23 @@ pub(super) async fn find_or_create_unmatched(
         || PathBuf::from(lib.root_of(d.folder_id)),
         |r| PathBuf::from(resolve(&crate::libraries::sanitize_path(r), "/")),
     );
-    let record = record::of_group(&record::Group {
-        kind: d.media_type,
-        root: &root,
-        dir: &art_dir,
-        sample: &sample,
-        at_root: root_movie,
-    })
-    .await;
+    let tagged = match d.media_type {
+        MediaKind::Album => crate::ingest::music::sample(st, &sample).await,
+        _ => None,
+    };
+    let record = match &tagged {
+        Some(s) => Some(s.record.clone()),
+        None => {
+            record::of_group(&record::Group {
+                kind: d.media_type,
+                root: &root,
+                dir: &art_dir,
+                sample: &sample,
+                at_root: root_movie,
+            })
+            .await
+        }
+    };
     let (guessed_title, guessed_year) = record::title_year(record.as_ref());
     let typed = d
         .title
@@ -710,7 +719,21 @@ pub(super) async fn find_or_create_unmatched(
     let folder = target_folder(st, d, &title, year).await?;
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
-    let existing = existing_unmatched(st, d, lib, &folder).await?;
+    let mut existing = existing_unmatched(st, d, lib, &folder).await?;
+    // The release group the tags name, held by an album as its id or as the alias of a merged one.
+    if existing.is_none()
+        && let Some(group) = tagged.as_ref().and_then(|s| s.release_group.as_deref())
+        && let Some(held) = crate::metadata::music::aliases::album_of(&st.db, group).await?
+    {
+        let same =
+            sqlx::query_scalar::<_, bool>(r#"SELECT "libraryId" = $2 FROM media WHERE id = $1"#)
+                .bind(held)
+                .bind(lib.id)
+                .fetch_optional(&st.db)
+                .await?
+                .unwrap_or(false);
+        existing = same.then_some(held);
+    }
     let (id, created) = match existing {
         Some(id) => (id, false),
         None => {
@@ -722,7 +745,11 @@ pub(super) async fn find_or_create_unmatched(
                     return Err(outside());
                 }
             }
-            let artwork = local_artwork(&art_dir, art_base.as_deref(), root_movie);
+            // An album's cover is read once its files are settled: embedded first, then the folder's.
+            let artwork = match d.media_type {
+                MediaKind::Album => mw::Artwork::default(),
+                _ => local_artwork(&art_dir, art_base.as_deref(), root_movie),
+            };
             let id = mw::create_unmatched(
                 st,
                 mw::Unmatched {

@@ -205,24 +205,37 @@ async fn try_refresh(
         Some(url) => images.download_and_store(url, &Target::person(p.id)).await,
         None => None,
     };
-    sqlx::query!(
+    sqlx::query(
         r#"UPDATE persons SET name = COALESCE($2, name), "avatarUrl" = COALESCE($3, "avatarUrl"),
   biography = COALESCE($4, biography), birthday = COALESCE($5::text::date, birthday),
   deathday = COALESCE($6::text::date, deathday), "placeOfBirth" = COALESCE($7, "placeOfBirth"),
-  "knownForDepartment" = COALESCE($8, "knownForDepartment"), "metadataRefreshedAt" = now()
+  "knownForDepartment" = COALESCE($8, "knownForDepartment"), "sortName" = COALESCE($9, "sortName"),
+  disambiguation = COALESCE($10, disambiguation), "artistType" = COALESCE($11, "artistType"),
+  "metadataRefreshedAt" = now()
 WHERE id = $1"#,
-        p.id,
-        d.name,
-        avatar,
-        d.biography,
-        d.birthday,
-        d.deathday,
-        d.place_of_birth,
-        d.known_for_department
     )
+    .bind(p.id)
+    .bind(&d.name)
+    .bind(&avatar)
+    .bind(&d.biography)
+    .bind(&d.birthday)
+    .bind(&d.deathday)
+    .bind(&d.place_of_birth)
+    .bind(&d.known_for_department)
+    .bind(&d.sort_name)
+    .bind(&d.disambiguation)
+    .bind(&d.artist_type)
     .execute(db)
     .await
     .map_err(|e| e.to_string())?;
+    if let (Some(asked), Some(now)) = (&p.musicbrainz, &d.canonical_id)
+        && asked != now
+    {
+        let moved = crate::metadata::music::aliases::redirect_person(db, p.id, asked, now)
+            .await
+            .map_err(|e| e.to_string())?;
+        tracing::info!("person {} merged upstream: {moved:?}", p.id);
+    }
     Ok(())
 }
 

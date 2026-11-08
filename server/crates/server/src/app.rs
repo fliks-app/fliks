@@ -337,6 +337,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::write::import_tmdb,
         media::write::import_media,
         media::write::identify,
+        media::write::album_candidates,
         media::write::refresh,
         media::write::refresh_episode,
         media::write::rescan,
@@ -382,6 +383,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::edition_chapters,
         persons::search,
         persons::detail,
+        metadata::music::works::search,
+        metadata::music::works::detail,
         persons::provider_credits,
         persons::bibliography,
         persons::list,
@@ -534,6 +537,7 @@ fn api() -> Router<AppState> {
         .merge(metadata::router())
         .merge(collections::router())
         .merge(persons::router())
+        .merge(metadata::music::works::router())
         .merge(crate::wanted::router())
         .merge(system::api())
         .merge(jobs::router())

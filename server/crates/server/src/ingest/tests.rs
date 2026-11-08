@@ -4631,3 +4631,1011 @@ mod scene_import {
         assert!(again.errors.is_empty() && again.retry.is_empty());
     }
 }
+
+mod music_ingest {
+    use super::*;
+    use crate::{
+        ingest::{
+            books::Placed,
+            music::{self, identify},
+        },
+        metadata::music::{
+            self as meta,
+            tests::{ARTIST, GROUP, MusicFake, RELEASE},
+        },
+    };
+    use fliks_domain::{
+        external_id::Namespace, media::kind::MediaKind, metadata::limiter::Priority,
+    };
+    use std::sync::Arc;
+
+    const OTHER_RELEASE: &str = "0f6b9c1e-7a52-4d0b-8a6c-33c1c8e5f0aa";
+    const MERGED: &str = "9a8d2e17-5f43-4c6a-b1d9-6e7a0c4b2f55";
+
+    fn track(title: &str, number: u32, disc: u32, extra: Value) -> crate::engine::testkit::Answer {
+        let mut tags = json!({"title": title, "album": "Alpha", "artist": "Ana", "albumArtist": "Ana",
+            "genre": "Rock; Pop", "year": 1999, "track": number, "disc": disc, "lyrics": "la la la"});
+        tags.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().cloned().unwrap_or_default());
+        ok(
+            json!({"ok": true, "info": {"video": [], "audio": [{"streamIndex": 0, "codec": "flac", "language": "und"}],
+            "subtitles": [], "durationSeconds": 200.0, "tags": tags}}),
+        )
+    }
+
+    async fn album_lib(c: &Ctx) -> i32 {
+        library(c, "Music", &c.dir.join("music"), r#"["album"]"#).await
+    }
+
+    fn place(c: &Ctx, rels: &[&str]) -> Vec<Placed> {
+        rels.iter()
+            .map(|r| {
+                touch(&c.dir.join("music").join(r), r.as_bytes());
+                Placed {
+                    folder_id: 1,
+                    rel: (*r).to_owned(),
+                    abs: c.dir.join("music").join(r),
+                }
+            })
+            .collect()
+    }
+
+    type TrackRow = (String, i32, i32, Option<i32>, Option<String>);
+    type MatchedRow = (String, i32, Option<String>, Option<f64>, bool);
+
+    fn edition_release(id: &str, tracks: Value) -> Value {
+        json!({"externalId": id, "title": "Alpha", "country": "FR", "status": "official", "media": "cd",
+            "trackCount": 3, "discCount": 2, "releaseDate": "1999-05-01", "label": "Placeholder Records",
+            "tracks": tracks})
+    }
+
+    fn tracklist() -> Value {
+        json!([
+            {"title": "One", "discNumber": 1, "position": 1, "number": 1, "durationMs": 200000,
+             "recordingId": "11111111-1111-4111-8111-111111111111",
+             "releaseTrackId": "21111111-1111-4111-8111-111111111111",
+             "artists": [{"name": "Ana", "id": ARTIST}], "popularity": 12.5,
+             "works": [{"title": "Suite", "externalId": "31111111-1111-4111-8111-111111111111"}]},
+            {"title": "Two", "discNumber": 1, "position": 2, "number": 2, "durationMs": 200000,
+             "recordingId": "11111111-1111-4111-8111-111111111112"},
+            {"title": "Three", "discNumber": 2, "position": 3, "number": 1, "durationMs": 200000,
+             "recordingId": "11111111-1111-4111-8111-111111111113"}
+        ])
+    }
+
+    fn provider() -> Arc<MusicFake> {
+        let f = Arc::new(MusicFake::default());
+        f.works.lock().unwrap().insert(
+            GROUP.into(),
+            json!({"externalId": GROUP, "title": "Alpha (Provider)", "primaryType": "album", "year": 1999,
+                "firstReleaseDate": "1999-05-01", "genres": ["Provider Genre"], "popularity": 7.0,
+                "artists": [{"name": "Ana", "id": ARTIST, "sortName": "Ana"}], "mediaType": "album"}),
+        );
+        f.children.lock().unwrap().insert(
+            GROUP.into(),
+            vec![
+                json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "trackCount": 3}),
+            ],
+        );
+        f.editions
+            .lock()
+            .unwrap()
+            .insert(RELEASE.into(), edition_release(RELEASE, tracklist()));
+        f
+    }
+
+    async fn ctx_music(pool: PgPool, f: Option<Arc<MusicFake>>) -> Ctx {
+        let p: Option<Arc<dyn crate::metadata::MetadataProvider>> = f.map(|f| f as _);
+        ctx_with(pool, p).await
+    }
+
+    async fn album(c: &Ctx, lib: i32, folder: &str) -> i32 {
+        media(c, lib, folder, "album").await
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_folder_of_discs_is_one_edition_of_ungrouped_tracks_and_lyrics_stay_out_of_stream_info(
+        pool: PgPool,
+    ) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Ana/Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One", 1, 1, json!({})),
+                track("Two", 2, 1, json!({"composer": "Cy", "conductor": "Di"})),
+                track("Three", 1, 2, json!({"discSubtitle": "Bonus"})),
+            ],
+        );
+        let files = place(
+            &c,
+            &[
+                "Ana/Alpha/CD1/01.flac",
+                "Ana/Alpha/CD1/02.flac",
+                "Ana/Alpha/CD2/01.flac",
+            ],
+        );
+        let reg = music::register(&c.st, m, &files).await.unwrap();
+        assert_eq!(
+            (reg.files.len(), reg.conflicts.len()),
+            (3, 0),
+            "{:?}",
+            reg.conflicts
+        );
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM editions WHERE family = 'audio'").await,
+            1
+        );
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM items WHERE \"groupId\" IS NULL AND number IS NULL"
+            )
+            .await,
+            3
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM item_groups").await, 0);
+        let rows: Vec<TrackRow> = sqlx::query_as(
+            r#"SELECT i.title, td."discNumber", td.position, td."trackNumber", td."discTitle"
+               FROM items i JOIN track_details td ON td."itemId" = i.id ORDER BY td.position"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            [
+                ("One".into(), 1, 1, Some(1), None),
+                ("Two".into(), 1, 2, Some(2), None),
+                ("Three".into(), 2, 3, Some(1), Some("Bonus".into())),
+            ]
+        );
+        // One part per file, each a first version.
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM item_parts WHERE version = 0 AND position = 0"
+            )
+            .await,
+            3
+        );
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM media_files WHERE "streamInfo"::text LIKE '%la la la%'"#
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            count(&c, r#"SELECT count(*) FROM media_files WHERE "streamInfo"->'tags'->>'title' IS NOT NULL"#).await,
+            3
+        );
+        let credits: Vec<(String, String)> = sqlx::query_as(
+            r#"SELECT c.role, p.name FROM item_credits c JOIN persons p ON p.id = c."personId"
+               JOIN items i ON i.id = c."itemId" WHERE i.title = 'Two' ORDER BY c.role"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            credits,
+            [
+                ("artist".into(), "Ana".into()),
+                ("composer".into(), "Cy".into()),
+                ("conductor".into(), "Di".into())
+            ]
+        );
+        let (artists, details): (i64, i64) = (
+            count(
+                &c,
+                r#"SELECT count(*) FROM media_credits WHERE role = 'artist'"#,
+            )
+            .await,
+            count(&c, "SELECT count(*) FROM album_details").await,
+        );
+        assert_eq!((artists, details), (1, 1));
+        let (tracks, discs): (Option<i32>, Option<i32>) = sqlx::query_as(
+            r#"SELECT "trackCount", "discCount" FROM editions WHERE family = 'audio'"#,
+        )
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!((tracks, discs), (Some(3), Some(2)));
+        // The same files again change nothing; a file moved takes its track back.
+        c.fake
+            .script("POST", "/v1/probe", vec![track("One", 1, 1, json!({}))]);
+        music::register(&c.st, m, &files).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 3);
+        sqlx::query(r#"DELETE FROM media_files WHERE "relativePath" = 'Ana/Alpha/CD1/01.flac'"#)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let moved = place(&c, &["Ana/Alpha/CD1/01 - One.flac"]);
+        music::register(&c.st, m, &moved).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 3);
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM items i WHERE NOT EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id)").await,
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_release_id_in_the_tags_makes_its_own_edition(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track(
+                    "One",
+                    1,
+                    1,
+                    json!({"musicbrainzReleaseId": RELEASE, "label": "Placeholder Records",
+                    "mediaType": "x", "releaseStatus": "Official"}),
+                ),
+                track("One", 1, 1, json!({"musicbrainzReleaseId": OTHER_RELEASE})),
+                track("Two", 2, 1, json!({"musicbrainzReleaseId": RELEASE})),
+            ],
+        );
+        let files = place(&c, &["Alpha/a.flac", "Alpha/b.flac", "Alpha/c.flac"]);
+        music::register(&c.st, m, &files).await.unwrap();
+        let held: Vec<(String, i64)> = sqlx::query_as(
+            r#"SELECT x.value, count(i.id) FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
+               JOIN items i ON i."editionId" = e.id WHERE x.provider = 'musicbrainz' GROUP BY x.value ORDER BY x.value"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            held,
+            [(OTHER_RELEASE.to_owned(), 1), (RELEASE.to_owned(), 2)]
+        );
+        let (publisher, status): (Option<String>, Option<String>) = sqlx::query_as(
+            r#"SELECT e.publisher, e.status FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
+               WHERE x.value = $1"#,
+        )
+        .bind(RELEASE)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            (publisher.as_deref(), status.as_deref()),
+            (Some("Placeholder Records"), Some("official"))
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn works_and_movements_come_from_the_tags(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        let movement = |n: u32, name: &str| {
+            track(
+                name,
+                n,
+                1,
+                json!({"work": "Symphony No. 1", "movement": name, "movementNumber": n,
+                    "composer": "Cy", "musicbrainzWorkId": format!("4000000{n}-1111-4111-8111-111111111111")}),
+            )
+        };
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![movement(1, "Allegro"), movement(2, "Adagio")],
+        );
+        music::register(&c.st, m, &place(&c, &["Alpha/1.flac", "Alpha/2.flac"]))
+            .await
+            .unwrap();
+        let rows: Vec<(String, Option<String>, Option<String>)> = sqlx::query_as(
+            r#"SELECT w.title, p.title, c.name FROM works w LEFT JOIN works p ON p.id = w."parentWorkId"
+               LEFT JOIN persons c ON c.id = w."composerPersonId" WHERE w.mbid IS NOT NULL ORDER BY w.title"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            [
+                (
+                    "Adagio".into(),
+                    Some("Symphony No. 1".into()),
+                    Some("Cy".into())
+                ),
+                (
+                    "Allegro".into(),
+                    Some("Symphony No. 1".into()),
+                    Some("Cy".into())
+                ),
+            ]
+        );
+        assert_eq!(
+            count(
+                &c,
+                "SELECT count(*) FROM works WHERE title = 'Symphony No. 1'"
+            )
+            .await,
+            1
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM item_works").await, 2);
+        // Work search.
+        let (s, b) = call(&c, "GET", "/api/works?q=adag", &c.admin, Value::Null).await;
+        assert_eq!(s, 200);
+        assert_eq!(b[0]["title"], "Adagio");
+        assert_eq!(b[0]["parent"]["title"], "Symphony No. 1");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_ids_of_the_tags_identify_the_album_and_the_release_fills_its_tracks(pool: PgPool) {
+        let f = provider();
+        let c = ctx_music(pool, Some(f.clone())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        let ids = json!({"musicbrainzReleaseGroupId": GROUP, "musicbrainzReleaseId": RELEASE});
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One (live)", 1, 1, ids.clone()),
+                track("Two", 2, 1, ids.clone()),
+                track("Extra", 9, 2, ids.clone()),
+            ],
+        );
+        music::register(
+            &c.st,
+            m,
+            &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/9.flac"]),
+        )
+        .await
+        .unwrap();
+        let out = identify::identify_media(&c.st, m).await.unwrap();
+        assert_eq!(out, identify::Outcome::Applied);
+        let id: String = sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'musicbrainz'"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(id, GROUP);
+        let (title, genres): (String, Value) =
+            sqlx::query_as("SELECT title, genres FROM media WHERE id = $1")
+                .bind(m)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        // The tags give genres: the provider's do not replace them; the title is the provider's.
+        assert_eq!(
+            (title.as_str(), genres),
+            ("Alpha (Provider)", json!(["Rock", "Pop"]))
+        );
+        let tracks: Vec<MatchedRow> = sqlx::query_as(
+            r#"SELECT i.title, td.position, td."releaseTrackMbid"::text, td.popularity, td."orphanedAt" IS NOT NULL
+               FROM items i JOIN track_details td ON td."itemId" = i.id ORDER BY td.position, i.id"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(tracks[0].0, "One");
+        assert_eq!(
+            tracks[0].2.as_deref(),
+            Some("21111111-1111-4111-8111-111111111111")
+        );
+        assert_eq!(tracks[0].3, Some(12.5));
+        assert_eq!(tracks[1].0, "Two");
+        // The file the release does not list is flagged, not deleted.
+        let extra = tracks.iter().find(|t| t.0 == "Extra").unwrap();
+        assert!(extra.4);
+        let (country, discs, status): (Option<String>, Option<i32>, Option<String>) =
+            sqlx::query_as(
+                r#"SELECT country, "discCount", status FROM editions WHERE family = 'audio'"#,
+            )
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(
+            (country.as_deref(), discs, status.as_deref()),
+            (Some("FR"), Some(2), Some("official"))
+        );
+        let (primary, compilation, orphaned): (Option<String>, bool, bool) = sqlx::query_as(
+            r#"SELECT "primaryType", "isCompilation", "orphanedAt" IS NOT NULL FROM album_details WHERE "mediaId" = $1"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            (primary.as_deref(), compilation, orphaned),
+            (Some("album"), false, false)
+        );
+        // The work the release names is kept, linked to the track.
+        assert_eq!(count(&c, "SELECT count(*) FROM item_works").await, 1);
+        // The album artist is the provider's person, with its id.
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM person_external_ids WHERE value = '{ARTIST}'")
+            )
+            .await,
+            1
+        );
+        // A second identify has nothing left to do.
+        assert_eq!(
+            identify::identify_media(&c.st, m).await.unwrap(),
+            identify::Outcome::Nothing
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_missing_release_group_a_shrunk_tracklist_and_a_merged_id_never_delete(pool: PgPool) {
+        let f = provider();
+        let c = ctx_music(pool, Some(f.clone())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        let ids = json!({"musicbrainzReleaseGroupId": GROUP, "musicbrainzReleaseId": RELEASE});
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One", 1, 1, ids.clone()),
+                track("Two", 2, 1, ids.clone()),
+                track("Three", 1, 2, ids),
+            ],
+        );
+        music::register(
+            &c.st,
+            m,
+            &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/3.flac"]),
+        )
+        .await
+        .unwrap();
+        identify::identify_media(&c.st, m).await.unwrap();
+        let items = count(&c, "SELECT count(*) FROM items").await;
+        let orphans = |sql: &'static str| {
+            let c = &c;
+            async move { count(c, sql).await }
+        };
+        // A shrunk tracklist flags the track the release dropped.
+        {
+            let mut e = f.editions.lock().unwrap();
+            let v = e.get_mut(RELEASE).unwrap();
+            v["tracks"].as_array_mut().unwrap().pop();
+        }
+        sqlx::query("DELETE FROM metadata_snapshots")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        meta::refresh(&c.st, m, Priority::Background).await.unwrap();
+        assert_eq!(
+            orphans(r#"SELECT count(*) FROM track_details WHERE "orphanedAt" IS NOT NULL"#).await,
+            1
+        );
+        // The track comes back with the release.
+        f.editions
+            .lock()
+            .unwrap()
+            .insert(RELEASE.into(), edition_release(RELEASE, tracklist()));
+        meta::refresh(&c.st, m, Priority::Background).await.unwrap();
+        assert_eq!(
+            orphans(r#"SELECT count(*) FROM track_details WHERE "orphanedAt" IS NOT NULL"#).await,
+            0
+        );
+        // A release the group no longer lists is flagged.
+        f.children.lock().unwrap().insert(
+            GROUP.into(),
+            vec![json!({"externalId": OTHER_RELEASE, "title": "Alpha"})],
+        );
+        meta::refresh(&c.st, m, Priority::Background).await.unwrap();
+        assert_eq!(
+            orphans(r#"SELECT count(*) FROM editions WHERE "orphanedAt" IS NOT NULL"#).await,
+            1
+        );
+        // A 404 flags the album and removes nothing.
+        f.works.lock().unwrap().clear();
+        assert!(meta::refresh(&c.st, m, Priority::Background).await.unwrap());
+        assert_eq!(
+            orphans(r#"SELECT count(*) FROM album_details WHERE "orphanedAt" IS NOT NULL"#).await,
+            1
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, items);
+        assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
+        // A merged id: the provider answers another id for the group; the old one becomes an alias.
+        let mut w = provider()
+            .works
+            .lock()
+            .unwrap()
+            .get(GROUP)
+            .cloned()
+            .unwrap();
+        w["externalId"] = json!(MERGED);
+        f.works.lock().unwrap().insert(GROUP.into(), w);
+        f.children.lock().unwrap().insert(MERGED.into(), vec![]);
+        meta::refresh(&c.st, m, Priority::Background).await.unwrap();
+        let live: String = sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = $1 AND provider = 'musicbrainz'"#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(live, MERGED);
+        for id in [GROUP, MERGED] {
+            assert_eq!(
+                crate::media::external_ids::find(
+                    &c.st.db,
+                    MediaKind::Album,
+                    Namespace::MUSICBRAINZ,
+                    id
+                )
+                .await
+                .unwrap(),
+                Some(m),
+                "{id}"
+            );
+        }
+        assert_eq!(
+            meta::aliases::album_of(&c.st.db, GROUP).await.unwrap(),
+            Some(m)
+        );
+        // The alias is never also a live id, and an alias that becomes live again is dropped.
+        let moved = meta::aliases::redirect_album(&c.st, m, MERGED, GROUP)
+            .await
+            .unwrap();
+        assert_eq!(moved.0, meta::aliases::Moved::Renamed);
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM media_external_id_aliases WHERE value = '{GROUP}'")
+            )
+            .await,
+            0
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM media_external_id_aliases WHERE value = '{MERGED}'")
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_album_folded_into_the_one_holding_the_merged_id_carries_its_files_and_aliases(
+        pool: PgPool,
+    ) {
+        let f = provider();
+        let c = ctx_music(pool, Some(f)).await;
+        let l = album_lib(&c).await;
+        let (a, b) = (album(&c, l, "A").await, album(&c, l, "B").await);
+        c.fake
+            .script("POST", "/v1/probe", vec![track("One", 1, 1, json!({}))]);
+        music::register(&c.st, b, &place(&c, &["B/1.flac"]))
+            .await
+            .unwrap();
+        for (media, id) in [(a, MERGED), (b, GROUP)] {
+            sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'album', 'musicbrainz', $2)"#)
+                .bind(media)
+                .bind(id)
+                .execute(&c.st.db)
+                .await
+                .unwrap();
+        }
+        sqlx::query(r#"INSERT INTO media_external_id_aliases ("mediaId", kind, provider, value) VALUES ($1, 'album', 'musicbrainz', $2)"#)
+            .bind(b)
+            .bind("7c2a1d55-1b2c-4d3e-8f90-aabbccddeeff")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        // B holds GROUP; the provider says A's id MERGED is now GROUP: A folds into B.
+        let (moved, refs) = meta::aliases::redirect_album(&c.st, a, MERGED, GROUP)
+            .await
+            .unwrap();
+        assert_eq!(moved, meta::aliases::Moved::Folded(b));
+        drop(refs);
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM media WHERE id = {a}")).await,
+            0
+        );
+        assert_eq!(
+            meta::aliases::album_of(&c.st.db, MERGED).await.unwrap(),
+            Some(b)
+        );
+        assert_eq!(
+            meta::aliases::album_of(&c.st.db, "7c2a1d55-1b2c-4d3e-8f90-aabbccddeeff")
+                .await
+                .unwrap(),
+            Some(b)
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_search_applies_a_close_release_and_offers_a_far_one_for_review(pool: PgPool) {
+        let f = provider();
+        f.found
+            .lock()
+            .unwrap()
+            .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
+            "artists": [{"name": "Ana"}], "mediaType": "album"}));
+        let c = ctx_music(pool, Some(f.clone())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One", 1, 1, json!({})),
+                track("Two", 2, 1, json!({})),
+                track("Three", 1, 2, json!({})),
+            ],
+        );
+        music::register(
+            &c.st,
+            m,
+            &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/3.flac"]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            identify::identify_media(&c.st, m).await.unwrap(),
+            identify::Outcome::Applied
+        );
+        assert!(f.calls().iter().any(|c| c.starts_with("search ")));
+        // Files of another album are not applied.
+        let other = album(&c, l, "Other").await;
+        let mismatch = |n: u32, t: &str| {
+            ok(
+                json!({"ok": true, "info": {"video": [], "audio": [], "subtitles": [], "durationSeconds": 200.0,
+                "tags": {"title": t, "album": "Beta", "artist": "Zed", "track": n, "year": 1980}}}),
+            )
+        };
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![mismatch(1, "Nine"), mismatch(2, "Ten")],
+        );
+        music::register(&c.st, other, &place(&c, &["Other/1.flac", "Other/2.flac"]))
+            .await
+            .unwrap();
+        let before = f.calls().len();
+        assert_eq!(
+            identify::identify_media(&c.st, other).await.unwrap(),
+            identify::Outcome::Nothing
+        );
+        assert!(f.calls().len() >= before);
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM media_external_ids WHERE "mediaId" = {other}"#)
+            )
+            .await,
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_scan_lists_albums_by_folder_and_the_relink_creates_an_unmatched_one_from_the_tags(
+        pool: PgPool,
+    ) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track(
+                "One",
+                1,
+                1,
+                json!({"musicbrainzReleaseGroupId": GROUP}),
+            )],
+        );
+        for r in [
+            "Ana/Alpha/CD1/01.flac",
+            "Ana/Alpha/CD2/01.flac",
+            "Ana/Beta/01.mp3",
+            "Ana/Beta/cover.jpg",
+        ] {
+            touch(&c.dir.join("music").join(r), r.as_bytes());
+        }
+        let (s, b) = call(
+            &c,
+            "POST",
+            &format!("/api/imports/library/{l}/orphans/scan"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 201);
+        let groups = b["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), 2, "{b}");
+        let alpha = groups
+            .iter()
+            .find(|g| g["folderName"] == "Ana/Alpha")
+            .unwrap();
+        assert_eq!(alpha["mediaType"], "album");
+        assert_eq!(alpha["files"].as_array().unwrap().len(), 2);
+        assert_eq!(alpha["guessTitle"], "Alpha");
+        assert_eq!(
+            alpha["fileIds"],
+            json!([{"provider": "musicbrainz", "externalId": GROUP}])
+        );
+        assert_eq!(b["orphanCount"], 3);
+        let files: Vec<Value> = alpha["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| json!({"filePath": f["filePath"]}))
+            .collect();
+        let body =
+            json!({"libraryId": l, "type": "album", "folderName": "Ana/Alpha", "files": files});
+        let (s, r) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body.clone(),
+        )
+        .await;
+        assert_eq!(
+            (s, r["created"].clone(), r["linked"].clone()),
+            (201, json!(true), json!(2)),
+            "{r}"
+        );
+        let m = r["mediaId"].as_i64().unwrap();
+        let (title, folder, monitored): (String, String, bool) =
+            sqlx::query_as(r#"SELECT title, "folderName", monitored FROM media WHERE id = $1"#)
+                .bind(m as i32)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(
+            (title.as_str(), folder.as_str(), monitored),
+            ("Alpha", "Ana/Alpha", false)
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, 2);
+        // A second relink of the same folder finds the same album.
+        let (_, again) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!(
+            (again["mediaId"].as_i64().unwrap(), again["created"].clone()),
+            (m, json!(false))
+        );
+        // A folder whose tags name a release group an album already holds joins that album.
+        sqlx::query(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'album', 'musicbrainz', $2)"#)
+            .bind(m as i32)
+            .bind(GROUP)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let beta = c.dir.join("music/Ana/Beta/01.mp3");
+        let body = json!({"libraryId": l, "type": "album", "folderName": "Ana/Beta", "files": [{"filePath": beta}]});
+        let (_, joined) = call(
+            &c,
+            "POST",
+            "/api/imports/library/orphans/relink",
+            &c.admin,
+            body,
+        )
+        .await;
+        assert_eq!(
+            (
+                joined["mediaId"].as_i64().unwrap(),
+                joined["created"].clone()
+            ),
+            (m, json!(false)),
+            "{joined}"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_library_of_books_keeps_mp3_as_books_and_a_library_of_albums_owns_audio(
+        pool: PgPool,
+    ) {
+        let c = ctx_music(pool, None).await;
+        let lib = c.dir.join("shared");
+        for r in ["a.mp3", "b.wav", "c.epub"] {
+            touch(&lib.join(r), b"x");
+        }
+        let mut out = vec![];
+        super::super::disk::collect(&lib, 0, &[MediaKind::Album], &mut out);
+        let names: Vec<String> = out
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["a.mp3", "b.wav"]);
+        out.clear();
+        super::super::disk::collect(&lib, 0, &[MediaKind::Album, MediaKind::Book], &mut out);
+        let names: Vec<String> = out
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["a.mp3", "c.epub"]);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_album_is_imported_from_its_release_group_and_a_merged_id_the_caller_named_is_kept_as_an_alias(
+        pool: PgPool,
+    ) {
+        let f = provider();
+        let mut w = f.works.lock().unwrap().get(GROUP).cloned().unwrap();
+        w["externalId"] = json!(MERGED);
+        f.works.lock().unwrap().insert(GROUP.into(), w);
+        f.children.lock().unwrap().insert(MERGED.into(), vec![]);
+        let c = ctx_music(pool, Some(f)).await;
+        let l = album_lib(&c).await;
+        let body = json!({"type": "album", "provider": "musicbrainz", "externalId": GROUP, "libraryId": l});
+        let (s, b) = call(&c, "POST", "/api/media/import", &c.admin, body.clone()).await;
+        assert_eq!(s, 201, "{b}");
+        let m = b["id"].as_i64().unwrap() as i32;
+        assert_eq!(
+            (b["title"].as_str(), b["type"].as_str()),
+            (Some("Alpha (Provider)"), Some("album"))
+        );
+        assert_eq!(
+            meta::aliases::album_of(&c.st.db, MERGED).await.unwrap(),
+            Some(m)
+        );
+        assert_eq!(
+            meta::aliases::album_of(&c.st.db, GROUP).await.unwrap(),
+            Some(m)
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM album_details").await, 1);
+        let (s, _) = call(&c, "POST", "/api/media/import", &c.admin, body).await;
+        assert_eq!(s, 409);
+        // Identifying another album against an id the first one holds is refused.
+        let other = album(&c, l, "Other").await;
+        let (s, _) = call(
+            &c,
+            "POST",
+            &format!("/api/media/{other}/identify"),
+            &c.admin,
+            json!({"provider": "musicbrainz", "externalId": MERGED}),
+        )
+        .await;
+        assert_eq!(s, 409);
+        let (s, _) = call(
+            &c,
+            "POST",
+            &format!("/api/media/{other}/identify"),
+            &c.admin,
+            json!({"tmdbId": 5}),
+        )
+        .await;
+        assert_eq!(s, 400);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_merged_artist_keeps_its_row_and_its_old_id_as_an_alias(pool: PgPool) {
+        let c = ctx_music(pool, None).await;
+        let p: i32 =
+            sqlx::query_scalar(r#"INSERT INTO persons (name) VALUES ('Ana') RETURNING id"#)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        sqlx::query(r#"INSERT INTO person_external_ids ("personId", provider, value) VALUES ($1, 'musicbrainz', $2)"#)
+            .bind(p)
+            .bind(ARTIST)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let moved = meta::aliases::redirect_person(&c.st.db, p, ARTIST, MERGED)
+            .await
+            .unwrap();
+        assert_eq!(moved, meta::aliases::Moved::Renamed);
+        assert_eq!(
+            meta::aliases::person_of(&c.st.db, ARTIST).await.unwrap(),
+            Some(p)
+        );
+        assert_eq!(
+            meta::aliases::person_of(&c.st.db, MERGED).await.unwrap(),
+            Some(p)
+        );
+        let live: String =
+            sqlx::query_scalar(r#"SELECT value FROM person_external_ids WHERE "personId" = $1"#)
+                .bind(p)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(live, MERGED);
+        // Another person holding the new id keeps it: nothing moves.
+        let q: i32 = sqlx::query_scalar(r#"INSERT INTO persons (name) VALUES ('Bo') RETURNING id"#)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO person_external_ids ("personId", provider, value) VALUES ($1, 'musicbrainz', $2)"#)
+            .bind(q)
+            .bind(GROUP)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(
+            meta::aliases::redirect_person(&c.st.db, p, MERGED, GROUP)
+                .await
+                .unwrap(),
+            meta::aliases::Moved::Folded(q)
+        );
+        // The search finds a person by its sort name.
+        sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Ana' WHERE id = $1"#)
+            .bind(p)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let (s, b) = call(
+            &c,
+            "GET",
+            "/api/persons/search?q=zzyzx",
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!((s, b[0]["name"].as_str()), (200, Some("Ana")));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_candidates_of_an_album_are_listed_without_applying_any(pool: PgPool) {
+        let f = provider();
+        f.found
+            .lock()
+            .unwrap()
+            .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
+            "artists": [{"name": "Ana"}], "mediaType": "album"}));
+        let c = ctx_music(pool, Some(f)).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Alpha").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![
+                track("One", 1, 1, json!({})),
+                track("Two", 2, 1, json!({})),
+                track("Three", 1, 2, json!({})),
+            ],
+        );
+        music::register(
+            &c.st,
+            m,
+            &place(&c, &["Alpha/1.flac", "Alpha/2.flac", "Alpha/3.flac"]),
+        )
+        .await
+        .unwrap();
+        let (s, b) = call(
+            &c,
+            "GET",
+            &format!("/api/media/{m}/music/candidates"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 200, "{b}");
+        assert_eq!(
+            (b[0]["group"].as_str(), b[0]["release"].as_str()),
+            (Some(GROUP), Some(RELEASE))
+        );
+        assert!(b[0]["similarity"].as_f64().unwrap() > 0.9);
+        assert_eq!(
+            count(&c, "SELECT count(*) FROM media_external_ids").await,
+            0
+        );
+        let book = media(&c, l, "NotAlbum", "book").await;
+        let (s, _) = call(
+            &c,
+            "GET",
+            &format!("/api/media/{book}/music/candidates"),
+            &c.admin,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(s, 400);
+    }
+}

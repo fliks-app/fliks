@@ -100,6 +100,22 @@ fn flag(v: &Value, key: &str) -> Option<bool> {
     v.get(key)?.as_bool()
 }
 
+/// The medium a format name says (`CD`, `Digital Media`, `12\" Vinyl`); `other` for any other.
+pub fn medium(format: &str) -> &'static str {
+    let f = format.to_lowercase();
+    if f.contains("vinyl") {
+        "vinyl"
+    } else if f.contains("digital") {
+        "digital"
+    } else if f.contains("cassette") {
+        "cassette"
+    } else if f.contains("cd") {
+        "cd"
+    } else {
+        "other"
+    }
+}
+
 /// A name or credit of an artist, composer or other contributor.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Credit {
@@ -166,6 +182,8 @@ pub struct Album {
     pub release_count: Option<i32>,
     pub popularity: Option<f64>,
     pub source_url: Option<String>,
+    /// At most 20 names of 1 to 64 characters; what fills `media.genres` when the tags give none.
+    pub genres: Vec<String>,
 }
 
 /// The album a record describes; `Err` when the id or the title is missing or the record is no album. An
@@ -213,7 +231,27 @@ pub fn album(v: &Value) -> Result<Album, &'static str> {
         release_count: int(v, "releaseCount", 0, i64::from(i32::MAX)),
         popularity: float(v, "popularity", |n| n >= 0.0),
         source_url: https(v, "sourceUrl"),
+        genres: genres(v),
     })
+}
+
+const MAX_GENRES: usize = 20;
+const MAX_GENRE: usize = 64;
+
+fn genres(v: &Value) -> Vec<String> {
+    let mut seen = HashSet::new();
+    v.get("genres")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|g| {
+            let g = g.as_str()?.trim();
+            let ok =
+                (1..=MAX_GENRE).contains(&g.chars().count()) && !g.chars().any(char::is_control);
+            (ok && seen.insert(g.to_lowercase())).then(|| g.to_owned())
+        })
+        .take(MAX_GENRES)
+        .collect()
 }
 
 /// A list of albums that passed the checks, and what was dropped.
@@ -343,6 +381,8 @@ pub struct Track {
     pub explicit: bool,
     pub gain: Option<f64>,
     pub peak: Option<f64>,
+    /// A score of the provider (a listen count), only comparable inside one provider.
+    pub popularity: Option<f64>,
     pub credits: Vec<Credit>,
     pub works: Vec<WorkRef>,
 }
@@ -373,6 +413,7 @@ fn track(v: &Value, index: usize) -> Result<Track, &'static str> {
         explicit: flag(v, "explicit").unwrap_or(false),
         gain: float(v, "gain", |n| n.abs() <= 100.0),
         peak: float(v, "peak", |n| n > 0.0 && n <= 100.0),
+        popularity: float(v, "popularity", |n| n >= 0.0),
         credits: all,
         works: v
             .get("works")
@@ -433,6 +474,8 @@ pub fn edition(v: &Value) -> Result<Edition, &'static str> {
 /// knows images answers an `avatarUrl`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Person {
+    /// The MusicBrainz id the record names: another than the one asked is the one a merge left.
+    pub id: Option<String>,
     pub name: Option<String>,
     pub sort_name: Option<String>,
     pub disambiguation: Option<String>,
@@ -449,6 +492,7 @@ pub fn person(v: &Value) -> Result<Person, &'static str> {
         return Err("not an object");
     }
     Ok(Person {
+        id: mbid(v, "id"),
         name: text(v, "name", MAX_NAME),
         sort_name: text(v, "sortName", MAX_NAME),
         disambiguation: text(v, "disambiguation", MAX_NAME),
@@ -692,5 +736,21 @@ mod tests {
         assert_eq!(p.biography.as_deref(), Some("a\nb"));
         assert_eq!(person(&json!({})), Ok(Person::default()));
         assert!(person(&json!([])).is_err());
+    }
+
+    #[test]
+    fn genres_and_track_popularity_are_bounded() {
+        let many: Vec<String> = (0..30).map(|i| format!("g{i}")).collect();
+        let a = album(&json!({"externalId": A, "title": "T", "genres": many})).unwrap();
+        assert_eq!(a.genres.len(), 20);
+        let a = album(&json!({"externalId": A, "title": "T",
+            "genres": [" Rock ", "rock", "", "x".repeat(65), 3, "Pop"]}))
+        .unwrap();
+        assert_eq!(a.genres, ["Rock", "Pop"]);
+        let e = edition(&json!({"externalId": A, "title": "T", "tracks": [
+            {"title": "a", "popularity": 12.5}, {"title": "b", "popularity": -1}, {"title": "c", "popularity": "x"}]}))
+        .unwrap();
+        let p: Vec<_> = e.tracks.iter().map(|t| t.popularity).collect();
+        assert_eq!(p, [Some(12.5), None, None]);
     }
 }

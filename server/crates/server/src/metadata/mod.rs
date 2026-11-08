@@ -5,6 +5,7 @@ pub mod comics;
 mod credits;
 mod language;
 mod lists;
+pub mod music;
 mod orchestrator;
 mod provider;
 mod routes;
