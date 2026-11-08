@@ -280,7 +280,7 @@ pub struct Shared {
     /// In-flight guest outbound requests of this plugin, across its instances.
     pub outbound: Arc<tokio::sync::Semaphore>,
     /// The outbound limiter of a plugin with a `provider` block.
-    pub gate: Option<Arc<super::outbound::Gate>>,
+    pub gate: Option<Arc<super::outbound::Gates>>,
 }
 
 pub struct Ctx {

@@ -31,8 +31,9 @@ pub struct Outbound {
     pub internal: bool,
     pub net: Arc<dyn Net>,
     pub permits: Arc<Semaphore>,
-    /// Set for a plugin with a `provider` block (`provider-plugins.md` rule 54).
-    pub gate: Option<Arc<Gate>>,
+    /// Set for a plugin with a `provider` block (`provider-plugins.md` rule 54): one limiter and breaker per
+    /// upstream host.
+    pub gate: Option<Arc<Gates>>,
     /// The export in progress in this Store (rule 58).
     pub priority: Priority,
     /// When the export in progress is interrupted.
@@ -59,6 +60,7 @@ impl WasiHttpHooks for Outbound {
         let priority = self.priority;
         let left = self.deadline.saturating_duration_since(Instant::now());
         let internal = self.internal | self.over.rewrite(request.uri_mut());
+        let gate = gate.map(|g| g.for_host(request.uri().host().unwrap_or_default()));
         Box::new(async move {
             // The call's deadline aborts a guest still queued here, like any other host wait.
             let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
@@ -449,6 +451,108 @@ impl Gate {
             }
             self.record(Outcome::of_status(reply.status));
             return Done::Reply(reply);
+        }
+    }
+}
+
+/// The gates of one provider plugin, one per upstream host (`provider-plugins.md` rule 54): each host gets
+/// the declared rate, and its pause (`Retry-After`) and breaker never touch another host's, so an outage
+/// of one upstream (a popularity service) leaves the main one (the catalogue) running.
+pub struct Gates {
+    id: Arc<str>,
+    limits: Mutex<Limits>,
+    timeout: Duration,
+    max_pause_ms: u64,
+    hosts: Mutex<HashMap<String, Arc<Gate>>>,
+    /// The host of the latest request: what a guest's `rate-limited`, a spent quota or a checked record is about.
+    last: Mutex<Option<String>>,
+}
+
+impl Gates {
+    /// From a validated manifest `provider` block.
+    pub fn from_block(id: &str, block: &Value) -> Option<Self> {
+        let proto = Gate::from_block(id, block)?;
+        Some(Self {
+            id: id.into(),
+            limits: Mutex::new(proto.limits()),
+            timeout: proto.timeout,
+            max_pause_ms: proto.max_pause_ms,
+            hosts: Mutex::default(),
+            last: Mutex::default(),
+        })
+    }
+
+    #[cfg(test)]
+    fn of(host: &str, gate: Gate) -> Self {
+        Self {
+            id: "stub".into(),
+            limits: Mutex::new(gate.limits()),
+            timeout: gate.timeout,
+            max_pause_ms: gate.max_pause_ms,
+            hosts: Mutex::new(HashMap::from([(host.to_owned(), Arc::new(gate))])),
+            last: Mutex::default(),
+        }
+    }
+
+    /// The gate of `host`, made on its first request.
+    pub fn for_host(&self, host: &str) -> Arc<Gate> {
+        *self.last.lock_clean() = Some(host.to_owned());
+        self.hosts
+            .lock_clean()
+            .entry(host.to_owned())
+            .or_insert_with(|| {
+                let mut g = Gate::new(&self.id, *self.limits.lock_clean(), self.timeout);
+                g.max_pause_ms = self.max_pause_ms;
+                Arc::new(g)
+            })
+            .clone()
+    }
+
+    fn current(&self) -> Option<Arc<Gate>> {
+        let host = self.last.lock_clean().clone()?;
+        self.hosts.lock_clean().get(&host).cloned()
+    }
+
+    pub fn limits(&self) -> Limits {
+        *self.limits.lock_clean()
+    }
+
+    /// `provider-set-limits`: every host, the background share staying the manifest's.
+    pub fn set_limits(&self, rate_per_sec: f64, burst: u32, daily_quota: Option<u32>) {
+        let mut l = self.limits.lock_clean();
+        l.rate_per_sec = rate_per_sec;
+        l.burst = burst;
+        l.daily_quota = daily_quota;
+        for g in self.hosts.lock_clean().values() {
+            g.set_limits(rate_per_sec, burst, daily_quota);
+        }
+    }
+
+    /// `provider-quota-spent`: no request to the host the plugin last spoke to until midnight UTC.
+    pub fn quota_spent(&self) {
+        if let Some(g) = self.current() {
+            g.quota_spent();
+        }
+    }
+
+    /// `rate-limited(retry)`: the host the plugin last spoke to is paused.
+    pub fn pause_secs(&self, secs: u32) {
+        if let Some(g) = self.current() {
+            g.pause_secs(secs);
+        }
+    }
+
+    /// The plugin's settings changed: no host stays paused.
+    pub fn clear_pause(&self) {
+        for g in self.hosts.lock_clean().values() {
+            g.clear_pause();
+        }
+    }
+
+    /// A record of the plugin's answer parsed (`true`) or not, counted by the host it came from.
+    pub fn record_checked(&self, valid: bool) {
+        if let Some(g) = self.current() {
+            g.record_checked(valid);
         }
     }
 }
@@ -1176,6 +1280,29 @@ mod tests {
     }
 
     #[test]
+    fn each_upstream_host_has_its_own_limiter_pause_and_breaker() {
+        let block = serde_json::json!({"limits": {"ratePerSec": 1.0, "burst": 1}});
+        let gates = Gates::from_block("p", &block).unwrap();
+        let (a, b) = (gates.for_host("a.example"), gates.for_host("b.example"));
+        assert!(!Arc::ptr_eq(&a, &b) && Arc::ptr_eq(&a, &gates.for_host("a.example")));
+        // The host spoken to last is the one a plugin's `rate-limited` and spent quota are about.
+        gates.for_host("a.example");
+        gates.pause_secs(60);
+        assert!(a.limiter.lock_clean().take(0, 0, Interactive).is_err());
+        assert!(b.limiter.lock_clean().take(0, 0, Interactive).is_ok());
+        for _ in 0..BREAKER_FAILURES {
+            a.record(Outcome::Transient);
+        }
+        assert!(!a.breaker.lock_clean().allow(1));
+        assert!(b.breaker.lock_clean().allow(1));
+        gates.set_limits(5.0, 3, None);
+        assert_eq!(b.limits().burst, 3);
+        assert_eq!(gates.for_host("c.example").limits().rate_per_sec, 5.0);
+        gates.clear_pause();
+        assert!(a.limiter.lock_clean().take(2_000, 0, Interactive).is_ok());
+    }
+
+    #[test]
     fn the_gate_reads_the_manifest_block() {
         let block = serde_json::json!({
             "limits": {"ratePerSec": 4.0, "burst": 8, "dailyQuota": 100, "backgroundShare": 0.5},
@@ -1273,7 +1400,7 @@ mod tests {
         (port, seen)
     }
 
-    fn hook(gate: Option<Arc<Gate>>) -> Outbound {
+    fn hook(gate: Option<Arc<Gates>>) -> Outbound {
         Outbound {
             plugin_id: "p".into(),
             internal: true,
@@ -1300,7 +1427,7 @@ mod tests {
     #[tokio::test]
     async fn the_hook_replays_a_small_post_and_hands_a_large_one_the_429() {
         let (g, clock) = gate(fast());
-        let mut h = hook(Some(Arc::new(g)));
+        let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[(429, "2")]).await;
         assert_eq!(post(&mut h, port, 3).await, 200);
         assert_eq!(*seen.lock().unwrap(), ["aaa", "aaa"]);
@@ -1322,7 +1449,7 @@ mod tests {
     async fn the_hook_answers_for_a_spent_quota_without_a_request() {
         let (g, _) = gate(fast());
         g.quota_spent();
-        let mut h = hook(Some(Arc::new(g)));
+        let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
         assert!(seen.lock().unwrap().is_empty());

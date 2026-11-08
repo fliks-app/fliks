@@ -1,7 +1,7 @@
 //! Host imports (`plugins.md` rules 30-35, 43, 55): bound to the calling instance's plugin.
 use super::db::UNAVAILABLE;
 use super::logs::Level;
-use super::outbound::Gate;
+use super::outbound::Gates;
 use super::runtime::fliks::plugin::{db, host, log, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
@@ -108,7 +108,7 @@ impl Ctx {
     }
 
     /// The outbound limiter, or `ERR_DENIED` for a plugin with no `provider` block.
-    fn provider_gate(&self, method: &str) -> Result<Arc<Gate>, HostError> {
+    fn provider_gate(&self, method: &str) -> Result<Arc<Gates>, HostError> {
         self.sh.gate.clone().ok_or_else(|| {
             host_err(
                 "ERR_DENIED",
