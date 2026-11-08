@@ -304,7 +304,8 @@ export class OrphanScanPanelComponent {
       reorganize: pick && group.folderName !== '' ? this.reorganize() : false,
       transfer: this.transfer() ?? undefined,
       scanRoot: this.scanRoot,
-      files: group.files.map((f) => ({
+      folderId: group.folderId,
+      files: group.mediaType === 'series' ? undefined : group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
         episodeNumber: f.episodeNumber ?? undefined,

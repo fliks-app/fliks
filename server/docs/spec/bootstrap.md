@@ -17,7 +17,7 @@ Cross-cutting HTTP stack: prefix, validation, serialization, error bodies, CORS,
 7. Any response with `statusCode >= 400` gets `Cache-Control: no-store, no-cache, must-revalidate`.
 8. CORS: origins from `CORS_ORIGIN` (comma-separated) when non-empty, else `http://localhost:4200` and `http://localhost:4500`; always union `https://localhost`, `capacitor://localhost`, `http://localhost`; `credentials: true`.
 9. The server trusts the proxy: `X-Forwarded-*` is honoured for the client IP.
-10. JSON and urlencoded request bodies are limited to 100 kB; no route overrides the limit.
+10. JSON and urlencoded request bodies are limited to 100 kB. `POST /api/plugins/:id/import` bounds its own body, and the two orphan relink routes (`/api/imports/library/orphans/relink`, `relink-batch`) take up to 16 MiB: they list every file of a scan.
 11. At boot, before listen: `CREATE EXTENSION IF NOT EXISTS pg_trgm` on the database connection.
 12. Static files: the `emoji/` subdirectory of the `public` directory next to the binary is served at `/api/emoji`. There is no `/cast` route.
 13. When `SERVE_STATIC_PATH` is set, serve that directory at `/`, excluding `/api/{*path}`. Any other unmatched path falls back to that directory's `index.html` (SPA fallback). There is no `/internal` route: `/internal/**` falls to the SPA fallback like any unknown non-`/api` path, and answers the `Cannot <METHOD>` 404 when no client directory is set.

@@ -20,7 +20,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{
         StatusCode,
         header::{CACHE_CONTROL, CONTENT_TYPE},
@@ -37,7 +37,8 @@ use fliks_domain::{
     },
     metadata::limiter::Priority,
     naming::{
-        self, is_special_file, parse_episode_numbers, validate_folder_name, validate_folder_path,
+        self, EpisodeNumbers, is_special_file, parse_episode_numbers, validate_folder_name,
+        validate_folder_path,
     },
     release::parsing::quality::parse_release_quality,
 };
@@ -56,9 +57,22 @@ pub fn router() -> Router<AppState> {
         .route("/api/imports/orphans/cover", get(cover))
         .route(
             "/api/imports/library/orphans/relink-batch",
-            post(relink_batch),
+            post(relink_batch).layer(DefaultBodyLimit::max(RELINK_BODY_LIMIT)),
         )
-        .route("/api/imports/library/orphans/relink", post(relink))
+        .route(
+            "/api/imports/library/orphans/relink",
+            post(relink).layer(DefaultBodyLimit::max(RELINK_BODY_LIMIT)),
+        )
+}
+
+/// A relink body lists every file of a scan: a series library goes far past the global JSON cap.
+const RELINK_BODY_LIMIT: usize = 16 << 20;
+
+pub fn reads_own_body(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/imports/library/orphans/relink" | "/api/imports/library/orphans/relink-batch"
+    )
 }
 
 struct Lib {
@@ -270,9 +284,7 @@ async fn scan_under(
         }
         let name = file_name(abs);
         let abs_s = abs.to_string_lossy().into_owned();
-        let nums = parse_episode_numbers(&name, Some(&abs_s));
-        let rel = fsx::rel_under(root_p, abs).unwrap_or_default();
-        let series = nums.is_some() || is_special_file(&rel);
+        let (nums, rel, series) = episode_of(root_p, abs);
         let media_type = if series {
             MediaKind::Series
         } else {
@@ -370,6 +382,43 @@ async fn scan_under(
         scanned_files: all.len(),
         orphan_count,
     }
+}
+
+/// Rule 63: the numbers of a file and whether it belongs to a series, read under the scan root.
+fn episode_of(root: &Path, abs: &Path) -> (Option<EpisodeNumbers>, String, bool) {
+    let nums = parse_episode_numbers(&file_name(abs), Some(&abs.to_string_lossy()));
+    let rel = fsx::rel_under(root, abs).unwrap_or_default();
+    let series = nums.is_some() || is_special_file(&rel);
+    (nums, rel, series)
+}
+
+/// Rule 72a: the files the scan groups under `root/folder` as one series, walked again.
+async fn series_files(
+    root: PathBuf,
+    folder: &str,
+    linked: &HashMap<PathBuf, String>,
+) -> Vec<RelinkFile> {
+    let dir = root.join(folder);
+    let all = tokio::task::spawn_blocking(move || {
+        let mut out = vec![];
+        collect(&dir, 1, false, false, &mut out);
+        out
+    })
+    .await
+    .unwrap_or_default();
+    let n = |v: i64| i32::try_from(v).ok();
+    all.into_iter()
+        .filter(|p| !linked.contains_key(p))
+        .filter_map(|abs| {
+            let (nums, _, series) = episode_of(&root, &abs);
+            series.then(|| RelinkFile {
+                path: abs.to_string_lossy().into_owned(),
+                season: nums.and_then(|x| n(x.season)),
+                episode: nums.and_then(|x| n(x.episode)),
+                end: nums.and_then(|x| x.episode_end).and_then(n),
+            })
+        })
+        .collect()
 }
 
 /// The works the book files make, one orphan group each for the works that have a file still
@@ -895,7 +944,7 @@ async fn relink_core(
     st: &AppState,
     a: Option<&Authed>,
     user: i32,
-    d: RelinkDto,
+    mut d: RelinkDto,
 ) -> Result<Value, AppError> {
     let lib = require_path(st, d.library_id).await?;
     if let Some(f) = d.folder_id {
@@ -906,6 +955,27 @@ async fn relink_core(
             "Library \"{}\" does not accept {}",
             lib.name, d.media_type
         )));
+    }
+    if d.files.is_empty() {
+        let folder = validate_folder_name(&d.folder_name).map_err(|_| {
+            AppError::bad_request(format!("Invalid folder name \"{}\"", d.folder_name))
+        })?;
+        let (root, linked) = match d.scan_root.as_deref() {
+            Some(r) => (
+                resolve(&crate::libraries::sanitize_path(r), "/"),
+                HashMap::new(),
+            ),
+            None => (
+                resolve(lib.root_of(d.folder_id), "/"),
+                linked_owners(st, lib.id).await?,
+            ),
+        };
+        d.files = series_files(PathBuf::from(root), folder, &linked).await;
+        if d.files.is_empty() {
+            return Err(AppError::bad_request(format!(
+                "No episode file in \"{folder}\""
+            )));
+        }
     }
     let in_place_reorganize = d.reorganize && d.transfer.is_none();
     if d.external_id.is_none() && in_place_reorganize {

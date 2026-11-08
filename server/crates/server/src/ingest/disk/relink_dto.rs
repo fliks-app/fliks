@@ -22,6 +22,7 @@ pub struct RelinkDto {
     pub(super) reorganize: bool,
     pub(super) transfer: Option<Method>,
     pub(super) folder_id: Option<i32>,
+    /// Empty for a series sent by folder: the relink walks the folder again (rule 72a).
     pub(super) files: Vec<RelinkFile>,
     /// A batch item with no id takes the best hit of a search of its title (rule 73).
     pub(super) auto: bool,
@@ -102,6 +103,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
         }
     });
     let files = match b.0.get("files") {
+        None if media_type == MediaKind::Series => vec![],
         Some(Value::Array(a)) if !a.is_empty() => a
             .iter()
             .enumerate()
@@ -162,7 +164,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
 
 /// Moving files from outside the library is a library manager's action.
 pub(super) fn check_transfer(a: &Authed, d: &RelinkDto) -> Result<(), AppError> {
-    if d.transfer.is_some() {
+    if d.transfer.is_some() || (d.files.is_empty() && d.scan_root.is_some()) {
         a.require(Action::Manage, Subject::Settings)?;
     }
     Ok(())

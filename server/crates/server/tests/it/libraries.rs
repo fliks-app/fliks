@@ -1245,3 +1245,79 @@ async fn a_stuck_source_survives_a_move_that_runs_before_it_is_freed(pool: PgPoo
     settled(&c).await;
     assert!(!src_dir.join("0.mkv").exists());
 }
+
+#[sqlx::test(migrations = false)]
+async fn orphan_relink_takes_a_body_past_the_json_cap(pool: PgPool) {
+    let c = ctx(pool).await;
+    for uri in [
+        "/api/imports/library/orphans/relink-batch",
+        "/api/imports/library/orphans/relink",
+    ] {
+        let big = json!({ "items": "x".repeat(200 * 1024) });
+        assert_eq!(call(&c, "POST", uri, &c.admin, big).await.0, 400);
+        let huge = json!({ "items": "x".repeat(17 << 20) });
+        assert_eq!(call(&c, "POST", uri, &c.admin, huge).await.0, 413);
+    }
+    let big = json!({ "name": "x".repeat(200 * 1024) });
+    assert_eq!(
+        call(&c, "POST", "/api/libraries", &c.admin, big).await.0,
+        413
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_series_relinked_by_folder_takes_its_season_folders_and_loose_episodes(pool: PgPool) {
+    let c = ctx(pool).await;
+    let show = c.tmp.join("lib/Show A");
+    for f in [
+        "Season 01/Show A - S01E01.mkv",
+        "Show A - S01E02.mkv",
+        "Season 02/sub/Show A - S02E01.mkv",
+        "Extras/Show A - S01E01 Behind.mkv",
+        "notes.mkv",
+    ] {
+        let p = show.join(f);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, b"x").unwrap();
+    }
+    let lib = c.tmp.join("lib").to_string_lossy().into_owned();
+    let (s, l) = call(
+        &c,
+        "POST",
+        "/api/libraries",
+        &c.admin,
+        json!({"name": "S", "path": lib, "mediaTypes": ["series"]}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let relink =
+        |folder: &str| json!({"libraryId": l["id"], "type": "series", "folderName": folder});
+    let uri = "/api/imports/library/orphans/relink";
+    let (s, b) = call(&c, "POST", uri, &c.admin, relink("Show A")).await;
+    assert_eq!(
+        (s, &b["linked"], &b["errors"]),
+        (201, &json!(3), &json!([])),
+        "{b}"
+    );
+    let eps: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT s."number", e."number" FROM media_files f
+           JOIN media_file_items fi ON fi."mediaFileId" = f.id JOIN items e ON e.id = fi."episodeId"
+           JOIN item_groups s ON s.id = e."groupId" WHERE f."mediaId" = $1 ORDER BY 1, 2"#,
+    )
+    .bind(b["mediaId"].as_i64().unwrap() as i32)
+    .fetch_all(&c.st.db)
+    .await
+    .unwrap();
+    assert_eq!(eps, [(1, 1), (1, 2), (2, 1)]);
+    assert_eq!(
+        call(&c, "POST", uri, &c.admin, relink("../lib")).await.0,
+        400
+    );
+    assert_eq!(
+        call(&c, "POST", uri, &c.admin, relink("Missing")).await.0,
+        400
+    );
+    let movie = json!({"libraryId": l["id"], "type": "movie", "folderName": "Show A"});
+    assert_eq!(call(&c, "POST", uri, &c.admin, movie).await.0, 400);
+    let _ = std::fs::remove_dir_all(&c.tmp);
+}
