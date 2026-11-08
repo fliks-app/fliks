@@ -95,6 +95,7 @@ fn json_of(b: &[u8]) -> Value {
 
 async fn stem(st: &AppState, dir: &std::path::Path, file: i32, kind: &str, model: &str) {
     let path = dir.join(format!("{file}-{kind}.opus"));
+    std::fs::create_dir_all(dir).unwrap();
     std::fs::write(&path, b"0123456789").unwrap();
     store::put(
         &st.db,
