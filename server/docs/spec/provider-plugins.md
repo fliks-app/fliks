@@ -25,7 +25,7 @@ The pluginApi stays 3: the `metadata-provider` interface and the `provider` worl
 | `chapterNamespaces` | no | Distinct namespace names `fetch-chapters` accepts (ASIN). |
 | `limits` | yes | `{ratePerSec, burst, dailyQuota?, backgroundShare?, maxPauseSecs?}`: `ratePerSec` a number in (0, 1000], `burst` an integer 1 to 1000, `dailyQuota` null or an integer of at least 1, `backgroundShare` a number in (0, 1], default 0.75, `maxPauseSecs` an integer 300 to 86400, default 300: the longest a `rate-limited(retry)` of this plugin pauses the limiter (rule 57). |
 | `requestTimeoutMs` | no | Integer 1000 to 60000, default 10000. |
-| `snapshotTtlSecs` | no | Object over `work children edition person chapters`; each value null (never expires) or an integer of seconds, at most 315360000 (ten years); a missing resource is 0. |
+| `snapshotTtlSecs` | no | Object over `work children edition person chapters credits` (`credits`: the discography of an artist, `person-credits` of a music provider); each value null (never expires) or an integer of seconds, at most 315360000 (ten years); a missing resource is 0. |
 | `imageHosts` | no | At most 16 distinct lowercase host names, each with a dot and no scheme, port, path or wildcard. |
 | `requires` | no | Distinct config keys (`^[A-Za-z][A-Za-z0-9_-]{0,63}$`, no `.`: a key with a dot is not one key of a plugin's own settings) that must resolve non-empty for the provider to be available (rule 41). |
 

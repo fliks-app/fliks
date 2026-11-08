@@ -2,20 +2,25 @@
 use super::{
     body::Body,
     identified::{Creation, Row, TAKEN, announce, discard, insert_row},
-    import::{creation_folder, resolve_target},
+    import::{resolve_target, resolve_target_in},
 };
 use crate::{
     http::{AppError, auth::Authed},
     libraries::{accessible_library_ids, paths_visible},
     media::{
         external_ids::{self, Link},
-        hydrate,
+        hydrate, wants,
     },
-    metadata::music::{Written, fetch, write_album},
+    metadata::music::{Written, fetch, target, write_album},
     state::AppState,
 };
 use axum::{Json, http::StatusCode};
-use fliks_domain::{media::kind::MediaKind, metadata::limiter::Priority, naming};
+use fliks_domain::{
+    external_id::Namespace,
+    media::{kind::MediaKind, wants::WantSpec},
+    metadata::limiter::Priority,
+    naming,
+};
 use serde_json::Value;
 
 const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
@@ -70,44 +75,72 @@ pub(super) async fn import_album(
     Ok((StatusCode::CREATED, Json(out)))
 }
 
-/// A folder component of a title or an artist: no separator, no dot at the ends.
+/// A folder component: no dot or space at the ends.
 fn component(s: &str) -> String {
-    s.replace(['/', '\\'], "-")
-        .trim()
-        .trim_matches('.')
-        .to_owned()
+    s.trim().trim_matches('.').trim().to_owned()
 }
 
-/// Creates the album from its release group; a failure after the row exists deletes it. The folder is the
-/// title, then `Artist - Title` when a folder of that name is taken, until the naming scopes (acquisition).
+/// The folder of a new album: the artist folder and the album folder of the naming settings, the artist's left
+/// out when the album has none; a taken name takes the first characters of the release group id, 409 when that
+/// one is taken too.
+async fn album_folder(
+    st: &AppState,
+    library: i32,
+    album: &fliks_domain::music::provider::Album,
+) -> Result<String, AppError> {
+    let formats = crate::ingest::naming_formats(&st.db).await?;
+    let artist = album.artists.first();
+    let tokens = naming::AlbumNameTokens {
+        artist_name: artist.map(|a| a.name.clone()),
+        artist_sort_name: artist.and_then(|a| a.sort_name.clone()),
+        album_title: album.title.clone(),
+        release_year: album.year.map(i64::from),
+        album_type: album.primary_type.map(str::to_owned),
+        ..Default::default()
+    };
+    let artist_dir = component(&naming::apply_album_format(&formats.artist_folder, &tokens));
+    let album_dir = component(&naming::apply_album_format(&formats.album_folder, &tokens));
+    let invalid = || AppError::bad_request(format!("Invalid folder name for \"{}\"", album.title));
+    let join = |album_dir: &str| {
+        let path = if artist_dir.is_empty() {
+            album_dir.to_owned()
+        } else {
+            format!("{artist_dir}/{album_dir}")
+        };
+        naming::validate_folder_path(&path)
+            .map(str::to_owned)
+            .map_err(|_| invalid())
+    };
+    let taken = |folder: String| async move {
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT id FROM media WHERE type = 'album' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,
+        )
+        .bind(library)
+        .bind(folder)
+        .fetch_optional(&st.db)
+        .await
+    };
+    let folder = join(&album_dir)?;
+    if taken(folder.clone()).await?.is_none() {
+        return Ok(folder);
+    }
+    let id: String = album.external_id.chars().take(8).collect();
+    let suffixed = join(&format!("{album_dir} [{id}]"))?;
+    if taken(suffixed.clone()).await?.is_some() {
+        return Err(AppError::conflict(format!(
+            "{TAKEN}: a folder of that name exists"
+        )));
+    }
+    Ok(suffixed)
+}
+
+/// Creates the album from its release group; a failure after the row exists deletes it.
 pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
     let (ns, id) = c.id;
     let lang = crate::metadata::library_language(st, c.target.id).await?;
     let fetched = fetch(st, ns, id, &lang, c.prio).await?;
     let title = fetched.album.title.clone();
-    let year = fetched.album.year.map(i64::from);
-    let mut folder = creation_folder(st, MediaKind::Album, &title, year).await?;
-    let taken = |folder: String| async move {
-        sqlx::query_scalar::<_, i32>(
-            r#"SELECT id FROM media WHERE type = 'album' AND "libraryId" = $1 AND "folderName" = $2 LIMIT 1"#,
-        )
-        .bind(c.target.id)
-        .bind(folder)
-        .fetch_optional(&st.db)
-        .await
-    };
-    if taken(folder.clone()).await?.is_some() {
-        let artist = fetched.album.artists.first().map(|a| component(&a.name));
-        let named = format!("{} - {}", artist.unwrap_or_default(), component(&title));
-        folder = naming::validate_folder_path(&named)
-            .map(str::to_owned)
-            .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?;
-        if taken(folder.clone()).await?.is_some() {
-            return Err(AppError::conflict(format!(
-                "{TAKEN}: a folder of that name exists"
-            )));
-        }
-    }
+    let folder = album_folder(st, c.target.id, &fetched.album).await?;
     let row = Row {
         kind: MediaKind::Album,
         title: &title,
@@ -119,7 +152,7 @@ pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result
     };
     // The canonical id is what the album is linked to: a merged id the caller asked for becomes an alias.
     let canonical = fetched.album.external_id.clone();
-    let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, None).await?;
+    let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, c.wants).await?;
     if external_ids::link(
         &mut tx,
         &st.namespaces(),
@@ -162,5 +195,60 @@ pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result
         (c.user, None),
     )
     .await?;
+    if let Err(e) = target::ensure(st, media, c.prio).await {
+        tracing::warn!("album #{media}: no target edition yet: {}", e.text());
+    }
     Ok(media)
+}
+
+/// The album of a request: the release group in the request's library with its audio want, or the want
+/// added to the album the library already holds (403 when that one sits in a library outside `readable`).
+pub async fn import_album_for_request(
+    st: &AppState,
+    group: &str,
+    wants: &[WantSpec],
+    (library, folder): (Option<i32>, Option<i32>),
+    (added_by, readable): (Option<i32>, &[i32]),
+) -> Result<i32, AppError> {
+    let ns = Namespace::MUSICBRAINZ;
+    let held = async || external_ids::find(&st.db, MediaKind::Album, ns, group).await;
+    if let Some(id) = held().await? {
+        let own: Option<Option<i32>> =
+            sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                .bind(id)
+                .fetch_optional(&st.db)
+                .await?;
+        if !own.flatten().is_some_and(|l| readable.contains(&l)) {
+            return Err(AppError::forbidden(
+                "You do not have access to the library holding this title",
+            ));
+        }
+        let mut tx = st.db.begin().await?;
+        wants::add(&mut tx, id, wants)
+            .await
+            .map_err(|e| wants::write_error(e, id))?;
+        tx.commit().await?;
+        return Ok(id);
+    }
+    let all = super::all_library_ids(&st.db).await?;
+    let target = resolve_target_in(st, &all, MediaKind::Album, library, folder).await?;
+    let created = create_album_from(
+        st,
+        &Creation {
+            kind: MediaKind::Album,
+            id: (ns, group),
+            target: &target,
+            profiles: (None, None),
+            user: added_by.filter(|u| *u != 0),
+            links: vec![],
+            seasons: None,
+            wants: Some(wants),
+            prio: Priority::Interactive,
+        },
+    )
+    .await;
+    match created {
+        Err(e) if e.status() == StatusCode::CONFLICT => held().await?.ok_or(e),
+        r => r,
+    }
 }

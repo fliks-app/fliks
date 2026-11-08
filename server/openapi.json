@@ -972,6 +972,33 @@
         }
       }
     },
+    "/api/imports/lidarr": {
+      "post": {
+        "tags": [],
+        "operationId": "lidarr_import",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/imports/lidarr/preview": {
+      "post": {
+        "tags": [],
+        "operationId": "lidarr_preview",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/imports/lidarr/test": {
+      "post": {
+        "tags": [],
+        "operationId": "lidarr_test",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/imports/orphans/cover": {
       "get": {
         "tags": [

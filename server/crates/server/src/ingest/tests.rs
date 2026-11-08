@@ -5838,3 +5838,5 @@ mod music_ingest {
         );
     }
 }
+
+mod album_acquisition;

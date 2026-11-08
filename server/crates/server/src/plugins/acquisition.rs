@@ -408,6 +408,9 @@ pub async fn score_any(
             .await
             .map_err(db_err);
     }
+    if m.kind == MediaKind::Album {
+        return album::score(st, &m, releases).await.map_err(db_err);
+    }
     if m.kind != MediaKind::Book {
         let (season, episode) = super::units::video(unit.as_ref())?;
         return release::score_of(st, &m, season, episode, releases)
@@ -428,14 +431,17 @@ pub async fn score_any(
         .map_err(db_err)
 }
 
+mod album;
 mod book;
 mod candidates;
 mod comic;
 mod create;
+mod music;
 mod release;
 pub use book::score as score_book;
 pub use candidates::*;
 pub use create::*;
+pub use music::*;
 pub use release::*;
 
 #[cfg(test)]

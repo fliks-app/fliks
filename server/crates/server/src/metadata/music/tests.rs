@@ -23,6 +23,8 @@ pub(crate) struct MusicFake {
     pub children: Mutex<HashMap<String, Vec<Value>>>,
     pub editions: Mutex<HashMap<String, Value>>,
     pub found: Mutex<Vec<Value>>,
+    /// The discography `person_credits` answers.
+    pub albums: Mutex<Vec<Value>>,
     pub calls: Mutex<Vec<String>>,
 }
 
@@ -119,7 +121,13 @@ impl MetadataProvider for MusicFake {
         missing()
     }
     fn person_credits<'a>(&'a self, _: &'a str, _: &'a Resolved, _: Priority) -> Call<'a, Credits> {
-        missing()
+        let albums = self.albums.lock().unwrap().clone();
+        Box::pin(async move {
+            Ok(Credits {
+                albums,
+                ..Credits::default()
+            })
+        })
     }
     fn fetch_edition<'a>(
         &'a self,

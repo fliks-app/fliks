@@ -154,6 +154,40 @@ impl Metadata {
         })
     }
 
+    /// The discography of the artist `id` as `p` lists it, from its snapshot or the provider.
+    pub async fn albums(
+        &self,
+        p: Namespace,
+        id: &str,
+        lang: &Resolved,
+        prio: Priority,
+    ) -> Result<Vec<Value>, MetaError> {
+        let provider = self.of(p);
+        let ttl = provider.snapshot_ttl("credits");
+        let (id_owned, lang_owned) = (id.to_owned(), lang.clone());
+        let call = move || {
+            async move {
+                let c = provider
+                    .person_credits(&id_owned, &lang_owned, prio)
+                    .await?;
+                Ok(Value::Array(c.albums))
+            }
+            .boxed()
+        };
+        match self
+            .snapshot(
+                self.key(p, "credits", MediaKind::Album, id, lang),
+                prio,
+                ttl,
+                call,
+            )
+            .await?
+        {
+            Value::Array(all) => Ok(all),
+            _ => Ok(vec![]),
+        }
+    }
+
     /// A record not expired answers without a call; else `fetch` runs once, in its own task, for every
     /// concurrent caller of `key` and `prio`, and the task stores the answer unless `ttl` is zero
     /// (`None`: never expires).

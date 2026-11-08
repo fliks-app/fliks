@@ -119,12 +119,12 @@ pub struct BookScoreOptions {
     pub expected_issue: Option<ExpectedIssue>,
 }
 
-struct Parsed {
-    quality: &'static AppQuality,
-    languages: Vec<&'static AppLanguage>,
-    retail: bool,
-    names: BookNameGuess,
-    comic: Option<ComicRelease>,
+pub(super) struct Parsed {
+    pub(super) quality: &'static AppQuality,
+    pub(super) languages: Vec<&'static AppLanguage>,
+    pub(super) retail: bool,
+    pub(super) names: BookNameGuess,
+    pub(super) comic: Option<ComicRelease>,
 }
 
 /// `None` for a family without release parsing.
@@ -251,69 +251,87 @@ pub fn score_and_sort_book_releases(
         .into_iter()
         .filter_map(|r| {
             let p = parse(family, &r.title)?;
-            let unknown_iso = opts
-                .source_unknown_lang
-                .get(&r.source_id)
-                .and_then(|i| i.as_deref());
-            let langs = resolve_unknown_languages(p.languages, unknown_iso);
-            let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
-            let custom_format_score = score_custom_formats(&r.title, &r.flags);
-            let blocklisted = is_blocked(&r.title, r.source_id);
-            let is_audio = family == Family::Audio;
-            let mut rejections = compute_rejections(&RejectionInput {
-                quality_id: p.quality.id,
-                allowed: opts.allowed.clone(),
-                language_ids: lang_ids.clone(),
-                allowed_langs: opts.allowed_langs.clone(),
-                is_blocklisted: blocklisted,
-                size_bytes: r.size,
-                runtime_minutes: if is_audio { opts.duration_minutes } else { 0.0 },
-                size_by_quality: opts.size_by_quality.clone(),
-                seeders: r.seeders,
-                source_id: r.source_id,
-                source_min_seeders: opts.source_min_seeders.clone(),
-                release_title: Some(r.title.clone()),
-                coverage: None,
-                expected_title: opts.expected_title.clone(),
-                expected_season: None,
-                expected_episode: None,
-                min_resolution: None,
-                expected_year: opts.expected_year,
-                custom_format_score: Some(custom_format_score),
-                min_custom_format_score: opts.min_custom_format_score,
-                rank: Some(p.quality.rank.into()),
-                min_rank_exclusive: opts.min_rank_exclusive,
-                max_rank_inclusive: opts.max_rank_inclusive,
-            });
-            if let (Some(want), Some(got)) = (&opts.expected_issue, &p.comic) {
-                rejections.extend(issue_rejections(want, got));
-            }
-            let limits = opts.size_by_quality.get(&p.quality.id);
-            let size_deviation = if is_audio {
-                compute_size_deviation(&r.title, r.size, opts.duration_minutes, limits)
-            } else {
-                rejections.extend(text_size_rejections(r.size, limits));
-                let preferred = limits.map_or(0.0, |l| l.preferred);
-                (preferred > 0.0 && r.size > 0.0)
-                    .then(|| (r.size / 1_048_576.0 - preferred).abs() / preferred)
-            };
-            Some(ScoredBookRelease {
-                quality_id: p.quality.id,
-                quality_name: p.quality.name,
-                rank: p.quality.rank,
-                allowed: opts.allowed.contains(&p.quality.id),
-                custom_format_score,
-                blocklisted,
-                languages: langs,
-                language_allowed: opts.allowed_langs.is_empty()
-                    || !opts.allowed_langs.is_disjoint(&lang_ids),
-                rejections,
-                retail: p.retail,
-                size_deviation,
-                names: p.names,
-                candidate: r,
-            })
+            Some(score_one(
+                family,
+                r,
+                p,
+                opts,
+                score_custom_formats,
+                is_blocked,
+            ))
         })
         .collect();
     sort_releases_by_relevance(rows, false)
+}
+
+pub(super) fn score_one(
+    family: Family,
+    r: ReleaseCandidate,
+    p: Parsed,
+    opts: &BookScoreOptions,
+    score_custom_formats: FormatScore,
+    is_blocked: Blocked,
+) -> ScoredBookRelease {
+    let unknown_iso = opts
+        .source_unknown_lang
+        .get(&r.source_id)
+        .and_then(|i| i.as_deref());
+    let langs = resolve_unknown_languages(p.languages, unknown_iso);
+    let lang_ids: BTreeSet<u32> = langs.iter().map(|l| l.id).collect();
+    let custom_format_score = score_custom_formats(&r.title, &r.flags);
+    let blocklisted = is_blocked(&r.title, r.source_id);
+    let is_audio = family == Family::Audio;
+    let mut rejections = compute_rejections(&RejectionInput {
+        quality_id: p.quality.id,
+        allowed: opts.allowed.clone(),
+        language_ids: lang_ids.clone(),
+        allowed_langs: opts.allowed_langs.clone(),
+        is_blocklisted: blocklisted,
+        size_bytes: r.size,
+        runtime_minutes: if is_audio { opts.duration_minutes } else { 0.0 },
+        size_by_quality: opts.size_by_quality.clone(),
+        seeders: r.seeders,
+        source_id: r.source_id,
+        source_min_seeders: opts.source_min_seeders.clone(),
+        release_title: Some(r.title.clone()),
+        coverage: None,
+        expected_title: opts.expected_title.clone(),
+        expected_season: None,
+        expected_episode: None,
+        min_resolution: None,
+        expected_year: opts.expected_year,
+        custom_format_score: Some(custom_format_score),
+        min_custom_format_score: opts.min_custom_format_score,
+        rank: Some(p.quality.rank.into()),
+        min_rank_exclusive: opts.min_rank_exclusive,
+        max_rank_inclusive: opts.max_rank_inclusive,
+    });
+    if let (Some(want), Some(got)) = (&opts.expected_issue, &p.comic) {
+        rejections.extend(issue_rejections(want, got));
+    }
+    let limits = opts.size_by_quality.get(&p.quality.id);
+    let size_deviation = if is_audio {
+        compute_size_deviation(&r.title, r.size, opts.duration_minutes, limits)
+    } else {
+        rejections.extend(text_size_rejections(r.size, limits));
+        let preferred = limits.map_or(0.0, |l| l.preferred);
+        (preferred > 0.0 && r.size > 0.0)
+            .then(|| (r.size / 1_048_576.0 - preferred).abs() / preferred)
+    };
+    ScoredBookRelease {
+        quality_id: p.quality.id,
+        quality_name: p.quality.name,
+        rank: p.quality.rank,
+        allowed: opts.allowed.contains(&p.quality.id),
+        custom_format_score,
+        blocklisted,
+        languages: langs,
+        language_allowed: opts.allowed_langs.is_empty()
+            || !opts.allowed_langs.is_disjoint(&lang_ids),
+        rejections,
+        retail: p.retail,
+        size_deviation,
+        names: p.names,
+        candidate: r,
+    }
 }

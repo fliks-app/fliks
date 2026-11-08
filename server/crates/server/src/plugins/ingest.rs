@@ -193,14 +193,18 @@ pub async fn run(
     } else {
         let wrong = |f: &library::File| {
             let name = library::file_name(&f.path);
-            if family == Family::Image {
+            if kind == MediaKind::Album {
+                !crate::ingest::music::is_music_file(&name)
+            } else if family == Family::Image {
                 !comics::is_comic_file(&name)
             } else {
                 books::classify(&name).is_none_or(|(of, _)| of != family)
             }
         };
         if let Some(f) = files.iter().find(|f| wrong(f)) {
-            let what = if family == Family::Image {
+            let what = if kind == MediaKind::Album {
+                "music".to_owned()
+            } else if family == Family::Image {
                 "comic".to_owned()
             } else {
                 format!("{family} book")

@@ -46,6 +46,17 @@ pub fn satisfied_sql() -> String {
     WHERE ci."mediaId" = m.id AND ci.monitored
       AND ci."airDate" <= (now() AT TIME ZONE 'UTC')::date
       AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ci.id))
+  WHEN w.family = 'audio' AND m.type = 'album' THEN CASE
+    WHEN (SELECT ad."targetEditionId" FROM album_details ad WHERE ad."mediaId" = m.id) IS NULL
+      THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id)
+    ELSE NOT EXISTS (
+      SELECT 1 FROM items ti JOIN track_details td ON td."itemId" = ti.id
+      WHERE ti."editionId" = (SELECT ad."targetEditionId" FROM album_details ad WHERE ad."mediaId" = m.id)
+        AND ti.monitored
+        AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ti.id)
+        AND NOT EXISTS (SELECT 1 FROM track_details od JOIN item_parts op ON op."itemId" = od."itemId"
+                        WHERE od."mediaId" = m.id AND od."recordingMbid" = td."recordingMbid"))
+    END
   ELSE EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id
                JOIN item_parts ip ON ip."itemId" = i.id
                WHERE e."mediaId" = m.id AND e.family = w.family

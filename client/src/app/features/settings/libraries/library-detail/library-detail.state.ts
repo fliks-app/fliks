@@ -1,7 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import {
+  DEFAULT_METADATA_PROFILE,
   Library,
   LibrariesApiService,
+  MetadataProfile,
   UpdateLibraryBody,
 } from '../../../../core/services/api/libraries-api.service';
 import { UserRow } from '../../../../core/services/api/users-api.service';
@@ -42,6 +44,8 @@ export class LibraryDetailState {
   readonly formLanguageProfileId = signal<number | null>(null);
   readonly formMergeM4b = signal(false);
   readonly formMergeM4bReplace = signal(false);
+  /** A library of albums only: which release groups and releases it wants. */
+  readonly formMetadataProfile = signal<MetadataProfile>(DEFAULT_METADATA_PROFILE);
   /** First folder: only the creation wizard edits it, a saved library's folders have their own routes. */
   readonly formPath = signal('');
   /** Further folders of a library being created, added once it exists. */
@@ -62,6 +66,7 @@ export class LibraryDetailState {
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
     this.formMergeM4b.set(lib.mergeM4b);
     this.formMergeM4bReplace.set(lib.mergeM4bReplace);
+    this.formMetadataProfile.set(lib.metadataProfile ?? DEFAULT_METADATA_PROFILE);
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
   }
@@ -71,6 +76,14 @@ export class LibraryDetailState {
     if (on) next.add(kind);
     else next.delete(kind);
     this.formKinds.set(next);
+  }
+
+  /** Adds or removes `value` in one list of the metadata profile. */
+  toggleProfile(list: keyof MetadataProfile, value: string, on: boolean) {
+    const current = this.formMetadataProfile();
+    const next = current[list].filter((v) => v !== value);
+    if (on) next.push(value);
+    this.formMetadataProfile.set({ ...current, [list]: next });
   }
 
   toggleUser(id: number) {
@@ -88,6 +101,10 @@ export class LibraryDetailState {
     }
     if (this.mediaTypes().length === 0) {
       this.saveError.set(this.translate.instant('settings.libraries.media_type_required'));
+      return false;
+    }
+    if (this.holdsAlbums() && this.formMetadataProfile().primaryTypes.length === 0) {
+      this.saveError.set(this.translate.instant('settings.libraries.profile_primary_required'));
       return false;
     }
     this.saveError.set('');
@@ -148,6 +165,10 @@ export class LibraryDetailState {
     }
   }
 
+  holdsAlbums(): boolean {
+    return (this.formKinds() as ReadonlySet<string>).has('album');
+  }
+
   mediaTypes(): MediaType[] {
     return MEDIA_KINDS.filter((k) => this.formKinds().has(k));
   }
@@ -165,6 +186,7 @@ export class LibraryDetailState {
       defaultLanguageProfileId: this.formLanguageProfileId(),
       mergeM4b: this.formMergeM4b(),
       mergeM4bReplace: this.formMergeM4bReplace(),
+      ...(this.holdsAlbums() ? { metadataProfile: this.formMetadataProfile() } : {}),
     };
   }
 }

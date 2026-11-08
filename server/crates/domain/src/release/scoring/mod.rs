@@ -1,6 +1,7 @@
 pub mod book;
 pub mod custom_format;
 pub mod flags;
+pub mod music;
 pub mod pipeline;
 pub mod rejection;
 pub mod sizes;
@@ -10,6 +11,7 @@ pub mod titles;
 pub use book::*;
 pub use custom_format::*;
 pub use flags::*;
+pub use music::*;
 pub use pipeline::*;
 pub use rejection::*;
 pub use sizes::*;

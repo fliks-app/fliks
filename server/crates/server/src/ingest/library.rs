@@ -468,9 +468,21 @@ impl Ctx<'_> {
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
-        // An issue's number and a track's live in the file name, so they keep it.
-        let mut base = if matches!(m.media_type, MediaKind::Comic | MediaKind::Album) {
+        // An issue's number lives in the file name, so it keeps it; a track's name comes from its tags.
+        let mut base = if m.media_type == MediaKind::Comic {
             transfer::split_ext(&name).0.to_owned()
+        } else if m.media_type == MediaKind::Album {
+            let tagged = super::music::naming::track_base(
+                self.st,
+                (m.id, &m.title, m.year),
+                self.formats,
+                &src,
+            )
+            .await;
+            match tagged {
+                Ok(named) => named.unwrap_or_else(|| transfer::split_ext(&name).0.to_owned()),
+                Err(e) => return Ok(Placed::Retry(format!("{name}: {e}"))),
+            }
         } else {
             naming::apply_book_format(
                 &self.formats.book,
@@ -550,6 +562,24 @@ impl Ctx<'_> {
                     .map_err(|e| format!("{name}: {e}"))?;
             if !done {
                 return Ok(Placed::Present);
+            }
+            if m.media_type == MediaKind::Album {
+                let src_dir = src.parent().map(Path::to_path_buf).unwrap_or_default();
+                let (source_base, new_base) =
+                    (stem_of(&src), transfer::split_ext(&file).0.to_owned());
+                let (allowed, dest_dir) = (self.allowed.to_vec(), dir.clone());
+                let _ = tokio::task::spawn_blocking(move || {
+                    transfer::transfer_companions(&transfer::Companions {
+                        src_dir: &src_dir,
+                        dest_dir: &dest_dir,
+                        source_base: &source_base,
+                        new_base: &new_base,
+                        method,
+                        allowed: &allowed,
+                    });
+                    transfer::transfer_folder_art(&src_dir, &dest_dir, method, &allowed);
+                })
+                .await;
             }
         }
         let dest = dir.join(&file);

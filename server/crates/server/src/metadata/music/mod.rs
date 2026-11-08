@@ -4,6 +4,7 @@ pub mod aliases;
 mod apply;
 pub mod people;
 pub mod routes;
+pub mod target;
 #[cfg(test)]
 pub(crate) mod tests;
 pub mod works;

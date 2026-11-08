@@ -45,12 +45,14 @@ fn lookup(key: &str) -> Option<Sizes> {
     TABLE.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
 }
 
-/// Audio MB per hour by `AUDIO_QUALITIES` id: unknown, then the 64k, 128k and 256k buckets of each lossy codec, then lossless.
+/// Audio MB per hour by `AUDIO_QUALITIES` id: unknown, then the 64k, 128k and 256k buckets of each lossy codec, then lossless, then MP3 V0 and 320.
 fn audio_sizes(id: u32) -> Sizes {
     match audio_quality_by_id(i64::from(id)).map(|q| (q.resolution, q.source)) {
         Some((64, _)) => s(10.0, 30.0, 60.0),
         Some((128, _)) => s(30.0, 60.0, 120.0),
         Some((256, _)) => s(60.0, 120.0, 250.0),
+        Some((245, _)) => s(60.0, 130.0, 270.0),
+        Some((320, _)) => s(80.0, 150.0, 320.0),
         Some((16, _)) => s(150.0, 350.0, 700.0),
         Some((24, _)) => s(300.0, 700.0, 1400.0),
         _ => s(0.0, 60.0, 250.0),
@@ -158,14 +160,14 @@ mod tests {
             default_allowed(Family::Text),
             [202, 203, 204, 205, 206, 207]
         );
-        assert_eq!(default_allowed(Family::Audio).len(), 14);
+        assert_eq!(default_allowed(Family::Audio).len(), 16);
         assert!(!default_allowed(Family::Audio).contains(&101));
         assert_eq!(default_allowed(Family::Image), [302, 303, 304, 305]);
     }
 
     #[test]
     fn seeds_one_row_per_quality() {
-        assert_eq!(seed_rows(Family::Audio).count(), 15);
+        assert_eq!(seed_rows(Family::Audio).count(), 17);
         assert_eq!(seed_rows(Family::Text).count(), 7);
         assert_eq!(seed_rows(Family::Image).count(), 5);
         let rows: Vec<_> = seed_rows(Family::Video).collect();
@@ -192,6 +194,6 @@ mod tests {
             .into_iter()
             .flat_map(|f| table(f).iter().map(|q| q.id))
             .collect();
-        assert_eq!(ids.len(), 24 + 15 + 7 + 5);
+        assert_eq!(ids.len(), 24 + 17 + 7 + 5);
     }
 }

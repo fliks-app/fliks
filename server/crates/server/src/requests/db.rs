@@ -287,7 +287,7 @@ pub async fn media_by_ref_on(
 /// The title's own key and the other ids of the one library media holding it, so a title is one key.
 pub async fn title_keys(db: &mut PgConnection, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
     let mut keys = vec![t.clone()];
-    if t.media_type == MediaKind::Book {
+    if super::is_work(t.media_type) {
         return Ok(keys);
     }
     let kind = t.media_type;

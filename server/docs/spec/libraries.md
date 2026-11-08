@@ -110,6 +110,7 @@ Rules 18-20 are implemented in `media/write/delete.rs` (`media-write.md` rules 7
 57. An in-place link (`ingest.md` rule 52) takes the folder of the media's library whose `realpath` contains the file; a file in none of them is `file outside the media folder`. A transferred file goes to the target folder of rule 44.
 58. `diskFreeBelowPercent` (`cleanup.md`, criteria table) is evaluated per folder (`statfs` of each `library_folders` row): a media matches when a folder holding one of its files is below the threshold, or, with no file, its target folder is. A matched `delete` removes the media in every folder (rule 55).
 59. Folder writes and ingests: `AppState` holds one `RwLock`. Ingest (`library.ingest`, the import confirm), the orphan relink and the in-place link hold it for reading across the resolution of the folder, the move and the insert; `rescanFiles` holds it for reading; a folder path change (rule 51), a folder delete (rule 52), the move of a media between folders (`media-write.md` rule 102) and a legacy `path` change on `PATCH /libraries/:id` (rule 53) hold it for writing. It is always taken after the media lock, never before, and no other lock is taken while waiting for it, so a relocation or delete never meets a half-placed file.
+60. `metadataProfile` (`{primaryTypes, secondaryTypes, statuses}`, `music.md` rule 50) is read and written by `POST` and `PATCH /api/libraries`: `null` clears it, an invalid object is a 400, and `GET` answers the effective profile for a library holding `album` (absent for the others).
 
 ## SQL
 

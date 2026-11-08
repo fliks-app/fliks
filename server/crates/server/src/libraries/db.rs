@@ -29,6 +29,9 @@ pub struct Library {
     pub optimize_profile_id: Option<i32>,
     pub optimize_new_files: bool,
     pub allow_rename: bool,
+    /// The wanted release groups and releases of a library of albums: the stored profile, else the default; absent elsewhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_profile: Option<Json<Value>>,
     pub path: Option<String>,
     pub label: Option<String>,
 }
@@ -113,7 +116,7 @@ pub fn not_found(id: i32) -> AppError {
 
 /// Byte-order name sort (collation-dependent lists), then `id`.
 pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
-    sqlx::query_as!(
+    let mut libraries = sqlx::query_as!(
         Library,
         r#"SELECT l.id, l."createdAt" AS created_at, l."updatedAt" AS updated_at, l.name, l.icon, l.color,
         l."mediaTypes" AS "media_types: Json<Vec<String>>", l."preferredProvider" AS preferred_provider,
@@ -122,13 +125,33 @@ pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
         "defaultLanguageProfileId" AS default_language_profile_id, l."mergeM4b" AS merge_m4b,
         l."mergeM4bReplace" AS merge_m4b_replace, l."optimizeProfileId" AS optimize_profile_id,
         l."optimizeNewFiles" AS optimize_new_files, l."allowRename" AS allow_rename,
+        NULL::jsonb AS "metadata_profile: Json<Value>",
         df.path AS "path?", NULL::text AS label
         FROM libraries l LEFT JOIN library_default_folders df ON df."libraryId" = l.id
         WHERE l.id = ANY($1) ORDER BY name COLLATE "C", l.id"#,
         ids
     )
     .fetch_all(db)
-    .await
+    .await?;
+    let stored: HashMap<i32, Json<Value>> = sqlx::query_as(
+        r#"SELECT id, "metadataProfile" FROM libraries WHERE id = ANY($1) AND "metadataProfile" IS NOT NULL"#,
+    )
+    .bind(ids)
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .collect();
+    for l in &mut libraries {
+        l.metadata_profile = stored.get(&l.id).cloned().or_else(|| {
+            l.media_types.0.iter().any(|t| t == "album").then(|| {
+                Json(
+                    serde_json::to_value(fliks_domain::music::profile::MetadataProfile::default())
+                        .expect("profile serialises"),
+                )
+            })
+        });
+    }
+    Ok(libraries)
 }
 
 pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Library>> {
@@ -284,4 +307,25 @@ pub fn constraint(e: sqlx::Error) -> AppError {
         (Some("22001"), _) => AppError::bad_request(vec!["a value is too long"]),
         _ => e.into(),
     }
+}
+
+/// The metadata profile of a library of albums: its own, else the default (also when the stored one is corrupt).
+pub async fn metadata_profile(
+    db: &PgPool,
+    library: i32,
+) -> sqlx::Result<fliks_domain::music::profile::MetadataProfile> {
+    use fliks_domain::music::profile::MetadataProfile;
+    let stored: Option<Json<Value>> =
+        sqlx::query_scalar(r#"SELECT "metadataProfile" FROM libraries WHERE id = $1"#)
+            .bind(library)
+            .fetch_optional(db)
+            .await?
+            .flatten();
+    Ok(stored
+        .and_then(|v| {
+            MetadataProfile::parse(&v.0)
+                .map_err(|e| tracing::warn!("library {library}: corrupt metadata profile: {e}"))
+                .ok()
+        })
+        .unwrap_or_default())
 }
