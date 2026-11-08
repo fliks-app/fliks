@@ -5,6 +5,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import type { Media } from '../../../core/services/api/media.service';
 import type { AlbumDetail, Track } from '../../../core/services/api/music.models';
 import { AuthService } from '../../../core/services/auth.service';
+import { PartyService } from '../../../core/services/party/party.service';
 import { bookSpecProviders } from '../book/book-test-setup';
 import { AlbumPageComponent } from './album-page.component';
 
@@ -22,6 +23,7 @@ function setup(tracks: Track[]) {
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
       { provide: AudioPlayerService, useValue: player },
+      { provide: PartyService, useValue: { active: () => false } },
       { provide: AuthService, useValue: { hasPermission: () => false, user: () => null, sessionEpoch: () => 0 } },
     ),
   });
