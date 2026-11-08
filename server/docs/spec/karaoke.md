@@ -50,3 +50,9 @@ Scope: what the host does with the engine's karaoke jobs (`fliks-engine` `docs/s
 ## Wire and migration
 
 22. `1789000000970_karaoke.sql` creates `derived_audio` (an index led by `mediaFileId` through the unique key, `set_updated_at`). Two SSE events join the catalogue, `karaoke.model_changed` and `karaoke.job_changed`; neither is a domain event.
+
+## Experience (F11, partly)
+
+23. **UltraStar import**: a sidecar `.txt` with a `#BPM:` header is read as UltraStar (`music.md` rule 63) through the ordinary lyrics discovery; its cues carry `pitch` and `golden`, so a track needs no `Melody` run (`has_pitch`). `#VOCALS`/`#INSTRUMENTAL` and MP3+G are not imported yet.
+24. **Stems in shells with an absolute server URL**: the client asks for `GET /api/media-files/:id/stems/:kind?token=<file-bound stream token>` on `resolveUrl`, sets `crossOrigin=anonymous` on the stem elements, and the CORS layer exposes `Content-Range`, `Accept-Ranges`, `Content-Length` and `ETag`. A stem element that errors after load hands the sound back to the original.
+25. **Scoring and queue are client-side** (`core/services/karaoke/`): octave-folded hit within a difficulty window, golden twice, 90 % line bonus, round-robin singer order over party proposals, pitch frames (`karaoke-pitch` data channel batches, never audio).

@@ -71,6 +71,7 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
                     byte_end: w.byte_end,
                     agent_id: agent_id.clone(),
                     pitch: None,
+                    golden: false,
                 })
                 .collect();
             (!cues.is_empty()).then(|| Line {

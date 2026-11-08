@@ -1,7 +1,10 @@
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Request, State};
-use axum::http::header::{ACCESS_CONTROL_REQUEST_METHOD, CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
+use axum::http::header::{
+    ACCEPT_RANGES, ACCESS_CONTROL_REQUEST_METHOD, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE,
+    CONTENT_TYPE, ETAG, HeaderValue,
+};
 use axum::http::{Method, StatusCode};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
@@ -125,7 +128,8 @@ pub fn apply(
             Method::POST,
             Method::DELETE,
         ])
-        .allow_headers(AllowHeaders::mirror_request());
+        .allow_headers(AllowHeaders::mirror_request())
+        .expose_headers([CONTENT_RANGE, ACCEPT_RANGES, CONTENT_LENGTH, ETAG]);
     // Media and downloads stay byte-for-byte: already compressed, or served with a length and ranges.
     let compress = DefaultPredicate::new()
         .and(NotForContentType::const_new("video/"))

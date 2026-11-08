@@ -1,12 +1,16 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../auth.service';
+import { ServerConfigService } from '../server-config.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import type { KaraokeItemState, KaraokeModel, KaraokeModels, KaraokeStatus, StemKind } from './karaoke.models';
 
 @Injectable({ providedIn: 'root' })
 export class KaraokeApiService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly serverConfig = inject(ServerConfigService);
   /** Callers show their own state for these failures (engine absent, no stems). */
   private readonly quiet = { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
 
@@ -38,8 +42,11 @@ export class KaraokeApiService {
     return firstValueFrom(this.http.delete<void>(`/api/items/${itemId}/karaoke`));
   }
 
-  /** Same-origin path: the session cookie is the credential. */
+  /** A same-origin path rides the session cookie; a shell with an absolute server URL carries the file-bound stream token. */
   stemUrl(mediaFileId: number, kind: StemKind): string {
-    return `/api/media-files/${mediaFileId}/stems/${kind}`;
+    const path = `/api/media-files/${mediaFileId}/stems/${kind}`;
+    if (!this.serverConfig.isNative) return path;
+    const token = this.auth.playbackTokenFor(mediaFileId);
+    return `${this.serverConfig.resolveUrl(path)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
 }

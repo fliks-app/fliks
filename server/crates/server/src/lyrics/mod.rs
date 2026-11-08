@@ -76,9 +76,16 @@ fn entry(r: &Row, enhanced: bool, artist: &str, title: &str) -> Value {
                     .cues
                     .iter()
                     .map(|c| {
-                        json!({"start": c.start, "end": c.end,
+                        let mut cue = json!({"start": c.start, "end": c.end,
                             "value": l.text.get(c.byte_start..c.byte_end).unwrap_or(""),
-                            "byteStart": c.byte_start, "byteEnd": c.byte_end})
+                            "byteStart": c.byte_start, "byteEnd": c.byte_end});
+                        if let Some(p) = c.pitch {
+                            cue["pitch"] = json!(p);
+                        }
+                        if c.golden {
+                            cue["golden"] = json!(true);
+                        }
+                        cue
                     })
                     .collect();
                 let mut cl = json!({"index": i, "start": l.start, "end": l.end, "value": l.text, "cue": cues});

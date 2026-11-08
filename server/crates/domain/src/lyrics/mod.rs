@@ -2,6 +2,7 @@
 pub mod karaoke;
 mod lrc;
 mod ttml;
+mod ultrastar;
 
 use serde::{Deserialize, Serialize};
 
@@ -59,6 +60,8 @@ pub struct Cue {
     pub agent_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pitch: Option<f32>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub golden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -154,6 +157,7 @@ pub fn parse(format: Format, text: &str) -> Result<Parsed, String> {
     let text = clean(text);
     let p = match format {
         Format::Lrc | Format::Elrc => lrc::parse(&text)?,
+        Format::Plain if ultrastar::looks_like(&text) => ultrastar::parse(&text)?,
         Format::Plain if looks_synced(&text) => lrc::parse(&text)?,
         Format::Plain => plain(&text),
         Format::Srt => srt(&text),

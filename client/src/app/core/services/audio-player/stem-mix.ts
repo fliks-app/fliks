@@ -37,6 +37,7 @@ export class StemMix {
     private readonly context: () => AudioContext | null,
     private readonly url: (fileId: number, kind: StemKind) => string,
     private readonly onReady: () => void,
+    private readonly onFailed: () => void = () => undefined,
   ) {}
 
   /** True once both stems can play: the main element stays audible until then. */
@@ -107,11 +108,13 @@ export class StemMix {
     const make = (): Stem => {
       const el = new Audio();
       el.preload = 'auto';
+      el.crossOrigin = 'anonymous';
       el.preservesPitch = true;
       const gain = ctx.createGain();
       gain.gain.value = 0;
       ctx.createMediaElementSource(el).connect(gain).connect(ctx.destination);
       el.addEventListener('canplay', () => this.checkReady());
+      el.addEventListener('error', () => this.fileId !== null && el.getAttribute('src') && this.onFailed());
       return { el, gain };
     };
     try {
