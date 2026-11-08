@@ -136,6 +136,15 @@ async fn album_folder(
 
 /// Creates the album from its release group; a failure after the row exists deletes it.
 pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
+    create_album(st, c, true).await
+}
+
+/// An album left unmonitored picks no target edition: nothing wants its tracks.
+pub(crate) async fn create_album(
+    st: &AppState,
+    c: &Creation<'_>,
+    monitored: bool,
+) -> Result<i32, AppError> {
     let (ns, id) = c.id;
     let lang = crate::metadata::library_language(st, c.target.id).await?;
     let fetched = fetch(st, ns, id, &lang, c.prio).await?;
@@ -149,6 +158,7 @@ pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result
         overview: None,
         provider: Some(ns),
         refreshed: false,
+        monitored,
     };
     // The canonical id is what the album is linked to: a merged id the caller asked for becomes an alias.
     let canonical = fetched.album.external_id.clone();
@@ -195,7 +205,7 @@ pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result
         (c.user, None),
     )
     .await?;
-    if let Err(e) = target::ensure(st, media, c.prio).await {
+    if monitored && let Err(e) = target::ensure(st, media, c.prio).await {
         tracing::warn!("album #{media}: no target edition yet: {}", e.text());
     }
     Ok(media)

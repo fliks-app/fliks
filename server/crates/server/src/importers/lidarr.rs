@@ -5,9 +5,8 @@ use crate::{
     http::{AppError, auth::Authed},
     media::{
         external_ids,
-        write::{Creation, album_import::create_album_from, resolve_target_in},
+        write::{Creation, album_import::create_album, resolve_target_in},
     },
-    metadata::music::target,
     outbound::{LIST_TIMEOUT, base_url},
     state::AppState,
 };
@@ -193,7 +192,7 @@ pub(super) async fn import(
                 }
             }
             let specs = wants_of(local);
-            let made = create_album_from(
+            let made = create_album(
                 &st2,
                 &Creation {
                     kind: MediaKind::Album,
@@ -206,25 +205,11 @@ pub(super) async fn import(
                     wants: Some(&specs),
                     prio: Priority::Background,
                 },
+                monitored,
             )
             .await;
-            match made {
-                Ok(media) if !monitored => {
-                    if let Err(e) =
-                        crate::media::write::set_media_monitored(&st2, &[media], false).await
-                    {
-                        tracing::warn!("Lidarr import: album #{media} stays monitored: {e}");
-                    }
-                }
-                Ok(media) => {
-                    if let Err(e) = target::ensure(&st2, media, Priority::Background).await {
-                        tracing::warn!(
-                            "Lidarr import: album #{media} has no target yet: {}",
-                            e.text()
-                        );
-                    }
-                }
-                Err(e) => tracing::warn!("Lidarr import: album {id}: {}", e.text()),
+            if let Err(e) = made {
+                tracing::warn!("Lidarr import: album {id}: {}", e.text());
             }
         }
         for (mbid, local) in followed {

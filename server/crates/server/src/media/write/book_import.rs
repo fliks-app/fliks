@@ -184,6 +184,7 @@ pub(crate) async fn create_book(st: &AppState, new: &NewBook<'_>) -> Result<i32,
         overview: None,
         provider: None,
         refreshed: false,
+        monitored: true,
     };
     let (id, mut tx) = insert_row(st, &row, target, user, links, wants).await?;
     if discovered {
@@ -445,6 +446,7 @@ async fn insert_unanchored(
         overview: overview.as_deref(),
         provider: Some(pref),
         refreshed: true,
+        monitored: true,
     };
     let (id, mut tx) = insert_row(st, &row, target, c.user, &own, c.wants).await?;
     sqlx::query(r#"INSERT INTO book_details ("mediaId") VALUES ($1) ON CONFLICT DO NOTHING"#)

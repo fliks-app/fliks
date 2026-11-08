@@ -98,6 +98,7 @@ pub(super) struct Row<'a> {
     /// The provider the media is pinned to.
     pub provider: Option<Namespace>,
     pub refreshed: bool,
+    pub monitored: bool,
 }
 
 /// Inserts the row of a book or a comic with its wants and `links`, in a transaction left open for the
@@ -114,7 +115,7 @@ pub(super) async fn insert_row(
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, overview,
              "libraryId", "folderName", "preferredProvider", "metadataRefreshedAt", "addedById")
-           VALUES ($1, $1, $2, $3, 'released', true, $4, $5, $6, $7,
+           VALUES ($1, $1, $2, $3, 'released', $10, $4, $5, $6, $7,
              CASE WHEN $8 THEN now() END, $9)
            RETURNING id"#,
     )
@@ -127,6 +128,7 @@ pub(super) async fn insert_row(
     .bind(row.provider.as_ref().map(Namespace::as_str))
     .bind(row.refreshed)
     .bind(user)
+    .bind(row.monitored)
     .fetch_one(&mut *tx)
     .await?;
     let want = NewWant {

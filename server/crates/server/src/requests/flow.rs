@@ -351,6 +351,16 @@ pub async fn ensure_media(
         .as_deref()
         .filter(|_| spec.title.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
+    if spec.title.media_type == MediaKind::Album
+        && let Err(e) = crate::metadata::music::target::want_all(
+            st,
+            media_id,
+            fliks_domain::metadata::limiter::Priority::Interactive,
+        )
+        .await
+    {
+        tracing::warn!("album #{media_id}: not wanted as a whole yet: {}", e.text());
+    }
     Ok(Some(media_id))
 }
 

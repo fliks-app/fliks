@@ -340,6 +340,74 @@ struct Free {
     disc: i32,
     number: Option<i32>,
     recording: Option<String>,
+    title: Option<String>,
+}
+
+impl Free {
+    /// A file's track: its recording id, else its disc and track number, else its title.
+    fn pairs(&self, t: &TrackTags) -> bool {
+        t.recording
+            .as_ref()
+            .is_some_and(|r| self.recording.as_ref() == Some(r))
+            || (t.track.is_some() && self.number == t.track && self.disc == t.disc_number())
+            || t.title.as_ref().is_some_and(|n| {
+                self.title
+                    .as_ref()
+                    .is_some_and(|m| m.trim().to_lowercase() == n.trim().to_lowercase())
+            })
+    }
+}
+
+async fn target_edition(c: &mut PgConnection, media: i32) -> sqlx::Result<Option<i32>> {
+    Ok(
+        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
+            .bind(media)
+            .fetch_optional(&mut *c)
+            .await?
+            .flatten(),
+    )
+}
+
+/// Loads the free tracks and the last position of `edition` once.
+async fn load_free(
+    c: &mut PgConnection,
+    edition: i32,
+    free: &mut HashMap<i32, Vec<Free>>,
+    next: &mut HashMap<i32, i32>,
+) -> sqlx::Result<()> {
+    let std::collections::hash_map::Entry::Vacant(slot) = free.entry(edition) else {
+        return Ok(());
+    };
+    let list: Vec<(i32, i32, Option<i32>, Option<String>, Option<String>)> = sqlx::query_as(
+        r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, i.title
+           FROM items i JOIN track_details td ON td."itemId" = i.id
+           WHERE i."editionId" = $1
+             AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id)
+           ORDER BY i.id"#,
+    )
+    .bind(edition)
+    .fetch_all(&mut *c)
+    .await?;
+    slot.insert(
+        list.into_iter()
+            .map(|(item, disc, number, recording, title)| Free {
+                item,
+                disc,
+                number,
+                recording,
+                title,
+            })
+            .collect(),
+    );
+    let max: i32 = sqlx::query_scalar(
+        r#"SELECT COALESCE(max(td.position), 0) FROM track_details td JOIN items i ON i.id = td."itemId"
+           WHERE i."editionId" = $1"#,
+    )
+    .bind(edition)
+    .fetch_one(&mut *c)
+    .await?;
+    next.insert(edition, max);
+    Ok(())
 }
 
 fn edition_status(t: &TrackTags) -> Option<&'static str> {
@@ -582,51 +650,33 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             }
             continue;
         }
-        let edition = edition_for(&mut tx, st, media, t)
-            .await
-            .map_err(|e| e.to_string())?;
+        let target = if t.release.is_none() {
+            target_edition(&mut tx, media)
+                .await
+                .map_err(|e| e.to_string())?
+        } else {
+            None
+        };
+        if let Some(target) = target {
+            load_free(&mut tx, target, &mut free, &mut next)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        // A release-less file joins the target edition only where it pairs with one of its free tracks.
+        let edition = match target.filter(|e| free[e].iter().any(|f| f.pairs(t))) {
+            Some(e) => e,
+            None => edition_for(&mut tx, st, media, t)
+                .await
+                .map_err(|e| e.to_string())?,
+        };
         if !editions.contains(&edition) {
             editions.push(edition);
         }
-        if let std::collections::hash_map::Entry::Vacant(slot) = free.entry(edition) {
-            let list: Vec<(i32, i32, Option<i32>, Option<String>)> = sqlx::query_as(
-                r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text
-                   FROM items i JOIN track_details td ON td."itemId" = i.id
-                   WHERE i."editionId" = $1
-                     AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id)
-                   ORDER BY i.id"#,
-            )
-            .bind(edition)
-            .fetch_all(&mut *tx)
+        load_free(&mut tx, edition, &mut free, &mut next)
             .await
             .map_err(|e| e.to_string())?;
-            slot.insert(
-                list.into_iter()
-                    .map(|(item, disc, number, recording)| Free {
-                        item,
-                        disc,
-                        number,
-                        recording,
-                    })
-                    .collect(),
-            );
-            let max: i32 = sqlx::query_scalar(
-                r#"SELECT COALESCE(max(td.position), 0) FROM track_details td JOIN items i ON i.id = td."itemId"
-                   WHERE i."editionId" = $1"#,
-            )
-            .bind(edition)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-            next.insert(edition, max);
-        }
         let heirs = free.entry(edition).or_default();
-        let heir = heirs.iter().position(|f| {
-            t.recording
-                .as_ref()
-                .is_some_and(|r| f.recording.as_ref() == Some(r))
-                || (t.track.is_some() && f.number == t.track && f.disc == t.disc_number())
-        });
+        let heir = heirs.iter().position(|f| f.pairs(t));
         let item = match heir {
             Some(i) => heirs.remove(i).item,
             None => {
@@ -712,7 +762,18 @@ async fn album_facts(
                 .to_lowercase();
             provider::PRIMARY_TYPES.iter().find(|k| **k == ty).copied()
         });
-        let compilation = tags.iter().any(|t| t.compilation);
+        let tagged_line = tags
+            .iter()
+            .find(|t| !t.album_artists.is_empty())
+            .map(|t| &t.album_artists);
+        let mut firsts: Vec<String> = tags
+            .iter()
+            .filter_map(|t| Some(t.artists.first()?.name.to_lowercase()))
+            .collect();
+        firsts.sort();
+        firsts.dedup();
+        let compilation =
+            tags.iter().any(|t| t.compilation) || (tagged_line.is_none() && firsts.len() > 1);
         let first = tags
             .iter()
             .filter_map(|t| provider::partial_date(t.original_date.as_deref()?))
@@ -727,18 +788,15 @@ async fn album_facts(
         .bind(first)
         .execute(&mut *c)
         .await?;
-        let mut artists: Vec<Credited> = vec![];
-        if !compilation {
-            let line = tags
-                .iter()
-                .find(|t| !t.album_artists.is_empty())
-                .map(|t| &t.album_artists)
-                .or_else(|| {
-                    tags.iter()
-                        .find(|t| !t.artists.is_empty())
-                        .map(|t| &t.artists)
-                });
-            artists = line.into_iter().flatten().map(credited).collect();
+        let line = tagged_line.or_else(|| {
+            tags.iter()
+                .find(|t| !t.artists.is_empty())
+                .map(|t| &t.artists)
+                .filter(|_| !compilation)
+        });
+        let mut artists: Vec<Credited> = line.into_iter().flatten().map(credited).collect();
+        if compilation && artists.is_empty() {
+            artists = vec![people::various_artists()];
         }
         people::replace_album_artists(c, media, &artists).await?;
     }

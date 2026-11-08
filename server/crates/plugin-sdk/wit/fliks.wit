@@ -248,6 +248,9 @@ interface host {
   /// track monitored. Needs `media:create` and `media:read`.
   music-want-recording: func(recording: recording-ref, library-id: option<u32>)
     -> result<wanted-track, host-error>;
+  /// The track `recording` that a library holds a file for, found without creating or monitoring anything;
+  /// none when no track of the library has a file for it. Needs `media:read`.
+  music-find-recording: func(recording: recording-ref) -> result<option<wanted-track>, host-error>;
   /// The playlist `name` of user `user-id`, created when missing, holding exactly `item-ids` in that order.
   /// Needs `playlists:write`.
   playlist-sync: func(user-id: u32, name: string, item-ids: list<u32>) -> result<u32, host-error>;

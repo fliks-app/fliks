@@ -137,7 +137,7 @@ The contract is `provider-plugins.md`; these rules are the part the plugin pipel
 59. Registration of the block checks the declared namespaces in order (`provider-plugins.md` rules 19-21): `namespace-not-owned`, `unknown-provider-namespace`, `core-namespace-not-official`, `invalid-namespace-pattern`; the claim of the namespaces against `provider_namespaces` (`namespace-signer-changed`) follows the handshake of step (10). The first failure ends the registration with that reason.
 60. A provider is served on its own `provider` lane and its outbound requests take the limiter semantics of `provider-plugins.md` rules 50-55 instead of the plain outbound guard alone.
 61. A provider's config fields may declare `"default": "fliks:<key>"`; the `hello` config and `config.get` resolve the stored override, else the Fliks default (`provider-plugins.md` rules 34-40). Rule 24's ownership applies to the override.
-62. `media.resolveOrCreate` also serves `album`, `music.wantRecording` and `playlist.sync` are host imports of the plugin `host` interface (`music.md` rule 58). The scope `playlists:write` joins the manifest scopes.
+62. `media.resolveOrCreate` also serves `album`, `music.wantRecording`, `music.findRecording` and `playlist.sync` are host imports of the plugin `host` interface (`music.md` rule 58). The scope `playlists:write` joins the manifest scopes.
 
 ## SQL
 
@@ -431,6 +431,9 @@ interface host {
   /// track monitored. Needs `media:create` and `media:read`.
   music-want-recording: func(recording: recording-ref, library-id: option<u32>)
     -> result<wanted-track, host-error>;
+  /// The track `recording` that a library holds a file for, found without creating or monitoring anything;
+  /// none when no track of the library has a file for it. Needs `media:read`.
+  music-find-recording: func(recording: recording-ref) -> result<option<wanted-track>, host-error>;
   /// The playlist `name` of user `user-id`, created when missing, holding exactly `item-ids` in that order.
   /// Needs `playlists:write`.
   playlist-sync: func(user-id: u32, name: string, item-ids: list<u32>) -> result<u32, host-error>;
