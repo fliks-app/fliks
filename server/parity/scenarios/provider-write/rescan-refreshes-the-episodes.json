@@ -85,6 +85,7 @@
               "relativePath": "Rescan Show/Season 01/Rescan Show - S01E01.mkv",
               "size": 27383,
               "streamInfo": {
+                "attachments": 0,
                 "audio": [
                   {
                     "channelLayout": "mono",
