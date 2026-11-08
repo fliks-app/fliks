@@ -1,0 +1,66 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.lyrics.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.lyrics.subtitle' | translate }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.lyrics.section_fetch' | translate }}</h2>
+
+        <app-toggle-field
+          [value]="autoFetch()"
+          (valueChange)="autoFetch.set($event)"
+          [label]="'settings.lyrics.auto_fetch' | translate"
+          [hint]="'settings.lyrics.auto_fetch_hint' | translate"
+          toggleClass="toggle-sm toggle-primary" />
+
+        <label class="form-control w-full max-w-lg">
+          <div class="label">
+            <span class="label-text">{{ 'settings.lyrics.provider_order' | translate }}</span>
+          </div>
+          <textarea class="textarea textarea-bordered w-full font-mono text-sm" rows="3"
+            [ngModel]="order()" (ngModelChange)="order.set($event)"></textarea>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.lyrics.provider_order_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="divider my-0"></div>
+        <h2 class="card-title text-base">{{ 'settings.lyrics.section_files' | translate }}</h2>
+
+        <app-toggle-field
+          [value]="writeBack()"
+          (valueChange)="writeBack.set($event)"
+          [label]="'settings.lyrics.write_back' | translate"
+          [hint]="'settings.lyrics.write_back_hint' | translate"
+          toggleClass="toggle-sm toggle-primary" />
+
+        <label class="form-control w-full max-w-lg">
+          <div class="label">
+            <span class="label-text">{{ 'settings.lyrics.sidecars' | translate }}</span>
+          </div>
+          <input type="text" class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="sidecars()" (ngModelChange)="sidecars.set($event)" />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.lyrics.sidecars_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+            @if (saving()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

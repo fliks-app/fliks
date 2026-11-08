@@ -6,12 +6,13 @@ use super::{
     render::{Answer, Obj, SubError},
 };
 use crate::{
-    playlists::{Role, assert_role},
+    playlists::{Role, assert_role, smart},
     state::AppState,
 };
 use chrono::{DateTime, Utc};
+use fliks_domain::music::playlist_rules::SmartRules;
 use serde_json::{Value, json};
-use sqlx::PgConnection;
+use sqlx::{PgConnection, types::Json};
 use std::collections::HashMap;
 
 const MAX_NAME: usize = 255;
@@ -49,9 +50,27 @@ async fn item_ids(db: impl sqlx::PgExecutor<'_>, id: i32) -> Result<Vec<i32>, sq
     .await
 }
 
+/// A smart playlist's tracks are its rules evaluated for the caller, never `playlist_items`.
+async fn order(st: &AppState, c: &Caller, id: i32) -> Result<Vec<i32>, sqlx::Error> {
+    let smart: Option<(i32, Json<SmartRules>)> = sqlx::query_as(
+        r#"SELECT "ownerId", rules FROM playlists WHERE id = $1 AND rules IS NOT NULL"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await?;
+    match smart {
+        Some((owner, Json(rules))) => smart::evaluate(&st.db, owner, &c.libraries, &rules).await,
+        None => item_ids(&st.db, id).await,
+    }
+}
+
+fn read_only() -> SubError {
+    SubError::new(50, "A smart playlist is read-only")
+}
+
 /// The visible tracks of a playlist, in playlist order.
 async fn entries(st: &AppState, c: &Caller, id: i32) -> Result<Vec<Value>, SubError> {
-    let order = item_ids(&st.db, id).await?;
+    let order = order(st, c, id).await?;
     let f = Filter {
         ids: Some(order.clone()),
         limit: ALL,
@@ -179,7 +198,9 @@ pub async fn create(st: &AppState, c: &Caller, p: &Params) -> Answer {
         } else {
             Role::Editor
         };
-        assert_role(&st.db, c.user(), id, min).await?;
+        if assert_role(&st.db, c.user(), id, min).await?.0.is_smart() {
+            return Err(read_only());
+        }
         let held = item_ids(&st.db, id).await?;
         let replaced: Vec<i32> = catalog::visible_tracks(&st.db, &c.libraries, &held)
             .await?
@@ -225,17 +246,15 @@ pub async fn update(st: &AppState, c: &Caller, p: &Params) -> Answer {
     let add = track_ids(&p.all("songIdToAdd"))?;
     check_tracks(st, c, &add).await?;
     let renames = p.get("name").is_some() || p.get("public").is_some();
-    assert_role(
-        &st.db,
-        c.user(),
-        id,
-        if renames {
-            Role::Administrator
-        } else {
-            Role::Editor
-        },
-    )
-    .await?;
+    let min = if renames {
+        Role::Administrator
+    } else {
+        Role::Editor
+    };
+    let (playlist, _) = assert_role(&st.db, c.user(), id, min).await?;
+    if playlist.is_smart() && (!add.is_empty() || p.get("songIndexToRemove").is_some()) {
+        return Err(read_only());
+    }
     let public = p.get("public").map(|v| v == "true");
     if public == Some(true) && c.a.user.share_disabled {
         return Err(SubError::new(50, "Sharing is disabled for this user"));

@@ -4,6 +4,7 @@ mod auth;
 mod browse;
 mod catalog;
 mod ids;
+mod lyrics;
 mod media;
 mod playlists;
 mod render;
@@ -195,6 +196,8 @@ async fn dispatch(st: &AppState, c: &Caller, endpoint: &str, p: &Params) -> Answ
         "getSongsByGenre" => browse::songs_by_genre(st, c, p).await,
         "getStarred2" => browse::starred(st, c, p).await,
         "search3" => browse::search(st, c, p).await,
+        "getLyricsBySongId" => lyrics::by_song_id(st, c, p).await,
+        "getLyrics" => lyrics::legacy(st, c, p).await,
         "getPlaylists" => playlists::list(st, c).await,
         "getPlaylist" => playlists::get(st, c, p).await,
         "createPlaylist" => playlists::create(st, c, p).await,

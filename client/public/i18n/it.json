@@ -2187,7 +2187,8 @@
       "optimize_profiles": "Profili",
       "optimize": "Impostazioni",
       "optimize_workers": "Worker",
-      "karaoke": "Karaoke"
+      "karaoke": "Karaoke",
+      "lyrics": "Testi"
     },
     "engine": {
       "title": "Motore di streaming remoto",
@@ -3797,6 +3798,22 @@
         "start_command": "Avvialo con:",
         "confirm_revoke": "Revocare il token di {{name}}? I suoi lavori tornano in coda."
       }
+    },
+    "lyrics": {
+      "title": "Testi",
+      "subtitle": "Da dove arrivano i testi e cosa se ne fa.",
+      "section_fetch": "Recupero",
+      "auto_fetch": "Recupero automatico",
+      "auto_fetch_hint": "Chiede ai fornitori i testi di ogni nuova traccia una volta importato il suo album.",
+      "provider_order": "Ordine dei fornitori",
+      "provider_order_hint": "Uno spazio dei nomi di fornitore per riga, interrogati dal primo all'ultimo. Vuoto: ordine di registrazione.",
+      "section_files": "File",
+      "write_back": "Scrivi i testi recuperati accanto alla traccia",
+      "write_back_hint": "Salva i testi sincronizzati di un fornitore o scritti da un utente come file .lrc o .elrc. Un file esistente non viene mai sovrascritto.",
+      "sidecars": "Estensioni dei file associati",
+      "sidecars_hint": "Estensioni lette accanto a una traccia, in ordine, separate da virgole. Vuoto: ttml, elrc, lrc, srt, txt.",
+      "load_error": "Impossibile caricare le impostazioni dei testi.",
+      "saved": "Impostazioni dei testi salvate."
     }
   },
   "roles": {

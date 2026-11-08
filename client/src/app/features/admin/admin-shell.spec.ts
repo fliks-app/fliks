@@ -38,6 +38,7 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.auto_approval', href: '/admin/settings/auto-approval' },
     { label: 'settings.nav.cleanup', href: '/admin/settings/cleanup' },
     { label: 'settings.nav.metadata', href: '/admin/settings/metadata' },
+    { label: 'settings.nav.lyrics', href: '/admin/settings/lyrics' },
     { label: 'settings.nav.karaoke', href: '/admin/settings/karaoke' },
   ] },
   { label: 'admin.section_subtitles', links: [

@@ -40,7 +40,7 @@ Fliks rather than linked into it.
 
 `fliks-server` embeds the provider plugin archives pinned in `server/providers.lock` (`fliks.tmdb`,
 `fliks.tvdb`, `fliks.openlibrary`, `fliks.bnf`, `fliks.googlebooks`, `fliks.audible`,
-`fliks.audnexus`, `fliks.thexem`, `fliks.musicbrainz`, `fliks.fanarttv`) at build time. They are built from
+`fliks.audnexus`, `fliks.thexem`, `fliks.musicbrainz`, `fliks.fanarttv`, `fliks.lrclib`) at build time. They are built from
 https://github.com/fliks-app/plugins and licensed **AGPL-3.0-or-later**, like Fliks; each plugin
 folder there holds its own `LICENSE`.
 

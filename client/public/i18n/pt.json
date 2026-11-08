@@ -2187,7 +2187,8 @@
       "optimize_profiles": "Perfis",
       "optimize": "Definições",
       "optimize_workers": "Workers",
-      "karaoke": "Karaoke"
+      "karaoke": "Karaoke",
+      "lyrics": "Letras"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -3797,6 +3798,22 @@
         "start_command": "Execute-o com:",
         "confirm_revoke": "Revogar o token de {{name}}? As suas tarefas voltam à fila."
       }
+    },
+    "lyrics": {
+      "title": "Letras",
+      "subtitle": "De onde vêm as letras e o que se faz com elas.",
+      "section_fetch": "Obtenção",
+      "auto_fetch": "Obtenção automática",
+      "auto_fetch_hint": "Pede aos fornecedores a letra de cada faixa nova depois de importado o seu álbum.",
+      "provider_order": "Ordem dos fornecedores",
+      "provider_order_hint": "Um espaço de nomes de fornecedor por linha, consultados do primeiro ao último. Vazio: ordem de registo.",
+      "section_files": "Ficheiros",
+      "write_back": "Escrever as letras obtidas junto à faixa",
+      "write_back_hint": "Guarda as letras sincronizadas de um fornecedor ou escritas por um utilizador como ficheiro .lrc ou .elrc. Um ficheiro existente nunca é substituído.",
+      "sidecars": "Extensões dos ficheiros associados",
+      "sidecars_hint": "Extensões lidas junto a uma faixa, por ordem, separadas por vírgulas. Vazio: ttml, elrc, lrc, srt, txt.",
+      "load_error": "Não foi possível carregar as definições das letras.",
+      "saved": "Definições das letras guardadas."
     }
   },
   "roles": {
