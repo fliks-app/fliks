@@ -41,7 +41,19 @@ const SLOTS: usize = 2;
 const DEFAULT_BUDGET_MB: i64 = 4096;
 const MIN_BUDGET_MB: i64 = 256;
 const DEFAULT_VERIFIED: [&str; 3] = ["coreml", "cuda", "migraphx"];
-const GPU_PROVIDERS: [&str; 3] = ["cuda", "migraphx", "coreml"];
+/// The engine's provider names, in its order (`PROVIDERS` of the engine's karaoke module).
+const GPU_PROVIDERS: [&str; 10] = [
+    "cuda",
+    "nvtensorrtrtx",
+    "amdgpu",
+    "migraphx",
+    "coreml",
+    "openvino",
+    "qnn",
+    "vitisai",
+    "webgpu",
+    "directml",
+];
 
 /// In-memory state of the runs and of the background pass.
 pub struct Shared {
@@ -109,7 +121,7 @@ pub(crate) async fn verified_providers(st: &AppState) -> Vec<String> {
         .unwrap_or_else(|| DEFAULT_VERIFIED.map(str::to_owned).to_vec())
 }
 
-/// The verified GPU provider the engine lists, if any (rule 16); OpenVINO is never one.
+/// The verified GPU provider the engine lists, if any (rule 16).
 pub fn gpu_provider(features: &[String], verified: &[String]) -> Option<String> {
     GPU_PROVIDERS
         .iter()
@@ -445,7 +457,11 @@ mod tests {
         let feats = s(&["onnx", "onnx-cuda", "onnx-openvino", "onnx-coreml"]);
         assert_eq!(gpu_provider(&feats, &s(&["coreml"])), Some("coreml".into()));
         assert_eq!(gpu_provider(&feats, &s(&["migraphx"])), None);
-        assert_eq!(gpu_provider(&feats, &s(&["openvino"])), None);
+        assert_eq!(
+            gpu_provider(&feats, &s(&["openvino"])),
+            Some("openvino".into())
+        );
+        assert_eq!(gpu_provider(&feats, &s(&["directml"])), None);
         assert_eq!(gpu_provider(&s(&["onnx"]), &s(&["cuda"])), None);
     }
 

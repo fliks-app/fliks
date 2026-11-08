@@ -396,6 +396,7 @@ async fn separate(
             .to_string_lossy()
             .into_owned()
     };
+    let providers = super::verified_providers(st).await;
     let req = JobRequest {
         kind: JobKind::Separate {
             info,
@@ -405,6 +406,7 @@ async fn separate(
             guide: Some(at("guide")),
             guide_vocals_gain: None,
             bitrate_kbps: None,
+            providers: Some(providers),
         },
         media: MediaRef {
             media_file_id: t.file as u32,
