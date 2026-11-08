@@ -125,6 +125,24 @@ async fn a_device_only_takes_a_codec_it_encodes(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_job_without_a_codec_is_only_leased_to_the_cpu_device(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    let id = job(&pool, None, "/m/a.mkv").await;
+    let hevc = vec!["hevc".to_string()];
+    let gpu = Want {
+        device: "gpu0",
+        hw: &hevc,
+        ..want("w1", &hevc)
+    };
+    assert!(store::take(&pool, &gpu).await.unwrap().is_none());
+    let taken = store::take(&pool, &want("w1", &hevc))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(taken.id, id);
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_hardware_planned_encode_stays_off_the_cpu_while_a_gpu_exists(pool: PgPool) {
     crate::db::migrate(&pool).await.unwrap();
     let id = job(&pool, Some("hevc"), "/m/a.mkv").await;
@@ -198,14 +216,18 @@ async fn engine_failures_retry_then_fail_and_busy_does_not_count(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn hello_requeues_the_leases_the_instance_no_longer_holds(pool: PgPool) {
     crate::db::migrate(&pool).await.unwrap();
-    let kept = job(&pool, None, "/m/a.mkv").await;
-    let lost = job(&pool, None, "/m/b.mkv").await;
-    store::take(&pool, &want("w1", &[])).await.unwrap().unwrap();
+    let hevc = vec!["hevc".to_string()];
+    let kept = job(&pool, Some("hevc"), "/m/a.mkv").await;
+    let lost = job(&pool, Some("hevc"), "/m/b.mkv").await;
+    store::take(&pool, &want("w1", &hevc))
+        .await
+        .unwrap()
+        .unwrap();
     store::take(
         &pool,
         &Want {
             device: "gpu",
-            ..want("w1", &[])
+            ..want("w1", &hevc)
         },
     )
     .await
