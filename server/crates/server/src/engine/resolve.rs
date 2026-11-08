@@ -116,6 +116,9 @@ pub async fn resolve(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Json<ResolveResponse>, AppError> {
     let request = parse(&body).map_err(AppError::bad_request)?;
+    if let Some(answer) = crate::queue::grant_answer(&st, &request).await? {
+        return Ok(Json(answer));
+    }
     let Some(caller) = user_for(&st, &request).await? else {
         return Ok(Json(deny()));
     };
@@ -357,6 +360,11 @@ async fn device_user(st: &AppState, req: &ResolveRequest) -> Result<Option<Calle
         }))
 }
 
+/// The token of a `Bearer`/cookie/bare credential, as `locate` reads it.
+pub(crate) fn credential_token(c: &str) -> Option<String> {
+    token_of(c)
+}
+
 /// `Basic <base64(identifier:password)>` as `(identifier, password)`; the identifier is free, at most 255 bytes.
 pub(crate) fn basic(credential: &str) -> Option<(String, String)> {
     use base64::{Engine, engine::general_purpose::STANDARD};
@@ -480,16 +488,8 @@ struct SubLocated {
     stored: Option<String>,
 }
 
-/// A media file the user may read, as its absolute path: library ACL, then the path must stay under the
-/// folder root, exist, and not escape it through a symlink. Every refusal is a 404 to the routes.
-async fn resolve_file(
-    st: &AppState,
-    user: &UserRow,
-    perms: &Permissions,
-    id: u32,
-) -> Result<PathBuf, Fail> {
-    let id = i32::try_from(id).map_err(|_| Fail::Denied)?;
-    let row = sqlx::query_as!(
+async fn located(st: &AppState, id: i32) -> Result<Located, Fail> {
+    sqlx::query_as!(
         Located,
         r#"SELECT m."libraryId" AS library_id, lf.path AS folder_path, mf."relativePath" AS stored
            FROM media_files mf
@@ -500,9 +500,11 @@ async fn resolve_file(
     )
     .fetch_optional(&st.db)
     .await?
-    .ok_or(Fail::Denied)?;
-    check_library(st, user, perms, row.library_id).await?;
-    check_file_edition(st, user, perms, id).await?;
+    .ok_or(Fail::Denied)
+}
+
+/// The row's file as an absolute path that exists and stays under the folder root through symlinks.
+async fn contained_path(row: &Located) -> Result<PathBuf, Fail> {
     let absolute = crate::ingest::fsx::locate(&row.folder_path, &row.stored).ok_or(Fail::Denied)?;
     tokio::fs::metadata(&absolute)
         .await
@@ -510,6 +512,34 @@ async fn resolve_file(
     crate::ingest::fsx::contained(&row.folder_path, absolute)
         .await
         .ok_or(Fail::Denied)
+}
+
+/// A file read for a leased job, no user behind it: the queue's own grant is the authorization.
+pub(crate) async fn library_path(st: &AppState, id: i32) -> Result<Option<PathBuf>, AppError> {
+    let found = match located(st, id).await {
+        Ok(row) => contained_path(&row).await,
+        Err(e) => Err(e),
+    };
+    match found {
+        Ok(p) => Ok(Some(p)),
+        Err(Fail::Denied) => Ok(None),
+        Err(Fail::Fault(e)) => Err(e),
+    }
+}
+
+/// A media file the user may read, as its absolute path: library ACL, then the path must stay under the
+/// folder root, exist, and not escape it through a symlink. Every refusal is a 404 to the routes.
+async fn resolve_file(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    id: u32,
+) -> Result<PathBuf, Fail> {
+    let id = i32::try_from(id).map_err(|_| Fail::Denied)?;
+    let row = located(st, id).await?;
+    check_library(st, user, perms, row.library_id).await?;
+    check_file_edition(st, user, perms, id).await?;
+    contained_path(&row).await
 }
 
 /// The edition gate of a file: its editions' libraries must be in the user's scope.

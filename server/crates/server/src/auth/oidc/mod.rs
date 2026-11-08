@@ -1,6 +1,6 @@
 //! OpenID Connect relying party (`docs/spec/auth.md`): discovery and JWKS caches, the
 //! guarded outbound calls, token exchange and the ID and logout token checks.
-mod db;
+pub(crate) mod db;
 pub(crate) mod providers;
 pub(crate) mod routes;
 mod sync;

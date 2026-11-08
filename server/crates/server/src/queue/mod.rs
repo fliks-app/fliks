@@ -10,6 +10,7 @@ mod enqueue;
 mod estimate;
 pub mod ocr;
 pub mod recover;
+pub(crate) mod remote;
 pub(crate) mod routes;
 pub mod settings;
 mod store;
@@ -36,6 +37,7 @@ pub use api::router;
 pub use auth::{Principal, WorkerAuth};
 pub use enqueue::{Outcome, queue_new};
 pub use estimate::{PerLevelOpt, speeds};
+pub use remote::grant_answer;
 pub use routes::worker_router;
 pub use store::boot;
 
@@ -57,6 +59,8 @@ pub struct Shared {
     /// Woken after a backup restore, so `committing` jobs are reviewed at once.
     pub recover: Notify,
     downloads: Mutex<HashMap<i32, Instant>>,
+    grants: Mutex<HashMap<String, remote::Grant>>,
+    uploads: Mutex<HashMap<i64, (i32, remote::Slot)>>,
     /// Files whose OCR just ended; their queueing runs in the queue's own task.
     ocr_ended: Mutex<Vec<i32>>,
     ocr_wake: Notify,
@@ -208,6 +212,7 @@ pub fn spawn(st: &AppState) {
                 Ok(_) => st.queue.wake.notify_waiters(),
                 Err(e) => tracing::warn!("job lease sweep failed: {e}"),
             }
+            remote::sweep(&st).await;
             commit::run(&st).await;
             cleanup::staged(&st.db).await;
             n = n.wrapping_add(1);
@@ -243,5 +248,7 @@ pub fn spawn(st: &AppState) {
 mod auto_tests;
 #[cfg(test)]
 mod commit_tests;
+#[cfg(test)]
+mod remote_tests;
 #[cfg(test)]
 mod tests;

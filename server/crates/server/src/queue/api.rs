@@ -37,7 +37,10 @@ pub fn router() -> Router<AppState> {
             "/api/optimize/workers/tokens",
             get(list_tokens).post(create_token),
         )
-        .route("/api/optimize/workers/tokens/{id}", delete(revoke_token))
+        .route(
+            "/api/optimize/workers/tokens/{id}",
+            delete(revoke_token).patch(patch_token),
+        )
 }
 
 fn db(e: sqlx::Error) -> AppError {
@@ -350,6 +353,46 @@ pub async fn revoke_token(
         return Err(AppError::not_found("Not Found"));
     }
     store::release_token(&st.db, id).await.map_err(db)?;
+    super::remote::sweep(&st).await;
+    st.queue.wake.notify_waiters();
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Renames, enables or disables a token, sets its path access and mappings; a disabled token loses its leases.
+#[utoipa::path(patch, path = "/api/optimize/workers/tokens/{id}", responses((status = 204), (status = 404)))]
+pub async fn patch_token(
+    State(st): State<AppState>,
+    authed: Authed,
+    PathParams(id): PathParams<i32>,
+    ValidJson(dto): ValidJson<tokens::Patch>,
+) -> Result<StatusCode, AppError> {
+    manage_settings(&authed)?;
+    if dto
+        .name
+        .as_deref()
+        .is_some_and(|n| n.trim().is_empty() || n.len() > 80)
+    {
+        return Err(AppError::bad_request("name must hold 1 to 80 characters"));
+    }
+    if dto
+        .path_access
+        .as_deref()
+        .is_some_and(|a| a != "none" && a != "shared")
+    {
+        return Err(AppError::bad_request("pathAccess must be none or shared"));
+    }
+    if dto.path_mappings.as_ref().is_some_and(|m| {
+        m.iter()
+            .any(|m| m.from.trim().is_empty() || m.to.trim().is_empty())
+    }) {
+        return Err(AppError::bad_request("a mapping needs both paths"));
+    }
+    if !tokens::update(&st.db, id, &dto).await.map_err(db)? {
+        return Err(AppError::not_found("Not Found"));
+    }
+    // A changed access or mapping, or a disabled token, ends the leases taken under the old terms.
+    store::release_token(&st.db, id).await.map_err(db)?;
+    super::remote::sweep(&st).await;
     st.queue.wake.notify_waiters();
     Ok(StatusCode::NO_CONTENT)
 }

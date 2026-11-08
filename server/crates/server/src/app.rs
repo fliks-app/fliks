@@ -100,6 +100,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::queue::routes::lease,
         crate::queue::routes::heartbeat,
         crate::queue::routes::result,
+        crate::queue::remote::put_output,
+        crate::queue::api::patch_token,
         crate::queue::api::enqueue,
         crate::queue::api::verify,
         crate::queue::api::list_jobs,

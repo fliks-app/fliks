@@ -3223,6 +3223,17 @@
           "204": {},
           "404": {}
         }
+      },
+      "patch": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "summary": "Renames, enables or disables a token, sets its path access and mappings; a disabled token loses its leases.",
+        "operationId": "patch_token",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
       }
     },
     "/api/parties": {
@@ -5704,6 +5715,19 @@
           "crate::queue::routes"
         ],
         "operationId": "heartbeat",
+        "responses": {
+          "200": {},
+          "409": {}
+        }
+      }
+    },
+    "/engine/jobs/{id}/output": {
+      "put": {
+        "tags": [
+          "crate::queue::remote"
+        ],
+        "summary": "`PUT /engine/jobs/{id}/output`: one chunk at `Upload-Offset`, which must equal the length held.",
+        "operationId": "put_output",
         "responses": {
           "200": {},
           "409": {}

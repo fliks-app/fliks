@@ -1,7 +1,8 @@
 //! Remote worker tokens: shown once at creation, stored as a SHA-256, revocable.
 use crate::{config::random_hex, device_tokens::hash, http::json::iso_ms};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use fliks_engine_core::api::PathMapping;
+use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
 const PREFIX: &str = "fkw_";
@@ -12,6 +13,9 @@ pub struct WorkerToken {
     pub id: i32,
     pub name: String,
     pub enabled: bool,
+    /// `shared`: the worker mounts the library; `none`: it reads over HTTP and uploads its output.
+    pub path_access: String,
+    pub path_mappings: Vec<PathMapping>,
     #[serde(with = "iso_ms")]
     pub created_at: DateTime<Utc>,
     #[serde(with = "iso_ms::opt")]
@@ -46,6 +50,8 @@ pub async fn create(pool: &PgPool, name: &str) -> sqlx::Result<(WorkerToken, Str
         id: row.get("id"),
         name: name.to_owned(),
         enabled: true,
+        path_access: "none".into(),
+        path_mappings: vec![],
         created_at: row.get("createdAt"),
         last_seen_at: None,
     };
@@ -54,7 +60,7 @@ pub async fn create(pool: &PgPool, name: &str) -> sqlx::Result<(WorkerToken, Str
 
 pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<WorkerToken>> {
     let rows = sqlx::query(
-        r#"SELECT id, name, enabled, "createdAt", "lastSeenAt" FROM worker_tokens
+        r#"SELECT id, name, enabled, "pathAccess", "pathMappings", "createdAt", "lastSeenAt" FROM worker_tokens
            WHERE "revokedAt" IS NULL ORDER BY id"#,
     )
     .fetch_all(pool)
@@ -65,6 +71,8 @@ pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<WorkerToken>> {
             id: r.get("id"),
             name: r.get("name"),
             enabled: r.get("enabled"),
+            path_access: r.get("pathAccess"),
+            path_mappings: serde_json::from_value(r.get("pathMappings")).unwrap_or_default(),
             created_at: r.get("createdAt"),
             last_seen_at: r.get("lastSeenAt"),
         })
@@ -89,4 +97,55 @@ pub async fn touch(pool: &PgPool, id: i32) -> sqlx::Result<()> {
         .execute(pool)
         .await
         .map(drop)
+}
+
+/// How a token's worker reaches the library: by path through `mappings`, or not at all.
+pub struct Access {
+    pub shared: bool,
+    pub mappings: Vec<PathMapping>,
+}
+
+pub async fn access(pool: &PgPool, id: i32) -> sqlx::Result<Access> {
+    let row =
+        sqlx::query(r#"SELECT "pathAccess", "pathMappings" FROM worker_tokens WHERE id = $1"#)
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map_or(
+        Access {
+            shared: false,
+            mappings: vec![],
+        },
+        |r| Access {
+            shared: r.get::<String, _>("pathAccess") == "shared",
+            mappings: serde_json::from_value(r.get("pathMappings")).unwrap_or_default(),
+        },
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Patch {
+    pub name: Option<String>,
+    pub enabled: Option<bool>,
+    pub path_access: Option<String>,
+    pub path_mappings: Option<Vec<PathMapping>>,
+}
+
+/// Whether a live token was found.
+pub async fn update(pool: &PgPool, id: i32, p: &Patch) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        r#"UPDATE worker_tokens SET name = COALESCE($2, name), enabled = COALESCE($3, enabled),
+             "pathAccess" = COALESCE($4, "pathAccess"), "pathMappings" = COALESCE($5, "pathMappings")
+           WHERE id = $1 AND "revokedAt" IS NULL"#,
+    )
+    .bind(id)
+    .bind(&p.name)
+    .bind(p.enabled)
+    .bind(&p.path_access)
+    .bind(p.path_mappings.as_ref().map(|m| serde_json::json!(m)))
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(n > 0)
 }
