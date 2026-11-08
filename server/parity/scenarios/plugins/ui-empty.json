@@ -191,18 +191,18 @@
               "en": {
                 "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "Base URL",
-                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror must answer on a public address and allow one request a second.",
+                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror on your own network works, and must allow one request a second.",
                 "musicbrainz.config.listenbrainzToken": "ListenBrainz token",
-                "musicbrainz.config.listenbrainzToken_hint": "Optional. Sent to ListenBrainz to rank search results by popularity; without it the ranking uses title, type and release count.",
+                "musicbrainz.config.listenbrainzToken_hint": "Optional. Create one at https://listenbrainz.org/settings/. It only raises ListenBrainz's rate limit for the popularity of albums and tracks; without it the calls are anonymous.",
                 "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               },
               "fr": {
                 "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "URL de base",
-                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir doit répondre sur une adresse publique et accepter une requête par seconde.",
+                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir de votre réseau convient, et doit accepter une requête par seconde.",
                 "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
-                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. Envoyé à ListenBrainz pour classer les résultats par popularité; sans lui, le classement repose sur le titre, le type et le nombre de sorties.",
+                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. À créer sur https://listenbrainz.org/settings/. Il relève seulement la limite de requêtes de ListenBrainz pour la popularité des albums et des titres; sans lui, les appels sont anonymes.",
                 "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               }
@@ -594,18 +594,18 @@
               "en": {
                 "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "Base URL",
-                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror must answer on a public address and allow one request a second.",
+                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror on your own network works, and must allow one request a second.",
                 "musicbrainz.config.listenbrainzToken": "ListenBrainz token",
-                "musicbrainz.config.listenbrainzToken_hint": "Optional. Sent to ListenBrainz to rank search results by popularity; without it the ranking uses title, type and release count.",
+                "musicbrainz.config.listenbrainzToken_hint": "Optional. Create one at https://listenbrainz.org/settings/. It only raises ListenBrainz's rate limit for the popularity of albums and tracks; without it the calls are anonymous.",
                 "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               },
               "fr": {
                 "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "URL de base",
-                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir doit répondre sur une adresse publique et accepter une requête par seconde.",
+                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir de votre réseau convient, et doit accepter une requête par seconde.",
                 "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
-                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. Envoyé à ListenBrainz pour classer les résultats par popularité; sans lui, le classement repose sur le titre, le type et le nombre de sorties.",
+                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. À créer sur https://listenbrainz.org/settings/. Il relève seulement la limite de requêtes de ListenBrainz pour la popularité des albums et des titres; sans lui, les appels sont anonymes.",
                 "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               }
