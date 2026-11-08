@@ -264,7 +264,10 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
             json!({"size": r.size, "durationMs": r.duration_ms}),
         );
     }
-    let imported = |k: &str| rows.iter().any(|r| r.kind == k && r.provider == store::IMPORT);
+    let imported = |k: &str| {
+        rows.iter()
+            .any(|r| r.kind == k && r.provider == store::IMPORT)
+    };
     let ready = store::KINDS.iter().all(|k| stems.contains_key(*k))
         || (imported("vocals") && imported("instrumental"));
     let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);

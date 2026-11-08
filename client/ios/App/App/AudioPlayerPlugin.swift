@@ -657,12 +657,26 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if had { applyGain() }
     }
 
-    /// Follows the queue's player: play or pause, rate, and a seek past 150 ms of drift.
+    private var stemSeeking = Set<ObjectIdentifier>()
+    private var stemSeekLatency = 0.0
+
+    /// Follows the queue's player: play or pause, rate, and one seek at a time past 150 ms of drift, aimed ahead by the last seek's latency.
     private func syncStems() {
         let run = player.timeControlStatus == .playing
         let at = player.currentTime()
         for p in stemPlayers where p.currentItem?.status == .readyToPlay {
-            if abs(p.currentTime().seconds - at.seconds) > 0.15 { p.seek(to: at, toleranceBefore: .zero, toleranceAfter: .zero) }
+            let id = ObjectIdentifier(p)
+            if !stemSeeking.contains(id), abs(p.currentTime().seconds - at.seconds) > 0.15 {
+                stemSeeking.insert(id)
+                let started = Date()
+                let target = CMTime(seconds: at.seconds + (run ? stemSeekLatency : 0), preferredTimescale: 1000)
+                p.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        self?.stemSeekLatency = Date().timeIntervalSince(started)
+                        self?.stemSeeking.remove(id)
+                    }
+                }
+            }
             if run { if p.rate != rate { p.rate = rate } } else if p.rate != 0 { p.pause() }
         }
     }
