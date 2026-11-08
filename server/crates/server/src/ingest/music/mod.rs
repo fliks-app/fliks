@@ -665,7 +665,7 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
-        crate::lyrics::store::rebind(&mut *tx, item, r.id, t.duration_ms)
+        crate::lyrics::store::rebind(&mut tx, item, r.id, t.duration_ms)
             .await
             .map_err(|e| e.to_string())?;
     }
