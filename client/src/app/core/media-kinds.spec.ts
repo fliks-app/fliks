@@ -2,6 +2,7 @@ import {
   DEFAULT_LIST_KIND,
   KIND_REGISTRY,
   MEDIA_KINDS,
+  canMarkWatched,
   isMediaKind,
   kindFromProviderSegment,
   kindFromSegment,
@@ -41,5 +42,14 @@ describe('media kind registry', () => {
     expect(kindOfListFilter('all')).toBe(DEFAULT_LIST_KIND);
     expect(kindOfListFilter('series')).toBe('series');
     expect(kindOfListFilter('movie')).toBe('movie');
+  });
+});
+
+describe('canMarkWatched', () => {
+  it('is video only: a series, or a movie with a file', () => {
+    expect(canMarkWatched({ type: 'series' })).toBe(true);
+    expect(canMarkWatched({ type: 'movie', files: [{}] })).toBe(true);
+    expect(canMarkWatched({ type: 'movie', files: [] })).toBe(false);
+    for (const type of ['book', 'comic', 'album'] as const) expect(canMarkWatched({ type, files: [{}] })).toBe(false);
   });
 });

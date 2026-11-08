@@ -86,6 +86,12 @@ export function isMediaKind(value: unknown): value is MediaType {
   return typeof value === 'string' && Object.hasOwn(KIND_REGISTRY, value);
 }
 
+/** A card toggles watched for a series (bulk endpoint) or a movie with a file; other kinds have no such state. */
+export function canMarkWatched(m: { type: MediaType; files?: readonly unknown[] }): boolean {
+  const k = KIND_REGISTRY[m.type];
+  return k.families.includes('video') && (k.hasSeasons || !!m.files?.length);
+}
+
 /** Router link of a title's detail page. */
 export function mediaDetailLink(type: MediaType, id: number | string): string[] {
   return ['/' + KIND_REGISTRY[type].segment, String(id)];

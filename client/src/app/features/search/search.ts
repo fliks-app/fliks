@@ -49,7 +49,7 @@ import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
-import { KIND_REGISTRY, kindOfListFilter, mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, canMarkWatched, kindOfListFilter, mediaDetailLink } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 /** The content types searched as shelves of their own (library, people and providers), not through the video flow. */
@@ -568,7 +568,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
   canMarkMediaWatched(m: Media): boolean {
-    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
+    return canMarkWatched(m);
   }
 
   async toggleMediaWatched(m: Media, watched: boolean) {

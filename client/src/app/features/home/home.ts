@@ -55,7 +55,7 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { CacheRead } from '../../core/interceptors/cache.interceptor';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
-import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { KIND_REGISTRY, canMarkWatched, mediaDetailLink } from '../../core/media-kinds';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
@@ -648,7 +648,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Needs a movie with a file or a series (bulk endpoint); lean rows without a file keep it hidden. */
   canMarkMediaWatched(m: Media): boolean {
-    return KIND_REGISTRY[m.type].hasSeasons || !!m.files?.length;
+    return canMarkWatched(m);
   }
 
   async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
