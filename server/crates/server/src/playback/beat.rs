@@ -190,7 +190,6 @@ async fn engine_beat(
         owner_id: Some(owner.to_string()),
         position_s: num(b, "positionSeconds"),
         state: b.get("state").and_then(Value::as_str).map(str::to_owned),
-        quality: b.get("quality").and_then(Value::as_str).map(str::to_owned),
     };
     let asked = async {
         let lost = st.engine.heartbeat(sid, &req).await?.session_lost;
