@@ -40,9 +40,20 @@ pub async fn rows(db: &PgPool, file: i32) -> sqlx::Result<Vec<Row>> {
     .await
 }
 
-/// The stems of `file` when all three exist on disk and were made by `model`.
+/// The provider of an imported stem (an UltraStar `#VOCALS`/`#INSTRUMENTAL` file), kept by eviction and model changes.
+pub const IMPORT: &str = "import";
+
+/// The stems of `file` when both imports exist on disk, or all three exist and were made by `model`.
 pub async fn valid(db: &PgPool, file: i32, model: &str, version: &str) -> sqlx::Result<bool> {
     let rows = rows(db, file).await?;
+    let on_disk = |k: &str, imported: bool| {
+        rows.iter().any(|r| {
+            r.kind == k && (r.provider == IMPORT) == imported && Path::new(&r.path).is_file()
+        })
+    };
+    if on_disk("vocals", true) && on_disk("instrumental", true) {
+        return Ok(true);
+    }
     Ok(KINDS.iter().all(|k| {
         rows.iter().any(|r| {
             r.kind == *k
@@ -129,6 +140,68 @@ async fn unlink(paths: Vec<String>) -> u64 {
     paths.len() as u64
 }
 
+/// Copies `src` as the `kind` stem of `file`, unless that import already holds a copy of the same size.
+pub async fn import(
+    db: &PgPool,
+    file: i32,
+    kind: &str,
+    src: &Path,
+    duration_ms: i32,
+) -> std::io::Result<()> {
+    let size = tokio::fs::metadata(src).await?.len() as i64;
+    let held: Option<(String, i64)> = sqlx::query_as(
+        r#"SELECT path, size FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2 AND provider = $3"#,
+    )
+    .bind(file)
+    .bind(kind)
+    .bind(IMPORT)
+    .fetch_optional(db)
+    .await
+    .map_err(std::io::Error::other)?;
+    if held.is_some_and(|(p, s)| s == size && Path::new(&p).is_file()) {
+        return Ok(());
+    }
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin")
+        .to_lowercase();
+    let dir = file_dir(file);
+    tokio::fs::create_dir_all(&dir).await?;
+    let to = dir.join(format!("{kind}-{}.{ext}", crate::config::random_hex(4)));
+    tokio::fs::copy(src, &to).await?;
+    let to = to.to_string_lossy().into_owned();
+    put(
+        db,
+        &New {
+            file,
+            kind,
+            model: "ultrastar",
+            model_version: "1",
+            provider: IMPORT,
+            path: &to,
+            size,
+            duration_ms,
+        },
+    )
+    .await
+    .map_err(std::io::Error::other)
+}
+
+/// The imported stems of `file` whose kind is not in `keep`.
+pub async fn drop_imports(db: &PgPool, file: i32, keep: &[&str]) -> sqlx::Result<u64> {
+    let keep: Vec<String> = keep.iter().map(|k| (*k).to_owned()).collect();
+    let paths = sqlx::query_scalar(
+        r#"DELETE FROM derived_audio WHERE "mediaFileId" = $1 AND provider = $2 AND kind <> ALL($3) RETURNING path"#,
+    )
+    .bind(file)
+    .bind(IMPORT)
+    .bind(keep)
+    .fetch_all(db)
+    .await?;
+    Ok(unlink(paths).await)
+}
+
 /// Every stem of these files (a replaced source, a deleted track).
 pub async fn invalidate_files(db: &PgPool, files: &[i32]) -> sqlx::Result<u64> {
     let paths = sqlx::query_scalar(
@@ -165,7 +238,7 @@ pub async fn invalidate_model(db: &PgPool, model: &str) -> sqlx::Result<u64> {
 /// Stems of another model or version than the one the host picks (rule 12).
 pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) -> sqlx::Result<u64> {
     let paths = sqlx::query_scalar(
-        r#"DELETE FROM derived_audio WHERE model <> $1 OR "modelVersion" <> $2 RETURNING path"#,
+        r#"DELETE FROM derived_audio WHERE provider <> 'import' AND (model <> $1 OR "modelVersion" <> $2) RETURNING path"#,
     )
     .bind(model)
     .bind(version)
@@ -187,7 +260,7 @@ pub async fn evict(db: &PgPool, budget: i64) -> sqlx::Result<u64> {
         let paths: Vec<String> = sqlx::query_scalar(
             r#"DELETE FROM derived_audio WHERE "mediaFileId" = (
                  SELECT "mediaFileId" FROM derived_audio GROUP BY "mediaFileId"
-                 HAVING max("lastUsedAt") < now() - make_interval(mins => $1)
+                 HAVING bool_and(provider <> 'import') AND max("lastUsedAt") < now() - make_interval(mins => $1)
                  ORDER BY max("lastUsedAt") LIMIT 1)
                RETURNING path"#,
         )

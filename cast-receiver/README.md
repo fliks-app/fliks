@@ -31,6 +31,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 - `index.html` — entry point loaded by the Chromecast.
 - `edl.js`: EDL skip/mute policy (port of `client/src/app/core/utils/edl-policy.ts`).
 - `cues.js`: skip cue and progress band policy.
+- `lyrics.js`: joins the chunked lyrics document and finds the active line and each word's fill (`node --test lyrics.test.js`).
 - `captions.js`: the sender's text track style as CSS for the receiver's own caption layer.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
@@ -133,6 +134,16 @@ because a plain-HTTP NAS cannot serve images to the HTTPS receiver. Test from De
 ```ts
 { kind: 'party_reaction', emoji: string, username: string, img: string | null }
 { kind: 'party_chat', id: number | string, username: string, text: string, sep: string }
+```
+
+Lyrics of the playing music track, sent by the same sender (`karaoke.md` rule 28). The document is cut
+at 40 000 characters so each message stays under the 64 KiB limit; a lower `seq` than the one held is ignored.
+Lyrics hide while nothing plays, and `lyrics_clear` (or the sender leaving) drops them.
+
+```ts
+{ kind: 'lyrics', itemId: number, seq: number, part: number, parts: number, data: string }
+// the parts of one seq joined parse as { rows: {start?, end?, text, cues?: {start, end, byteStart, byteEnd}[]}[], offset: number, synced: boolean }
+{ kind: 'lyrics_clear' }
 ```
 
 Reserved for upcoming features (skip-intro markers, queue auto-next,

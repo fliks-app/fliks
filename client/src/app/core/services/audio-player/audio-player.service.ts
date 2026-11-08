@@ -158,8 +158,8 @@ export class AudioPlayerService {
   readonly pitch = this._pitch.asReadonly();
   /** True when the playing music track has its stems ready and this player can mix them. */
   readonly stemsAvailable = this._stemsAvailable.asReadonly();
-  /** The native player has no processors for stems. */
-  readonly stemsNative = !!this.nativeAudio;
+  /** True where the native player cannot mix stems. */
+  readonly stemsNative = !!this.nativeAudio && !NATIVE_STEMS.includes(Capacitor.getPlatform());
   readonly replayGain = computed(() => this._prefs().replayGain);
   readonly preamp = computed(() => this._prefs().preamp);
   readonly active = computed(() => this._track() !== null);
@@ -628,7 +628,10 @@ export class AudioPlayerService {
 
   /** Applies the ReplayGain of the playing track to its element and of the buffered one to the standby. */
   private applyGains(): void {
-    if (this.nativeAudio) return this.pushGain();
+    if (this.nativeAudio) {
+      this.pushGain();
+      return this.pushNativeStems();
+    }
     const cur = this.el();
     if (cur) this.applyGain(cur, this._musicMode() ? this.mq.current : null, cur.src);
     const standby = this.els[1 - this.current];
@@ -637,13 +640,14 @@ export class AudioPlayerService {
   }
 
   private applyStemGains(): void {
+    if (this.nativeAudio) return this.pushNativeStems();
     if (!this.stems?.loaded) return;
     this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck);
     void this.audioCtx?.resume().catch(() => undefined);
   }
 
   private mix() {
-    return mixGains(this._stemMode(), this._vocalLevel(), !!this.stems?.loaded);
+    return mixGains(this._stemMode(), this._vocalLevel(), !!this.stems?.loaded || this.nativeStemFile !== null);
   }
 
   private context(): AudioContext | null {
@@ -693,7 +697,7 @@ export class AudioPlayerService {
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const itemId = this._musicMode() && !this.casting && !this.nativeAudio && this._pitch() === 0 ? this._track()?.itemId : undefined;
+    const itemId = this._musicMode() && !this.casting && !this.stemsNative && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
       const api = this.injector.get(KaraokeApiService);
@@ -703,6 +707,11 @@ export class AudioPlayerService {
       if (!ready) return this.dropStems();
       if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
       if (run !== this.stemsRun) return;
+      if (this.nativeAudio) {
+        this.nativeStemFile = state.fileId;
+        this._stemsAvailable.set(true);
+        return this.pushNativeStems();
+      }
       this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed());
       if (!this.stems.load(state.fileId)) return this.dropStems();
       this._stemsAvailable.set(true);
@@ -739,6 +748,22 @@ export class AudioPlayerService {
     if (n === 0) void this.refreshStems();
   }
 
+  private nativeStemFile: number | null = null;
+
+  /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
+  private pushNativeStems(): void {
+    const n = this.nativeAudio;
+    if (!n) return;
+    const file = this.nativeStemFile;
+    if (file === null || this._stemMode() === 'original') return void n.clearStems().catch(() => undefined);
+    const api = this.injector.get(KaraokeApiService);
+    const g = this.mix();
+    void n
+      .setStems({ key: String(file), instrumentalUrl: api.stemUrl(file, 'instrumental'), vocalsUrl: api.stemUrl(file, 'vocals') })
+      .then(() => n.setStemMix({ main: g.main, instrumental: g.instrumental, vocals: g.vocals }))
+      .catch(() => undefined);
+  }
+
   /** A stem that errors (evicted, token expired) hands the sound back to the original. */
   private onStemsFailed(): void {
     this.dropStems();
@@ -754,6 +779,10 @@ export class AudioPlayerService {
   private dropStems(): void {
     this.stemsRun++;
     this._stemsAvailable.set(false);
+    if (this.nativeStemFile !== null) {
+      this.nativeStemFile = null;
+      void this.nativeAudio?.clearStems().catch(() => undefined);
+    }
     if (!this.stems) return;
     this.stems.clear();
     this.applyGains();
@@ -1244,6 +1273,9 @@ export class AudioPlayerService {
     void n.addListener('track', (e) => this.onNativeTrack(e));
     void n.addListener('queue', (e) => this.onNativeQueue(e));
     void n.addListener('command', (e) => this.onNativeCommand(e));
+    void n.addListener('stems', (e) => {
+      if (e.state === 'failed') this.onStemsFailed();
+    });
     void n.addListener('error', () => this.onError());
     void n.addListener('refresh', () => void this.auth.refreshAccessToken());
     await n.configure({ deviceProfile: JSON.stringify(this.nativeProfile()) });
@@ -1292,6 +1324,7 @@ export class AudioPlayerService {
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
     await n.setQueue({ tracks: [...this.mq.tracks], index: this.mq.index, autoplay });
+    void this.refreshStems();
   }
 
   /** The parts of an audiobook, played back to back from `local` seconds into part `index`. */
@@ -1387,6 +1420,8 @@ export class AudioPlayerService {
       this._ended.set(false);
       this.info = null;
       this.sessionId = undefined;
+      this.dropStems();
+      void this.refreshStems();
     }
     if (e.mediaFileId && e.itemId === cur.itemId && !this.info) {
       this.info = { playMethod: 'DirectPlay', mediaFileId: e.mediaFileId, sessionId: e.sessionId } as PlaybackInfoResponse;
@@ -1471,6 +1506,9 @@ export class AudioPlayerService {
     }
   }
 }
+
+/** Platforms whose native player mixes stems (karaoke spec rule 30). */
+const NATIVE_STEMS = ['android', 'ios'];
 
 const NATIVE_AUDIO_ANDROID = {
   containers: ['mp3', 'flac', 'ogg', 'aac', 'wav', 'mp4'],

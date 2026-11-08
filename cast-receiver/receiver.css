@@ -401,3 +401,43 @@ body:not(.playing) .captions {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+
+/* Lyrics: the previous, current and next line over the artwork; a sung word fills with the primary colour. */
+.lyrics {
+  position: fixed;
+  left: 8%;
+  right: 8%;
+  bottom: 16vh;
+  z-index: 110;
+  text-align: center;
+  text-shadow: 0 0.3vh 1vh rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.lyrics.show {
+  opacity: 1;
+}
+
+.lyric {
+  min-height: 1.3em;
+  font-size: 3.4vh;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.lyric.cur {
+  font-size: 5.6vh;
+  font-weight: 700;
+  color: #fff;
+}
+
+.lyric .word {
+  --fill: 0%;
+  background: linear-gradient(90deg, var(--fliks-primary) var(--fill), rgba(255, 255, 255, 0.55) var(--fill));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}

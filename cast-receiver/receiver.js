@@ -20,6 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
+const { createAssembler, activeIndex, segments, fills } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -731,6 +732,86 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
 });
 context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
   if (event.senderId === partySender) partySender = null;
+});
+
+// --- Lyrics -----------------------------------------------------------------
+// The sender pushes the document in chunks (`lyrics`) and drops it with `lyrics_clear`; the receiver follows its own clock.
+
+const lyricsEl = document.getElementById('lyrics');
+const lyricsState = { doc: null, sender: null, shown: -2, words: [], add: createAssembler() };
+
+function lyricLine(row, cls) {
+  const el = document.createElement('div');
+  el.className = 'lyric ' + cls;
+  if (row) el.textContent = row.text;
+  return el;
+}
+
+function renderLyrics(i) {
+  const rows = lyricsState.doc.rows;
+  lyricsEl.replaceChildren();
+  lyricsState.words = [];
+  const cur = i >= 0 ? lyricLine(null, 'cur') : null;
+  if (cur) {
+    const row = rows[i];
+    for (const seg of row.cues && row.cues.length ? segments(row.text, row.cues) : [{ text: row.text, cue: null }]) {
+      const span = document.createElement('span');
+      span.textContent = seg.text;
+      if (seg.cue !== null) {
+        span.className = 'word';
+        lyricsState.words[seg.cue] = span;
+      }
+      cur.appendChild(span);
+    }
+  }
+  lyricsEl.append(lyricLine(rows[i - 1], 'prev'), cur || lyricLine(null, 'cur'), lyricLine(rows[i + 1], 'next'));
+}
+
+function refreshLyrics() {
+  const { doc } = lyricsState;
+  if (!doc || !document.body.classList.contains('playing')) return lyricsEl.classList.remove('show');
+  const pos = playerManager.getCurrentTimeSec() * 1000;
+  const timed = doc.synced && doc.rows.every((r) => r.start !== undefined && r.start !== null);
+  const i = timed ? activeIndex(doc.rows, pos, doc.offset) : -1;
+  const shown = timed ? i : -1;
+  if (shown !== lyricsState.shown) {
+    lyricsState.shown = shown;
+    if (timed) renderLyrics(i);
+    else {
+      lyricsEl.replaceChildren(...doc.rows.slice(0, 12).map((r) => lyricLine(r, 'next')));
+    }
+  }
+  const cues = timed && i >= 0 ? doc.rows[i].cues : null;
+  if (cues) fills(cues, pos, doc.offset).forEach((f, k) => lyricsState.words[k] && lyricsState.words[k].style.setProperty('--fill', f + '%'));
+  lyricsEl.classList.add('show');
+}
+setInterval(refreshLyrics, 100);
+
+function dropLyrics() {
+  lyricsState.doc = null;
+  lyricsState.shown = -2;
+  lyricsState.add = createAssembler();
+  lyricsEl.classList.remove('show');
+  lyricsEl.replaceChildren();
+}
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || (msg.kind !== 'lyrics' && msg.kind !== 'lyrics_clear')) return;
+  if (lyricsState.sender && lyricsState.sender !== event.senderId) return;
+  lyricsState.sender = event.senderId;
+  if (msg.kind === 'lyrics_clear') return dropLyrics();
+  const doc = lyricsState.add(msg);
+  if (doc) {
+    lyricsState.doc = doc;
+    lyricsState.shown = -2;
+  }
+});
+context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
+  if (event.senderId === lyricsState.sender) {
+    lyricsState.sender = null;
+    dropLyrics();
+  }
 });
 
 // --- Boot ---------------------------------------------------------------

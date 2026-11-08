@@ -81,6 +81,11 @@ export interface AudioPlayerPlugin {
   skipTo(o: { index: number }): Promise<void>;
   setRate(o: { rate: number }): Promise<void>;
   setGain(o: { mode: ReplayGainMode; preamp: number; duck: number }): Promise<void>;
+  /** Loads the track's stems unless `key` (the media file) already is; the native side drops them when the track changes. */
+  setStems(o: { key: string; instrumentalUrl: string; vocalsUrl: string }): Promise<void>;
+  /** Levels 0 to 1 of the queue's player and of each stem; the native side applies ReplayGain on top. */
+  setStemMix(o: { main: number; instrumental: number; vocals: number }): Promise<void>;
+  clearStems(): Promise<void>;
   setRepeat(o: { mode: 'off' | 'all' | 'one' }): Promise<void>;
   /** While true, controls outside the app come back as `command` events and do nothing natively. */
   setRouted(o: { routed: boolean }): Promise<void>;
@@ -90,6 +95,8 @@ export interface AudioPlayerPlugin {
   addListener(event: 'track', fn: (e: NativeAudioTrack) => void): Promise<PluginListenerHandle>;
   addListener(event: 'queue', fn: (e: NativeAudioQueue) => void): Promise<PluginListenerHandle>;
   addListener(event: 'command', fn: (e: NativeAudioCommand) => void): Promise<PluginListenerHandle>;
+  /** `failed`: a stem would not play and the sound is back on the original; `cleared`: the track changed. */
+  addListener(event: 'stems', fn: (e: { state: 'failed' | 'cleared' }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'error', fn: (e: { message: string }) => void): Promise<PluginListenerHandle>;
   /** The native side got a 401: the web layer refreshes the session, which it persists for native to read. */
   addListener(event: 'refresh', fn: () => void): Promise<PluginListenerHandle>;

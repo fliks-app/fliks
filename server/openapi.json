@@ -1945,6 +1945,20 @@
         }
       }
     },
+    "/api/media-files/{mediaFileId}/cdg": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "summary": "Rule 32: the `.cdg` of the track of `file`, served whole like a stem (same credentials).",
+        "operationId": "cdg_file",
+        "responses": {
+          "200": {},
+          "206": {},
+          "404": {}
+        }
+      }
+    },
     "/api/media-files/{mediaFileId}/stems/{kind}": {
       "get": {
         "tags": [

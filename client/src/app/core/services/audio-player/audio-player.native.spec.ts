@@ -1,5 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Capacitor } from '@capacitor/core';
+import { KaraokeApiService } from '../api/karaoke-api.service';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { MediaService } from '../api/media.service';
@@ -30,7 +32,7 @@ const track = (id: number): MusicTrackRequest => ({
 describe('AudioPlayerService on the native player', () => {
   const handlers = new Map<string, (e: unknown) => void>();
   const plugin = Object.fromEntries(
-    ['configure', 'attach', 'detach', 'setQueue', 'updateQueue', 'loadParts', 'play', 'pause', 'seek', 'skipTo', 'setRate', 'setGain', 'setRepeat', 'setRouted', 'stop'].map(
+    ['configure', 'attach', 'detach', 'setQueue', 'updateQueue', 'loadParts', 'play', 'pause', 'seek', 'skipTo', 'setRate', 'setGain', 'setRepeat', 'setRouted', 'stop', 'setStems', 'setStemMix', 'clearStems'].map(
       (m) => [m, vi.fn().mockResolvedValue(undefined)],
     ),
   ) as Record<string, ReturnType<typeof vi.fn>>;
@@ -66,6 +68,34 @@ describe('AudioPlayerService on the native player', () => {
         { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true, scope: () => 's' } },
       ],
     });
+  });
+
+  it('mixes stems in the native player only in a stem mode, and drops them when the track changes', async () => {
+    const platform = vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android');
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: KaraokeApiService,
+          useValue: {
+            itemState: vi.fn().mockResolvedValue({ state: 'ready', fileId: 10, stems: { instrumental: {}, vocals: {} } }),
+            stemUrl: (f: number, k: string) => `https://s/${f}/${k}`,
+          },
+        },
+      ],
+    });
+    const audio = TestBed.inject(AudioPlayerService);
+    platform.mockRestore();
+    expect(audio.stemsNative).toBe(false);
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
+    expect(plugin['setStems']).not.toHaveBeenCalled();
+    audio.setStemMode('instrumental');
+    await vi.waitFor(() => expect(plugin['setStemMix']).toHaveBeenCalledWith({ main: 0, instrumental: 1, vocals: 0 }));
+    expect(plugin['setStems']).toHaveBeenCalledWith({ key: '10', instrumentalUrl: 'https://s/10/instrumental', vocalsUrl: 'https://s/10/vocals' });
+    emit('stems', { state: 'failed' });
+    expect(audio.stemMode()).toBe('original');
+    expect(plugin['clearStems']).toHaveBeenCalled();
   });
 
   it('attaches with the device profile and hands the music queue over without resolving streams', async () => {

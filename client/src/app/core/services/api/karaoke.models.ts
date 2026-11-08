@@ -58,6 +58,8 @@ export interface KaraokeItemState {
   stems: Partial<Record<StemKind, { size: number; durationMs: number }>>;
   lyrics: boolean;
   melody: boolean;
+  /** A `.cdg` file sits next to the track (MP3+G). */
+  cdg: boolean;
 }
 
 /** Payload of the `karaoke.job_changed` SSE event. */

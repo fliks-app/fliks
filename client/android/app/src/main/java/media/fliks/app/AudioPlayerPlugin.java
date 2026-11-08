@@ -170,6 +170,27 @@ public class AudioPlayerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setStems(PluginCall call) {
+        String key = call.getString("key", "");
+        String instrumental = call.getString("instrumentalUrl", "");
+        String vocals = call.getString("vocalsUrl", "");
+        run(call, () -> host.setStems(key, instrumental, vocals));
+    }
+
+    @PluginMethod
+    public void setStemMix(PluginCall call) {
+        float main = call.getFloat("main", 1f);
+        float instrumental = call.getFloat("instrumental", 0f);
+        float vocals = call.getFloat("vocals", 0f);
+        run(call, () -> host.setStemMix(main, instrumental, vocals));
+    }
+
+    @PluginMethod
+    public void clearStems(PluginCall call) {
+        run(call, host::clearStems);
+    }
+
+    @PluginMethod
     public void setRepeat(PluginCall call) {
         String mode = call.getString("mode", "off");
         run(call, () -> host.exo().setRepeatMode("one".equals(mode) ? Player.REPEAT_MODE_ONE
