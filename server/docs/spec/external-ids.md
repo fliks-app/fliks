@@ -45,3 +45,6 @@ A plugin namespace's ids are normalised by the manifest's `idPattern` before any
 ## Persons
 
 A person's ids live in `person_external_ids`, FK-backed like `media_external_ids` but unique per `(provider, value)` for every provider (a person id names one person). The shape, the view `person_ids` and the lookup lock are in `persons.md` ("Credits and person ids").
+
+
+A merged MusicBrainz id is an alias row (`media_external_id_aliases`, `person_external_id_aliases`, `music.md` rule 15): `find` and `holder` read the live id first, then the alias, so a lookup by the old id still names the row.

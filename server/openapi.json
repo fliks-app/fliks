@@ -5696,6 +5696,31 @@
         }
       }
     },
+    "/api/works": {
+      "get": {
+        "tags": [
+          "metadata::music::works"
+        ],
+        "summary": "`GET /api/works?q=&limit=`: works by title, prefix terms ANDed, those a readable track plays.",
+        "operationId": "search",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/works/{id}": {
+      "get": {
+        "tags": [
+          "metadata::music::works"
+        ],
+        "summary": "`GET /api/works/:id`: 404 for a work no readable track plays.",
+        "operationId": "detail",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      }
+    },
     "/engine/jobs/lease": {
       "post": {
         "tags": [

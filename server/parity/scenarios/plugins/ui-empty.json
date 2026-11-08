@@ -55,6 +55,81 @@
             }
           },
           {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "fanarttv.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "fanarttv.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "hasDefault": false,
+                    "hint": "fanarttv.config.clientKey_hint",
+                    "key": "clientKey",
+                    "labelKey": "fanarttv.config.clientKey",
+                    "requiredByProvider": false,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "kind": "caption",
+                    "textKey": "fanarttv.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "fanarttv.config.title",
+                "subtitleKey": "fanarttv.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.fanarttv/general"
+                },
+                "id": "fliks-fanarttv.settings.general",
+                "labelKey": "fanarttv.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "fanarttv.config.apiKey": "API key",
+                "fanarttv.config.apiKey_hint": "Fliks ships a project key. Type your own to use it instead.",
+                "fanarttv.config.attribution": "Images from Fanart.tv (https://fanart.tv).",
+                "fanarttv.config.clientKey": "Personal key",
+                "fanarttv.config.clientKey_hint": "Optional. Your Fanart.tv personal API key, sent with every request.",
+                "fanarttv.config.subtitle": "Artist images and album covers from Fanart.tv.",
+                "fanarttv.config.title": "Fanart.tv"
+              },
+              "fr": {
+                "fanarttv.config.apiKey": "Clé d'API",
+                "fanarttv.config.apiKey_hint": "Fliks fournit une clé de projet. Saisissez la vôtre pour l'utiliser à la place.",
+                "fanarttv.config.attribution": "Images de Fanart.tv (https://fanart.tv).",
+                "fanarttv.config.clientKey": "Clé personnelle",
+                "fanarttv.config.clientKey_hint": "Facultatif. Votre clé d'API personnelle Fanart.tv, envoyée avec chaque requête.",
+                "fanarttv.config.subtitle": "Images d'artistes et pochettes d'albums de Fanart.tv.",
+                "fanarttv.config.title": "Fanart.tv"
+              }
+            },
+            "name": "Fanart.tv",
+            "pluginId": "fliks.fanarttv",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "fanarttv"
+              ]
+            }
+          },
+          {
             "configPages": [],
             "contributions": [],
             "i18n": {},
@@ -66,6 +141,80 @@
               ],
               "namespaces": [
                 "googlebooks"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "musicbrainz.config.baseUrl_hint",
+                    "key": "baseUrl",
+                    "labelKey": "musicbrainz.config.baseUrl",
+                    "requiredByProvider": false,
+                    "type": "text"
+                  },
+                  {
+                    "hasDefault": false,
+                    "hint": "musicbrainz.config.listenbrainzToken_hint",
+                    "key": "listenbrainzToken",
+                    "labelKey": "musicbrainz.config.listenbrainzToken",
+                    "requiredByProvider": false,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "kind": "caption",
+                    "textKey": "musicbrainz.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "musicbrainz.config.title",
+                "subtitleKey": "musicbrainz.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.musicbrainz/general"
+                },
+                "id": "fliks-musicbrainz.settings.general",
+                "labelKey": "musicbrainz.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
+                "musicbrainz.config.baseUrl": "Base URL",
+                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror must answer on a public address and allow one request a second.",
+                "musicbrainz.config.listenbrainzToken": "ListenBrainz token",
+                "musicbrainz.config.listenbrainzToken_hint": "Optional. Sent to ListenBrainz to rank search results by popularity; without it the ranking uses title, type and release count.",
+                "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
+                "musicbrainz.config.title": "MusicBrainz"
+              },
+              "fr": {
+                "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
+                "musicbrainz.config.baseUrl": "URL de base",
+                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir doit répondre sur une adresse publique et accepter une requête par seconde.",
+                "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
+                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. Envoyé à ListenBrainz pour classer les résultats par popularité; sans lui, le classement repose sur le titre, le type et le nombre de sorties.",
+                "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
+                "musicbrainz.config.title": "MusicBrainz"
+              }
+            },
+            "name": "MusicBrainz",
+            "pluginId": "fliks.musicbrainz",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "musicbrainz"
               ]
             }
           },
@@ -309,6 +458,81 @@
             }
           },
           {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "fanarttv.config.apiKey_hint",
+                    "key": "apiKey",
+                    "labelKey": "fanarttv.config.apiKey",
+                    "requiredByProvider": true,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "hasDefault": false,
+                    "hint": "fanarttv.config.clientKey_hint",
+                    "key": "clientKey",
+                    "labelKey": "fanarttv.config.clientKey",
+                    "requiredByProvider": false,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "kind": "caption",
+                    "textKey": "fanarttv.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "fanarttv.config.title",
+                "subtitleKey": "fanarttv.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.fanarttv/general"
+                },
+                "id": "fliks-fanarttv.settings.general",
+                "labelKey": "fanarttv.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "fanarttv.config.apiKey": "API key",
+                "fanarttv.config.apiKey_hint": "Fliks ships a project key. Type your own to use it instead.",
+                "fanarttv.config.attribution": "Images from Fanart.tv (https://fanart.tv).",
+                "fanarttv.config.clientKey": "Personal key",
+                "fanarttv.config.clientKey_hint": "Optional. Your Fanart.tv personal API key, sent with every request.",
+                "fanarttv.config.subtitle": "Artist images and album covers from Fanart.tv.",
+                "fanarttv.config.title": "Fanart.tv"
+              },
+              "fr": {
+                "fanarttv.config.apiKey": "Clé d'API",
+                "fanarttv.config.apiKey_hint": "Fliks fournit une clé de projet. Saisissez la vôtre pour l'utiliser à la place.",
+                "fanarttv.config.attribution": "Images de Fanart.tv (https://fanart.tv).",
+                "fanarttv.config.clientKey": "Clé personnelle",
+                "fanarttv.config.clientKey_hint": "Facultatif. Votre clé d'API personnelle Fanart.tv, envoyée avec chaque requête.",
+                "fanarttv.config.subtitle": "Images d'artistes et pochettes d'albums de Fanart.tv.",
+                "fanarttv.config.title": "Fanart.tv"
+              }
+            },
+            "name": "Fanart.tv",
+            "pluginId": "fliks.fanarttv",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "fanarttv"
+              ]
+            }
+          },
+          {
             "configPages": [],
             "contributions": [],
             "i18n": {},
@@ -320,6 +544,80 @@
               ],
               "namespaces": [
                 "googlebooks"
+              ]
+            }
+          },
+          {
+            "configPages": [
+              {
+                "fields": [
+                  {
+                    "hasDefault": false,
+                    "hint": "musicbrainz.config.baseUrl_hint",
+                    "key": "baseUrl",
+                    "labelKey": "musicbrainz.config.baseUrl",
+                    "requiredByProvider": false,
+                    "type": "text"
+                  },
+                  {
+                    "hasDefault": false,
+                    "hint": "musicbrainz.config.listenbrainzToken_hint",
+                    "key": "listenbrainzToken",
+                    "labelKey": "musicbrainz.config.listenbrainzToken",
+                    "requiredByProvider": false,
+                    "secret": true,
+                    "type": "text"
+                  },
+                  {
+                    "kind": "caption",
+                    "textKey": "musicbrainz.config.attribution"
+                  }
+                ],
+                "id": "general",
+                "labelKey": "musicbrainz.config.title",
+                "subtitleKey": "musicbrainz.config.subtitle"
+              }
+            ],
+            "contributions": [
+              {
+                "action": {
+                  "kind": "route",
+                  "path": "/admin/settings/plugins/fliks.musicbrainz/general"
+                },
+                "id": "fliks-musicbrainz.settings.general",
+                "labelKey": "musicbrainz.config.title",
+                "slot": "settings.page",
+                "weight": 100
+              }
+            ],
+            "i18n": {
+              "en": {
+                "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
+                "musicbrainz.config.baseUrl": "Base URL",
+                "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror must answer on a public address and allow one request a second.",
+                "musicbrainz.config.listenbrainzToken": "ListenBrainz token",
+                "musicbrainz.config.listenbrainzToken_hint": "Optional. Sent to ListenBrainz to rank search results by popularity; without it the ranking uses title, type and release count.",
+                "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
+                "musicbrainz.config.title": "MusicBrainz"
+              },
+              "fr": {
+                "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
+                "musicbrainz.config.baseUrl": "URL de base",
+                "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir doit répondre sur une adresse publique et accepter une requête par seconde.",
+                "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
+                "musicbrainz.config.listenbrainzToken_hint": "Facultatif. Envoyé à ListenBrainz pour classer les résultats par popularité; sans lui, le classement repose sur le titre, le type et le nombre de sorties.",
+                "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
+                "musicbrainz.config.title": "MusicBrainz"
+              }
+            },
+            "name": "MusicBrainz",
+            "pluginId": "fliks.musicbrainz",
+            "provider": {
+              "kinds": [
+                "album"
+              ],
+              "namespaces": [
+                "musicbrainz"
               ]
             }
           },
