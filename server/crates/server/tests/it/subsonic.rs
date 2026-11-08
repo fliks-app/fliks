@@ -1207,3 +1207,32 @@ async fn a_smart_playlist_lists_its_evaluated_tracks_and_refuses_song_writes(poo
         ["Hidden", "Other"]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_hit_from_a_plugin_namespace_is_stored_and_served(pool: PgPool) {
+    let c = ctx(pool).await;
+    let parsed =
+        fliks_domain::lyrics::parse(fliks_domain::lyrics::Format::Lrc, "[00:01.00]hi").unwrap();
+    fliks_server::lyrics::store::upsert(
+        &c.pool,
+        &fliks_server::lyrics::store::New {
+            item: 102,
+            file: None,
+            kind: "main",
+            lang: "und",
+            source: "provider:fliks.lrclib:lrclib",
+            source_ref: Some("42"),
+            parsed: &parsed,
+            raw: None,
+            duration_ms: None,
+            reviewed: false,
+        },
+    )
+    .await
+    .unwrap();
+    let got = c.alice("getLyricsBySongId", "id=tr-102").await;
+    assert_eq!(
+        got["lyricsList"]["structuredLyrics"][0]["source"],
+        "provider:fliks.lrclib:lrclib"
+    );
+}
