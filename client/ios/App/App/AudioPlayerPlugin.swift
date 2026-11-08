@@ -453,7 +453,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if let known = resolved[itemId] { return .success(known) }
         guard let key = boundKey, let profile = deviceProfile,
               let (data, status) = await apiCall(key, "POST", "/api/items/\(itemId)/playback-info?startAt=0", body: Data(profile.utf8)),
-              status == 200,
+              (200..<300).contains(status),
               let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return .failure(.unavailable) }
         let sid = info["sessionId"] as? String ?? ""
         let mediaFileId = (info["mediaFileId"] as? NSNumber)?.intValue ?? 0
