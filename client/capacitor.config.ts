@@ -45,6 +45,8 @@ const config: CapacitorConfig = {
   },
   ios: {
     allowMixedContent: true,
+    // The default ('recommended') makes the iPad WebView claim to be a desktop Mac.
+    preferredContentMode: 'mobile',
     webContentsDebuggingEnabled: true,
   },
 };
