@@ -20,7 +20,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{
         StatusCode,
         header::{CACHE_CONTROL, CONTENT_TYPE},
@@ -56,9 +56,22 @@ pub fn router() -> Router<AppState> {
         .route("/api/imports/orphans/cover", get(cover))
         .route(
             "/api/imports/library/orphans/relink-batch",
-            post(relink_batch),
+            post(relink_batch).layer(DefaultBodyLimit::max(RELINK_BODY_LIMIT)),
         )
-        .route("/api/imports/library/orphans/relink", post(relink))
+        .route(
+            "/api/imports/library/orphans/relink",
+            post(relink).layer(DefaultBodyLimit::max(RELINK_BODY_LIMIT)),
+        )
+}
+
+/// A relink body lists every file of a scan: a series library goes far past the global JSON cap.
+const RELINK_BODY_LIMIT: usize = 16 << 20;
+
+pub fn reads_own_body(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/imports/library/orphans/relink" | "/api/imports/library/orphans/relink-batch"
+    )
 }
 
 struct Lib {

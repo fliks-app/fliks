@@ -1245,3 +1245,22 @@ async fn a_stuck_source_survives_a_move_that_runs_before_it_is_freed(pool: PgPoo
     settled(&c).await;
     assert!(!src_dir.join("0.mkv").exists());
 }
+
+#[sqlx::test(migrations = false)]
+async fn orphan_relink_takes_a_body_past_the_json_cap(pool: PgPool) {
+    let c = ctx(pool).await;
+    for uri in [
+        "/api/imports/library/orphans/relink-batch",
+        "/api/imports/library/orphans/relink",
+    ] {
+        let big = json!({ "items": "x".repeat(200 * 1024) });
+        assert_eq!(call(&c, "POST", uri, &c.admin, big).await.0, 400);
+        let huge = json!({ "items": "x".repeat(17 << 20) });
+        assert_eq!(call(&c, "POST", uri, &c.admin, huge).await.0, 413);
+    }
+    let big = json!({ "name": "x".repeat(200 * 1024) });
+    assert_eq!(
+        call(&c, "POST", "/api/libraries", &c.admin, big).await.0,
+        413
+    );
+}
