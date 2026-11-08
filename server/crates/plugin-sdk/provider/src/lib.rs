@@ -48,10 +48,10 @@ pub mod bindings {
     });
 }
 
+pub use bindings::exports::fliks::plugin::lyrics_provider::{LyricsHit, LyricsQuery};
 pub use bindings::exports::fliks::plugin::metadata_provider::{
     Lang, ProviderError, SearchQuery, UpstreamError,
 };
-pub use bindings::exports::fliks::plugin::lyrics_provider::{LyricsHit, LyricsQuery};
 pub use bindings::exports::fliks::plugin::scene::ScenePair;
 #[doc(hidden)]
 pub use fliks_plugin_sdk as sdk;

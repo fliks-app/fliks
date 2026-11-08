@@ -268,8 +268,8 @@ pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
     let mut with_lyrics = with_scene.clone();
     with_lyrics.push("fliks:plugin/lyrics-provider@3.0.0");
     with_lyrics.sort_unstable();
-    let extended = provider
-        && (exports.iter().eq(with_scene.iter()) || exports.iter().eq(with_lyrics.iter()));
+    let extended =
+        provider && (exports.iter().eq(with_scene.iter()) || exports.iter().eq(with_lyrics.iter()));
     if exports.iter().ne(want.iter()) && !extended {
         return Err(format!(
             "exports {} instead of {}",
