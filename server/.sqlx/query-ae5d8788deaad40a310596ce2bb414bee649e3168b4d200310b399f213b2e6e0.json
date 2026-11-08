@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH old AS (SELECT \"stagedPath\" FROM jobs WHERE id = $1)\n           UPDATE jobs SET state = 'leased', attempt = attempt + 1, \"workerId\" = $2, \"deviceId\" = $3,\n             \"leaseUntil\" = now() + make_interval(secs => $4), \"startedAt\" = now(),\n             progress = 0, paused = false, \"updatedAt\" = now()\n           WHERE id = $1 RETURNING attempt, payload, (SELECT \"stagedPath\" FROM old) AS old",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "old",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "ae5d8788deaad40a310596ce2bb414bee649e3168b4d200310b399f213b2e6e0"
+}

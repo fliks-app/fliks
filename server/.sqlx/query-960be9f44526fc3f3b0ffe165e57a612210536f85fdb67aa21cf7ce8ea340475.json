@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET \"leaseUntil\" = now() + make_interval(secs => $1)\n           WHERE state = 'leased'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "960be9f44526fc3f3b0ffe165e57a612210536f85fdb67aa21cf7ce8ea340475"
+}

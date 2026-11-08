@@ -4,7 +4,7 @@ use crate::libraries::path::disk;
 use chrono::{DateTime, Utc};
 use fliks_engine_core::api::{JobError, JobErrorClass};
 use serde_json::{Value, json};
-use sqlx::{PgPool, Postgres, Row, Transaction, postgres::PgRow};
+use sqlx::{PgPool, Postgres, Transaction};
 use std::{collections::HashMap, path::Path};
 
 pub const LEASE_S: u32 = 60;
@@ -18,11 +18,11 @@ const STDERR_MAX: usize = 64 * 1024;
 
 /// Leases survive a server restart: a restart must not throw away hours of encoding.
 pub async fn boot(pool: &PgPool) -> sqlx::Result<()> {
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE jobs SET "leaseUntil" = now() + make_interval(secs => $1)
            WHERE state = 'leased'"#,
+        BOOT_GRACE_S as f64
     )
-    .bind(BOOT_GRACE_S as f64)
     .execute(pool)
     .await
     .map(drop)
@@ -30,7 +30,7 @@ pub async fn boot(pool: &PgPool) -> sqlx::Result<()> {
 
 /// Expired leases go back to the queue; a lost worker is not a failure.
 pub async fn expire(pool: &PgPool) -> sqlx::Result<u64> {
-    let r = sqlx::query(
+    let r = sqlx::query!(
         r#"UPDATE jobs SET state = 'queued', "workerId" = NULL, "deviceId" = NULL, "leaseUntil" = NULL,
              progress = 0, "updatedAt" = now() WHERE state = 'leased' AND "leaseUntil" < now()"#,
     )
@@ -41,11 +41,11 @@ pub async fn expire(pool: &PgPool) -> sqlx::Result<u64> {
 
 /// Leases of a revoked token's instances go back at once.
 pub async fn release_token(pool: &PgPool, token_id: i32) -> sqlx::Result<u64> {
-    let r = sqlx::query(
+    let r = sqlx::query!(
         r#"UPDATE jobs SET state = 'queued', "workerId" = NULL, "deviceId" = NULL, "leaseUntil" = NULL,
              progress = 0, "updatedAt" = now() WHERE state = 'leased' AND "workerId" LIKE $1"#,
+        format!("t{token_id}:%")
     )
-    .bind(format!("t{token_id}:%"))
     .execute(pool)
     .await?;
     Ok(r.rows_affected())
@@ -119,17 +119,17 @@ fn device_of(path: &Path) -> u64 {
 /// Bytes still held by originals in the trash, per filesystem: `done` jobs whose result names a
 /// `trashPath` that is not purged yet (written by the commit).
 pub async fn unpurged_trash(pool: &PgPool) -> sqlx::Result<HashMap<u64, i64>> {
-    let rows: Vec<(String, Option<i64>)> = sqlx::query_as(
-        r#"SELECT result ->> 'trashPath', "inSize" FROM jobs
+    let rows = sqlx::query!(
+        r#"SELECT result ->> 'trashPath' AS "path!", "inSize" AS size FROM jobs
            WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')"#,
     )
     .fetch_all(pool)
     .await?;
     Ok(tokio::task::spawn_blocking(move || {
         let mut by_dev: HashMap<u64, i64> = HashMap::new();
-        for (path, size) in rows {
-            let dev = Path::new(&path).parent().map_or(0, device_of);
-            *by_dev.entry(dev).or_default() += size.unwrap_or(0);
+        for r in rows {
+            let dev = Path::new(&r.path).parent().map_or(0, device_of);
+            *by_dev.entry(dev).or_default() += r.size.unwrap_or(0);
         }
         by_dev
     })
@@ -142,22 +142,24 @@ pub async fn unpurged_trash(pool: &PgPool) -> sqlx::Result<HashMap<u64, i64>> {
 pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let mut tx = pool.begin().await?;
     // Two takes of one device must not both see a free slot.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(format!("take:{}:{}", w.key, w.device))
-        .execute(&mut *tx)
-        .await?;
-    let running: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM jobs WHERE state = 'leased' AND "workerId" = $1 AND "deviceId" = $2"#,
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        format!("take:{}:{}", w.key, w.device)
     )
-    .bind(w.key)
-    .bind(w.device)
+    .execute(&mut *tx)
+    .await?;
+    let running = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM jobs WHERE state = 'leased' AND "workerId" = $1 AND "deviceId" = $2"#,
+        w.key,
+        w.device
+    )
     .fetch_one(&mut *tx)
     .await?;
     if running >= i64::from(w.max_jobs) {
         return Ok(None);
     }
-    let rows = sqlx::query(
-        r#"SELECT id, kind, "inPath", "inSize", "mediaFileId" FROM jobs
+    let rows = sqlx::query!(
+        r#"SELECT id, kind, "inPath" AS in_path, "inSize" AS in_size, "mediaFileId" AS media_file_id FROM jobs
            WHERE state = 'queued' AND "notBefore" <= now() AND (kind <> 'verify' OR $4)
              AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'
                   AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'
@@ -166,20 +168,19 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
                     WHEN payload #>> '{plan,software}' = 'true' THEN payload #>> '{plan,codec}' = ANY($2)
                     ELSE payload #>> '{plan,codec}' = ANY($1) OR payload #>> '{plan,codec}' = ANY($3) END)
            ORDER BY priority DESC, id LIMIT 16 FOR UPDATE SKIP LOCKED"#,
+        w.hw,
+        w.sw,
+        w.fallback,
+        w.local
     )
-    .bind(w.hw)
-    .bind(w.sw)
-    .bind(w.fallback)
-    .bind(w.local)
     .fetch_all(&mut *tx)
     .await?;
     let mut trash: Option<HashMap<u64, i64>> = None;
     let mut chosen = None;
     for r in rows {
-        let (id, kind): (i64, String) = (r.get("id"), r.get("kind"));
-        let in_path: Option<String> = r.get("inPath");
+        let (id, kind, in_path) = (r.id, r.kind, r.in_path);
         if kind == "optimize" {
-            let need: i64 = r.get::<Option<i64>, _>("inSize").unwrap_or(0);
+            let need = r.in_size.unwrap_or(0);
             if trash.is_none() {
                 trash = Some(unpurged_trash(pool).await?);
             }
@@ -197,26 +198,26 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
                 }
             }
         }
-        chosen = Some((id, kind, in_path, r.get::<Option<i32>, _>("mediaFileId")));
+        chosen = Some((id, kind, in_path, r.media_file_id));
         break;
     }
     let Some((id, kind, in_path, media_file_id)) = chosen else {
         return Ok(None);
     };
-    let row = sqlx::query(
+    let row = sqlx::query!(
         r#"WITH old AS (SELECT "stagedPath" FROM jobs WHERE id = $1)
            UPDATE jobs SET state = 'leased', attempt = attempt + 1, "workerId" = $2, "deviceId" = $3,
              "leaseUntil" = now() + make_interval(secs => $4), "startedAt" = now(),
              progress = 0, paused = false, "updatedAt" = now()
            WHERE id = $1 RETURNING attempt, payload, (SELECT "stagedPath" FROM old) AS old"#,
+        id,
+        w.key,
+        w.device,
+        f64::from(LEASE_S)
     )
-    .bind(id)
-    .bind(w.key)
-    .bind(w.device)
-    .bind(f64::from(LEASE_S))
     .fetch_one(&mut *tx)
     .await?;
-    let attempt: i32 = row.get("attempt");
+    let attempt = row.attempt;
     let staged = match (kind == "optimize", in_path.as_deref().and_then(parent_of)) {
         (true, Some(dir)) => Some(
             dir.join(staged_name(id, attempt))
@@ -225,21 +226,22 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
         ),
         _ => None,
     };
-    sqlx::query(r#"UPDATE jobs SET "stagedPath" = $2 WHERE id = $1"#)
-        .bind(id)
-        .bind(&staged)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        r#"UPDATE jobs SET "stagedPath" = $2 WHERE id = $1"#,
+        id,
+        staged
+    )
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
-    let old: Option<String> = row.get("old");
     Ok(Some(Taken {
         id,
         attempt,
         kind,
-        payload: row.get("payload"),
+        payload: row.payload,
         in_path,
         media_file_id,
-        old_staged: old.filter(|o| Some(o) != staged.as_ref()),
+        old_staged: row.old.filter(|o| Some(o) != staged.as_ref()),
         staged_path: staged,
     }))
 }
@@ -248,26 +250,23 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
 /// know as leased to this instance are returned to abandon, the others get a fresh lease.
 pub async fn hello(pool: &PgPool, key: &str, held: &[(i64, i32)]) -> sqlx::Result<Vec<i64>> {
     let mut tx = pool.begin().await?;
-    let leased = sqlx::query(
+    let leased = sqlx::query!(
         r#"SELECT id, attempt FROM jobs WHERE state = 'leased' AND "workerId" = $1 FOR UPDATE"#,
+        key
     )
-    .bind(key)
     .fetch_all(&mut *tx)
     .await?;
-    let leased: Vec<(i64, i32)> = leased
-        .iter()
-        .map(|r| (r.get("id"), r.get("attempt")))
-        .collect();
+    let leased: Vec<(i64, i32)> = leased.iter().map(|r| (r.id, r.attempt)).collect();
     let drop_ids: Vec<i64> = leased
         .iter()
         .filter(|j| !held.contains(j))
         .map(|j| j.0)
         .collect();
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE jobs SET state = 'queued', "workerId" = NULL, "deviceId" = NULL, "leaseUntil" = NULL,
              progress = 0, "updatedAt" = now() WHERE id = ANY($1)"#,
+        &drop_ids
     )
-    .bind(&drop_ids)
     .execute(&mut *tx)
     .await?;
     let keep: Vec<i64> = held
@@ -275,11 +274,11 @@ pub async fn hello(pool: &PgPool, key: &str, held: &[(i64, i32)]) -> sqlx::Resul
         .filter(|j| leased.contains(j))
         .map(|j| j.0)
         .collect();
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE jobs SET "leaseUntil" = now() + make_interval(secs => $2) WHERE id = ANY($1)"#,
+        &keep,
+        f64::from(LEASE_S)
     )
-    .bind(&keep)
-    .bind(f64::from(LEASE_S))
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -304,24 +303,24 @@ pub async fn heartbeat(
     progress: f64,
     paused: bool,
 ) -> sqlx::Result<Option<Beat>> {
-    let row = sqlx::query(
+    let row = sqlx::query!(
         r#"UPDATE jobs SET progress = $4, paused = $5, "updatedAt" = now(),
              "leaseUntil" = CASE WHEN state = 'leased' THEN now() + make_interval(secs => $6)
                                  ELSE "leaseUntil" END
            WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state IN ('leased', 'cancelled')
-           RETURNING state, COALESCE("leaseUntil", now()) AS lease"#,
+           RETURNING state, COALESCE("leaseUntil", now()) AS "lease!""#,
+        id,
+        key,
+        attempt,
+        progress.clamp(0.0, 1.0) as f32,
+        paused,
+        f64::from(LEASE_S)
     )
-    .bind(id)
-    .bind(key)
-    .bind(attempt)
-    .bind(progress.clamp(0.0, 1.0) as f32)
-    .bind(paused)
-    .bind(f64::from(LEASE_S))
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|r| Beat {
-        lease_until: r.get("lease"),
-        cancel: r.get::<String, _>("state") == "cancelled",
+        lease_until: r.lease,
+        cancel: r.state == "cancelled",
     }))
 }
 
@@ -379,20 +378,27 @@ fn error_json(e: &JobError) -> Value {
     json!({ "class": class_name(e.class), "message": e.message, "stderr": tail })
 }
 
+struct Fenced {
+    state: String,
+    kind: String,
+    failures: i32,
+}
+
 /// The row of a leased job, locked, when `(attempt, workerId)` still match.
 async fn lock_fenced(
     tx: &mut Transaction<'_, Postgres>,
     id: i64,
     key: &str,
     attempt: i32,
-) -> sqlx::Result<Option<PgRow>> {
-    sqlx::query(
-        r#"SELECT state, kind, failures, "stagedPath" FROM jobs
+) -> sqlx::Result<Option<Fenced>> {
+    sqlx::query_as!(
+        Fenced,
+        r#"SELECT state, kind, failures FROM jobs
            WHERE id = $1 AND "workerId" = $2 AND attempt = $3 FOR UPDATE"#,
+        id,
+        key,
+        attempt
     )
-    .bind(id)
-    .bind(key)
-    .bind(attempt)
     .fetch_optional(&mut **tx)
     .await
 }
@@ -412,24 +418,24 @@ pub async fn succeed(
     let Some(row) = lock_fenced(&mut tx, id, key, attempt).await? else {
         return Ok(Settled::Stale);
     };
-    if row.get::<String, _>("state") != "leased" {
+    if row.state != "leased" {
         return Ok(Settled::Done);
     }
-    let state = if row.get::<String, _>("kind") == "verify" {
+    let state = if row.kind == "verify" {
         "done"
     } else {
         "staged"
     };
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE jobs SET state = $2, progress = 1, "outSize" = $3, "outSha256" = $4, result = $5,
              "leaseUntil" = NULL, "finishedAt" = CASE WHEN $2 = 'done' THEN now() END,
              "encodedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
+        id,
+        state,
+        out_size,
+        out_sha256,
+        result
     )
-    .bind(id)
-    .bind(state)
-    .bind(out_size)
-    .bind(out_sha256)
-    .bind(result)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -449,14 +455,14 @@ pub async fn skip_nothing(
     let Some(row) = lock_fenced(&mut tx, id, key, attempt).await? else {
         return Ok(Settled::Stale);
     };
-    if row.get::<String, _>("state") == "leased" {
-        sqlx::query(
+    if row.state == "leased" {
+        sqlx::query!(
             r#"UPDATE jobs SET state = 'skipped', progress = 1, result = $2, "leaseUntil" = NULL,
                  error = '{"class": "nothing_to_do", "message": "the video was kept and nothing else changes"}'::jsonb,
                  "finishedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
+            id,
+            result
         )
-        .bind(id)
-        .bind(result)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
@@ -476,10 +482,10 @@ pub async fn fail(
     let Some(row) = lock_fenced(&mut tx, id, key, attempt).await? else {
         return Ok(Settled::Stale);
     };
-    if row.get::<String, _>("state") != "leased" {
+    if row.state != "leased" {
         return Ok(Settled::Done);
     }
-    let failures: i32 = row.get("failures");
+    let failures = row.failures;
     let error = error_json(err);
     let (state, delay) = match next_after(err.class, failures) {
         Next::Fail => ("failed", 0),
@@ -490,7 +496,7 @@ pub async fn fail(
         err.class,
         JobErrorClass::Engine | JobErrorClass::Network
     ));
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE jobs SET state = $2, error = $3, failures = failures + $4,
              "notBefore" = CASE WHEN $2 = 'queued' THEN now() + make_interval(secs => $5) ELSE "notBefore" END,
              "workerId" = CASE WHEN $2 = 'queued' THEN NULL ELSE "workerId" END,
@@ -498,12 +504,12 @@ pub async fn fail(
              "leaseUntil" = NULL, progress = 0,
              "finishedAt" = CASE WHEN $2 = 'queued' THEN NULL ELSE now() END, "updatedAt" = now()
            WHERE id = $1"#,
+        id,
+        state,
+        error,
+        real,
+        delay as f64
     )
-    .bind(id)
-    .bind(state)
-    .bind(error)
-        .bind(real)
-    .bind(delay as f64)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -513,8 +519,7 @@ pub async fn fail(
 /// The `stagedPath` of a job the worker reports on, for the size check of a local result.
 pub async fn staged_of(pool: &PgPool, id: i64) -> sqlx::Result<Option<String>> {
     Ok(
-        sqlx::query_scalar(r#"SELECT "stagedPath" FROM jobs WHERE id = $1"#)
-            .bind(id)
+        sqlx::query_scalar!(r#"SELECT "stagedPath" FROM jobs WHERE id = $1"#, id)
             .fetch_optional(pool)
             .await?
             .flatten(),
@@ -523,24 +528,24 @@ pub async fn staged_of(pool: &PgPool, id: i64) -> sqlx::Result<Option<String>> {
 
 /// Whether the instance still holds the lease of this attempt.
 pub async fn holds(pool: &PgPool, id: i64, key: &str, attempt: i32) -> sqlx::Result<bool> {
-    sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased')"#,
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased') AS "held!""#,
+        id,
+        key,
+        attempt
     )
-    .bind(id)
-    .bind(key)
-    .bind(attempt)
     .fetch_one(pool)
     .await
 }
 
 /// Cancels a job that is not being committed; whether it was.
 pub async fn cancel(pool: &PgPool, id: i64) -> sqlx::Result<bool> {
-    let n = sqlx::query(
+    let n = sqlx::query!(
         r#"UPDATE jobs SET state = 'cancelled', "finishedAt" = now(), "updatedAt" = now(),
              error = '{"class":"cancelled","message":"cancelled by an admin"}'::jsonb
            WHERE id = $1 AND state IN ('queued', 'leased', 'staged')"#,
+        id
     )
-    .bind(id)
     .execute(pool)
     .await?
     .rows_affected();

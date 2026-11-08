@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT result ->> 'trashPath' AS \"path!\", \"inSize\" AS size FROM jobs\n           WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "path!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "inSize"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      true
+    ]
+  },
+  "hash": "fca77e95f09cf50bfb0264a80582b494ac91b514386b13c77e5ddac84f4df8c1"
+}

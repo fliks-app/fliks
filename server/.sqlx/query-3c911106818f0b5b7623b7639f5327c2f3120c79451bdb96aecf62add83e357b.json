@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET state = 'queued', \"workerId\" = NULL, \"deviceId\" = NULL, \"leaseUntil\" = NULL,\n             progress = 0, \"updatedAt\" = now() WHERE state = 'leased' AND \"leaseUntil\" < now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3c911106818f0b5b7623b7639f5327c2f3120c79451bdb96aecf62add83e357b"
+}
