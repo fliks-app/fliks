@@ -19,6 +19,8 @@ Comics: [`spec/comics.md`](spec/comics.md) (the `comic` kind, volumes and issues
 Book files: [`spec/books-files.md`](spec/books-files.md) (OPF metadata, ISBNs, file and folder names, KOReader hash). KEPUB conversion: [`spec/kepub.md`](spec/kepub.md).
 OPDS: [`spec/opds.md`](spec/opds.md) (OPDS 1.2 catalogue on device tokens: routes, ACL, throttle, feed shapes).
 
+OpenSubsonic: [`spec/opensubsonic.md`](spec/opensubsonic.md) (the `/rest` music API: auth, envelope, ids, endpoints, stream credential).
+
 Device tokens: [`spec/device-tokens.md`](spec/device-tokens.md) (credentials of readers and sync apps, hashing, scope, resolve by token).
 Kobo sync: [`spec/kobo.md`](spec/kobo.md) (emulated Kobo store API on a `kobo` device token: library, covers, reading state, shelves, optional store proxy).
 KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, auth by device token, document hash, shared progression).

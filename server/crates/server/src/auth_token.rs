@@ -22,17 +22,20 @@ pub enum TokenScope {
 
 /// What a token is bound to besides its user: its session, and a live viewer session or a media file.
 struct Bound<'a> {
-    sid: i32,
+    sid: Option<i32>,
     live: Option<&'a str>,
     mf: Option<u32>,
+    /// The `subsonic` device token that issued a stream credential, which then has no session.
+    dt: Option<i32>,
 }
 
 impl Bound<'_> {
     fn session(sid: i32) -> Self {
         Self {
-            sid,
+            sid: Some(sid),
             live: None,
             mf: None,
+            dt: None,
         }
     }
 }
@@ -43,11 +46,14 @@ struct SignClaims<'a> {
     username: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     scope: Option<TokenScope>,
-    sid: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sid: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     live: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mf: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dt: Option<i32>,
     iat: i64,
     exp: i64,
 }
@@ -63,6 +69,8 @@ pub struct Claims {
     pub live: Option<String>,
     /// The media file a stream token opens on the data plane; absent on legacy tokens, which open any.
     pub mf: Option<u32>,
+    /// The `subsonic` device token a session-less stream credential comes from (`device-tokens.md` rule 16).
+    pub dt: Option<i32>,
     pub exp: i64,
 }
 
@@ -140,6 +148,29 @@ impl Jwt {
         )
     }
 
+    /// A file-bound stream credential for a `subsonic` device token: no session behind it.
+    pub fn sign_stream_for_device(
+        &self,
+        user_id: i32,
+        username: &str,
+        device_token: i32,
+        media_file_id: u32,
+        ttl_secs: u64,
+    ) -> Result<Signed, AppError> {
+        self.sign(
+            user_id,
+            username,
+            Some(TokenScope::Stream),
+            ttl_secs,
+            Bound {
+                sid: None,
+                live: None,
+                mf: Some(media_file_id),
+                dt: Some(device_token),
+            },
+        )
+    }
+
     pub fn sign_live(
         &self,
         user_id: i32,
@@ -204,6 +235,7 @@ impl Jwt {
             sid: bound.sid,
             live: bound.live,
             mf: bound.mf,
+            dt: bound.dt,
             iat,
             exp,
         };

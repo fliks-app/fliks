@@ -26,7 +26,7 @@ export class AccountDevicesComponent implements OnInit {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly translate = inject(TranslateService);
 
-  readonly kinds: DeviceTokenKind[] = ['opds', 'kosync', 'kobo'];
+  readonly kinds: DeviceTokenKind[] = ['opds', 'kosync', 'kobo', 'subsonic'];
   readonly devices = signal<DeviceToken[]>([]);
   readonly issued = signal<IssuedDeviceToken | null>(null);
   readonly name = signal('');
@@ -98,6 +98,11 @@ export class AccountDevicesComponent implements OnInit {
   /** The line to put in `.kobo/Kobo/Kobo eReader.conf`. */
   koboEndpoint(token: string): string {
     return `api_endpoint=${new URL(this.serverConfig.resolveUrl(`/kobo/${token}`), location.origin).href}`;
+  }
+
+  /** The address a music app is given: the origin, with no path. */
+  subsonicServer(): string {
+    return new URL(this.serverConfig.resolveUrl('/'), location.origin).origin;
   }
 
   /** Plain-HTTP origins have no clipboard API. */

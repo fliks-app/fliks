@@ -92,4 +92,10 @@ describe('AccountDevicesComponent', () => {
     const remote = setup(true, 'https://fliks.example').cmp;
     expect(remote.koboEndpoint('fkd_x')).toBe('api_endpoint=https://fliks.example/kobo/fkd_x');
   });
+
+  it('gives a music app the server origin without a path', () => {
+    expect(setup().cmp.subsonicServer()).toBe(location.origin);
+    TestBed.resetTestingModule();
+    expect(setup(true, 'https://fliks.example').cmp.subsonicServer()).toBe('https://fliks.example');
+  });
 });

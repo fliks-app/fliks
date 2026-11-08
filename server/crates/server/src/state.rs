@@ -44,6 +44,8 @@ pub struct AppState {
     pub kepub_cache: Option<Arc<std::path::Path>>,
     /// Signs the read grants of remote workers, so they outlive a restart.
     pub grant_key: Arc<[u8]>,
+    /// Encrypts the secrets of `subsonic` device tokens (`device-tokens.md` rule 15).
+    pub subsonic_key: Arc<[u8]>,
 }
 
 impl AppState {
@@ -94,6 +96,11 @@ impl AppState {
             kepub_cache: None,
             grant_key: <sha2::Sha256 as sha2::Digest>::digest(format!(
                 "fliks-job-grants:{jwt_secret}"
+            ))
+            .to_vec()
+            .into(),
+            subsonic_key: <sha2::Sha256 as sha2::Digest>::digest(format!(
+                "fliks-subsonic-secrets:{jwt_secret}"
             ))
             .to_vec()
             .into(),

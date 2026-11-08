@@ -1,4 +1,4 @@
-use super::{Kind, issue};
+use super::{Kind, issue, seal};
 use crate::{
     http::{
         AppError,
@@ -98,6 +98,7 @@ pub async fn create(
         return Err(AppError::bad_request(errs));
     };
     let (token, stored) = issue(kind);
+    let sealed = (kind == Kind::Subsonic).then(|| seal(&st.subsonic_key, a.user.id, &token));
     let mut tx = st.db.begin().await?;
     // The user row serialises two creations, so the cap holds.
     sqlx::query_scalar!(
@@ -117,13 +118,14 @@ pub async fn create(
     }
     let row = sqlx::query_as!(
         DeviceToken,
-        r#"INSERT INTO device_tokens ("userId", name, kind, "hash")
-           VALUES ($1, $2, $3::text::device_token_kind, $4)
+        r#"INSERT INTO device_tokens ("userId", name, kind, "hash", "secret")
+           VALUES ($1, $2, $3::text::device_token_kind, $4, $5)
            RETURNING id, name, kind::text AS "kind!", "createdAt" AS created_at, "lastUsedAt" AS last_used_at"#,
         a.user.id,
         name,
         kind.as_str(),
-        stored
+        stored,
+        sealed
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -148,13 +150,15 @@ pub async fn renew(
     .and_then(|k| Kind::parse(&k))
     .ok_or_else(unknown)?;
     let (token, stored) = issue(kind);
+    let sealed = (kind == Kind::Subsonic).then(|| seal(&st.subsonic_key, a.user.id, &token));
     let row = sqlx::query_as!(
         DeviceToken,
-        r#"UPDATE device_tokens SET "hash" = $3, "lastUsedAt" = NULL WHERE id = $1 AND "userId" = $2
+        r#"UPDATE device_tokens SET "hash" = $3, "secret" = $4, "lastUsedAt" = NULL WHERE id = $1 AND "userId" = $2
            RETURNING id, name, kind::text AS "kind!", "createdAt" AS created_at, "lastUsedAt" AS last_used_at"#,
         id,
         a.user.id,
-        stored
+        stored,
+        sealed
     )
     .fetch_optional(&st.db)
     .await?

@@ -38,6 +38,22 @@
             }
           </div>
         }
+        @if (t.kind === 'subsonic') {
+          <p class="text-sm">{{ 'device_tokens.subsonic_hint' | translate }}</p>
+          <div class="flex gap-2 items-center">
+            <input
+              class="input input-bordered input-sm flex-1 min-w-0 font-mono"
+              readonly
+              [value]="subsonicServer()"
+              [attr.aria-label]="'device_tokens.subsonic_server_label' | translate: { name: t.name }"
+            />
+            @if (canCopy) {
+              <button type="button" class="btn btn-sm shrink-0" (click)="copy(subsonicServer())">
+                {{ 'device_tokens.copy' | translate }}
+              </button>
+            }
+          </div>
+        }
       </div>
       <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="issued.set(null)">
         {{ 'device_tokens.dismiss' | translate }}
