@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
@@ -13,6 +13,7 @@ import {
   LucideShuffle,
   LucideStar,
   LucideMoon,
+  LucideMusic,
   LucidePause,
   LucidePlay,
   LucideRotateCcw,
@@ -62,6 +63,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideShuffle,
     LucideStar,
     LucideMoon,
+  LucideMusic,
     LucidePause,
     LucidePlay,
     LucideRotateCcw,
@@ -75,6 +77,11 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 })
 export class AudioPlayerComponent {
   protected readonly audio = inject(AudioPlayerService);
+  /** Reset by every new cover: a cover that fails to load shows the placeholder, not a broken image. */
+  protected readonly coverFailed = linkedSignal<string | null | undefined, boolean>({
+    source: () => this.audio.track()?.coverUrl,
+    computation: () => false,
+  });
   private readonly likes = inject(LikesApiService);
   private readonly mediaApi = inject(MediaService);
   private readonly musicApi = inject(MusicApiService);

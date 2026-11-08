@@ -58,7 +58,7 @@ describe('AudioPlayerService on the native player', () => {
         { provide: AuthService, useValue: { refreshAccessToken, user: signal(null) } },
         { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
         { provide: CastPlayerService, useValue: {} },
-        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x' }) } },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x', directPlayProfiles: [] }) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
         { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true, scope: () => 's' } },
@@ -69,7 +69,9 @@ describe('AudioPlayerService on the native player', () => {
   it('attaches with the device profile and hands the music queue over without resolving streams', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
-    expect(plugin['configure']).toHaveBeenCalledWith({ deviceProfile: '{"deviceType":"x"}' });
+    const sent = JSON.parse(plugin['configure']!.mock.calls[0]![0].deviceProfile);
+    expect(sent.deviceType).toBe('x');
+    expect(sent.directPlayProfiles).toEqual([expect.objectContaining({ containers: expect.arrayContaining(['mp3', 'flac']), videoCodecs: [] })]);
     await audio.playTracks([track(1), track(2)], 1);
     expect(getItemPlaybackInfo).not.toHaveBeenCalled();
     expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, autoplay: true });
