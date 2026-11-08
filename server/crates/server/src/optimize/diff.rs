@@ -242,7 +242,6 @@ impl Diff {
             crop: None,
             streams: vec![],
             hvc1_tag: false,
-            strip_statistics_tags: false,
             quality: None,
             software: false,
             max_software_hours: None,
@@ -396,17 +395,6 @@ impl Diff {
                 }
             }
         }
-        let mkv_out = plan.container.map_or_else(
-            || {
-                !info
-                    .format_name
-                    .as_deref()
-                    .is_some_and(|n| n.contains("mp4"))
-            },
-            |c| c == OptimizeContainer::Mkv,
-        );
-        plan.strip_statistics_tags = mkv_out
-            && (self.level > LevelOut::Metadata || self.changes.contains(&Change::StatisticsTags));
         // Never a file without audio, whatever the changes say.
         let audio_kept = info.audio.iter().any(|a| {
             plan.streams
@@ -1485,10 +1473,8 @@ mod tests {
         i.video[0].has_statistics_tags = Some(false);
         let d = diff(run(Preset::Balanced, "a.mkv", &i, Some("en")));
         assert!(d.changes.contains(&Change::StatisticsTags));
-        let p = d
-            .plan(&Preset::Balanced.document(), &i, &HashSet::new(), &[])
+        d.plan(&Preset::Balanced.document(), &i, &HashSet::new(), &[])
             .unwrap();
-        assert!(p.strip_statistics_tags);
         let mut j = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
         j.duration_seconds = Some(7200.0);
         j.video[0].end_seconds = Some(5400.0);

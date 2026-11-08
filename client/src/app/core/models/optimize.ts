@@ -249,7 +249,6 @@ export interface WorkerDevice {
   encoders: string[];
   decoders: string[];
   maxJobs: number;
-  vramMib?: number;
 }
 
 export interface OptimizeWorker {

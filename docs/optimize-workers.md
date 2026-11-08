@@ -29,6 +29,8 @@ nssm start FliksWorker
 
 ## macOS
 
+Apple Silicon only (the engine ships for darwin-arm64).
+
 Create `~/Library/LaunchAgents/app.fliks.worker.plist` with the binary as `ProgramArguments`, the three variables under `EnvironmentVariables`, and `RunAtLoad` and `KeepAlive` set to true, then:
 
 ```
