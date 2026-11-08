@@ -54,7 +54,7 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
         .primary_tag()
         .cloned()
         .unwrap_or_else(|| Tag::new(tagged.primary_tag_type()));
-    let year = f.year.map(|y| y.to_string());
+    let year = f.year.and_then(|y| u32::try_from(y).ok());
     let text = [
         (ItemKey::TrackTitle, f.title.as_deref()),
         (ItemKey::AlbumTitle, Some(f.album.as_str())),
@@ -64,7 +64,6 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
         (ItemKey::MusicBrainzTrackId, f.release_track.as_deref()),
         (ItemKey::MusicBrainzReleaseId, f.release.as_deref()),
         (ItemKey::MusicBrainzReleaseGroupId, f.group.as_deref()),
-        (ItemKey::Year, year.as_deref()),
     ];
     let number = f.number.and_then(|n| u32::try_from(n).ok());
     let disc = u32::try_from(f.disc).unwrap_or(1);
@@ -78,6 +77,9 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
     }
     for (k, v) in text {
         set(&mut tag, k, v);
+    }
+    if let Some(y) = year {
+        tag.insert_text(ItemKey::RecordingDate, y.to_string());
     }
     if let Some(n) = number {
         tag.set_track(n);

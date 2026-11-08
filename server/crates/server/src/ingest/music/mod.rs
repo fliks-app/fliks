@@ -378,7 +378,8 @@ async fn load_free(
     let std::collections::hash_map::Entry::Vacant(slot) = free.entry(edition) else {
         return Ok(());
     };
-    let list: Vec<(i32, i32, Option<i32>, Option<String>, Option<String>)> = sqlx::query_as(
+    type Row = (i32, i32, Option<i32>, Option<String>, Option<String>);
+    let list: Vec<Row> = sqlx::query_as(
         r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, i.title
            FROM items i JOIN track_details td ON td."itemId" = i.id
            WHERE i."editionId" = $1

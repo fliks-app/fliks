@@ -4915,15 +4915,15 @@ mod music_ingest {
         let c = ctx_music(pool, None).await;
         let l = album_lib(&c).await;
         let m = album(&c, l, "Alpha").await;
-        let bare = |t: &str| track(t, 1, 1, json!({"disc": null, "lyrics": null}));
-        c.fake.script(
-            "POST",
-            "/v1/probe",
-            [("One", "Two"); 4]
-                .iter()
-                .flat_map(|(a, b)| [bare(a), bare(b)])
-                .collect(),
-        );
+        let bare = || {
+            track(
+                "x",
+                1,
+                1,
+                json!({"title": null, "track": null, "disc": null, "lyrics": null}),
+            )
+        };
+        c.fake.script("POST", "/v1/probe", vec![bare()]);
         let inbox = c.dir.join("inbox/Alpha");
         let files: Vec<_> = ["CD1/01.flac", "CD2/01.flac"]
             .iter()
@@ -4963,13 +4963,21 @@ mod music_ingest {
             "{:?}",
             out.errors
         );
-        let discs: Vec<i32> = sqlx::query_scalar(
-            r#"SELECT td."discNumber" FROM track_details td ORDER BY td."discNumber""#,
+        let discs: Vec<(String, i32)> = sqlx::query_as(
+            r#"SELECT f."relativePath", td."discNumber" FROM track_details td
+               JOIN item_parts p ON p."itemId" = td."itemId" JOIN media_files f ON f.id = p."mediaFileId"
+               ORDER BY td."discNumber""#,
         )
         .fetch_all(&c.st.db)
         .await
         .unwrap();
-        assert_eq!(discs, [1, 2]);
+        assert_eq!(
+            discs,
+            [
+                ("Alpha/CD1/01.flac".into(), 1),
+                ("Alpha/CD2/01.flac".into(), 2)
+            ]
+        );
     }
 
     #[sqlx::test(migrations = false)]
@@ -5400,6 +5408,8 @@ mod music_ingest {
                  SELECT i.id, {m}, row_number() OVER (ORDER BY i.id), CASE i.title WHEN 'Three' THEN 2 ELSE 1 END,
                         CASE i.title WHEN 'Two' THEN 2 ELSE 1 END
                    FROM items i WHERE i."mediaId" = {m};
+               INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
+                 SELECT id, {m}, 'musicbrainz', '{RELEASE}' FROM editions;
                INSERT INTO album_details ("mediaId", "targetEditionId") SELECT {m}, id FROM editions"#
         )))
         .execute(&c.st.db)

@@ -8,21 +8,28 @@ use crate::{
 use fliks_domain::naming::{AlbumNameTokens, NamingFormats, apply_album_format};
 use std::path::Path;
 
-/// The file name (without extension) `src` takes in the album `media`, `None` when its tags give no track
-/// number, so its own name is kept. `Err` when the engine cannot read the file.
+/// Where and how `src` is named in the album `media`: the file name (without extension), `None` when its tags
+/// give no track number so its own name is kept, and the disc folder to keep when the tags name no disc, so
+/// `CD1/01` and `CD2/01` never meet. `Err` when the engine cannot read the file.
 pub async fn track_base(
     st: &AppState,
     media: (i32, &str, Option<i32>),
     formats: &NamingFormats,
     src: &Path,
-) -> Result<Option<String>, String> {
+) -> Result<(Option<String>, Option<String>), String> {
     let (id, title, year) = media;
     let p = probe(st, src, false).await?;
     let seps = separators_of(st).await;
-    let t = TrackTags::read(&p.info, &seps, stem(&file_name(src)))
-        .with_folder_disc(&src.to_string_lossy());
+    let tagged = TrackTags::read(&p.info, &seps, stem(&file_name(src)));
+    let t = tagged.clone().with_folder_disc(&src.to_string_lossy());
+    let disc_dir = tagged
+        .disc
+        .is_none()
+        .then(|| fliks_domain::music::group::disc_of_folder(&src.to_string_lossy()))
+        .flatten()
+        .and_then(|_| src.parent()?.file_name()?.to_str().map(str::to_owned));
     let Some(track) = t.track else {
-        return Ok(None);
+        return Ok((None, disc_dir));
     };
     let artist: Option<String> = sqlx::query_scalar(
         r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId"
@@ -56,5 +63,5 @@ pub async fn track_base(
         &formats.track
     };
     let name = apply_album_format(format, &tokens);
-    Ok(Some(name).filter(|n| !n.is_empty()))
+    Ok((Some(name).filter(|n| !n.is_empty()), disc_dir))
 }
