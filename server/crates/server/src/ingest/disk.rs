@@ -2,7 +2,7 @@
 use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
-    load_media, naming_formats, record,
+    load_media, music, naming_formats, record,
     rescan::{ensure_season_and_episode, link_in_place, match_special},
     transfer::{Method, split_ext},
 };
@@ -171,8 +171,18 @@ struct Group {
 
 /// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only. Book
 /// files, when the library takes books, are read one level deeper and never through a link.
-pub(crate) fn collect(dir: &Path, depth: usize, book: bool, comic: bool, out: &mut Vec<PathBuf>) {
-    if depth > if book || comic { BOOK_DEPTH } else { 3 } {
+pub(crate) fn collect(dir: &Path, depth: usize, types: &[MediaKind], out: &mut Vec<PathBuf>) {
+    let book = types.contains(&MediaKind::Book);
+    let comic = types.contains(&MediaKind::Comic);
+    // A library holds albums or books; where a scan reads both, `.mp3` and the like stay books.
+    let music = types.contains(&MediaKind::Album) && !book;
+    if depth
+        > if book || comic || music {
+            BOOK_DEPTH
+        } else {
+            3
+        }
+    {
         return;
     }
     let Ok(rd) = fs::read_dir(dir) else {
@@ -188,7 +198,10 @@ pub(crate) fn collect(dir: &Path, depth: usize, book: bool, comic: bool, out: &m
             if !(depth > 0 && is_bonus_dir(&name)) {
                 subdirs.push(e.path());
             }
-        } else if (book && books::is_book_file(&name)) || (comic && comics::is_comic_file(&name)) {
+        } else if (book && books::is_book_file(&name))
+            || (comic && comics::is_comic_file(&name))
+            || (music && music::is_music_file(&name))
+        {
             if kind.is_ok_and(|t| t.is_file()) {
                 out.push(e.path());
             }
@@ -201,7 +214,7 @@ pub(crate) fn collect(dir: &Path, depth: usize, book: bool, comic: bool, out: &m
         }
     }
     for s in subdirs {
-        collect(&s, depth + 1, book, comic, out);
+        collect(&s, depth + 1, types, out);
     }
 }
 
@@ -253,21 +266,25 @@ async fn scan_under(
     let r = PathBuf::from(root);
     let book = types.contains(&MediaKind::Book);
     let comic = types.contains(&MediaKind::Comic);
+    let music = types.contains(&MediaKind::Album) && !book;
+    let kinds = types.to_vec();
     let all = tokio::task::spawn_blocking(move || {
         let mut out = vec![];
-        collect(&r, 0, book, comic, &mut out);
+        collect(&r, 0, &kinds, &mut out);
         out
     })
     .await
     .unwrap_or_default();
     // A library that takes books keeps `.cbz` and `.pdf` as books; a comic-only one reads them as comics.
-    let comic_only = comic && !book;
     let (book_files, rest): (Vec<&PathBuf>, Vec<&PathBuf>) = all
         .iter()
-        .partition(|p| !comic_only && books::is_book_file(&file_name(p)));
-    let (comic_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) = rest
+        .partition(|p| book && books::is_book_file(&file_name(p)));
+    let (comic_files, rest): (Vec<&PathBuf>, Vec<&PathBuf>) = rest
         .into_iter()
         .partition(|p| comic && comics::is_comic_file(&file_name(p)));
+    let (music_files, video): (Vec<&PathBuf>, Vec<&PathBuf>) = rest
+        .into_iter()
+        .partition(|p| music && music::is_music_file(&file_name(p)));
     let unlinked: Vec<&PathBuf> = video
         .into_iter()
         .filter(|p| !linked.contains_key(*p))
@@ -375,6 +392,17 @@ async fn scan_under(
     .await;
     orphan_count += volumes.iter().map(|g| g.files.len()).sum::<usize>();
     groups.extend(volumes);
+    let albums = music_groups(
+        st,
+        root_p,
+        folder_id,
+        &suggested(st, provider, MediaKind::Album),
+        &music_files,
+        linked,
+    )
+    .await;
+    orphan_count += albums.iter().map(|g| g.files.len()).sum::<usize>();
+    groups.extend(albums);
     progress(st, &key, root, total, total);
     st.hub.activity().remove(&key);
     Scanned {
@@ -401,7 +429,7 @@ async fn series_files(
     let dir = root.join(folder);
     let all = tokio::task::spawn_blocking(move || {
         let mut out = vec![];
-        collect(&dir, 1, false, false, &mut out);
+        collect(&dir, 1, &[], &mut out);
         out
     })
     .await
@@ -544,6 +572,96 @@ async fn comic_groups(
             file_ids: vec![],
             suggested_provider: provider.to_owned(),
             files: entries,
+        });
+    }
+    out
+}
+
+/// The albums the audio files make: a folder with its disc folders is one, the files at the root one per
+/// album their tags name. Only albums with a file still unlinked are listed.
+async fn music_groups(
+    st: &AppState,
+    root: &Path,
+    folder_id: Option<i32>,
+    provider: &str,
+    files: &[&PathBuf],
+    linked: &HashMap<PathBuf, String>,
+) -> Vec<Group> {
+    let by_rel: HashMap<String, &PathBuf> = files
+        .iter()
+        .filter_map(|p| Some((fsx::rel_under(root, p)?, *p)))
+        .collect();
+    let mut entries = vec![];
+    for (rel, abs) in &by_rel {
+        let key = match fliks_domain::music::group::album_dir(rel).is_empty()
+            && !linked.contains_key(*abs)
+        {
+            true => music::album_key(st, abs).await,
+            false => None,
+        };
+        entries.push(fliks_domain::music::group::Entry {
+            rel: rel.clone(),
+            key,
+        });
+    }
+    let mut out = vec![];
+    for album in fliks_domain::music::group::group(&entries) {
+        let unlinked: Vec<&String> = album
+            .files
+            .iter()
+            .filter(|r| !linked.contains_key(by_rel[*r]))
+            .collect();
+        if unlinked.is_empty() {
+            continue;
+        }
+        let mut file_entries = vec![];
+        for rel in &unlinked {
+            let abs = by_rel[*rel];
+            file_entries.push(FileEntry {
+                file_path: abs.to_string_lossy().into_owned(),
+                filename: file_name(abs),
+                size: tokio::fs::metadata(abs).await.map_or(0, |m| m.len()),
+                quality_name: "",
+                quality_id: 0,
+                season_number: None,
+                episode_number: None,
+                episode_end: None,
+            });
+        }
+        let sample = music::sample(st, Path::new(&file_entries[0].file_path)).await;
+        let (title, year) = record::title_year(sample.as_ref().map(|s| &s.record));
+        let folder = album.dir.rsplit('/').next().unwrap_or_default().to_owned();
+        out.push(Group {
+            folder_id,
+            group_key: format!(
+                "album:{}:{}",
+                album.dir,
+                album.key.as_deref().unwrap_or_default()
+            ),
+            media_type: MediaKind::Album,
+            folder_name: if album.anchored {
+                album.dir.clone()
+            } else {
+                String::new()
+            },
+            guess_title: title.unwrap_or(folder),
+            guess_year: year,
+            guess_authors: sample
+                .as_ref()
+                .map(|s| s.artist.clone())
+                .filter(|a| !a.is_empty())
+                .into_iter()
+                .collect(),
+            file_ids: sample
+                .and_then(|s| s.release_group)
+                .map(|id| record::FileId {
+                    provider: "musicbrainz",
+                    external_id: id,
+                })
+                .into_iter()
+                .collect(),
+            suggested_provider: provider.to_owned(),
+            files: file_entries,
         });
     }
     out

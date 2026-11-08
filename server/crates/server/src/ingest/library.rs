@@ -468,8 +468,8 @@ impl Ctx<'_> {
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
-        // An issue's number lives in its file name, so a comic keeps it.
-        let mut base = if m.media_type == MediaKind::Comic {
+        // An issue's number and a track's live in the file name, so they keep it.
+        let mut base = if matches!(m.media_type, MediaKind::Comic | MediaKind::Album) {
             transfer::split_ext(&name).0.to_owned()
         } else {
             naming::apply_book_format(

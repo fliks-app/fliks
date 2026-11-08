@@ -327,10 +327,10 @@ async fn book_pass(
         .collect();
     let refs: Vec<&super::books::KnownFile> = known.iter().collect();
     if !force {
-        c.updated += if media.media_type == MediaKind::Comic {
-            super::comics::refresh(st, base, &refs).await
-        } else {
-            super::books::refresh(st, base, &refs).await
+        c.updated += match media.media_type {
+            MediaKind::Comic => super::comics::refresh(st, base, &refs).await,
+            MediaKind::Album => super::music::refresh(st, media.id, base, &refs).await,
+            _ => super::books::refresh(st, base, &refs).await,
         }
         .map_err(AppError::internal)?;
     }
@@ -365,9 +365,11 @@ async fn book_pass(
     let reg = if fresh.is_empty() {
         super::books::Registration::default()
     } else {
-        super::register_files(st, media.media_type, media.id, &fresh, None)
-            .await
-            .map_err(AppError::internal)?
+        match media.media_type {
+            MediaKind::Album => super::music::register_with(st, media.id, &fresh, force).await,
+            kind => super::register_files(st, kind, media.id, &fresh, None).await,
+        }
+        .map_err(AppError::internal)?
     };
     for why in &reg.conflicts {
         tracing::warn!("Rescan[media #{}]: {why}", media.id);

@@ -6,6 +6,7 @@ pub mod comics;
 pub mod disk;
 pub mod fsx;
 pub mod library;
+pub mod music;
 pub mod post_import;
 pub mod record;
 pub mod rescan;
@@ -262,10 +263,10 @@ pub fn drop_thumbnails(st: &AppState, file_id: i32) {
 
 /// Whether `kind` registers its files in one batch through `register_files`.
 pub fn registers(kind: MediaKind) -> bool {
-    matches!(kind, MediaKind::Book | MediaKind::Comic)
+    matches!(kind, MediaKind::Book | MediaKind::Comic | MediaKind::Album)
 }
 
-/// `books::register_language` for a book, `comics::register` for a comic.
+/// `books::register_language` for a book, `comics::register` for a comic, `music::register` for an album.
 pub async fn register_files(
     st: &AppState,
     kind: MediaKind,
@@ -275,6 +276,7 @@ pub async fn register_files(
 ) -> Result<Registration, String> {
     match kind {
         MediaKind::Comic => comics::register(st, media, files).await,
+        MediaKind::Album => music::register(st, media, files).await,
         _ => books::register_language(st, media, files, language).await,
     }
 }
@@ -284,6 +286,7 @@ pub fn not_owned_message(kind: MediaKind) -> &'static str {
     match kind {
         MediaKind::Book => "not a book file",
         MediaKind::Comic => "not a comic file",
+        MediaKind::Album => "not an audio file",
         _ => "not a video file",
     }
 }

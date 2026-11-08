@@ -184,6 +184,9 @@ pub async fn file_records(st: &AppState, media: i32) -> Vec<Record> {
     .fetch_optional(&st.db)
     .await;
     let Ok(Some(r)) = row else { return vec![] };
+    if r.kind == MediaKind::Album.as_str() {
+        return super::music::records(st, media).await.into_iter().collect();
+    }
     let (Some(kind), Some(rel)) = (MediaKind::parse(&r.kind), fsx::safe_rel(&r.rel)) else {
         return vec![];
     };
