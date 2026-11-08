@@ -29,6 +29,7 @@ class FlksViewController: CAPBridgeViewController {
 
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(NativePlayerPlugin())
+        bridge?.registerPluginInstance(AudioPlayerPlugin())
         bridge?.registerPluginInstance(HdrPlugin())
         bridge?.registerPluginInstance(AudioCapabilitiesPlugin())
         bridge?.registerPluginInstance(VideoCapabilitiesPlugin())

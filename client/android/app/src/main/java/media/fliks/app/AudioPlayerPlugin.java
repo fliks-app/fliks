@@ -1,0 +1,209 @@
+package media.fliks.app;
+
+import android.os.Handler;
+import android.os.Looper;
+
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
+
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** The bridge of the audio player (music queue and audiobook parts) to the native player. */
+@CapacitorPlugin(name = "AudioPlayer")
+public class AudioPlayerPlugin extends Plugin {
+    private static final String CAPACITOR_FILE = "https://localhost/_capacitor_file_/";
+
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private MusicHost host;
+
+    @Override
+    public void load() {
+        host = MusicHost.get(getContext());
+        host.setEmitter((event, data) -> notifyListeners(event, data));
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        host.setEmitter(null);
+        host.setObserved(false);
+    }
+
+    private void run(PluginCall call, Runnable r) {
+        main.post(() -> {
+            try {
+                r.run();
+                call.resolve();
+            } catch (RuntimeException e) {
+                call.reject(e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void configure(PluginCall call) {
+        String profile = call.getString("deviceProfile");
+        if (profile != null) host.setDeviceProfile(profile);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void attach(PluginCall call) {
+        host.setObserved(true);
+        main.post(() -> {
+            call.resolve();
+            host.snapshot();
+        });
+    }
+
+    @PluginMethod
+    public void detach(PluginCall call) {
+        host.setObserved(false);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setQueue(PluginCall call) {
+        List<MediaItem> items = tracks(call.getArray("tracks"));
+        int index = call.getInt("index", 0);
+        long startMs = (long) (call.getDouble("startAt", 0.0) * 1000);
+        boolean autoplay = call.getBoolean("autoplay", true);
+        run(call, () -> host.setQueue(items, index, startMs, autoplay));
+    }
+
+    @PluginMethod
+    public void updateQueue(PluginCall call) {
+        List<MediaItem> items = tracks(call.getArray("tracks"));
+        int index = call.getInt("index", 0);
+        run(call, () -> host.updateQueue(items, index));
+    }
+
+    /** Audiobook parts: plain URLs played back to back. */
+    @PluginMethod
+    public void loadParts(PluginCall call) {
+        List<MediaItem> items = new ArrayList<>();
+        JSArray parts = call.getArray("parts");
+        MediaMetadata md = new MediaMetadata.Builder()
+                .setTitle(call.getString("title", ""))
+                .setArtist(call.getString("artist"))
+                .setAlbumTitle(call.getString("album"))
+                .setArtworkUri(artwork(call.getString("artworkUrl")))
+                .setIsPlayable(true).setIsBrowsable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_AUDIO_BOOK_CHAPTER)
+                .build();
+        try {
+            for (int i = 0; i < parts.length(); i++) {
+                String url = parts.getJSONObject(i).getString("url");
+                if (url.startsWith(CAPACITOR_FILE)) url = "file:///" + url.substring(CAPACITOR_FILE.length());
+                items.add(new MediaItem.Builder().setMediaId("p:" + i).setUri(url).setMediaMetadata(md).build());
+            }
+        } catch (JSONException e) {
+            call.reject("bad parts");
+            return;
+        }
+        int index = call.getInt("index", 0);
+        long startMs = (long) (call.getDouble("startAt", 0.0) * 1000);
+        boolean autoplay = call.getBoolean("autoplay", true);
+        float rate = call.getFloat("rate", 1f);
+        run(call, () -> {
+            host.setQueue(items, index, startMs, autoplay);
+            host.exo().setPlaybackParameters(new PlaybackParameters(rate, 1f));
+        });
+    }
+
+    @PluginMethod
+    public void play(PluginCall call) {
+        run(call, () -> host.exo().play());
+    }
+
+    @PluginMethod
+    public void pause(PluginCall call) {
+        run(call, () -> host.exo().pause());
+    }
+
+    @PluginMethod
+    public void seek(PluginCall call) {
+        long ms = (long) (call.getDouble("position", 0.0) * 1000);
+        Integer index = call.getInt("index");
+        run(call, () -> {
+            Player p = host.exo();
+            p.seekTo(index == null ? p.getCurrentMediaItemIndex() : index, ms);
+        });
+    }
+
+    @PluginMethod
+    public void skipTo(PluginCall call) {
+        int index = call.getInt("index", 0);
+        run(call, () -> host.exo().seekTo(index, C.TIME_UNSET));
+    }
+
+    @PluginMethod
+    public void setRate(PluginCall call) {
+        float rate = call.getFloat("rate", 1f);
+        run(call, () -> host.exo().setPlaybackParameters(new PlaybackParameters(rate, 1f)));
+    }
+
+    @PluginMethod
+    public void setGain(PluginCall call) {
+        String mode = call.getString("mode", "track");
+        int preamp = call.getInt("preamp", 0);
+        double duck = call.getDouble("duck", 1.0);
+        run(call, () -> host.setGain(mode, preamp, duck));
+    }
+
+    @PluginMethod
+    public void setRepeat(PluginCall call) {
+        String mode = call.getString("mode", "off");
+        run(call, () -> host.exo().setRepeatMode("one".equals(mode) ? Player.REPEAT_MODE_ONE
+                : "all".equals(mode) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF));
+    }
+
+    @PluginMethod
+    public void setRouted(PluginCall call) {
+        host.setRouted(call.getBoolean("routed", false));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stop(PluginCall call) {
+        run(call, host::stop);
+    }
+
+    private android.net.Uri artwork(String url) {
+        return url == null || url.isEmpty() ? null : android.net.Uri.parse(host.absolute(url));
+    }
+
+    private List<MediaItem> tracks(JSArray array) {
+        List<MediaItem> out = new ArrayList<>();
+        try {
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject t = array.getJSONObject(i);
+                out.add(MusicCatalog.queueItem(t.getLong("itemId"), t.getLong("mediaId"), t.optString("title"),
+                        t.optString("artists"), t.optString("albumTitle"),
+                        t.isNull("coverUrl") ? null : host.absolute(t.getString("coverUrl")),
+                        num(t, "durationSeconds"), num(t, "gain"), num(t, "peak"), num(t, "albumGain"),
+                        num(t, "albumPeak")));
+            }
+        } catch (JSONException e) {
+            throw new IllegalArgumentException(e);
+        }
+        return out;
+    }
+
+    private static double num(JSONObject o, String key) {
+        return o.isNull(key) ? Double.NaN : o.optDouble(key, Double.NaN);
+    }
+}
