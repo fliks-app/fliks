@@ -33,7 +33,9 @@ Fliks rather than linked into it.
 | PostgreSQL client (PGDG archive, `pg_dump` for the backup before a migration) | PostgreSQL License | https://www.postgresql.org |
 | ffmpeg-pitch (FFmpeg 8.1.2 built with `--enable-gpl --enable-librubberband`, for key changes; license and source pointer in `/usr/share/doc/ffmpeg-pitch`) | GPL-3.0-or-later | https://ffmpeg.org |
 | Rubber Band Library (`librubberband2`, Ubuntu archive, used by ffmpeg-pitch) | GPL-2.0-or-later | https://breakfastquay.com/rubberband/ |
-| whisper.cpp (`whisper-cli` v1.9.5, built from the sha256-pinned release tarball, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
+| whisper.cpp (`whisper-cli` v1.9.5, built from the sha256-pinned release tarball with its Vulkan backend, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
+| Vulkan loader (`libvulkan1`, Ubuntu archive, used by whisper-cli; licence in `/usr/share/doc/libvulkan1`) | Apache-2.0 | https://github.com/KhronosGroup/Vulkan-Loader |
+| Mesa Vulkan drivers (`mesa-vulkan-drivers`, Ubuntu archive, Intel and AMD; licences in `/usr/share/doc/mesa-vulkan-drivers`) | MIT and others (see the package) | https://www.mesa3d.org |
 | ONNX Runtime (CPU build 1.31.1, loaded at run time by `fliks-engine` for the model jobs; `LICENSE` and `ThirdPartyNotices.txt` in `/usr/share/doc/onnxruntime`) | MIT | https://github.com/microsoft/onnxruntime |
 
 ## Server: provider plugins
@@ -53,7 +55,7 @@ page, which shows each licence before the download:
 |---|---|---|
 | Spleeter 2 stems (vocals, accompaniment), ONNX export published by sherpa-onnx | MIT | https://github.com/deezer/spleeter |
 | SwiftF0 (voice pitch) | MIT | https://github.com/lars76/swift-f0 |
-| Whisper small and base, ggml 5-bit conversion published by whisper.cpp | MIT | https://github.com/openai/whisper |
+| Whisper small, ggml 5-bit conversion published by whisper.cpp | MIT | https://github.com/openai/whisper |
 
 ## Server: Windows and macOS apps
 
