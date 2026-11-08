@@ -71,11 +71,16 @@ struct AddToPlaylistSheet: View {
     }
 
     private func add(to playlist: Playlist) async {
-        struct Body: Encodable { let mediaId: Int?; let episodeId: Int? }
+        struct Body: Encodable { let mediaId: Int?; let episodeId: Int?; let itemId: Int? }
         busyId = playlist.id
-        let body = target.episodeId == nil
-            ? Body(mediaId: target.mediaId, episodeId: nil)
-            : Body(mediaId: nil, episodeId: target.episodeId)
+        let body: Body
+        if let itemId = target.itemId {
+            body = Body(mediaId: nil, episodeId: nil, itemId: itemId)
+        } else if let episodeId = target.episodeId {
+            body = Body(mediaId: nil, episodeId: episodeId, itemId: nil)
+        } else {
+            body = Body(mediaId: target.mediaId, episodeId: nil, itemId: nil)
+        }
         try? await APIClient.shared.post("/api/playlists/\(playlist.id)/items", body: body)
         busyId = nil
         onDone()

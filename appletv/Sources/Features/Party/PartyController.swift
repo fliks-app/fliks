@@ -25,6 +25,8 @@ final class PartyController {
     /// A scheduled start is waiting for its time: the player is paused by us, not by the viewer.
     private var scheduledStart = false
     private var ownUntil = Date.distantPast
+    /// The party moved on to a track: the music player takes it over, so closing this one is not leaving.
+    private var handedToMusic = false
 
     /// Close enough to the anchor that a seek would only restart a transcode for nothing.
     private static let seekSlackS = 0.25
@@ -66,7 +68,7 @@ final class PartyController {
         party.onLive = nil
         party.onRejoined = nil
         // Closing the player is leaving the party.
-        if party.active { Task { await party.leave() } }
+        if party.active, !handedToMusic { Task { await party.leave() } }
     }
 
     /// Forced seek to wherever the group is.
@@ -77,6 +79,13 @@ final class PartyController {
     // MARK: - Party state -> player
 
     private func apply(_ live: PartyLiveState, force: Bool) {
+        if live.item.isTrack {
+            handedToMusic = true
+            generation += 1
+            player.onStopRequested?()
+            party.onOpenMusic?()
+            return
+        }
         generation += 1
         let gen = generation
         playTask?.cancel()

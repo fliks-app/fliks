@@ -115,5 +115,10 @@
   "party.tv_votes_one": "{{count}} vote",
   "party.tv_votes_other": "{{count}} votes",
   "party.tv_proposals_empty": "No proposals yet. Guests suggest films from the web or the mobile app.",
-  "media_picker.back": "Back"
+  "media_picker.back": "Back",
+  "sidebar.now_playing": "Now Playing",
+  "library.type.album": "Albums",
+  "music.not_playable": "\"%@\" cannot be played here",
+  "music.nothing_playing": "Nothing is playing",
+  "music.tab_albums": "Albums"
 }

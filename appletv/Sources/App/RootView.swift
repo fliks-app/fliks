@@ -31,6 +31,7 @@ struct RootView: View {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
             .onChange(of: scenePhase) { _, _ in updateRemotePolling() }
+            .onChange(of: party.active) { _, active in if !active { MusicPartyDriver.shared.detach() } }
             .onAppear {
                 RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused, tracks in
                     // Same "reset then push" the auth-state transition above uses -
@@ -42,6 +43,10 @@ struct RootView: View {
                 }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
                 party.onGoHome = { path = NavigationPath() }
+                party.onOpenMusic = {
+                    MusicPartyDriver.shared.attach()
+                    if !MusicPlayer.shared.nowPlayingOpen { path.append(Route.nowPlaying) }
+                }
                 party.onOpenPlayer = { mediaFileId, mediaId, episodeId in
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
@@ -138,7 +143,8 @@ struct RootView: View {
                             onSelectParty: { path.append(Route.partyDetail(id: $0)) }
                         )
                     case let .library(id):
-                        LibraryView(libraryId: id, onSelectMedia: { path.append(Route.mediaDetail(id: $0)) })
+                        LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
+                                    onSelectArtist: { path.append(Route.artist(id: $0)) })
                     case let .mediaDetail(id):
                         MediaDetailView(
                             mediaId: id,
@@ -146,7 +152,11 @@ struct RootView: View {
                                 path.append(Route.player(mediaFileId: mediaFileId, mediaId: id,
                                                           episodeId: episodeId, startAt: startAt))
                             },
-                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: id, episodeId: $0)) }
+                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: id, episodeId: $0)) },
+                            onAlbum: {
+                                if !path.isEmpty { path.removeLast() }
+                                path.append(Route.album(id: id))
+                            }
                         )
                     case let .episodeDetail(mediaId, episodeId):
                         EpisodeDetailView(
@@ -158,14 +168,22 @@ struct RootView: View {
                             },
                             onSelectEpisode: { path.append(Route.episodeDetail(mediaId: mediaId, episodeId: $0)) }
                         )
+                    case let .album(id):
+                        AlbumView(mediaId: id, onSelectArtist: { path.append(Route.artist(id: $0)) })
+                    case let .artist(id):
+                        ArtistView(personId: id, onSelectAlbum: { path.append(Route.album(id: $0)) })
+                    case .nowPlaying:
+                        NowPlayingView(onClose: { if !path.isEmpty { path.removeLast() } })
                     case let .player(mediaFileId, mediaId, episodeId, startAt, startPaused, launch):
                         PlayerView(
                             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,
                             startPaused: startPaused, launch: launch,
                             onExit: { if !path.isEmpty { path.removeLast() } }
                         )
+                        .onAppear { MusicPlayer.shared.stop() }
                     case .search:
-                        SearchView(onSelectMedia: { path.append(Route.mediaDetail(id: $0)) })
+                        SearchView(onSelectMedia: { path.append(Route.forMedia($0, $1)) },
+                                   onSelectArtist: { path.append(Route.artist(id: $0)) })
                     case .playlists:
                         PlaylistsView(onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) })
                     case let .playlistDetail(id):
@@ -213,6 +231,7 @@ struct Sidebar: View {
     @State private var libraries: [Library] = []
     @FocusState private var focused: String?
     @State private var accountActions = false
+    @State private var music = MusicPlayer.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -244,6 +263,14 @@ struct Sidebar: View {
 
             SidebarRow(label: tr("sidebar.playlists"), systemImage: "list.and.film", focusID: "playlists", focused: $focused) {
                 path.append(Route.playlists)
+            }
+
+            if let track = music.current {
+                SidebarRow(label: tr("sidebar.now_playing"), systemImage: music.isPlaying ? "waveform" : "music.note",
+                           focusID: "nowPlaying", focused: $focused) {
+                    if !MusicPlayer.shared.nowPlayingOpen { path.append(Route.nowPlaying) }
+                }
+                .accessibilityHint(track.title)
             }
 
             Spacer()

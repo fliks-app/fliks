@@ -60,7 +60,7 @@ struct PartyCreateView: View {
     @State private var picking = false
     @State private var loaded = false
 
-    private var fromPlaylist: Bool { target.playlistId != nil }
+    private var fromPlaylist: Bool { target.playlistId != nil || !target.items.isEmpty }
     private var canSubmit: Bool { !busy && !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -128,7 +128,7 @@ struct PartyCreateView: View {
     @ViewBuilder
     private var filmRow: some View {
         if fromPlaylist {
-            Text(trp("party.playlist_label", ["name": target.name])).foregroundStyle(.secondary)
+            Text(target.items.isEmpty ? trp("party.playlist_label", ["name": target.name]) : target.name).foregroundStyle(.secondary)
         } else {
             HStack(spacing: 24) {
                 Text(film?.title ?? (target.mediaId != nil ? target.name : tr("party.create_programme_later")))
@@ -170,7 +170,9 @@ struct PartyCreateView: View {
     private func submit() {
         busy = true
         var request = PartyCreateRequest(name: name.trimmingCharacters(in: .whitespaces))
-        if let playlistId = target.playlistId {
+        if !target.items.isEmpty {
+            request.items = target.items
+        } else if let playlistId = target.playlistId {
             request.playlistId = playlistId
         } else if let film {
             request.mediaId = film.mediaId

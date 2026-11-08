@@ -5,7 +5,8 @@ import SwiftUI
 /// scroll via `onReachEnd`.
 struct LibraryView: View {
     let libraryId: Int
-    var onSelectMedia: (Int) -> Void
+    var onSelectMedia: (Int, MediaKind) -> Void
+    var onSelectArtist: (Int) -> Void
 
     private enum LoadState {
         case loading
@@ -28,17 +29,27 @@ struct LibraryView: View {
 
     private let pageSize = 60
 
+    private var isMusic: Bool { library?.mediaTypes == [.album] }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                content(for: state)
+        Group {
+            if let library, isMusic {
+                MusicLibraryView(libraryId: libraryId, name: library.name,
+                                 onSelectAlbum: { onSelectMedia($0, .album) }, onSelectArtist: onSelectArtist)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        header
+                        content(for: state)
+                    }
+                    .padding(.horizontal, 60)
+                    .padding(.vertical, 48)
+                }
             }
-            .padding(.horizontal, 60)
-            .padding(.vertical, 48)
         }
         .task {
             await loadLibrary()
+            guard !isMusic else { return }
             await load(reset: true)
         }
     }
@@ -64,7 +75,7 @@ struct LibraryView: View {
                 ContentGrid(title: nil, items: items, onReachEnd: loadMore) { m in
                     MediaCard(imagePath: m.posterUrl, title: m.title, subtitle: m.year.map(String.init),
                               backdropPath: m.fanartUrl, mediaId: m.id, missing: m.isMissing) {
-                        onSelectMedia(m.id)
+                        onSelectMedia(m.id, m.type)
                     }
                 }
             }

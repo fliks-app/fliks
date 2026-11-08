@@ -50,10 +50,15 @@ struct PlaylistDetailView: View {
                     Text(tr("playlists.detail_empty")).foregroundStyle(.secondary)
                 } else {
                     ContentGrid(title: nil, items: items) { item in
+                        if let track = item.track {
+                            AlbumTile(imagePath: track.posterUrl, title: track.title,
+                                      subtitle: track.artists.joined(separator: ", ")) { playTrack(item) }
+                        } else {
                         PosterCard(imagePath: itemImage(item), title: itemTitle(item),
                                    progressPercent: item.progressPercent,
                                    mediaId: item.media.id, episodeId: item.episode?.id) {
                             Task { await play(item) }
+                        }
                         }
                     }
                 }
@@ -65,6 +70,10 @@ struct PlaylistDetailView: View {
     private var header: some View {
         HStack(spacing: 24) {
             Text(playlist?.name ?? "").font(.title.bold())
+            if playlist?.rules != nil {
+                Label(tr("playlists.smart_readonly_hint"), systemImage: "wand.and.stars")
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            }
             if !items.isEmpty {
                 Button(action: { Task { await playAll() } }) {
                     Label(tr("common.play"), systemImage: "play.fill")
@@ -116,8 +125,16 @@ struct PlaylistDetailView: View {
     // Add a queue (mirroring the web PlaybackQueueService) if that's needed.
     private func playAll() async {
         guard !items.isEmpty else { return }
+        if items[0].track != nil { return playTrack(items[0]) }
         let target = items.first(where: { !$0.watched }) ?? items[0]
         await play(target)
+    }
+
+    /// The playlist's tracks as a queue, started at `item`.
+    private func playTrack(_ item: PlaylistItem) {
+        let entries = items.compactMap(\.track)
+        guard let start = item.track.flatMap({ t in entries.firstIndex { $0.itemId == t.itemId } }) else { return }
+        MusicPlayer.shared.play(entries.map(QueueTrack.init(entry:)), from: start)
     }
 
     /// Resolve the file id via a fresh GET /media/:id (the item payload has no

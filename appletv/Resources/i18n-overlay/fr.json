@@ -109,5 +109,10 @@
   "party.tv_votes_one": "{{count}} vote",
   "party.tv_votes_other": "{{count}} votes",
   "party.tv_proposals_empty": "Aucune proposition. Les invités proposent des films depuis le web ou l'application mobile.",
-  "media_picker.back": "Retour"
+  "media_picker.back": "Retour",
+  "sidebar.now_playing": "En lecture",
+  "library.type.album": "Albums",
+  "music.not_playable": "« %@ » ne peut pas être lu ici",
+  "music.nothing_playing": "Aucune lecture en cours",
+  "music.tab_albums": "Albums"
 }

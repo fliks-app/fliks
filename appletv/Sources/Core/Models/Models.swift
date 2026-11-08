@@ -199,6 +199,7 @@ extension Media {
 extension Media {
     /// Released but nothing on disk (monitored or not); mirrors the web `computeMediaBarStatus`.
     var isMissing: Bool {
+        if type == .album { return false }
         let hasFiles = type.hasChildren ? (episodeStats?.downloadedEpisodes ?? 0) > 0 : !(files ?? []).isEmpty
         if hasFiles { return false }
         if type.hasChildren { return status == "continuing" || status == "ended" }
@@ -464,7 +465,12 @@ struct Playlist: Codable, Identifiable {
     /// First up-to-4 poster URLs for the card mosaic.
     let posters: [String]
     let updatedAt: Date
+    /// Present for a smart playlist, whose entries follow its rules.
+    let rules: SmartRules?
 }
+
+/// The rules of a smart playlist: only their presence matters here.
+struct SmartRules: Codable, Hashable {}
 
 /// GET /playlists/:id/items row. `media` is the movie, or the parent series
 /// when the item is an episode; it carries no `files` (unhydrated
@@ -477,6 +483,8 @@ struct PlaylistItem: Codable, Identifiable {
     let episode: PlaylistEpisode?
     let progressPercent: Double
     let watched: Bool
+    /// Set for a music entry.
+    let track: PlaylistTrack?
 
     var id: Int { itemId }
 }

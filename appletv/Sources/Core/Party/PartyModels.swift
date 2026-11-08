@@ -20,10 +20,18 @@ struct PartyItem: Codable, Equatable {
     var episodeTitle: String? = nil
     /// The viewer cannot open the media: title and artwork are blank, the ids stay.
     let hidden: Bool
+    /// A track of an album (`mediaId` is the album, `seriesTitle` its title); absent for video.
+    var itemId: Int? = nil
 }
 
 extension PartyItem: Identifiable {
-    var id: String { "\(mediaId).\(episodeId ?? 0)" }
+    var id: String { "\(mediaId).\(episodeId ?? 0).\(itemId ?? 0)" }
+    var isTrack: Bool { itemId != nil }
+
+    /// The same programme entry: a track is named by its item, an episode by its id.
+    func sameEntry(as other: PartyItem) -> Bool {
+        mediaId == other.mediaId && episodeId == other.episodeId && itemId == other.itemId
+    }
 }
 
 extension PartyItem {
@@ -31,12 +39,13 @@ extension PartyItem {
     var shownTitle: String { hidden ? tr("party.proposal_hidden") : title }
 
     /// The series title for an episode, else the title: the Continue Watching card's title.
-    var cardTitle: String { hidden ? tr("party.proposal_hidden") : (seriesTitle ?? title) }
+    var cardTitle: String { hidden ? tr("party.proposal_hidden") : (isTrack ? title : (seriesTitle ?? title)) }
     /// What a removal names: the episode for an episode, the film otherwise.
     var itemName: String { cardSubtitle ?? cardTitle }
 
     /// "S01E02 - Episode title" like the Continue Watching card; nil for a movie or a masked row.
     var cardSubtitle: String? {
+        if isTrack { return hidden ? nil : seriesTitle }
         guard !hidden, let season = seasonNumber, let number = episodeNumber else { return nil }
         let label = String(format: "S%02dE%02d", season, number)
         guard let episodeTitle, !episodeTitle.isEmpty else { return label }
@@ -303,6 +312,13 @@ struct PartyCreateTarget: Equatable {
     var mediaFileId: Int?
     var episodeId: Int?
     var playlistId: Int?
+    /// Tracks that open the programme.
+    var items: [PartyCreateItem] = []
+}
+
+struct PartyCreateItem: Encodable, Equatable {
+    let mediaId: Int
+    let itemId: Int
 }
 
 /// `POST /api/parties`; nil fields stay out of the body.
@@ -318,6 +334,7 @@ struct PartyCreateRequest: Encodable {
     var chatEnabled: Bool?
     var linkSharing: Bool?
     var inviteeIds: [Int]?
+    var items: [PartyCreateItem]?
 
     static func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
 }
