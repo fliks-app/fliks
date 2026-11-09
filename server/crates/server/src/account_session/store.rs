@@ -130,6 +130,9 @@ pub async fn all(db: &PgPool) -> Result<Vec<Row>, sqlx::Error> {
 
 /// What the item shows of itself: media title, episode or track label, poster.
 pub struct Shown {
+    /// The routing pair of the item: its media, and itself when it sits in a group (episode, disc).
+    pub media_id: i32,
+    pub episode_id: Option<i32>,
     pub title: Option<String>,
     pub subtitle: Option<String>,
     pub poster_url: Option<String>,
@@ -138,7 +141,8 @@ pub struct Shown {
 pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error> {
     let r = sqlx::query!(
         r#"SELECT m.title AS "media_title!", m."posterUrl" AS poster_url, m."type"::text AS "kind!",
-                  i.title AS item_title, i.number AS item_number, g.number AS "season: i32"
+                  i.title AS item_title, i.number AS item_number, g.number AS "season: i32",
+                  i."mediaId" AS media_id, i."groupId" AS group_id
              FROM items i
              JOIN media m ON m.id = i."mediaId"
              LEFT JOIN item_groups g ON g.id = i."groupId"
@@ -157,6 +161,8 @@ pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error>
             _ => titled.filter(|t| *t != r.media_title),
         };
         Shown {
+            media_id: r.media_id,
+            episode_id: r.group_id.map(|_| item),
             title: Some(r.media_title),
             subtitle,
             poster_url: r.poster_url,

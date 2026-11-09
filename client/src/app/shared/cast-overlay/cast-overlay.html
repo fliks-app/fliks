@@ -75,6 +75,13 @@
         {{ (sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
       </button>
     }
+    <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
+      <button trigger type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'session.transfer' | translate"
+              [title]="'session.transfer' | translate">
+        <svg lucideArrowRightLeft class="h-5 w-5"></svg>
+      </button>
+      <app-remote-picker-list />
+    </app-dropdown-menu>
     <button type="button" class="btn btn-ghost btn-circle" (click)="hide()" [attr.aria-label]="'session.hide' | translate">
       <svg lucideX class="h-5 w-5"></svg>
     </button>

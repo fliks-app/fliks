@@ -1,0 +1,115 @@
+{
+  "ignore": [
+    "$..sessionId",
+    "$..playUrl",
+    "$..hwAccel",
+    "$..profileHash",
+    "$..tonemapAlgo",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..positionAt",
+    "$..cmdId",
+    "$..expiresAt",
+    "$..engineStatus",
+    "$..transcodePercent",
+    "$..playbackId",
+    "$..lastActivity",
+    "$..startedAt",
+    "$..playedAt",
+    "$..lastPlayedAt"
+  ],
+  "name": "session-transfer-no-session",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "sessionKinds": null,
+        "sessionSync": true
+      },
+      "expect": {
+        "body": {
+          "albumQuotaLimit": 0,
+          "avatar": null,
+          "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-2",
+        "formFactor": "tv",
+        "name": "Bedroom"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-2#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "toTargetId": "dev-2#native"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "session.error_no_session",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/session/transfer"
+    }
+  ]
+}

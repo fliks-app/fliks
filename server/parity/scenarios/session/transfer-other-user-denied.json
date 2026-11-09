@@ -1,0 +1,259 @@
+{
+  "capture": {
+    "s1": "$.steps[3].body.sessionId"
+  },
+  "engine": "up",
+  "ignore": [
+    "$..sessionId",
+    "$..playUrl",
+    "$..hwAccel",
+    "$..profileHash",
+    "$..tonemapAlgo",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..positionAt",
+    "$..cmdId",
+    "$..expiresAt",
+    "$..engineStatus",
+    "$..transcodePercent",
+    "$..playbackId",
+    "$..lastActivity",
+    "$..startedAt",
+    "$..playedAt",
+    "$..lastPlayedAt"
+  ],
+  "name": "session-transfer-other-user-denied",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "other",
+      "body": {
+        "sessionKinds": null,
+        "sessionSync": true
+      },
+      "expect": {
+        "body": {
+          "albumQuotaLimit": 0,
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "bookQuotaLimit": 0,
+          "comicQuotaLimit": 0,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create",
+            "parties.create",
+            "parties.read_public"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "other",
+      "body": {
+        "deviceId": "dev-3",
+        "formFactor": "tv",
+        "name": "Den"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-3#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "other",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "audioCopyStream": true,
+          "audioPlan": {
+            "channels": 1,
+            "codec": "aac",
+            "mode": "copy",
+            "profile": "LC"
+          },
+          "audioTracks": [
+            {
+              "bitrateBps": 192000,
+              "channels": 1,
+              "codec": "aac",
+              "copy": true,
+              "index": 0,
+              "language": "eng",
+              "outputChannels": 1,
+              "outputCodec": "aac",
+              "reasonFlags": [],
+              "sampleRate": 48000
+            }
+          ],
+          "clientTonemap": false,
+          "contentType": "video/x-matroska",
+          "dolbyVision": false,
+          "durationSeconds": 3.021,
+          "mediaFileId": 1,
+          "outputAudioCodec": "aac",
+          "outputContainer": "mkv",
+          "outputVideoCodec": "h264",
+          "playMethod": "DirectPlay",
+          "qualities": [
+            {
+              "height": 90,
+              "id": "original",
+              "isRemux": false,
+              "label": "144p",
+              "totalBitrateBps": 193941,
+              "width": 160
+            }
+          ],
+          "quality": "original",
+          "source": {
+            "audioChannelLayout": "mono",
+            "audioChannels": 1,
+            "audioCodec": "aac",
+            "audioLanguage": "eng",
+            "audioSampleRate": 48000,
+            "container": "mkv",
+            "durationSeconds": 3.021,
+            "formatBitRate": 193941,
+            "frameRate": "24",
+            "height": 90,
+            "videoBitDepth": 8,
+            "videoBitRate": 193941,
+            "videoCodec": "h264",
+            "videoLevel": 10,
+            "videoProfile": "high",
+            "width": 160
+          },
+          "startAtSeconds": 0.0,
+          "tonemapping": false,
+          "transcodeReasons": [],
+          "videoCopyStream": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    },
+    {
+      "as": "other",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 1,
+        "positionSeconds": 1111,
+        "quality": "original",
+        "sessionId": "{s1}",
+        "state": "playing",
+        "targetId": "dev-3#native"
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/1/state"
+    },
+    {
+      "as": "other",
+      "body": {
+        "toTargetId": "dev-1#native"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "remote.error_device_offline",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/session/transfer"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{s1}"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/session"
+    }
+  ]
+}

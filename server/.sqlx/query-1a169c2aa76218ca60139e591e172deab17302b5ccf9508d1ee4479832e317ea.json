@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.title AS \"media_title!\", m.\"posterUrl\" AS poster_url, m.\"type\"::text AS \"kind!\",\n                  i.title AS item_title, i.number AS item_number, g.number AS \"season: i32\"\n             FROM items i\n             JOIN media m ON m.id = i.\"mediaId\"\n             LEFT JOIN item_groups g ON g.id = i.\"groupId\"\n            WHERE i.id = $1",
+  "query": "SELECT m.title AS \"media_title!\", m.\"posterUrl\" AS poster_url, m.\"type\"::text AS \"kind!\",\n                  i.title AS item_title, i.number AS item_number, g.number AS \"season: i32\",\n                  i.\"mediaId\" AS media_id, i.\"groupId\" AS group_id\n             FROM items i\n             JOIN media m ON m.id = i.\"mediaId\"\n             LEFT JOIN item_groups g ON g.id = i.\"groupId\"\n            WHERE i.id = $1",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,28 @@
             "name": "number"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "media_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "mediaId"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "group_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "groupId"
+          }
+        }
       }
     ],
     "parameters": {
@@ -81,8 +103,10 @@
       false,
       true,
       true,
+      true,
+      false,
       true
     ]
   },
-  "hash": "c7b72443e9d857294a2fd17c55c8aefa87b5d1c64a346dbd28dee86027baddf2"
+  "hash": "1a169c2aa76218ca60139e591e172deab17302b5ccf9508d1ee4479832e317ea"
 }

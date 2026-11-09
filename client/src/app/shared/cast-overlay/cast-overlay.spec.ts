@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { Component, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,12 +8,23 @@ import { RemotePlaybackTarget } from '../../core/services/remote-playback-target
 import { SessionSyncService, type AccountSession } from '../../core/services/session-sync.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { DropdownMenuComponent } from '../components/dropdown-menu';
+import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { CastOverlayComponent } from './cast-overlay';
+
+@Component({ selector: 'app-dropdown-menu', template: '<ng-content select="[trigger]" />' })
+class DropdownStub {
+  readonly placement = input('');
+  readonly heading = input('');
+}
+
+@Component({ selector: 'app-remote-picker-list', template: '' })
+class PickerListStub {}
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   return {
     epoch: 1,
-    item: { id: 5, mediaFileId: 9, kind: 'movie', title: 'Observed title', subtitle: null, posterUrl: '/p.jpg' },
+    item: { id: 5, mediaId: 3, episodeId: null, mediaFileId: 9, kind: 'movie', title: 'Observed title', subtitle: null, posterUrl: '/p.jpg' },
     owner: { targetId: 'pc#1', deviceName: 'Desk', formFactor: 'desktop' },
     state: 'playing',
     positionSeconds: 65,
@@ -67,6 +78,10 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
     ],
+  });
+  TestBed.overrideComponent(CastOverlayComponent, {
+    remove: { imports: [DropdownMenuComponent, RemotePickerListComponent] },
+    add: { imports: [DropdownStub, PickerListStub] },
   });
   const fixture = TestBed.createComponent(CastOverlayComponent);
   fixture.detectChanges();
@@ -131,6 +146,11 @@ describe('CastOverlayComponent', () => {
       expect(video.el.querySelector('app-session-audio-controller')).toBeNull();
     });
 
+    it('offers the device list to transfer the session to', () => {
+      const { el } = setup({ local: true, account: accountSession() });
+      expect(el.querySelector('[aria-label="session.transfer"]')).not.toBeNull();
+    });
+
     it('is hidden on a TV, and for the owner', () => {
       expect(setup({ local: true, tv: true, account: accountSession() }).el.querySelector('button')).toBeNull();
       TestBed.resetTestingModule();
@@ -142,8 +162,8 @@ describe('CastOverlayComponent', () => {
       const { el, sync } = setup({ local: true, account: parked, live: false, canPlayHere: true });
       expect(el.textContent).toContain('session.parked_device');
       const buttons = Array.from(el.querySelectorAll('button'));
-      expect(buttons).toHaveLength(2);
-      buttons[1].click();
+      expect(buttons).toHaveLength(3);
+      buttons[2].click();
       expect(sync.dismiss).toHaveBeenCalled();
     });
 

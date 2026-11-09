@@ -6,20 +6,22 @@ The account session is opt-in (`users."sessionSync"`, default false). With the o
 
 ## Routes
 
-Both require a session credential: a `scope:'stream'`/`'cast'` token is rejected with `403 { message: "session_token_required" }` (same as `/api/remote/*`). No CASL policy applies: a caller only ever reaches their own row. 401 for no/invalid credential. Neither route is household-scoped: a grantee or an admin never sees another account's session.
+The routes below require a session credential: a `scope:'stream'`/`'cast'` token is rejected with `403 { message: "session_token_required" }` (same as `/api/remote/*`). No CASL policy applies: a caller only ever reaches their own row. 401 for no/invalid credential. Neither route is household-scoped: a grantee or an admin never sees another account's session.
 
 | Method path | Auth | Request | Response | Errors | Side effects |
 |---|---|---|---|---|---|
 | `GET /api/session` | session-only credential | none | `AccountSessionDto` or JSON `null` (200 either way) | 401, 403 `session_token_required` | evaluates staleness (rule 14): a live row whose owner stopped beating becomes `parked` and `session.changed` is emitted |
 | `DELETE /api/session` | session-only credential | none | 204, no body | 401, 403 `session_token_required`, 409 `session.error_not_parked` | deletes a `parked` row and emits `session.changed` with null fields; no row is a 204 no-op |
 
-`POST /api/session/transfer` is not part of this spec yet (a later batch).
+| `POST /api/session/transfer` | session-only credential | `{ toTargetId: string }` (unknown keys refused) | 202, `{ cmdId: string }` | 401, 403 `session_token_required`, 403 `remote.error_<reason>`, 404 `session.error_no_session`, 404 `remote.error_device_offline`, 400 `remote.error_self_target`, 400 validation | one `remote.command load` to the target's connection (rule 18) |
+
+`POST /api/session/transfer` is for the caller's own account session. The target is authorized exactly like `POST /api/remote/:targetId/command` (`authorizeTarget` then `canControl`, `remote.md` rules 7 and 10): the caller's own devices, a device granted to them, or any device for an admin.
 
 `AccountSessionDto` (every key always present, `null` not absent):
 
 ```
 { epoch: number,
-  item: { id: number, mediaFileId: number|null, kind: MediaKind, title: string|null,
+  item: { id: number, mediaId: number, episodeId: number|null, mediaFileId: number|null, kind: MediaKind, title: string|null,
           subtitle: string|null, posterUrl: string|null },
   owner: { targetId: string|null, deviceName: string|null, formFactor: string|null },
   state: 'playing'|'paused'|'buffering'|'parked',
@@ -28,7 +30,7 @@ Both require a session credential: a `scope:'stream'`/`'cast'` token is rejected
   queue: { itemIds: number[], index: number, shuffle: boolean, repeat: 'off'|'all'|'one' }|null }
 ```
 
-`positionAt` is the server time the position was last reported: observers extrapolate `positionSeconds + (now - positionAt)` while `playing` (`state = 'playing'`). `title` is the media title and `subtitle` the episode or track label, `posterUrl` the same poster the item page uses.
+`positionAt` is the server time the position was last reported: observers extrapolate `positionSeconds + (now - positionAt)` while `playing` (`state = 'playing'`). `title` is the media title and `subtitle` the episode or track label, `posterUrl` the same poster the item page uses. `mediaId` and `episodeId` are the routing pair a player needs to open the item: the item's media, and the item itself when it sits in a group (episode, disc), else `null`.
 
 ## Data
 
@@ -50,7 +52,7 @@ CREATE TABLE account_sessions (
   "updatedAt" timestamptz NOT NULL DEFAULT now());
 ```
 
-The kind CHECK lists `MediaKind::ALL` (`items.md` rule 39). `"itemId"` and `"mediaFileId"` carry a covering index (every FK has one). Addressing is item-first: no `(mediaId, episodeId)` pair on the wire.
+The kind CHECK lists `MediaKind::ALL` (`items.md` rule 39). `"itemId"` and `"mediaFileId"` carry a covering index (every FK has one). Addressing is item-first: the stored key is `itemId`; the `(mediaId, episodeId)` pair is derived from it when the row is shown or transferred, never stored.
 
 Preference columns of `users`: `"sessionSync" boolean NOT NULL DEFAULT false`; `"sessionKinds" text[]`, `NULL` meaning every kind, with a CHECK that every element is a `MediaKind`. Both are self-writable preferences (`users.md` rule 19) and `PublicUser` keys.
 
@@ -90,6 +92,9 @@ Parked
 Safety
 17. The `account_sessions` row is never sent to the household (grantees, admins). `remote.state` is unchanged and still fans out as in `remote.md`.
 
+Transfer
+18. `POST /api/session/transfer` answers 404 `session.error_no_session` when the caller has no row (checked first), authorizes the target (404 `remote.error_device_offline` for a target the caller cannot see or that is gone, 403 `remote.error_<reason>` when seen but not controllable), and answers 400 `remote.error_self_target` when the row is live and already owned by `toTargetId`. It then sends one `remote.command` `load` to that connection only (the same send and `claimAttribution` as `POST /api/remote/:targetId/command`): `mediaId`/`episodeId` (the pair of the item, rule above), `itemId`, `mediaFileId` (omitted when the row has none), `kind`, `positionSeconds` = the row's position plus the time since `positionAt` while `state = 'playing'` (capped at `durationSeconds`), `paused` = the state is `paused` or `parked`, and for a row with a queue `queue {itemIds, index}`, `shuffle`, `repeat`. Audio and subtitle tracks are not stored in the row, so the command carries none. The route never supersedes: the target's first beat claims (rule 6) and the previous owner is superseded by that normal path. The route changes nothing in the row.
+
 ## Events
 
 | Event | Audience | Payload | Emitter |
@@ -105,4 +110,4 @@ Sweep every 15 s (rule 14a), `SUPERSEDED_STOP_DELAY` 3 s, `PARKED_TTL` 24 h, per
 
 Rust unit tests (`crates/server/src/account_session/tests.rs`): concurrent claims leave one owner, a preloaded session without a beat claims nothing, an offline replay claims nothing, the sweep parks a silent owner and drops an old parked row, boot parks everything, an out-of-scope kind or the option off leave the row untouched, a same-target replacement keeps the epoch, a shared device parks the other account's row.
 Integration (`tests/it/account_session.rs`): two SSE streams of one account, claim from the second target, `session.superseded` on the first stream only, `session.changed` on both, the first's next beat answered `superseded`.
-Parity (`server/parity/scenarios/session/`): `get-empty`, `get-after-beat`, `beat-superseded`, `dismiss-parked`, `dismiss-live-409`, `stream-token-forbidden`, `unauthenticated`.
+Parity (`server/parity/scenarios/session/`): `get-empty`, `get-after-beat`, `beat-superseded`, `dismiss-parked`, `dismiss-live-409`, `stream-token-forbidden`, `unauthenticated`, `transfer-ok`, `transfer-no-session`, `transfer-offline`, `transfer-own-target`, `transfer-other-user-denied`, `transfer-grantee-allowed`, `transfer-stream-token-forbidden`.

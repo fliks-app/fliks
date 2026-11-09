@@ -20,6 +20,9 @@ export interface AccountSession {
   epoch: number;
   item: {
     id: number;
+    /** The pair a player opens the item with: its media, and the item itself when it sits in a group. */
+    mediaId: number;
+    episodeId: number | null;
     mediaFileId: number | null;
     kind: MediaType;
     title: string | null;
@@ -55,20 +58,13 @@ export interface SessionPlayer {
   yield(): Promise<SupersededPlayback | null>;
 }
 
-/** What the owner's own report adds to the stored session, which names no media or episode. */
+/** What the owner's own report names: the file it plays, to tell its live reading from another item's. */
 export interface LiveReport {
   mediaFileId: number;
-  mediaId: number | null;
-  episodeId: number | null;
 }
 
-/** Where the media of a session stands, ready to start from. */
-export interface ResumePoint extends LiveReport {
-  positionSeconds: number;
-}
-
-/** Starts `session` on this device, one per family of kind; the video one is registered by the player module. */
-export type SessionResumer = (session: AccountSession, at: ResumePoint) => Promise<void>;
+/** Starts `session` on this device at `positionSeconds`, one per family of kind; the video one is registered by the player module. */
+export type SessionResumer = (session: AccountSession, positionSeconds: number) => Promise<void>;
 
 const HANDLED_MAX = 32;
 
@@ -131,16 +127,11 @@ export class SessionSyncService {
       });
     });
 
-    effect(() => {
-      const r = this.live();
-      if (r) untracked(() => this.known.set(r));
-    });
-
-    this.registerResumer('video', async (_s, at) => {
-      if (!at.mediaId) return;
-      const episode = at.episodeId ? { episodeId: at.episodeId } : {};
-      await this.router.navigate(['/watch', at.mediaFileId], {
-        queryParams: { mediaId: at.mediaId, ...episode, t: Math.floor(at.positionSeconds) },
+    this.registerResumer('video', async (s, positionSeconds) => {
+      if (!s.item.mediaFileId) return;
+      const episode = s.item.episodeId ? { episodeId: s.item.episodeId } : {};
+      await this.router.navigate(['/watch', s.item.mediaFileId], {
+        queryParams: { mediaId: s.item.mediaId, ...episode, t: Math.floor(positionSeconds) },
       });
     });
 
@@ -231,9 +222,6 @@ export class SessionSyncService {
     return r && r.mediaFileId === s.item.mediaFileId ? r : null;
   });
 
-  /** Last report seen for the session's file: the stored session names neither media nor episode, and a parked owner no longer reports. */
-  private readonly known = signal<LiveReport | null>(null);
-
   /** The session's position now: the owner's report when observed, else the stored anchor. */
   positionNow(s: AccountSession): number {
     if (this.live()) return this.livePosition();
@@ -247,26 +235,23 @@ export class SessionSyncService {
     return family && this.resumers[family];
   }
 
-  /** What a start needs beyond the stored session: the media pair for video, the queue alone for an album. */
-  private knownFor(s: AccountSession): LiveReport | null {
-    const k = this.known();
-    if (k && k.mediaFileId === s.item.mediaFileId) return k;
-    return s.item.kind === 'album' ? { mediaFileId: s.item.mediaFileId ?? 0, mediaId: null, episodeId: null } : null;
-  }
-
-  /** Whether this device can start the item: it has an adapter for the kind and has seen the media the session omits. */
+  /** Whether this device can start the session's item: it has an adapter for the kind (a parked session included, from a cold start). */
   readonly canPlayHere = computed(() => {
     const s = this._session();
-    return !!s && this.role() !== 'owner' && !!this.resumerFor(s) && this.knownFor(s) !== null;
+    return !!s && this.role() !== 'owner' && !!this.resumerFor(s);
   });
 
   /** Takes the session over on this device, at its position now; the first beat claims it and the old owner is superseded. */
   async playHere(): Promise<void> {
     const s = this._session();
-    const known = s && this.knownFor(s);
     const resumer = s && this.resumerFor(s);
-    if (!s || !known || !resumer || this.role() === 'owner') return;
-    await resumer(s, { ...known, positionSeconds: this.positionNow(s) });
+    if (!s || !resumer || this.role() === 'owner') return;
+    await resumer(s, this.positionNow(s));
+  }
+
+  /** Moves the session to another device of the account, which loads it where it stands; its first beat claims and this one is superseded. */
+  async transferTo(targetId: string): Promise<void> {
+    await firstValueFrom(this.http.post<void>('/api/session/transfer', { toTargetId: targetId }));
   }
 
   /** Masks a parked session; a live one is stopped through its owner instead. */

@@ -16,7 +16,7 @@ import { SseService, type SessionEvent } from './sse.service';
 function session(over: Partial<AccountSession> = {}): AccountSession {
   return {
     epoch: 1,
-    item: { id: 5, mediaFileId: 9, kind: 'movie', title: 'A film', subtitle: null, posterUrl: null },
+    item: { id: 5, mediaId: 3, episodeId: 7, mediaFileId: 9, kind: 'movie', title: 'A film', subtitle: null, posterUrl: null },
     owner: { targetId: 'pc#1', deviceName: 'Desk', formFactor: 'desktop' },
     state: 'playing',
     positionSeconds: 100,
@@ -196,52 +196,59 @@ describe('SessionSyncService takeover', () => {
 describe('SessionSyncService play here', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('cannot start an item whose media it has not seen', async () => {
-    const { service, flush } = setup();
-    await flush(session());
-    expect(service.canPlayHere()).toBe(false);
-  });
-
-  it('starts the observed item at the owner position through the adapter of its family', async () => {
+  it('starts the item with its own pair at the extrapolated position through the adapter of its family', async () => {
     const { service, flush } = setup();
     await flush(session());
     const resumer = vi.fn().mockResolvedValue(undefined);
     service.registerResumer('video', resumer);
-    service.setLiveSource(() => ({ mediaFileId: 9, mediaId: 3, episodeId: 7 }), () => 812.5);
-    TestBed.tick();
     expect(service.canPlayHere()).toBe(true);
     await service.playHere();
-    expect(resumer.mock.calls[0][1]).toEqual({ mediaFileId: 9, mediaId: 3, episodeId: 7, positionSeconds: 812.5 });
+    expect(resumer.mock.calls[0][0].item).toMatchObject({ mediaId: 3, episodeId: 7, mediaFileId: 9 });
+    expect(resumer.mock.calls[0][1]).toBeGreaterThanOrEqual(100);
   });
 
-  it('falls back on the stored anchor once the owner is parked', async () => {
+  it('prefers the owner live position while it is observed', async () => {
     const { service, flush } = setup();
     await flush(session());
     const resumer = vi.fn().mockResolvedValue(undefined);
     service.registerResumer('video', resumer);
-    const report = signal<{ mediaFileId: number; mediaId: number; episodeId: null } | null>({ mediaFileId: 9, mediaId: 3, episodeId: null });
-    service.setLiveSource(report, () => 812);
+    service.setLiveSource(() => ({ mediaFileId: 9 }), () => 812.5);
     TestBed.tick();
-    report.set(null);
-    service.refresh();
-    TestBed.inject(HttpTestingController).expectOne('/api/session').flush(session({ state: 'parked', playing: false, positionSeconds: 640 }));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(service.canPlayHere()).toBe(true);
     await service.playHere();
-    expect(resumer.mock.calls[0][1].positionSeconds).toBe(640);
+    expect(resumer.mock.calls[0][1]).toBe(812.5);
   });
 
-  it('starts an album from its stored queue with no live report from the owner', async () => {
+  it('resumes a parked session from a cold start at the stored position', async () => {
+    const { service, flush } = setup();
+    await flush(session({ state: 'parked', playing: false, positionSeconds: 640 }));
+    const resumer = vi.fn().mockResolvedValue(undefined);
+    service.registerResumer('video', resumer);
+    expect(service.canPlayHere()).toBe(true);
+    await service.playHere();
+    expect(resumer.mock.calls[0][1]).toBe(640);
+  });
+
+  it('starts an album from its stored queue', async () => {
     const { service, flush } = setup();
     const queue = { itemIds: [5, 6], index: 0, shuffle: false, repeat: 'off' as const };
-    await flush(session({ item: { id: 5, mediaFileId: null, kind: 'album', title: 'An album', subtitle: 'A track', posterUrl: null }, queue, state: 'parked', playing: false }));
+    await flush(session({ item: { id: 5, mediaId: 2, episodeId: null, mediaFileId: null, kind: 'album', title: 'An album', subtitle: 'A track', posterUrl: null }, queue, state: 'parked', playing: false }));
     const resumer = vi.fn().mockResolvedValue(undefined);
     service.registerResumer('audio', resumer);
     expect(service.canPlayHere()).toBe(true);
     await service.playHere();
     expect(resumer.mock.calls[0][0].queue).toEqual(queue);
-    expect(resumer.mock.calls[0][1].positionSeconds).toBe(100);
+    expect(resumer.mock.calls[0][1]).toBe(100);
+  });
+
+  it('transfers to another device through the server without touching the local state', async () => {
+    const { service, flush, http } = setup();
+    await flush(session({ owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }));
+    const done = service.transferTo('tv#1');
+    const req = http.expectOne('/api/session/transfer');
+    expect(req.request.body).toEqual({ toTargetId: 'tv#1' });
+    req.flush({ cmdId: 'c1' });
+    await done;
+    expect(service.role()).toBe('owner');
   });
 
   it('does nothing for the owner', async () => {
