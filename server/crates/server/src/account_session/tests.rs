@@ -276,12 +276,12 @@ async fn a_revived_session_of_a_device_that_lost_the_screen_stays_superseded(poo
         s.beat(&st, beat(u, "s1", "tA", i)).await,
         Verdict::Superseded
     );
-    assert!(s.is_superseded(u, "s1").await);
+    assert!(s.is_superseded("s1").await);
     assert_eq!(row(&st, u).await.unwrap().session_id, "s2");
     s.0.lock().await.claimed.get_mut("s1").unwrap().ended_at = Some(0);
     s.sweep(&st).await;
     assert!(
-        !s.is_superseded(u, "s1").await,
+        !s.is_superseded("s1").await,
         "forgotten past the revive window"
     );
 }
@@ -388,35 +388,108 @@ async fn a_same_owner_claim_keeps_the_queue_only_when_it_holds_the_item(pool: Pg
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_beat_without_a_target_keeps_the_stored_one(pool: PgPool) {
-    let st = state(&pool).await;
-    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
-    let s = &st.account_sessions;
-    s.beat(&st, beat(u, "s1", "tA", i)).await;
-    let mut b = beat(u, "s1", "tA", i);
-    b.owner.target_id = None;
-    s.beat(&st, b).await;
-    let r = row(&st, u).await.unwrap();
-    assert_eq!(r.owner.target_id.as_deref(), Some("tA"));
-}
-
-#[sqlx::test(migrations = false)]
 async fn boot_rebuilds_the_claims_from_the_rows(pool: PgPool) {
     let st = state(&pool).await;
     let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
     st.account_sessions.beat(&st, beat(u, "s1", "tA", i)).await;
-    st.account_sessions.beat(&st, beat(u, "s2", "tB", i)).await;
     let fresh = AccountSessions::default();
     fresh.load(&st).await.unwrap();
     assert_eq!(
         fresh.beat(&st, beat(u, "s2", "tB", i)).await,
         Verdict::Current
     );
-    assert!(!fresh.is_superseded(u, "s2").await);
     assert_eq!(
         fresh.beat(&st, beat(u, "s1", "tA", i)).await,
         Verdict::Superseded
     );
+    assert!(fresh.is_superseded("s1").await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_sid_is_judged_on_the_account_it_claimed_for(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let other = user(&pool, "b", true, None).await;
+    let s = &st.account_sessions;
+    let attributed = |sid, target| BeatIn {
+        hub_user: other,
+        ..beat(u, sid, target, i)
+    };
+    s.beat(&st, attributed("s1", "tA")).await;
+    assert!(
+        !s.is_superseded("s1").await,
+        "the current owner is not superseded"
+    );
+    s.beat(&st, attributed("s2", "tB")).await;
+    assert!(s.is_superseded("s1").await);
+    assert_eq!(s.item_of("s1").await, Some(i));
+    assert!(!s.is_superseded("unknown").await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_without_a_target_keeps_the_stored_owner_whole(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    let mut b = beat(u, "s1", "tA", i);
+    b.owner = Owner {
+        target_id: None,
+        device_name: Some("other".into()),
+        form_factor: Some("tv".into()),
+    };
+    s.beat(&st, b).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(r.owner.target_id.as_deref(), Some("tA"));
+    assert_eq!(r.owner.device_name.as_deref(), Some("device tA"));
+    assert_eq!(r.owner.form_factor, None);
+}
+
+#[sqlx::test(migrations = false)]
+async fn forget_and_unfile_leave_a_row_that_was_replaced_meanwhile(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let other = item(&pool).await;
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "tA", i);
+    b.file = Some(7);
+    s.beat(&st, b).await;
+    s.unfile(u, "s1", 8).await;
+    assert_eq!(row(&st, u).await.unwrap().media_file_id, Some(7));
+    s.unfile(u, "s1", 7).await;
+    assert_eq!(row(&st, u).await.unwrap().media_file_id, None);
+    s.forget(u, "s1", other).await;
+    assert!(row(&st, u).await.is_some());
+    s.forget(u, "s1", i).await;
+    assert!(row(&st, u).await.is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_video_sid_beating_after_a_reader_save_claims_normally(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.ended(&st, "s1").await;
+    s.reading(&st, reading(u, i, 0.3)).await;
+    assert_eq!(row(&st, u).await.unwrap().session_id, format!("reader:{i}"));
+    assert!(!s.is_superseded("s1").await);
+    assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Current);
+    assert_eq!(row(&st, u).await.unwrap().session_id, "s1");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reader_save_of_the_same_owner_is_stored_only_every_30_seconds(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.reading(&st, reading(u, i, 0.2)).await;
+    s.reading(&st, reading(u, i, 0.4)).await;
+    assert_eq!(row(&st, u).await.unwrap().position, 0.4);
+    assert_eq!(s.0.lock().await.rows[&u].persisted_pos, 0.2);
+    s.0.lock().await.rows.get_mut(&u).unwrap().persisted_at = 0;
+    s.reading(&st, reading(u, i, 0.6)).await;
+    assert_eq!(s.0.lock().await.rows[&u].persisted_pos, 0.6);
 }
 
 #[sqlx::test(migrations = false)]

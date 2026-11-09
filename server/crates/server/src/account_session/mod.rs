@@ -130,8 +130,9 @@ struct Entry {
     persisted_pos: f64,
 }
 
-/// A sid that claimed: its target, and when its engine session ended (ms).
+/// A sid that claimed: the account it claimed for, its target, and when its engine session ended (ms).
 struct Claim {
+    account: i32,
     target: Option<String>,
     ended_at: Option<i64>,
 }
@@ -147,15 +148,18 @@ struct Inner {
 }
 
 impl Inner {
-    /// What a beat of an already claimed `sid` is for `account` (rule 8).
-    fn claimed_verdict(&self, account: i32, sid: &str) -> Option<Verdict> {
+    /// What a beat of an already claimed `sid` is (rule 8), judged on the account it claimed for.
+    /// `None` when it is free to claim again: never claimed, or a reader's row replaced its own.
+    fn claimed_verdict(&self, sid: &str) -> Option<Verdict> {
         let claim = self.claimed.get(sid)?;
-        Some(
-            match self.rows.get(&account).map(|e| &e.row.owner.target_id) {
-                Some(owner) if owner != &claim.target => Verdict::Superseded,
-                _ => Verdict::Ignored,
-            },
-        )
+        let row = self.rows.get(&claim.account).map(|e| &e.row);
+        if row.is_some_and(|r| r.session_id.starts_with(READER_PREFIX)) {
+            return None;
+        }
+        Some(match row.map(|r| &r.owner.target_id) {
+            Some(owner) if owner != &claim.target => Verdict::Superseded,
+            _ => Verdict::Ignored,
+        })
     }
 }
 
@@ -196,9 +200,11 @@ pub struct ReadingIn {
     pub progression: f64,
 }
 
+const READER_PREFIX: &str = "reader:";
+
 /// The sid of the parked row a reader leaves for `item`; nothing ever beats under it.
 fn reader_sid(item: i32) -> String {
-    format!("reader:{item}")
+    format!("{READER_PREFIX}{item}")
 }
 
 /// Cheap to clone, every clone shares the one lock.
@@ -254,6 +260,7 @@ impl AccountSessions {
         let now = now_ms() as i64;
         for row in &rows {
             let claim = Claim {
+                account: row.user_id,
                 target: row.owner.target_id.clone(),
                 ended_at: Some(now),
             };
@@ -285,7 +292,7 @@ impl AccountSessions {
         if current {
             return Self::update(st, &mut g, b).await;
         }
-        if let Some(v) = g.claimed_verdict(b.account, &b.sid) {
+        if let Some(v) = g.claimed_verdict(&b.sid) {
             return v;
         }
         if b.owner.target_id.is_none() || g.unscoped.contains(&b.sid) {
@@ -307,23 +314,16 @@ impl AccountSessions {
     }
 
     /// Whether a beat of `sid` is superseded, whatever else is known of its sender.
-    pub async fn is_superseded(&self, account: i32, sid: &str) -> bool {
-        let g = self.0.lock().await;
-        let current = g
-            .rows
-            .get(&account)
-            .is_some_and(|e| e.row.session_id == sid);
-        !current && g.claimed_verdict(account, sid) == Some(Verdict::Superseded)
+    pub async fn is_superseded(&self, sid: &str) -> bool {
+        self.0.lock().await.claimed_verdict(sid) == Some(Verdict::Superseded)
     }
 
-    /// The item of the account's row, to tell a superseded beat of another item from one of the row's.
-    pub async fn item_of(&self, account: i32) -> Option<i32> {
-        self.0
-            .lock()
-            .await
-            .rows
-            .get(&account)
-            .map(|e| e.row.item_id)
+    /// The item of the row of the account `sid` claimed for, to tell a superseded beat of another
+    /// item from one of the row's.
+    pub async fn item_of(&self, sid: &str) -> Option<i32> {
+        let g = self.0.lock().await;
+        let account = g.claimed.get(sid)?.account;
+        g.rows.get(&account).map(|e| e.row.item_id)
     }
 
     async fn update(st: &AppState, g: &mut Inner, b: BeatIn) -> Verdict {
@@ -344,11 +344,9 @@ impl AccountSessions {
         if b.queue.is_some() {
             r.queue = b.queue;
         }
-        let target = b.owner.target_id.or_else(|| r.owner.target_id.take());
-        r.owner = Owner {
-            target_id: target,
-            ..b.owner
-        };
+        if b.owner.target_id.is_some() {
+            r.owner = b.owner;
+        }
         e.held = Some(Held {
             hub_user: b.hub_user,
             connection: b.connection,
@@ -375,6 +373,7 @@ impl AccountSessions {
 
     async fn claim(st: &AppState, g: &mut Inner, b: BeatIn) {
         let claim = Claim {
+            account: b.account,
             target: b.owner.target_id.clone(),
             ended_at: None,
         };
@@ -468,13 +467,21 @@ impl AccountSessions {
             }
         }
         let mut g = self.0.lock().await;
-        let prior = g.rows.get(&r.account);
-        if prior.is_some_and(|e| e.row.state != State::Parked) {
-            return;
-        }
         let sid = reader_sid(r.item);
-        let announced = prior.is_none_or(|e| e.row.session_id != sid || e.row.owner != r.owner);
-        let epoch = prior.map_or(1, |e| e.row.epoch);
+        match g.rows.get_mut(&r.account) {
+            Some(e) if e.row.state != State::Parked => return,
+            Some(e) if e.row.session_id == sid && e.row.owner == r.owner => {
+                let moved = e.row.media_file_id != Some(r.file);
+                (e.row.position, e.row.media_file_id) = (r.progression, Some(r.file));
+                e.row.updated_at = Utc::now();
+                if moved || now_ms() as i64 - e.persisted_at >= PERSIST_EVERY_MS {
+                    persist(st, e).await;
+                }
+                return;
+            }
+            _ => {}
+        }
+        let epoch = g.rows.get(&r.account).map_or(1, |e| e.row.epoch);
         let mut entry = Entry {
             row: Row {
                 user_id: r.account,
@@ -495,9 +502,7 @@ impl AccountSessions {
             persisted_pos: 0.0,
         };
         persist(st, &mut entry).await;
-        if announced {
-            announce(st, r.account, Some(&entry.row));
-        }
+        announce(st, r.account, Some(&entry.row));
         g.rows.insert(r.account, entry);
     }
 
@@ -598,17 +603,20 @@ impl AccountSessions {
 
     /// A row whose item is gone (the database cascaded it) is dropped from memory too, unless a
     /// newer row replaced it meanwhile.
-    async fn forget(&self, user: i32, sid: &str) {
+    async fn forget(&self, user: i32, sid: &str, item: i32) {
         let mut g = self.0.lock().await;
-        if g.rows.get(&user).is_some_and(|e| e.row.session_id == sid) {
+        if let Some(e) = g.rows.get(&user)
+            && (e.row.session_id.as_str(), e.row.item_id) == (sid, item)
+        {
             g.rows.remove(&user);
         }
     }
 
     /// The file of the row is gone (the database nulled it): memory follows.
-    async fn unfile(&self, user: i32, sid: &str) {
+    async fn unfile(&self, user: i32, sid: &str, file: i32) {
         if let Some(e) = self.0.lock().await.rows.get_mut(&user)
             && e.row.session_id == sid
+            && e.row.media_file_id == Some(file)
         {
             e.row.media_file_id = None;
         }

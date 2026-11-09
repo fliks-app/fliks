@@ -94,11 +94,17 @@ async fn current(st: &AppState, user: i32) -> Result<Option<(Row, store::Shown)>
         return Ok(None);
     };
     let Some(shown) = store::shown(&st.db, row.item_id, row.media_file_id).await? else {
-        st.account_sessions.forget(user, &row.session_id).await;
+        st.account_sessions
+            .forget(user, &row.session_id, row.item_id)
+            .await;
         return Ok(None);
     };
-    if !shown.file_exists && row.media_file_id.take().is_some() {
-        st.account_sessions.unfile(user, &row.session_id).await;
+    if !shown.file_exists
+        && let Some(file) = row.media_file_id.take()
+    {
+        st.account_sessions
+            .unfile(user, &row.session_id, file)
+            .await;
     }
     Ok(Some((row, shown)))
 }
