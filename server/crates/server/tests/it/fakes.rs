@@ -10,7 +10,7 @@ use fliks_domain::{
 };
 use fliks_server::{
     images::ImageStore,
-    metadata::{Call, Credits, MetadataProvider, PersonDetails, Search, Upstream},
+    metadata::{Call, Credits, MetadataProvider, PersonDetails, Search, Target, Upstream},
     net::guard::{Net, SystemNet},
 };
 use futures_util::future::BoxFuture;
@@ -36,6 +36,7 @@ pub struct Scripted {
     fallback: Mutex<Option<Fallback>>,
     log: Mutex<Vec<String>>,
     person_of: Mutex<Vec<Namespace>>,
+    delay: Mutex<std::time::Duration>,
     pub on: AtomicBool,
 }
 
@@ -47,6 +48,7 @@ impl Scripted {
             fallback: Mutex::default(),
             log: Mutex::default(),
             person_of: Mutex::default(),
+            delay: Mutex::default(),
             on: AtomicBool::new(true),
         })
     }
@@ -62,6 +64,11 @@ impl Scripted {
     /// Also describes the people of `ns` for the albums, as a provider listing `ns` in its `findBy` does.
     pub fn serve_persons_of(&self, ns: Namespace) {
         self.person_of.lock().unwrap().push(ns);
+    }
+
+    /// Every later answer waits this long first.
+    pub fn slow(&self, by: std::time::Duration) {
+        *self.delay.lock().unwrap() = by;
     }
 
     /// Answers the keys the table does not hold; `None` is a 404.
@@ -93,7 +100,13 @@ impl Scripted {
         let r = r
             .map(map)
             .map_err(|s| Upstream::new(Some(s), format!("HTTP {s}")));
-        Box::pin(async move { r })
+        let delay = *self.delay.lock().unwrap();
+        Box::pin(async move {
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+            r
+        })
     }
 }
 
@@ -141,6 +154,19 @@ impl MetadataProvider for Scripted {
             lang.tmdb_locale
         );
         self.answer(format!("search/{}", q.kind.as_str()), logged, items)
+    }
+    fn has_target_search(&self, _: Target) -> bool {
+        true
+    }
+    fn search_target<'a>(
+        &'a self,
+        t: Target,
+        q: &'a Search<'a>,
+        _: &'a Resolved,
+        _: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        let key = format!("search/album/{}", t.as_str());
+        self.answer(key.clone(), format!("{key}?query={}", q.query), items)
     }
     fn fetch_work<'a>(
         &'a self,

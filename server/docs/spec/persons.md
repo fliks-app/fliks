@@ -101,6 +101,10 @@ Scenarios (`server/parity/scenarios/persons/`, 25 files, `as` in `admin|user|rea
 None.
 
 
+## Resolve (`POST /api/persons/resolve`)
+
+Any authenticated caller. Body `{provider, externalId, name, sortName?}` of an artist a music provider found (`music.md` rule 72): `provider` must be a namespace whose people an available provider describes for `album` (`Metadata::person_providers`), else 400 `provider must be one of the following values: <name>`; `externalId` is normalised by the namespace (400 `externalId is not a <name> id`); `name` is required. It finds the person holding that id (or an alias), else the one of that name (`metadata::music::people::person`), else creates it, and links the id: 200 `{id}`. Calling it again answers the same id, and two calls at once create one person. The artist page (`/artists/:id`) then reads it like any other.
+
 ## Music artists
 
 A refresh from a provider that serves music artists (`music.md` rules 22 and 25) also stores `sortName` (`persons."sortName"`, which the search vector reads), `disambiguation` and `artistType`; none of them is in `Person` yet. An answer that names another MusicBrainz `id` than the one asked replaces the stored id and keeps the old one as an alias (`music.md` rule 40).

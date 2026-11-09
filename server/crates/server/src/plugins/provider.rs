@@ -8,7 +8,7 @@ use super::runtime::{
 use super::{Plugins, packages};
 use crate::metadata::{
     Call, Credits, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, PersonDetails, Search,
-    Upstream,
+    Target, Upstream,
 };
 use fliks_domain::{
     comics::provider as comics,
@@ -303,6 +303,37 @@ impl PluginProvider {
         Ok(list.into_iter().map(|v| self.sanitized(v)).collect())
     }
 
+    async fn search_with(
+        &self,
+        q: &Search<'_>,
+        extra: Vec<(String, String)>,
+        lang: &Resolved,
+        p: Priority,
+    ) -> Result<Vec<Value>, Upstream> {
+        let wq = wit::SearchQuery {
+            kind: q.kind.as_str().to_owned(),
+            query: q.query.to_owned(),
+            year: q.year.and_then(|y| i32::try_from(y).ok()),
+            title: q.title.map(str::to_owned),
+            author: q.author.map(str::to_owned),
+            author_id: q.author_id.map(str::to_owned),
+            isbn: q.isbn.map(str::to_owned),
+            language: q.language.map(str::to_owned),
+            page: q.page,
+            extra,
+        };
+        let lang = lang_of(lang);
+        let (json, seen) = self
+            .call(false, p, move |i| {
+                Box::pin(async move {
+                    let (g, s) = i.provider();
+                    g.call_search(s, &wq, &lang).await
+                })
+            })
+            .await?;
+        self.array(&seen, &json)
+    }
+
     fn own(&self, value: &str) -> ExternalId {
         ExternalId {
             provider: self.key.as_str().to_owned(),
@@ -415,28 +446,22 @@ impl MetadataProvider for PluginProvider {
     ) -> Call<'a, Vec<Value>> {
         async move {
             self.has(Some(q.kind), "search")?;
-            let wq = wit::SearchQuery {
-                kind: q.kind.as_str().to_owned(),
-                query: q.query.to_owned(),
-                year: q.year.and_then(|y| i32::try_from(y).ok()),
-                title: q.title.map(str::to_owned),
-                author: q.author.map(str::to_owned),
-                author_id: q.author_id.map(str::to_owned),
-                isbn: q.isbn.map(str::to_owned),
-                language: q.language.map(str::to_owned),
-                page: q.page,
-                extra: vec![],
-            };
-            let lang = lang_of(lang);
-            let (json, seen) = self
-                .call(false, p, move |i| {
-                    Box::pin(async move {
-                        let (g, s) = i.provider();
-                        g.call_search(s, &wq, &lang).await
-                    })
-                })
-                .await?;
-            self.array(&seen, &json)
+            self.search_with(q, vec![], lang, p).await
+        }
+        .boxed()
+    }
+
+    fn search_target<'a>(
+        &'a self,
+        target: Target,
+        q: &'a Search<'a>,
+        lang: &'a Resolved,
+        p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        async move {
+            self.has(Some(MediaKind::Album), target.capability())?;
+            let extra = vec![("target".to_owned(), target.as_str().to_owned())];
+            self.search_with(q, extra, lang, p).await
         }
         .boxed()
     }
@@ -665,6 +690,10 @@ impl MetadataProvider for PluginProvider {
 
     fn has_search(&self, kind: MediaKind) -> bool {
         self.declares(Some(kind), "search")
+    }
+
+    fn has_target_search(&self, target: Target) -> bool {
+        self.declares(Some(MediaKind::Album), target.capability())
     }
 
     fn has_scene(&self) -> bool {

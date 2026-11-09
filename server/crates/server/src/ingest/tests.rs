@@ -6094,6 +6094,51 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn wanting_a_recording_creates_the_album_and_monitors_only_that_track(pool: PgPool) {
+        let c = ctx_music(pool, Some(provider())).await;
+        let l = album_lib(&c).await;
+        let two = "11111111-1111-4111-8111-111111111112";
+        let one = "11111111-1111-4111-8111-111111111111";
+        let want = |rec: &str| json!({"provider": "musicbrainz", "externalId": rec, "albumExternalId": GROUP, "libraryId": l});
+        let monitored = |c: &Ctx| {
+            let db = c.st.db.clone();
+            async move {
+                sqlx::query_scalar::<_, String>(
+                    r#"SELECT i.title FROM items i JOIN track_details td ON td."itemId" = i.id
+                       WHERE i.monitored ORDER BY td.position"#,
+                )
+                .fetch_all(&db)
+                .await
+                .unwrap()
+            }
+        };
+        let (s, b) = call(&c, "POST", "/api/music/want-recording", &c.admin, want(two)).await;
+        assert_eq!(s, 201, "{b}");
+        assert_eq!(monitored(&c).await, ["Two"]);
+        let media = b["mediaId"].as_i64();
+        assert!(b["itemId"].is_i64() && media.is_some());
+        // A held album keeps what it wants and adds this track.
+        let (s, b) = call(&c, "POST", "/api/music/want-recording", &c.admin, want(one)).await;
+        assert_eq!((s, b["mediaId"].as_i64()), (201, media), "{b}");
+        assert_eq!(monitored(&c).await, ["One", "Two"]);
+        // A recording the target release lacks leaves the album as it is.
+        let other = "11111111-1111-4111-8111-1111111111ff";
+        let (s, b) = call(
+            &c,
+            "POST",
+            "/api/music/want-recording",
+            &c.admin,
+            want(other),
+        )
+        .await;
+        assert_eq!((s, b["itemId"].is_null()), (201, true), "{b}");
+        assert_eq!(monitored(&c).await, ["One", "Two"]);
+        let bad = json!({"provider": "tmdb", "externalId": two, "albumExternalId": GROUP});
+        let (s, _) = call(&c, "POST", "/api/music/want-recording", &c.admin, bad).await;
+        assert_eq!(s, 400);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_merged_artist_keeps_its_row_and_its_old_id_as_an_alias(pool: PgPool) {
         let c = ctx_music(pool, None).await;
         let p: i32 =

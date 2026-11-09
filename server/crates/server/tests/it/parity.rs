@@ -702,6 +702,8 @@ const ADDITIVE: &[&str] = &[
     "$..identities",
     "$..accessManagedBy",
     "$..hasPassword",
+    "$[*].state",
+    "$[*].requestStatus",
 ];
 
 /// Step-level `ignore`: paths dropped from that step's body only.

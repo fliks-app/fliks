@@ -12,13 +12,14 @@ mod routes;
 #[cfg(any(test, feature = "parity"))]
 pub mod scene_stub;
 mod search;
+mod search_cache;
 pub mod service;
 mod types;
 
 pub use language::{LanguageCache, Override};
 pub use orchestrator::{Key, prune_snapshots};
 use provider::Absent;
-pub use provider::{Call, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, Search};
+pub use provider::{Call, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, Search, Target};
 pub use routes::*;
 pub use search::*;
 pub use types::{Credits, MetaError, PersonDetails, Upstream};
@@ -54,6 +55,7 @@ pub struct Metadata {
     flights: orchestrator::Flights,
     /// Last good copy of each global list (rule 17); never expires.
     stale: Mutex<HashMap<String, serde_json::Value>>,
+    search_cache: search_cache::SearchCache,
 }
 
 impl Metadata {
@@ -63,6 +65,7 @@ impl Metadata {
             db,
             flights: Default::default(),
             stale: Mutex::default(),
+            search_cache: Default::default(),
             dynamic: RwLock::default(),
         }
     }
@@ -75,6 +78,8 @@ impl Metadata {
             d.added.push(id);
         }
         d.providers.insert(id, provider);
+        drop(d);
+        self.search_cache.clear();
     }
 
     /// The provider of `id` and whether it is available: a plugin that went away stays, its calls fail 503.
@@ -267,6 +272,7 @@ impl Metadata {
             })
             .collect();
         self.dynamic.write_clean().orders = orders;
+        self.search_cache.clear();
         Ok(())
     }
 
