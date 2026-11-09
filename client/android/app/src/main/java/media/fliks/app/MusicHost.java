@@ -15,6 +15,7 @@ import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
@@ -30,7 +31,10 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.exoplayer.drm.DrmSessionManagerProvider;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
 import androidx.media3.session.LibraryResult;
 import androidx.media3.session.MediaLibraryService;
 import androidx.media3.session.MediaSession;
@@ -46,7 +50,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,8 +76,11 @@ final class MusicHost {
         final String sessionId;
         final long mediaFileId;
         final double duration;
+        /** The server serves an HLS timeline (transcode or remux) rather than the file. */
+        final boolean hls;
 
-        Resolved(String path, String sessionId, long mediaFileId, double duration) {
+        Resolved(String path, String sessionId, long mediaFileId, double duration, boolean hls) {
+            this.hls = hls;
             this.path = path;
             this.sessionId = sessionId;
             this.mediaFileId = mediaFileId;
@@ -98,13 +104,6 @@ final class MusicHost {
             this.sessionId = sessionId;
             this.duration = duration;
             this.offsets = offsets;
-        }
-    }
-
-    /** A track native playback cannot serve; a FileNotFoundException is never retried by ExoPlayer. */
-    private static final class NotPlayable extends FileNotFoundException {
-        NotPlayable(String message) {
-            super(message);
         }
     }
 
@@ -138,7 +137,6 @@ final class MusicHost {
     /** Server and user the queue started under; a different signed-in session never reaches it. */
     @Nullable private volatile String sessionKey;
     @Nullable private volatile Book book;
-    private int skipped;
     private boolean jsEditing;
     private boolean externalQueue;
     private int lastIndex = -1;
@@ -167,8 +165,9 @@ final class MusicHost {
         };
         DataSource.Factory http = new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true);
         DataSource.Factory source = new ResolvingDataSource.Factory(new DefaultDataSource.Factory(context, http), this::resolve);
+        DefaultMediaSourceFactory base = new DefaultMediaSourceFactory(context).setDataSourceFactory(source);
         exo = new ExoPlayer.Builder(context, renderers)
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(context).setDataSourceFactory(source))
+                .setMediaSourceFactory(new TrackSourceFactory(base))
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
                 .setSeekBackIncrementMs(15_000)
@@ -307,6 +306,48 @@ final class MusicHost {
 
     // ---- streams ----
 
+    /** A music track opens as the file or as the item's HLS stream, whichever the server decides. */
+    private final class TrackSourceFactory implements MediaSource.Factory {
+        private final MediaSource.Factory base;
+
+        TrackSourceFactory(MediaSource.Factory base) {
+            this.base = base;
+        }
+
+        @Override
+        public MediaSource.Factory setDrmSessionManagerProvider(DrmSessionManagerProvider provider) {
+            base.setDrmSessionManagerProvider(provider);
+            return this;
+        }
+
+        @Override
+        public MediaSource.Factory setLoadErrorHandlingPolicy(LoadErrorHandlingPolicy policy) {
+            base.setLoadErrorHandlingPolicy(policy);
+            return this;
+        }
+
+        @Override
+        public int[] getSupportedTypes() {
+            return base.getSupportedTypes();
+        }
+
+        @Override
+        public MediaSource createMediaSource(MediaItem item) {
+            if (item.localConfiguration == null || !MusicCatalog.SCHEME.equals(item.localConfiguration.uri.getScheme())) {
+                return base.createMediaSource(item);
+            }
+            return new DeferredMediaSource(item, base, this::open, io);
+        }
+
+        private MediaItem open(MediaItem item) throws IOException {
+            String key = boundKey();
+            Resolved r = resolveTrack(Long.parseLong(item.localConfiguration.uri.getHost()), key);
+            if (!r.hls) return item;
+            return item.buildUpon().setUri(api.streamUrl(r.path, r.sessionId, r.mediaFileId, key))
+                    .setMimeType(MimeTypes.APPLICATION_M3U8).build();
+        }
+    }
+
     private DataSpec resolve(DataSpec spec) throws IOException {
         if (!MusicCatalog.SCHEME.equals(spec.uri.getScheme())) return spec;
         String key = boundKey();
@@ -331,16 +372,13 @@ final class MusicHost {
         if (profile == null) throw new IOException("no device profile");
         try {
             JSONObject info = api.postJson("/api/items/" + itemId + "/playback-info?startAt=0", profile, key);
-            if (!"DirectPlay".equals(info.optString("playMethod"))) {
-                endSession(info.optString("sessionId"), key);
-                throw new NotPlayable("audio needs a transcode");
-            }
+            boolean hls = !"DirectPlay".equals(info.optString("playMethod"));
             JSONArray parts = info.optJSONArray("parts");
-            String url = parts != null && parts.length() > 0 ? parts.getJSONObject(0).getString("playUrl")
+            String url = !hls && parts != null && parts.length() > 0 ? parts.getJSONObject(0).getString("playUrl")
                     : info.getString("playUrl");
             int q = url.indexOf('?');
             Resolved r = new Resolved(q < 0 ? url : url.substring(0, q), info.optString("sessionId"),
-                    info.optLong("mediaFileId"), info.optDouble("durationSeconds", 0));
+                    info.optLong("mediaFileId"), info.optDouble("durationSeconds", 0), hls);
             resolved.put(itemId, r);
             main.post(this::emitTrack);
             return r;
@@ -564,7 +602,6 @@ final class MusicHost {
         public void onIsPlayingChanged(boolean playing) {
             main.removeCallbacks(tick);
             if (playing) {
-                skipped = 0;
                 main.post(tick);
             } else beat(false);
             emitState();
@@ -586,17 +623,6 @@ final class MusicHost {
             JSObject o = new JSObject();
             o.put("message", String.valueOf(error.getMessage()));
             emit("error", o);
-            if (isNotPlayable(error) && exo.hasNextMediaItem() && ++skipped < exo.getMediaItemCount()) {
-                exo.seekToNextMediaItem();
-                exo.prepare();
-            }
-        }
-
-        private boolean isNotPlayable(PlaybackException error) {
-            for (Throwable t = error; t != null; t = t.getCause()) {
-                if (t instanceof NotPlayable) return true;
-            }
-            return false;
         }
     }
 

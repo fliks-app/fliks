@@ -3,7 +3,7 @@ import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
-import { BrowserDeviceProfileService, type DeviceProfile } from '../browser-device-profile.service';
+import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { Capacitor } from '@capacitor/core';
 import { MediaService } from '../api/media.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
@@ -1317,16 +1317,9 @@ export class AudioPlayerService {
     });
     void n.addListener('error', () => this.onError());
     void n.addListener('refresh', () => void this.auth.refreshAccessToken());
-    await n.configure({ deviceProfile: JSON.stringify(this.nativeProfile()) });
+    await n.configure({ deviceProfile: JSON.stringify(this.deviceProfile.getProfile()) });
     this.pushGain();
     await n.attach();
-  }
-
-  /** The browser profile lists video containers only: the native player also direct-plays the audio files itself. */
-  private nativeProfile(): DeviceProfile {
-    const profile = this.deviceProfile.getProfile();
-    const audio = Capacitor.getPlatform() === 'ios' ? NATIVE_AUDIO_IOS : NATIVE_AUDIO_ANDROID;
-    return { ...profile, directPlayProfiles: [...profile.directPlayProfiles, { ...audio, videoCodecs: [] }] };
   }
 
   private pushGain(): void {
@@ -1548,15 +1541,6 @@ export class AudioPlayerService {
 
 /** Platforms whose native player mixes stems (karaoke spec rule 30). */
 const NATIVE_STEMS = ['android', 'ios'];
-
-const NATIVE_AUDIO_ANDROID = {
-  containers: ['mp3', 'flac', 'ogg', 'aac', 'wav', 'mp4'],
-  audioCodecs: ['mp3', 'flac', 'aac', 'opus', 'vorbis', 'pcm_s16le', 'pcm_s24le'],
-};
-const NATIVE_AUDIO_IOS = {
-  containers: ['mp3', 'flac', 'aac', 'wav', 'mp4'],
-  audioCodecs: ['mp3', 'flac', 'aac', 'alac', 'pcm_s16le', 'pcm_s24le'],
-};
 
 function sameOrigin(url: string): boolean {
   try {

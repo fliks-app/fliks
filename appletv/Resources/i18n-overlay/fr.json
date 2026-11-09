@@ -112,7 +112,6 @@
   "media_picker.back": "Retour",
   "sidebar.now_playing": "En lecture",
   "library.type.album": "Albums",
-  "music.not_playable": "« %@ » ne peut pas être lu ici",
   "music.nothing_playing": "Aucune lecture en cours",
   "music.tab_albums": "Albums",
   "karaoke.unavailable": "Le karaoké n'est pas disponible sur ce serveur."

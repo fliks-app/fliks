@@ -65,6 +65,10 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
 
 26. The state row of a beat or replay is one upsert on `("userId", "itemId")`: two first writes at once (two devices, or the web reader and kosync) both succeed, the later one updating the row. `Watch.clear_locator` makes the same statement store a NULL `locator` (`kosync.md` rule 14).
 
+27. **Native music players** (tvOS, iOS, Android) open an item as the decision says: `DirectPlay` is the file's byte-range URL, any other method (`DirectStream`, `Transcode`) the item's HLS `playUrl`, both with the file-bound stream token and `sid`; the stream session is deleted when the item is done or skipped. Stems are dropped by a key change only (`karaoke.md` rule 36), not by a transcode.
+
+28. **Device profile formats are detected, never listed**: the audio files a native player opens as they are come from the platform at run time (Android: `MediaCodecList` decoders, mapped to the containers Media3 reads; Apple: `AVURLAsset.isPlayableExtendedMIMEType`), mapped to the server's container and codec names by a minimal table. A format detected but broken on a device is an explicit, commented denylist entry keyed on the platform or device, never a static allowlist. The web layer sends the browser profile; the native layer adds the audio files.
+
 ## Not done
 
 - Continue-watching rows, resume info and `GET media/:id` for a text item (they read `positionSeconds`); the mixed Continue row of plan 3.3.

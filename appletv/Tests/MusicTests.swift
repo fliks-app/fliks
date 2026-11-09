@@ -7,6 +7,21 @@ final class MusicTests: XCTestCase {
                    durationSeconds: 100, gain: gain, peak: peak, albumGain: albumGain, albumPeak: nil)
     }
 
+    func testStreamPathFollowsTheDecision() {
+        let hls = "/api/stream/s/item/index.m3u8"
+        let part = "/api/stream/s/parts/0"
+        XCTAssertEqual(MusicPlayer.streamPath(playMethod: "DirectPlay", pitched: false, partUrl: part, playUrl: hls), part)
+        XCTAssertEqual(MusicPlayer.streamPath(playMethod: "Transcode", pitched: false, partUrl: part, playUrl: hls), hls)
+        XCTAssertEqual(MusicPlayer.streamPath(playMethod: "DirectStream", pitched: false, partUrl: nil, playUrl: hls), hls)
+        XCTAssertEqual(MusicPlayer.streamPath(playMethod: "DirectPlay", pitched: true, partUrl: part, playUrl: hls), hls)
+    }
+
+    func testAudioFileFormatsFollowThePlayableTypes() {
+        let formats = DeviceProfileBuilder.audioFileFormats { $0 == "audio/mpeg" || $0.hasPrefix("audio/mp4") && $0.contains("alac") }
+        XCTAssertEqual(formats.containers, ["mp3", "mp4"])
+        XCTAssertEqual(formats.codecs, ["mp3", "alac"])
+    }
+
     func testShuffleKeepsCurrentFirstAndRestoresOrder() {
         var q = MusicQueue()
         q.set((1...6).map { track($0) }, start: 2)
