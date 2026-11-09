@@ -15,6 +15,7 @@ import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-re
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 import { WantsStore } from '../../../../core/acquisition/acquisition';
 import type { Want } from '../../../../core/services/api/wants-api.service';
+import { TrackingModalService } from '../../../../core/services/tracking-modal.service';
 import { ReleaseGrabController } from '../../release-grab-controller';
 
 const WANT = { id: 1, family: 'video', language: null, qualityProfileId: 4, folderId: null, satisfied: true } as Want;
@@ -68,6 +69,7 @@ interface FixtureOpts {
   bestBusyGroupIds?: ReadonlySet<number>;
   media?: Media;
   grabs?: Partial<ReleaseGrabController>;
+  season?: Season;
 }
 
 async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<MediaDetailSeasonsComponent>> {
@@ -107,8 +109,8 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
 
   const fixture = TestBed.createComponent(MediaDetailSeasonsComponent);
   fixture.componentRef.setInput('media', opts.media ?? makeMedia());
-  fixture.componentRef.setInput('selectedSeason', SEASON);
-  fixture.componentRef.setInput('activeSeasonId', SEASON.id);
+  fixture.componentRef.setInput('selectedSeason', opts.season ?? SEASON);
+  fixture.componentRef.setInput('activeSeasonId', (opts.season ?? SEASON).id);
   fixture.componentRef.setInput('filteredEpisodes', []);
 
   fixture.detectChanges();
@@ -217,6 +219,22 @@ describe('MediaDetailSeasonsComponent, media.group.actions is plugin-only', () =
       bestBusyGroupIds: new Set([SEASON.id + 1]),
     });
     expect(seasonDropdownItems(other.nativeElement)[grabIdx].disabled).toBe(false);
+  });
+});
+
+describe('MediaDetailSeasonsComponent, Files status row', () => {
+  it('unfolds the Files row of a monitored season and opens the tracking modal with the season scope', async () => {
+    const season = { ...SEASON, seasonNumber: 3, monitored: true };
+    const fixture = await createFixture({ season, media: makeMedia({ seasons: [season] }) });
+    const files = seasonDropdownLabels(fixture.nativeElement).indexOf('media_detail.files_group');
+    expect(files).toBeGreaterThanOrEqual(0);
+    seasonDropdownItems(fixture.nativeElement)[files].click();
+    fixture.detectChanges();
+
+    const labels = seasonDropdownLabels(fixture.nativeElement);
+    expect(labels).not.toContain('x.search_releases');
+    seasonDropdownItems(fixture.nativeElement)[labels.lastIndexOf('tracking.menu_item')].click();
+    expect(TestBed.inject(TrackingModalService).request()).toMatchObject({ mediaId: 5, scope: { kind: 'season', seasonNumber: 3 } });
   });
 });
 

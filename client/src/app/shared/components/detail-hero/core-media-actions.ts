@@ -179,15 +179,6 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'submenu' },
     children: [
     {
-      id: 'core.tracking',
-      slot: 'media.actions',
-      weight: 5,
-      labelKey: 'tracking.menu_item',
-      icon: 'list-checks',
-      when: ['isMonitored'],
-      action: { kind: 'action', actionId: 'media.open-tracking' },
-    },
-    {
       id: 'core.analyze',
       slot: 'media.actions',
       weight: 10,

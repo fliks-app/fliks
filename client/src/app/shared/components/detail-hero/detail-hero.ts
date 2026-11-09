@@ -774,6 +774,10 @@ export class DetailHeroComponent {
     core: CORE_MEDIA_ACTIONS,
     handlers: () => this.handlers(),
     guards: this.extraGuards,
+    trackingScope: () => {
+      const episodeId = this.episodeId();
+      return episodeId ? { kind: 'episode', episodeId } : { kind: this.mediaType() };
+    },
   });
 
   readonly menuItems = computed<ResolvedMediaAction[]>(() => this.actionsMenu.rows().map((r) => ({ ...r, handler: r.run })));

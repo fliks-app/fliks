@@ -75,16 +75,6 @@
         <span class="flex-1">{{ 'media_detail.episodes_available_only' | translate }}</span>
       </label>
       @if (selSeason) {
-        @if (selSeason.monitored) {
-          <button
-            type="button"
-            class="dropdown-item text-white"
-            (click)="viewSeasonTracking.emit(selSeason.seasonNumber)"
-          >
-            <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg>
-            <span class="flex-1">{{ 'tracking.menu_item' | translate }}</span>
-          </button>
-        }
         <button
           type="button"
           class="dropdown-item text-white"
@@ -167,6 +157,29 @@
             </button>
           }
           @for (item of seasonActionItems(); track item.id) {
+            @if (item.children?.length) {
+              <button
+                type="button"
+                class="dropdown-item text-white"
+                [attr.aria-expanded]="seasonSubOpen() === item.id"
+                (click)="$event.stopPropagation(); seasonSubOpen.set(seasonSubOpen() === item.id ? null : item.id)"
+              >
+                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ item.labelKey | translate }}</span>
+                <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60 transition-transform" [class.rotate-90]="seasonSubOpen() === item.id"></svg>
+              </button>
+              @if (seasonSubOpen() === item.id) {
+                <div class="ps-4">
+                  @for (child of item.children; track child.id) {
+                    <ng-container *ngTemplateOutlet="seasonActionRow; context: { $implicit: child }" />
+                  }
+                </div>
+              }
+            } @else {
+              <ng-container *ngTemplateOutlet="seasonActionRow; context: { $implicit: item }" />
+            }
+          }
+          <ng-template #seasonActionRow let-item>
             <button
               type="button"
               class="dropdown-item text-white"
@@ -176,15 +189,17 @@
               @if (seasonActionPending(item.actionId)) {
                 <span class="loading loading-spinner loading-sm"></span>
                 <span class="flex-1"></span>
-              } @else if (item.actionId === 'group.search-releases') {
-                <svg lucidePackage class="h-5 w-5 shrink-0 opacity-80"></svg>
-                <span class="flex-1">{{ item.labelKey | translate }}</span>
               } @else {
-                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+                @switch (item.icon) {
+                  @case ('search') { <svg lucideSearch class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @case ('zap') { <svg lucideZap class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @case ('list-checks') { <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @default { <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                }
                 <span class="flex-1">{{ item.labelKey | translate }}</span>
               }
             </button>
-          }
+          </ng-template>
           @if (isAdmin()) {
             <button
               type="button"

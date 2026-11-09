@@ -42,6 +42,19 @@ describe('withCoreAcquisition', () => {
     ['no quality profile', { hasQualityProfile: false }],
     ['no grab permission', { hasPermission: () => false }],
   ])('shows no core row with %s, leaving the plugin row as it is', (_name, over) => {
-    expect(ids(withCoreAcquisition('work', ctx(over), [legacy]))).toEqual(['fliks.acme.search']);
+    const rows = withCoreAcquisition('work', ctx(over), [legacy]);
+    expect(ids(rows)).toEqual(['core.files_group_work', 'fliks.acme.search']);
+    expect(rows[0].children).toEqual([]);
+  });
+
+  it('keeps the tracking child of a monitored target even without a provider', () => {
+    const rows = withCoreAcquisition('work', ctx({ hasAcquisitionProvider: false, isMonitored: true }), [legacy]);
+    expect(ids(rows)).toEqual(['core.files_group_work', 'fliks.acme.search']);
+    expect(ids(rows[0].children!)).toEqual(['core.tracking_work']);
+  });
+
+  it('shows no tracking child for an album, which the server does not track', () => {
+    const rows = withCoreAcquisition('work', ctx({ isMonitored: true, mediaType: 'album' }), []);
+    expect(ids(rows[0].children!)).toEqual(['core.search_releases_work', 'core.grab_best_work']);
   });
 });

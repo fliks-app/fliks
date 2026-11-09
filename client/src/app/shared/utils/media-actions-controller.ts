@@ -17,6 +17,8 @@ import { ReleaseGrabController } from '../../features/media-detail/release-grab-
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
+import { TrackingModalService } from '../../core/services/tracking-modal.service';
+import type { TrackingScope } from '../components/tracking-status-modal/tracking-status-modal';
 
 /** The acquisition actionIds of a level: `media.*` for the work, `group.*`, `item.*` below it. */
 const ID_PREFIX = { work: 'media', group: 'group', item: 'item' } as const;
@@ -36,6 +38,8 @@ export interface MediaActionsConfig {
   core?: readonly UiContribution[];
   handlers?: () => MediaActionHandlers;
   guards?: Record<string, () => boolean>;
+  /** What the "Files" status row opens at this level; without it the row falls back to the page's `media.open-tracking` handler. */
+  trackingScope?: () => TrackingScope | null;
 }
 
 /** The menu of one title, group or item, whatever its kind: the `when` context, the acquisition handlers and the merge of core and plugin rows,
@@ -48,6 +52,7 @@ export class MediaActionsController {
   private readonly tv = inject(TvService);
   private readonly wantsStore = inject(WantsStore);
   private readonly grabs = inject(ReleaseGrabController);
+  private readonly tracking = inject(TrackingModalService);
 
   constructor(private readonly cfg: MediaActionsConfig) {}
 
@@ -105,6 +110,8 @@ export class MediaActionsController {
   private resolve(id: string): (() => void) | null {
     if (this.isSearch(id)) return () => void this.grabs.search(this.cfg.base(), aimedWants(this.acquisition()));
     if (this.isGrabBest(id)) return () => void this.grabs.grabBest(this.cfg.base(), aimedWants(this.acquisition()));
+    const scope = id === `${ID_PREFIX[this.cfg.base().level]}.open-tracking` ? this.cfg.trackingScope?.() : null;
+    if (scope) return () => this.tracking.open(this.cfg.base().mediaId, scope);
     return resolveMediaAction(id, this.cfg.handlers?.() ?? {});
   }
 
