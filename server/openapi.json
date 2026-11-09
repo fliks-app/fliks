@@ -3712,7 +3712,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "The host plays the head of the singer queue (`karaoke.md` rule 31).",
+        "summary": "The host plays the head of the singer queue (`karaoke.md` rule 37).",
         "operationId": "next_singer",
         "responses": {
           "200": {}
