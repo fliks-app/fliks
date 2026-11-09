@@ -4024,6 +4024,8 @@
     "resume": "Fortsetzen",
     "hide": "Ausblenden",
     "parked_device": "{{device}} ist offline",
+    "read_on": "Gelesen auf {{device}}",
+    "open_here": "Hier öffnen",
     "playing_on": "Läuft auf {{device}}",
     "current": "Aktuelle Sitzung",
     "resume_at": "Fortsetzen bei {{position}}",

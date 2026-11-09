@@ -133,6 +133,7 @@ pub struct Shown {
     /// The routing pair of the item: its media, and itself when it sits in a group (episode, disc).
     pub media_id: i32,
     pub episode_id: Option<i32>,
+    pub family: Option<String>,
     pub title: Option<String>,
     pub subtitle: Option<String>,
     pub poster_url: Option<String>,
@@ -142,9 +143,10 @@ pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error>
     let r = sqlx::query!(
         r#"SELECT m.title AS "media_title!", m."posterUrl" AS poster_url, m."type"::text AS "kind!",
                   i.title AS item_title, i.number AS item_number, g.number AS "season: i32",
-                  i."mediaId" AS media_id, i."groupId" AS group_id
+                  i."mediaId" AS media_id, i."groupId" AS group_id, e.family AS "family?"
              FROM items i
              JOIN media m ON m.id = i."mediaId"
+             LEFT JOIN editions e ON e.id = i."editionId"
              LEFT JOIN item_groups g ON g.id = i."groupId"
             WHERE i.id = $1"#,
         item
@@ -163,9 +165,21 @@ pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error>
         Shown {
             media_id: r.media_id,
             episode_id: r.group_id.map(|_| item),
+            family: r.family,
             title: Some(r.media_title),
             subtitle,
             poster_url: r.poster_url,
         }
     }))
+}
+
+/// The kind of the media `item` belongs to.
+pub async fn kind_of(db: &PgPool, item: i32) -> Result<Option<MediaKind>, sqlx::Error> {
+    let t = sqlx::query_scalar!(
+        r#"SELECT m."type"::text AS "kind!" FROM items i JOIN media m ON m.id = i."mediaId" WHERE i.id = $1"#,
+        item
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(t.and_then(|t| MediaKind::parse(&t)))
 }

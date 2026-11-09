@@ -1,0 +1,54 @@
+{
+  "ignore": [
+    "$..positionAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..createdAt",
+    "$..playedAt"
+  ],
+  "name": "session-reader-option-off",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "phone",
+        "name": "Phone"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 0,
+        "itemId": 101,
+        "mediaFileId": 101,
+        "positionSeconds": 0,
+        "progression": 0.3,
+        "targetId": "dev-1#native"
+      },
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "PUT",
+      "path": "/api/playback/media/101/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/session"
+    }
+  ]
+}

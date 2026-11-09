@@ -313,3 +313,52 @@ fn a_beat_queue_is_taken_only_when_well_formed() {
     assert!(q(serde_json::json!({"itemIds": vec![1; 501], "index": 0})).is_none());
     assert!(q(serde_json::json!("queue")).is_none());
 }
+
+fn reading(account: i32, item: i32, progression: f64) -> ReadingIn {
+    ReadingIn {
+        account,
+        owner: Owner {
+            target_id: Some("tA".into()),
+            device_name: Some("device tA".into()),
+            form_factor: None,
+        },
+        kind: MediaKind::Movie,
+        item,
+        file: 1,
+        progression,
+    }
+}
+
+#[sqlx::test]
+async fn a_reader_save_parks_a_row_without_bumping_the_epoch_and_never_replaces_a_live_one(
+    pool: PgPool,
+) {
+    let st = state(&pool).await;
+    let s = &st.account_sessions;
+    let u = user(&pool, "u", true, None).await;
+    let i = item(&pool).await;
+    s.reading(&st, reading(u, i, 0.2)).await;
+    s.reading(&st, reading(u, i, 0.4)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.state, r.epoch, r.position), (State::Parked, 1, 0.4));
+    s.complete_reading(&st, u, i).await;
+    assert!(row(&st, u).await.is_none());
+    alive(&st, "s1");
+    s.beat(&st, beat(u, "s1", "tB", i)).await;
+    s.reading(&st, reading(u, i, 0.9)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.session_id.as_str(), r.state), ("s1", State::Playing));
+}
+
+#[sqlx::test]
+async fn a_reader_save_out_of_scope_leaves_no_row(pool: PgPool) {
+    let st = state(&pool).await;
+    let off = user(&pool, "off", false, None).await;
+    let other = user(&pool, "other", true, Some(&["book"])).await;
+    let i = item(&pool).await;
+    st.account_sessions.reading(&st, reading(off, i, 0.5)).await;
+    st.account_sessions
+        .reading(&st, reading(other, i, 0.5))
+        .await;
+    assert!(row(&st, off).await.is_none() && row(&st, other).await.is_none());
+}

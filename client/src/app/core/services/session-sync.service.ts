@@ -25,6 +25,8 @@ export interface AccountSession {
     episodeId: number | null;
     mediaFileId: number | null;
     kind: MediaType;
+    /** The family of the item's edition, which tells a book to read from an audiobook. */
+    family: MediaFamily | null;
     title: string | null;
     subtitle: string | null;
     posterUrl: string | null;
@@ -135,6 +137,12 @@ export class SessionSyncService {
       });
     });
 
+    const reader: SessionResumer = async (s) => {
+      await this.router.navigate(['/read', s.item.mediaId, s.item.id]);
+    };
+    this.registerResumer('text', reader);
+    this.registerResumer('image', reader);
+
     this.sse.sessionEvents.subscribe((e) => this.onEvent(e));
   }
 
@@ -231,9 +239,20 @@ export class SessionSyncService {
   }
 
   private resumerFor(s: AccountSession): SessionResumer | undefined {
-    const family = KIND_REGISTRY[s.item.kind].families.find((f) => this.resumers[f]);
+    const family = s.item.family ?? KIND_REGISTRY[s.item.kind].families.find((f) => this.resumers[f]);
     return family && this.resumers[family];
   }
+
+  /** Whether the session is a reader's position: resumed by opening the item, never driven. */
+  isReading(s: AccountSession): boolean {
+    return s.item.family === 'text' || s.item.family === 'image';
+  }
+
+  /** Playable sessions only: a reader's position is resumed where it is opened, never moved. */
+  readonly canTransfer = computed(() => {
+    const s = this._session();
+    return !!s && !this.isReading(s);
+  });
 
   /** Whether this device can start the session's item: it has an adapter for the kind (a parked session included, from a cold start). */
   readonly canPlayHere = computed(() => {

@@ -5,6 +5,7 @@ import { HttpFetcher, Link, Manifest, Publication, type FetchImplementation, typ
 import { NetworkService } from '../../core/services/network.service';
 import { OfflineBookStoreService } from '../../core/services/offline-book-store.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
+import { SseService } from '../../core/services/sse.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { SKIP_ERROR_TOAST } from '../../core/interceptors/error.interceptor';
 
@@ -38,6 +39,7 @@ export class ReaderApiService {
   private readonly network = inject(NetworkService);
   private readonly sync = inject(OfflinePlaybackSyncService);
   private readonly streaming = inject(StreamingApiService);
+  private readonly sse = inject(SseService);
 
   manifestUrl(itemId: number): string {
     return this.store.manifestUrl(itemId);
@@ -90,7 +92,7 @@ export class ReaderApiService {
     if (!this.network.isOnline()) return void this.sync.queue(saved);
     try {
       await firstValueFrom(
-        this.http.put<void>(`/api/playback/media/${t.mediaId}/state`, { positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p }, { context: silent() }),
+        this.http.put<void>(`/api/playback/media/${t.mediaId}/state`, { positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, sseConnectionId: this.sse.connectionId(), ...p }, { context: silent() }),
       );
       this.sync.record(saved);
     } catch {
@@ -103,7 +105,7 @@ export class ReaderApiService {
     const saved = { mediaId: t.mediaId, mediaFileId: t.fileId, itemId: t.itemId, positionSeconds: 0, durationSeconds: 0, extra: { ...p } };
     if (!this.network.isOnline()) return void this.sync.queue(saved);
     const { url, init } = this.streaming.positionRequest(t.mediaId);
-    fetch(url, { ...init, body: JSON.stringify({ positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, ...p }) })
+    fetch(url, { ...init, body: JSON.stringify({ positionSeconds: 0, durationSeconds: 0, mediaFileId: t.fileId, itemId: t.itemId, sseConnectionId: this.sse.connectionId(), ...p }) })
       .then((r) => (r.ok ? this.sync.record(saved) : this.sync.queue(saved)))
       .catch(() => this.sync.queue(saved));
   }

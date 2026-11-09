@@ -3,6 +3,7 @@ mod routes;
 mod store;
 
 pub use routes::*;
+pub use store::kind_of;
 
 use crate::{
     events::{
@@ -182,6 +183,22 @@ pub struct BeatIn {
     pub position: f64,
     pub duration: Option<f64>,
     pub queue: Option<QueueState>,
+}
+
+/// A reader's saved position (`session.md` rule 19): the item and how far through it the account is.
+pub struct ReadingIn {
+    pub account: i32,
+    pub owner: Owner,
+    pub kind: MediaKind,
+    pub item: i32,
+    pub file: i32,
+    /// 0..1 over the whole item.
+    pub progression: f64,
+}
+
+/// The sid of the parked row a reader leaves for `item`; nothing ever beats under it.
+fn reader_sid(item: i32) -> String {
+    format!("reader:{item}")
 }
 
 /// Cheap to clone, every clone shares the one lock.
@@ -408,6 +425,51 @@ impl AccountSessions {
             tokio::time::sleep(SUPERSEDED_STOP_DELAY).await;
             stop_session(&st, &sid).await;
         });
+    }
+
+    /// A reader saved its position: the account's row becomes a parked row of that item. Never a
+    /// claim, an epoch bump or a supersede: a live playback keeps the row (rule 19).
+    pub async fn reading(&self, st: &AppState, r: ReadingIn) {
+        if !store::in_scope(&st.db, r.account, r.kind).await {
+            return;
+        }
+        let mut g = self.0.lock().await;
+        let prior = g.rows.get(&r.account);
+        if prior.is_some_and(|e| e.row.state != State::Parked) {
+            return;
+        }
+        let sid = reader_sid(r.item);
+        let announced = prior.is_none_or(|e| e.row.session_id != sid || e.row.owner != r.owner);
+        let epoch = prior.map_or(1, |e| e.row.epoch);
+        let mut entry = Entry {
+            row: Row {
+                user_id: r.account,
+                session_id: sid,
+                epoch,
+                item_id: r.item,
+                media_file_id: Some(r.file),
+                kind: r.kind,
+                state: State::Parked,
+                position: r.progression,
+                duration: Some(1.0),
+                owner: r.owner,
+                queue: None,
+                updated_at: Utc::now(),
+            },
+            held: None,
+            persisted_at: 0,
+            persisted_pos: 0.0,
+        };
+        persist(st, &mut entry).await;
+        if announced {
+            announce(st, r.account, Some(&entry.row));
+        }
+        g.rows.insert(r.account, entry);
+    }
+
+    /// A reader finished `item`: its row goes like a video's (rule 11).
+    pub async fn complete_reading(&self, st: &AppState, account: i32, item: i32) {
+        self.complete(st, account, &reader_sid(item)).await;
     }
 
     /// The history write completed the item of `sid`: the row goes (rule 11).
