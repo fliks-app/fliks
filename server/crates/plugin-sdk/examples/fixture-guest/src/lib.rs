@@ -415,6 +415,20 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 .collect();
             host_result(host::acquisition_sources_set(&list))
         }
+        "inflight" => {
+            let n = |k: &str| req.query(k).and_then(|v| v.parse::<u32>().ok());
+            let unit = n("group").map(|group| t::UnitRef {
+                group: Some(group),
+                number: n("number").map(f64::from),
+                end_number: None,
+                label: None,
+                absolute: None,
+            });
+            host_result(host::acquisition_in_flight(
+                n("media").unwrap_or(1),
+                unit.as_ref(),
+            ))
+        }
         "failed" => host_result(host::events_publish(&[t::AcquisitionEvent::Failed(
             t::Failed {
                 media_id: req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1),

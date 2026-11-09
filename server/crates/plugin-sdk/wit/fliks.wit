@@ -268,6 +268,10 @@ interface host {
   /// Replaces the sources this plugin offers as an acquisition provider; needs `acquisition:candidates`.
   acquisition-sources-set: func(sources: list<source>) -> result<_, host-error>;
 
+  /// The other plugins with a download in flight that covers `unit` of the media (none: any download of it);
+  /// needs `acquisition:candidates`.
+  acquisition-in-flight: func(media-id: u32, unit: option<unit-ref>) -> result<list<string>, host-error>;
+
   deadline-remaining-ms: func() -> u64;
 
   schedule-call: func(key: string, delay-ms: u64, payload: json) -> result<_, host-error>;
