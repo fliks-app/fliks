@@ -13,7 +13,11 @@ const want = (o: Partial<Want>): Want =>
 const BOOK = { mediaId: 3, kind: 'book' as const, level: 'work' as const };
 
 function setup() {
-  const api = { search: vi.fn(async () => []), grab: vi.fn(async () => {}) };
+  const api = {
+    providersFor: vi.fn(() => [{ pluginId: 'p.one', name: 'One', routes: { byKind: {} }, sources: [] }]),
+    search: vi.fn(async () => []),
+    grab: vi.fn(async () => {}),
+  };
   const modal = { showModal: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
@@ -21,7 +25,7 @@ function setup() {
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: MediaDetailReleasePickerService, useValue: api },
-      { provide: ReleaseSearchStreamService, useValue: { run: (f: (id: string) => Promise<unknown[]>) => f('sid') } },
+      { provide: ReleaseSearchStreamService, useValue: { run: (searches: { fetch: (id: string) => Promise<unknown[]> }[]) => searches[0].fetch('sid') } },
       { provide: DownloadProgressService, useValue: { markGrabbing: () => () => undefined } },
     ],
   });
@@ -34,8 +38,8 @@ describe('ReleaseGrabController', () => {
   it('grabs the best release of every given want, each aimed by its family and language', async () => {
     const { api, grabs } = setup();
     await grabs.grabBest(BOOK, [want({ family: 'text', language: 'fr' }), want({ id: 2, family: 'audio' })]);
-    expect(api.grab).toHaveBeenCalledWith({ ...BOOK, family: 'text', language: 'fr' }, {});
-    expect(api.grab).toHaveBeenCalledWith({ ...BOOK, family: 'audio', language: null }, {});
+    expect(api.grab).toHaveBeenCalledWith('p.one', { ...BOOK, family: 'text', language: 'fr' }, {});
+    expect(api.grab).toHaveBeenCalledWith('p.one', { ...BOOK, family: 'audio', language: null }, {});
     expect(grabs.isBestBusy(BOOK)).toBe(false);
   });
 
@@ -44,9 +48,9 @@ describe('ReleaseGrabController', () => {
     const audio = want({ id: 2, family: 'audio' });
     await grabs.search(BOOK, [want({}), audio]);
     expect(modal.showModal).toHaveBeenCalledOnce();
-    expect(api.search).toHaveBeenLastCalledWith({ ...BOOK, family: 'text', language: null }, undefined, 'sid');
+    expect(api.search).toHaveBeenLastCalledWith('p.one', { ...BOOK, family: 'text', language: null }, undefined, 'sid');
     await grabs.selectWant(audio);
-    expect(api.search).toHaveBeenLastCalledWith({ ...BOOK, family: 'audio', language: null }, undefined, 'sid');
+    expect(api.search).toHaveBeenLastCalledWith('p.one', { ...BOOK, family: 'audio', language: null }, undefined, 'sid');
     expect(grabs.target()?.family).toBe('audio');
   });
 
@@ -55,9 +59,30 @@ describe('ReleaseGrabController', () => {
     await grabs.search(BOOK, [want({})]);
     await grabs.grabRelease({ downloadUrl: 'magnet:x', title: 't', sourceId: 2, allowed: true } as never, 'r1');
     expect(api.grab).toHaveBeenCalledWith(
+      'p.one',
       { ...BOOK, family: 'text', language: null },
       { downloadUrl: 'magnet:x', sourceTitle: 't', sourceId: 2 },
     );
     expect(grabs.grabState().get('r1')).toBe('ok');
+  });
+
+  it('grabs a release from the provider that found it, and grab-best from the first provider in order', async () => {
+    const { api, grabs } = setup();
+    api.providersFor.mockReturnValue([
+      { pluginId: 'p.first', name: 'First', routes: { byKind: {} }, sources: [] },
+      { pluginId: 'p.second', name: 'Second', routes: { byKind: {} }, sources: [] },
+    ]);
+    await grabs.grabBest(BOOK, [want({})]);
+    expect(api.grab).toHaveBeenLastCalledWith('p.first', expect.anything(), {});
+    await grabs.search(BOOK, [want({})]);
+    await grabs.grabRelease({ downloadUrl: 'x', title: 't', sourceId: 'a', pluginId: 'p.second', allowed: true } as never, 'r2');
+    expect(api.grab).toHaveBeenLastCalledWith('p.second', expect.anything(), expect.anything());
+  });
+
+  it('does nothing for a grab-best when no provider serves the base', async () => {
+    const { api, grabs } = setup();
+    api.providersFor.mockReturnValue([]);
+    await grabs.grabBest(BOOK, [want({})]);
+    expect(api.grab).not.toHaveBeenCalled();
   });
 });

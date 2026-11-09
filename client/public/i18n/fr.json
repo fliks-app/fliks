@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Qualité actuelle",
     "search_upgrade_releases": "Chercher des releases supérieures",
     "grab_upgrade_best": "Télécharger la meilleure mise à niveau",
+    "grab_best": "Télécharger la meilleure release",
+    "search_releases": "Chercher des releases",
     "custom_search_placeholder": "Recherche personnalisée (optionnel, remplace le titre)",
     "subtitles_section": "Sous-titres",
     "search_subtitles": "Chercher des sous-titres",
@@ -2195,6 +2197,7 @@
       "optimize": "Réglages",
       "optimize_workers": "Workers",
       "karaoke": "Karaoké",
+      "acquisition": "Téléchargements",
       "lyrics": "Paroles"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Lancez-le avec :",
         "confirm_revoke": "Révoquer le jeton de {{name}} ? Ses jobs retournent dans la file."
       }
+    },
+    "acquisition": {
+      "title": "Téléchargements",
+      "subtitle": "Quels fournisseurs de téléchargement sont interrogés en premier, et ce qui se passe quand l'un ne trouve rien.",
+      "provider_order": "Ordre des fournisseurs",
+      "provider_order_hint": "Le premier fournisseur qui sert un titre est utilisé pour les recherches automatiques et le téléchargement rapide.",
+      "drag": "Glisser pour réordonner",
+      "move_up": "Monter",
+      "move_down": "Descendre",
+      "providers_empty": "Aucun fournisseur de téléchargement n'est installé.",
+      "fallback": "Essayer le fournisseur suivant",
+      "fallback_hint": "Quand un fournisseur ne trouve rien lors d'une recherche automatique, interroger le suivant.",
+      "load_error": "Impossible de charger les réglages.",
+      "saved": "Réglages enregistrés."
     },
     "lyrics": {
       "title": "Paroles",

@@ -15,18 +15,20 @@ import type { Want } from '../../../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../../../core/utils/language.utils';
 import { LucideCirclePause, LucideSearchX, LucideTriangleAlert } from '@lucide/angular';
 import { MovieRelease } from '../../media-detail-release-picker.service';
-import { IndexerRosterEntry } from '../../release-search-stream.service';
+import { IndexerRosterEntry, sourceKey } from '../../release-search-stream.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
-/** `null` is the "Tous" tab; anything else is one indexer id. */
-export type ReleaseTab = number | null;
+/** `null` is the "Tous" tab; anything else is one source key (`pluginId:sourceId`). */
+export type ReleaseTab = string | null;
 
 interface TabView {
   id: ReleaseTab;
   label: string;
+  /** The provider's name, set on the first tab of each provider when several are searched. */
+  group: string | null;
   count: number | null;
   state: IndexerSearchStateOrAll;
 }
@@ -93,7 +95,7 @@ export class ReleasesModalComponent {
   private readonly resetOrphanTab = effect(() => {
     const roster = this.indexers();
     const active = this.activeTab();
-    if (active !== null && !roster.some((ix) => ix.id === active)) this.activeTab.set(null);
+    if (active !== null && !roster.some((ix) => sourceKey(ix.pluginId, ix.id) === active)) this.activeTab.set(null);
   });
 
   /** What the picker shows: exactly the profile's allowed qualities (above is unwanted, below no fallback); other rejections still show and confirm.
@@ -103,23 +105,35 @@ export class ReleasesModalComponent {
   readonly tabs = computed<TabView[]>(() => {
     const roster = this.indexers();
     if (!roster.length) return [];
-    const counts = new Map<number, number>();
-    for (const r of this.offered()) counts.set(r.sourceId, (counts.get(r.sourceId) ?? 0) + 1);
+    const counts = new Map<string, number>();
+    for (const r of this.offered()) {
+      const k = sourceKey(r.pluginId, r.sourceId);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const several = new Set(roster.map((ix) => ix.pluginId)).size > 1;
+    let lastGroup: string | undefined;
     // `count: null` is the spinner slot — a tab still working. Tous spins for as long as any
     // indexer does, so the whole strip follows one rule instead of the header carrying its own.
     return [
       {
         id: null,
         label: '',
+        group: null,
         count: this.loading() ? null : this.offered().length,
         state: 'all' as const,
       },
-      ...roster.map((ix) => ({
-        id: ix.id,
-        label: ix.name,
-        count: ix.state === 'pending' ? null : (counts.get(ix.id) ?? 0),
-        state: ix.state,
-      })),
+      ...roster.map((ix) => {
+        const id = sourceKey(ix.pluginId, ix.id);
+        const first = several && ix.pluginId !== lastGroup;
+        lastGroup = ix.pluginId;
+        return {
+          id,
+          label: ix.name,
+          group: first ? (ix.pluginName ?? ix.pluginId ?? null) : null,
+          count: ix.state === 'pending' ? null : (counts.get(id) ?? 0),
+          state: ix.state,
+        };
+      }),
     ];
   });
 
@@ -128,7 +142,7 @@ export class ReleasesModalComponent {
   readonly visibleReleases = computed(() => {
     const tab = this.activeTab();
     const all = this.offered();
-    return tab === null ? all : all.filter((r) => r.sourceId === tab);
+    return tab === null ? all : all.filter((r) => sourceKey(r.pluginId, r.sourceId) === tab);
   });
 
   /** The open tab has nothing *yet*: the search or this tab's indexer is still running. Rows win once present; once the search answered nothing spins. */
@@ -136,14 +150,14 @@ export class ReleasesModalComponent {
     if (this.visibleReleases().length || !this.loading()) return false;
     const tab = this.activeTab();
     if (tab === null) return true;
-    return this.indexers().some((ix) => ix.id === tab && ix.state === 'pending');
+    return this.indexers().some((ix) => sourceKey(ix.pluginId, ix.id) === tab && ix.state === 'pending');
   });
 
   /** Why the open tab is empty: "found nothing" and "never answered" call for different fixes; the whole search uses the caller's message. */
   readonly emptyPanel = computed<{ icon: 'none' | 'failed' | 'skipped'; key: string }>(() => {
     const tab = this.activeTab();
     if (tab === null) return { icon: 'none', key: this.emptyMessage() };
-    const state = this.indexers().find((ix) => ix.id === tab)?.state;
+    const state = this.indexers().find((ix) => sourceKey(ix.pluginId, ix.id) === tab)?.state;
     if (state === 'failed') return { icon: 'failed', key: 'media_detail.indexer_failed' };
     if (state === 'skipped') return { icon: 'skipped', key: 'media_detail.indexer_cooldown' };
     return { icon: 'none', key: 'media_detail.releases_empty_indexer' };

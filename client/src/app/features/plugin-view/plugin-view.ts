@@ -199,7 +199,7 @@ export class PluginViewComponent implements OnDestroy {
   readonly implementationsLoadError = signal(false);
 
   constructor() {
-    this.releasePicker.attach(() => this.releasesModal());
+    this.releasePicker.attach(() => this.releasesModal(), () => this.pluginId());
     effect(() => {
       const p = this.page();
       if (p && isFormView(p)) void this.loadFormValue(p.fields);

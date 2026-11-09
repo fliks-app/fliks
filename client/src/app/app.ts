@@ -11,6 +11,7 @@ import { PartySync } from './core/services/party/party-sync';
 import { CastPartyRelayService } from './core/services/party/cast-party-relay.service';
 import { CastLyricsRelayService } from './core/services/cast-lyrics-relay.service';
 import { SseService } from './core/services/sse.service';
+import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
 import { AutoDownloadService } from './core/services/auto-download.service';
@@ -72,6 +73,7 @@ export class App implements OnInit, OnDestroy {
   private readonly castLyricsRelay = inject(CastLyricsRelayService);
   private readonly partySync = inject(PartySync);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly translate = inject(TranslateService);
   private backButtonListener?: { remove: () => Promise<void> };
   private visibilityListener?: () => void;
@@ -84,6 +86,10 @@ export class App implements OnInit, OnDestroy {
       if (authenticated) void this.sse.connect();
       else this.sse.close();
     });
+  });
+  /** A provider's sources changed: the buttons and the releases modal read them from the registry. */
+  private readonly sourcesRefresh = effect(() => {
+    if (this.sse.lastEvent()?.type === 'acquisition.sources') untracked(() => void this.pluginUi.load(true));
   });
   private resumeListener?: { remove: () => Promise<void> };
   private pauseListener?: { remove: () => Promise<void> };

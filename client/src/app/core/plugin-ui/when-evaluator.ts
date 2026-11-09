@@ -10,6 +10,8 @@ export interface WhenContext {
   isMonitored?: boolean;
   /** The target has at least one want with a quality profile, whatever its kind. */
   hasQualityProfile?: boolean;
+  /** An acquisition provider has a source serving this kind at this level. */
+  hasAcquisitionProvider?: boolean;
   /** The level the menu is built for: the work, one of its groups (season, volume, disc) or one of its items. */
   level?: AcquisitionLevel;
   isEpisode?: boolean;
@@ -38,6 +40,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'hasFiles') return ctx.hasFiles ?? false;
   if (predicate === 'isMonitored') return ctx.isMonitored ?? false;
   if (predicate === 'hasQualityProfile') return ctx.hasQualityProfile ?? false;
+  if (predicate === 'hasAcquisitionProvider') return ctx.hasAcquisitionProvider ?? false;
   if (predicate.startsWith('level:')) return ctx.level === predicate.slice('level:'.length);
   if (predicate === 'isEpisode') return ctx.isEpisode ?? false;
   if (predicate === 'identified') return ctx.identified ?? true;

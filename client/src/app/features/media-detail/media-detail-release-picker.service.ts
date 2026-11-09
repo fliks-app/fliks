@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { ReleasePickerPair } from '@fliks/plugin-ui';
+import type { AcquisitionProvider } from '../../core/plugin-ui/plugin-ui-response';
 import type { AcquisitionTarget } from '../../core/acquisition/acquisition';
 
 export interface MovieRelease {
@@ -17,7 +18,9 @@ export interface MovieRelease {
   allowed: boolean;
   customFormatScore: number;
   blocklisted: boolean;
-  sourceId: number;
+  /** The provider that found it; a grab goes back to it. */
+  pluginId?: string;
+  sourceId: number | string;
   sourceName: string;
   languages: { id: number; name: string }[];
   languageAllowed: boolean;
@@ -35,7 +38,7 @@ export interface MovieRelease {
 export interface GrabBody {
   downloadUrl?: string;
   sourceTitle?: string;
-  sourceId?: number;
+  sourceId?: number | string;
   /** Manual override for a release the profile would otherwise reject — never sent for an allowed grab. */
   force?: boolean;
   /** Echoed back from the search hit: the plugin cannot recover it from `downloadUrl`. */
@@ -51,16 +54,20 @@ export function resolveReleasePickerUrl(pluginId: string, route: string, t: Acqu
   return /:[A-Za-z]/.test(path) ? null : `/api/plugins/${pluginId}${path}`;
 }
 
-/** Calls the release picker's `search`/`grab` routes, declared by whichever plugin
- *  contributes `ui.releasePicker` and reached through its proxy. */
+/** Calls the `search`/`grab` routes of an acquisition provider, declared by its `ui.releasePicker` and reached through its proxy. */
 @Injectable({ providedIn: 'root' })
 export class MediaDetailReleasePickerService {
   private readonly http = inject(HttpClient);
   private readonly registry = inject(PluginUiRegistryService);
 
+  /** Providers able to search this target, in the admin order. */
+  providersFor(target: Pick<AcquisitionTarget, 'kind' | 'level'>): AcquisitionProvider[] {
+    return this.registry.providersFor(target.kind, target.level);
+  }
+
   /** `searchId` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */
-  async search(target: AcquisitionTarget, q?: string, searchId?: string): Promise<MovieRelease[]> {
-    const url = this.resolve(target, 'search');
+  async search(pluginId: string, target: AcquisitionTarget, q?: string, searchId?: string): Promise<MovieRelease[]> {
+    const url = this.resolve(pluginId, target, 'search');
     const params: Record<string, string> = { family: target.family };
     if (target.language) params['language'] = target.language;
     if (q?.trim()) params['q'] = q.trim();
@@ -68,21 +75,15 @@ export class MediaDetailReleasePickerService {
     return firstValueFrom(this.http.get<MovieRelease[]>(url, { params }));
   }
 
-  async grab(target: AcquisitionTarget, body: GrabBody = {}): Promise<void> {
-    const url = this.resolve(target, 'grab');
+  async grab(pluginId: string, target: AcquisitionTarget, body: GrabBody = {}): Promise<void> {
+    const url = this.resolve(pluginId, target, 'grab');
     return firstValueFrom(this.http.post<void>(url, { family: target.family, language: target.language ?? null, ...body }));
   }
 
-  private pair(target: Pick<AcquisitionTarget, 'kind' | 'level'>): ReleasePickerPair | undefined {
-    return this.registry.releasePicker()?.routes.byKind[target.kind]?.[target.level];
-  }
-
-  /** Throws rather than firing a malformed request — unreachable in practice, since
-   *  every caller is itself a plugin contribution that disappears with the plugin. */
-  private resolve(target: AcquisitionTarget, which: keyof ReleasePickerPair): string {
-    const pair = this.pair(target);
-    const pluginId = this.registry.releasePicker()?.pluginId;
-    const url = pair && pluginId && resolveReleasePickerUrl(pluginId, pair[which], target);
+  /** Throws rather than firing a malformed request: every caller picked the provider from `providersFor`. */
+  private resolve(pluginId: string, target: AcquisitionTarget, which: keyof ReleasePickerPair): string {
+    const pair = this.providersFor(target).find((p) => p.pluginId === pluginId)?.routes.byKind[target.kind]?.[target.level];
+    const url = pair && resolveReleasePickerUrl(pluginId, pair[which], target);
     if (!url) throw new Error('release picker route unavailable');
     return url;
   }

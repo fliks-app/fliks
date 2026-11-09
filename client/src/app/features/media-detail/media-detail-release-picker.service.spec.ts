@@ -57,13 +57,22 @@ describe('MediaDetailReleasePickerService', () => {
 
   const install = async (releasePicker: PluginUiEntry['releasePicker']) => {
     const promise = registry.load();
-    http.expectOne('/api/plugins/ui').flush([{ pluginId: 'fliks.acme', contributions: [], configPages: [], releasePicker }]);
+    const acquisition = releasePicker && {
+      order: 0,
+      routes: releasePicker,
+      sources: [{ id: '1', name: 'ix', kinds: ['movie', 'series', 'book', 'comic'] }],
+    };
+    http.expectOne('/api/plugins/ui').flush([{ pluginId: 'fliks.acme', contributions: [], configPages: [], acquisition }]);
     await promise;
   };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
     service = TestBed.inject(MediaDetailReleasePickerService);
@@ -74,7 +83,7 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('builds the proxied work search URL and sends the want aimed at', async () => {
     await install(ROUTES);
-    const promise = service.search(target({ kind: 'book', family: 'audio', language: 'fr' }));
+    const promise = service.search('fliks.acme', target({ kind: 'book', family: 'audio', language: 'fr' }));
     const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
     expect(req.request.params.get('family')).toBe('audio');
     expect(req.request.params.get('language')).toBe('fr');
@@ -84,7 +93,7 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('omits language for an any-language want', async () => {
     await install(ROUTES);
-    const promise = service.search(target());
+    const promise = service.search('fliks.acme', target());
     const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
     expect(req.request.params.has('language')).toBe(false);
     req.flush([]);
@@ -93,7 +102,7 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('builds the proxied group grab URL and posts the want with the release body', async () => {
     await install(ROUTES);
-    const promise = service.grab(target({ kind: 'series', level: 'group', groupId: 3, language: 'en' }), {
+    const promise = service.grab('fliks.acme', target({ kind: 'series', level: 'group', groupId: 3, language: 'en' }), {
       downloadUrl: 'magnet:x',
     });
     const req = http.expectOne('/api/plugins/fliks.acme/7/groups/3/grab');
@@ -105,7 +114,7 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('posts a null language for a grab-best on an any-language want', async () => {
     await install(ROUTES);
-    const promise = service.grab(target());
+    const promise = service.grab('fliks.acme', target());
     const req = http.expectOne('/api/plugins/fliks.acme/7/grab');
     expect(req.request.body).toEqual({ family: 'video', language: null });
     req.flush(null);
@@ -114,32 +123,32 @@ describe('MediaDetailReleasePickerService', () => {
 
   it('builds the proxied item search URL of a series and of a comic', async () => {
     await install(ROUTES);
-    const episode = service.search(target({ kind: 'series', level: 'item', itemId: 12 }));
+    const episode = service.search('fliks.acme', target({ kind: 'series', level: 'item', itemId: 12 }));
     http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/items/12/releases').flush([]);
     await episode;
-    const issue = service.search(target({ kind: 'comic', level: 'item', itemId: 5, family: 'image' }));
+    const issue = service.search('fliks.acme', target({ kind: 'comic', level: 'item', itemId: 5, family: 'image' }));
     http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/items/5/releases').flush([]);
     await issue;
   });
 
   it('sends the trimmed q param only when given one', async () => {
     await install(ROUTES);
-    const promise = service.search(target(), '  1080p  ');
+    const promise = service.search('fliks.acme', target(), '  1080p  ');
     const req = http.expectOne((r) => r.url === '/api/plugins/fliks.acme/7/releases');
     expect(req.request.params.get('q')).toBe('1080p');
     req.flush([]);
     await promise;
   });
 
-  it('fires no request and rejects when no plugin declares a picker', async () => {
+  it('fires no request and rejects when no provider is installed', async () => {
     await install(undefined);
-    await expect(service.search(target())).rejects.toThrow();
+    await expect(service.search('fliks.acme', target())).rejects.toThrow();
   });
 
   it('fires no request and rejects for a kind or a level the plugin does not declare', async () => {
     await install({ byKind: { movie: ROUTES.byKind.movie } });
-    await expect(service.search(target({ kind: 'series', level: 'item', itemId: 3 }))).rejects.toThrow();
-    await expect(service.search(target({ kind: 'comic', level: 'work', family: 'image' }))).rejects.toThrow();
+    await expect(service.search('fliks.acme', target({ kind: 'series', level: 'item', itemId: 3 }))).rejects.toThrow();
+    await expect(service.search('fliks.acme', target({ kind: 'comic', level: 'work', family: 'image' }))).rejects.toThrow();
   });
 
   it('fires no request and rejects when the declared route has an unresolvable placeholder', async () => {
@@ -149,6 +158,6 @@ describe('MediaDetailReleasePickerService', () => {
         series: { group: { search: '/:id/groups/:groupId/releases', grab: '/:id/groups/:groupId/:extra/grab' } },
       },
     });
-    await expect(service.grab(target({ kind: 'series', level: 'group', groupId: 3 }))).rejects.toThrow();
+    await expect(service.grab('fliks.acme', target({ kind: 'series', level: 'group', groupId: 3 }))).rejects.toThrow();
   });
 });

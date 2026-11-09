@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Qualidade atual",
     "search_upgrade_releases": "Procurar releases superiores",
     "grab_upgrade_best": "Transferir a melhor atualização",
+    "grab_best": "Transferir a melhor release",
+    "search_releases": "Procurar releases",
     "custom_search_placeholder": "Pesquisa personalizada (opcional, substitui o título)",
     "subtitles_section": "Legendas",
     "search_subtitles": "Procurar legendas",
@@ -2195,6 +2197,7 @@
       "optimize": "Definições",
       "optimize_workers": "Workers",
       "karaoke": "Karaoke",
+      "acquisition": "Transferências",
       "lyrics": "Letras"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Execute-o com:",
         "confirm_revoke": "Revogar o token de {{name}}? As suas tarefas voltam à fila."
       }
+    },
+    "acquisition": {
+      "title": "Transferências",
+      "subtitle": "Que fornecedores de transferência são consultados primeiro e o que acontece quando um não encontra nada.",
+      "provider_order": "Ordem dos fornecedores",
+      "provider_order_hint": "O primeiro fornecedor que serve um título é usado nas pesquisas automáticas e na transferência rápida.",
+      "drag": "Arrastar para reordenar",
+      "move_up": "Subir",
+      "move_down": "Descer",
+      "providers_empty": "Nenhum fornecedor de transferência está instalado.",
+      "fallback": "Tentar o fornecedor seguinte",
+      "fallback_hint": "Quando um fornecedor não encontra nada numa pesquisa automática, consultar o seguinte.",
+      "load_error": "Não foi possível carregar as definições.",
+      "saved": "Definições guardadas."
     },
     "lyrics": {
       "title": "Letras",

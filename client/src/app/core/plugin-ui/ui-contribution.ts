@@ -21,6 +21,8 @@ export type WhenPredicateName =
   | 'hasFiles'
   | 'isMonitored'
   | 'hasQualityProfile'
+  /** A provider has a source serving the title's kind at this level (core release-picker rows only). */
+  | 'hasAcquisitionProvider'
   | 'isEpisode'
   /** The level the menu is built for: the work, a group (season, volume, disc) or an item (episode, issue, track). */
   | 'level:work'

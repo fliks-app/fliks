@@ -28,7 +28,11 @@ describe('PluginUiRegistryService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
     registry = TestBed.inject(PluginUiRegistryService);
@@ -152,29 +156,40 @@ describe('PluginUiRegistryService', () => {
     expect(registry.i18nFor('de')).toBeUndefined();
   });
 
-  it('returns null for releasePicker when no plugin declares one', async () => {
+  it('orders providers by acquisition.order, not array position, and filters by kind and level', async () => {
+    const routes = (kind: string, level: string) => ({ byKind: { [kind]: { [level]: { search: '/s', grab: '/g' } } } });
+    const provider = (id: string, order: number, kind: string, sources: string[]) =>
+      entry(id, [], { acquisition: { order, routes: routes(kind, 'work'), sources: sources.map((k) => ({ id: k, name: k, kinds: [k] })) } });
+    const promise = registry.load();
+    http.expectOne('/api/plugins/ui').flush([
+      provider('fliks.b', 1, 'movie', ['movie']),
+      provider('fliks.a', 0, 'movie', ['movie']),
+      provider('fliks.c', 2, 'movie', []),
+      entry('fliks.plain', []),
+    ]);
+    await promise;
+
+    expect(registry.providers().map((p) => p.pluginId)).toEqual(['fliks.a', 'fliks.b', 'fliks.c']);
+    // fliks.c has no source: it serves nothing.
+    expect(registry.providersFor('movie', 'work').map((p) => p.pluginId)).toEqual(['fliks.a', 'fliks.b']);
+    expect(registry.providersFor('movie', 'item')).toEqual([]);
+    expect(registry.providersFor('book', 'work')).toEqual([]);
+  });
+
+  it('keeps the known entries when a refresh fails, and replaces them when it succeeds', async () => {
     const promise = registry.load();
     http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [])]);
     await promise;
 
-    expect(registry.releasePicker()).toBeNull();
-  });
+    const failed = registry.load(true);
+    http.expectOne('/api/plugins/ui').flush(null, { status: 500, statusText: 'err' });
+    await failed;
+    expect(registry.hasPlugin('fliks.a')).toBe(true);
 
-  it('returns the declaring plugin\'s id and routes for releasePicker', async () => {
-    const routes = {
-      byKind: {
-        movie: { work: { search: '/:id/releases', grab: '/:id/grab' } },
-        series: {
-          group: { search: '/:id/groups/:groupId/releases', grab: '/:id/groups/:groupId/grab' },
-          item: { search: '/:id/items/:itemId/releases', grab: '/:id/items/:itemId/grab' },
-        },
-      },
-    };
-    const promise = registry.load();
-    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [], { releasePicker: routes })]);
-    await promise;
-
-    expect(registry.releasePicker()).toEqual({ pluginId: 'fliks.a', routes });
+    const refreshed = registry.load(true);
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.b', [])]);
+    await refreshed;
+    expect(registry.hasPlugin('fliks.a')).toBe(false);
   });
 
   it('lets no plugin redefine another plugin\'s key, picking the winner by plugin id', async () => {

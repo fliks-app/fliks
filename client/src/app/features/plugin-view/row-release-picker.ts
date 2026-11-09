@@ -31,6 +31,7 @@ export class RowReleasePicker {
   private readonly translate = inject(TranslateService);
 
   private modal: () => ReleasesModalComponent | undefined = () => undefined;
+  private pluginId: () => string = () => '';
   private current: OpenPicker | null = null;
 
   readonly titleKey = signal('');
@@ -43,8 +44,9 @@ export class RowReleasePicker {
   readonly grabBusy = signal<string | null>(null);
   readonly grabState = signal<Map<string, 'ok' | 'error'>>(new Map());
 
-  attach(modal: () => ReleasesModalComponent | undefined): void {
+  attach(modal: () => ReleasesModalComponent | undefined, pluginId: () => string): void {
     this.modal = modal;
+    this.pluginId = pluginId;
   }
 
   readonly open: OpenReleases = (picker, grabbed) => {
@@ -63,10 +65,12 @@ export class RowReleasePicker {
     this.loading.set(true);
     this.modal()?.showModal();
     try {
-      const rows = await this.stream.run(
-        (sid) => firstValueFrom(this.http.get<MovieRelease[]>(open.search, { params: { sid } })),
-        { releases: this.releases, indexers: this.indexers },
-      );
+      const search = {
+        pluginId: this.pluginId(),
+        name: this.pluginId(),
+        fetch: (sid: string) => firstValueFrom(this.http.get<MovieRelease[]>(open.search, { params: { sid } })),
+      };
+      const rows = await this.stream.run([search], { releases: this.releases, indexers: this.indexers });
       if (this.current === open) this.releases.set(rows);
     } catch (err: unknown) {
       if (this.current !== open) return;

@@ -47,6 +47,9 @@
                     [attr.title]="'media_detail.indexer_cooldown' | translate"
                   ></span>
                 }
+                @if (t.group) {
+                  <span class="text-sm text-base-content/50">{{ t.group }} ·</span>
+                }
                 <span class="tab-label">{{
                   t.id === null ? ('media_detail.releases_tab_all' | translate) : t.label
                 }}</span>

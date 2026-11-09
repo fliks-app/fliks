@@ -59,6 +59,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.auto_approval', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.auto_approval', action: { kind: 'route', path: '/admin/settings/auto-approval' } },
       { id: 'core.cleanup', slot: 'settings.page', weight: 600, labelKey: 'settings.nav.cleanup', when: ['server:5.1.0'], action: { kind: 'route', path: '/admin/settings/cleanup' } },
       { id: 'core.metadata', slot: 'settings.page', weight: 700, labelKey: 'settings.nav.metadata', action: { kind: 'route', path: '/admin/settings/metadata' } },
+      { id: 'core.acquisition', slot: 'settings.page', weight: 720, labelKey: 'settings.nav.acquisition', action: { kind: 'route', path: '/admin/settings/acquisition' } },
       { id: 'core.lyrics', slot: 'settings.page', weight: 750, labelKey: 'settings.nav.lyrics', action: { kind: 'route', path: '/admin/settings/lyrics' } },
       { id: 'core.karaoke', slot: 'settings.page', weight: 800, labelKey: 'settings.nav.karaoke', action: { kind: 'route', path: '/admin/settings/karaoke' } },
     ],

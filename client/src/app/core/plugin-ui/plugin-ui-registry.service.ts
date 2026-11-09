@@ -2,8 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
-import type { ConfigPage, ReleasePickerRoutes, SlotId, UiContribution } from '@fliks/plugin-ui';
-import type { PluginUiEntry } from './plugin-ui-response';
+import type { ConfigPage, SlotId, UiContribution } from '@fliks/plugin-ui';
+import type { AcquisitionProvider, PluginUiEntry } from './plugin-ui-response';
 
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */
 const FETCH_TIMEOUT_MS = 3000;
@@ -16,13 +16,15 @@ export class PluginUiRegistryService {
    *  instead of waiting for the next full page load. */
   private readonly entriesSignal = signal<PluginUiEntry[]>([]);
 
-  async load(): Promise<void> {
+  /** `keep`: a failed refresh leaves the known entries instead of emptying the registry. */
+  async load(keep = false): Promise<void> {
     const entries = await firstValueFrom(
       this.http.get<PluginUiEntry[]>('/api/plugins/ui').pipe(
         timeout(FETCH_TIMEOUT_MS),
-        catchError(() => of<PluginUiEntry[]>([])),
+        catchError(() => of<PluginUiEntry[] | null>(null)),
       ),
     );
+    if (entries === null && keep) return;
     this.entriesSignal.set(Array.isArray(entries) ? entries : []);
   }
 
@@ -73,11 +75,26 @@ export class PluginUiRegistryService {
     return this.entries.find((e) => e.pluginId === pluginId)?.configPages?.find((p) => p.id === pageId);
   }
 
-  /** The plugin declaring `ui.releasePicker`, or null when none is installed. The backend
-   *  refuses a second declaration, so at most one entry ever has it — the first is it. */
-  releasePicker(): { pluginId: string; routes: ReleasePickerRoutes } | null {
-    const entry = this.entries.find((e) => e.releasePicker);
-    return entry?.releasePicker ? { pluginId: entry.pluginId, routes: entry.releasePicker } : null;
+  /** Acquisition providers in the admin order (`acquisition.order`, never array position). */
+  readonly providers = computed<AcquisitionProvider[]>(() =>
+    this.entriesSignal()
+      .filter((e) => e.acquisition)
+      .sort((a, b) => a.acquisition!.order - b.acquisition!.order)
+      .map((e) => ({
+        pluginId: e.pluginId,
+        name: e.name ?? e.pluginId,
+        routes: e.acquisition!.routes,
+        sources: e.acquisition!.sources,
+      })),
+  );
+
+  /** Providers with a source serving `kind` and a route for `level`, in order. */
+  providersFor(kind: string, level: string): AcquisitionProvider[] {
+    return this.providers().filter(
+      (p) =>
+        p.sources.some((s) => s.kinds.includes(kind)) &&
+        (p.routes.byKind[kind] as Record<string, unknown> | undefined)?.[level],
+    );
   }
 
   /** Every plugin's `i18n[lang]` dict combined (undefined if none ship it); ordered by plugin id, first-declared wins, independent of install order. */

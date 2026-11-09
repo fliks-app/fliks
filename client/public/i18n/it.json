@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Qualità attuale",
     "search_upgrade_releases": "Cerca release superiori",
     "grab_upgrade_best": "Scarica il miglioramento migliore",
+    "grab_best": "Scarica la release migliore",
+    "search_releases": "Cerca release",
     "custom_search_placeholder": "Ricerca personalizzata (facoltativa, sostituisce il titolo)",
     "subtitles_section": "Sottotitoli",
     "search_subtitles": "Cerca sottotitoli",
@@ -2195,6 +2197,7 @@
       "optimize": "Impostazioni",
       "optimize_workers": "Worker",
       "karaoke": "Karaoke",
+      "acquisition": "Download",
       "lyrics": "Testi"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Avvialo con:",
         "confirm_revoke": "Revocare il token di {{name}}? I suoi lavori tornano in coda."
       }
+    },
+    "acquisition": {
+      "title": "Download",
+      "subtitle": "Quali provider di download vengono interrogati per primi e cosa succede quando uno non trova nulla.",
+      "provider_order": "Ordine dei provider",
+      "provider_order_hint": "Il primo provider che serve un titolo viene usato per le ricerche automatiche e per il download rapido.",
+      "drag": "Trascina per riordinare",
+      "move_up": "Sposta su",
+      "move_down": "Sposta giù",
+      "providers_empty": "Nessun provider di download è installato.",
+      "fallback": "Prova il provider successivo",
+      "fallback_hint": "Quando un provider non trova nulla in una ricerca automatica, interroga il successivo.",
+      "load_error": "Impossibile caricare le impostazioni.",
+      "saved": "Impostazioni salvate."
     },
     "lyrics": {
       "title": "Testi",
