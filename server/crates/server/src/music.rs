@@ -17,7 +17,7 @@ use axum::{
     Json, Router,
     extract::{Query, State},
     http::StatusCode,
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use fliks_domain::acl::{Action, Subject};
 use serde::Deserialize;
@@ -27,6 +27,7 @@ use sqlx::{Postgres, QueryBuilder};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/tracks", get(tracks))
+        .route("/api/music/want-recording", post(want_recording))
         .route("/api/items/{itemId}/rating", put(rate).delete(unrate))
         .route("/api/composers/{id}/works", get(composer_works))
         .route("/api/works/{id}/recordings", get(recordings))
@@ -155,6 +156,17 @@ pub(crate) async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result
     .await?;
     ok.then_some(())
         .ok_or_else(|| AppError::not_found(format!("Item #{item} not found")))
+}
+
+/// `POST /api/music/want-recording` (`docs/spec/music.md` rule 73).
+#[utoipa::path(post, path = "/api/music/want-recording", responses((status = 201)))]
+pub async fn want_recording(
+    State(st): State<AppState>,
+    a: Authed,
+    ValidJson(v): ValidJson<Value>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    a.require(Action::Create, Subject::Media)?;
+    crate::media::write::album_import::want_recording(&st, &a, v).await
 }
 
 #[utoipa::path(put, path = "/api/items/{itemId}/rating", responses((status = 200)))]

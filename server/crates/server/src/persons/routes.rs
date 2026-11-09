@@ -1,6 +1,10 @@
 use super::service;
 use crate::{
-    http::{AppError, auth::Authed, validate::PathParams},
+    http::{
+        AppError,
+        auth::Authed,
+        validate::{PathParams, ValidJson},
+    },
     libraries::accessible_library_ids,
     media::{
         aggregates,
@@ -11,19 +15,23 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Query, State},
-    routing::get,
+    routing::{get, post},
 };
 use fliks_domain::{
     acl::{Action, Subject},
+    external_id::Namespace,
     media::kind::MediaKind,
     persons::tsquery,
 };
+use serde::Deserialize;
 use serde_json::Value;
+use serde_json::json;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/persons", get(list))
         .route("/api/persons/search", get(search))
+        .route("/api/persons/resolve", post(resolve))
         .route("/api/persons/{id}", get(detail))
         .route("/api/persons/{id}/provider-credits", get(provider_credits))
         .route("/api/persons/{id}/bibliography", get(bibliography))
@@ -32,6 +40,60 @@ pub fn router() -> Router<AppState> {
 }
 
 type Res = Result<Json<Value>, AppError>;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResolveDto {
+    provider: String,
+    external_id: String,
+    name: String,
+    sort_name: Option<String>,
+}
+
+/// `POST /api/persons/resolve` (`docs/spec/persons.md`): the person of a provider's artist, created when new.
+#[utoipa::path(post, path = "/api/persons/resolve", responses((status = 200)))]
+pub async fn resolve(
+    State(st): State<AppState>,
+    _a: Authed,
+    ValidJson(dto): ValidJson<ResolveDto>,
+) -> Res {
+    let known = st.namespaces();
+    let ns = known
+        .parse(&dto.provider)
+        .filter(|n| {
+            *n == Namespace::MUSICBRAINZ
+                && !st
+                    .metadata
+                    .person_providers(MediaKind::Album, *n)
+                    .is_empty()
+        })
+        .ok_or_else(|| {
+            AppError::bad_request(format!(
+                "provider must be one of the following values: {}",
+                dto.provider
+            ))
+        })?;
+    let id = known.normalize(ns, dto.external_id.trim()).ok_or_else(|| {
+        AppError::bad_request(vec![format!("externalId is not a {} id", dto.provider)])
+    })?;
+    let name = dto.name.trim();
+    if name.is_empty() {
+        return Err(AppError::bad_request(vec!["name should not be empty"]));
+    }
+    let mut tx = st.db.begin().await?;
+    let person = crate::metadata::music::people::person(
+        &mut tx,
+        name,
+        Some(&id),
+        dto.sort_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty()),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(json!({"id": person})))
+}
 
 #[utoipa::path(get, path = "/api/persons/search", responses((status = 200)))]
 pub async fn search(

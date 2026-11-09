@@ -45,6 +45,30 @@ impl<'a> Search<'a> {
     }
 }
 
+/// What an album search looks for besides the albums themselves (`metadata.md` rule 52).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Target {
+    Artist,
+    Recording,
+}
+
+impl Target {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Artist => "artist",
+            Self::Recording => "recording",
+        }
+    }
+
+    /// The capability a provider declares to be asked this target.
+    pub fn capability(self) -> &'static str {
+        match self {
+            Self::Artist => "artistSearch",
+            Self::Recording => "recordingSearch",
+        }
+    }
+}
+
 /// What a lyrics provider is asked: the track's facts (`music.md` rule 68).
 #[derive(Debug, Clone, Default)]
 pub struct LyricsQuery {
@@ -146,6 +170,20 @@ pub trait MetadataProvider: Send + Sync {
     /// Whether `search` is answered for `kind`.
     fn has_search(&self, _kind: MediaKind) -> bool {
         true
+    }
+    /// Whether `search_target` is answered for `target`.
+    fn has_target_search(&self, _target: Target) -> bool {
+        false
+    }
+    /// The artists or recordings matching `q` (kind `album`), as the provider's records.
+    fn search_target<'a>(
+        &'a self,
+        _target: Target,
+        _q: &'a Search<'a>,
+        _lang: &'a Resolved,
+        _p: Priority,
+    ) -> Call<'a, Vec<Value>> {
+        Box::pin(async { Err(Upstream::new(Some(404), "the provider has no such search")) })
     }
     /// Whether `list` is answered for `kind`.
     fn has_lists(&self, _kind: MediaKind) -> bool {

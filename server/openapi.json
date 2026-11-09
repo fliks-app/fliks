@@ -2957,6 +2957,18 @@
         }
       }
     },
+    "/api/music/want-recording": {
+      "post": {
+        "tags": [
+          "crate::music"
+        ],
+        "summary": "`POST /api/music/want-recording` (`docs/spec/music.md` rule 73).",
+        "operationId": "want_recording",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/notifications": {
       "get": {
         "tags": [
@@ -3859,6 +3871,18 @@
           "persons"
         ],
         "operationId": "list",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/persons/resolve": {
+      "post": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "`POST /api/persons/resolve` (`docs/spec/persons.md`): the person of a provider's artist, created when new.",
+        "operationId": "resolve",
         "responses": {
           "200": {}
         }

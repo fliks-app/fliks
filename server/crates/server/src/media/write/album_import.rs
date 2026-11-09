@@ -262,3 +262,121 @@ pub async fn import_album_for_request(
         r => r,
     }
 }
+
+const WANT_FIELDS: [&str; 5] = [
+    "provider",
+    "externalId",
+    "albumExternalId",
+    "libraryId",
+    "folderId",
+];
+
+/// `POST /api/music/want-recording` (`docs/spec/music.md` rule 73): one track of a release group wanted.
+pub(crate) async fn want_recording(
+    st: &AppState,
+    a: &Authed,
+    v: Value,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let b = Body::new(v, &WANT_FIELDS)?;
+    let name = b.required(b.str("provider")?, "provider", "must be a string")?;
+    let recording = b.required(b.str("externalId")?, "externalId", "must be a string")?;
+    let group = b.required(
+        b.str("albumExternalId")?,
+        "albumExternalId",
+        "must be a string",
+    )?;
+    let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
+    let known = st.namespaces();
+    let ns = known
+        .parse(&name)
+        .filter(|n| st.metadata.serves(*n, MediaKind::Album))
+        .ok_or_else(|| {
+            AppError::bad_request(format!(
+                "provider must be one of the following values: {name}"
+            ))
+        })?;
+    let id = |field: &str, value: &str| {
+        known
+            .normalize(ns, value)
+            .ok_or_else(|| AppError::bad_request(vec![format!("{field} is not a {name} id")]))
+    };
+    let (recording, group) = (
+        id("externalId", &recording)?,
+        id("albumExternalId", &group)?,
+    );
+    let acl = accessible_library_ids(&st.db, a).await?;
+    let held = external_ids::find(&st.db, MediaKind::Album, ns, &group).await?;
+    let (media, created) = match held {
+        Some(media) => {
+            let own: Option<Option<i32>> =
+                sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                    .bind(media)
+                    .fetch_optional(&st.db)
+                    .await?;
+            if !own.flatten().is_some_and(|l| acl.contains(&l)) {
+                return Err(AppError::conflict(TAKEN));
+            }
+            (media, false)
+        }
+        None => {
+            let target = resolve_target(st, a, MediaKind::Album, library, folder).await?;
+            let media = create_album_from(
+                st,
+                &Creation {
+                    kind: MediaKind::Album,
+                    id: (ns, &group),
+                    target: &target,
+                    profiles: (None, None),
+                    user: Some(a.user.id).filter(|u| *u != 0),
+                    links: vec![],
+                    seasons: None,
+                    wants: None,
+                    prio: Priority::Interactive,
+                },
+            )
+            .await?;
+            (media, true)
+        }
+    };
+    target::ensure(st, media, Priority::Interactive).await?;
+    let edition: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
+            .bind(media)
+            .fetch_optional(&st.db)
+            .await?
+            .flatten();
+    let tracks: Vec<i32> = match edition {
+        Some(e) => {
+            sqlx::query_scalar(
+                r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
+                   WHERE i."editionId" = $1 AND td."recordingMbid" = $2::text::uuid ORDER BY i.id"#,
+            )
+            .bind(e)
+            .bind(&recording)
+            .fetch_all(&st.db)
+            .await?
+        }
+        None => vec![],
+    };
+    if let (Some(e), false) = (edition, tracks.is_empty()) {
+        let mut tx = st.db.begin().await?;
+        if created {
+            sqlx::query(
+                r#"UPDATE items SET monitored = false WHERE "editionId" = $1 AND id <> ALL($2)"#,
+            )
+            .bind(e)
+            .bind(&tracks)
+            .execute(&mut *tx)
+            .await?;
+        }
+        sqlx::query("UPDATE items SET monitored = true WHERE id = ANY($1)")
+            .bind(&tracks)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+    }
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({"mediaId": media, "itemId": tracks.first()})),
+    ))
+}

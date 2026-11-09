@@ -264,11 +264,11 @@ async fn provider_choice_and_fallback(pool: PgPool) {
     assert_eq!(s, 400, "an unknown provider is refused");
     // an empty TMDB answer asks TVDB, whose results keep their own provider
     c.stub.ok("search/series", json!([]));
-    let (_, v) = call(&c, "/api/metadata/search/tv?q=x", Some(&c.admin)).await;
+    let (_, v) = call(&c, "/api/metadata/search/tv?q=x1", Some(&c.admin)).await;
     assert_eq!(first(&v).0, "tvdb");
     c.tvdb.ok("search/series", json!([]));
     assert_eq!(
-        call(&c, "/api/metadata/search/tv?q=x", Some(&c.admin))
+        call(&c, "/api/metadata/search/tv?q=x2", Some(&c.admin))
             .await
             .1,
         json!([])
@@ -296,7 +296,7 @@ async fn a_failing_provider_is_skipped_for_the_next_one(pool: PgPool) {
     );
     assert_eq!(v[0]["mediaType"], "movie");
     c.tvdb.fail("search/movie", 500);
-    let (s, b) = call(&c, "/api/metadata/search/movie?q=x", Some(&c.admin)).await;
+    let (s, b) = call(&c, "/api/metadata/search/movie?q=x2", Some(&c.admin)).await;
     assert_eq!(s, 503, "{b}");
     assert_eq!(
         call(&c, "/api/metadata/search/nope?q=x", Some(&c.admin))
@@ -1081,4 +1081,312 @@ async fn persisting_credits_skips_person_ids_the_table_refuses(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!((persons, credits), (1, 1));
+}
+
+const REC: &str = "6b5fb1a0-12a3-4f0c-9a4d-0c9f6c8d2e11";
+const GROUP: &str = "7c6ac2b1-23b4-4a1d-8b5e-1d0a7d9e3f22";
+
+fn recording(id: &str, group: &str) -> Value {
+    json!({"externalId": id, "title": "Song", "durationMs": 180000,
+           "artists": [{"name": "Ana", "id": MBID}],
+           "album": {"externalId": group, "title": "Alpha", "year": 1999, "mediaType": "album"}})
+}
+
+async fn music_ctx(pool: PgPool) -> (Ctx, Arc<Scripted>) {
+    let c = ctx(pool).await;
+    let mb = Scripted::new(Namespace::MUSICBRAINZ);
+    c.st.metadata.add_plugin(mb.clone());
+    (c, mb)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_repeated_search_is_served_from_the_cache_and_still_marked_live(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    c.stub.ok("search/movie", json!([movie(11)]));
+    let uri = |q: &str| format!("/api/metadata/search/movie?q={q}");
+    let (_, first) = call(&c, &uri("Sample%20%20Query"), Some(&c.admin)).await;
+    assert_eq!(first[0]["existingMediaId"], Value::Null);
+    media(&pool, 1, "movie", Some(11), None, 1).await;
+    let (_, again) = call(&c, &uri("sample%20query"), Some(&c.admin)).await;
+    assert_eq!(
+        again[0]["existingMediaId"], 1,
+        "marks are read after the cache"
+    );
+    assert_eq!(c.stub.seen("search/movie").len(), 1);
+    call(
+        &c,
+        "/api/metadata/search/movie?q=sample%20query&page=2",
+        Some(&c.admin),
+    )
+    .await;
+    assert_eq!(
+        c.stub.seen("search/movie").len(),
+        2,
+        "the page is part of the key"
+    );
+    // a failed walk is not kept
+    c.stub.fail("search/movie", 500);
+    c.tvdb.fail("search/movie", 500);
+    assert_eq!(call(&c, &uri("other"), Some(&c.admin)).await.0, 503);
+    c.stub.ok("search/movie", json!([movie(12)]));
+    assert_eq!(call(&c, &uri("other"), Some(&c.admin)).await.0, 200);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hit_carries_the_state_of_its_media_and_the_request_of_the_caller(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 1, "movie", Some(11), None, 1).await;
+    media(&pool, 2, "movie", Some(22), None, 1).await;
+    media(&pool, 3, "movie", Some(33), None, 1).await;
+    sqlx::raw_sql(
+        r#"UPDATE media SET monitored = true WHERE id IN (1, 2);
+           UPDATE media SET monitored = false WHERE id = 3;
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+             SELECT 1, 1, id, '1.mkv', 1, 'x' FROM library_folders WHERE "libraryId" = 1 LIMIT 1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reader: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'reader'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for (ext, status, user) in [
+        ("44", "approved", reader),
+        ("55", "removed", reader),
+        ("66", "pending", 1),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO requests ("userId", "mediaType", title, status, provider, "externalId")
+               VALUES ($1, 'movie', 't', $2::requests_status_enum, 'tmdb', $3)"#,
+        )
+        .bind(user)
+        .bind(status)
+        .bind(ext)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    c.stub.ok(
+        "search/movie",
+        json!([
+            movie(11),
+            movie(22),
+            movie(33),
+            movie(44),
+            movie(55),
+            movie(66)
+        ]),
+    );
+    let (_, v) = call(&c, "/api/metadata/search/movie?q=s", Some(&c.reader)).await;
+    let pick = |k: &str| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h[k].clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        pick("state"),
+        [
+            json!("owned"),
+            json!("wanted"),
+            json!("missing"),
+            Value::Null,
+            Value::Null,
+            Value::Null
+        ]
+    );
+    assert_eq!(
+        pick("requestStatus"),
+        [
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            json!("approved"),
+            Value::Null,
+            Value::Null
+        ],
+        "a removed request and another user's request are not the caller's"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_slow_provider_is_cut_after_three_seconds_and_the_next_one_answers(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.stub.slow(std::time::Duration::from_millis(3300));
+    c.stub.ok("search/movie", json!([movie(11)]));
+    c.tvdb.ok(
+        "search/movie",
+        json!([{"provider": "tvdb", "tvdbId": 90, "title": "V", "year": 2001}]),
+    );
+    let t = std::time::Instant::now();
+    let (s, v) = call(&c, "/api/metadata/search/movie?q=slow", Some(&c.admin)).await;
+    assert_eq!((s, v[0]["provider"].as_str()), (200, Some("tvdb")), "{v}");
+    assert!(t.elapsed() < std::time::Duration::from_millis(3300));
+    c.tvdb.fail("search/movie", 500);
+    let (s, b) = call(&c, "/api/metadata/search/movie?q=slow2", Some(&c.admin)).await;
+    assert_eq!(s, 503);
+    assert!(
+        b["message"]
+            .as_str()
+            .unwrap()
+            .ends_with("failed on tmdb: timed out"),
+        "{b}"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_album_search_targets_artists_and_recordings(pool: PgPool) {
+    let (c, mb) = music_ctx(pool.clone()).await;
+    artist(&pool, 7).await;
+    mb.ok(
+        "search/album/artist",
+        json!([{"externalId": MBID, "name": "Ana", "artistType": "Person", "country": "FR"},
+               {"externalId": "8d7bd3c2-34c5-4b2e-9c6f-2e1b8eaf4a33", "name": "Bo"},
+               {"externalId": "bad", "name": "Dropped"}]),
+    );
+    let (s, v) = call(
+        &c,
+        "/api/metadata/search/album?q=a&target=artist",
+        Some(&c.reader),
+    )
+    .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v.as_array().unwrap().len(), 2);
+    assert_eq!(
+        (v[0]["personId"].clone(), v[1]["personId"].clone()),
+        (json!(7), Value::Null)
+    );
+    assert_eq!(
+        (v[0]["artistType"].as_str(), v[0]["country"].as_str()),
+        (Some("Person"), Some("FR"))
+    );
+
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (3, 'M', '["album"]');
+           INSERT INTO library_folders ("libraryId", path) VALUES (3, '/tmp/m');
+           INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (50, 'Alpha', 'album', 3, 'a');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (50, 'album', 'musicbrainz', '{GROUP}');
+           INSERT INTO editions (id, "mediaId", family) VALUES (50, 50, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", title) VALUES (50, 50, 50, 'Song');
+           INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES (50, 50, 1, '{REC}');
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+             SELECT 50, 50, id, 's.flac', 1, 'FLAC' FROM library_folders WHERE "libraryId" = 3;
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (50, 50, 50, 0, 0)"#
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    mb.ok(
+        "search/album/recording",
+        json!([
+            recording(REC, GROUP),
+            recording(
+                "9e8ce4d3-45d6-4c3f-8d70-3f2c9fb05b44",
+                "0f9df5e4-56e7-4d40-9e81-4a3dafc16c55"
+            )
+        ]),
+    );
+    let uri = "/api/metadata/search/album?q=song&target=recording";
+    let (s, v) = call(&c, uri, Some(&c.admin)).await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(
+        (v[0]["trackId"].clone(), v[1]["trackId"].clone()),
+        (json!(50), Value::Null)
+    );
+    assert_eq!(v[0]["album"]["existingMediaId"], 50);
+    assert_eq!(v[0]["album"]["state"], "owned");
+    assert_eq!(v[1]["album"]["existingMediaId"], Value::Null);
+    assert_eq!(
+        (v[0]["artists"][0].as_str(), v[0]["durationMs"].as_u64()),
+        (Some("Ana"), Some(180000))
+    );
+    let (_, reader) = call(&c, uri, Some(&c.reader)).await;
+    assert_eq!(
+        reader[0]["trackId"],
+        Value::Null,
+        "a library the caller cannot read holds nothing"
+    );
+    assert_eq!(mb.seen("search/album/recording").len(), 1, "cached");
+
+    for bad in ["target=nope", "target=artist"] {
+        let kind = if bad == "target=artist" {
+            "movie"
+        } else {
+            "album"
+        };
+        let (s, _) = call(
+            &c,
+            &format!("/api/metadata/search/{kind}?q=x&{bad}"),
+            Some(&c.admin),
+        )
+        .await;
+        assert_eq!(s, 400, "{bad} on {kind}");
+    }
+    mb.ok("search/album", json!([]));
+    assert_eq!(
+        call(
+            &c,
+            "/api/metadata/search/album?q=x&target=album",
+            Some(&c.admin)
+        )
+        .await
+        .0,
+        200
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn resolving_an_artist_is_idempotent_and_finds_the_known_person(pool: PgPool) {
+    let (c, mb) = music_ctx(pool.clone()).await;
+    mb.serve_persons_of(Namespace::MUSICBRAINZ);
+    let post = |body: Value| {
+        let (app, tok) = (c.app.clone(), c.reader.clone());
+        async move {
+            let res = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/persons/resolve")
+                        .header("authorization", format!("Bearer {tok}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let s = res.status().as_u16();
+            let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (
+                s,
+                serde_json::from_slice::<Value>(&b).unwrap_or(Value::Null),
+            )
+        }
+    };
+    let body = json!({"provider": "musicbrainz", "externalId": MBID.to_uppercase(), "name": "Ana"});
+    let ((s1, a), (s2, b)) = (post(body.clone()).await, post(body).await);
+    assert_eq!((s1, s2, &a["id"]), (200, 200, &b["id"]));
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM persons WHERE name = 'Ana'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    let other = "8d7bd3c2-34c5-4b2e-9c6f-2e1b8eaf4a33";
+    artist_with_id(&pool, 71, other).await;
+    let (_, held) =
+        post(json!({"provider": "musicbrainz", "externalId": other, "name": "Whoever"})).await;
+    assert_eq!(
+        held["id"], 71,
+        "the person holding the id wins over the name"
+    );
+    for bad in [
+        json!({"provider": "tmdb", "externalId": "1", "name": "A"}),
+        json!({"provider": "musicbrainz", "externalId": "x", "name": "A"}),
+        json!({"provider": "musicbrainz", "externalId": MBID, "name": " "}),
+    ] {
+        assert_eq!(post(bad).await.0, 400);
+    }
 }

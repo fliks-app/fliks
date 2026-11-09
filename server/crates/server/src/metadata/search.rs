@@ -1,7 +1,7 @@
 //! `GET /api/metadata/search/{movie|tv|book|comic}`: one provider walk and one hit shape
 //! (`docs/spec/metadata.md` rules 6-12).
 use super::{
-    Search,
+    Search, Target, Upstream,
     books::routes::{self as book_hits, unknown_provider},
     comics::routes as comic_hits,
     routes::{Pairs, Res, bare, lang, stamp, unavailable, year},
@@ -28,6 +28,13 @@ use fliks_domain::{
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
+/// How long the route waits for one provider before it walks on (`docs/spec/metadata.md` rule 10).
+const PROVIDER_CUT: Duration = Duration::from_secs(3);
 
 /// The kind a search segment names.
 pub(crate) fn segment_kind(seg: &str) -> Option<MediaKind> {
@@ -223,6 +230,80 @@ pub(crate) async fn mark_existing(
             h["existingMediaType"] = found.map_or(Value::Null, |_| kind.as_str().into());
         }
     }
+    mark_state(db, a, kind, hits, &refs).await
+}
+
+/// Sets `state` and `requestStatus` of each hit (`docs/spec/metadata.md` rule 53).
+async fn mark_state(
+    db: &PgPool,
+    a: &Authed,
+    kind: MediaKind,
+    hits: &mut [Value],
+    refs: &[Vec<(String, String)>],
+) -> Result<(), AppError> {
+    let ids: Vec<i32> = hits
+        .iter()
+        .filter_map(|h| {
+            h["existingMediaId"]
+                .as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+        })
+        .collect();
+    let mut media: HashMap<i32, &'static str> = HashMap::new();
+    if !ids.is_empty() {
+        let rows: Vec<(i32, bool, bool)> = sqlx::query_as(
+            r#"SELECT m.id, m.monitored,
+                      EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id)
+                      OR EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id)
+               FROM media m WHERE m.id = ANY($1)"#,
+        )
+        .bind(&ids)
+        .fetch_all(db)
+        .await?;
+        for (id, monitored, owned) in rows {
+            let state = match (owned, monitored) {
+                (true, _) => "owned",
+                (false, true) => "wanted",
+                (false, false) => "missing",
+            };
+            media.insert(id, state);
+        }
+    }
+    let (ps, vs): (Vec<&str>, Vec<&str>) = refs
+        .iter()
+        .flatten()
+        .map(|(p, v)| (p.as_str(), v.as_str()))
+        .unzip();
+    let mut asked: Vec<(String, String, String)> = vec![];
+    if !ps.is_empty() && a.user.id != 0 {
+        asked = sqlx::query_as(
+            r#"SELECT DISTINCT ON (r.provider, r."externalId") r.provider, r."externalId", r.status::text
+               FROM requests r
+               LEFT JOIN provider_namespaces pn ON pn.name = r.provider
+               WHERE r."userId" = $1 AND r."mediaType" = $2 AND r.kind = 'add'
+                 AND r."namespaceGeneration" IS NOT DISTINCT FROM pn.generation
+                 AND (r.provider, r."externalId") IN (SELECT * FROM unnest($3::text[], $4::text[]))
+               ORDER BY r.provider, r."externalId", r."createdAt" DESC, r.id DESC"#,
+        )
+        .bind(a.user.id)
+        .bind(kind.as_str())
+        .bind(&ps)
+        .bind(&vs)
+        .fetch_all(db)
+        .await?;
+    }
+    for (h, refs) in hits.iter_mut().zip(refs) {
+        h["state"] = h["existingMediaId"]
+            .as_i64()
+            .and_then(|n| i32::try_from(n).ok())
+            .and_then(|id| media.get(&id))
+            .map_or(Value::Null, |s| (*s).into());
+        h["requestStatus"] = refs
+            .iter()
+            .find_map(|(p, v)| asked.iter().find(|(rp, rv, _)| rp == p && rv == v))
+            .filter(|(_, _, status)| status != "removed")
+            .map_or(Value::Null, |(_, _, status)| status.as_str().into());
+    }
     Ok(())
 }
 
@@ -274,6 +355,7 @@ pub async fn search_hits(
         return Ok(Json(json!([])));
     };
     let page = page(&q)?;
+    let target = target(kind, bare(&q, "target").as_deref())?;
     let md = &st.metadata;
     let named = field("provider")
         .map(|n| {
@@ -298,14 +380,158 @@ pub async fn search_hits(
         language: language.as_deref(),
         page,
     };
-    let order = named.into_iter().chain(pinned);
-    let mut hits = walk(&st, order, &search, Priority::Interactive).await?;
-    if book {
-        let wanted = title.as_deref().unwrap_or(&query);
-        rank_books(&mut hits, wanted, author.as_deref(), wanted_year);
+    let lang = lang(&st).await?;
+    let key = cache_key(&search, target, (named, pinned), &lang.tmdb_locale);
+    let cached = super::search_cache::enabled().then(|| md.search_cache.get(&key, Instant::now()));
+    let mut hits = match cached.flatten() {
+        Some(hits) => hits,
+        None => {
+            let order = named.into_iter().chain(pinned);
+            let walk = Walk {
+                target,
+                cut: Some(PROVIDER_CUT),
+            };
+            let mut hits = walk_with(&st, order, &search, Priority::Interactive, &walk).await?;
+            if book {
+                let wanted = title.as_deref().unwrap_or(&query);
+                rank_books(&mut hits, wanted, author.as_deref(), wanted_year);
+            }
+            if super::search_cache::enabled() {
+                md.search_cache.put(key, hits.clone(), Instant::now());
+            }
+            hits
+        }
+    };
+    match target {
+        None => mark_existing(&st.db, &a, kind, &mut hits).await?,
+        Some(Target::Artist) => mark_artists(&st.db, &mut hits).await?,
+        Some(Target::Recording) => mark_recordings(&st.db, &a, &mut hits).await?,
     }
-    mark_existing(&st.db, &a, kind, &mut hits).await?;
     Ok(Json(Value::Array(hits)))
+}
+
+/// `target` of an album search: `album` or none is the albums themselves.
+fn target(kind: MediaKind, raw: Option<&str>) -> Result<Option<Target>, AppError> {
+    match (kind, raw.map(str::trim)) {
+        (_, None) => Ok(None),
+        (MediaKind::Album, Some("album")) => Ok(None),
+        (MediaKind::Album, Some("artist")) => Ok(Some(Target::Artist)),
+        (MediaKind::Album, Some("recording")) => Ok(Some(Target::Recording)),
+        _ => Err(AppError::bad_request(
+            "target must be one of the following values: album, artist, recording",
+        )),
+    }
+}
+
+/// The cache key of `docs/spec/metadata.md` rule 11.
+fn cache_key(
+    s: &Search<'_>,
+    target: Option<Target>,
+    (named, pinned): (Option<Namespace>, Option<Namespace>),
+    locale: &str,
+) -> String {
+    let norm = |t: &str| {
+        t.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    let opt = |v: Option<&str>| v.map(norm).unwrap_or_default();
+    let ns = |n: Option<Namespace>| n.map_or_else(String::new, |n| n.as_str().to_owned());
+    [
+        s.kind.as_str().to_owned(),
+        target.map_or("album", Target::as_str).to_owned(),
+        ns(named),
+        ns(pinned),
+        norm(s.query),
+        opt(s.title),
+        opt(s.author),
+        opt(s.isbn),
+        opt(s.language),
+        s.year.map(|y| y.to_string()).unwrap_or_default(),
+        s.page.to_string(),
+        locale.to_owned(),
+    ]
+    .join("\u{1f}")
+}
+
+/// Sets `personId` of each artist hit: the person holding its id, or an alias of it.
+async fn mark_artists(db: &PgPool, hits: &mut [Value]) -> Result<(), AppError> {
+    let ids: Vec<(String, String)> = hits
+        .iter()
+        .filter_map(|h| {
+            Some((
+                h["provider"].as_str()?.to_owned(),
+                h["externalId"].as_str()?.to_owned(),
+            ))
+        })
+        .collect();
+    let (ps, vs): (Vec<String>, Vec<String>) = ids.into_iter().unzip();
+    let held: Vec<(i32, String, String)> = sqlx::query_as(
+        r#"SELECT min("personId"), provider, value FROM (
+             SELECT "personId", provider, value FROM person_external_ids
+             UNION ALL SELECT "personId", provider, value FROM person_external_id_aliases) x
+           WHERE (provider, value) IN (SELECT * FROM unnest($1::text[], $2::text[]))
+           GROUP BY provider, value"#,
+    )
+    .bind(&ps)
+    .bind(&vs)
+    .fetch_all(db)
+    .await?;
+    for h in hits {
+        let (p, v) = (h["provider"].as_str(), h["externalId"].as_str());
+        h["personId"] = held
+            .iter()
+            .find(|(_, hp, hv)| Some(hp.as_str()) == p && Some(hv.as_str()) == v)
+            .map_or(Value::Null, |(id, _, _)| (*id).into());
+    }
+    Ok(())
+}
+
+/// Marks the release group of each recording hit like an album hit, and sets `trackId`: the lowest track
+/// with a part of that recording in a readable library.
+async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<(), AppError> {
+    let mut albums: Vec<Value> = hits.iter_mut().map(|h| h["album"].take()).collect();
+    mark_existing(db, a, MediaKind::Album, &mut albums).await?;
+    for (h, album) in hits.iter_mut().zip(albums) {
+        h["album"] = album;
+    }
+    let ids: Vec<&str> = hits
+        .iter()
+        .filter_map(|h| h["externalId"].as_str())
+        .collect();
+    let held: Vec<(i32, String)> = if ids.is_empty() {
+        vec![]
+    } else {
+        let libs = accessible_library_ids(db, a).await?;
+        sqlx::query_as(
+            r#"SELECT min(i.id), td."recordingMbid"::text FROM track_details td
+               JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
+               JOIN media m ON m.id = i."mediaId"
+               WHERE td."recordingMbid" = ANY($1::text[]::uuid[]) AND m."libraryId" = ANY($2)
+                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+               GROUP BY td."recordingMbid""#,
+        )
+        .bind(&ids)
+        .bind(&libs)
+        .fetch_all(db)
+        .await?
+    };
+    for h in hits {
+        let id = h["externalId"].as_str();
+        h["trackId"] = held
+            .iter()
+            .find(|(_, r)| Some(r.as_str()) == id)
+            .map_or(Value::Null, |(t, _)| (*t).into());
+    }
+    Ok(())
+}
+
+/// How a walk asks: the album target (`None` is the albums themselves) and the time each provider gets.
+pub(crate) struct Walk {
+    pub target: Option<Target>,
+    pub cut: Option<Duration>,
 }
 
 /// The hits of the first provider with any, trying `first` then the providers serving the kind; an
@@ -316,10 +542,35 @@ pub(crate) async fn walk(
     search: &Search<'_>,
     prio: Priority,
 ) -> Result<Vec<Value>, AppError> {
+    walk_with(
+        st,
+        first,
+        search,
+        prio,
+        &Walk {
+            target: None,
+            cut: None,
+        },
+    )
+    .await
+}
+
+pub(crate) async fn walk_with(
+    st: &AppState,
+    first: impl Iterator<Item = Namespace>,
+    search: &Search<'_>,
+    prio: Priority,
+    how: &Walk,
+) -> Result<Vec<Value>, AppError> {
     let (md, kind, known) = (&st.metadata, search.kind, st.namespaces());
     let mut order: Vec<Namespace> = vec![];
     for p in first.chain(md.serving(kind)) {
-        let usable = md.available(p) && md.of(p).supports(kind) && md.of(p).has_search(kind);
+        let usable = md.available(p)
+            && md.of(p).supports(kind)
+            && how.target.map_or_else(
+                || md.of(p).has_search(kind),
+                |t| md.of(p).has_target_search(t),
+            );
         if usable && !order.contains(&p) {
             order.push(p);
         }
@@ -327,9 +578,31 @@ pub(crate) async fn walk(
     let lang = lang(st).await?;
     let (mut answered, mut failed) = (false, None);
     for p in order {
-        match md.of(p).search(search, &lang, prio).await {
+        let provider = md.of(p);
+        let call = async {
+            match how.target {
+                None => provider.search(search, &lang, prio).await,
+                Some(t) => provider.search_target(t, search, &lang, prio).await,
+            }
+        };
+        let r = match how.cut {
+            Some(cut) => tokio::time::timeout(cut, call)
+                .await
+                .unwrap_or_else(|_| Err(Upstream::new(Some(504), "timed out"))),
+            None => call.await,
+        };
+        match r {
             Ok(r) => {
-                let hits: Vec<Value> = r.iter().filter_map(|v| hit(&known, kind, p, v)).collect();
+                let hits: Vec<Value> = r
+                    .iter()
+                    .filter_map(|v| match how.target {
+                        None => hit(&known, kind, p, v),
+                        Some(Target::Artist) => super::music::routes::artist_hit(&known, p, v),
+                        Some(Target::Recording) => {
+                            super::music::routes::recording_hit(&known, p, v)
+                        }
+                    })
+                    .collect();
                 if !hits.is_empty() {
                     return Ok(hits);
                 }
