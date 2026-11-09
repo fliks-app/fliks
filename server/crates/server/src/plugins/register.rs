@@ -456,18 +456,11 @@ impl Plugins {
 
     pub(super) async fn activate(&self, p: Pending) {
         let id = p.id.clone();
-        let picker = p.registered.manifest["ui"].get("releasePicker").is_some();
         let player = p.registered.manifest["ui"].get("player").is_some();
         self.registry
             .install_declarations(&id, &p.registered.manifest, &p.declared);
         self.registry
             .activate(p.registered, p.declared.webhooks.clone());
-        if picker && self.registry.release_picker_winner().as_deref() != Some(id.as_str()) {
-            tracing::warn!(
-                "plugin \"{id}\" declared a releasePicker but \"{}\" holds it (lower plugin id wins)",
-                self.registry.release_picker_winner().unwrap_or_default()
-            );
-        }
         if player && self.registry.pre_roll_winner().as_deref() != Some(id.as_str()) {
             tracing::warn!(
                 "plugin \"{id}\" declared ui.player but \"{}\" holds it (lower plugin id wins)",

@@ -103,7 +103,7 @@ impl Plugins {
             .into_iter()
             .filter(|p| !p.is_process() || self.state_of(&p.plugin_id) == Some(State::Ready))
             .collect();
-        without_collisions(active)
+        let entries: Vec<Value> = without_collisions(active)
             .into_iter()
             .map(|p| {
                 let ui = &p.manifest["ui"];
@@ -163,12 +163,36 @@ impl Plugins {
                         json!({"namespaces": names, "kinds": kinds}),
                     );
                 }
-                if let Some(rp) = self.registry.release_picker_for(id) {
-                    e.insert("releasePicker".into(), json!({"byKind": rp}));
-                }
                 Value::Object(e)
             })
-            .collect()
+            .collect();
+        self.with_providers(entries)
+    }
+
+    /// Rule 48: provider entries first in provider order, each with `acquisition`; the first keeps `releasePicker`.
+    fn with_providers(&self, mut entries: Vec<Value>) -> Vec<Value> {
+        let order = self.providers();
+        let pos = |e: &Value| order.iter().position(|id| e["pluginId"] == *id);
+        entries.sort_by_key(|e| pos(e).unwrap_or(usize::MAX));
+        let mut first = true;
+        for e in entries.iter_mut() {
+            let id = e["pluginId"].as_str().unwrap_or_default().to_owned();
+            let Some(rp) = pos(e).and(self.registry.release_picker_of(&id)) else {
+                continue;
+            };
+            let routes = json!({"byKind": rp});
+            let sources: Vec<Value> = self
+                .pickers
+                .sources_of(&id)
+                .iter()
+                .map(|s| s.json())
+                .collect();
+            e["acquisition"] = json!({"order": pos(e), "routes": routes, "sources": sources});
+            if std::mem::take(&mut first) {
+                e["releasePicker"] = routes;
+            }
+        }
+        entries
     }
 }
 

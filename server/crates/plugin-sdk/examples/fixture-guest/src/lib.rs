@@ -394,6 +394,32 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 v.as_deref(),
             ))
         }
+        "sources" => {
+            let kinds: Vec<String> = req
+                .query("kinds")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|k| !k.is_empty())
+                .map(str::to_owned)
+                .collect();
+            let list: Vec<t::Source> = req
+                .query("ids")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|i| !i.is_empty())
+                .map(|id| t::Source {
+                    id: id.to_owned(),
+                    name: id.to_owned(),
+                    kinds: kinds.clone(),
+                })
+                .collect();
+            host_result(host::acquisition_sources_set(&list))
+        }
+        "failed" => host_result(host::events_publish(&[t::AcquisitionEvent::Failed(t::Failed {
+            media_id: req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1),
+            title: "t".into(),
+            reason: req.query("reason").unwrap_or("no-release").to_owned(),
+        })])),
         "emit" => host_result(host::events_emit_own(
             "ping",
             r#"{"n":1}"#,
@@ -592,8 +618,8 @@ impl Plugin for Fixture {
         Ok(())
     }
 
-    fn event(name: String, _payload: String) {
-        info!("event {name}");
+    fn event(name: String, payload: String) {
+        info!("event {name} {payload}");
     }
 
     fn config_changed(keys: Vec<String>) {

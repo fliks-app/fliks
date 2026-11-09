@@ -18,6 +18,7 @@ pub mod logs;
 pub mod namespaces;
 pub mod outbound;
 pub mod packages;
+pub mod picker;
 pub mod provider;
 mod register;
 pub mod registry;
@@ -41,7 +42,7 @@ use fliks_domain::media::family::Family;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -160,6 +161,7 @@ pub struct Plugins {
     /// The declared plugin namespaces, read wherever an id of one is parsed or normalised.
     pub namespaces: Arc<namespaces::Known>,
     pub counts: counts::Counts,
+    pub pickers: picker::Pickers,
     pub staging: staging::Staging,
     pub logs: Arc<logs::Logs>,
     host: OnceLock<Arc<Host>>,
@@ -208,6 +210,7 @@ impl Plugins {
             registry: Registry::default(),
             namespaces: Arc::default(),
             counts: counts::Counts::default(),
+            pickers: picker::Pickers::default(),
             logs: Arc::default(),
             host: OnceLock::new(),
             locks: KeyedLocks::default(),
@@ -347,6 +350,11 @@ impl Plugins {
         self.counts.forget(id);
         if let Some(app) = self.app() {
             app.images.forget_hosts(id);
+            if self.pickers.forget(id) {
+                app.hub
+                    .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
+            }
+            events::progress_gates().forget(app, id).await;
         }
         self.registry.withdraw(id, true);
     }
@@ -476,22 +484,34 @@ impl Plugins {
         );
         let st4 = st.clone();
         tokio::spawn(async move { sources::refresh_all(&st4, true).await });
+        let me = self.clone();
+        tokio::spawn(async move { me.load_acquisition_settings().await });
     }
 
-    fn domain_event(&self, st: &AppState, ev: &crate::events::DomainEvent) {
+    fn domain_event(self: &Arc<Self>, st: &AppState, ev: &crate::events::DomainEvent) {
         let Ok(payload) = serde_json::to_value(ev) else {
             return;
         };
         let name = payload["type"].as_str().unwrap_or_default().to_owned();
-        let text = payload.to_string();
-        for rt in self.live() {
-            rt.push_event(&name, &text);
+        if name == picker::REQUESTED {
+            let (me, st) = (self.clone(), st.clone());
+            let ev = payload.clone();
+            tokio::spawn(async move { me.arbitrate(&st, ev).await });
+        } else {
+            self.push_to_plugins(&name, &payload);
         }
         webhooks::dispatch(st, &name, payload);
     }
 
     /// A settings write: the owning running plugin gets `config-changed` unless it wrote it.
-    pub fn settings_changed(&self, keys: &[String], origin: Option<&str>) {
+    pub fn settings_changed(self: &Arc<Self>, keys: &[String], origin: Option<&str>) {
+        if keys
+            .iter()
+            .any(|k| k == picker::ORDER_KEY || k == picker::FALLBACK_KEY)
+        {
+            let me = self.clone();
+            tokio::spawn(async move { me.load_acquisition_settings().await });
+        }
         let live = self.live();
         for key in keys {
             let ids: Vec<&str> = live.iter().map(|r| &*r.sh.id).collect();
