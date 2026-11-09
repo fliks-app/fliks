@@ -972,6 +972,7 @@
     "status_monitored": "Monitorizada",
     "status_not_monitored": "Não monitorizada",
     "seasons_unavailable": "Lista de temporadas indisponível: serão monitorizadas todas as temporadas exceto os especiais.",
+    "tracks_unavailable": "Lista de faixas indisponível: todas as faixas serão monitorizadas.",
     "seasons_unavailable_request": "Lista de temporadas indisponível: será pedida a série completa.",
     "advanced_options": "Opções avançadas",
     "select_seasons": "Selecionar a(s) temporada(s)",

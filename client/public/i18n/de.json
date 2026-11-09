@@ -972,6 +972,7 @@
     "status_monitored": "Überwacht",
     "status_not_monitored": "Nicht überwacht",
     "seasons_unavailable": "Staffelliste nicht verfügbar: alle Staffeln außer den Specials werden überwacht.",
+    "tracks_unavailable": "Titelliste nicht verfügbar: alle Titel werden überwacht.",
     "seasons_unavailable_request": "Staffelliste nicht verfügbar: die gesamte Serie wird angefragt.",
     "advanced_options": "Erweiterte Optionen",
     "select_seasons": "Staffel(n) auswählen",

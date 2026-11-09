@@ -19,14 +19,20 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use fliks_domain::acl::{Action, Subject};
-use serde_json::Value;
+use fliks_domain::{
+    acl::{Action, Subject},
+    external_id::Namespace,
+    media::kind::MediaKind,
+    metadata::limiter::Priority,
+};
+use serde_json::{Value, json};
 use sqlx::{Postgres, QueryBuilder};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/tracks", get(tracks))
         .route("/api/music/want-recording", post(want_recording))
+        .route("/api/music/albums/tracks", get(album_tracks))
         .route("/api/composers/{id}/works", get(composer_works))
         .route("/api/works/{id}/recordings", get(recordings))
         .route("/api/playback/recently-played", get(recently_played))
@@ -171,6 +177,53 @@ pub async fn want_recording(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
     crate::media::write::album_import::want_recording(&st, &a, v).await
+}
+
+/// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.
+#[utoipa::path(get, path = "/api/music/albums/tracks", responses((status = 200)))]
+pub async fn album_tracks(
+    State(st): State<AppState>,
+    a: Authed,
+    Query(q): Pairs,
+) -> Result<Json<Value>, AppError> {
+    a.require(Action::Create, Subject::Media)?;
+    let mut r = Reader::new(&q, &["provider", "externalId", "libraryId"]);
+    let (provider, external, library) = (
+        r.string("provider"),
+        r.string("externalId"),
+        r.int("libraryId"),
+    );
+    r.finish()?;
+    let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
+    let (Some(provider), Some(external), Some(library)) = (provider, external, library) else {
+        return Err(bad("provider, externalId and libraryId are required"));
+    };
+    let known = st.namespaces();
+    let ns = known
+        .parse(&provider)
+        .filter(|n| st.metadata.serves(*n, MediaKind::Album))
+        .ok_or_else(|| bad("provider is not a music provider"))?;
+    let group = known
+        .normalize(ns, &external)
+        .ok_or_else(|| bad("externalId is not a provider id"))?;
+    if ns != Namespace::MUSICBRAINZ {
+        return Ok(Json(Value::Array(vec![])));
+    }
+    if !accessible_library_ids(&st.db, &a).await?.contains(&library) {
+        return Err(AppError::not_found(format!("Library #{library} not found")));
+    }
+    let tracks =
+        crate::metadata::music::target::preview(&st, &group, library, Priority::Interactive)
+            .await?;
+    Ok(Json(Value::Array(
+        tracks
+            .iter()
+            .map(|t| {
+                json!({"recordingId": t.recording_id, "discNumber": t.disc_number, "position": t.position,
+                       "number": t.number, "title": t.title, "durationMs": t.duration_ms})
+            })
+            .collect(),
+    )))
 }
 
 /// The tracks of a readable edition that play the work `{W}` or one of its movements.

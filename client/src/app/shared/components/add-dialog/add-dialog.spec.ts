@@ -55,6 +55,10 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
       {
         provide: MusicApiService,
         useValue: {
+          albumTracks: async () => [
+            { recordingId: 'r1', discNumber: 1, position: 1, number: 1, title: 'One', durationMs: 1000 },
+            { recordingId: 'r2', discNumber: 1, position: 2, number: 2, title: 'Two', durationMs: 2000 },
+          ],
           importAlbum: async (b: unknown) => (calls['album']!.push(b), { id: 43 }),
           wantRecording: async (b: unknown) => (calls['want']!.push(b), { mediaId: 44, itemId: 5 }),
         },
@@ -148,18 +152,34 @@ describe('AddDialogComponent', () => {
     expect(show).toHaveBeenCalledOnce();
   });
 
-  it('adds an album, or wants one recording of it, through the music api', async () => {
-    const { cmp, calls, done } = setup([lib(1, ['album'])]);
+  it('asks for the profile and the tracks of an album, and monitors only the ticked ones', async () => {
+    const { cmp, calls, show, done } = setup([lib(1, ['album'])]);
+    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void };
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    expect(show).toHaveBeenCalledOnce();
+    await dialog.submit();
+    expect(calls['album']).toEqual([
+      { provider: 'musicbrainz', externalId: 'g1', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
+    ]);
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g2', title: 'B' });
+    dialog.toggleTrack('r2');
+    await dialog.submit();
+    expect((calls['album']![1] as { monitoredRecordings: string[] }).monitoredRecordings).toEqual(['r1']);
+    expect(done.map((d) => d.mediaId)).toEqual([43, 43]);
+  });
+
+  it('wants one recording of an album straight away, with the default audio profile', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])]);
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r1', albumExternalId: 'g1' } });
-    expect(calls['album']).toEqual([{ provider: 'musicbrainz', externalId: 'g1', libraryId: 1 }]);
-    expect(calls['want']).toEqual([{ provider: 'musicbrainz', externalId: 'r1', albumExternalId: 'g1', libraryId: 1 }]);
-    expect(done.map((d) => d.mediaId)).toEqual([43, 44]);
+    expect(calls['want']).toEqual([
+      { provider: 'musicbrainz', externalId: 'r1', albumExternalId: 'g1', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
+    ]);
   });
 
   it('requests an album with its audio want', async () => {
     const { cmp, calls } = setup([lib(1, ['album'])], ['requests.create']);
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    await (cmp as unknown as { submit(): Promise<void> }).submit();
     expect(calls['request']).toEqual([
       { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
     ]);

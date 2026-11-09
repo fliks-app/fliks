@@ -5,8 +5,10 @@ import { abortable } from '../../utils/abortable';
 import type { Media } from './media.service';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { trackRowRequest } from '../../../features/music/music-utils';
+import type { WantSpec } from './wants-api.service';
 import type {
   AlbumCandidate,
+  AlbumPreviewTrack,
   ComposerWork,
   Discography,
   MusicPersonRow,
@@ -44,7 +46,7 @@ export class MusicApiService {
   }
 
   /** Adds the album of a provider recording with that one track wanted. */
-  wantRecording(body: { provider: string; externalId: string; albumExternalId: string; libraryId?: number; folderId?: number }): Promise<{ mediaId: number; itemId: number | null }> {
+  wantRecording(body: { provider: string; externalId: string; albumExternalId: string; libraryId?: number; folderId?: number; wants?: WantSpec[] }): Promise<{ mediaId: number; itemId: number | null }> {
     return firstValueFrom(this.http.post<{ mediaId: number; itemId: number | null }>('/api/music/want-recording', body));
   }
 
@@ -64,8 +66,13 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<Media[]>('/api/playback/recently-played', { params: { limit } }));
   }
 
-  /** Adds an identified album (a provider hit) to a library. */
-  importAlbum(body: { provider: string; externalId: string; libraryId?: number; folderId?: number }): Promise<Media> {
+  /** The tracklist an album added to the library would get. */
+  albumTracks(provider: string, externalId: string, libraryId: number): Promise<AlbumPreviewTrack[]> {
+    return firstValueFrom(this.http.get<AlbumPreviewTrack[]>('/api/music/albums/tracks', { params: { provider, externalId, libraryId } }));
+  }
+
+  /** Adds an identified album (a provider hit) to a library; only `monitoredRecordings` stay monitored when given. */
+  importAlbum(body: { provider: string; externalId: string; libraryId?: number; folderId?: number; wants?: WantSpec[]; monitoredRecordings?: string[] }): Promise<Media> {
     return firstValueFrom(this.http.post<Media>('/api/media/import', { type: 'album', ...body }));
   }
 

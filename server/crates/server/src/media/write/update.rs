@@ -315,6 +315,11 @@ impl MonitoredChange {
                     {
                         tracing::warn!("album #{id}: no target edition yet: {}", e.text());
                     }
+                    if let Err(e) =
+                        crate::metadata::music::target::monitor_unfiled(&st.db, id).await
+                    {
+                        tracing::warn!("album #{id}: tracks not monitored: {e}");
+                    }
                 });
             }
             lifecycle.on_media_monitor_change(m, !self.monitored).await;

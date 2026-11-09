@@ -3029,6 +3029,18 @@
         }
       }
     },
+    "/api/music/albums/tracks": {
+      "get": {
+        "tags": [
+          "crate::music"
+        ],
+        "summary": "`GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.",
+        "operationId": "album_tracks",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/music/want-recording": {
       "post": {
         "tags": [

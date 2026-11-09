@@ -95,7 +95,7 @@ export function askNothing(req: AddRequest, mode: AddMode, c: Choices): boolean 
   const d = profileDefaults(fit[0], c);
   if (req.kind === 'movie') return d.quality != null;
   if (req.kind === 'book') return d.want != null;
-  if (req.kind === 'album') return mode === 'import' || d.want != null;
+  if (req.kind === 'album') return !!req.recording && (mode === 'import' || d.want != null);
   return false;
 }
 

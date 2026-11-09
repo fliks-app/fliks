@@ -972,6 +972,7 @@
     "status_monitored": "Vigilada",
     "status_not_monitored": "No vigilada",
     "seasons_unavailable": "Lista de temporadas no disponible: se vigilarán todas las temporadas excepto los especiales.",
+    "tracks_unavailable": "Lista de pistas no disponible: se vigilarán todas las pistas.",
     "seasons_unavailable_request": "Lista de temporadas no disponible: se solicitará la serie completa.",
     "advanced_options": "Opciones avanzadas",
     "select_seasons": "Seleccionar la(s) temporada(s)",

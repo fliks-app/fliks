@@ -972,6 +972,7 @@
     "status_monitored": "Monitored",
     "status_not_monitored": "Not monitored",
     "seasons_unavailable": "Season list unavailable: every season but the specials will be monitored.",
+    "tracks_unavailable": "Track list unavailable: every track will be monitored.",
     "seasons_unavailable_request": "Season list unavailable: the whole series will be requested.",
     "advanced_options": "Advanced options",
     "select_seasons": "Select season(s)",
