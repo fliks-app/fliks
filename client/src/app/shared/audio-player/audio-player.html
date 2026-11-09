@@ -1,6 +1,8 @@
 @if (audio.track(); as t) {
   <div
     appTvRow
+    animate.enter="mini-player-in"
+    animate.leave="mini-player-out"
     class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
     style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))"
     data-testid="audio-mini"

@@ -157,7 +157,7 @@
       </div>
     }
 
-    @if (!desktop) {
+    @if (!desktop && mediaType() !== 'album') {
       <!-- A download in flight is the headline state, so it gets its own full-width bar rather than a chip crowding the action row on phones. -->
       @if (badge(); as b) {
         <div class="flex mt-4">
@@ -200,10 +200,6 @@
         <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="addToPlaylist()">
           <svg lucideListPlus class="h-5 w-5"></svg>
           {{ 'playlists.add_to_playlist' | translate }}
-        </button>
-        <button #moreMobile type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="openActionsMenu(moreMobile)">
-          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-          {{ 'common.more' | translate }}
         </button>
       </div>
     }

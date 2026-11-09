@@ -1,7 +1,7 @@
 @let m = media();
 @let a = album();
 
-<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="album" [media]="m" [actions]="actions" [posterUrl]="coverUrl()" [overview]="m.overview || null" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="album" [media]="m" [actions]="actions" [posterUrl]="coverUrl()" [menuSubtitle]="artistsText() || null" [overview]="m.overview || null" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
   @if (a) {
     <p heroMeta class="flex flex-wrap gap-x-3 gap-y-1 text-base-content/70" data-testid="facts">
       @for (ar of a.artists; track ar.id; let last = $last) {
@@ -23,13 +23,33 @@
     </p>
   }
   <ng-container ngProjectAs="[heroActions]">
-    @if (playable().length) {
-      <button type="button" class="btn btn-primary" [class.flex-1]="!desktop()" autofocus (click)="play()" data-testid="play">
-        <svg lucidePlay class="size-4" fill="currentColor"></svg>{{ 'music.play' | translate }}
-      </button>
-      <button type="button" class="btn btn-outline" [class.flex-1]="!desktop()" (click)="play(undefined, true)" data-testid="shuffle">
-        <svg lucideShuffle class="size-4"></svg>{{ 'music.shuffle' | translate }}
-      </button>
+    @if (desktop()) {
+      @if (playable().length) {
+        <button type="button" class="btn btn-primary" autofocus (click)="play()" data-testid="play">
+          <svg lucidePlay class="size-4" fill="currentColor"></svg>{{ 'music.play' | translate }}
+        </button>
+        <button type="button" class="btn btn-outline" (click)="play(undefined, true)" data-testid="shuffle">
+          <svg lucideShuffle class="size-4"></svg>{{ 'music.shuffle' | translate }}
+        </button>
+      }
+    } @else {
+      <div class="flex w-full items-center gap-1">
+        <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="like.focusedLiked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="like.focusedLiked()" (click)="like.toggle()" data-testid="like">
+          <svg lucideHeart class="size-6" [attr.fill]="like.focusedLiked() ? 'currentColor' : 'none'"></svg>
+        </button>
+        <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addAlbumToPlaylist()" data-testid="add-playlist">
+          <svg lucideListPlus class="size-6"></svg>
+        </button>
+        <span class="flex-1"></span>
+        @if (playable().length) {
+          <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'music.shuffle' | translate" (click)="play(undefined, true)" data-testid="shuffle">
+            <svg lucideShuffle class="size-6"></svg>
+          </button>
+          <button type="button" class="btn btn-primary btn-circle size-14" [attr.aria-label]="'music.play' | translate" (click)="play()" data-testid="play">
+            <svg lucidePlay class="size-6" fill="currentColor"></svg>
+          </button>
+        }
+      </div>
     }
   </ng-container>
 </app-detail-hero>
@@ -65,26 +85,22 @@
       </select>
     </app-detail-section>
   }
-  @if (edition()) {
-    <app-facts-grid class="mt-4" [facts]="facts()" />
-  }
-
   <ng-template #row let-t>
     <li class="flex items-center gap-1" data-testid="track">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
         <app-track-line [title]="t.title" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
-          <span lead class="w-8 shrink-0 text-right tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
+          <span lead class="hidden w-8 shrink-0 text-right md:block tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
           @if (!t.hasFile) {
             <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
           }
         </app-track-line>
       </button>
-      <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
-        <svg lucideHeart class="size-4" [class.fill-current]="t.favourite"></svg>
+      <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
+        <svg lucideHeart class="size-5" [class.fill-current]="t.favourite"></svg>
       </button>
       <app-dropdown-menu placement="bottom-end" [heading]="t.title">
-        <div trigger tabindex="0" role="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'common.more' | translate" data-testid="track-menu">
-          <svg lucideEllipsisVertical class="size-4"></svg>
+        <div trigger tabindex="0" role="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" data-testid="track-menu">
+          <svg lucideEllipsisVertical class="size-5"></svg>
         </div>
         <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="enqueue(t, 'next')" data-testid="track-play-next">
           <svg lucideListStart class="h-4 w-4"></svg>
@@ -115,11 +131,14 @@
   </ng-template>
 
   @for (d of discs(); track d.disc.discNumber) {
-    <app-detail-section [heading]="discs().length > 1 || d.disc.title ? ('music.disc' | translate: { n: d.disc.discNumber }) + (d.disc.title ? ' · ' + d.disc.title : '') : ('music.tracks' | translate)" [collapsible]="false">
+    <section class="mt-4">
+      @if (discs().length > 1 || d.disc.title) {
+        <h2 class="mb-2 text-lg font-bold">{{ ('music.disc' | translate: { n: d.disc.discNumber }) + (d.disc.title ? ' · ' + d.disc.title : '') }}</h2>
+      }
       <ul class="flex flex-col gap-1">
         @for (s of d.sections; track $index) {
-          @if (s.work) {
-            <li class="px-3 pt-3 pb-1 font-semibold" data-testid="work">
+          @if (s.work && s.tracks.length > 1) {
+            <li class="px-0 pt-3 pb-1 font-semibold md:px-3" data-testid="work">
               {{ s.work.composerName ? s.work.composerName + ': ' : '' }}{{ s.work.title }}
             </li>
           }
@@ -128,8 +147,15 @@
           }
         }
       </ul>
-    </app-detail-section>
+    </section>
   }
+  <dialog #detailsDialog class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <app-modal-header [title]="'media_detail.details' | translate" />
+      <app-facts-grid class="py-4" [facts]="facts()" />
+    </div>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  </dialog>
   <dialog #creditsDialog class="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
       <app-modal-header [title]="creditsOf()?.title ?? ('music.credits' | translate)" />

@@ -1071,11 +1071,23 @@ describe('DetailHeroComponent - a title with no video', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('app-hero-progress')?.textContent).toContain('40 %');
   });
 
+  it('hands its actions menu to the host on a phone and takes it back when destroyed', () => {
+    const setHeroMenu = vi.fn();
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    const fixture = hero('book', [{ provide: DETAIL_HERO_HOST, useValue: { openLibrary: vi.fn(), setHeroMenu } }]);
+    fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T' } as Media);
+    fixture.detectChanges();
+    expect(setHeroMenu).toHaveBeenLastCalledWith(expect.any(Function));
+    fixture.destroy();
+    vi.unstubAllGlobals();
+    expect(setHeroMenu).toHaveBeenLastCalledWith(null);
+  });
+
   it('asks its host for the library dialog', () => {
     const register = vi.fn();
     const openLibrary = vi.fn();
     const fixture = hero('book', [
-      { provide: DETAIL_HERO_HOST, useValue: { openLibrary } },
+      { provide: DETAIL_HERO_HOST, useValue: { openLibrary, setHeroMenu: vi.fn() } },
       { provide: CardActionsService, useValue: { register, show: vi.fn() } },
     ]);
     fixture.componentRef.setInput('media', { id: 9, type: 'book', title: 'T' } as Media);

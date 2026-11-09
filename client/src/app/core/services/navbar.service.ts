@@ -12,6 +12,8 @@ export class NavbarService {
   /** Clearlogo for the current hero page, shown in the topbar / back row in
    *  place of the title text. Null when the page has no logo. */
   readonly heroLogoUrl = signal<string | null>(null);
+  /** Opens the page's actions menu from the mobile navbar, in place of the user menu; null when the page has none. */
+  readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
   /** Non-hero pages can opt into the layout's desktop back button by setting
@@ -231,6 +233,7 @@ export class NavbarService {
     this.isHeroPage.set(false);
     this.heroTitle.set('');
     this.heroLogoUrl.set(null);
+    this.heroMenu.set(null);
   }
 
   toggleSidebarPinned() {

@@ -114,7 +114,13 @@
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }
-        <app-user-menu />
+        @if (navbar.heroMenu(); as openMenu) {
+          <button #heroMore type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openMenu(heroMore)">
+            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          </button>
+        } @else {
+          <app-user-menu />
+        }
       </div>
     </nav>
     <!-- Desktop top-right: Cast + User -->

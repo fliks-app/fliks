@@ -64,6 +64,8 @@ import { CORE_MEDIA_ACTIONS } from './core-media-actions';
 /** What the page that owns the title does for the hero. */
 export interface DetailHeroHost {
   openLibrary(): void;
+  /** Hands the page the actions menu to show in the phone navbar; null takes it back. */
+  setHeroMenu(open: ((anchor: HTMLElement) => void) | null): void;
 }
 export const DETAIL_HERO_HOST = new InjectionToken<DetailHeroHost>('DETAIL_HERO_HOST');
 
@@ -179,10 +181,17 @@ export class DetailHeroComponent {
     return this.injector.get(OfflinePlaybackSyncService);
   }
   private readonly cardActions = inject(CardActionsService);
+
   private readonly admin = inject(MediaAdminService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly recommendations = inject(RecommendService);
   private readonly host = inject(DETAIL_HERO_HOST, { optional: true });
+  private readonly navbarMenu = effect((onCleanup) => {
+    const host = this.host;
+    if (!host || this.desktopLayout()) return;
+    host.setHeroMenu((anchor) => this.openActionsMenu(anchor));
+    onCleanup(() => host.setHeroMenu(null));
+  });
 
   // ── Inputs: content ──
   readonly title = input.required<string>();
@@ -192,6 +201,8 @@ export class DetailHeroComponent {
   readonly episodeLabel = input<string | null>(null);
   readonly rating = input<number | null>(null);
   readonly dateLabel = input<string | null>(null);
+  /** Line under the title in the actions menu when the date is not what identifies the title (an album's artists). */
+  readonly menuSubtitle = input<string | null>(null);
   readonly runtime = input<number | null>(null);
   readonly overview = input<string | null>(null);
   readonly genres = input<string[]>([]);
@@ -808,9 +819,9 @@ export class DetailHeroComponent {
       anchor,
       {
         title: this.title(),
-        subtitle: this.dateLabel() ?? '',
+        subtitle: this.menuSubtitle() ?? this.dateLabel() ?? '',
         imageUrl: this.posterUrl(),
-        imageAspect: this.episodeId() ? 'landscape' : 'portrait',
+        imageAspect: this.episodeId() ? 'landscape' : this.mediaType() === 'album' ? 'square' : 'portrait',
       },
       (r) => this.rowOverrides(r as ResolvedMediaAction),
     );

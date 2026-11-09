@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { DeviceService } from '../../../core/services/device.service';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
@@ -30,7 +31,7 @@ export function heroDesktopLayout() {
  *  Slots: `heroMeta` (before the meta row), `heroTags` (after it), `heroActions` (the button row), `heroStatus` (under it), and the default one. */
 @Component({
   selector: 'app-hero-base',
-  imports: [DecimalPipe, RouterLink, TranslatePipe, SpoilerDirective, TvRowDirective, HeroPosterComponent, MobileFanartHeroComponent, SynopsisComponent],
+  imports: [DecimalPipe, RouterLink, ResolveUrlPipe, TranslatePipe, SpoilerDirective, TvRowDirective, HeroPosterComponent, MobileFanartHeroComponent, SynopsisComponent],
   templateUrl: './hero-base.html',
   host: { class: 'block' },
 })

@@ -81,7 +81,10 @@ export class AlbumPageComponent {
   protected readonly orphaned = computed(() => !!this.album()?.orphaned || !!this.edition()?.orphaned);
   protected readonly desktop = heroDesktopLayout();
   /** Identify lists the releases the files may be, instead of the title search of the other kinds. */
-  protected readonly actions: MediaActionHandlers = { 'media.identify': () => void this.review() };
+  protected readonly actions: MediaActionHandlers = {
+    'media.identify': () => void this.review(),
+    'media.details': () => this.detailsDialog()?.nativeElement.showModal(),
+  };
   protected readonly artistsText = computed(() => artistLine(this.album()?.artists ?? []));
   protected readonly coverUrl = computed(() => this.edition()?.coverUrl ?? this.media().posterUrl);
   protected readonly duration = computed(() => formatDuration(this.tracks().reduce((s, t) => s + (t.durationSeconds ?? 0), 0)));
@@ -121,6 +124,10 @@ export class AlbumPageComponent {
     return this.player.playTracks(list.map((t) => this.request(t)), start, shuffle ? { shuffle: true } : undefined);
   }
 
+  protected addAlbumToPlaylist(): void {
+    this.playlists.open({ mediaId: this.media().id });
+  }
+
   protected addToPlaylist(t: Track): void {
     this.playlists.open({ itemId: t.itemId });
   }
@@ -134,6 +141,7 @@ export class AlbumPageComponent {
   }
 
   protected readonly creditsOf = signal<Track | null>(null);
+  private readonly detailsDialog = viewChild<ElementRef<HTMLDialogElement>>('detailsDialog');
   private readonly creditsDialog = viewChild<ElementRef<HTMLDialogElement>>('creditsDialog');
   protected readonly candidates = signal<AlbumCandidate[] | null>(null);
   protected readonly reviewing = signal(false);

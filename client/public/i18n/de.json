@@ -1116,6 +1116,7 @@
     "request_deletion_success": "Löschanfrage gesendet.",
     "refresh_metadata": "Metadaten aktualisieren",
     "identify": "Identifizieren",
+    "details": "Details",
     "identify_title": "Identifizieren",
     "identify_hint": "Geben Sie ein oder mehrere Kriterien ein. Entfernen Sie einige, um die Ergebnisse zu erweitern.",
     "identify_path": "Pfad",
