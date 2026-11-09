@@ -175,8 +175,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly programme = signal<PartyItem[]>([]);
   protected readonly proposedItems = computed(() => this.party.proposals().map((p) => p.item));
   /** A proposal already accepted into the programme leaves the list until it is sent back. */
-  protected readonly openProposals = computed(() => this.party.proposals().filter((p) => !this.programme().some((i) => sameItem(i, p.item))));
-  protected readonly canStart = computed(() => !!this.head()?.item || !!topProposal(this.party.proposals()));
+  protected readonly openProposals = computed(() => this.party.filmProposals().filter((p) => !this.programme().some((i) => sameItem(i, p.item))));
+  protected readonly canStart = computed(() => !!this.head()?.item || !!topProposal(this.party.filmProposals()));
   /** The chat column exists in the lobby only; the live phase gives the page its full width. */
   protected readonly chatShown = computed(() => this.phase() === 'lobby' && this.joined());
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');

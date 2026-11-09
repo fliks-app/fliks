@@ -1,0 +1,57 @@
+<section class="flex flex-col gap-2 rounded-lg bg-base-200 p-3" data-testid="karaoke-queue" [attr.aria-label]="'karaoke.queue_title' | translate">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h3 class="font-medium" [class.text-xl]="tv()">{{ 'karaoke.queue_title' | translate }}</h3>
+    @if (party.isHost() && next()) {
+      <div class="scroll-ring-safe" appTvSection>
+        <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="play()" data-testid="karaoke-queue-play-next">
+          <svg lucidePlay class="h-4 w-4"></svg>
+          {{ 'karaoke.queue_play_next' | translate }}
+        </button>
+      </div>
+    }
+  </div>
+  @if (next(); as n) {
+    <p class="text-base text-base-content/80" [class.text-xl]="tv()" role="status" data-testid="karaoke-queue-next">
+      {{ 'karaoke.queue_next' | translate: { name: name(n.proposedBy), title: n.item.title } }}
+    </p>
+  }
+
+  @if (queue().length) {
+    <ol class="scroll-ring-safe flex max-h-48 flex-col gap-1 overflow-y-auto" appTvSection data-testid="karaoke-queue-list">
+      @for (p of queue(); track p.id) {
+        <li class="flex items-center gap-2" [class.text-lg]="tv()" data-testid="karaoke-queue-item">
+          <span class="w-6 shrink-0 text-right tabular-nums text-base-content/60">{{ p.queuePosition }}</span>
+          <span class="flex min-w-0 flex-1 items-baseline gap-2"><span class="truncate font-medium">{{ p.item.title }}</span><span class="shrink-0 text-sm text-base-content/60">{{ name(p.proposedBy) }}</span></span>
+          @if (party.isHost()) {
+            <button type="button" class="btn btn-ghost btn-sm btn-square" [disabled]="busy()" [attr.aria-label]="'karaoke.queue_play_now' | translate: { title: p.item.title }" (click)="play(p)">
+              <svg lucidePlay class="h-4 w-4"></svg>
+            </button>
+          }
+          @if (mine(p) || party.isHost()) {
+            <button type="button" class="btn btn-ghost btn-sm btn-square" [disabled]="busy()" [attr.aria-label]="'karaoke.queue_cancel' | translate: { title: p.item.title }" (click)="cancel(p)" data-testid="karaoke-queue-cancel">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
+          }
+        </li>
+      }
+    </ol>
+  } @else {
+    <p class="text-sm text-base-content/60" [class.text-lg]="tv()" data-testid="karaoke-queue-empty">{{ 'karaoke.queue_empty' | translate }}</p>
+  }
+
+  <div class="scroll-ring-safe flex flex-col gap-1" appTvSection>
+    <input type="search" class="input input-sm w-full" [class.input-lg]="tv()" [value]="query()" [attr.placeholder]="'karaoke.queue_search' | translate" [attr.aria-label]="'karaoke.queue_search' | translate" (input)="onInput($any($event.target).value)" data-testid="karaoke-queue-search" />
+    @if (results().length) {
+      <ul class="flex flex-col gap-1" data-testid="karaoke-queue-results">
+        @for (t of results(); track t.itemId) {
+          <li class="flex items-center gap-2" [class.text-lg]="tv()">
+            <span class="flex min-w-0 flex-1 items-baseline gap-2"><span class="truncate font-medium">{{ t.title }}</span><span class="shrink-0 text-sm text-base-content/60">{{ t.albumTitle }}</span></span>
+            <button type="button" class="btn btn-ghost btn-sm btn-square" [disabled]="busy()" [attr.aria-label]="'karaoke.queue_add' | translate: { title: t.title }" (click)="add(t)">
+              <svg lucidePlus class="h-4 w-4"></svg>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</section>

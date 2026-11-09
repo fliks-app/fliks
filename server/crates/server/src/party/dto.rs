@@ -348,6 +348,9 @@ pub struct ProposalDto {
     pub proposed_by: i32,
     pub upvoter_ids: Vec<i32>,
     pub downvoter_ids: Vec<i32>,
+    /// A pending track proposal's place in the singer queue, from 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_position: Option<i32>,
 }
 
 /// `1` up, `-1` down.
@@ -370,6 +373,7 @@ fn vote_value<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i16, D::Error> {
 pub struct ProposalIn {
     pub media_id: i32,
     pub episode_id: Option<i32>,
+    pub item_id: Option<i32>,
 }
 
 #[derive(Deserialize)]

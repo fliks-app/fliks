@@ -2745,6 +2745,119 @@ async fn the_start_takes_the_top_vote_refuses_a_tie_and_the_hosts_choice_wins(po
     assert_eq!(left, 0, "ending the party clears its proposals");
 }
 
+/// An album of six tracks, items 5001 to 5006.
+async fn album_tracks(c: &Ctx) {
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, type, "libraryId") VALUES (500, 'Album', 'album', 1);
+           INSERT INTO editions (id, "mediaId", family) VALUES (500, 500, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", title)
+             SELECT 5000 + n, 500, 500, 't' || n FROM generate_series(1, 6) n;
+           INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             SELECT 500, 'a' || n, 1, 'q', (SELECT min(id) FROM library_folders) FROM generate_series(1, 6) n;
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+             SELECT 5000 + n, f.id, 500, 0 FROM generate_series(1, 6) n
+             JOIN media_files f ON f."relativePath" = 'a' || n AND f."mediaId" = 500"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+}
+
+async fn track(c: &Ctx, url: &str, tok: &str, n: i32) -> (u16, Value) {
+    c.call(
+        "POST",
+        &format!("{url}/proposals"),
+        tok,
+        Some(json!({"mediaId": 500, "itemId": 5000 + n})),
+    )
+    .await
+}
+
+fn position_of(list: &Value, n: i32) -> Value {
+    list.as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["item"]["itemId"] == 5000 + n)
+        .map_or(Value::Null, |p| p["queuePosition"].clone())
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_live_party_queues_tracks_round_robin_with_a_cap_and_a_cancel(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (cara, cc) = c.user("cara", true).await;
+    c.follow(alice, bob).await;
+    c.follow(alice, cara).await;
+    let url = bare_party(&c, &a, &[bob, cara]).await;
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 1})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let (s, _) = c.call("POST", &format!("{url}/start"), &a, None).await;
+    assert_eq!(s, 200);
+
+    let (s, e) = propose(&c, &url, &b, 1).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
+    assert_eq!(track(&c, &url, &a, 2).await.0, 201);
+    assert_eq!(track(&c, &url, &b, 3).await.0, 201);
+    let (s, l) = track(&c, &url, &cc, 4).await;
+    assert_eq!(s, 201);
+    let (s, e) = track(&c, &url, &a, 5).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_queue_full")));
+    let order: Vec<Value> = (1..=4).map(|n| position_of(&l, n)).collect();
+    assert_eq!(order, [json!(1), json!(4), json!(2), json!(3)]);
+
+    let by_bob = l.as_array().unwrap()[2]["id"].as_i64().unwrap();
+    let (s, e) = c
+        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &cc, None)
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_author")));
+    let (s, _) = c
+        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &b, None)
+        .await;
+    assert_eq!(s, 204);
+
+    let (s, _) = c
+        .call("POST", &format!("{url}/proposals/next"), &b, None)
+        .await;
+    assert_eq!(s, 403);
+    let (s, p) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(p["proposals"].as_array().unwrap().len(), 2);
+    assert_eq!(position_of(&p["proposals"], 4), json!(1), "alice just sang");
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
+    assert_eq!(q.as_array().unwrap().len(), 2);
+    let (s, e) = track(&c, &url, &b, 1).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_in_programme")));
+
+    for _ in 0..2 {
+        let (s, _) = c
+            .call("POST", &format!("{url}/proposals/next"), &a, None)
+            .await;
+        assert_eq!(s, 200);
+    }
+    let (s, e) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_queue_empty")));
+    let (s, l) = track(&c, &url, &a, 6).await;
+    assert_eq!(
+        (s, position_of(&l, 6)),
+        (201, json!(1)),
+        "a chosen row frees the cap"
+    );
+}
+
 /// A second library with a film in it, which alice opens and nobody else does.
 async fn hidden_film(c: &Ctx, alice: i32) {
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

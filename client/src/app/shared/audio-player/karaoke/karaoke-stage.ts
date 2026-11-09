@@ -11,6 +11,7 @@ import type { Difficulty } from '../../../core/services/karaoke/karaoke-score';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { LyricsViewComponent } from '../lyrics/lyrics-view';
+import { KaraokeQueueComponent } from './karaoke-queue';
 
 const BEHIND_MS = 2000;
 const AHEAD_MS = 6000;
@@ -21,7 +22,7 @@ const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores and the singers' controls. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideMic, LucideMicOff, LucideMinus, LucidePlus],
+  imports: [TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMicOff, LucideMinus, LucidePlus],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
@@ -41,6 +42,7 @@ export class KaraokeStageComponent {
   protected readonly calibrated = signal<boolean | null>(null);
   protected readonly hasMelody = computed(() => (this.doc().cueLine ?? []).some((l) => l.cue.some((c) => c.pitch !== undefined)));
   protected readonly canSing = this.karaoke.canSing;
+  protected readonly inParty = this.party.active;
 
   private frame = 0;
 

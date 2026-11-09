@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { computed, provideZonelessChangeDetection, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -31,7 +31,7 @@ describe('PartyPageComponent film selection', () => {
   let enter: ReturnType<typeof vi.fn>;
   let connected: ReturnType<typeof signal<boolean>>;
   let lobby: ReturnType<typeof signal<boolean>>;
-  let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>> };
+  let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>>; filmProposals: ReturnType<typeof computed<PartyProposal[]>> };
   const flush = async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
     TestBed.tick();
@@ -43,7 +43,8 @@ describe('PartyPageComponent film selection', () => {
     enter = vi.fn().mockResolvedValue(undefined);
     connected = signal(true);
     lobby = signal(false);
-    service = { party: signal<PartyDto | null>(null), proposals: signal<PartyProposal[]>([]) };
+    const proposals = signal<PartyProposal[]>([]);
+    service = { party: signal<PartyDto | null>(null), proposals, filmProposals: computed(() => proposals()) };
     const stub = (v: object) => v as never;
     vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
     TestBed.overrideComponent(PartyPageComponent, { set: { template: '', imports: [] } });
