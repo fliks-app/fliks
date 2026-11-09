@@ -370,6 +370,24 @@ export const routes: Routes = [
         data: { titleKey: 'pending_requests.title' },
       },
       {
+        path: 'acquisition/queue',
+        canActivate: [permissionGuard('media.grab')],
+        loadComponent: () =>
+          import('./features/acquisition-queue/acquisition-queue').then(
+            (m) => m.AcquisitionQueueComponent,
+          ),
+        data: { titleKey: 'acquisition_queue.queue_title', view: 'queue' },
+      },
+      {
+        path: 'acquisition/history',
+        canActivate: [permissionGuard('media.grab')],
+        loadComponent: () =>
+          import('./features/acquisition-queue/acquisition-queue').then(
+            (m) => m.AcquisitionQueueComponent,
+          ),
+        data: { titleKey: 'acquisition_queue.history_title', view: 'history' },
+      },
+      {
         path: 'plugins/:pluginId/:view',
         canActivate: [pluginViewGuard],
         loadComponent: () =>

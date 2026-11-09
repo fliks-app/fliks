@@ -95,6 +95,7 @@ struct Tables {
     permissions: HashMap<String, BTreeSet<String>>,
     webhooks: HashMap<String, Vec<(String, String)>>,
     pickers: HashMap<String, Value>,
+    queue_actions: HashMap<String, Value>,
     players: HashMap<String, String>,
     jobs: HashMap<String, Vec<Job>>,
 }
@@ -153,6 +154,11 @@ impl Registry {
             manifest["ui"].get("releasePicker").cloned(),
         );
         set_or_remove(
+            &mut t.queue_actions,
+            id,
+            manifest["acquisition"].get("queueActions").cloned(),
+        );
+        set_or_remove(
             &mut t.players,
             id,
             manifest["ui"]["player"]["preRollRoute"]
@@ -192,6 +198,7 @@ impl Registry {
             t.routes.remove(id);
             t.permissions.remove(id);
             t.pickers.remove(id);
+            t.queue_actions.remove(id);
             t.players.remove(id);
         }
     }
@@ -222,6 +229,12 @@ impl Registry {
 
     pub fn release_picker_of(&self, id: &str) -> Option<Value> {
         self.r().pickers.get(id).cloned()
+    }
+
+    /// The route a provider declares for a queue action (`pause`, `resume`, `remove`, `retryImport`).
+    pub fn queue_action_of(&self, id: &str, action: &str) -> Option<String> {
+        let t = self.r();
+        Some(t.queue_actions.get(id)?.get(action)?.as_str()?.to_owned())
     }
 
     /// Every plugin declaring `ui.releasePicker`, by id.
@@ -310,6 +323,7 @@ impl Registry {
             vec![]
         };
         validate_release_picker(m, &routes_json)?;
+        validate_queue_actions(m, &routes_json)?;
         validate_player(m, &routes_json)?;
         validate_view_targets(id, m)?;
         self.check_i18n(id, m)?;
@@ -458,6 +472,37 @@ fn validate_release_picker(m: &Value, routes: &[Value]) -> Result<(), Fail> {
                     ),
                 ));
             }
+        }
+    }
+    Ok(())
+}
+
+pub const QUEUE_ACTIONS: [&str; 4] = ["pause", "resume", "remove", "retryImport"];
+
+fn validate_queue_actions(m: &Value, routes: &[Value]) -> Result<(), Fail> {
+    let Some(actions) = m["acquisition"].get("queueActions") else {
+        return Ok(());
+    };
+    let keys = route_keys(routes);
+    let bad = |key: &str, what: String| {
+        fail(
+            "invalid-queue-actions",
+            format!("acquisition.queueActions.{key} {what}"),
+        )
+    };
+    let Some(map) = actions.as_object() else {
+        return Err(bad("", "must be an object".into()));
+    };
+    for (key, path) in map {
+        if !QUEUE_ACTIONS.contains(&key.as_str()) {
+            return Err(bad(key, "is not a queue action".into()));
+        }
+        let path = path.as_str().unwrap_or_default();
+        if !keys.contains(&format!("POST {path}")) {
+            return Err(bad(
+                key,
+                format!("\"{path}\" is not declared as a POST route in routes[]"),
+            ));
         }
     }
     Ok(())
@@ -739,6 +784,29 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn queue_actions_are_declared_post_routes() {
+        let routes = json!([
+            {"method":"POST","path":"/p","policy":"read:Settings"},
+            {"method":"GET","path":"/g","policy":"read:Settings"}
+        ]);
+        let routes = routes.as_array().unwrap();
+        let m = |a: Value| json!({"acquisition":{"queueActions":a}});
+        assert!(
+            validate_queue_actions(&m(json!({"pause":"/p","retryImport":"/p"})), routes).is_ok()
+        );
+        for bad in [
+            json!({"pause":"/g"}),
+            json!({"pause":"/x"}),
+            json!({"stop":"/p"}),
+            json!([]),
+        ] {
+            let f = validate_queue_actions(&m(bad), routes).unwrap_err();
+            assert_eq!(f.reason, "invalid-queue-actions");
+        }
+        assert!(validate_queue_actions(&json!({}), routes).is_ok());
     }
 
     #[test]

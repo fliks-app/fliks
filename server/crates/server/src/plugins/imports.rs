@@ -507,13 +507,30 @@ impl host::Host for Ctx {
         unit: Option<t::UnitRef>,
     ) -> Result<Vec<String>, HostError> {
         let id = self.sh.id.clone();
+        let app = self.app();
         call!(
             self,
             "acquisition.inFlight",
             ["acquisition:candidates"],
             HOST_CALL,
             async {
-                super::events::progress_gates().in_flight(&id, media_id as i32, unit.as_ref())
+                let app = app?;
+                super::events::in_flight(&app, &id, media_id as i32, unit.as_ref()).await
+            }
+        )
+    }
+
+    async fn queue_set(&mut self, entries: Vec<t::QueueEntry>) -> Result<(), HostError> {
+        let app = self.app();
+        let id = self.sh.id.clone();
+        call!(
+            self,
+            "queue.set",
+            ["acquisition:candidates"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::queue::set(&app, &id, entries).await
             }
         )
     }

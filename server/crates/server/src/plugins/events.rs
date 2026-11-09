@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -79,8 +79,8 @@ fn download_of(d: &t::DownloadProgress) -> Result<Download, HostError> {
     })
 }
 
-/// One `download.progress` to the media's viewers; nothing when there are none.
-pub async fn push_progress(st: &AppState, media_id: i32, downloads: Vec<Download>) {
+/// One `download.progress` to the media's viewers (`downloads` plus the queue's open rows); nothing when there are none.
+pub async fn push_progress(st: &AppState, media_id: i32, mut downloads: Vec<Download>) {
     let recipients = viewers(st, Some(media_id)).await;
     if recipients.is_empty() {
         return;
@@ -88,6 +88,7 @@ pub async fn push_progress(st: &AppState, media_id: i32, downloads: Vec<Download
     let Some((_, media_type)) = media_row(st, media_id).await else {
         return;
     };
+    downloads.extend(super::queue::downloads(&st.db, media_id).await);
     st.hub.emit_to_users(
         &recipients,
         SseEvent::DownloadProgress {
@@ -230,18 +231,24 @@ impl Progress {
         push_progress(&st, media_id, pending).await;
     }
 
-    /// The other plugins with a download in flight that covers `unit` of the media (`plugins.md` rule 67).
-    pub fn in_flight(
-        &self,
-        plugin: &str,
-        media_id: i32,
-        unit: Option<&t::UnitRef>,
-    ) -> Result<Vec<String>, HostError> {
-        let (season, episode) = units::video(unit)?;
-        Ok(self
-            .0
-            .lock_clean()
-            .in_flight(media_id, plugin, season, episode))
+    /// The media's in-memory sets (`progress.set` and placeholders).
+    pub fn union(&self, media: i32) -> Vec<Download> {
+        self.0.lock_clean().union(media)
+    }
+
+    /// Drops the plugin's sets (it reports through `queue.set`); the media they held.
+    pub fn retire(&self, plugin: &str) -> Vec<i32> {
+        let mut g = self.0.lock_clean();
+        let held: Vec<i32> = g
+            .sets
+            .iter()
+            .filter(|(_, m)| m.contains_key(plugin))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in &held {
+            g.store(plugin, *id, vec![]);
+        }
+        held
     }
 
     /// The plugin's set plus a placeholder, pushed at once (`acquisition.grabbed`).
@@ -280,6 +287,29 @@ impl Progress {
             push_progress(st, id, set).await;
         }
     }
+}
+
+/// The other plugins with a download in flight that covers `unit` of the media (`plugins.md` rule 67): the queue's
+/// open rows and the in-memory sets.
+pub async fn in_flight(
+    st: &AppState,
+    plugin: &str,
+    media_id: i32,
+    unit: Option<&t::UnitRef>,
+) -> Result<Vec<String>, HostError> {
+    let (season, episode) = units::video(unit)?;
+    let mut ids: BTreeSet<String> = progress_gates()
+        .0
+        .lock_clean()
+        .in_flight(media_id, plugin, season, episode)
+        .into_iter()
+        .collect();
+    ids.extend(
+        super::queue::in_flight(&st.db, plugin, media_id, season, episode)
+            .await
+            .map_err(super::imports::db_err)?,
+    );
+    Ok(ids.into_iter().collect())
 }
 
 pub fn progress_gates() -> &'static Progress {

@@ -11,6 +11,7 @@ mod no_tmdb;
 mod pickers;
 mod provider;
 mod provider_host;
+mod queue;
 mod roles;
 mod runtime;
 mod sql;

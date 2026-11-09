@@ -58,8 +58,9 @@ const BASE_KEYS: [&str; 14] = [
     "i18n",
     "kind",
 ];
-const PROCESS_KEYS: [&str; 12] = [
+const PROCESS_KEYS: [&str; 13] = [
     "provider",
+    "acquisition",
     "runtime",
     "memoryMb",
     "files",

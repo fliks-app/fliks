@@ -216,6 +216,28 @@ interface types {
   }
   /// One thing an acquisition provider can search: an indexer, an account.
   record source { id: string, name: string, kinds: list<kind> }
+
+  /// `import-failed` waits for a retry or a removal; `imported` and `failed` close the entry.
+  enum queue-state { queued, active, stalled, paused, importing, import-failed, imported, failed }
+  enum grab-method { manual, auto, rss }
+  /// One transfer of a provider: `ref` is its own id for it, stable while the transfer lives.
+  record queue-entry {
+    ref: string,
+    media-id: u32,
+    unit: option<unit-ref>,
+    source-id: string,
+    source-name: string,
+    title: string,
+    quality: string,
+    method: grab-method,
+    info-url: option<string>,
+    state: queue-state,
+    progress: f64,
+    size-bytes: option<u64>,
+    bytes-per-second: option<f64>,
+    eta-seconds: option<f64>,
+    error: option<string>,
+  }
 }
 
 interface host {
@@ -223,7 +245,7 @@ interface host {
     target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
     ingest-result, acquisition-event, audience, download-progress, family, unit-ref, host-error,
-    json, kind, external-id, recording-ref, wanted-track, source,
+    json, kind, external-id, recording-ref, wanted-track, source, queue-entry,
   };
 
   /// `family` none is the media's first want; `language` picks among the wants of a book's family.
@@ -264,6 +286,10 @@ interface host {
   counts-set: func(key: string, value: u64) -> result<_, host-error>;
   events-emit-own: func(event-type: string, payload: json, audience: audience) -> result<_, host-error>;
   progress-set: func(media-id: u32, downloads: list<download-progress>) -> result<_, host-error>;
+
+  /// The full snapshot of this plugin's transfers: entries are upserted by `ref`, the open ones missing from it
+  /// close as removed; needs `acquisition:candidates`.
+  queue-set: func(entries: list<queue-entry>) -> result<_, host-error>;
 
   /// Replaces the sources this plugin offers as an acquisition provider; needs `acquisition:candidates`.
   acquisition-sources-set: func(sources: list<source>) -> result<_, host-error>;
