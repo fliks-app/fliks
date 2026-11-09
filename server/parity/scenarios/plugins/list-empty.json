@@ -10,7 +10,18 @@
       "expect": {
         "body": [
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "namespace:tmdb",
+              "provider:tmdb:movie",
+              "provider:tmdb:series"
+            ],
+            "description": "Movie and series metadata, images, people and lists from The Movie Database.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "TMDB",
             "origin": "bundled",
@@ -23,7 +34,18 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "namespace:tvdb",
+              "provider:tvdb:movie",
+              "provider:tvdb:series"
+            ],
+            "description": "Movie and series metadata, images, people and credits from TheTVDB.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "TheTVDB",
             "origin": "bundled",
@@ -36,7 +58,15 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "namespace:openlibrary",
+              "provider:openlibrary:book"
+            ],
+            "description": "Book metadata from OpenLibrary: search, works and their editions.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "OpenLibrary",
             "origin": "bundled",
@@ -49,7 +79,15 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "namespace:bnf",
+              "provider:bnf:book"
+            ],
+            "description": "Book metadata from the BnF general catalogue: search and editions by ISBN or notice id.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "BnF",
             "origin": "bundled",
@@ -62,7 +100,15 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "namespace:googlebooks",
+              "provider:googlebooks:book"
+            ],
+            "description": "Book metadata from Google Books: search and editions by ISBN or volume id.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "Google Books",
             "origin": "bundled",
@@ -75,7 +121,15 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "namespace:audible",
+              "provider:audible:book"
+            ],
+            "description": "Audiobook metadata from the unofficial Audible catalog: search and editions by ASIN.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "Audible",
             "origin": "bundled",
@@ -88,7 +142,15 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "namespace:audnexus",
+              "provider:audnexus:book"
+            ],
+            "description": "Audiobook metadata and chapters from Audnexus, by ASIN.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": null,
             "kind": "process",
             "name": "Audnexus",
             "origin": "bundled",
@@ -101,7 +163,17 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "namespace:fliks.thexem:xem",
+              "provider:fliks.thexem:xem:series"
+            ],
+            "description": "Maps the season and episode numbers of release names to the aired ones for series released under another numbering, from TheXEM.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": "https://thexem.info",
             "kind": "process",
             "name": "TheXEM scene numbering",
             "origin": "bundled",
@@ -114,7 +186,18 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "network:internal",
+              "namespace:musicbrainz",
+              "provider:musicbrainz:album"
+            ],
+            "description": "Album, release and artist metadata from MusicBrainz, with cover art from the Cover Art Archive and optional ListenBrainz popularity.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": "https://musicbrainz.org",
             "kind": "process",
             "name": "MusicBrainz",
             "origin": "bundled",
@@ -127,7 +210,17 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "namespace:fanarttv",
+              "provider:fanarttv:album"
+            ],
+            "description": "Artist images and album covers from Fanart.tv, keyed by MusicBrainz ids.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": "https://fanart.tv",
             "kind": "process",
             "name": "Fanart.tv",
             "origin": "bundled",
@@ -140,7 +233,17 @@
             "verifiedByKeyId": "release-2026"
           },
           {
+            "author": "Fliks",
+            "capabilities": [
+              "ui:settings.page",
+              "config:general",
+              "namespace:fliks.lrclib:lrclib",
+              "provider:fliks.lrclib:lrclib:album"
+            ],
+            "description": "Synced and plain lyrics from LRCLIB, matched on title, artist, album and duration.",
+            "descriptions": {},
             "enabled": true,
+            "homepage": "https://lrclib.net",
             "kind": "process",
             "name": "LRCLIB",
             "origin": "bundled",
