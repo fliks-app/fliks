@@ -133,8 +133,10 @@ export class SessionSyncService {
       if (!s.item.mediaFileId) return;
       const episode = s.item.episodeId ? { episodeId: s.item.episodeId } : {};
       // A mounted player reuses its route: leave /watch first so it remounts on the new file.
-      if (this.router.url.startsWith('/watch')) await this.router.navigateByUrl('/', { skipLocationChange: true });
+      const overPlayer = this.router.url.startsWith('/watch');
+      if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
       await this.router.navigate(['/watch', s.item.mediaFileId], {
+        replaceUrl: overPlayer,
         queryParams: { mediaId: s.item.mediaId, ...episode, t: Math.floor(positionSeconds) },
       });
     });

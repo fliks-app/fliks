@@ -18,6 +18,7 @@ import { RemoteService, RemoteTarget } from '../../core/services/remote.service'
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SessionSyncService } from '../../core/services/session-sync.service';
+import { SseService } from '../../core/services/sse.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
@@ -32,6 +33,8 @@ export interface PickerRow {
   subtitle: string | null;
   /** Casting to this row already: pressing it leaves the device instead. */
   connected?: boolean;
+  /** Pressing it does nothing: the session already sits on this device. */
+  disabled?: boolean;
 }
 
 /** The destination list (Cast devices + remote targets) without its surface: wrapped by `app-remote-picker` in the top bar, a dropdown/sheet in the player. */
@@ -60,6 +63,7 @@ export class RemotePickerListComponent {
   private readonly session = inject(PlaybackSession);
   protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
+  private readonly sse = inject(SseService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -77,19 +81,33 @@ export class RemotePickerListComponent {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
     const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
-    const position = this.sync.positionNow(s);
+    const reading = this.sync.isReading(s);
+    if (reading && this.readerHere()) return null;
+    const position = reading ? `${this.readPercent(s)}%` : formatTime(this.sync.positionNow(s));
     return {
       title: s.item.title,
-      detail: s.item.subtitle ? `${s.item.subtitle} · ${formatTime(position)}` : formatTime(position),
-      device,
-      parked: this.sync.parked(),
+      detail: s.item.subtitle ? `${s.item.subtitle} · ${position}` : position,
+      line: this.translate.instant(
+        reading ? 'session.read_on' : this.sync.parked() ? 'session.parked_device' : 'session.playing_on',
+        { device },
+      ),
     };
   });
 
+  /** The book or comic position is saved by this very device. */
+  private readerHere(): boolean {
+    const s = this.sync.session();
+    return !!s && this.sync.isReading(s) && s.owner.targetId === this.sse.targetId();
+  }
+
+  private readPercent(s: { positionSeconds: number; durationSeconds: number | null }): number {
+    return Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100);
+  }
+
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
-    const resumable = this.sync.canPlayHere() && this.session.isLocal();
     const session = this.sync.session();
+    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.readerHere();
     rows.push({
       kind: 'local',
       id: 'local',
@@ -97,9 +115,12 @@ export class RemotePickerListComponent {
       label: this.translate.instant('remote.this_device'),
       subtitle:
         resumable && session
-          ? this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
+          ? this.sync.isReading(session)
+            ? this.translate.instant('session.open_here')
+            : this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
           : null,
       connected: this.session.isLocal() && !resumable,
+      disabled: this.readerHere(),
     });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
@@ -179,6 +200,11 @@ export class RemotePickerListComponent {
   protected canTransfer(row: PickerRow): boolean {
     const s = this.sync.session();
     return row.kind === 'remote' && !!s && this.sync.canTransfer() && (this.sync.parked() || s.owner.targetId !== row.id);
+  }
+
+  protected pressable(row: PickerRow): boolean {
+    if (row.disabled) return false;
+    return !(this.transferOnly() && row.kind === 'remote' && !this.canTransfer(row));
   }
 
   protected async transfer(row: PickerRow): Promise<void> {

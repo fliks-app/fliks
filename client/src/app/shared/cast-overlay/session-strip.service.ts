@@ -27,7 +27,7 @@ export class SessionStripService {
     const s = this.sync.session();
     if (!s || this.device.isTv() || !this.session.isLocal() || this.sync.role() !== 'observer') return null;
     if (this.sync.isReading(s) && s.owner.targetId === this.sse.targetId()) return null;
-    return this.hiddenOwner() === s.owner.targetId && !this.sync.parked() ? null : s;
+    return this.hiddenOwner() === s.owner.targetId && (!this.sync.parked() || this.sync.isReading(s)) ? null : s;
   });
 
   /** The strip rises above the audio mini-player, which sits at the same place. */
@@ -36,7 +36,7 @@ export class SessionStripService {
   hide(): void {
     const s = this.observed();
     if (!s) return;
-    if (this.sync.parked()) void this.sync.dismiss();
+    if (this.sync.parked() && !this.sync.isReading(s)) void this.sync.dismiss();
     else this.hiddenOwner.set(s.owner.targetId);
   }
 }
