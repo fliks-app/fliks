@@ -58,7 +58,6 @@ pub struct Filter {
     pub artist: Option<i32>,
     pub starred: bool,
     pub played: bool,
-    pub rated: bool,
     pub limit: i64,
     pub offset: i64,
 }
@@ -92,7 +91,6 @@ pub struct SongRow {
     pub stream: Option<Json<Value>>,
     pub created: DateTime<Utc>,
     pub starred: Option<DateTime<Utc>>,
-    pub rating: Option<i16>,
     pub plays: i64,
     pub played: Option<DateTime<Utc>>,
 }
@@ -125,7 +123,6 @@ pub async fn songs(
   e."albumGain" AS album_gain, e."albumPeak" AS album_peak, f.size, f."relativePath" AS rel_path,
   f."streamInfo" AS stream, i."createdAt" AS created,
   (SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id) AS starred,
-  (SELECT r.rating FROM item_ratings r WHERE r."userId" = $1 AND r."itemId" = i.id) AS rating,
   (SELECT count(*) FROM playback_history h WHERE h."userId" = $1 AND h."itemId" = i.id) AS plays,
   (SELECT max(h."playedAt") FROM playback_history h WHERE h."userId" = $1 AND h."itemId" = i.id) AS played
 FROM items i
@@ -176,7 +173,6 @@ pub struct AlbumRow {
     pub duration: i32,
     pub plays: i64,
     pub played: Option<DateTime<Utc>>,
-    pub rating: Option<f64>,
     pub starred: Option<DateTime<Utc>>,
     pub first_release: Option<String>,
     pub compilation: Option<bool>,
@@ -191,7 +187,6 @@ pub enum AlbumOrder {
     Newest,
     Frequent,
     Recent,
-    Highest,
     Starred,
     Name,
     Artist,
@@ -211,7 +206,6 @@ pub async fn albums(
         AlbumOrder::Newest => "created DESC, id DESC",
         AlbumOrder::Frequent => "plays DESC, id",
         AlbumOrder::Recent => "played DESC, id",
-        AlbumOrder::Highest => "rating DESC, id",
         AlbumOrder::Starred => "starred DESC, id",
         AlbumOrder::Name => "lower(title), id",
         AlbumOrder::Artist => "artist_sort, lower(title), id",
@@ -225,7 +219,6 @@ pub async fn albums(
   m."posterUrl" IS NOT NULL AS has_cover, st.songs, st.duration,
   (SELECT count(*) FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id) AS plays,
   (SELECT max(h."playedAt") FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id) AS played,
-  (SELECT avg(r.rating)::float8 FROM item_ratings r JOIN items ri ON ri.id = r."itemId" WHERE r."userId" = $1 AND ri."mediaId" = m.id) AS rating,
   (SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."mediaId" = m.id AND l."itemId" IS NULL AND l."groupId" IS NULL) AS starred,
   ad."firstReleaseDate"::text AS first_release, ad."isCompilation" AS compilation, ad."primaryType" AS primary_type,
   ad."secondaryTypes" AS secondary,
@@ -246,7 +239,7 @@ WHERE {visible}
   AND ($8::text[] IS NULL OR (m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL ($8))
   AND ($9::int[] IS NULL OR m.id = ANY($9))
   AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $10 AND mc.role = 'artist'))
-) a WHERE (NOT $11 OR starred IS NOT NULL) AND (NOT $12 OR played IS NOT NULL) AND (NOT $13 OR rating IS NOT NULL)
+) a WHERE (NOT $11 OR starred IS NOT NULL) AND (NOT $12 OR played IS NOT NULL)
 ORDER BY {order} LIMIT $6 OFFSET $7"#
     );
     sqlx::query_as::<_, AlbumRow>(AssertSqlSafe(sql))
@@ -262,7 +255,6 @@ ORDER BY {order} LIMIT $6 OFFSET $7"#
         .bind(f.artist)
         .bind(f.starred)
         .bind(f.played)
-        .bind(f.rated)
         .fetch_all(db)
         .await
 }
@@ -596,9 +588,6 @@ pub fn song(r: &SongRow, c: &Credits) -> Value {
     if let Some(t) = r.starred {
         set(&mut o, "starred", iso(t));
     }
-    if let Some(n) = r.rating {
-        set(&mut o, "userRating", n);
-    }
     set(&mut o, "playCount", r.plays);
     if let Some(t) = r.played {
         set(&mut o, "played", iso(t));
@@ -735,9 +724,6 @@ pub fn album(r: &AlbumRow, c: &Credits, discs: &HashMap<i32, Vec<Value>>) -> Obj
         set(&mut o, "genre", g.clone());
     }
     set(&mut o, "genres", genres_value(&genres));
-    if let Some(rt) = r.rating {
-        set(&mut o, "userRating", rt.round() as i64);
-    }
     if let Some(m) = &r.mbid {
         set(&mut o, "musicBrainzId", m.clone());
     }

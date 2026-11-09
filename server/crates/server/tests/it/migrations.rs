@@ -2811,3 +2811,34 @@ async fn m1789000000510_clears_preferred_providers_no_provider_serves(pool: PgPo
         assert_eq!(got, want, "{t}");
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1789000001000_strips_rating_from_the_stored_smart_playlist_rules(pool: PgPool) {
+    apply_until(&pool, 1789000001000).await;
+    sql(
+        &pool,
+        r#"INSERT INTO users (id, username) VALUES (1, 'u');
+          INSERT INTO playlists (id, name, "ownerId", "updatedAt", rules) VALUES
+            (1, 'mixed', 1, '2020-01-01', '{"match":"all","criteria":[{"type":"rating","min":4},{"type":"genre","name":"jazz"}],"sort":{"by":"rating","descending":true},"limit":null}'),
+            (2, 'only rating', 1, '2020-01-01', '{"match":"all","criteria":[{"type":"rating","min":4}],"sort":{"by":"year","descending":false},"limit":null}'),
+            (3, 'untouched', 1, '2020-01-01', '{"match":"any","criteria":[{"type":"favourite","value":true}],"sort":{"by":"title","descending":false},"limit":5}'),
+            (4, 'static', 1, '2020-01-01', NULL)"#,
+    )
+    .await;
+    apply_only(&pool, 1789000001000).await;
+    let got: Vec<(i32, Option<String>, bool)> = rows(
+        &pool,
+        r#"SELECT id, rules::text, "updatedAt" = '2020-01-01' FROM playlists ORDER BY id"#,
+    )
+    .await;
+    let rules =
+        |i: usize| serde_json::from_str::<serde_json::Value>(got[i].1.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        rules(0),
+        serde_json::json!({"match":"all","criteria":[{"type":"genre","name":"jazz"}],"sort":{"by":"title","descending":true},"limit":null})
+    );
+    assert_eq!(got[1].1, None);
+    assert_eq!(rules(2)["criteria"][0]["type"], "favourite");
+    assert_eq!(got[3].1, None);
+    assert!(got.iter().all(|r| r.2), "updatedAt does not move");
+}

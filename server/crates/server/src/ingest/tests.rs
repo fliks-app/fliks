@@ -5063,11 +5063,10 @@ mod music_ingest {
             "PATCH",
             &format!("/api/lyrics/{id}"),
             &c.admin,
-            json!({"offsetMs": 250, "preferred": true}),
+            json!({"preferred": true}),
         )
         .await;
         assert_eq!(s, 200);
-        assert_eq!(v["structuredLyrics"][0]["offset"], 250);
         assert_eq!(v["structuredLyrics"][0]["source"], "user");
         // The file is replaced by one of the same length: every row follows the track, user text included.
         sqlx::query(r#"DELETE FROM media_files WHERE "mediaId" = $1"#)

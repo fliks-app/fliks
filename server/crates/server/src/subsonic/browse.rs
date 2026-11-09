@@ -312,10 +312,7 @@ pub async fn album_list(st: &AppState, c: &Caller, p: &Params) -> Answer {
             f.played = true;
             AlbumOrder::Recent
         }
-        "highest" => {
-            f.rated = true;
-            AlbumOrder::Highest
-        }
+        "highest" => return one("albumList2", json!({"album": []})),
         "starred" => {
             f.starred = true;
             AlbumOrder::Starred

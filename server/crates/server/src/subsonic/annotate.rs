@@ -1,4 +1,4 @@
-//! `star`, `unstar`, `setRating` and `scrobble` (`opensubsonic.md` rules 25-26).
+//! `star`, `unstar` and `scrobble` (`opensubsonic.md` rules 25-26).
 use super::{
     Caller, Params, catalog,
     ids::Id,
@@ -7,7 +7,7 @@ use super::{
 use crate::state::AppState;
 use chrono::{DateTime, Utc};
 
-fn not_supported() -> SubError {
+pub(super) fn not_supported() -> SubError {
     SubError::new(0, "Not supported")
 }
 
@@ -79,47 +79,6 @@ pub async fn star(st: &AppState, c: &Caller, p: &Params, on: bool) -> Answer {
             .await?;
     }
     tx.commit().await?;
-    Ok(Default::default())
-}
-
-pub async fn set_rating(st: &AppState, c: &Caller, p: &Params) -> Answer {
-    let id = p.required("id")?;
-    let rating = p
-        .required("rating")?
-        .trim()
-        .parse::<i16>()
-        .ok()
-        .filter(|r| (0..=5).contains(r));
-    let rating = rating.ok_or_else(|| SubError::new(0, "rating must be between 0 and 5"))?;
-    let Id::Track(item) = Id::parse(id).ok_or_else(SubError::not_found)? else {
-        return Err(match Id::parse(id) {
-            Some(Id::Album(_) | Id::Artist(_)) => not_supported(),
-            _ => SubError::not_found(),
-        });
-    };
-    if catalog::visible_tracks(&st.db, &c.libraries, &[item])
-        .await?
-        .is_empty()
-    {
-        return Err(SubError::not_found());
-    }
-    if rating == 0 {
-        sqlx::query(r#"DELETE FROM item_ratings WHERE "userId" = $1 AND "itemId" = $2"#)
-            .bind(c.user())
-            .bind(item)
-            .execute(&st.db)
-            .await?;
-    } else {
-        sqlx::query(
-            r#"INSERT INTO item_ratings ("userId", "itemId", rating) VALUES ($1, $2, $3)
-               ON CONFLICT ("userId", "itemId") DO UPDATE SET rating = EXCLUDED.rating"#,
-        )
-        .bind(c.user())
-        .bind(item)
-        .bind(rating)
-        .execute(&st.db)
-        .await?;
-    }
     Ok(Default::default())
 }
 
