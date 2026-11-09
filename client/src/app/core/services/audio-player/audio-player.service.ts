@@ -25,6 +25,7 @@ import {
 } from '../../plugins/audio-player.plugin';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
+import type { StemKind } from '../api/karaoke.models';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -529,6 +530,32 @@ export class AudioPlayerService {
     this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
     this.setupMediaSession(this._track()!);
     this.onPlayState(true);
+    this._stemMode.set('original');
+    void this.refreshStems();
+  }
+
+  /** On Cast the receiver plays one file: a stem mode loads that stem (the guide, else the instrumental) at the position, `original` the track again. */
+  private async switchCastStem(): Promise<void> {
+    const req = this.mq.current;
+    const file = this.castStemFile;
+    if (!req || file === null) return;
+    const mode = this._stemMode();
+    const kind = mode === 'original' ? null : mode === 'guide' && this.castStemKinds.includes('guide') ? 'guide' : 'instrumental';
+    if (kind === this.castKind) return;
+    const generation = this.generation;
+    const position = this._position();
+    const autoplay = this._playing();
+    const cast = this.injector.get(CastPlayerService);
+    if (kind) {
+      if (!(await cast.castStem(req, file, kind, position, autoplay))) return void this.onStemsFailed();
+    } else {
+      const info = await cast.castTrack(req, autoplay, position);
+      if (!info) return void this.onStemsFailed();
+      if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+      this.info = info;
+      this.sessionId = info.sessionId;
+    }
+    if (generation === this.generation) this.castKind = kind;
   }
 
   /** Loads the next track's stream on the standby element once the current one nears its end. */
@@ -684,6 +711,7 @@ export class AudioPlayerService {
     this._stemMode.set(mode);
     if (mode !== 'original') this._vocalLevel.set(mode === 'guide' ? GUIDE_VOCAL_LEVEL : 0);
     this.applyGains();
+    if (this.casting) void this.switchCastStem();
   }
 
   /** Sets the vocal stem gain; from `original` it only stores the level for the next stem mode. */
@@ -692,12 +720,13 @@ export class AudioPlayerService {
     this._vocalLevel.set(v);
     if (this._stemMode() !== 'original') this._stemMode.set(v === 0 ? 'instrumental' : 'guide');
     this.applyGains();
+    if (this.casting) void this.switchCastStem();
   }
 
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const itemId = this._musicMode() && !this.casting && !this.stemsNative && this._pitch() === 0 ? this._track()?.itemId : undefined;
+    const itemId = this._musicMode() && (this.casting || !this.stemsNative) && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
       const api = this.injector.get(KaraokeApiService);
@@ -705,6 +734,11 @@ export class AudioPlayerService {
       if (run !== this.stemsRun) return;
       const ready = state.state === 'ready' && !!state.stems.instrumental && !!state.stems.vocals;
       if (!ready) return this.dropStems();
+      if (this.casting) {
+        this.castStemFile = state.fileId;
+        this.castStemKinds = Object.keys(state.stems) as StemKind[];
+        return this._stemsAvailable.set(true);
+      }
       if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
       if (run !== this.stemsRun) return;
       if (this.nativeAudio) {
@@ -749,6 +783,9 @@ export class AudioPlayerService {
   }
 
   private nativeStemFile: number | null = null;
+  private castStemFile: number | null = null;
+  private castStemKinds: StemKind[] = [];
+  private castKind: StemKind | null = null;
 
   /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
   private pushNativeStems(): void {
@@ -779,6 +816,8 @@ export class AudioPlayerService {
   private dropStems(): void {
     this.stemsRun++;
     this._stemsAvailable.set(false);
+    this.castStemFile = null;
+    this.castKind = null;
     if (this.nativeStemFile !== null) {
       this.nativeStemFile = null;
       void this.nativeAudio?.clearStems().catch(() => undefined);

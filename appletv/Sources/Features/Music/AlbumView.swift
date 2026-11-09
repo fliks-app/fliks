@@ -138,7 +138,8 @@ struct AlbumView: View {
             onRate: { rate(t, $0) },
             onPlaylist: { picker.open(mediaId: page.id, itemId: t.itemId) },
             onPlayNext: { player.addNext([item]) },
-            onQueue: { player.addLast([item]) })
+            onQueue: { player.addLast([item]) },
+            onSing: PartyService.shared.active ? { Task { _ = await PartyService.shared.proposeTrack(mediaId: page.id, itemId: t.itemId) } } : nil)
     }
 
     @ViewBuilder private func credits() -> some View {

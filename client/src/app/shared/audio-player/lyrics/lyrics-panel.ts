@@ -12,6 +12,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import { AuthService } from '../../../core/services/auth.service';
 import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
+import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
@@ -24,7 +25,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay],
+  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {

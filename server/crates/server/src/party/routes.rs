@@ -1014,6 +1014,8 @@ pub(super) enum Edit {
     Replace(Vec<Item>),
     /// The item joins the end, unless it is already there.
     Append(Item),
+    /// A track already played moves to the end so the party can go to it again.
+    Requeue(Item),
 }
 
 /// The one path that writes the programme, under the party's gate so edits and their events keep
@@ -1053,6 +1055,16 @@ async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()
     let replaced = matches!(edit, Edit::Replace(_));
     let items = match edit {
         Edit::Replace(items) => items,
+        Edit::Requeue(item) => {
+            let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
+            if row.item().is_none_or(|c| !same_row(&c, &item)) {
+                items.retain(|i| !same_row(i, &item));
+            }
+            if !items.iter().any(|i| same_row(i, &item)) {
+                items.push(item);
+            }
+            items
+        }
         Edit::Append(item) => {
             let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
             if !items.iter().any(|i| same_row(i, &item)) {

@@ -94,13 +94,19 @@ import Foundation
     var item: PartyItem? { live?.item ?? party?.item }
     /// Suggestions the programme does not hold yet.
     var openProposals: [PartyProposal] {
-        proposals.filter { p in !queue.contains { $0.sameEntry(as: p.item) } }
+        films.filter { p in !queue.contains { $0.sameEntry(as: p.item) } }
+    }
+    /// Film suggestions: the start vote ignores the songs of the singer queue.
+    var films: [PartyProposal] { proposals.filter { !$0.item.isTrack } }
+    /// The songs waiting to be sung, next singer first.
+    var singerQueue: [PartyProposal] {
+        proposals.filter { $0.queuePosition != nil }.sorted { ($0.queuePosition ?? 0) < ($1.queuePosition ?? 0) }
     }
     /// Tied for the top vote with nothing chosen: the server refuses a start until the host picks one.
-    var voteTied: Bool { party?.item == nil && PartyProposal.best(proposals).count > 1 }
+    var voteTied: Bool { party?.item == nil && PartyProposal.best(films).count > 1 }
     /// The programme has a head, or a clear top suggestion (a masked one cannot be played).
     var canStart: Bool {
-        party?.item != nil || PartyProposal.top(proposals).map { !$0.item.hidden } == true
+        party?.item != nil || PartyProposal.top(films).map { !$0.item.hidden } == true
     }
 
     // MARK: - Entry points
@@ -278,6 +284,34 @@ import Foundation
     }
 
     func choose(_ proposalId: Int) async { await hostAction("proposals/\(proposalId)/choose") }
+
+    /// Puts a track forward as a song to sing; false when the server refused (cap, queue full, still ahead).
+    func proposeTrack(mediaId: Int, itemId: Int) async -> Bool {
+        struct Body: Encodable { let mediaId: Int; let itemId: Int }
+        guard let id = party?.id else { return false }
+        do {
+            try await APIClient.shared.post("/api/parties/\(id)/proposals", body: Body(mediaId: mediaId, itemId: itemId))
+            show(tr("karaoke.queue_added"))
+            return true
+        } catch {
+            show(describe(error))
+            return false
+        }
+    }
+
+    /// Host: plays the head of the singer queue, or the song `proposalId`, now. An empty queue is not an error.
+    func playSinger(_ proposalId: Int? = nil) async {
+        guard let id = party?.id else { return }
+        do {
+            try await APIClient.shared.post("/api/parties/\(id)/proposals/\(proposalId.map { "\($0)/choose" } ?? "next")")
+        } catch APIError.badStatus(409, let message) where message == "party.error_queue_empty" {
+            return
+        } catch {
+            return show(describe(error))
+        }
+        await refetch()
+        await sendIntent("next")
+    }
 
     func sendMessage(_ text: String) async {
         struct Body: Encodable { let deviceId: String; let text: String }

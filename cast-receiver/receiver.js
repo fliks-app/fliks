@@ -20,7 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
-const { createAssembler, activeIndex, segments, fills } = self.FliksLyrics;
+const { createAssembler, activeIndex, segments, fills, claim } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -806,6 +806,9 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
     lyricsState.doc = doc;
     lyricsState.shown = -2;
   }
+});
+context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, (event) => {
+  if (claim(lyricsState, event.senderId)) dropLyrics();
 });
 context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
   if (event.senderId === lyricsState.sender) {

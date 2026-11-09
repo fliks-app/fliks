@@ -463,7 +463,7 @@ export class StreamingApiService {
   }
 
   /** URLs absolues pour pistes Cast : base issue de cast-info (reloadCastStream). */
-  private absoluteUrl(path: string): string {
+  absoluteUrl(path: string): string {
     const base = this.castService.castStreamBaseUrl();
     let out: string;
     if (base) out = `${base}${path}`;

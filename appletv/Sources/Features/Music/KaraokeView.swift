@@ -20,6 +20,7 @@ struct KaraokeView: View {
             stage
             if session.phase == .ready { controls }
             if session.phase == .ready { hint }
+            if party.active { KaraokeQueueView() }
         }
         .padding(.horizontal, 90)
         .padding(.vertical, 50)
