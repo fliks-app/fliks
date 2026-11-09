@@ -63,17 +63,6 @@ struct CarPlayCatalog {
         return nil
     }
 
-    func search(_ query: String) async -> CarListing? {
-        guard let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
-        async let albums = json("/api/media?type=album&limit=10&q=\(q)")
-        async let tracks = json("/api/tracks?limit=30&q=\(q)")
-        guard let found = await tracks as? [[String: Any]] else { return nil }
-        var out = Self.tracks(found)
-        let folders = ((await albums as? [String: Any])?["data"] as? [[String: Any]] ?? []).compactMap(Self.album)
-        out.rows = folders + out.rows
-        return out
-    }
-
     private func albumTracks(_ id: String) async -> CarListing? {
         guard let media = await json("/api/media/\(id)") as? [String: Any], let album = media["album"] as? [String: Any],
               let tracks = album["tracks"] as? [[String: Any]] else { return nil }
