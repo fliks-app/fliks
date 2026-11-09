@@ -762,7 +762,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected readonly placeholders = [0, 1, 2, 3, 4, 5];
 
-  /** Books and albums of the providers show a first page; the sections below them stay in reach. */
+  /** Books, albums, artists and tracks of the providers show a first page; the sections below them stay in reach. */
   protected readonly cap = 12;
   protected readonly more = signal<ReadonlySet<string>>(new Set());
 

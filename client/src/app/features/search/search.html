@@ -347,7 +347,7 @@
               <div>
                 <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
                 <ul class="flex flex-col gap-1 max-w-xl">
-                  @for (a of artistsToAdd(); track a.provider + ':' + a.externalId) {
+                  @for (a of visible(artistsToAdd(), 'artists'); track a.provider + ':' + a.externalId) {
                     <li>
                       <button type="button" class="flex w-full items-center justify-between gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
                         <span class="min-w-0">
@@ -363,6 +363,9 @@
                     </li>
                   }
                 </ul>
+                @if (artistsToAdd().length > cap && !more().has('artists')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
+                }
               </div>
             } @else if (state.pending().has('artist')) {
               <ng-container *ngTemplateOutlet="skeletonRows" />
@@ -372,7 +375,7 @@
               <div>
                 <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
                 <ul class="flex flex-col gap-1 max-w-3xl">
-                  @for (r of recordingsToAdd(); track r.provider + ':' + r.externalId) {
+                  @for (r of visible(recordingsToAdd(), 'tracks'); track r.provider + ':' + r.externalId) {
                     <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
                       <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null" />
                       <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
@@ -388,6 +391,9 @@
                     </li>
                   }
                 </ul>
+                @if (recordingsToAdd().length > cap && !more().has('tracks')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('tracks')">{{ 'common.show_more' | translate }}</button>
+                }
               </div>
             } @else if (state.pending().has('recording')) {
               <ng-container *ngTemplateOutlet="skeletonRows" />
