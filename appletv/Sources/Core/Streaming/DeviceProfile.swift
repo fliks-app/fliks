@@ -56,14 +56,14 @@ enum DeviceProfileBuilder {
     /// Read per build: the receiver can be switched on after launch.
     private static var audioChannels: Int { max(2, AVAudioSession.sharedInstance().maximumOutputNumberOfChannels) }
 
+    /// The same full profile, video and audio-files entries, on every playback-info.
     static func build(needsHlsSubtitles: Bool = false, supportsMuxedAudioRendition: Bool = false) -> DeviceProfile {
-        let hevc10 = videoCodecs.contains("hevc") && !hdrModes.isEmpty
+        let hevc10 = videoCodecs.contains("hevc") && AVURLAsset.isPlayableExtendedMIMEType("video/mp4; codecs=\"hvc1.2.4.L120.B0\"")
         return DeviceProfile(
-            directPlayProfiles: [DirectPlayProfile(
-                containers: ["mp4", "mov", "m4v"],
-                videoCodecs: videoCodecs,
-                audioCodecs: audioCodecs
-            )],
+            directPlayProfiles: [
+                DirectPlayProfile(containers: videoContainers(), videoCodecs: videoCodecs, audioCodecs: audioCodecs),
+                audioFiles,
+            ],
             codecConditions: [
                 CodecCondition(codec: "h264", profiles: ["baseline", "constrained baseline", "main", "high"], maxBitDepth: 8),
                 CodecCondition(codec: "hevc", profiles: ["main", "main 10"], maxBitDepth: hevc10 ? 10 : 8),
@@ -92,11 +92,14 @@ enum DeviceProfileBuilder {
         )
     }
 
-    /// The device profile plus the audio files AVPlayer reports it opens as they are, for a music track.
-    static func buildMusic() -> DeviceProfile {
-        var profile = build()
-        profile.directPlayProfiles.append(audioFiles)
-        return profile
+    /// Containers AVFoundation lists among its audiovisual MIME types, in the server's names.
+    static func videoContainers(types: [String] = AVURLAsset.audiovisualMIMETypes()) -> [String] {
+        let known: [(mime: String, containers: [String])] = [
+            ("video/mp4", ["mp4"]),
+            ("video/quicktime", ["mov"]),
+            ("video/x-m4v", ["m4v"]),
+        ]
+        return known.filter { types.contains($0.mime) }.flatMap(\.containers)
     }
 
     private static let audioFiles: DirectPlayProfile = {

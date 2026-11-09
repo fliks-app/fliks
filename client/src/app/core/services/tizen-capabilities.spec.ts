@@ -1,4 +1,5 @@
-import { applyTizenAudioCodecs, tizenDecoderLevels, tizenSupportsVideoCodec } from './tizen-capabilities';
+import { applyTizenAudioCodecs, tizenDecoderLevels, tizenVideo } from './tizen-capabilities';
+import type { WebVideo } from './device-capabilities/web-video';
 
 function installWebapis(
   audio: Record<string, boolean> | null,
@@ -23,7 +24,6 @@ describe('tizen-capabilities', () => {
 
   it('keeps the probed list untouched when the API is missing', () => {
     expect(applyTizenAudioCodecs(['aac', 'mp3'])).toEqual(['aac', 'mp3']);
-    expect(tizenSupportsVideoCodec('HEVC')).toBeNull();
     expect(tizenDecoderLevels()).toBeNull();
   });
 
@@ -57,10 +57,41 @@ describe('tizen-capabilities', () => {
     expect(applyTizenAudioCodecs(['aac', 'flac', 'alac'])).toEqual(['aac']);
   });
 
-  it('reports video support from the video probe', () => {
-    installWebapis(null, { HEVC: true, AV1: false });
-    expect(tizenSupportsVideoCodec('HEVC')).toBe(true);
-    expect(tizenSupportsVideoCodec('AV1')).toBe(false);
+  describe('tizenVideo', () => {
+    const probed = (codecs: string[]): WebVideo => ({
+      containers: ['mp4'],
+      videoCodecs: codecs,
+      codecConditions: [
+        { codec: 'h264', maxLevel: 40, profiles: ['high'], maxBitDepth: 8 },
+        { codec: 'hevc', maxLevel: 120, profiles: ['main'], maxBitDepth: 8 },
+      ],
+    });
+
+    it('before Tizen 6.0 keeps the WebView answer for H.264 and WebM codecs, claims HEVC from the spec, never AV1', () => {
+      const v = tizenVideo(probed(['h264', 'avc1', 'vp9', 'av1']));
+      expect(v.videoCodecs).toEqual(['h264', 'avc1', 'hevc', 'h265', 'hvc1', 'vp9']);
+      expect(v.codecConditions.map((c) => c.codec)).toEqual(['h264', 'hevc']);
+    });
+
+    it('lets the firmware decide every codec it enumerates', () => {
+      installWebapis(null, { H264: true, HEVC: true, AV1: true, VP9: false, MPEG2: true });
+      const v = tizenVideo(probed(['h264', 'avc1', 'vp9']));
+      expect(v.videoCodecs).toEqual(['h264', 'avc1', 'hevc', 'h265', 'hvc1', 'av1', 'mpeg2video']);
+      expect(v.codecConditions.find((c) => c.codec === 'av1')).toEqual({ codec: 'av1', maxBitDepth: 10, profiles: ['main'] });
+    });
+
+    it('drops HEVC when the firmware says it does not decode it', () => {
+      installWebapis(null, { H264: true, HEVC: false });
+      expect(tizenVideo(probed(['h264'])).videoCodecs).toEqual(['h264', 'avc1']);
+    });
+
+    it('adds the spec demuxers and the panel decoder levels', () => {
+      (window as any).webapis = { productinfo: { isUdPanelSupported: () => true, is8KPanelSupported: () => false } };
+      const v = tizenVideo(probed(['h264']));
+      expect(v.containers).toEqual(['mp4', 'mkv', 'mov', 'ts', 'm2ts', 'avi', 'webm']);
+      expect(v.codecConditions.find((c) => c.codec === 'h264')?.maxLevel).toBe(51);
+      expect(v.codecConditions.find((c) => c.codec === 'hevc')?.maxLevel).toBe(153);
+    });
   });
 
   it('maps the panel class to the spec decoder levels', () => {

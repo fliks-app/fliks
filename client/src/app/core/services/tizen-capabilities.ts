@@ -1,6 +1,9 @@
 /** Samsung's `webapis.systeminfo` codec API: synchronous and answers for the AVPlay decoders, unlike the WebView's MSE probe; containers have no equivalent.
  * https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/systeminfo-api.html */
 
+import type { CodecCondition } from './browser-device-profile.service';
+import type { WebVideo } from './device-capabilities/web-video';
+
 interface TizenSystemInfo {
   isSupportedAudioCodec?(codec: string): boolean;
   isSupportedVideoCodec?(codec: string): boolean;
@@ -57,11 +60,6 @@ export function applyTizenAudioCodecs(probed: string[]): string[] {
   return answered ? merged : kept;
 }
 
-/** Whether AVPlay decodes this video codec (Samsung enum name). `null` keeps the caller's assumption. */
-export function tizenSupportsVideoCodec(name: 'HEVC' | 'AV1'): boolean | null {
-  return isSupported('video', name);
-}
-
 /** AVPlay decoder levels per panel class (Samsung media spec); `null` when productinfo is unavailable. */
 export function tizenDecoderLevels(): { h264: number; hevc: number } | null {
   const pi = webapis()?.productinfo;
@@ -72,4 +70,55 @@ export function tizenDecoderLevels(): { h264: number; hevc: number } | null {
   } catch {
     return null;
   }
+}
+
+/** Demuxers of every Samsung TV listed in the 2015 to 2026 TV Video Specifications (identical in each year); no API lists containers.
+ * https://developer.samsung.com/smarttv/develop/specifications/media-specifications.html */
+const TIZEN_CONTAINERS = ['mp4', 'mkv', 'mov', 'ts', 'm2ts', 'avi', 'webm'];
+
+/** Codec id to the `isSupportedVideoCodec` enum (Tizen 6.0, 2021 and later). */
+const VIDEO_ENUM: Record<string, string> = {
+  h264: 'H264',
+  hevc: 'HEVC',
+  av1: 'AV1',
+  vp9: 'VP9',
+  vp8: 'VP8',
+  mpeg2video: 'MPEG2',
+  mpeg4: 'MPEG4',
+  vc1: 'WMV',
+};
+
+/** The answer for a codec the firmware cannot be asked about (before Tizen 6.0): HEVC is in every year's spec, H.264 and WebM codecs keep the WebView probe, the rest is not claimed. */
+const NO_API_FALLBACK: Record<string, (probed: boolean) => boolean> = {
+  h264: (probed) => probed,
+  vp8: (probed) => probed,
+  vp9: (probed) => probed,
+  hevc: () => true,
+};
+
+const VIDEO_ALIASES: Record<string, string[]> = {
+  h264: ['h264', 'avc1'],
+  hevc: ['hevc', 'h265', 'hvc1'],
+};
+
+const DEFAULT_CONDITIONS: Record<string, CodecCondition> = {
+  hevc: { codec: 'hevc', profiles: ['main', 'main 10'], maxBitDepth: 10 },
+  av1: { codec: 'av1', maxBitDepth: 10, profiles: ['main'] },
+};
+
+/** What AVPlay decodes, not what the WebView's FHD-only MSE reports: the API answers per codec where the firmware has it, Samsung's published demuxers and decoder levels fill the rest. */
+export function tizenVideo(probed: WebVideo): WebVideo {
+  const probedCodecs = new Set(probed.videoCodecs);
+  const decoded = Object.keys(VIDEO_ENUM).filter((codec) => {
+    const asked = isSupported('video', VIDEO_ENUM[codec]);
+    return asked ?? NO_API_FALLBACK[codec]?.(probedCodecs.has(codec)) ?? false;
+  });
+  const videoCodecs = decoded.flatMap((c) => VIDEO_ALIASES[c] ?? [c]);
+  const levels = tizenDecoderLevels();
+  const codecConditions = decoded.flatMap((codec) => {
+    const cond = codec === 'av1' ? DEFAULT_CONDITIONS[codec] : (probed.codecConditions.find((c) => c.codec === codec) ?? DEFAULT_CONDITIONS[codec]);
+    if (!cond) return [];
+    return [levels && (codec === 'h264' || codec === 'hevc') ? { ...cond, maxLevel: levels[codec] } : cond];
+  });
+  return { containers: [...new Set([...probed.containers, ...TIZEN_CONTAINERS])], videoCodecs, codecConditions };
 }

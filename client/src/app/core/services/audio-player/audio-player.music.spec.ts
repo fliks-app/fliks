@@ -80,7 +80,7 @@ describe('AudioPlayerService music mode', () => {
         { provide: CastService, useValue: cast },
         { provide: CastPlayerService, useValue: { castTrack, castStem } },
         { provide: KaraokeApiService, useValue: { itemState } },
-        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}), getAudioProfile: () => ({}) } },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
         { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true, scope: () => 's' } },

@@ -164,6 +164,8 @@ function markerOf(v: unknown): TimeMarker | null {
 
 /** Receiver probe version that reports the 10-bit and HDR fields; an older cached answer is re-probed. */
 const RECEIVER_CAPS_VERSION = 2;
+/** The probe version that also reports the audio files; an older answer is asked again. */
+const RECEIVER_CAPS_LATEST = 3;
 
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
@@ -189,8 +191,8 @@ export class CastPlayerService {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
-  /** Profile from the receiver-probed MSE codecs. A receiver that predates probe v2 (or no probe) keeps
-   * `videoCodecs` empty, so the engine transcodes to H.264 SDR; without caps audio is AAC-only stereo. */
+  /** One profile for every kind, from the receiver's probe: its MSE codecs and the audio files it opens.
+   * Without a v2 probe `videoCodecs` stays empty (H.264 SDR transcode) and audio is AAC stereo. */
   getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
     const maxChannels = cs.audioChannels ?? 2;
@@ -218,8 +220,11 @@ export class CastPlayerService {
     return {
       directPlayProfiles: [
         { containers: ['hls'], videoCodecs, audioCodecs },
+        ...(caps?.audioFiles?.containers.length ? [caps.audioFiles] : []),
       ],
-      codecConditions,
+      codecConditions: caps?.audioFiles?.audioCodecs.includes('flac')
+        ? [...codecConditions, { codec: 'flac', maxBitDepth: 24 }]
+        : codecConditions,
       maxStreamingBitrate: 20_000_000,
       maxAudioChannels: maxChannels,
       supportsHdr: (cs.hdr ?? false) && hdrCapable,
@@ -229,15 +234,6 @@ export class CastPlayerService {
       useTs: false,
       // The Cast receiver runs Shaka (seg-0 fetched on load-then-seek, real ABR); CAST traits leave the other flags undefined.
       ...ENGINE_TRAITS[EngineKind.CAST],
-    };
-  }
-
-  /** Audio-only profile for a music track: FLAC, MP3 and AAC play as they are, anything else (ALAC) is transcoded by the server. */
-  getCastAudioProfile(): DeviceProfile {
-    return {
-      ...this.getCastDeviceProfile(),
-      directPlayProfiles: [{ containers: ['flac', 'mp3', 'aac', 'm4a'], videoCodecs: [], audioCodecs: ['flac', 'mp3', 'aac'] }],
-      codecConditions: [{ codec: 'flac', maxBitDepth: 24 }],
     };
   }
 
@@ -270,7 +266,7 @@ export class CastPlayerService {
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
   async castTrack(t: CastTrack, autoplay = true, startAt = 0) {
     const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastAudioProfile(), { startAt }),
+      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
       this.authService.getCastInfo(),
     ]);
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
@@ -356,7 +352,7 @@ export class CastPlayerService {
     // Skip if we already have caps for this device — the probe is idempotent
     // but each round-trip is ~150–300 ms and slows the first loadMedia.
     const cached = this.castSettings.getDeviceCapabilities(deviceName);
-    if (cached && (cached.v ?? 1) >= RECEIVER_CAPS_VERSION) {
+    if (cached && (cached.v ?? 1) >= RECEIVER_CAPS_LATEST) {
       return;
     }
 
@@ -380,6 +376,7 @@ export class CastPlayerService {
             hevcMain10: data.hevcMain10 === true,
             av1Main10: data.av1Main10 === true,
             hdr: data.hdr === true,
+            audioFiles: data.audioFiles?.containers ? data.audioFiles : undefined,
           });
         } catch (err) {
           console.warn('[fliks-cast/sender] probe parse error:', err);

@@ -40,6 +40,7 @@ export type MacAddon = NowPlayingAddon & {
   setProperty(name: string, value: string): void;
   resize(): void;
   setBottomCornerRadius(wid: string, radius: number): void;
+  probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
 };
 

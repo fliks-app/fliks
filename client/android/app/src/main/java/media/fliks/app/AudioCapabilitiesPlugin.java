@@ -132,6 +132,9 @@ public class AudioCapabilitiesPlugin extends Plugin {
         result.put("maxChannels", maxChannels);
         result.put("channelsByCodec", channelsByCodec);
         result.put("passthrough", passthrough(getContext()));
+        try {
+            result.put("audioFiles", NativeAudioFormats.directPlay(NativeAudioFormats.decoderMimes()));
+        } catch (Throwable ignored) { /* best-effort, the profile then lists none */ }
         call.resolve(result);
     }
 

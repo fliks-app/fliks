@@ -1153,6 +1153,29 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// probeLists(): decoder-list and demuxer-lavf-list of a throwaway mpv, before any playback exists.
+Napi::Value ProbeLists(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::Object out = Napi::Object::New(env);
+  if (!M::Load()) return out;
+  mpv_handle* h = M::create();
+  if (!h) return out;
+  M::set_option_string(h, "config", "no");
+  M::set_option_string(h, "vo", "null");
+  M::set_option_string(h, "ao", "null");
+  M::set_option_string(h, "idle", "yes");
+  if (M::initialize(h) >= 0) {
+    for (const char* name : {"decoder-list", "demuxer-lavf-list"}) {
+      char* v = M::get_property_string(h, name);
+      if (!v) continue;
+      out.Set(name, Napi::String::New(env, v));
+      M::mpv_free(v);
+    }
+  }
+  M::destroy(h);
+  return out;
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitNowPlaying(env, exports);
   exports.Set("start", Napi::Function::New(env, Start));
@@ -1160,6 +1183,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("load", Napi::Function::New(env, Load));
   exports.Set("command", Napi::Function::New(env, Command));
   exports.Set("getProperty", Napi::Function::New(env, GetProperty));
+  exports.Set("probeLists", Napi::Function::New(env, ProbeLists));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("resize", Napi::Function::New(env, Resize));
   exports.Set("setBottomCornerRadius", Napi::Function::New(env, SetBottomCornerRadius));

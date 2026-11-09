@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import AVFoundation
 import VideoToolbox
 import CoreMedia
 
@@ -11,13 +12,8 @@ public class VideoCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getSupported", returnType: CAPPluginReturnPromise),
     ]
 
-    /// Reports the video codecs the device can hardware-decode, queried at
-    /// runtime from VideoToolbox rather than guessed from the OS version — H.264
-    /// is universal; HEVC and AV1 are asked of `VTIsHardwareDecodeSupported` so
-    /// only devices with the actual decoder (HEVC: A9+, AV1: A17 Pro / M3+) are
-    /// told they can Direct Play them. Their hardware decoders are 10-bit, so the
-    /// Main10 flags follow the codec. AVPlayer demuxes the ISO-BMFF family only,
-    /// so MKV/WebM are never advertised (those still remux/transcode server-side).
+    /// HEVC and AV1 come from VideoToolbox, Main10 from AVFoundation on a 10-bit codec string, containers from its MIME list.
+    /// AVPlayer never demuxes MKV/WebM: those remux or transcode server-side.
     @objc func getSupported(_ call: CAPPluginCall) {
         var codecs: [String] = ["h264"]
         var hevc = false
@@ -35,10 +31,24 @@ public class VideoCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
 
         call.resolve([
             "videoCodecs": codecs,
-            "hevcMain10": hevc,
-            "av1Main10": av1,
-            "containers": ["mp4", "m4v", "mov"],
+            "hevcMain10": hevc && Self.plays("hvc1.2.4.L120.B0"),
+            "av1Main10": av1 && Self.plays("av01.0.08M.10"),
+            "containers": Self.containers(),
             "cropsBlackBars": true,
         ])
+    }
+
+    private static func plays(_ codec: String) -> Bool {
+        AVURLAsset.isPlayableExtendedMIMEType("video/mp4; codecs=\"\(codec)\"")
+    }
+
+    /// Containers AVFoundation lists among its audiovisual MIME types, in the server's names.
+    static func containers(types: [String] = AVURLAsset.audiovisualMIMETypes()) -> [String] {
+        let known: [(mime: String, containers: [String])] = [
+            ("video/mp4", ["mp4"]),
+            ("video/quicktime", ["mov"]),
+            ("video/x-m4v", ["m4v"]),
+        ]
+        return known.filter { types.contains($0.mime) }.flatMap(\.containers)
     }
 }

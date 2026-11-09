@@ -88,6 +88,9 @@ export interface DesktopSystemInfo {
  *  profile 5/8 RPU); plain `--vo=gpu` and macOS/Linux play only the profile 7 base layer. */
 export interface DesktopPlayerCapabilities {
   canReshapeDolbyVision: boolean;
+  /** mpv's decoder codec names and lavf demuxer names; absent on a shell that could not ask mpv, or an older one. */
+  decoders?: string[];
+  demuxers?: string[];
 }
 
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';

@@ -67,6 +67,7 @@ import {
 } from '../../core/services/playback-engine/engine-surface';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
+import { directPlayMime } from '../../core/services/device-capabilities/direct-play-mime';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { PlayerScreen } from './player-screen';
@@ -2682,7 +2683,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         startAt: opts.startTime,
         startQuality: this.resolveStartQuality(),
       }),
-      mimeType: pi.playMethod === 'DirectPlay' ? 'video/mp4' : undefined,
+      mimeType: pi.playMethod === 'DirectPlay' ? directPlayMime(pi.source?.container) : undefined,
     };
     this.lastStreamUrl = built.url;
     return built;

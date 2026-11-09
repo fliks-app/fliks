@@ -7,7 +7,11 @@ import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { ENGINE_TRAITS, engineKindFor, type EngineTraits } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
-import { applyTizenAudioCodecs, tizenDecoderLevels, tizenSupportsVideoCodec } from './tizen-capabilities';
+import { applyTizenAudioCodecs, tizenVideo } from './tizen-capabilities';
+import { webosAudioCodecs, webosDevice, webosMkvProfile, webosVideo, type WebOsDevice } from './webos-capabilities';
+import { detectDolbyVisionProfiles, detectSampleEntries, detectWebVideo, webVideoMimes, type TypeProbe } from './device-capabilities/web-video';
+import { detectHdrTransfers, undecodableVideoMimes, type HdrTransfers } from './device-capabilities/media-capabilities';
+import { mpvAudioCodecs, mpvVideo } from './device-capabilities/desktop-mpv';
 import { isTizenCropSupported } from './playback-engine/tizen-engine';
 import { getDeviceName, getOrCreateDeviceId } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
@@ -33,6 +37,8 @@ interface AudioCapabilitiesPlugin {
     channelsByCodec?: Record<string, number>;
     /** Bitstreams the HDMI sink takes untouched; absent on older builds. */
     passthrough?: { codecs: string[]; maxChannels: number };
+    /** The audio files the native player opens as they are, from the platform's own decoders. */
+    audioFiles?: DirectPlayProfile;
   }>;
   addListener(event: 'audioRouteChanged', cb: () => void): Promise<unknown>;
 }
@@ -51,16 +57,6 @@ interface NativeVideoCaps {
   /** The NativePlayer plugin implements `setCrop`; absent on builds without it. */
   cropsBlackBars?: boolean;
 }
-
-/** Sample entries a raw MP4 may carry beyond its codec's own (`avc1`, `hvc1`, `av01`), and the
- *  codec strings probing them. */
-const EXTRA_SAMPLE_ENTRIES: ReadonlyArray<[codec: string, entry: string, probes: string[]]> = [
-  ['h264', 'avc3', ['avc3.640028']],
-  ['hevc', 'hev1', ['hev1.1.6.L120.B0']],
-  ['hevc', 'dvh1', ['dvh1.05.06', 'dvh1.08.06']],
-  ['hevc', 'dvhe', ['dvhe.05.06', 'dvhe.08.06']],
-  ['av1', 'dav1', ['dav1.10.06']],
-];
 
 interface VideoCapabilitiesPlugin {
   getSupported(): Promise<NativeVideoCaps>;
@@ -175,9 +171,6 @@ export interface DeviceProfile {
   needsHlsSubtitles?: boolean;
 }
 
-/** Containers AVPlay demuxes (Samsung media spec). Over-declaring is safe: Direct Play also needs the codecs to match. */
-const TIZEN_CONTAINERS = ['mp4', 'mkv', 'mov', 'ts', 'm2ts', 'avi', 'webm'];
-
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
  *  See `DeviceProfile.useTs` for the rationale. */
 function readUseTsOverride(): boolean {
@@ -204,13 +197,22 @@ export class BrowserDeviceProfileService {
     maxChannels: number;
     channelsByCodec?: Record<string, number>;
     passthrough?: { codecs: string[]; maxChannels: number };
+    audioFiles?: DirectPlayProfile;
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
   private desktopCanReshapeDolbyVision = false;
   private desktopProbe: Promise<void> | null = null;
+  /** Settles once the native plugins answered; a profile built before holds none of what they detect. */
+  private nativeProbe: Promise<void> = Promise.resolve();
   private audioProbe: HTMLAudioElement | null = null;
   private undecodableAudio: ReadonlySet<string> = new Set();
+  /** Video MIMEs `mediaCapabilities` refuses, and the HDR transfers it decodes; filled once resolved. */
+  private undecodableVideo: ReadonlySet<string> = new Set();
+  private hdrTransfers: HdrTransfers | null = null;
+  /** mpv's own decoder and demuxer lists; null until the desktop probe answers. */
+  private mpv: { decoders: string[]; demuxers: string[] } | null = null;
+  private readonly webos: WebOsDevice | null = this.device.tvPlatform() === 'webos' ? webosDevice() : null;
 
   /** Behavioural traits of the engine this device plays with. */
   engineTraits(): EngineTraits {
@@ -236,37 +238,53 @@ export class BrowserDeviceProfileService {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
     // later sync use)
     if (Capacitor.isNativePlatform()) {
-      Hdr.isSupported()
-        .then((r) => {
-          this.nativeHdr = r.supported;
-          this.nativeDolbyVision = r.dolbyVision ?? false;
-          this.nativeDvProfiles = r.dolbyVisionProfiles ?? null;
-          this.cachedProfile = null;
-        })
-        .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; });
       const loadAudio = () => AudioCaps.getSupported()
         .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
         .catch(() => { this.nativeAudio = null; });
-      void loadAudio();
+      this.nativeProbe = Promise.all([
+        Hdr.isSupported()
+          .then((r) => {
+            this.nativeHdr = r.supported;
+            this.nativeDolbyVision = r.dolbyVision ?? false;
+            this.nativeDvProfiles = r.dolbyVisionProfiles ?? null;
+            this.cachedProfile = null;
+          })
+          .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; }),
+        loadAudio(),
+        VideoCaps.getSupported()
+          .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
+          .catch(() => { this.nativeVideo = null; }),
+      ]).then(() => undefined);
       // HDMI hot-plug: a receiver can come or go mid-session.
       void AudioCaps.addListener('audioRouteChanged', () => void loadAudio()).catch(() => undefined);
-      VideoCaps.getSupported()
-        .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
-        .catch(() => { this.nativeVideo = null; });
     }
     if (!Capacitor.isNativePlatform()) {
-      void undecodableAudioFormats().then((denied) => (this.undecodableAudio = denied));
+      void undecodableAudioFormats().then((denied) => this.refresh(() => (this.undecodableAudio = denied)));
     }
+    void undecodableVideoMimes(webVideoMimes()).then((denied) => this.refresh(() => (this.undecodableVideo = denied)));
+    void detectHdrTransfers().then((t) => this.refresh(() => (this.hdrTransfers = t)));
     // Windows mpv can fall back off gpu-next at startup (old driver); the flag
     // is only read on Windows, the one desktop backend that can reshape DV.
     this.desktopProbe = desktopBridgeOrNull()
       ?.getPlayerCapabilities()
       .then((r) => {
         this.desktopCanReshapeDolbyVision = r.canReshapeDolbyVision;
+        if (r.decoders?.length) this.mpv = { decoders: r.decoders, demuxers: r.demuxers ?? [] };
         this.cachedProfile = null;
       })
       .catch((e) => console.warn('[DeviceProfile] desktop capability probe failed', e))
       .finally(() => { this.desktopProbe = null; }) ?? null;
+  }
+
+  /** Resolves once the native plugins' answers are in the profile. */
+  whenNativeProbed(): Promise<void> {
+    return this.nativeProbe;
+  }
+
+  /** Applies a late probe answer and drops the profile built without it. */
+  private refresh(apply: () => void): void {
+    apply();
+    this.cachedProfile = null;
   }
 
   /** Resolves once the desktop capability probe settles (or after `timeoutMs`), so a
@@ -278,7 +296,9 @@ export class BrowserDeviceProfileService {
 
   /** Audio codecs the device direct-plays, lowercased: what a track must be in to be chosen over one that is not. */
   playableAudioCodecs(): string[] {
-    const all = this.getProfile().directPlayProfiles.flatMap((p) => p.audioCodecs.map((c) => c.toLowerCase()));
+    const all = this.getProfile()
+      .directPlayProfiles.filter((p) => p.videoCodecs.length)
+      .flatMap((p) => p.audioCodecs.map((c) => c.toLowerCase()));
     return [...new Set(all)];
   }
 
@@ -334,14 +354,6 @@ export class BrowserDeviceProfileService {
     };
   }
 
-  /** `getProfile()` plus what the page's own audio element opens (web, TV and desktop shell alike), as an audio-only entry: the recorded video codecs stay whole. */
-  getAudioProfile(): DeviceProfile {
-    this.audioProbe ??= new Audio();
-    const profile = this.getProfile();
-    const audio = probeAudioDirectPlay(this.audioProbe, this.undecodableAudio);
-    return { ...profile, directPlayProfiles: [...profile.directPlayProfiles, audio] };
-  }
-
   /** Whether the display hardware supports HDR (ignoring user preference). */
   get hardwareSupportsHdr(): boolean {
     if (!this.cachedProfile) this.cachedProfile = this.buildProfile();
@@ -350,83 +362,18 @@ export class BrowserDeviceProfileService {
 
   private buildProfile(passthrough = true): DeviceProfile {
     const video = document.createElement('video');
-    const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
+    const supported = this.typeProbe(video);
+    const plays: TypeProbe = (mime) => !!video.canPlayType(mime);
 
-    // --- Detect supported containers ---
-    // Probed WITH a representative codec: a bare container mime is ambiguous and Chromium answers false.
-    const containers: string[] = [];
-    if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
-      containers.push('mp4', 'm4v', 'mov');
-    }
-    if (this.testCodec(video, hasMSE, 'video/webm', 'vp8')) containers.push('webm');
-    // MKV: no browser demuxes Matroska, so it stays out of the probed list. A
-    // supported codec inside MKV still remuxes to HLS via DirectStream.
+    // Containers, codecs and levels from the engine's own probe, then replaced by the platform's own answer where the WebView is not what decodes.
+    let { containers, videoCodecs, codecConditions } = detectWebVideo(supported);
 
-    // --- Detect supported video codecs ---
-    const videoCodecs: string[] = [];
-    const codecConditions: CodecCondition[] = [];
-
-    // H.264
-    if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
-      videoCodecs.push('h264', 'avc1');
-      const maxLevel = this.probeH264Level(video, hasMSE);
-      codecConditions.push({
-        codec: 'h264',
-        maxLevel,
-        profiles: ['baseline', 'constrained baseline', 'main', 'high'],
-        maxBitDepth: 8,
-      });
-    }
-
-    // HEVC on Smart TV: AVPlay decodes it natively in HW.
     const isTv = this.device.isTv();
     const tvPlatform = this.device.tvPlatform();
     // Engine-behavioural flags come from one declarative row in `engine-traits.ts`.
     const traits = this.engineTraits();
-    if (
-      this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
-      this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
-    ) {
-      videoCodecs.push('hevc', 'h265', 'hvc1');
-      const maxLevel = this.probeHevcLevel(video, hasMSE);
-      const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.2.4.L120.B0') ? 10 : 8;
-      codecConditions.push({
-        codec: 'hevc',
-        maxLevel,
-        profiles: maxBitDepth >= 10 ? ['main', 'main 10'] : ['main'],
-        maxBitDepth,
-      });
-    }
-
-    // AVPlay, not the WebView's FHD-only MSE, decodes on Tizen: its own API answers there.
-    if (tvPlatform === 'tizen') {
-      if (tizenSupportsVideoCodec('AV1')) {
-        videoCodecs.push('av1');
-        codecConditions.push({ codec: 'av1', maxBitDepth: 10, profiles: ['main'] });
-      }
-    } else if (this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
-      videoCodecs.push('av1');
-      const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.10') ? 10 : 8;
-      codecConditions.push({
-        codec: 'av1',
-        maxBitDepth,
-        profiles: maxBitDepth >= 10 ? ['main', 'high'] : ['main'],
-      });
-    }
-
-    // VP9
-    if (this.testCodec(video, hasMSE, 'video/webm', 'vp09.00.10.08') ||
-        this.testCodec(video, hasMSE, 'video/webm', 'vp9')) {
-      videoCodecs.push('vp9');
-    }
-
-    // VP8
-    if (this.testCodec(video, hasMSE, 'video/webm', 'vp8')) {
-      videoCodecs.push('vp8');
-    }
 
     // Native engines decode via the OS stack, whose capabilities beat the WebView's MSE probe: trust the plugin.
-    // Smart TVs have no plugin: declare HEVC for them, their WebView probe can miss it.
     if (this.nativeVideo && this.nativeVideo.videoCodecs.length) {
       const nv = this.nativeVideo;
       // AVPlayer decodes what the WebView's WebKit probes, so its level ceiling
@@ -434,10 +381,9 @@ export class BrowserDeviceProfileService {
       const probedLevels = new Map<string, number | undefined>(
         Capacitor.getPlatform() === 'ios' ? codecConditions.map((c) => [c.codec, c.maxLevel]) : [],
       );
-      videoCodecs.length = 0;
-      codecConditions.length = 0;
-      containers.length = 0;
-      containers.push(...nv.containers);
+      videoCodecs = [];
+      codecConditions = [];
+      containers = [...nv.containers];
       for (const c of nv.videoCodecs) {
         if (c === 'h264') {
           videoCodecs.push('h264', 'avc1');
@@ -466,33 +412,13 @@ export class BrowserDeviceProfileService {
             ...this.nativeResCondition(nv, 'av1'),
           });
         } else {
-          videoCodecs.push(c); // vp9 / vp8 — no fine-grained conditions
+          videoCodecs.push(c); // vp9 / vp8: no fine-grained conditions
         }
       }
-    } else if (
-      (tvPlatform === 'tizen' || tvPlatform === 'webos') &&
-      !videoCodecs.includes('hevc') &&
-      (tvPlatform !== 'tizen' || tizenSupportsVideoCodec('HEVC') !== false)
-    ) {
-      videoCodecs.push('hevc', 'h265', 'hvc1');
-      codecConditions.push({
-        codec: 'hevc',
-        profiles: ['main', 'main 10'],
-        maxBitDepth: 10,
-      });
-    }
-
-    // Tizen: use Samsung's published demuxer containers and decoder levels; the WebView probe answers for a pipeline that never plays.
-    if (tvPlatform === 'tizen') {
-      for (const c of TIZEN_CONTAINERS) {
-        if (!containers.includes(c)) containers.push(c);
-      }
-      const levels = tizenDecoderLevels();
-      if (levels) {
-        for (const c of codecConditions) {
-          if (c.codec === 'h264' || c.codec === 'hevc') c.maxLevel = levels[c.codec];
-        }
-      }
+    } else if (tvPlatform === 'tizen') {
+      ({ containers, videoCodecs, codecConditions } = tizenVideo({ containers, videoCodecs, codecConditions }));
+    } else if (tvPlatform === 'webos') {
+      ({ containers, videoCodecs, codecConditions } = webosVideo({ containers, videoCodecs, codecConditions }));
     }
 
     // --- Detect supported audio codecs ---
@@ -502,24 +428,21 @@ export class BrowserDeviceProfileService {
       audioCodecs = [...this.nativeAudio.codecs];
     } else {
       audioCodecs = [];
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.40.2')) audioCodecs.push('aac');
+      if (supported('audio/mp4; codecs="mp4a.40.2"')) audioCodecs.push('aac');
       // MP3 probed wrapped in MP4 (mp4a.6B/mp4a.69), the form we deliver; Chrome's MSE rejects it though 'audio/mpeg' passes.
-      if (
-        this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.6B') ||
-        this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.69') ||
-        tvPlatform === 'webos'
-      ) {
+      if (supported('audio/mp4; codecs="mp4a.6B"') || supported('audio/mp4; codecs="mp4a.69"')) {
         audioCodecs.push('mp3');
       }
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'ac-3')) audioCodecs.push('ac3');
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'ec-3')) audioCodecs.push('eac3');
+      if (supported('audio/mp4; codecs="ac-3"')) audioCodecs.push('ac3');
+      if (supported('audio/mp4; codecs="ec-3"')) audioCodecs.push('eac3');
       // Probed in fMP4 only, the form the HLS paths deliver them in.
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus')) audioCodecs.push('opus');
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac')) audioCodecs.push('flac');
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
+      if (supported('audio/mp4; codecs="opus"')) audioCodecs.push('opus');
+      if (supported('audio/mp4; codecs="flac"')) audioCodecs.push('flac');
+      if (supported('audio/mp4; codecs="alac"')) audioCodecs.push('alac');
       // AVPlay decodes the stream on Tizen, so its own capability API overrides
       // the MSE probe for every codec that API enumerates.
       if (tvPlatform === 'tizen') audioCodecs = applyTizenAudioCodecs(audioCodecs);
+      if (tvPlatform === 'webos') audioCodecs = webosAudioCodecs(audioCodecs);
     }
 
     // Android TV: bitstreams the HDMI sink takes reach the receiver untouched, decoder or not.
@@ -564,57 +487,36 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = Math.max(maxAudioChannels, 6);
     }
 
-    // Desktop shell: mpv decodes virtually any codec but the Chromium MSE probe under-reports, so advertise mpv's set.
-    if (this.device.isDesktopNative()) {
-      containers.length = 0;
-      containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv', 'm2ts', 'mts', 'mpg', 'mpeg', 'wmv', 'ogm');
-      videoCodecs.length = 0;
-      videoCodecs.push(
-        'h264', 'avc1', 'hevc', 'h265', 'hvc1',
-        'av1', 'vp9', 'vp8', 'mpeg1video', 'mpeg2video', 'mpeg4', 'msmpeg4v3', 'vc1', 'wmv3', 'theora',
-      );
-      codecConditions.length = 0;
-      codecConditions.push(
-        {
-          codec: 'h264',
-          profiles: ['baseline', 'constrained baseline', 'main', 'high', 'high 10', 'high 10 intra', 'high 4:2:2'],
-          maxBitDepth: 10,
-        },
-        { codec: 'hevc', profiles: ['main', 'main 10'], maxBitDepth: 10 },
-        { codec: 'av1', profiles: ['main', 'high'], maxBitDepth: 10 },
-      );
-      audioCodecs = ['aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis', 'mp2', 'pcm_s16le', 'pcm_s24le', 'pcm_bluray'];
+    // Desktop shell: mpv decodes what its own lists name, which the Chromium MSE probe under-reports.
+    if (this.device.isDesktopNative() && this.mpv) {
+      ({ containers, videoCodecs, codecConditions } = mpvVideo(this.mpv.decoders, this.mpv.demuxers));
+      audioCodecs = mpvAudioCodecs(this.mpv.decoders);
       maxAudioChannels = Math.max(maxAudioChannels, 8);
     }
 
-    // The file's own demuxer reads these, not MSE (Apple refuses `hev1`): WebKit and browsers
-    // answer canPlayType; mpv, Media3 and the TVs (no usable probe) take them all.
-    const takesEveryEntry =
+    // The file's own demuxer reads these, not MSE (Apple refuses `hev1`): WebKit, browsers and webOS answer
+    // canPlayType; mpv, Media3 and AVPlay demux every MP4 sample entry themselves and have no probe.
+    const demuxesEveryEntry =
       this.device.isDesktopNative() ||
-      isTv ||
+      tvPlatform === 'tizen' ||
       (Capacitor.getPlatform() === 'android' && !!this.nativeVideo?.videoCodecs.length);
-    for (const [codec, entry, probes] of EXTRA_SAMPLE_ENTRIES) {
-      if (
-        videoCodecs.includes(codec) &&
-        (takesEveryEntry || probes.some((c) => video.canPlayType(`video/mp4; codecs="${c}"`)))
-      ) {
-        videoCodecs.push(entry);
-      }
-    }
+    videoCodecs.push(...detectSampleEntries(videoCodecs, plays, demuxesEveryEntry));
 
     // --- HDR support ---
     let supportsHdr: boolean;
     if (Capacitor.isNativePlatform()) {
-      // Use native plugin result (pre-fetched in constructor). Default true if not yet resolved.
-      supportsHdr = this.nativeHdr ?? true;
+      // The display's answer (pre-fetched in constructor, true until resolved), and a 10-bit decoder behind it.
+      supportsHdr = (this.nativeHdr ?? true) && (!this.nativeVideo || codecConditions.some((c) => (c.maxBitDepth ?? 0) >= 10));
     } else if (isTizenHdrCapable()) {
       // Tizen: use `isHdrTvSupport()` (matchMedia is unreliable on Chromium 85), combined with a 10-bit codec check.
       const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
       supportsHdr = has10bitCodec;
     } else {
-      const hdrDisplay = typeof matchMedia !== 'undefined' && matchMedia('(dynamic-range: high)').matches;
+      // webOS reports its panel itself; elsewhere the media query, then the engine's PQ decode when `mediaCapabilities` answers.
+      const hdrDisplay =
+        this.webos?.hdr10 ?? (typeof matchMedia !== 'undefined' && matchMedia('(dynamic-range: high)').matches);
       const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
-      supportsHdr = hdrDisplay && has10bitCodec;
+      supportsHdr = hdrDisplay && has10bitCodec && (this.hdrTransfers?.pq ?? true);
     }
 
     // mpv tone-maps HDR to an SDR display itself, so the server can copy the bitstream.
@@ -634,7 +536,9 @@ export class BrowserDeviceProfileService {
         ? this.nativeDolbyVision
           ? (this.nativeDvProfiles ?? this.nativeVideo?.dolbyVisionProfiles ?? [5, 8])
           : []
-        : this.probeDolbyVisionProfiles(video, hasMSE);
+        : this.webos?.dolbyVision === false
+          ? []
+          : detectDolbyVisionProfiles(supported);
     // mpv decodes dual-layer P7 and tone-maps it locally, so list it regardless of supportsHdr.
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
@@ -654,11 +558,11 @@ export class BrowserDeviceProfileService {
     if (useTs) console.warn('[DeviceProfile] useTs override active');
 
     return {
-      directPlayProfiles: [{
-        containers,
-        videoCodecs,
-        audioCodecs,
-      }],
+      directPlayProfiles: [
+        { containers, videoCodecs, audioCodecs },
+        ...(tvPlatform === 'webos' ? [webosMkvProfile(this.webos)] : []),
+        ...this.audioFilesProfile(),
+      ],
       codecConditions,
       maxStreamingBitrate: 0, // 0 = no limit
       maxAudioChannels,
@@ -696,28 +600,21 @@ export class BrowserDeviceProfileService {
 
   // --- Probing helpers ---
 
-  /** Codec gate for the backend profile: browser playback runs through MSE, so require isTypeSupported
-   *  (canPlayType's "maybe" can pass codecs MSE rejects, e.g. HEVC on Chrome Linux). */
-  private testCodec(video: HTMLVideoElement, hasMSE: boolean, mime: string, codec: string): boolean {
-    const full = codec ? `${mime}; codecs="${codec}"` : mime;
-    if (hasMSE) return MediaSource.isTypeSupported(full);
-    return !!video.canPlayType(full);
+  /** The engine's answer for a MIME: browser playback runs through MSE, so require `isTypeSupported` (canPlayType's
+   *  "maybe" can pass codecs MSE rejects, e.g. HEVC on Chrome Linux), minus what `mediaCapabilities` refuses. */
+  private typeProbe(video: HTMLVideoElement): TypeProbe {
+    const mse = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
+    return (mime) =>
+      !this.undecodableVideo.has(mime) && (mse ? MediaSource.isTypeSupported(mime) : !!video.canPlayType(mime));
   }
 
-  /** Probe single-layer Dolby Vision decode per profile (5, 8, 10), included
-   *  only if the pipeline actually claims that codec string. */
-  private probeDolbyVisionProfiles(video: HTMLVideoElement, hasMSE: boolean): number[] {
-    const profiles: number[] = [];
-    if (
-      this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.05.06') ||
-      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.05.06')
-    ) profiles.push(5);
-    if (
-      this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.08.06') ||
-      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.08.06')
-    ) profiles.push(8);
-    if (this.testCodec(video, hasMSE, 'video/mp4', 'dav1.10.06')) profiles.push(10);
-    return profiles;
+  /** The audio files the device opens as they are: the platform plugin on native builds, else what the page's own audio element reports. */
+  private audioFilesProfile(): DirectPlayProfile[] {
+    this.audioProbe ??= new Audio();
+    const files = Capacitor.isNativePlatform()
+      ? this.nativeAudio?.audioFiles
+      : probeAudioDirectPlay(this.audioProbe, this.undecodableAudio);
+    return files?.containers.length ? [files] : [];
   }
 
   /** Turn the plugin's per-codec decode ceiling into a codec-condition fragment; empty when unreported. */
@@ -735,52 +632,5 @@ export class BrowserDeviceProfileService {
   private levelCondition(levels: Map<string, number | undefined>, codec: string): { maxLevel?: number } {
     const maxLevel = levels.get(codec);
     return maxLevel === undefined ? {} : { maxLevel };
-  }
-
-  private probeH264Level(video: HTMLVideoElement, hasMSE: boolean): number {
-    // Level -> hex suffix in avc1 codec string
-    const levels: [number, string][] = [
-      [30, 'avc1.42001E'],   // 3.0
-      [31, 'avc1.42001F'],   // 3.1
-      [40, 'avc1.640028'],   // 4.0
-      [41, 'avc1.640029'],   // 4.1
-      [42, 'avc1.64002A'],        // 4.2
-      [50, 'avc1.640032'],   // 5.0
-      [51, 'avc1.640033'],   // 5.1
-      [52, 'avc1.640034'],   // 5.2
-      [60, 'avc1.64003C'],   // 6.0
-      [62, 'avc1.64003E'],   // 6.2
-    ];
-    let maxLevel = 30;
-    for (const [level, codec] of levels) {
-      if (this.testCodec(video, hasMSE, 'video/mp4', codec)) {
-        maxLevel = level;
-      } else {
-        break;
-      }
-    }
-    return maxLevel;
-  }
-
-  /** Probe max HEVC level */
-  private probeHevcLevel(video: HTMLVideoElement, hasMSE: boolean): number {
-    const levels: [number, string][] = [
-      [120, 'hvc1.1.6.L120.B0'],  // 4.0
-      [123, 'hvc1.1.6.L123.B0'],  // 4.1
-      [150, 'hvc1.1.6.L150.B0'],  // 5.0
-      [153, 'hvc1.1.6.L153.B0'],  // 5.1
-      [156, 'hvc1.1.6.L156.B0'],  // 5.2
-      [180, 'hvc1.1.6.L180.B0'],  // 6.0
-      [186, 'hvc1.1.6.L186.B0'],  // 6.2
-    ];
-    let maxLevel = 120;
-    for (const [level, codec] of levels) {
-      if (this.testCodec(video, hasMSE, 'video/mp4', codec)) {
-        maxLevel = level;
-      } else {
-        break;
-      }
-    }
-    return maxLevel;
   }
 }

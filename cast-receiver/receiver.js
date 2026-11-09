@@ -627,6 +627,14 @@ const CAPS_VIDEO = [
   { codec: 'av01.0.04M.08',       label: 'av1' },
 ];
 
+// Audio files the receiver opens as they are, in the server's container and codec names.
+const CAPS_AUDIO_FILES = [
+  { mime: 'audio/mpeg',                    containers: ['mp3'],        codecs: ['mp3'] },
+  { mime: 'audio/aac',                     containers: ['aac'],        codecs: ['aac'] },
+  { mime: 'audio/mp4; codecs="mp4a.40.2"', containers: ['m4a', 'mp4'], codecs: ['aac'] },
+  { mime: 'audio/flac',                    containers: ['flac'],       codecs: ['flac'] },
+];
+
 console.log('[fliks-cast] registering caps listener on', CAPS_NAMESPACE);
 context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
   console.log(
@@ -644,13 +652,21 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
   const videoCodecs = CAPS_VIDEO
     .filter((c) => probe(`video/mp4; codecs="${c.codec}"`))
     .map((c) => c.label);
-  // v2 adds the 10-bit and HDR fields; senders ignore them on a v1 reply.
+  const audioEl = new Audio();
+  const files = CAPS_AUDIO_FILES.filter((f) => !!audioEl.canPlayType(f.mime));
+  const unique = (list) => [...new Set(list)];
+  // v2 adds the 10-bit and HDR fields, v3 the audio files; senders ignore what they do not know.
   let hdr = false;
   try {
     hdr = !!context.getDeviceCapabilities?.()?.[cast.framework.system.DeviceCapabilities.IS_HDR_SUPPORTED];
   } catch { /* old firmware: no capability API */ }
   const reply = {
-    type: 'caps', v: 2, audioCodecs, videoCodecs, hdr,
+    type: 'caps', v: 3, audioCodecs, videoCodecs, hdr,
+    audioFiles: {
+      containers: unique(files.flatMap((f) => f.containers)),
+      videoCodecs: [],
+      audioCodecs: unique(files.flatMap((f) => f.codecs)),
+    },
     hevcMain10: probe('video/mp4; codecs="hvc1.2.4.L150.B0"'),
     av1Main10: probe('video/mp4; codecs="av01.0.08M.10"'),
   };

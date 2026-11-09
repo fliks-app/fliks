@@ -28,6 +28,19 @@ function configure(
   return TestBed.inject(BrowserDeviceProfileService);
 }
 
+/** mpv's own lists, as the desktop shell reports them. */
+function withMpv(service: BrowserDeviceProfileService, decoders = MPV_DECODERS, demuxers = MPV_DEMUXERS) {
+  const internals = service as unknown as { mpv: unknown; cachedProfile: unknown };
+  internals.mpv = { decoders, demuxers };
+  internals.cachedProfile = null;
+}
+const MPV_DECODERS = [
+  'h264', 'hevc', 'av1', 'vp9', 'vp8', 'mpeg1video', 'mpeg2video', 'mpeg4', 'vc1', 'wmv3', 'theora',
+  'aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis', 'mp2',
+  'pcm_s16le', 'pcm_s24le', 'pcm_bluray',
+];
+const MPV_DEMUXERS = ['mov', 'matroska', 'webm', 'mpegts', 'avi', 'flv', 'mpeg', 'asf', 'ogg'];
+
 describe('BrowserDeviceProfileService, cropsBlackBarsLocally', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -302,7 +315,9 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
 
   it('desktop declares what mpv decodes: Hi10P H.264, VC-1, MPEG-2 transport files, PCM and MP2', () => {
     const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
-    const profile = configure(desktopDevice, { hasServerFeature: () => true }).getProfile();
+    const service = configure(desktopDevice, { hasServerFeature: () => true });
+    withMpv(service);
+    const profile = service.getProfile();
     const dp = profile.directPlayProfiles[0];
     expect(dp.containers).toEqual(expect.arrayContaining(['m2ts', 'mts', 'mpg', 'wmv']));
     expect(dp.videoCodecs).toEqual(expect.arrayContaining(['vc1', 'wmv3', 'mpeg1video']));
@@ -539,8 +554,9 @@ describe('BrowserDeviceProfileService, extra sample entries', () => {
   it('claims every entry on the desktop shell, mpv demuxes them all', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
     const device = { isTv: () => false, tvPlatform: () => null, isDesktopNative: () => true };
-    const profile = configure(device as DeviceService).getProfile();
-    const codecs = profile.directPlayProfiles[0].videoCodecs;
+    const service = configure(device as DeviceService);
+    withMpv(service);
+    const codecs = service.getProfile().directPlayProfiles[0].videoCodecs;
     expect(codecs).toEqual(expect.arrayContaining(['avc3', 'hev1', 'dvh1', 'dvhe', 'dav1']));
   });
 });
@@ -560,7 +576,7 @@ describe('BrowserDeviceProfileService: TV codec detection', () => {
       isTypeSupported: (mime: string) => !mime.includes('av01'),
     };
     (window as any).webapis = {
-      systeminfo: { isSupportedVideoCodec: (c: string) => c === 'AV1' || c === 'HEVC' },
+      systeminfo: { isSupportedVideoCodec: (c: string) => c === 'AV1' || c === 'HEVC' || c === 'H264' },
       productinfo: { isUdPanelSupported: () => true, is8KPanelSupported: () => false },
     };
     const profile = tv('tizen').getProfile();
@@ -589,18 +605,23 @@ describe('BrowserDeviceProfileService: TV codec detection', () => {
   });
 });
 
-describe('BrowserDeviceProfileService, getAudioProfile', () => {
+describe('BrowserDeviceProfileService, the audio-files entry', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.restoreAllMocks();
   });
 
-  it('appends an audio-only entry the audio element opens and keeps the video entries', () => {
+  it('is part of every profile, after the video entry, so a device sends one profile whatever it plays', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation((m) => (m === 'audio/mpeg' ? 'probably' : ''));
     const service = configure({ isTv: () => false, tvPlatform: () => null, isDesktopNative: () => false } as DeviceService);
-    const video = service.getProfile().directPlayProfiles;
-    const list = service.getAudioProfile().directPlayProfiles;
-    expect(list.slice(0, -1)).toEqual(video);
+    const list = service.getProfile().directPlayProfiles;
     expect(list.at(-1)).toEqual({ containers: ['mp3'], videoCodecs: [], audioCodecs: ['mp3'] });
+    expect(service.getProfile()).toEqual(service.getProfile());
+  });
+
+  it('leaves the audio codecs of the video entry alone for track selection', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation((m) => (m === 'audio/flac' ? 'probably' : ''));
+    const service = configure({ isTv: () => false, tvPlatform: () => null, isDesktopNative: () => false } as DeviceService);
+    expect(service.playableAudioCodecs()).not.toContain('flac');
   });
 });

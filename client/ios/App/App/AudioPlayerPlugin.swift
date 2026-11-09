@@ -127,28 +127,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Plugin methods
 
     @objc func configure(_ call: CAPPluginCall) {
-        deviceProfile = call.getString("deviceProfile").map(Self.withAudioFiles)
+        deviceProfile = call.getString("deviceProfile")
         call.resolve()
-    }
-
-    /// The web layer's profile plus the audio files AVFoundation reports it opens as they are, by MIME type.
-    private static func withAudioFiles(_ profile: String) -> String {
-        let probes: [(mime: String, containers: [String], codecs: [String])] = [
-            ("audio/mpeg", ["mp3"], ["mp3"]),
-            ("audio/aac", ["aac"], ["aac"]),
-            ("audio/mp4; codecs=\"mp4a.40.2\"", ["mp4"], ["aac"]),
-            ("audio/mp4; codecs=\"alac\"", ["mp4"], ["alac"]),
-            ("audio/flac", ["flac"], ["flac"]),
-            ("audio/wav", ["wav"], ["pcm_s16le", "pcm_s24le"]),
-            ("audio/aiff", ["aiff"], ["pcm_s16be", "pcm_s24be"]),
-        ].filter { AVURLAsset.isPlayableExtendedMIMEType($0.mime) }
-        func unique(_ l: [String]) -> [String] { var seen = Set<String>(); return l.filter { seen.insert($0).inserted } }
-        guard var json = (try? JSONSerialization.jsonObject(with: Data(profile.utf8))) as? [String: Any] else { return profile }
-        var direct = json["directPlayProfiles"] as? [[String: Any]] ?? []
-        direct.append(["containers": unique(probes.flatMap(\.containers)), "videoCodecs": [String](),
-                       "audioCodecs": unique(probes.flatMap(\.codecs))])
-        json["directPlayProfiles"] = direct
-        return (try? JSONSerialization.data(withJSONObject: json)).flatMap { String(data: $0, encoding: .utf8) } ?? profile
     }
 
     @objc func attach(_ call: CAPPluginCall) {

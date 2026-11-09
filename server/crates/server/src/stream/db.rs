@@ -212,4 +212,31 @@ mod client_codecs_tests {
                 .unwrap();
         assert_eq!(rows, vec![(Some(true),)]);
     }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_row_holds_the_video_and_the_audio_files_entries_of_the_last_profile(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let profile: DeviceProfile = serde_json::from_value(serde_json::json!({
+            "deviceId": "dev-1",
+            "directPlayProfiles": [
+                {"containers": ["mp4"], "videoCodecs": ["h264", "hevc"], "audioCodecs": ["aac"]},
+                {"containers": ["mp3", "flac"], "videoCodecs": [], "audioCodecs": ["mp3", "flac"]},
+            ],
+        }))
+        .unwrap();
+        record_client_codecs(&db, &profile).await.unwrap();
+        record_client_codecs(&db, &profile).await.unwrap();
+        let rows: Vec<(serde_json::Value,)> =
+            sqlx::query_as(r#"SELECT "directPlayProfiles" FROM client_codecs"#)
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 1);
+        let device = crate::optimize::codec::Device::from_profiles(&rows[0].0);
+        assert_eq!(device.video, ["h264", "hevc"].into());
+        assert_eq!(
+            device.audio,
+            ["aac", "mp3", "flac"].map(String::from).into()
+        );
+    }
 }
