@@ -68,13 +68,16 @@ Windows x64 only, pinned in `engine.lock`).
 | fliks-engine (release binary pinned in `engine.lock`) | AGPL-3.0-or-later | https://github.com/fliks-app/engine |
 | jellyfin-ffmpeg (portable build) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | PostgreSQL (Windows: EDB binaries; macOS: Homebrew bottle) | PostgreSQL License | https://www.postgresql.org |
-| ONNX Runtime (macOS: official release 1.31.1 in `karaoke/` with the CoreML provider, loaded at run time by `fliks-engine`; `LICENSE` and `ThirdPartyNotices.txt` in `karaoke/licenses/onnxruntime`) | MIT | https://github.com/microsoft/onnxruntime |
-| Windows ML runtime 2.5.96 (Windows: `onnxruntime.dll` 1.28.3 with DirectML, `DirectML.dll` and `Microsoft.Windows.AI.MachineLearning.dll` in `karaoke\`; the licence and notices in `karaoke\licenses\windows-ml`; execution providers Windows downloads for the hardware are Microsoft's and the vendors', under their own terms) | Microsoft Windows ML Runtime license terms (redistributable) | https://www.nuget.org/packages/Microsoft.Windows.AI.MachineLearning |
+| ONNX Runtime (official release 1.31.1 in `karaoke/`, CoreML provider on macOS and CPU build on Windows, loaded at run time by `fliks-engine`; `LICENSE` and `ThirdPartyNotices.txt` in `karaoke/licenses/onnxruntime`) | MIT | https://github.com/microsoft/onnxruntime |
 | whisper.cpp (`whisper-cli` v1.9.5 in `karaoke/`, Metal on macOS, for lyrics alignment) | MIT | https://github.com/ggml-org/whisper.cpp |
 | ffmpeg-pitch (`karaoke/ffmpeg-pitch`, FFmpeg built with `--enable-gpl --enable-librubberband` and libopus, for key changes and stem encoding; license texts and source offer in `karaoke/licenses/ffmpeg-pitch/SOURCE`) | GPL-3.0-or-later | https://ffmpeg.org |
 | Rubber Band Library (linked statically into ffmpeg-pitch) | GPL-2.0-or-later | https://breakfastquay.com/rubberband/ |
 | Opus (`libopus`, linked statically into ffmpeg-pitch) | BSD-3-Clause | https://opus-codec.org |
 | Microsoft Visual C++ runtime DLLs (Windows only) | Microsoft redistributable license | https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
+
+The Windows ML runtime of Microsoft (the Windows App SDK framework package) is not distributed by Fliks: when
+the user has installed it on the machine, `fliks-engine` loads it from there, under Microsoft's own terms, to
+run karaoke models on the graphics card.
 
 ## Desktop client
 

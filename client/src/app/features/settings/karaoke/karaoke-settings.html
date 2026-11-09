@@ -55,11 +55,28 @@
             <dd>{{ (c.runtime.onnx ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}@if (c.runtime.onnxError) { <span class="text-error"> {{ c.runtime.onnxError }}</span> }</dd>
             <dt class="text-base-content/60">{{ 'karaoke.admin.providers' | translate }}</dt>
             <dd>{{ c.runtime.providers.length ? c.runtime.providers.join(', ') : '-' }}</dd>
+            @if (c.runtime.windowsMl; as w) {
+              <dt class="text-base-content/60">{{ 'karaoke.admin.winml' | translate }}</dt>
+              <dd>{{ 'karaoke.admin.winml_' + w | translate }}</dd>
+            }
             <dt class="text-base-content/60">{{ 'karaoke.admin.speech' | translate }}</dt>
             <dd>{{ (c.runtime.whisper ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}</dd>
             <dt class="text-base-content/60">{{ 'karaoke.admin.key_change' | translate }}</dt>
             <dd>{{ (c.runtime.rubberband ? 'karaoke.admin.yes' : 'karaoke.admin.no') | translate }}</dd>
           </dl>
+
+          @if (c.runtime.windowsMl === 'missing' || c.runtime.windowsMl === 'restart') {
+            <div class="flex flex-col items-start gap-2 rounded-lg bg-base-200 p-4" data-testid="karaoke-windows-ml">
+              <p class="font-medium">{{ 'karaoke.admin.winml_title' | translate }}</p>
+              <p class="text-sm text-base-content/60">{{ (c.runtime.windowsMl === 'missing' ? 'karaoke.admin.winml_missing_hint' : 'karaoke.admin.winml_restart_hint') | translate }}</p>
+              <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
+                @if (c.runtime.windowsMl === 'missing') {
+                  <a class="btn btn-primary btn-sm" [href]="windowsMlUrl" target="_blank" rel="noopener noreferrer">{{ 'karaoke.admin.winml_install' | translate }}</a>
+                }
+                <button type="button" class="btn btn-ghost btn-sm" [disabled]="checking()" (click)="recheck()">{{ 'karaoke.admin.winml_check' | translate }}</button>
+              </div>
+            </div>
+          }
 
           <ul class="flex flex-col gap-3" data-testid="karaoke-models">
             @for (m of c.models; track m.id) {
