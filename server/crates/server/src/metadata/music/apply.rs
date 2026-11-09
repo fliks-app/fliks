@@ -282,6 +282,7 @@ fn remote_track(t: &Track) -> RemoteTrack {
         number: t.number,
         duration_ms: t.duration_ms,
         recording: t.recording_id.clone(),
+        isrc: t.isrc.clone(),
     }
 }
 
@@ -515,6 +516,7 @@ pub async fn write_edition(
                     number,
                     duration_ms: duration,
                     recording,
+                    isrc: None,
                 },
             },
         )
