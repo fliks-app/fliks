@@ -83,4 +83,14 @@ describe('SearchComponent hits', () => {
     expect(resolveArtist).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenLastCalledWith(['/artists', 5]);
   });
+
+  it('shows a first page of the books and albums of the providers, then all on Show more', () => {
+    const { c } = setup();
+    const view = c as unknown as { visible(r: number[], s: string): number[]; showMore(s: string): void };
+    const rows = Array.from({ length: 30 }, (_, i) => i);
+    expect(view.visible(rows, 'albums')).toHaveLength(12);
+    view.showMore('albums');
+    expect(view.visible(rows, 'albums')).toHaveLength(30);
+    expect(view.visible(rows, 'books')).toHaveLength(12);
+  });
 });

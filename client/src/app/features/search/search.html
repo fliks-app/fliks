@@ -315,10 +315,13 @@
               <div>
                 <h3 class="text-lg font-semibold mb-3">{{ 'books_search.section_books' | translate }}</h3>
                 <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-                  @for (row of booksToAdd(); track row.provider + ':' + row.externalId) {
+                  @for (row of visible(booksToAdd(), 'books'); track row.provider + ':' + row.externalId) {
                     <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="(row.authors ?? []).join(', ')" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
                   }
                 </div>
+                @if (booksToAdd().length > cap && !more().has('books')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('books')">{{ 'common.show_more' | translate }}</button>
+                }
               </div>
             } @else if (state.pending().has('book')) {
               <ng-container *ngTemplateOutlet="skeletonGrid" />
@@ -328,10 +331,13 @@
               <div>
                 <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
                 <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-                  @for (row of albumsToAdd(); track row.provider + ':' + row.externalId) {
+                  @for (row of visible(albumsToAdd(), 'albums'); track row.provider + ':' + row.externalId) {
                     <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
                   }
                 </div>
+                @if (albumsToAdd().length > cap && !more().has('albums')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
+                }
               </div>
             } @else if (state.pending().has('album')) {
               <ng-container *ngTemplateOutlet="skeletonGrid" />
@@ -369,14 +375,16 @@
                   @for (r of recordingsToAdd(); track r.provider + ':' + r.externalId) {
                     <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
                       <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null" />
-                      @if (r.album.existingMediaId == null && (canAdd() || canRequest())) {
-                        <button type="button" class="btn btn-ghost btn-sm shrink-0" data-card-link (click)="addRecording(r)" data-testid="add-album">
-                          {{ (canAdd() ? 'search.add_album' : 'search.request_album') | translate }}
-                        </button>
-                      }
-                      @if (canAdd()) {
-                        <button type="button" class="btn btn-ghost btn-sm shrink-0" data-card-link (click)="wantRecording(r)" data-testid="want-track">{{ 'search.want_track' | translate }}</button>
-                      }
+                      <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
+                        @if (r.album.existingMediaId == null && (canAdd() || canRequest())) {
+                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="addRecording(r)" data-testid="add-album">
+                            {{ (canAdd() ? 'search.add_album' : 'search.request_album') | translate }}
+                          </button>
+                        }
+                        @if (canAdd()) {
+                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="wantRecording(r)" data-testid="want-track">{{ 'search.want_track' | translate }}</button>
+                        }
+                      </span>
                     </li>
                   }
                 </ul>

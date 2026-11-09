@@ -600,6 +600,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
     else void this.ensureDiscoverGenres();
     this.lastLocalSig = this.filterSig(q, ct);
+    this.more.set(new Set());
     this.runner.run(q, ct, { external: this.state.externalEnabled(), mediaParams: this.mediaParams(ct) });
   }
 
@@ -760,4 +761,16 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected readonly placeholders = [0, 1, 2, 3, 4, 5];
+
+  /** Books and albums of the providers show a first page; the sections below them stay in reach. */
+  protected readonly cap = 12;
+  protected readonly more = signal<ReadonlySet<string>>(new Set());
+
+  protected visible<T>(rows: T[], section: string): T[] {
+    return this.more().has(section) ? rows : rows.slice(0, this.cap);
+  }
+
+  protected showMore(section: string): void {
+    this.more.update((s) => new Set(s).add(section));
+  }
 }
