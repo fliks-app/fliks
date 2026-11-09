@@ -1,4 +1,4 @@
-<app-wants-editor [(wants)]="draft" [state]="state()" />
+<app-wants-editor [(wants)]="draft" [state]="state()" [families]="families()" />
 <div class="mt-4 flex justify-end">
   <button type="button" class="btn btn-primary btn-sm" data-testid="wants-save" [disabled]="busy()" (click)="save()">
     {{ 'wants.save' | translate }}

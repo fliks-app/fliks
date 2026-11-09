@@ -32,6 +32,8 @@ import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-eva
 import { hasProviderId } from '../../../core/utils/media-identity';
 import type { UiContribution } from '@fliks/plugin-ui';
 import { CORE_MEDIA_ACTIONS, sectionOf } from '../detail-hero/core-media-actions';
+import { CORE_ACQUISITION_ACTIONS } from '../../../core/plugin-ui/acquisition-contributions';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -74,6 +76,7 @@ export interface CardDownloadState {
 })
 export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
+  private readonly localeDate = new LocaleDatePipe();
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
@@ -311,7 +314,7 @@ export class MediaCardComponent {
       title: this._title(),
       imageUrl: this._img(),
       imageAspect: this.albumCover() ? 'square' : this.aspect(),
-      subtitle: this._subtitle(),
+      subtitle: this.menuSubtitle(),
       placement: 'card-top',
     });
     this.cardActionsService.show();
@@ -441,6 +444,13 @@ export class MediaCardComponent {
     if (m?.year) return '' + m.year;
     return undefined;
   });
+  /** The menu header reads the release date, the card's own subtitle when the title has none. */
+  private menuSubtitle(): string | undefined {
+    const date = this.media()?.releaseDate;
+    if (!date) return this._subtitle() ?? undefined;
+    return this.localeDate.transform(date, { dateStyle: 'long' }) || (this._subtitle() ?? undefined);
+  }
+
   protected readonly _barStatus = computed((): BarStatus | null => {
     if (this.hideStatusBar() || this.bookInfo()) return null;
     const m = this.media();
@@ -591,7 +601,7 @@ export class MediaCardComponent {
     const ctx = this.cardActionsContext();
     const watched = this.status() === 'watched';
     const rows = resolveMenuContributions({
-      contributions: [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions'),
+      contributions: [...CORE_MEDIA_ACTIONS, CORE_ACQUISITION_ACTIONS.work, ...this.pluginUi.contributionsFor('media.actions'),
         // `card.actions` stays read: it is in the plugin contract and installed
         // plugins target it. One list on our side, both slots on theirs.
         ...this.pluginUi.contributionsFor('card.actions'),

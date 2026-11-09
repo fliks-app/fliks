@@ -10,7 +10,7 @@
           [ngModel]="w.family"
           (ngModelChange)="setFamily(i, $event)"
         >
-          @for (f of families; track f) {
+          @for (f of families(); track f) {
             <option [ngValue]="f">{{ 'families.' + f | translate }}</option>
           }
         </select>

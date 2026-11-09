@@ -177,7 +177,6 @@
       (toggleSeasonWatched)="watched.onToggleSeasonWatched(m.id, $event.season, $event.watched)"
       (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
       (requestSeason)="host.requestFlow.openForSeason($event)"
-      (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
       (toggleSeasonLike)="like.toggleSeason($event)"
       (recommendSeason)="recommendSeason($event)"
       (downloadEpisode)="downloadEpisode($event.season, $event.episode)"

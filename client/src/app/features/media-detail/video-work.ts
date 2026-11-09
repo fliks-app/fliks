@@ -226,7 +226,6 @@ export abstract class VideoWorkBase {
       'media.refresh-metadata': () => void this.refreshMetadata(),
       'media.analyze': () => this.host.openAnalyze(),
       'media.edit-subtitles': () => this.openSubtitles(),
-      'media.open-tracking': () => this.openTracking(this.trackingScope()),
       'media.request': () => this.host.requestFlow.openForMedia(),
       'media.toggle-monitored': () => void this.toggleMonitored(),
     };

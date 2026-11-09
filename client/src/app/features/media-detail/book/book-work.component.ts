@@ -19,7 +19,7 @@ import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
 import { asBookMedia } from '../../../core/services/api/book-media';
 import { BookSourcesComponent } from './book-sources.component';
-import { BookWantsComponent } from './book-wants.component';
+import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 
 
@@ -45,7 +45,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
     BookChaptersComponent,
     BookWorksRowComponent,
     BookSourcesComponent,
-    BookWantsComponent,
+    MediaWantsComponent,
     ModalHeaderComponent,
   ],
   templateUrl: './book-work.component.html',

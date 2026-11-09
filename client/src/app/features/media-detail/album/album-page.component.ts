@@ -13,6 +13,8 @@ import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
@@ -39,7 +41,7 @@ interface DiscView {
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    DropdownMenuComponent, ModalHeaderComponent,
+    DropdownMenuComponent, ModalHeaderComponent, MediaWantsComponent,
     LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers,
   ],
   templateUrl: './album-page.component.html',
@@ -55,6 +57,7 @@ export class AlbumPageComponent {
   private readonly player = inject(AudioPlayerService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
+  private readonly auth = inject(AuthService);
   protected readonly party = inject(PartyService);
   protected readonly like = new LikeController(
     { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
@@ -81,10 +84,18 @@ export class AlbumPageComponent {
   protected readonly orphaned = computed(() => !!this.album()?.orphaned || !!this.edition()?.orphaned);
   protected readonly desktop = heroDesktopLayout();
   /** Identify lists the releases the files may be, instead of the title search of the other kinds. */
-  protected readonly actions: MediaActionHandlers = {
+  protected readonly actions = computed<MediaActionHandlers>(() => ({
     'media.identify': () => void this.review(),
     'media.details': () => this.detailsDialog()?.nativeElement.showModal(),
-  };
+    ...(this.auth.hasPermission('media.edit') && { 'media.edit-profiles': () => this.openWants() }),
+  }));
+  protected readonly wantsOpen = signal(false);
+  private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
+
+  private openWants(): void {
+    this.wantsOpen.set(true);
+    this.wantsDialog()?.nativeElement.showModal();
+  }
   protected readonly artistsText = computed(() => artistLine(this.album()?.artists ?? []));
   protected readonly coverUrl = computed(() => this.edition()?.coverUrl ?? this.media().posterUrl);
   protected readonly duration = computed(() => formatDuration(this.tracks().reduce((s, t) => s + (t.durationSeconds ?? 0), 0)));

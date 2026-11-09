@@ -8,7 +8,6 @@ import { localizeLanguage } from '../../../core/utils/language.utils';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 
 const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
-const FAMILIES: WantFamily[] = ['text', 'audio'];
 const MAX_WANTS = 8;
 
 export const wantKey = (w: Pick<Want, 'family' | 'language'>) => `${w.family}|${w.language ?? ''}`;
@@ -32,7 +31,8 @@ export class WantsEditorComponent {
   /** Create flows: no empty choice, each row starts on its family's first profile. */
   readonly profileRequired = input(false);
 
-  protected readonly families = FAMILIES;
+  /** The families a row may name, e.g. audio only for an album. */
+  readonly families = input<readonly WantFamily[]>(['text', 'audio']);
   protected readonly profiles = signal<Record<WantFamily, QualityProfile[]>>({ text: [], audio: [] });
   protected readonly canAdd = computed(() => this.wants().length < MAX_WANTS && this.free() !== null);
   protected readonly canRemove = computed(() => this.wants().length > 1);
@@ -52,7 +52,7 @@ export class WantsEditorComponent {
         rows.map((w) => (w.qualityProfileId == null ? { ...w, qualityProfileId: all[w.family][0]?.id ?? null } : w)),
       );
     });
-    for (const family of FAMILIES) {
+    for (const family of ['text', 'audio'] as const) {
       this.profilesApi
         .getQualityProfiles(family)
         .then((list) => this.profiles.update((p) => ({ ...p, [family]: list })))
@@ -87,7 +87,7 @@ export class WantsEditorComponent {
   private free(): WantSpec | null {
     const taken = this.wants();
     for (const language of [null, ...LANGUAGES]) {
-      for (const family of FAMILIES) {
+      for (const family of this.families()) {
         if (!taken.some((w) => w.family === family && w.language === language)) return { family, language };
       }
     }

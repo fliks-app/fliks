@@ -216,7 +216,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'recommend.menu_item',
       'media_detail.add_to_list',
       'media_card.mark_watched',
-      'media_detail.advanced_group',
+      'media_detail.files_group',
     ]);
   });
 
@@ -233,8 +233,13 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'media_card.action_open',
       'recommend.menu_item',
       'media_detail.add_to_list',
-      'media_detail.advanced_group',
+      'media_detail.files_group',
     ]);
+  });
+
+  it('an album card shows no Files status row, the server tracks video kinds only', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: makeMedia({ id: 5, type: 'album' as Media['type'], files: [] }), status: null });
+    expect(labels(h)).not.toContain('media_detail.files_group');
   });
 
   it('episode row (media-detail-seasons) with a file: play-intent via clickIntent, playlist target from ids', async () => {

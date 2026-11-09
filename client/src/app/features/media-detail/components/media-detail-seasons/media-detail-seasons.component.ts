@@ -18,6 +18,7 @@ import type { DownloadTask } from '../../../../core/services/download-cache.serv
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
+  LucideChevronRight,
   LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
@@ -28,7 +29,7 @@ import {
   LucideList,
   LucideListChecks,
   LucideListPlus,
-  LucidePackage,
+  LucideSearch,
   LucideUserPlus,
   LucideX,
   LucideZap,
@@ -82,7 +83,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX, LucideZap],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideChevronRight, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucideSearch, LucideUserPlus, LucideX, LucideZap],
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
@@ -149,8 +150,6 @@ export class MediaDetailSeasonsComponent {
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();
   /** Viewer (regular requester) asks to (re-)request this season. */
   readonly requestSeason = output<Season>();
-  /** Open the tracking-status modal for this season (emits the season number). */
-  readonly viewSeasonTracking = output<number>();
   /** Toggle the viewer's like on this season (emits the season id). */
   readonly downloadSeason = output<Season>();
   readonly optimizeSeason = output<Season>();
@@ -172,9 +171,15 @@ export class MediaDetailSeasonsComponent {
       isMonitored: this.selectedSeason()?.monitored ?? false,
       identified: true,
     }),
+    trackingScope: () => {
+      const season = this.selectedSeason();
+      return season ? { kind: 'season', seasonNumber: season.seasonNumber } : null;
+    },
   });
 
   readonly seasonActionItems = this.seasonActions.rows;
+  /** The season menu's open submenu, unfolded in place: the menu is a plain dropdown on desktop and a sheet on phones. */
+  readonly seasonSubOpen = signal<string | null>(null);
   readonly seasonActionPending = (actionId: string | undefined) =>
     this.seasonActions.isBusy(actionId) || this.seasonActions.isDisabled(actionId);
 

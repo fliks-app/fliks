@@ -1,7 +1,7 @@
 @let m = media();
 @let a = album();
 
-<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="album" [media]="m" [actions]="actions" [posterUrl]="coverUrl()" [menuSubtitle]="artistsText() || null" [overview]="m.overview || null" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
+<app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="album" [media]="m" [actions]="actions()" [posterUrl]="coverUrl()" [menuSubtitle]="artistsText() || null" [overview]="m.overview || null" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
   @if (a) {
     <p heroMeta class="flex flex-wrap gap-x-3 gap-y-1 text-base-content/70" data-testid="facts">
       @for (ar of a.artists; track ar.id; let last = $last) {
@@ -86,8 +86,8 @@
     </app-detail-section>
   }
   <ng-template #row let-t>
-    <li class="flex items-center gap-1" data-testid="track">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
+    <li class="flex items-center gap-1 rounded-lg pe-1 hover:bg-base-200" data-testid="track">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
         <app-track-line [title]="t.title" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
           <span lead class="hidden w-8 shrink-0 text-right md:block tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
           @if (!t.hasFile) {
@@ -95,8 +95,8 @@
           }
         </app-track-line>
       </button>
-      <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
-        <svg lucideHeart class="size-5" [class.fill-current]="t.favourite"></svg>
+      <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [class.text-white]="!t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
+        <svg lucideHeart class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
       </button>
       <app-dropdown-menu placement="bottom-end" [heading]="t.title">
         <div trigger tabindex="0" role="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" data-testid="track-menu">
@@ -169,3 +169,12 @@
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
   </dialog>
 }
+<dialog #wantsDialog class="modal" data-testid="wants-dialog" (close)="wantsOpen.set(false)">
+  <div class="modal-box max-w-lg">
+    <app-modal-header [title]="'wants.title' | translate" />
+    @if (wantsOpen()) {
+      <app-media-wants [mediaId]="m.id" [families]="['audio']" />
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+</dialog>
