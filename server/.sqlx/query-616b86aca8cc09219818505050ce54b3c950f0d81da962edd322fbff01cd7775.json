@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.title AS \"media_title!\", m.\"posterUrl\" AS poster_url, m.\"type\"::text AS \"kind!\",\n                  i.title AS item_title, i.number AS item_number, g.number AS \"season: i32\",\n                  i.\"mediaId\" AS media_id, i.\"groupId\" AS group_id, e.family AS \"family?\"\n             FROM items i\n             JOIN media m ON m.id = i.\"mediaId\"\n             LEFT JOIN editions e ON e.id = i.\"editionId\"\n             LEFT JOIN item_groups g ON g.id = i.\"groupId\"\n            WHERE i.id = $1",
+  "query": "SELECT m.title AS \"media_title!\", m.\"posterUrl\" AS poster_url, m.\"type\"::text AS \"kind!\",\n                  i.title AS item_title, i.number AS item_number, g.number AS \"season: i32\",\n                  i.\"mediaId\" AS media_id, i.\"groupId\" AS group_id, e.family AS \"family?\",\n                  EXISTS (SELECT 1 FROM media_files f WHERE f.id = $2) AS \"file_exists!\"\n             FROM items i\n             JOIN media m ON m.id = i.\"mediaId\"\n             LEFT JOIN editions e ON e.id = i.\"editionId\"\n             LEFT JOIN item_groups g ON g.id = i.\"groupId\"\n            WHERE i.id = $1",
   "describe": {
     "columns": [
       {
@@ -101,10 +101,17 @@
             "name": "family"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "file_exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
+        "Int4",
         "Int4"
       ]
     },
@@ -117,8 +124,9 @@
       true,
       false,
       true,
-      true
+      true,
+      null
     ]
   },
-  "hash": "7b207c3b6c00780e5d9e93934962a9adc26be5a9ab3a826f5469b22120562560"
+  "hash": "616b86aca8cc09219818505050ce54b3c950f0d81da962edd322fbff01cd7775"
 }

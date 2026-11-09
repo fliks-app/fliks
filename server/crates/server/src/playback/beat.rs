@@ -458,6 +458,7 @@ pub async fn heartbeat(
     };
     let mut lost = false;
     let mut superseded = false;
+    let mut keep_history = false;
     let mut attributed = None;
     let mut state_changed = false;
     let client_played_at = int(&body, "playedAt")
@@ -487,25 +488,31 @@ pub async fn heartbeat(
         };
         attributed = updated.as_ref().and_then(|u| u.attributed_user_id);
         state_changed = updated.is_some()
-            && play_state(&body).is_some_and(|s| before.is_none_or(|b| b.state != s));
+            && play_state(&body).is_some_and(|s| before.as_ref().is_none_or(|b| b.state != s));
         lost = engine_lost.unwrap_or(updated.is_none());
-        if let Some(u) = &updated {
-            let account = attributed.unwrap_or(user);
-            if client_played_at.is_none() {
-                superseded = match account_beat(&st, user, account, u, item, &body) {
-                    Some(input) => {
-                        st.account_sessions.beat(&st, input).await == Verdict::Superseded
-                    }
-                    None => st.account_sessions.is_superseded(account, sid).await,
-                };
-            }
-            if !superseded {
-                record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
-                emit_state(&st, user, u, media, &body);
-            }
+        let account = attributed
+            .or(before.as_ref().and_then(|b| b.attributed_user_id))
+            .unwrap_or(user);
+        if client_played_at.is_none() {
+            superseded = match updated
+                .as_ref()
+                .map(|u| account_beat(&st, user, account, u, item, &body))
+            {
+                Some(Some(input)) => {
+                    st.account_sessions.beat(&st, input).await == Verdict::Superseded
+                }
+                _ => st.account_sessions.is_superseded(account, sid).await,
+            };
+        }
+        if superseded {
+            // Another item than the row's is the old device's own progress (rule 8).
+            keep_history = item.is_some() && st.account_sessions.item_of(account).await != item;
+        } else if let Some(u) = &updated {
+            record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
+            emit_state(&st, user, u, media, &body);
         }
     }
-    if superseded {
+    if superseded && !keep_history {
         return Ok(reply(lost, true, None));
     }
     let history_user = attributed.unwrap_or(user);
@@ -538,7 +545,7 @@ pub async fn heartbeat(
             }),
         )
     {
-        return Ok(reply(lost, false, None));
+        return Ok(reply(lost, superseded, None));
     }
     let file = int(&body, "mediaFileId")
         .and_then(|f| i32::try_from(f).ok())
@@ -556,7 +563,7 @@ pub async fn heartbeat(
         }
     };
     let Some(item) = item else {
-        return Ok(reply(lost, false, Some(None)));
+        return Ok(reply(lost, superseded, Some(None)));
     };
     let episode = match named {
         Some(_) => episode_of(&st.db, item).await?,
@@ -600,7 +607,7 @@ pub async fn heartbeat(
         )
         .await;
     }
-    Ok(reply(lost, false, Some(saved)))
+    Ok(reply(lost, superseded, Some(saved)))
 }
 
 #[cfg(test)]
