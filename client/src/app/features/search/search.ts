@@ -19,19 +19,21 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
-import type { MusicPersonRow } from '../../core/services/api/music.models';
+import type { TrackRow } from '../../core/services/api/music.models';
 import { BooksApiService } from '../../core/services/api/books-api.service';
-import type { CollectionSummary, PersonListItem } from '../../core/services/api/books.models';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
+import type { CardAction } from '../../core/services/card-actions.service';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  ArtistHit,
+  RecordingHit,
   SearchHit,
   DiscoverFilters,
   searchResultKey,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
-import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
@@ -45,19 +47,27 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
 import { ContentTypeToggleComponent } from '../../shared/components/search-filters/content-type-toggle';
-import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
+import { LucideSearch, LucideX, LucideSettings, LucidePlay } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
+import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
+import type { AddRequest, AddResult } from '../../shared/components/add-dialog/add-plan';
+import { TrackLineComponent } from '../music/track-line.component';
+import { artistLine, toTrackRequest } from '../music/music-utils';
+import { SearchRunner } from './search-runner';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 /** The content types searched as shelves of their own (library, people and providers), not through the video flow. */
+const DEBOUNCE_MS = 250;
+
+/** The content types without discovery rows or filter panel: their search is the shelves of the results. */
 const isShelf = (ct: 'all' | MediaType) => ct === 'book' || ct === 'album';
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
+  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, LucidePlay, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -71,7 +81,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Opted out of the social layer → the people tab is hidden. */
   protected readonly resultKey = searchResultKey;
   protected readonly sharingDisabled = this.auth.sharingDisabled;
-  private readonly requestsApi = inject(RequestsService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly injector = inject(Injector);
   private readonly streamingApi = inject(StreamingApiService);
@@ -79,6 +88,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
+  private readonly player = inject(AudioPlayerService);
+  private readonly addDialog = viewChild(AddDialogComponent);
+  private readonly runner = new SearchRunner({
+    state: this.state,
+    media: this.mediaService,
+    metadata: this.metadata,
+    music: this.music,
+    books: this.booksApi,
+  });
 
   readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
   private lastDiscoveryKey = '';
@@ -167,18 +185,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  readonly bookAuthors = signal<PersonListItem[]>([]);
-  readonly bookSeries = signal<CollectionSummary[]>([]);
-  readonly bookExternal = signal<SearchHit[]>([]);
-  readonly albumArtists = signal<MusicPersonRow[]>([]);
-  readonly bookLoading = signal(false);
-  /** Books to add on the All tab: owned ones already show in the library section. */
-  readonly allBookResults = computed(() =>
-    this.state.applyPanelFilters(this.bookExternal().filter((r) => r.existingMediaId == null)),
-  );
-
-  readonly requestedTitles = signal<Map<string, FliksRequestStatus>>(new Map());
-
   private static readonly SCROLL_KEY = 'search';
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private filterDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -249,33 +255,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  async loadRequestedIds() {
-    if (this.auth.hasPermission('requests.create') && !this.auth.hasPermission('media.create')) {
-      try {
-        const res = await this.requestsApi.list({ limit: 200 });
-        const byTitle = new Map<string, FliksRequestStatus>();
-        // Newest first: keep the first row of each title.
-        for (const r of res.data) {
-          const key = `${r.mediaType}:${r.provider}:${r.externalId}`;
-          if (!byTitle.has(key)) byTitle.set(key, r.status);
-        }
-        this.requestedTitles.set(byTitle);
-      } catch { /* ignore */ }
-    }
-  }
-
   onQueryInput(value: string) {
     this.state.query.set(value);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     // People keeps searching on an empty query (→ default roster); videos clear.
     if (value.trim() || this.state.tab() === 'people') {
-      this.searchTimer = setTimeout(() => this.runSearch(), 350);
+      this.searchTimer = setTimeout(() => this.runSearch(), DEBOUNCE_MS);
     } else {
-      this.state.localResults.set([]);
-      this.state.externalResults.set([]);
-      this.state.localLoading.set(false);
-      this.state.externalLoading.set(false);
-      this.clearBookResults();
+      this.runner.cancel();
+      this.state.clearResults();
       // An engaged filter keeps browsing (discover / local) with no text query.
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
       void this.applyFiltersNow();
@@ -307,16 +295,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   toggleExternal() {
     this.state.externalEnabled.update(v => !v);
     const on = this.state.externalEnabled();
-    if (!on) {
-      this.state.externalResults.set([]);
-      this.bookExternal.set([]);
-      this.state.externalLoading.set(false);
-    }
     if (this.state.query().trim()) {
-      if (on) {
-        if (this.searchTimer) clearTimeout(this.searchTimer);
-        this.runSearch();
-      }
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.runSearch();
     } else {
       // Discover mode: switch the filter source (TMDB /discover ↔ local browse).
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
@@ -325,6 +306,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   clearQuery() {
+    this.runner.cancel();
     this.state.clear();
     this.searchInput()?.nativeElement.focus();
     // Clearing the query isn't tracked by liveFilterEffect, so re-apply any
@@ -373,7 +355,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.discoveryTrending.set(trending);
       this.state.discoveryPopular.set(popular);
       this.state.discoverGenres.set(genres);
-      this.loadRequestedIds();
 
       // "Suggestions pour vous": TMDB catalog matching taste, not library-limited; derive top genres from library recommendations.
       const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
@@ -512,7 +493,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       const rows = await this.metadata.discoverByKind(kindOfListFilter(ct), opts);
       if (fresh()) {
         this.state.discoverResults.set(rows);
-        this.loadRequestedIds();
       }
     } catch {
       if (fresh()) this.state.discoverResults.set([]);
@@ -617,147 +597,83 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!q) return;
 
     const ct = this.state.contentType();
-    if (ct === 'book') return this.runBookSearch(q);
-    if (ct === 'album') return this.runAlbumSearch(q);
-    await this.runLocalSearch(q, ct);
-    if (this.state.externalEnabled()) await this.runExternalSearch(q, ct);
-  }
-
-  private clearBookResults() {
-    this.bookAuthors.set([]);
-    this.albumArtists.set([]);
-    this.bookSeries.set([]);
-    this.bookExternal.set([]);
-    this.bookLoading.set(false);
-  }
-
-  /** Library works, authors and series, plus the book providers when external search is on; each source fails soft. */
-  private async runBookSearch(q: string) {
-    const fresh = () => this.state.query().trim() === q && this.state.contentType() === 'book';
-    const external = this.state.externalEnabled();
-    this.bookLoading.set(true);
-    const [authors, series, rows] = await Promise.all([
-      this.booksApi.persons({ role: 'author', q, limit: 12 }).catch(() => []),
-      this.booksApi.collections({ kind: 'book', q, limit: 12 }).catch(() => []),
-      external ? this.metadata.search('book', q).catch(() => []) : Promise.resolve([]),
-      this.runLocalSearch(q, 'book'),
-    ]);
-    if (!fresh()) return;
-    this.bookAuthors.set(authors);
-    this.bookSeries.set(series);
-    this.bookExternal.set(rows);
-    this.bookLoading.set(false);
-  }
-
-  /** Library albums and artists, plus the album providers when external search is on; each source fails soft. */
-  private async runAlbumSearch(q: string) {
-    const fresh = () => this.state.query().trim() === q && this.state.contentType() === 'album';
-    this.bookLoading.set(true);
-    const [artists, rows] = await Promise.all([
-      this.music.people('artist', { q, limit: 12 }).catch(() => []),
-      this.state.externalEnabled() ? this.metadata.search('album', q).catch(() => []) : Promise.resolve([]),
-      this.runLocalSearch(q, 'album'),
-    ]);
-    if (!fresh()) return;
-    this.albumArtists.set(artists);
-    this.bookExternal.set(rows);
-    this.bookLoading.set(false);
-  }
-
-  albumLink(row: SearchHit): string[] {
-    return row.existingMediaId ? mediaDetailLink('album', row.existingMediaId) : ['/add/album', row.provider, row.externalId];
-  }
-
-  bookLink(row: SearchHit): string[] {
-    return row.existingMediaId ? mediaDetailLink('book', row.existingMediaId) : ['/add/book', row.provider, row.externalId];
-  }
-
-  /** Local library query with the discover panel filters pushed to the backend
-   *  (q + genres + year + rating + sort). Re-run standalone on a filter change. */
-  private async runLocalSearch(q: string, ct: 'all' | MediaType) {
-    const sig = (this.lastLocalSig = this.filterSig(q, ct));
-    // Selected genres are mapped to names via the loaded genre list; wait for it
-    // when a genre is selected so the filter isn't silently dropped.
     if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
     else void this.ensureDiscoverGenres();
-    const localParams: SearchParams = {
-      q,
-      limit: 20,
-      ...libraryFilterParams({
-        type: ct,
-        genreNames: this.state.selectedGenreNames(),
-        sort: this.state.discoverSort(),
-        voteMin: this.state.discoverVoteMin(),
-        yearMin: this.state.discoverYearMin(),
-        yearMax: this.state.discoverYearMax(),
-      }),
-    };
+    this.lastLocalSig = this.filterSig(q, ct);
+    this.runner.run(q, ct, { external: this.state.externalEnabled(), mediaParams: this.mediaParams(ct) });
+  }
 
-    const fresh = () => this.filterSig(this.state.query().trim(), this.state.contentType()) === sig;
-    this.state.localLoading.set(true);
-    try {
-      const res = await this.mediaService.getAll(localParams);
-      if (fresh()) this.state.localResults.set(res.data);
-    } catch {
-      if (fresh()) this.state.localResults.set([]);
-    } finally {
-      this.state.localLoading.set(false);
-    }
-    queueMicrotask(() => {
-      if (!fresh()) return;
-      void this.mediaService
-        .getAll(localParams, { force: true })
-        .then((data) => { if (fresh()) this.state.localResults.set(data.data); })
-        .catch(() => {});
+  /** The library query of the discover panel filters: text, genres, year, rating and sort. */
+  private mediaParams(ct: 'all' | MediaType): SearchParams {
+    return libraryFilterParams({
+      type: ct,
+      genreNames: this.state.selectedGenreNames(),
+      sort: this.state.discoverSort(),
+      voteMin: this.state.discoverVoteMin(),
+      yearMin: this.state.discoverYearMin(),
+      yearMax: this.state.discoverYearMax(),
     });
   }
 
-  /** External provider (TMDB) title search. Not re-run on filter changes — the
-   *  state computeds re-filter the fetched rows client-side. */
-  private async runExternalSearch(q: string, ct: 'all' | MediaType) {
-    const fresh = () => this.state.query().trim() === q && this.state.contentType() === ct;
-    this.state.externalLoading.set(true);
-    try {
-      let rows: SearchHit[];
-      let books: SearchHit[] = [];
-      if (ct !== 'all') {
-        rows = await this.metadata.search(ct, q);
-      } else {
-        const [movies, tv, b] = await Promise.all([
-          this.metadata.search('movie', q),
-          this.metadata.search('series', q),
-          this.metadata.search('book', q).catch(() => []),
-        ]);
-        rows = [...movies, ...tv].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-        books = b;
-      }
-      if (fresh()) {
-        this.bookExternal.set(books);
-        this.state.externalResults.set(rows);
-        this.loadRequestedIds();
-      }
-    } catch {
-      if (fresh()) this.state.externalResults.set([]);
-    } finally {
-      this.state.externalLoading.set(false);
+  /** Re-runs the library media alone after a filter change; the provider hits re-filter in the state. */
+  private async runLocalSearch(q: string, ct: 'all' | MediaType) {
+    this.lastLocalSig = this.filterSig(q, ct);
+    if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
+    this.runner.runMedia(q, this.mediaParams(ct));
+  }
+
+  // ── Cards ──
+
+  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create'));
+  protected readonly canRequest = computed(() => !this.canAdd() && this.auth.hasPermission('requests.create'));
+
+  protected readonly videoHeld = this.state.videoHeld;
+  protected readonly videoToAdd = this.state.videoToAdd;
+  protected readonly booksHeld = this.state.booksHeld;
+  protected readonly booksToAdd = this.state.booksToAdd;
+  protected readonly albumsHeld = this.state.albumsHeld;
+  protected readonly albumsToAdd = this.state.albumsToAdd;
+  protected readonly artistsToAdd = this.state.artistsToAdd;
+  protected readonly recordingsToAdd = this.state.recordingsToAdd;
+  /** The filter panel (genre, year, rating, sort) narrows videos; books and music have none. */
+  protected readonly showFilters = computed(() => !isShelf(this.state.contentType()));
+  protected readonly libraryCount = computed(
+    () =>
+      this.state.localResults().length + this.videoHeld().length + this.booksHeld().length + this.albumsHeld().length +
+      this.state.localArtists().length + this.state.localTracks().length + this.state.localAuthors().length + this.state.localSeries().length,
+  );
+  protected readonly providerCount = computed(
+    () => this.videoToAdd().length + this.booksToAdd().length + this.albumsToAdd().length + this.artistsToAdd().length + this.recordingsToAdd().length,
+  );
+
+  protected albumSubtitle(row: SearchHit): string {
+    return [row.artists?.join(', '), row.year].filter(Boolean).join(' \u00b7 ');
+  }
+
+  /** What the card of a provider hit says: owned, wanted or missing in the library, else the caller's request. */
+  cardStatus(row: SearchHit): CardBadge {
+    if (row.state === 'owned') return 'library';
+    if (row.state === 'wanted') return 'wanted';
+    if (row.state === 'missing') return 'missing';
+    switch (row.requestStatus) {
+      case 'available':
+        return 'library';
+      case 'declined':
+      case 'failed':
+        return 'declined';
+      case 'pending':
+      case 'approved':
+      case 'processing':
+        return 'pending';
+      default:
+        return null;
     }
   }
 
-  cardStatus(row: SearchHit): CardBadge {
-    if (row.existingMediaId) return 'library';
-    const asked = this.requestedTitles();
-    const reqStatus =
-      asked.get(`${row.mediaType}:tmdb:${row.tmdbId}`) ??
-      asked.get(`${row.mediaType}:${row.provider}:${row.externalId}`);
-    if (!reqStatus || reqStatus === 'removed') return null;
-    if (reqStatus === 'declined' || reqStatus === 'failed') return 'declined';
-    if (reqStatus === 'available') return 'library';
-    return 'pending';
-  }
-
+  /** The hit's page: the library's own for a title it holds, else the add preview. */
   externalLink(row: SearchHit): string[] {
     if (row.existingMediaId) {
-      return mediaDetailLink(row.existingMediaType ?? 'movie', row.existingMediaId);
+      return mediaDetailLink(row.existingMediaType ?? row.mediaType, row.existingMediaId);
     }
     const provider = row.provider ?? 'tmdb';
     const externalId =
@@ -765,4 +681,83 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return ['/add/' + kindOf(row.mediaType).providerSegment, provider, externalId];
   }
 
+  /** Add, or Request for a caller who cannot add; none for a hit held already or asked for. */
+  hitActions(row: SearchHit): CardAction[] {
+    if (row.existingMediaId != null || row.requestStatus === 'pending' || row.requestStatus === 'approved') return [];
+    if (!this.canAdd() && !this.canRequest()) return [];
+    return [
+      {
+        labelKey: this.canAdd() ? 'discover.add_to_library' : 'discover.request',
+        icon: 'plus',
+        run: () => this.add(row),
+      },
+    ];
+  }
+
+  protected add(row: SearchHit, recording?: RecordingHit): void {
+    const req: AddRequest = {
+      kind: row.mediaType,
+      provider: row.provider,
+      externalId: row.externalId,
+      title: row.title,
+      ...(recording ? { recording: { externalId: recording.externalId, albumExternalId: row.externalId } } : {}),
+    };
+    this.pendingAdd = { row, recording };
+    void this.addDialog()?.add(req);
+  }
+
+  private pendingAdd: { row: SearchHit; recording?: RecordingHit } | null = null;
+
+  /** The card flips to its new state without another search. */
+  protected onAdded(r: AddResult): void {
+    const hit = this.pendingAdd;
+    if (!hit) return;
+    this.pendingAdd = null;
+    const next: SearchHit = {
+      ...hit.row,
+      existingMediaId: r.mediaId ?? hit.row.existingMediaId,
+      state: r.mode === 'import' ? 'wanted' : hit.row.state,
+      requestStatus: r.mode === 'request' ? 'pending' : hit.row.requestStatus,
+    };
+    const swap = (rows: SearchHit[]) => rows.map((x) => (x === hit.row ? next : x));
+    for (const list of [this.state.movieHits, this.state.seriesHits, this.state.bookHits, this.state.albumHits]) list.update(swap);
+    this.state.recordingHits.update((rows) => rows.map((x) => (x.album === hit.row ? { ...x, album: next } : x)));
+  }
+
+  protected addRecording(rec: RecordingHit): void {
+    this.add(rec.album);
+  }
+
+  /** Wants that one track: the album is added with only it monitored. */
+  protected wantRecording(rec: RecordingHit): void {
+    this.add(rec.album, rec);
+  }
+
+  // ── Artists and tracks ──
+
+  /** A provider artist opens through the library person holding it, created on the first click. */
+  protected async openArtist(a: ArtistHit): Promise<void> {
+    try {
+      const id = a.personId ?? (await this.music.resolveArtist({ provider: a.provider, externalId: a.externalId, name: a.name, sortName: a.sortName })).id;
+      void this.router.navigate(['/artists', id]);
+    } catch {
+      /* the global error toast says why */
+    }
+  }
+
+  protected readonly artistLine = artistLine;
+
+  /** Plays the library tracks of the result from the tapped one. */
+  protected playTrack(rows: TrackRow[], index: number): Promise<void> {
+    const playable = rows.filter((r) => r.hasFile);
+    const start = Math.max(0, playable.indexOf(rows[index]!));
+    return this.player.playTracks(
+      playable.map((r) =>
+        toTrackRequest(r, { mediaId: r.mediaId, title: r.albumTitle, coverUrl: r.posterUrl, artists: '', albumGain: null, albumPeak: null }),
+      ),
+      start,
+    );
+  }
+
+  protected readonly placeholders = [0, 1, 2, 3, 4, 5];
 }

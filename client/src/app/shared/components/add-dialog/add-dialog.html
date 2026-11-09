@@ -1,0 +1,115 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold text-primary">{{ titleKey() | translate }}</h3>
+        <p class="text-base-content/80">{{ req()?.title }}</p>
+      </div>
+    </app-modal-header>
+
+    @if (noLibrary()) {
+      <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.no_compatible_library' | translate }}</div>
+    }
+    @if (loadFailed()) {
+      <div role="alert" class="alert alert-error text-sm mt-4 py-2">{{ 'discover.profiles_load_error' | translate }}</div>
+    } @else if (isVideo() && !loading() && choices().quality.length === 0 && !qualityLocked()) {
+      <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.no_quality_profile' | translate }}</div>
+    }
+
+    @if (hasSeasons()) {
+      @if (seasonsFailed()) {
+        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
+          {{ (mode() === 'import' ? 'discover.seasons_unavailable' : 'discover.seasons_unavailable_request') | translate }}
+        </div>
+      }
+      <app-season-picker
+        class="block mt-4"
+        [seasons]="seasons()"
+        [selected]="selectedSeasons()"
+        [locked]="alreadyRequested()"
+        [loading]="seasonsLoading()"
+        [selectedBadgeKey]="mode() === 'import' ? 'discover.status_monitored' : 'discover.status_selected'"
+        [unselectedBadgeKey]="mode() === 'import' ? 'discover.status_not_monitored' : 'discover.status_not_requested'"
+        (seasonToggled)="toggleSeason($event)"
+        (allToggled)="toggleAllSeasons()"
+      />
+    }
+
+    @if (kind() === 'book') {
+      <div class="mt-4">
+        <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
+        <app-wants-editor [(wants)]="wants" [profileRequired]="true" />
+        @if (!loading() && !wantsReady()) {
+          <p class="text-sm text-warning" data-testid="book-profile-missing">{{ 'wants.profile_required' | translate }}</p>
+        }
+        @if (mode() === 'request' && req()?.requestedWants?.length) {
+          <p class="text-sm text-base-content/60" data-testid="book-already-requested">
+            {{ 'book_requests.already_requested' | translate }}
+            <app-request-wants [wants]="req()!.requestedWants!" />
+          </p>
+        }
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+    } @else {
+      <div class="mt-6 flex flex-col gap-3">
+        @if (libraries().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="libraryId()" (ngModelChange)="selectLibrary($event ? +$event : null)">
+              @for (l of libraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
+        @if (isVideo() && choices().quality.length && !qualityLocked()) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="qualityId()" (ngModelChange)="qualityId.set(+$event)">
+              @for (p of choices().quality; track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        @if (isVideo() && choices().language.length && !locked()) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="languageId()" (ngModelChange)="languageId.set(+$event)">
+              @for (p of choices().language; track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+        @if (kind() === 'album' && mode() === 'request' && choices().wantQuality.length) {
+          <label class="form-control w-full">
+            <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="audioQualityId()" (ngModelChange)="audioQualityId.set(+$event)">
+              @for (p of choices().wantQuality; track p.id) {
+                <option [ngValue]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+    }
+
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" [disabled]="!canSubmit()" (click)="submit()">
+        @if (busy()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ confirmKey() | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()">close</button>
+  </form>
+</dialog>

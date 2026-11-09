@@ -113,57 +113,5 @@
 }
 
 @if (book() && !inLibraryLink() && (canImport() || canRequest())) {
-  <dialog #addDialog class="modal">
-    <div class="modal-box max-w-2xl">
-      <app-modal-header>
-        <div>
-          <h3 class="text-lg font-bold text-primary">{{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}</h3>
-          <p class="text-base-content/80">{{ book()!.title }}</p>
-        </div>
-      </app-modal-header>
-
-      <div class="mt-4 flex flex-col gap-3">
-        @if (bookLibraries().length === 0 && libraries().length) {
-          <div role="alert" class="alert alert-warning text-sm py-2">{{ 'discover.no_compatible_library' | translate }}</div>
-        }
-        @if (bookLibraries().length > 1) {
-          <label class="form-control w-full">
-            <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
-            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="libraryId()" (ngModelChange)="selectLibrary($event ? +$event : null)">
-              @for (l of bookLibraries(); track l.id) {
-                <option [ngValue]="l.id">{{ l.name }}</option>
-              }
-            </select>
-          </label>
-        }
-        <div>
-          <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
-          <app-wants-editor [(wants)]="wants" [profileRequired]="true" />
-          @if (!wantsReady()) {
-            <p class="text-sm text-warning" data-testid="book-profile-missing">{{ 'wants.profile_required' | translate }}</p>
-          }
-        </div>
-        <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-        @if (canRequest() && requested().length) {
-          <p class="text-sm text-base-content/60" data-testid="book-already-requested">
-            {{ 'book_requests.already_requested' | translate }}
-            <app-request-wants [wants]="requested()" />
-          </p>
-        }
-      </div>
-
-      <app-modal-footer>
-        <button type="button" class="btn btn-ghost" (click)="closeDialog()">{{ 'common.cancel' | translate }}</button>
-        <button type="button" class="btn btn-primary" [disabled]="adding() || !bookLibraries().length || !wantsReady()" (click)="canImport() ? add() : request()">
-          @if (adding()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ (canImport() ? 'discover.add_to_library' : 'book_requests.request') | translate }}
-        </button>
-      </app-modal-footer>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeDialog()">close</button>
-    </form>
-  </dialog>
+  <app-add-dialog (done)="onAdded($event)" />
 }

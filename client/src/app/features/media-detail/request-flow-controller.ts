@@ -6,11 +6,11 @@ import type { RequestsService, TitleKey, TitleRequestState } from '../../core/se
 import type { AuthService } from '../../core/services/auth.service';
 import type { ConfirmationService } from '../../core/services/confirmation.service';
 import type { ToastService } from '../../core/services/toast.service';
-import type { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
+import type { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
 
 export interface RequestFlowHost {
   media(): Media | null;
-  requestModal(): RequestModalComponent | undefined;
+  addDialog(): AddDialogComponent | undefined;
 }
 
 export interface RequestFlowDeps {
@@ -156,9 +156,13 @@ export class RequestFlowController {
     const key = mediaTitleKey(m);
     if (!m || !key || m.type === 'book') return;
     const state = this.titleState();
-    this.host.requestModal()?.open({
+    const [provider, externalId] = titleRef(key);
+    void this.host.addDialog()?.add({
+      kind: m.type,
       title: m.title,
-      mediaType: m.type,
+      provider,
+      externalId,
+      mode: 'request',
       titleKey: key,
       alreadyRequestedSeasons: this.requestedSeasons(),
       ...extra,

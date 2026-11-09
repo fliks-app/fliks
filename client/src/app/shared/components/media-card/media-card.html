@@ -117,7 +117,7 @@
     }
 
     <!-- Top-left: missing-files indicator (auto), media type, status badge, episode number -->
-    @if (_resolvedStatus() === 'missing' || statusBadge() || _topLeftBadge() || typeBadge()) {
+    @if (_resolvedStatus() === 'missing' || statusBadge() || _topLeftBadge() || typeBadge() || stateChip()) {
       <div class="absolute top-2 left-2 z-10 flex items-center gap-1">
         @if (typeBadge()) {
           <span class="badge badge-sm badge-soft" [ngClass]="typeBadge()!.class">{{
@@ -132,6 +132,9 @@
             [attr.title]="'media_card.missing_files' | translate"
           ></svg>
         }
+        @if (stateChip()) {
+          <span class="badge badge-sm" [ngClass]="stateChip()!.class" data-testid="state-chip">{{ stateChip()!.text }}</span>
+        }
         @if (statusBadge()) {
           <span class="badge badge-sm" [ngClass]="statusBadge()!.class">{{ statusBadge()!.text }}</span>
         } @else if (_topLeftBadge()) {
@@ -141,7 +144,7 @@
     }
 
     <!-- Top-right: discover badge OR status icon -->
-    @if (badge()) {
+    @if (badge() && !stateChip()) {
       <div class="absolute top-1.5 right-1.5 z-10">
         @switch (badge()) {
           @case ('library') {

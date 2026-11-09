@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { abortable } from '../../utils/abortable';
 import type { Media } from './media.service';
 import type {
   AlbumCandidate,
@@ -16,16 +17,26 @@ import type {
 export class MusicApiService {
   private readonly http = inject(HttpClient);
 
-  tracks(q: TracksQuery = {}): Promise<TrackRow[]> {
+  tracks(q: TracksQuery = {}, signal?: AbortSignal): Promise<TrackRow[]> {
     let params = new HttpParams();
     for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== false) params = params.set(k, String(v));
-    return firstValueFrom(this.http.get<TrackRow[]>('/api/tracks', { params }));
+    return abortable(this.http.get<TrackRow[]>('/api/tracks', { params }), signal);
   }
 
-  people(role: 'artist' | 'composer', q: { libraryId?: number; q?: string; page?: number; limit?: number } = {}): Promise<MusicPersonRow[]> {
+  people(role: 'artist' | 'composer', q: { libraryId?: number; q?: string; page?: number; limit?: number } = {}, signal?: AbortSignal): Promise<MusicPersonRow[]> {
     let params = new HttpParams().set('role', role);
     for (const [k, v] of Object.entries(q)) if (v !== undefined) params = params.set(k, String(v));
-    return firstValueFrom(this.http.get<MusicPersonRow[]>('/api/persons', { params }));
+    return abortable(this.http.get<MusicPersonRow[]>('/api/persons', { params }), signal);
+  }
+
+  /** The library person of an artist a provider found, created when new. */
+  resolveArtist(body: { provider: string; externalId: string; name: string; sortName?: string | null }): Promise<{ id: number }> {
+    return firstValueFrom(this.http.post<{ id: number }>('/api/persons/resolve', body));
+  }
+
+  /** Adds the album of a provider recording with that one track wanted. */
+  wantRecording(body: { provider: string; externalId: string; albumExternalId: string; libraryId?: number; folderId?: number }): Promise<{ mediaId: number; itemId: number | null }> {
+    return firstValueFrom(this.http.post<{ mediaId: number; itemId: number | null }>('/api/music/want-recording', body));
   }
 
   discography(personId: number): Promise<Discography> {

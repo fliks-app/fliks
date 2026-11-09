@@ -51,13 +51,6 @@ async function settle(fixture: ReturnType<typeof setup>['fixture']) {
   return fixture.nativeElement as HTMLElement;
 }
 
-async function flushProfiles(fixture: ReturnType<typeof setup>['fixture'], http: HttpTestingController) {
-  for (const r of http.match((q) => q.url === '/api/profiles/quality')) {
-    r.flush([r.request.params.get('family') === 'text' ? { id: 7, name: 'Text' } : { id: 8, name: 'Audio' }]);
-  }
-  await settle(fixture);
-}
-
 describe('BookPreviewComponent', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
@@ -76,50 +69,13 @@ describe('BookPreviewComponent', () => {
     expect(el.querySelectorAll('li').length).toBe(bookPreviewFixture.editions.length);
   });
 
-  it('shows the folder select only when the library has several folders', async () => {
-    const one = setup([lib(1, [{ id: 5, name: 'a' }])]);
-    expect((await settle(one.fixture)).querySelectorAll('app-library-folder-select select').length).toBe(0);
-    TestBed.resetTestingModule();
-
-    const many = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
-    expect((await settle(many.fixture)).querySelectorAll('app-library-folder-select select').length).toBe(1);
-  });
-
-  it('adds with the chosen library and folder, then opens the book', async () => {
-    const { fixture, http, navigate } = setup([lib(1, [{ id: 5, name: 'a' }, { id: 6, name: 'b' }])]);
-    await settle(fixture);
-    await flushProfiles(fixture, http);
-    const pending = fixture.componentInstance.add();
-    const req = http.expectOne('/api/media/import');
-    expect(req.request.body).toEqual({ type: 'book', provider: 'openlibrary', externalId: 'OL1W', libraryId: 1, folderId: 5,
-      wants: [{ family: 'text', language: null, qualityProfileId: 7 }] });
-    req.flush({ id: 42, type: 'book' });
-    await pending;
+  it('opens the add dialog on Add, and navigates to the book once added', async () => {
+    const { fixture, navigate } = setup([lib(1)]);
+    const el = await settle(fixture);
+    expect(el.querySelector('app-add-dialog')).not.toBeNull();
+    const cmp = fixture.componentInstance as unknown as { onAdded(r: { mode: string; mediaId: number | null }): void };
+    cmp.onAdded({ mode: 'import', mediaId: 42 });
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
-  });
-
-  it('adds with the wants edited in the editor', async () => {
-    const { fixture, http } = setup([lib(1)]);
-    const el = await settle(fixture);
-    expect(el.querySelectorAll('[data-testid="want-row"]')).toHaveLength(1);
-    await flushProfiles(fixture, http);
-    (el.querySelector('[data-testid="wants-editor"] > button') as HTMLButtonElement).click();
-    await settle(fixture);
-    const pending = fixture.componentInstance.add();
-    const req = http.expectOne('/api/media/import');
-    expect(req.request.body.wants).toHaveLength(2);
-    req.flush({ id: 42, type: 'book' });
-    await pending;
-  });
-
-  it('blocks Add while a want has no profile', async () => {
-    const { fixture, http } = setup([lib(1)]);
-    const el = await settle(fixture);
-    const add = () => el.querySelector('dialog .btn-primary') as HTMLButtonElement;
-    expect(add().disabled).toBe(true);
-    expect(el.querySelector('[data-testid="book-profile-missing"]')).not.toBeNull();
-    await flushProfiles(fixture, http);
-    expect(add().disabled).toBe(false);
   });
 
   it('offers no Add without the import permission', async () => {
@@ -129,27 +85,14 @@ describe('BookPreviewComponent', () => {
     expect(el.querySelector('dialog')).toBeNull();
   });
 
-  it('requests the wished editions when the user cannot add', async () => {
+  it('hands the editions already requested to the dialog for a user who cannot add', async () => {
     const { fixture, http } = setup([lib(1)], false, ['requests.create']);
     await settle(fixture);
     http
       .expectOne('/api/requests/title-state?mediaType=book&externalId=OL1W')
       .flush({ requested: true, requestedWants: [{ family: 'audio', language: 'en' }] });
-    const el = await settle(fixture);
-    expect(el.querySelector('[data-testid="book-already-requested"]')).not.toBeNull();
-    await flushProfiles(fixture, http);
-    const pending = fixture.componentInstance.request();
-    const req = http.expectOne('/api/requests');
-    expect(req.request.body).toEqual({
-      mediaType: 'book',
-      externalId: 'OL1W',
-      title: bookPreviewFixture.title,
-      libraryId: 1,
-      wants: [{ family: 'text', language: null, qualityProfileId: 7 }],
-    });
-    req.flush({ id: 1 });
-    await new Promise((r) => setTimeout(r));
-    http.expectOne('/api/requests/title-state?mediaType=book&externalId=OL1W').flush({ requested: true });
-    await pending;
+    await settle(fixture);
+    const cmp = fixture.componentInstance as unknown as { requested(): unknown[] };
+    expect(cmp.requested()).toEqual([{ family: 'audio', language: 'en' }]);
   });
 });

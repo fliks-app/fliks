@@ -57,7 +57,17 @@ export interface CreateBookRequestBody {
   folderId?: number;
 }
 
-export type CreateRequestBody = CreateVideoRequestBody | CreateBookRequestBody;
+/** An album is the release group it is, asked with its audio want. */
+export interface CreateAlbumRequestBody {
+  mediaType: 'album';
+  externalId: string;
+  title: string;
+  wants: WantSpec[];
+  libraryId?: number;
+  folderId?: number;
+}
+
+export type CreateRequestBody = CreateVideoRequestBody | CreateBookRequestBody | CreateAlbumRequestBody;
 
 export interface UpdateRequestBody {
   qualityProfileId?: number;

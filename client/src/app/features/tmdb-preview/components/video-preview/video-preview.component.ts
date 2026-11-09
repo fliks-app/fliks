@@ -13,8 +13,8 @@ import { RequestsService, TitleKey, TitleRequestState, FliksRequestRow, VideoMed
 import { RequestDeclineModalComponent } from '../../../requests/request-decline-modal/request-decline-modal.component';
 import { RequestEditModalComponent } from '../../../requests/request-edit-modal/request-edit-modal.component';
 import { RequestDeclineFlow, RequestEditFlow } from '../../../requests/request-flows';
-import { RequestModalComponent } from '../request-modal/request-modal.component';
-import { ImportModalComponent } from '../import-modal/import-modal.component';
+import { AddDialogComponent } from '../../../../shared/components/add-dialog/add-dialog';
+import type { AddResult } from '../../../../shared/components/add-dialog/add-plan';
 import { PreviewSeasonsComponent } from '../preview-seasons/preview-seasons.component';
 import { localizeLanguage } from '../../../../core/utils/language.utils';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
@@ -31,7 +31,7 @@ import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 /** The add preview of a movie or a series: its facts, seasons and cast, and Add, Request or the manager's pending requests. */
 @Component({
   selector: 'app-video-preview',
-  imports: [NgTemplateOutlet, TranslatePipe, RequestModalComponent, ImportModalComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucidePlay, LucidePlus],
+  imports: [NgTemplateOutlet, TranslatePipe, AddDialogComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucidePlay, LucidePlus],
   templateUrl: './video-preview.component.html',
   host: { class: 'block' },
 })
@@ -118,8 +118,7 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   readonly actionBusyId = signal<number | null>(null);
 
 
-  private readonly requestModal = viewChild(RequestModalComponent);
-  private readonly importModal = viewChild(ImportModalComponent);
+  private readonly addDialog = viewChild(AddDialogComponent);
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly editModal = viewChild(RequestEditModalComponent);
   readonly decline = new RequestDeclineFlow(() => this.declineModal());
@@ -287,13 +286,18 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   openImportModal() {
     const m = this.media();
     if (!m) return;
-    this.importModal()?.open({
+    void this.addDialog()?.add({
+      kind: this.type(),
       title: m.title,
-      mediaType: this.type(),
-      tmdbId: m.tmdbId,
       provider: this.provider(),
       externalId: this.externalId(),
+      mode: 'import',
     });
+  }
+
+  protected onAdded(r: AddResult) {
+    if (r.mode === 'request') this.refreshExistingRequests();
+    else if (r.mediaId != null) void this.router.navigate(mediaDetailLink(this.type(), r.mediaId));
   }
 
   /** Pending requests on this title; bypasses the cache so an approve/decline shows on the next visit. */
@@ -399,9 +403,12 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     const type = this.type();
     if (!m) return;
     const state = this.titleState();
-    this.requestModal()?.open({
+    void this.addDialog()?.add({
+      kind: type,
       title: m.title,
-      mediaType: type,
+      provider: this.provider(),
+      externalId: this.externalId(),
+      mode: 'request',
       titleKey: this.titleKey(m),
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,

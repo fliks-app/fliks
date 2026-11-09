@@ -8,21 +8,15 @@
 >
   <ng-container ngProjectAs="[heroActions]">
     @if (canImport()) {
-      <div class="flex flex-wrap items-end gap-2">
-        @if (albumLibraries().length > 1) {
-          <select appTvSelect class="select select-bordered" [attr.aria-label]="'follows.library' | translate" [ngModel]="libraryId()" (ngModelChange)="selectLibrary(+$event)">
-            @for (l of albumLibraries(); track l.id) {
-              <option [ngValue]="l.id">{{ l.name }}</option>
-            }
-          </select>
-        }
-        @if (folders().length > 1) {
-          <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-        }
-        <button type="button" class="btn btn-primary gap-2" [disabled]="libraryId() === null || adding()" (click)="add()" data-hero-actions>
-          <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
-        </button>
-      </div>
+      <button type="button" class="btn btn-primary gap-2" (click)="open()" data-hero-actions>
+        <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
+      </button>
+    } @else if (requested()) {
+      <span class="badge badge-warning" data-hero-actions>{{ 'discover.already_requested' | translate }}</span>
+    } @else if (canRequest()) {
+      <button type="button" class="btn btn-secondary" (click)="open()" data-hero-actions>{{ 'discover.request' | translate }}</button>
     }
   </ng-container>
 </app-hero-base>
+
+<app-add-dialog (done)="onAdded($event)" />

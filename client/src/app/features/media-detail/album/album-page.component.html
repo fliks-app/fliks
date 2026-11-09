@@ -70,7 +70,7 @@
   }
 
   <ng-template #row let-t>
-    <li class="flex items-center gap-1" [class.opacity-50]="!t.hasFile" data-testid="track">
+    <li class="flex items-center gap-1" data-testid="track">
       <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
         <app-track-line [title]="t.title" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
           <span lead class="w-8 shrink-0 text-right tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>

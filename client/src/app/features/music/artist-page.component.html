@@ -30,8 +30,7 @@
               [imageUrl]="a.posterUrl"
               [title]="a.title"
               [subtitle]="a.year ? '' + a.year : undefined"
-              [grayscale]="true"
-              [dimmed]="true"
+              badge="missing"
               [hideStatusBar]="true"
               [link]="a.externalId ? ['/add/album', 'musicbrainz', a.externalId] : null"
             />
