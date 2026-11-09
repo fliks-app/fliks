@@ -21,7 +21,9 @@ class DropdownStub {
 }
 
 @Component({ selector: 'app-remote-picker-list', template: '' })
-class PickerListStub {}
+class PickerListStub {
+  readonly transferOnly = input(false);
+}
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   return {
