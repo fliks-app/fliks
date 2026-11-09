@@ -23,19 +23,18 @@ const other: UiContribution = { ...legacy, id: 'fliks.acme.other', action: { kin
 const ids = (l: UiContribution[]) => l.map((c) => c.id);
 
 describe('withCoreAcquisition', () => {
-  it('offers core rows when a provider serves the title and drops the plugin duplicate', () => {
-    expect(ids(withCoreAcquisition('work', ctx(), [legacy, other]))).toEqual([
-      'core.grab_best_work',
-      'core.search_releases_work',
-      'fliks.acme.other',
-    ]);
+  it('offers the core Files submenu when a provider serves the title and drops the plugin duplicate', () => {
+    const rows = withCoreAcquisition('work', ctx(), [legacy, other]);
+    expect(ids(rows)).toEqual(['core.files_group_work', 'fliks.acme.other']);
+    expect(rows[0].action.kind).toBe('submenu');
+    expect(ids(rows[0].children!)).toEqual(['core.search_releases_work', 'core.grab_best_work']);
   });
 
   it('uses the group and item action ids at those levels', () => {
     const actions = (level: 'group' | 'item') =>
-      withCoreAcquisition(level, ctx(), []).map((c) => (c.action.kind === 'action' ? c.action.actionId : ''));
-    expect(actions('group')).toEqual(['group.grab-best', 'group.search-releases']);
-    expect(actions('item')).toEqual(['item.grab-best', 'item.search-releases']);
+      withCoreAcquisition(level, ctx(), [])[0].children!.map((c) => (c.action.kind === 'action' ? c.action.actionId : ''));
+    expect(actions('group')).toEqual(['group.search-releases', 'group.grab-best']);
+    expect(actions('item')).toEqual(['item.search-releases', 'item.grab-best']);
   });
 
   it.each([

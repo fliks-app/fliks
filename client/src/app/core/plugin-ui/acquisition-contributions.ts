@@ -5,36 +5,47 @@ import { evaluateWhen, type WhenContext } from './when-evaluator';
 const PREFIX = { work: 'media', group: 'group', item: 'item' } as const;
 const SLOT = { work: 'media.actions', group: 'media.group.actions', item: 'media.item.actions' } as const;
 
-/** Core's release-picker rows of a level: shown once a provider has a source serving the kind at that level. */
-function rowsOf(level: AcquisitionLevel): UiContribution[] {
-  const when: UiContribution['when'] = ['hasPermission:media.grab', 'hasQualityProfile', 'hasAcquisitionProvider'];
-  return [
-    { id: 'core.grab_best', weight: 500, labelKey: 'media_detail.grab_best', icon: 'download', actionId: 'grab-best' },
-    { id: 'core.search_releases', weight: 600, labelKey: 'media_detail.search_releases', icon: 'search', actionId: 'search-releases' },
-  ].map(({ actionId, ...c }) => ({
-    ...c,
-    id: `${c.id}_${level}`,
+/** Core's "Files" submenu of a level, just above "Advanced": shown once a provider has a source serving the kind at that level. */
+function groupOf(level: AcquisitionLevel): UiContribution {
+  const row = (id: string, weight: number, labelKey: string, icon: string, actionId: string): UiContribution => ({
+    id: `${id}_${level}`,
     slot: SLOT[level],
-    when,
+    weight,
+    labelKey,
+    icon,
     action: { kind: 'action', actionId: `${PREFIX[level]}.${actionId}` },
-  }));
+  });
+  return {
+    id: `core.files_group_${level}`,
+    slot: SLOT[level],
+    weight: 1050,
+    labelKey: 'media_detail.files_group',
+    icon: 'download',
+    when: ['hasPermission:media.grab', 'hasQualityProfile', 'hasAcquisitionProvider'],
+    action: { kind: 'submenu' },
+    children: [
+      row('core.search_releases', 10, 'media_detail.search_releases', 'search', 'search-releases'),
+      row('core.grab_best', 20, 'media_detail.grab_best', 'zap', 'grab-best'),
+    ],
+  };
 }
 
-export const CORE_ACQUISITION_ACTIONS: Record<AcquisitionLevel, readonly UiContribution[]> = {
-  work: rowsOf('work'),
-  group: rowsOf('group'),
-  item: rowsOf('item'),
+export const CORE_ACQUISITION_ACTIONS: Record<AcquisitionLevel, UiContribution> = {
+  work: groupOf('work'),
+  group: groupOf('group'),
+  item: groupOf('item'),
 };
 
-/** Core's rows that pass `ctx`, plus the plugin ones minus any that offer the same action. A plugin row still shows (under its own `when`)
- *  where core's does not, which keeps a provider that has not published sources reachable. */
+/** Core's submenu when it passes `ctx`, plus the plugin rows minus any that offer one of its actions. A plugin row still shows (under its
+ *  own `when`) where core's does not, which keeps a provider that has not published sources reachable. */
 export function withCoreAcquisition(
   level: AcquisitionLevel,
   ctx: WhenContext,
   plugin: readonly UiContribution[],
 ): UiContribution[] {
-  const core = CORE_ACQUISITION_ACTIONS[level].filter((c) => evaluateWhen(c.when, ctx));
-  const owned = new Set(core.map((c) => (c.action.kind === 'action' ? c.action.actionId : '')));
+  const group = CORE_ACQUISITION_ACTIONS[level];
+  if (!evaluateWhen(group.when, ctx)) return [...plugin];
+  const owned = new Set((group.children ?? []).map((c) => (c.action.kind === 'action' ? c.action.actionId : '')));
   const keep = (c: UiContribution) => !(c.action.kind === 'action' && owned.has(c.action.actionId));
-  return [...core, ...plugin.filter(keep)];
+  return [group, ...plugin.filter(keep)];
 }
