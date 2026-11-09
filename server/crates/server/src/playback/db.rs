@@ -66,6 +66,7 @@ pub struct ContinueItem {
     fanart_url: Option<String>,
     still_url: Option<String>,
     episode_label: Option<String>,
+    release_date: Option<String>,
     progress_percent: f64,
 }
 
@@ -388,6 +389,7 @@ pub async fn continue_watching(
                   x.dur AS duration_seconds, x."lastPlayedAt" AS last_played_at,
                   x.title AS media_title, x.poster AS poster_url, x.fanart AS fanart_url,
                   x.kind AS media_type, x.still AS still_url, x.label AS episode_label,
+                  x.rdate AS release_date,
                   CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100)
                        ELSE 0 END AS progress_percent
            FROM (
@@ -396,6 +398,10 @@ pub async fn continue_watching(
                     m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
                     m.type AS kind,
                     e."stillUrl" AS still,
+                    to_char(CASE WHEN e."groupId" IS NOT NULL THEN e."airDate"
+                                 ELSE (SELECT d.date FROM media_release_dates d
+                                       WHERE d."mediaId" = m.id AND d.kind = 'release') END,
+                            'YYYY-MM-DD') AS rdate,
                     CASE WHEN e."groupId" IS NOT NULL
                          THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
                               || COALESCE(' - ' || e.title, '') END AS label
