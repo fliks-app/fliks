@@ -47,6 +47,7 @@ import { IdentifyModalHostComponent } from '../components/identify-modal-host/id
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
+import { SessionStripService } from '../cast-overlay/session-strip.service';
 import { AudioPlayerComponent } from '../audio-player/audio-player';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
@@ -158,6 +159,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly castPlayer = inject(CastPlayerService);
   private readonly session = inject(PlaybackSession);
   private readonly audio = inject(AudioPlayerService);
+  private readonly strip = inject(SessionStripService);
   protected readonly nowPlayingTitle = computed(() => this.session.nowPlaying()?.title ?? '');
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);
@@ -213,7 +215,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   });
   /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
   readonly chromeBottomTotal = computed(() => {
-    const bars = (!this.device.isTv() && !this.session.isLocal() ? 1 : 0) + (this.audio.active() ? 1 : 0);
+    const bars = (!this.device.isTv() && !this.session.isLocal() ? 1 : 0) + (this.strip.observed() ? 1 : 0) + (this.audio.active() ? 1 : 0);
     return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
   });
 

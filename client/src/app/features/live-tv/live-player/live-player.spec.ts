@@ -9,6 +9,7 @@ import { LiveTvApiService, PlaySession } from '../../../core/services/api/livetv
 import { DeviceService } from '../../../core/services/device.service';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { SessionSyncService } from '../../../core/services/session-sync.service';
 import { ControlsVisibilityService } from '../../player/controls/controls-visibility';
 
 function makeSession(id: string, channelId: number): PlaySession {
@@ -82,6 +83,7 @@ function createComponent() {
       },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (key: string) => key } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {} } },
       ControlsVisibilityService,
     ],
   });

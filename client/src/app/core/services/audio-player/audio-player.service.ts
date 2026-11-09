@@ -25,7 +25,7 @@ import {
 } from '../../plugins/audio-player.plugin';
 import { SessionSyncService, type AccountSession, type SupersededPlayback } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
-import { MusicApiService } from '../api/music-api.service';
+import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
@@ -93,6 +93,8 @@ type BeatBody = Parameters<StreamingApiService['updatePlaybackState']>[1];
 const BEAT_MS = 15_000;
 const PRELOAD_S = 20;
 const RESTART_S = 3;
+/** Ids a wire queue carries at most (the server and `/api/tracks?ids` cap). */
+const WIRE_QUEUE_MAX = 500;
 const POSITION_STATE_MS = 1000;
 const PREFS_KEY = 'fliks.audio.prefs';
 const BOOKMARKS_KEY = 'fliks.audio.bookmarks';
@@ -223,7 +225,7 @@ export class AudioPlayerService {
     this.sessionSync.registerResumer('audio', (s, positionSeconds) => this.resumeSession(s, positionSeconds));
     this.sessionSync.registerPlayer({
       sessionId: () => this.sessionId,
-      active: () => this._track() !== null,
+      active: () => this._track() !== null && (this._playing() || this._loading()),
       yield: () => this.yieldToTakeover(),
     });
     let signedIn = !!this.auth.user();
@@ -239,8 +241,14 @@ export class AudioPlayerService {
     const req = this._track();
     if (!req) return null;
     const positionSeconds = this._position();
+    const queue = this._musicMode() ? this.wireQueue() : null;
     await this.close();
-    return { title: req.title, positionSeconds, resume: () => this.play(req) };
+    if (!queue) return { title: req.title, positionSeconds, resume: () => this.play(req, { startAt: positionSeconds }) };
+    return {
+      title: req.title,
+      positionSeconds,
+      resume: () => this.startQueue(queue, queue.shuffle, queue.repeat, positionSeconds, true),
+    };
   }
 
   /** The account left: its queue goes without a progress beat, which would reach the next account. */
@@ -338,9 +346,10 @@ export class AudioPlayerService {
   }
 
   /** Restarts the track past a few seconds, else the previous one. */
-  previous(): void {
+  /** `restart` false skips the "past 3 s restarts the track" rule: a remote prev means the previous track. */
+  previous(restart = true): void {
     if (!this._musicMode()) return this.previousChapter();
-    if (this._position() > RESTART_S) return void this.seek(0);
+    if (restart && this._position() > RESTART_S) return void this.seek(0);
     if (this.routed({ type: 'prev' })) return;
     const t = this.mq.previous();
     if (t) this.syncQueue(), void this.goTo(t);
@@ -1011,6 +1020,8 @@ export class AudioPlayerService {
   /** Saves the position, ends the session and drops the player. */
   async close(): Promise<void> {
     this.generation++;
+    this.level = 1;
+    this.muted = false;
     if (this.casting) this.cast?.stop();
     await this.release();
     void this.nativeAudio?.stop().catch(() => undefined);
@@ -1214,14 +1225,15 @@ export class AudioPlayerService {
   }
 
   private async queueOf(q: WireQueue): Promise<{ tracks: MusicTrackRequest[]; index: number }> {
-    const tracks = await this.music.trackRequests(q.itemIds);
-    return { tracks, index: Math.max(0, tracks.findIndex((t) => t.itemId === q.itemIds[q.index])) };
+    const aligned = alignTrackRows(q.itemIds, await this.music.trackRequests(q.itemIds));
+    return { tracks: aligned.map((a) => a.row), index: Math.max(0, aligned.findIndex((a) => a.wireIndex >= q.index)) };
   }
 
   /** Opens a remote queue where the sender left it; the order is the sender's, never reshuffled. */
   private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<void> {
+    const generation = this.generation;
     const { tracks, index } = await this.queueOf(q);
-    if (!tracks.length || this.blockedByParty()) return;
+    if (generation !== this.generation || !tracks.length || this.blockedByParty()) return;
     this.mq.adopt(tracks, index, shuffle);
     this.mq.repeat = repeat;
     this.syncQueue();
@@ -1236,7 +1248,9 @@ export class AudioPlayerService {
       return this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
     }
     if (!cmd.itemId) return;
+    const generation = this.generation;
     const req = cmd.kind === 'album' ? null : cmd.mediaId ? await this.audiobookRequest(cmd.mediaId, cmd.itemId) : null;
+    if (generation !== this.generation) return;
     if (req) return this.play(req, { startAt, paused: !autoplay });
     return this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
   }
@@ -1273,11 +1287,12 @@ export class AudioPlayerService {
         this.next();
         break;
       case 'prev':
-        this.previous();
+        this.previous(false);
         break;
       case 'stop':
+        this.remote.markApplied(cmd.cmdId);
         await this.close();
-        break;
+        return;
       case 'volume':
         if (cmd.level !== undefined) this.setLevel(cmd.level, this.muted);
         break;
@@ -1310,6 +1325,10 @@ export class AudioPlayerService {
   private async replaceQueue(q: WireQueue, shuffle: boolean): Promise<void> {
     const { tracks, index } = await this.queueOf(q);
     if (!tracks.length) return;
+    if (tracks.length === this.mq.tracks.length && tracks.every((t, i) => t.itemId === this.mq.tracks[i].itemId)) {
+      this.playQueueAt(index);
+      return;
+    }
     if (tracks[index].itemId !== this.mq.current?.itemId) {
       this.mq.adopt(tracks, index, shuffle);
       this.syncQueue();
@@ -1374,11 +1393,12 @@ export class AudioPlayerService {
   }
 
   /** A beat the server does not take is kept, and replayed once it answers. */
-  private beat(): void {
+  private beat(final = false): void {
     const b = this.body();
     if (!b) return;
     const { positionSeconds, durationSeconds, mediaFileId, itemId } = b.payload;
-    const queue = this.queueToSend();
+    // The closing beat belongs to the ended session: a queue adopted for the next one must not ride on it.
+    const queue = final ? null : this.queueToSend();
     if (queue) b.payload.queue = queue;
     const ack = this.remote.lastAppliedCmdId();
     if (ack) b.payload.lastCmdId = ack;
@@ -1401,14 +1421,23 @@ export class AudioPlayerService {
   /** What the last beat carried: the queue goes out on the first beat of a session and when it changes. */
   private queueSent: string | null = null;
 
-  private queueToSend(): BeatBody['queue'] | null {
-    if (!this._musicMode() || !this.mq.tracks.length) return null;
-    const value = {
-      itemIds: this.mq.tracks.map((t) => t.itemId),
-      index: this.mq.index,
+  /** The queue as the wire carries it: at most 500 ids around the current track, index rebased. */
+  private wireQueue(): NonNullable<BeatBody['queue']> | null {
+    const ids = this.mq.tracks.map((t) => t.itemId);
+    if (!ids.length) return null;
+    const start = Math.max(0, Math.min(this.mq.index - WIRE_QUEUE_MAX / 2, ids.length - WIRE_QUEUE_MAX));
+    return {
+      itemIds: ids.slice(start, start + WIRE_QUEUE_MAX),
+      index: this.mq.index - start,
       shuffle: this.mq.shuffle,
       repeat: this.mq.repeat,
     };
+  }
+
+  private queueToSend(): BeatBody['queue'] | null {
+    if (!this._musicMode()) return null;
+    const value = this.wireQueue();
+    if (!value) return null;
     const key = `${this.sessionId}:${JSON.stringify(value)}`;
     if (key === this.queueSent) return null;
     this.queueSent = key;
@@ -1428,7 +1457,7 @@ export class AudioPlayerService {
     const el = this.el();
     if ((el || this.casting || this.nativeOn) && this.info) {
       this._playing.set(false);
-      this.beat();
+      this.beat(true);
     }
     this.dropPreload();
     this.dropStems();

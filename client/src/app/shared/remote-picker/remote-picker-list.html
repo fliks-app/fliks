@@ -60,7 +60,7 @@
         }
       </span>
     </button>
-    @if (canTransfer(row)) {
+    @if (!transferOnly() && canTransfer(row)) {
       <button type="button" class="btn btn-ghost btn-sm shrink-0 text-white" (click)="transfer(row)"
               [attr.aria-label]="('session.transfer' | translate) + ': ' + row.label">
         <svg lucideArrowRightLeft class="h-4 w-4"></svg>

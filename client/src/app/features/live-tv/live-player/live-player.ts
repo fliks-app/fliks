@@ -25,6 +25,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { engineKindFor } from '../../../core/services/engine-traits';
 import { ToastService } from '../../../core/services/toast.service';
+import { SessionSyncService } from '../../../core/services/session-sync.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { liveNeedsTs, supportsLiveDirectPlay } from './live-direct-play.util';
@@ -89,6 +90,13 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly sessionSync = inject(SessionSyncService);
+  /** Live TV claims no account session but is playing: it keeps the strip and an observed owner off this device. */
+  private readonly unregisterSession = this.sessionSync.registerPlayer({
+    sessionId: () => undefined,
+    active: () => true,
+    yield: async () => null,
+  });
   /** Same owner as the VOD player: auto-hide, pins, cursor. */
   readonly chrome = inject(ControlsVisibilityService);
 
@@ -282,6 +290,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     // not land in a destroyed engine.
     this.tuneSeq++;
     this.destroyed = true;
+    this.unregisterSession();
     window.removeEventListener('keydown', this.onKeydownCapture, true);
     window.removeEventListener('pagehide', this.releaseOnUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);

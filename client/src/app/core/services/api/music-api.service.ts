@@ -77,3 +77,13 @@ export class MusicApiService {
     return firstValueFrom(this.http.post(`/api/media/${mediaId}/identify`, { provider: 'musicbrainz', externalId: c.group }));
   }
 }
+
+/** Pairs each requested id with its row and its wire index: ids with no row are skipped, repeated ids keep their own place. */
+export function alignTrackRows(ids: readonly number[], rows: readonly MusicTrackRequest[]): { row: MusicTrackRequest; wireIndex: number }[] {
+  const out: { row: MusicTrackRequest; wireIndex: number }[] = [];
+  let j = 0;
+  ids.forEach((id, wireIndex) => {
+    if (rows[j]?.itemId === id) out.push({ row: rows[j++], wireIndex });
+  });
+  return out;
+}

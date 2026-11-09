@@ -1,11 +1,11 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { TranslatePipe } from '@ngx-translate/core';
+import { Component, computed, inject, viewChild } from '@angular/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideArrowRightLeft, LucidePause, LucidePlay, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
-import { SseService } from '../../core/services/sse.service';
+import { SessionStripService } from './session-strip.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { KIND_REGISTRY } from '../../core/media-kinds';
 import { formatTime } from '../../core/utils/player.utils';
@@ -26,16 +26,9 @@ export class CastOverlayComponent {
   protected readonly sync = inject(SessionSyncService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
-  private readonly sse = inject(SseService);
-
-  /** Owner whose strip was hidden here: another owner, or no session in between, shows it again. Epochs restart after a deletion, so they are not compared. */
-  private readonly hiddenOwner = signal<string | null>(null);
-
-  constructor() {
-    effect(() => {
-      if (!this.sync.session()) this.hiddenOwner.set(null);
-    });
-  }
+  private readonly translate = inject(TranslateService);
+  protected readonly strip = inject(SessionStripService);
+  private readonly transferList = viewChild(RemotePickerListComponent);
 
   protected readonly artwork = computed(() => {
     const meta = this.session.nowPlaying();
@@ -46,12 +39,7 @@ export class CastOverlayComponent {
   protected readonly output = computed(() => (this.device.isTv() || this.session.isLocal() ? null : this.session.output()));
 
   /** The account session played elsewhere that this device follows without having selected it. */
-  protected readonly observed = computed(() => {
-    const s = this.sync.session();
-    if (!s || this.device.isTv() || !this.session.isLocal() || this.sync.role() !== 'observer') return null;
-    if (this.sync.isReading(s) && s.owner.targetId === this.sse.targetId()) return null;
-    return this.hiddenOwner() === s.owner.targetId && !this.sync.parked() ? null : s;
-  });
+  protected readonly observed = this.strip.observed;
 
   /** A reader's position: read elsewhere, opened here, with a percentage instead of a clock. */
   protected readonly reading = computed(() => {
@@ -70,8 +58,8 @@ export class CastOverlayComponent {
   protected readonly detail = computed(() => {
     const s = this.observed();
     if (!s) return '';
-    const device = s.owner.deviceName ?? '';
-    const pos = this.live() ? this.target.position() : s.positionSeconds;
+    const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
+    const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
     const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
     const time = dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
     return `${device} · ${time}`;
@@ -105,9 +93,11 @@ export class CastOverlayComponent {
   }
 
   protected hide(): void {
-    const s = this.observed();
-    if (!s) return;
-    if (this.sync.parked()) void this.sync.dismiss();
-    else this.hiddenOwner.set(s.owner.targetId);
+    this.strip.hide();
+  }
+
+  /** The projected list is refreshed on every press of the trigger, as the top-bar picker does. */
+  protected refreshTransfer(): void {
+    this.transferList()?.refresh();
   }
 }

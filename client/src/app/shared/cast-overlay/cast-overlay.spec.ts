@@ -8,6 +8,7 @@ import { RemotePlaybackTarget } from '../../core/services/remote-playback-target
 import { SessionSyncService, type AccountSession } from '../../core/services/session-sync.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { SseService } from '../../core/services/sse.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
@@ -46,6 +47,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     playHere: vi.fn(),
     dismiss: vi.fn(),
+    positionNow: (a: AccountSession) => a.positionSeconds,
   };
   const target = {
     isIdle: signal(!(over.live ?? true)),
@@ -77,6 +79,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
+      { provide: AudioPlayerService, useValue: { active: signal(false) } },
       { provide: SseService, useValue: { targetId: signal('phone#1') } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },

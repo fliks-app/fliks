@@ -36,6 +36,7 @@ export class ConfirmationService {
 
   confirm(options: ConfirmOptions): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
+      this.state()?.resolve(false);
       this.state.set({
         ...options,
         alertOnly: false,
@@ -49,6 +50,7 @@ export class ConfirmationService {
 
   /** Cancelling reports the toggle's state anyway; every caller ignores it when `ok` is false. */
   confirmWithToggle(options: ConfirmToggleOptions): Promise<{ ok: boolean; toggle: boolean }> {
+    this.state()?.resolve(false);
     this.toggle.set(options.toggleDefault ?? false);
     return new Promise((resolve) => {
       this.state.set({
@@ -62,12 +64,14 @@ export class ConfirmationService {
   /** Three-outcome confirm: true (confirm), false (cancel), null (dismiss / click outside). */
   choose(options: ConfirmOptions): Promise<boolean | null> {
     return new Promise<boolean | null>((resolve) => {
+      this.state()?.resolve(false);
       this.state.set({ ...options, alertOnly: false, resolve });
     });
   }
 
   alert(options: ConfirmOptions): Promise<void> {
     return new Promise<void>((resolve) => {
+      this.state()?.resolve(false);
       this.state.set({
         ...options,
         alertOnly: true,
