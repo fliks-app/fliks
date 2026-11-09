@@ -167,6 +167,8 @@ jobs:
     env:
       SQLX_OFFLINE: 'true'
       CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      # Faster build; panic messages keep their file:line, only backtraces lose it.
+      CARGO_PROFILE_DEV_DEBUG: '0'
       ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -227,6 +229,11 @@ jobs:
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      # Every test database is a copy of template1: migrate it once here, before any test connects to it.
+      - name: migrate template1
+        run: |
+          tar --zstd -xf "$ARCHIVE_DIR/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+          DB_NAME=template1 "$RUNNER_TEMP/target/debug/fliks-server" migrate
       # cargo-nextest itself: the archive needs no Rust toolchain, `cargo` would install the pinned one.
       - run: >-
           cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"

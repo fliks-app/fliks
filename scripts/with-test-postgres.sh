@@ -9,5 +9,7 @@ trap 'docker rm -f "$name" >/dev/null 2>&1; rm -rf "$data"' EXIT INT TERM
 until docker exec "$name" pg_isready -h 127.0.0.1 -U fliks -q 2>/dev/null; do sleep 0.5; done
 port=$(docker port "$name" 5432/tcp | head -1 | sed 's/.*://')
 base="postgres://fliks:fliks@127.0.0.1:$port"
+# Every test database is a copy of template1: migrating it once spares each test the replay. Nothing may connect to it afterwards.
+sqlx migrate run --source "$(dirname "$0")/../server/migrations" --database-url "$base/template1" >/dev/null
 export DATABASE_URL="$base/fliks" S8_PG_ADMIN_URL="$base/postgres" FLIKS_HARNESS_PG_URL="$base/postgres" SQLX_OFFLINE=true FLIKS_DATA_DIR="$data"
 "$@"

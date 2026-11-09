@@ -45,10 +45,18 @@ impl Scratch {
         assert_ne!(name, "fliks");
         let admin = url.rsplit_once('/').unwrap().0.to_owned() + "/postgres";
         let mut c = PgConnection::connect(&admin).await.unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
-            .execute(&mut c)
-            .await
-            .unwrap();
+        // template1 is migrated: a partial migration needs an empty start.
+        let template = if migrate.is_some() {
+            " TEMPLATE template0"
+        } else {
+            ""
+        };
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "CREATE DATABASE {name}{template}"
+        )))
+        .execute(&mut c)
+        .await
+        .unwrap();
         let pool = PgPoolOptions::new()
             .max_connections(4)
             .connect(&format!("{}/{name}", url.rsplit_once('/').unwrap().0))
