@@ -493,6 +493,8 @@ pub enum SseEvent {
         session_id: String,
         by_device_name: Option<String>,
         epoch: i64,
+        /// A deliberate hand-over: the old device stops without telling the user.
+        silent: bool,
     },
     #[serde(rename = "social.followed")]
     SocialFollowed {

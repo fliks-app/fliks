@@ -186,5 +186,8 @@ pub async fn transfer(
         repeat: queue.map(|q| q.repeat),
         kind: Some(row.kind),
     };
+    st.account_sessions
+        .expect_handoff(row.user_id, &body.to_target_id, row.item_id)
+        .await;
     send(&st, &a, &body.to_target_id, owner, &conn, cmd)
 }

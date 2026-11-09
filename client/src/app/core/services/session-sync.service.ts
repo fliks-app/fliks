@@ -70,6 +70,8 @@ export interface LiveReport {
 export type SessionResumer = (session: AccountSession, positionSeconds: number) => Promise<void>;
 
 const HANDLED_MAX = 32;
+/** How long an armed hand-over waits for the new session's first beat. */
+const HANDOFF_TTL_MS = 60_000;
 
 /** The account's playback session as this device sees it: bootstrap, role, takeover. */
 @Injectable({ providedIn: 'root' })
@@ -139,6 +141,10 @@ export class SessionSyncService {
   private readonly registered = signal(0);
   private readonly resumers: Partial<Record<MediaFamily, SessionResumer>> = {};
   private readonly handled: string[] = [];
+  /** Sids a `session.superseded` event called silent, for a beat flag that outruns it. */
+  private readonly silent = new Set<string>();
+  /** A hand-over armed by this device: the first new sid to beat carries `handoff`. */
+  private handoff: { sid: string | null; until: number; skip: Set<string | undefined> } | null = null;
   /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
   private readonly tick = signal(0);
   private fetching = false;
@@ -185,7 +191,7 @@ export class SessionSyncService {
     if (e.type === 'session.changed') {
       if (this.enabled()) void this.refresh();
     }
-    else void this.handleSuperseded(e.sessionId, e.byDeviceName);
+    else void this.handleSuperseded(e.sessionId, e.byDeviceName, e.silent);
   }
 
   /** Re-reads the session; a burst of events costs one request in flight and at most one more. */
@@ -232,15 +238,33 @@ export class SessionSyncService {
     };
   }
 
-  /** The player has stopped on a takeover (event or beat flag): hand back the device, then offer to take it again. */
-  async handleSuperseded(sessionId: string, byDeviceName?: string | null): Promise<void> {
+  /** The next session this device starts takes the account session over on purpose: its beats say so, and the old owner stops silently. */
+  private armHandoff(): void {
+    const skip = new Set([...this.players].map((p) => p.sessionId()));
+    this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
+  }
+
+  /** What a beat of `sid` sends as `handoff`: true for the session an armed hand-over bound to. */
+  handoffFor(sid: string | undefined): true | undefined {
+    const h = this.handoff;
+    if (!h || !sid || Date.now() > h.until) return undefined;
+    if (h.sid === null && !h.skip.has(sid)) h.sid = sid;
+    return h.sid === sid ? true : undefined;
+  }
+
+  /** The player has stopped on a takeover (event or beat flag): hand back the device, then, unless the takeover was a hand-over, offer to take it again. */
+  async handleSuperseded(sessionId: string, byDeviceName?: string | null, silent = false): Promise<void> {
+    if (silent) {
+      this.silent.add(sessionId);
+      if (this.silent.size > HANDLED_MAX) this.silent.delete(this.silent.values().next().value as string);
+    }
     if (this.handled.includes(sessionId)) return;
     const player = [...this.players].find((p) => p.sessionId() === sessionId);
     if (!player) return;
     this.handled.push(sessionId);
     if (this.handled.length > HANDLED_MAX) this.handled.shift();
     const stopped = await player.yield();
-    if (!stopped) return;
+    if (!stopped || this.silent.has(sessionId)) return;
     if (!byDeviceName) await this.refresh();
     const s = this._session();
     const device = byDeviceName ?? (s ? this.ownerName(s) : this.translate.instant('session.another_device'));
@@ -256,7 +280,10 @@ export class SessionSyncService {
       cancelLabel: this.translate.instant('session.close'),
       variant: 'info',
     });
-    if (resume) await stopped.resume();
+    if (resume) {
+      this.armHandoff();
+      await stopped.resume();
+    }
   }
 
   /** The owner's own report of this very file, while it is being observed. */
@@ -303,6 +330,7 @@ export class SessionSyncService {
     const s = this._session();
     const resumer = s && this.resumerFor(s);
     if (!s || !resumer || this.role() === 'owner') return;
+    this.armHandoff();
     await resumer(s, this.positionNow(s));
   }
 

@@ -191,6 +191,14 @@ describe('SessionSyncService takeover', () => {
     expect(confirm.mock.calls[0][0].message).toBe('A film. session.superseded_message');
   });
 
+  it('flags the session started by "resume here" as a hand-over', async () => {
+    const { service, sse } = setup({ confirm: true });
+    const { p } = player('sid-1');
+    service.registerPlayer(p);
+    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2 });
+    await vi.waitFor(() => expect(service.handoffFor('sid-2')).toBe(true));
+  });
+
   it('leaves the player closed when the modal is dismissed', async () => {
     const { service, sse, confirm } = setup({ confirm: false });
     const { p, resume } = player('sid-1');
@@ -207,6 +215,29 @@ describe('SessionSyncService takeover', () => {
     await service.handleSuperseded('sid-1', 'Pixel');
     await service.handleSuperseded('sid-1');
     expect(yielded).toHaveBeenCalledOnce();
+  });
+
+  it('stops a silent hand-over without a modal, still saving the position', async () => {
+    const { service, sse, confirm } = setup({ confirm: true });
+    const { p, yielded, resume } = player('sid-1');
+    service.registerPlayer(p);
+    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2, silent: true });
+    await vi.waitFor(() => expect(yielded).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(resume).not.toHaveBeenCalled();
+    await service.handleSuperseded('sid-1');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('shows no modal when the silent event lands while the beat flag is yielding', async () => {
+    const { service, confirm } = setup({ confirm: true });
+    const { p } = player('sid-1');
+    service.registerPlayer(p);
+    const beat = service.handleSuperseded('sid-1');
+    await service.handleSuperseded('sid-1', 'Pixel', true);
+    await beat;
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('ignores a session no local player holds', async () => {
@@ -229,6 +260,41 @@ describe('SessionSyncService takeover', () => {
 
 describe('SessionSyncService play here', () => {
   afterEach(() => TestBed.resetTestingModule());
+
+  it('flags the first beats of the session started by play here as a hand-over, once', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
+    expect(service.handoffFor('new')).toBeUndefined();
+    await service.playHere();
+    expect(service.handoffFor('new')).toBe(true);
+    expect(service.handoffFor('new')).toBe(true);
+    expect(service.handoffFor('other')).toBeUndefined();
+  });
+
+  it('never flags the session of a player already running when play here is armed', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
+    service.registerPlayer({ sessionId: () => 'busy', active: () => true, yield: async () => null });
+    await service.playHere();
+    expect(service.handoffFor('busy')).toBeUndefined();
+    expect(service.handoffFor('new')).toBe(true);
+  });
+
+  it('lets a hand-over lapse after its TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, flush } = setup();
+      await flush(session());
+      service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
+      await service.playHere();
+      vi.advanceTimersByTime(61_000);
+      expect(service.handoffFor('late')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('starts the item with its own pair at the extrapolated position through the adapter of its family', async () => {
     const { service, flush } = setup();

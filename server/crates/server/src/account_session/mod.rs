@@ -31,6 +31,8 @@ const PERSIST_EVERY_MS: i64 = 30_000;
 const SEEK_JUMP: f64 = 30.0;
 /// Most items a queue carries (`remote.md` rule 35).
 const QUEUE_MAX: usize = 500;
+/// How long a transfer waits for the target's first beat to claim; past it the claim is a plain takeover.
+const HANDOFF_TTL_MS: i64 = 60_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -147,9 +149,17 @@ struct Inner {
     claimed: HashMap<String, Claim>,
     /// Sids found out of scope at their first beat, so later beats skip the preference read.
     unscoped: HashSet<String>,
+    /// Transfers sent but not yet claimed: (account, target) to the item and when the record lapses (ms).
+    handoffs: HashMap<(i32, String), (i32, i64)>,
 }
 
 impl Inner {
+    /// Consumes the transfer record of a claiming target: true only for its item and inside the TTL.
+    fn take_handoff(&mut self, account: i32, target: Option<&str>, item: i32, now: i64) -> bool {
+        let rec = target.and_then(|t| self.handoffs.remove(&(account, t.to_owned())));
+        rec.is_some_and(|(i, until)| i == item && until > now)
+    }
+
     /// What a beat of an already claimed `sid` is (rule 8), judged on the account it claimed for.
     /// `None` when it is free to claim again: never claimed, or a reader's row replaced its own.
     fn claimed_verdict(&self, sid: &str) -> Option<Verdict> {
@@ -195,6 +205,8 @@ pub struct BeatIn {
     pub position: f64,
     pub duration: Option<f64>,
     pub queue: Option<QueueState>,
+    /// The sender started this session on purpose to take it over: the previous owner stops silently.
+    pub handoff: bool,
 }
 
 /// A reader's saved position (`session.md` rule 19): the item and how far through it the account is.
@@ -322,6 +334,15 @@ impl AccountSessions {
         Verdict::Current
     }
 
+    /// A transfer of the account's session to `target` was sent: its first beat of `item` claims silently.
+    pub async fn expect_handoff(&self, account: i32, target: &str, item: i32) {
+        let mut g = self.0.lock().await;
+        let now = now_ms() as i64;
+        g.handoffs.retain(|_, (_, until)| *until > now);
+        g.handoffs
+            .insert((account, target.to_owned()), (item, now + HANDOFF_TTL_MS));
+    }
+
     /// Whether a beat of `sid` is superseded, whatever else is known of its sender.
     pub async fn is_superseded(&self, sid: &str) -> bool {
         self.0.lock().await.claimed_verdict(sid) == Some(Verdict::Superseded)
@@ -396,8 +417,14 @@ impl AccountSessions {
             Some(p) => p.row.epoch + 1,
             None => 1,
         };
+        let expected = g.take_handoff(
+            b.account,
+            b.owner.target_id.as_deref(),
+            b.item,
+            now_ms() as i64,
+        );
         if let Some(p) = prior.as_ref().filter(|_| !same_owner) {
-            Self::supersede(st, p, &b, epoch);
+            Self::supersede(st, p, &b, epoch, b.handoff || expected);
         }
         let mut entry = Entry {
             row: Row {
@@ -441,7 +468,7 @@ impl AccountSessions {
     }
 
     /// Tells a live previous owner and stops its engine session once it had time to save.
-    fn supersede(st: &AppState, prior: &Entry, by: &BeatIn, epoch: i64) {
+    fn supersede(st: &AppState, prior: &Entry, by: &BeatIn, epoch: i64, silent: bool) {
         if prior.row.state == State::Parked {
             return;
         }
@@ -455,6 +482,7 @@ impl AccountSessions {
                     session_id: prior.row.session_id.clone(),
                     by_device_name: by.owner.device_name.clone(),
                     epoch,
+                    silent,
                 },
             );
         }

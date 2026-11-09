@@ -3826,6 +3826,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
       hasNext?: boolean;
+      handoff?: boolean;
       qoe?: QoeSample;
     } = {
       positionSeconds: pos,
@@ -3837,6 +3838,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const sessionId = this.activeSessionId();
     if (sessionId) {
       payload.sessionId = sessionId;
+      payload.handoff = this.sessionSync.handoffFor(sessionId);
       payload.state = this.state.buffering() ? 'buffering' : this.uiPaused() ? 'paused' : 'playing';
       // This device's own truth: while casting the local engine is deliberately muted (castSyncEffect), so
       // don't report it as the target's volume.

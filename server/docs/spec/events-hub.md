@@ -144,7 +144,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 35 | `remote.targets_changed` | U(owner) + household hook | `{}` |
 | 36 | `remote.stopped` | U(owner) + household hook (device-scoped) | `{targetId: string}` |
 | 36a | `session.changed` | U(account), no household hook | `{epoch: number|null, itemId: number|null, state: string|null, ownerTargetId: string|null}` (`session.md` rule 15) |
-| 36b | `session.superseded` | C (the previous owner's connection, or its polled queue) | `{sessionId: string, byDeviceName: string|null, epoch: number}` (`session.md` rule 15) |
+| 36b | `session.superseded` | C (the previous owner's connection, or its polled queue) | `{sessionId: string, byDeviceName: string|null, epoch: number, silent: boolean}` (`session.md` rule 15) |
 | 37 | `social.followed` / `social.follow_request` | U(target user) | `{userId: number, username: string, avatar: string|null}` |
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |

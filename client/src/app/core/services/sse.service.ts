@@ -103,7 +103,7 @@ export interface RemoteState {
 /** Identity and ownership only: observers refetch `GET /api/session`. */
 export type SessionEvent =
   | { type: 'session.changed'; epoch: number | null; itemId: number | null; state: string | null; ownerTargetId: string | null }
-  | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number };
+  | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number; silent?: boolean };
 
 export interface PartyStateEvent {
   type: 'party.state';

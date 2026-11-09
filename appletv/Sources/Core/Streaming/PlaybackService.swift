@@ -305,6 +305,8 @@ import Foundation
             let qualities: [Rung]
             // Links a polled remote target to this live session; nil until registered.
             let targetId: String?
+            /// The session takes the account session over on purpose: the old owner stops silently.
+            let handoff: Bool?
             let qoe: Qoe
         }
         struct Response: Decodable { let sessionLost: Bool?; let superseded: Bool? }
@@ -318,13 +320,14 @@ import Foundation
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
             targetId: RemoteControlService.shared.targetId,
+            handoff: RemoteControlService.shared.handoff(for: sid),
             qoe: qoeSample()
         )
         let events = takeEvents()
         return Task {
             await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
-            if res.superseded == true { await RemoteControlService.shared.sessionSuperseded(sessionId: sid, byDeviceName: nil) }
+            if res.superseded == true { await RemoteControlService.shared.sessionSuperseded(sessionId: sid, byDeviceName: nil, silent: false) }
             else if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
         }
     }
