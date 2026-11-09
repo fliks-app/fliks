@@ -121,6 +121,8 @@ export interface TrackRow extends Track {
 
 export interface TracksQuery {
   libraryId?: number;
+  /** Comma-separated item ids (at most 500): the readable ones, in that order. */
+  ids?: string;
   q?: string;
   favourite?: boolean;
   sortBy?: 'title' | 'album' | 'added' | 'played';

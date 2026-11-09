@@ -45,6 +45,7 @@ pub async fn tracks(
         &q,
         &[
             "libraryId",
+            "ids",
             "q",
             "favourite",
             "sortBy",
@@ -54,6 +55,7 @@ pub async fn tracks(
         ],
     );
     let (library, text) = (r.int("libraryId"), r.string("q"));
+    let wanted = r.string("ids");
     let favourite = r.flag("favourite") == Some(true);
     let sort = r.one_of("sortBy", &["title", "album", "added", "played"]);
     let order = r.one_of("sortOrder", &["asc", "desc", "ASC", "DESC"]);
@@ -63,6 +65,12 @@ pub async fn tracks(
         paging_of(page, Some(limit.unwrap_or(50.0).min(200.0)), 50.0)?.unwrap_or((50, 0));
     let acl = accessible_library_ids(&st.db, &a).await?;
     let uid = a.user.id;
+    if let Some(list) = wanted {
+        let ids = parse_ids(&list)?;
+        return Ok(Json(Value::Array(
+            track_rows(&st.db, uid, &acl, &ids).await?,
+        )));
+    }
     let dir = if order.is_some_and(|o| o.eq_ignore_ascii_case("desc")) {
         "DESC"
     } else {
@@ -121,6 +129,23 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
         track_rows(&st.db, uid, &acl, &ids).await?,
     )))
 }
+
+/// `ids=1,2,3`: at most `IDS_MAX` positive integers.
+fn parse_ids(list: &str) -> Result<Vec<i32>, AppError> {
+    let ids = list
+        .split(',')
+        .map(|p| p.trim().parse::<i32>().ok().filter(|i| *i > 0))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| AppError::bad_request("ids must be a list of integers"))?;
+    if ids.len() > IDS_MAX {
+        return Err(AppError::bad_request(format!(
+            "ids must contain no more than {IDS_MAX} elements"
+        )));
+    }
+    Ok(ids)
+}
+
+const IDS_MAX: usize = 500;
 
 pub(crate) async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
     let acl = accessible_library_ids(&st.db, a).await?;

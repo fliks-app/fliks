@@ -4,7 +4,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteCommand, RemoteState, SseService } from './sse.service';
+import { RemoteCommand, RemoteState, SseService, type WireQueue } from './sse.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -13,7 +13,7 @@ import { SessionSyncService } from './session-sync.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import type { PlaybackSnapshot } from './playback/playback-output';
-import { DETAIL_SEGMENTS_PATTERN, isMediaKind, kindFromSegment, kindOf } from '../media-kinds';
+import { DETAIL_SEGMENTS_PATTERN, KIND_REGISTRY, isMediaKind, kindFromSegment, kindOf, type MediaFamily } from '../media-kinds';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -47,6 +47,10 @@ export type RemoteCommandInput = {
   subtitleId?: string | null;
   qualityId?: string;
   paused?: boolean;
+  queue?: WireQueue;
+  shuffle?: boolean;
+  repeat?: 'off' | 'all' | 'one';
+  kind?: MediaType;
 };
 
 /** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
@@ -382,13 +386,32 @@ export class RemoteService {
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'audio', 'subtitle', 'quality', 'browse',
+      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'audio', 'subtitle', 'quality', 'browse',
     ].includes(action);
+  }
+
+  /** Registers how a family starts a `load`; video, the default, is the `/watch` navigation below. */
+  registerLoader(family: MediaFamily, loader: (cmd: RemoteCommand) => Promise<void>): void {
+    this.loaders[family] = loader;
+  }
+
+  private readonly loaders: Partial<Record<MediaFamily, (cmd: RemoteCommand) => Promise<void>>> = {};
+
+  /** The loader of the family of the item, none for video and for an older sender that names no kind. */
+  private loaderFor(cmd: RemoteCommand) {
+    if (!isMediaKind(cmd.kind)) return undefined;
+    const family = KIND_REGISTRY[cmd.kind].families.find((f) => f !== 'video' && this.loaders[f]);
+    return family && this.loaders[family];
   }
 
   /** `load` is the one action the player cannot own: its command effect filters
    *  on the file it already has, and an idle device has no player at all. */
   private async applyLoad(cmd: RemoteCommand): Promise<void> {
+    const loader = this.loaderFor(cmd);
+    if (loader) {
+      this.lastAppliedCmdId.set(cmd.cmdId);
+      return loader(cmd);
+    }
     if (!cmd.mediaFileId) {
       console.warn('[remote] load without a mediaFileId', cmd.cmdId);
       return;

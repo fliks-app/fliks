@@ -1,5 +1,5 @@
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
-import type { ArtistAlbum, Track, TrackArtist, TrackWork } from '../../core/services/api/music.models';
+import type { ArtistAlbum, Track, TrackArtist, TrackRow, TrackWork } from '../../core/services/api/music.models';
 
 /** `m:ss`, or `h:mm:ss` from an hour up. */
 export function formatDuration(seconds: number | null | undefined): string {
@@ -74,6 +74,23 @@ export function toTrackRequest(t: Track, a: AlbumFacts): MusicTrackRequest {
     peak: t.peak,
     albumGain: a.albumGain,
     albumPeak: a.albumPeak,
+  };
+}
+
+/** A track of `GET /api/tracks`, which names its album: no album gain, so the track's own applies. */
+export function trackRowRequest(t: TrackRow): MusicTrackRequest {
+  return {
+    itemId: t.itemId,
+    mediaId: t.mediaId,
+    title: t.title,
+    artists: artistLine(t.artists),
+    albumTitle: t.albumTitle,
+    coverUrl: t.posterUrl,
+    durationSeconds: t.durationSeconds,
+    gain: t.gain,
+    peak: t.peak,
+    albumGain: null,
+    albumPeak: null,
   };
 }
 

@@ -15,6 +15,10 @@ import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
 import { AudioPlayerService, type AudioPartyRouter } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
+import { RemoteService } from '../remote.service';
+import { MusicApiService } from '../api/music-api.service';
+import type { RemoteCommand } from '../sse.service';
+import { Subject } from 'rxjs';
 
 const track = (id: number): MusicTrackRequest => ({
   itemId: id,
@@ -57,7 +61,9 @@ describe('AudioPlayerService on the native player', () => {
     });
     TestBed.configureTestingModule({
       providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: RemoteService, useValue: { registerLoader: vi.fn(), validated: new Subject<RemoteCommand>(), markApplied: vi.fn(), lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },

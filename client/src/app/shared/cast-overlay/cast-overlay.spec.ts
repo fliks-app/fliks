@@ -6,6 +6,8 @@ import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { SessionSyncService, type AccountSession } from '../../core/services/session-sync.service';
+import { MusicApiService } from '../../core/services/api/music-api.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { CastOverlayComponent } from './cast-overlay';
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
@@ -62,6 +64,8 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
+      { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
+      { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
     ],
   });
   const fixture = TestBed.createComponent(CastOverlayComponent);
@@ -116,6 +120,15 @@ describe('CastOverlayComponent', () => {
       buttons[1].click();
       expect(target.togglePlayPause).toHaveBeenCalled();
       expect(sync.playHere).toHaveBeenCalled();
+    });
+
+    it('opens the full controller from the strip of an audio session only', () => {
+      const audio = setup({ local: true, account: accountSession({ item: { ...accountSession().item, kind: 'album' } }) });
+      expect(audio.el.querySelector('app-session-audio-controller')).not.toBeNull();
+      expect(audio.el.querySelectorAll('button').length).toBeGreaterThan(2);
+      TestBed.resetTestingModule();
+      const video = setup({ local: true, account: accountSession() });
+      expect(video.el.querySelector('app-session-audio-controller')).toBeNull();
     });
 
     it('is hidden on a TV, and for the owner', () => {

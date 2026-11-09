@@ -1,18 +1,21 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucidePause, LucidePlay, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { SessionSyncService } from '../../core/services/session-sync.service';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 import { formatTime } from '../../core/utils/player.utils';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { SessionAudioControllerComponent } from './session-audio-controller';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [LucidePause, LucidePlay, LucideX, CachedSrcDirective, ResolveUrlPipe, TranslatePipe],
+  imports: [NgTemplateOutlet, LucidePause, LucidePlay, LucideX, CachedSrcDirective, SessionAudioControllerComponent, ResolveUrlPipe, TranslatePipe],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
@@ -57,6 +60,18 @@ export class CastOverlayComponent {
     const time = dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
     return `${device} · ${time}`;
   });
+
+  private readonly controller = viewChild(SessionAudioControllerComponent);
+
+  /** An audio session has a full controller: transport, queue, take over. */
+  protected readonly audio = computed(() => {
+    const kind = this.observed()?.item.kind;
+    return !!kind && KIND_REGISTRY[kind].families.includes('audio') && !KIND_REGISTRY[kind].families.includes('video');
+  });
+
+  protected openController(): void {
+    this.controller()?.open();
+  }
 
   protected open(): void {
     this.session.openPlayer();
