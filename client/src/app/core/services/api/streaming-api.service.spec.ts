@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { StreamingApiService, PlaybackInfoResponse } from './streaming-api.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
@@ -213,5 +213,31 @@ describe('StreamingApiService.resolveDownloadUrl', () => {
     service.resolveDownloadUrl(123, 'original', downloadPi('DirectPlay'));
     expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1');
     expect(buildPlayUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('StreamingApiService item-named calls', () => {
+  it('toggle-watched and the state delete name the item', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AuthService, useValue: {} },
+        { provide: ServerConfigService, useValue: {} },
+        { provide: CastService, useValue: {} },
+        { provide: BrowserDeviceProfileService, useValue: {} },
+        { provide: SseService, useValue: {} },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const service = TestBed.inject(StreamingApiService);
+    const toggled = service.toggleWatched(5, undefined, undefined, 77);
+    const post = http.expectOne('/api/playback/media/5/toggle-watched');
+    expect(post.request.body).toEqual({ mediaFileId: undefined, episodeId: undefined, itemId: 77 });
+    post.flush({});
+    await toggled;
+    const removed = service.deletePlaybackState(5, undefined, 77);
+    http.expectOne('/api/playback/media/5/state?itemId=77').flush(null);
+    await removed;
   });
 });

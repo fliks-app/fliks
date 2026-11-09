@@ -318,6 +318,7 @@ pub async fn command(
         media_type: dto.media_type,
         media_file_id: dto.media_file_id,
         episode_id: dto.episode_id,
+        item_id: dto.item_id,
         position_seconds: dto.position_seconds,
         level: dto.level,
         muted: dto.muted,

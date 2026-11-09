@@ -27,6 +27,7 @@
             "episodeId": 2,
             "hiddenFromContinueWatching": false,
             "id": 5,
+            "itemId": 2,
             "media": {
               "id": 18,
               "path": null
@@ -57,6 +58,7 @@
           "episodeId": 2,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 2,
           "mediaFileId": 19,
           "mediaId": 18,
           "positionSeconds": 300,

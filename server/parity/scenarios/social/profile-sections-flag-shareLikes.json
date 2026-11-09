@@ -79,6 +79,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 16,
           "media": {
             "id": 4,
             "path": null
@@ -112,6 +113,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 6,
+          "itemId": 17,
           "media": {
             "id": 5,
             "path": null
@@ -145,6 +147,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 7,
+          "itemId": 18,
           "media": {
             "id": 6,
             "path": null
@@ -181,6 +184,7 @@
             "episodeId": null,
             "hiddenFromContinueWatching": false,
             "id": 8,
+            "itemId": 23,
             "media": {
               "id": 11,
               "path": null

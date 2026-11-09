@@ -115,6 +115,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
         item.mediaId,
         item.mediaFileId,
         item.episodeId ?? undefined,
+        item.itemId,
       );
       this.items.update(list =>
         list.map(i => (i.id === item.id ? this.patchItemFromPlaybackState(i, state) : i)),
@@ -129,7 +130,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     try {
-      await this.streamingApi.deletePlaybackState(item.mediaId, item.episodeId ?? undefined);
+      await this.streamingApi.deletePlaybackState(item.mediaId, item.episodeId ?? undefined, item.itemId);
       this.items.update(list => list.filter(i => i.id !== item.id));
       this.total.update(t => t - 1);
     } catch { /* ignore */ }

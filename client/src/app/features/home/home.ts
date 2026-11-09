@@ -653,7 +653,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
     try {
-      await this.streamingApi.toggleWatched(item.mediaId, item.mediaFileId, item.episodeId ?? undefined);
+      await this.streamingApi.toggleWatched(item.mediaId, item.mediaFileId, item.episodeId ?? undefined, item.itemId);
       // Marking may surface the next episode (backend auto-advances), so refetch the row rather than filter locally.
       if (watched) {
         const list = await this.streamingApi.getContinueWatching(undefined, { force: true }).catch(() => null);

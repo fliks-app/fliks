@@ -131,9 +131,9 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 13,
           "media": {
-            "id": 1,
-            "path": null
+            "id": 1
           },
           "mediaFile": {
             "id": 1
@@ -432,6 +432,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 13,
           "mediaFile": {
             "id": 1
           },

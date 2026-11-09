@@ -23,6 +23,7 @@
             "episodeId": null,
             "hiddenFromContinueWatching": false,
             "id": 2,
+            "itemId": 14,
             "mediaFile": {
               "id": 2
             },
@@ -46,6 +47,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 2,
+          "itemId": 14,
           "mediaFileId": 2,
           "mediaId": 2,
           "positionSeconds": 600,

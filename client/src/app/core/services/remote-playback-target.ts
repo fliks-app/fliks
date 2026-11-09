@@ -44,7 +44,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     const s = this.remote.targetState();
     if (!s?.mediaId || !s.mediaFileId) return null;
     return {
-      item: { fileId: s.mediaFileId, mediaId: s.mediaId, episodeId: s.episodeId ?? undefined },
+      item: { fileId: s.mediaFileId, mediaId: s.mediaId, episodeId: s.episodeId ?? undefined, itemId: s.itemId },
       position: this.position(),
       paused: this.paused(),
       tracks: { fileId: s.mediaFileId, audioStreamIndex: s.audioTrackIndex ?? undefined, subtitleId: s.subtitleId ?? null },

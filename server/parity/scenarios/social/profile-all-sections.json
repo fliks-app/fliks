@@ -139,6 +139,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 5,
+          "itemId": 16,
           "media": {
             "id": 4,
             "path": null
@@ -172,6 +173,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 6,
+          "itemId": 17,
           "media": {
             "id": 5,
             "path": null
@@ -205,6 +207,7 @@
           "episodeId": null,
           "hiddenFromContinueWatching": false,
           "id": 7,
+          "itemId": 18,
           "media": {
             "id": 6,
             "path": null
@@ -241,6 +244,7 @@
             "episodeId": null,
             "hiddenFromContinueWatching": false,
             "id": 8,
+            "itemId": 19,
             "media": {
               "id": 7,
               "path": null
@@ -281,6 +285,7 @@
             "episodeId": 1,
             "hiddenFromContinueWatching": false,
             "id": 9,
+            "itemId": 1,
             "media": {
               "id": 18,
               "path": null
@@ -445,6 +450,7 @@
               "episodeLabel": "S01E01 - Episode 1",
               "fanartUrl": null,
               "id": 9,
+              "itemId": 1,
               "mediaFileId": 18,
               "mediaId": 18,
               "mediaTitle": "Parity Series A",
@@ -461,6 +467,7 @@
               "episodeLabel": null,
               "fanartUrl": null,
               "id": 8,
+              "itemId": 19,
               "mediaFileId": 7,
               "mediaId": 7,
               "mediaTitle": "Parity Movie 07",

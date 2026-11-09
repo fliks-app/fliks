@@ -251,6 +251,7 @@ fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> Ss
         media_id: Some(i64::from(media)),
         media_file_id: nullable(b, "mediaFileId", Value::as_i64),
         episode_id: int(b, "episodeId"),
+        item_id: int(b, "itemId"),
         media_title: s.media_title.clone(),
         episode_label: s.episode_label.clone(),
         poster_url: s.poster_url.clone(),

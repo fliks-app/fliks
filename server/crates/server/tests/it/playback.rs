@@ -530,6 +530,38 @@ async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
         assert_eq!(s, 409, "{method} {uri}: {b}");
         assert_eq!(b["message"], "ambiguous_item");
     }
+    let other = c
+        .id(&format!(
+            r#"SELECT max(id) FROM items WHERE "mediaId" = {m}"#
+        ))
+        .await;
+    for (method, uri, body) in [
+        ("GET", format!("{state}?itemId={other}"), None),
+        ("DELETE", format!("{state}?itemId={other}"), None),
+        (
+            "PUT",
+            state.clone(),
+            Some(
+                json!({"itemId": other, "mediaFileId": file, "positionSeconds": 1, "durationSeconds": 10}),
+            ),
+        ),
+        (
+            "POST",
+            format!("/api/playback/media/{m}/toggle-watched"),
+            Some(json!({"itemId": other, "mediaFileId": file})),
+        ),
+    ] {
+        let (s, b) = c.api(method, &uri, body).await;
+        assert!(s < 300, "{method} {uri} with an itemId: {s} {b}");
+    }
+    let (_, st) = c
+        .api(
+            "POST",
+            &format!("/api/playback/media/{m}/toggle-watched"),
+            Some(json!({"itemId": other})),
+        )
+        .await;
+    assert_eq!(st["itemId"], other, "a state names its item");
     let named = format!("{state}?episodeId={item}");
     assert_eq!(
         c.api("GET", &named, None).await.0,
@@ -540,4 +572,48 @@ async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
         c.api("GET", "/api/playback/media/9999/state", None).await.0,
         200
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn history_names_the_played_item_of_a_multi_item_media(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = c
+        .id(r#"INSERT INTO media (title, type, "libraryId") VALUES ('m', 'movie', (SELECT min(id) FROM libraries)) RETURNING id"#)
+        .await;
+    let first = c.shell(m).await;
+    let second = c
+        .id(&format!(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ({m}, 'video') RETURNING id)
+               INSERT INTO items ("mediaId", "editionId") SELECT {m}, id FROM e RETURNING items.id"#
+        ))
+        .await;
+    let file = c
+        .id(&format!(
+            r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId")
+               VALUES ('x', 1, 'q', {m}, (SELECT min(id) FROM library_folders)) RETURNING id"#
+        ))
+        .await;
+    for item in [first, second] {
+        c.id(&format!(
+            r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+               VALUES ({item}, {file}, {m}, 0) RETURNING "mediaFileId""#
+        ))
+        .await;
+        let beat = json!({"mediaFileId": file, "itemId": item, "positionSeconds": 1, "durationSeconds": 10});
+        let (s, b) = c
+            .api("PUT", &format!("/api/playback/media/{m}/state"), Some(beat))
+            .await;
+        assert_eq!(s, 200, "{b}");
+    }
+    c.id(r#"UPDATE playback_states SET "playedAt" = now() RETURNING id"#)
+        .await;
+    let (_, h) = c.api("GET", "/api/playback/history", None).await;
+    let mut got: Vec<i64> = h["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["itemId"].as_i64().unwrap())
+        .collect();
+    got.sort();
+    assert_eq!(got, [first, second].map(i64::from));
 }

@@ -397,6 +397,8 @@ pub enum SseEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         episode_id: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_id: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         position_seconds: Option<Num>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         level: Option<Num>,
@@ -424,6 +426,8 @@ pub enum SseEvent {
         #[serde(default, skip_serializing_if = "Option::is_none", with = "present")]
         media_file_id: Option<Option<i64>>,
         episode_id: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_id: Option<i64>,
         media_title: Option<String>,
         episode_label: Option<String>,
         poster_url: Option<String>,

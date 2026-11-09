@@ -122,9 +122,9 @@ pub async fn assert_targets(
     let r = sqlx::query!(
         r#"SELECT (SELECT title FROM media WHERE id = $1 AND "libraryId" = ANY($4)) AS title,
                   ($2::int IS NULL OR EXISTS (SELECT 1 FROM item_groups WHERE id = $2 AND "mediaId" = $1)) AS "season!",
-                  ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN media tm ON tm.id = e."mediaId"
+                  ($3::int IS NULL OR EXISTS (SELECT 1 FROM items e JOIN editions ed ON ed.id = e."editionId"
                                               WHERE e.id = $3 AND e."mediaId" = $1
-                                                AND (e."groupId" IS NOT NULL OR tm.type = 'album'))) AS "episode!""#,
+                                                AND COALESCE(ed."libraryId", (SELECT "libraryId" FROM media WHERE id = $1)) = ANY($4))) AS "episode!""#,
         media,
         season,
         episode,

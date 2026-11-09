@@ -66,9 +66,9 @@
             "episodeId": null,
             "hiddenFromContinueWatching": false,
             "id": 5,
+            "itemId": 15,
             "media": {
-              "id": 3,
-              "path": null
+              "id": 3
             },
             "mediaFile": {
               "id": 3

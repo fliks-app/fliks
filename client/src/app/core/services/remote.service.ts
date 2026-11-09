@@ -38,6 +38,7 @@ export type RemoteCommandInput = {
   mediaType?: MediaType;
   mediaFileId?: number;
   episodeId?: number;
+  itemId?: number;
   positionSeconds?: number;
   level?: number;
   muted?: boolean;
@@ -63,6 +64,7 @@ export function snapshotToWire(s: PlaybackSnapshot): RemoteCommandInput {
     mediaId: s.item.mediaId,
     mediaFileId: s.item.fileId,
     episodeId: s.item.episodeId,
+    ...(s.item.itemId != null && { itemId: s.item.itemId }),
     positionSeconds: Math.floor(s.position),
     // Sent only when set: a server without the field rejects it (deny_unknown_fields).
     ...(s.paused && { paused: true }),
@@ -74,7 +76,7 @@ export function snapshotFromWire(cmd: RemoteCommand): PlaybackSnapshot | null {
   const fileId = cmd.mediaFileId;
   if (!fileId) return null;
   return {
-    item: { fileId, mediaId: cmd.mediaId ?? 0, episodeId: cmd.episodeId },
+    item: { fileId, mediaId: cmd.mediaId ?? 0, episodeId: cmd.episodeId, itemId: cmd.itemId },
     position: cmd.positionSeconds ?? 0,
     paused: cmd.paused === true,
     tracks: {
