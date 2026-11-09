@@ -17,6 +17,7 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { AUDIO_SELECTION_MODE_OPTIONS, LANGUAGE_CODE_OPTIONS } from '../playback-options';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
+import { SessionSyncSettingsComponent } from '../session-sync-settings/session-sync-settings';
 
 @Component({
   selector: 'app-player-settings',
@@ -27,6 +28,7 @@ import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe
     LucideTrash2,
     ToggleFieldComponent,
     SelectFieldComponent,
+    SessionSyncSettingsComponent,
   ],
   templateUrl: './player-settings.html',
 })

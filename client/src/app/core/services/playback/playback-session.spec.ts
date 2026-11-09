@@ -19,6 +19,7 @@ import { PlaybackSession } from './playback-session';
 function target() {
   const t = {
     isConnected: signal(false),
+    isObserving: signal(false),
     item: vi.fn(() => ({ mediaId: 0, episodeId: undefined as number | undefined })),
     togglePlayPause: vi.fn(),
     seek: vi.fn(),

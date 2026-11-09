@@ -3,6 +3,7 @@ import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { ProfileVisibility } from '../auth.service';
+import type { MediaType } from '../../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { serverMessage } from '../../utils/server-message';
 
@@ -95,6 +96,10 @@ export interface UpdateUserBody {
   spoilerHideOverviews?: boolean;
   /** Self-editable: replace unwatched episode names with their number. */
   spoilerHideTitles?: boolean;
+  /** Self-editable: one playback per account, followed and taken over from any device. */
+  sessionSync?: boolean;
+  /** Self-editable: kinds the session covers; null = every kind. */
+  sessionKinds?: MediaType[] | null;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

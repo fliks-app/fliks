@@ -7,6 +7,7 @@ import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { AudioPlayerService } from './audio-player.service';
+import { SessionSyncService } from '../session-sync.service';
 
 const info = {
   playMethod: 'DirectPlay',
@@ -36,6 +37,7 @@ describe('AudioPlayerService', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,

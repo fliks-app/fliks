@@ -10,7 +10,7 @@ import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
 
-/** Mirrors the remote target this phone drives into an Android media notification and applies its controls.
+/** Mirrors the remote target this phone observes (selected or the account session's owner) into an Android media notification and applies its controls.
  *  Position is read untracked (native extrapolates it); Cast keeps the Cast SDK's notification, which Play Services would duplicate. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
@@ -34,7 +34,7 @@ export class RemoteNotificationService {
       const t = this.target;
       // Each remote report re-syncs the extrapolated position.
       this.remote.targetState();
-      if (!this.remote.isRemoting() || !t.hasMedia() || t.isIdle() || t.isStarting()) {
+      if (!this.remote.isObserving() || t.isIdle() || t.isStarting()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
         return;
@@ -65,7 +65,7 @@ export class RemoteNotificationService {
 
   private apply(action: RemoteNotificationAction, value: number): void {
     const t = this.target;
-    if (!t.isConnected()) return;
+    if (!t.isObserving()) return;
     switch (action) {
       case 'play':
         if (t.uiPaused()) t.togglePlayPause();

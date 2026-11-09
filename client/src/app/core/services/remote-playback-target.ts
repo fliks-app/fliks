@@ -26,7 +26,9 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   readonly position = this.remote.interpolatedPosition;
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
+  /** Selected: this device's plays go there. Observing without selecting follows it without taking its screen. */
   readonly isConnected = this.remote.isRemoting;
+  readonly isObserving = this.remote.isObserving;
   /** A selected target is present even with nothing playing: releasing it is
    *  an explicit action, not a side effect of stopping the media. */
   readonly hasMedia = computed(() => this.remote.isRemoting());
@@ -85,7 +87,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   constructor() {
     effect(() => {
-      const targetId = this.remote.selectedTargetId();
+      const targetId = this.remote.observedTargetId();
       untracked(() => {
         this.tracksLoadedForKey = null;
         this.audioOptions.set([]);
@@ -104,18 +106,18 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   seek(time: number): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote-playback-target] seek with no selected target');
+      console.warn('[remote-playback-target] seek with no observed target');
       return;
     }
     this.remote.sendCoalesced(targetId, { action: 'seek', positionSeconds: time });
   }
 
   setVolume(level: number): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote-playback-target] setVolume with no selected target');
+      console.warn('[remote-playback-target] setVolume with no observed target');
       return;
     }
     this.remote.pinVolume(level);
@@ -123,17 +125,17 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   play(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (targetId) void this.remote.send(targetId, { action: 'play' });
   }
 
   pause(): Promise<void> {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     return targetId ? this.remote.send(targetId, { action: 'pause' }) : Promise.resolve();
   }
 
   togglePlayPause(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     const s = this.remote.targetState();
     if (!targetId || !s) {
       console.warn('[remote-playback-target] togglePlayPause with no target/state');
@@ -143,7 +145,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   toggleMute(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     const s = this.remote.targetState();
     if (!targetId || !s) {
       console.warn('[remote-playback-target] toggleMute with no target/state');
@@ -153,7 +155,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   selectAudio(track: PlaybackOption | null): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId || !track) {
       console.warn('[remote-playback-target] selectAudio with no target/track');
       return;
@@ -162,18 +164,18 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   selectSubtitle(sub: PlaybackOption | null): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote-playback-target] selectSubtitle with no selected target');
+      console.warn('[remote-playback-target] selectSubtitle with no observed target');
       return;
     }
     void this.remote.send(targetId, { action: 'subtitle', subtitleId: sub?.id ?? null });
   }
 
   selectQuality(quality: PlaybackOption): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote-playback-target] selectQuality with no selected target');
+      console.warn('[remote-playback-target] selectQuality with no observed target');
       return;
     }
     void this.remote.send(targetId, { action: 'quality', qualityId: quality.id });
@@ -227,10 +229,10 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   );
 
   skip(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     const at = this.remote.interpolatedPosition();
     if (!targetId) {
-      console.warn('[remote-playback-target] skip with no selected target');
+      console.warn('[remote-playback-target] skip with no observed target');
       return;
     }
     const intro = this.introMarker();
@@ -249,18 +251,18 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   readonly canPlayNext = computed(() => this.remote.targetState()?.hasNext ?? false);
 
   playNext(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote-playback-target] playNext with no selected target');
+      console.warn('[remote-playback-target] playNext with no observed target');
       return;
     }
     void this.remote.send(targetId, { action: 'next' });
   }
 
   stopPlayback(): void {
-    const targetId = this.remote.selectedTargetId();
+    const targetId = this.remote.observedTargetId();
     if (!targetId) {
-      console.warn('[remote] stop requested with no selected target');
+      console.warn('[remote] stop requested with no observed target');
       return;
     }
     // Stopping the media doesn't give the device back: keep the target selected; the top-bar chip reopens the card.

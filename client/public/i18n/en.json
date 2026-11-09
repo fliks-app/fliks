@@ -4006,6 +4006,27 @@
     "error_ownerless_target_requires_admin": "Only an administrator can control a device with no account.",
     "error_target_user_missing": "That device no longer has an account."
   },
+  "session": {
+    "another_device": "another device",
+    "superseded_title": "Playback moved to {{device}}",
+    "superseded_message": "Your position ({{position}}) is saved.",
+    "resume_here": "Resume here",
+    "close": "Close",
+    "play_here": "Play here",
+    "resume": "Resume",
+    "hide": "Hide",
+    "parked_device": "{{device}} is offline",
+    "playing_on": "Playing on {{device}}",
+    "current": "Current session",
+    "resume_at": "Resume at {{position}}",
+    "settings_title": "Continue across devices",
+    "settings_hint": "What you play on one device shows on your others, where you can control it or pick it up in one tap. Only one playback at a time on the account for the chosen types.",
+    "scope_all": "All types",
+    "scope_chosen": "Chosen types",
+    "resume_only": "resume only",
+    "settings_note": "Live TV and watch parties are not covered. Audiobooks follow the Book type: they are streamed, so they can be controlled.",
+    "saved": "Settings saved"
+  },
   "language": {
     "en": "English",
     "fr": "French",

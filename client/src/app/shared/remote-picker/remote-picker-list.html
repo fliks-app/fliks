@@ -13,6 +13,16 @@
   }
 </div>
 
+@if (followed(); as f) {
+  <div class="px-3 py-2 mb-1 border-b border-white/10 text-white">
+    <p class="text-sm opacity-60">{{ 'session.current' | translate }}</p>
+    <p class="truncate font-semibold">{{ f.title }}</p>
+    <p class="truncate text-sm opacity-60">
+      {{ (f.parked ? 'session.parked_device' : 'session.playing_on') | translate: { device: f.device } }} · {{ f.detail }}
+    </p>
+  </div>
+}
+
 @if (castSearching()) {
   <div class="flex items-center gap-3 text-sm opacity-70 px-3 py-2">
     <span class="loading loading-spinner loading-xs"></span>

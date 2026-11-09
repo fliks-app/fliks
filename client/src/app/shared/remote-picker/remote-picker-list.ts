@@ -16,6 +16,8 @@ import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { SessionSyncService } from '../../core/services/session-sync.service';
+import { formatTime } from '../../core/utils/player.utils';
 import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
@@ -53,6 +55,7 @@ export class RemotePickerListComponent {
   private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly session = inject(PlaybackSession);
+  protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -66,15 +69,33 @@ export class RemotePickerListComponent {
     () => this.enumerates && this.castService.isAvailable() && this.castService.castDevices().length === 0,
   );
 
+  /** The account session another device plays, offered above the rows; null once this device owns it. */
+  protected readonly followed = computed(() => {
+    const s = this.sync.session();
+    if (!s || this.sync.role() !== 'observer') return null;
+    const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
+    return {
+      title: s.item.title,
+      detail: s.item.subtitle ? `${s.item.subtitle} · ${formatTime(s.positionSeconds)}` : formatTime(s.positionSeconds),
+      device,
+      parked: this.sync.parked(),
+    };
+  });
+
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
+    const resumable = this.sync.canPlayHere() && this.session.isLocal();
+    const session = this.sync.session();
     rows.push({
       kind: 'local',
       id: 'local',
       icon: this.device.isTouch() ? 'phone' : 'monitor',
       label: this.translate.instant('remote.this_device'),
-      subtitle: null,
-      connected: this.session.isLocal(),
+      subtitle:
+        resumable && session
+          ? this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
+          : null,
+      connected: this.session.isLocal() && !resumable,
     });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
@@ -160,7 +181,8 @@ export class RemotePickerListComponent {
       return;
     }
     if (row.kind === 'local') {
-      if (!row.connected) this.session.takeBack();
+      if (this.sync.canPlayHere() && this.session.isLocal()) void this.sync.playHere();
+      else if (!row.connected) this.session.takeBack();
       return;
     }
     // Pressing the device in use is the way out of it: a Cast session ends, a remote device plays on alone.

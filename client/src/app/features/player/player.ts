@@ -22,6 +22,7 @@ import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/
 import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { SessionSyncService } from '../../core/services/session-sync.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
@@ -263,6 +264,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
 export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly sessionSync = inject(SessionSyncService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoe = new PlayerQoe(inject(QoeReporter));
   private readonly offlineStorage = inject(OfflineStorageService);
@@ -1392,6 +1394,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.unregisterSession();
     this.stopDesktopSeekRequests?.();
     this.keyboardOverlay.leave();
     this.edl.clear();
@@ -3129,6 +3132,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
   }
 
+  /** Another device took the account session: close like a back, and hand over what it takes to start again. */
+  private readonly unregisterSession = this.sessionSync.registerPlayer({
+    sessionId: () => this.activeSessionId(),
+    yield: async () => {
+      const { mediaId, mediaFileId: fileId, episodeId } = this;
+      if (!mediaId || !fileId) return null;
+      const at = Math.floor(this.engine?.currentTime || this.state.currentTime() || 0);
+      const title = [this.mediaTitle(), this.episodeTitle()].filter(Boolean).join(' · ') || null;
+      this.onBack();
+      return {
+        title,
+        positionSeconds: at,
+        resume: () =>
+          void this.router.navigate(['/watch', fileId], {
+            queryParams: { mediaId, ...(episodeId ? { episodeId } : {}), t: at },
+          }),
+      };
+    },
+  });
+
   onBack() {
     this.detachLocalOutput();
     this.savePosition();
@@ -3880,6 +3903,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (response?.sessionLost) {
           void this.recovery.recoverFromLostSession('session_lost');
         }
+        if (response?.superseded && sessionId) void this.sessionSync.handleSuperseded(sessionId);
         // Auto-delete-after-watched: the moment the server marks this item
         // completed, drop its auto-managed download (no-op otherwise).
         if (response?.state?.completed) {

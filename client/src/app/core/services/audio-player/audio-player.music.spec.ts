@@ -11,6 +11,7 @@ import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
+import { SessionSyncService } from '../session-sync.service';
 
 const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRequest => ({
   itemId: id,
@@ -66,6 +67,7 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,

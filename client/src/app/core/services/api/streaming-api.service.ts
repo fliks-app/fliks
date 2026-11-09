@@ -189,6 +189,8 @@ export interface PlaybackState {
  * `state` is present only when the call flushed to the DB (debounced). */
 export interface HeartbeatResponse {
   sessionLost?: true;
+  /** Another device took the account session: this one stops. */
+  superseded?: true;
   state?: PlaybackState;
 }
 
