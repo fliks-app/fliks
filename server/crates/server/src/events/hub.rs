@@ -1,11 +1,6 @@
-//! The SSE hub (`docs/spec/events-hub.md`): connection registry, audiences, replay cache, polled
+//! The SSE hub (`docs/spec/events-hub.md`): connection registry, audiences, polled
 //! targets and attribution. Every method locks briefly and never awaits; the household hook runs unlocked.
-use super::{
-    Bus, SseEvent,
-    activity::Activity,
-    event::{Download, RawEvent},
-    replay::Replay,
-};
+use super::{Bus, SseEvent, activity::Activity, event::RawEvent};
 use crate::sync::MutexExt;
 use fliks_domain::js::now_ms;
 use std::{
@@ -86,7 +81,6 @@ struct Inner {
     /// Keyed by owner and `polled:<targetId>`: another account cannot take a device over.
     polled: HashMap<(i32, String), Polled>,
     claims: HashMap<String, Claim>,
-    replay: Replay,
     seq: u64,
     /// Owners of targets evicted for a full queue, announced to their household once unlocked.
     evicted: Vec<i32>,
@@ -263,7 +257,7 @@ impl Hub {
         true
     }
 
-    /// Registers the connection and queues `sse.connected` plus the user's progress replay (rule 9).
+    /// Registers the connection and queues `sse.connected` (rule 9).
     pub fn connect(&self, user: i32, identity: Identity) -> Connection {
         self.connect_session(user, None, identity)
     }
@@ -306,9 +300,6 @@ impl Hub {
                 connection_id: id.clone(),
             });
             let _ = tx.try_send(Msg::Event(connected.json));
-            for ev in g.replay.snapshot_for(user, Instant::now()) {
-                let _ = tx.try_send(Msg::Event(Out::sse(ev).json));
-            }
             // A request accepted while shutting down would otherwise hold the graceful shutdown open.
             if *self.0.down.borrow() {
                 let _ = tx.try_send(Msg::Close);
@@ -624,15 +615,6 @@ impl Hub {
             .then_some(claim.user)
     }
 
-    /// The downloads last stated for a media (plugin host replay read); empty when none.
-    pub fn progress_current(&self, media_id: i64) -> Vec<Download> {
-        self.lock()
-            .replay
-            .current(media_id)
-            .unwrap_or_default()
-            .to_vec()
-    }
-
     fn lock(&self) -> MutexGuard<'_, Inner> {
         self.0.inner.lock_clean()
     }
@@ -652,29 +634,8 @@ impl Hub {
         }
     }
 
-    /// The single funnel of every emit: records or clears the replay cache for user-scoped events
-    /// (rule 23), delivers, then feeds the in-process bus.
+    /// The single funnel of every emit: delivers, then feeds the in-process bus.
     fn dispatch(&self, inner: &mut Inner, aud: Aud<'_>, out: Out) {
-        if let (Aud::Users(users), Bus::Sse(ev)) = (&aud, &out.bus) {
-            match ev {
-                SseEvent::DownloadProgress {
-                    media_id,
-                    media_type,
-                    downloads,
-                } => inner
-                    .replay
-                    .record(users, *media_id, *media_type, downloads, Instant::now()),
-                SseEvent::ImportComplete {
-                    media_id,
-                    season_number,
-                    episode_number,
-                    ..
-                } => inner
-                    .replay
-                    .clear(*media_id, *season_number, *episode_number),
-                _ => {}
-            }
-        }
         let mut full = vec![];
         for (id, c) in &inner.conns {
             let to_it = match &aud {
@@ -749,8 +710,6 @@ fn name(ev: &SseEvent) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::event::DownloadState;
-    use fliks_domain::media::kind::MediaKind;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn at(device: &str) -> Identity {
@@ -777,31 +736,13 @@ mod tests {
 
     const CHANGED: &str = "remote.targets_changed";
 
-    fn progress(media: i64, season: i64) -> SseEvent {
-        SseEvent::DownloadProgress {
-            media_id: media,
-            media_type: MediaKind::Series,
-            downloads: vec![Download {
-                r#ref: "r".into(),
-                season_number: Some(season),
-                episode_number: None,
-                progress: 0.5.into(),
-                dlspeed: 1.into(),
-                eta: 1.into(),
-                state: DownloadState::Active,
-            }],
-        }
-    }
-
     #[test]
-    fn connect_sends_connected_then_replay_and_announces_to_the_others_only() {
+    fn connect_sends_connected_and_announces_to_the_others_only() {
         let hub = Hub::new();
-        hub.emit_to_users(&[1], progress(7, 1));
-        hub.emit(progress(8, 1));
         let mut other = hub.connect(1, Identity::default());
         let _ = got(&mut other);
         let mut c = hub.connect(1, at("d1#a"));
-        assert_eq!(got(&mut c), ["sse.connected", "download.progress"]);
+        assert_eq!(got(&mut c), ["sse.connected"]);
         assert_eq!(got(&mut other), [CHANGED]);
         hub.emit(SseEvent::QueueUpdated {});
         assert_eq!(got(&mut c), ["queue.updated"]);
@@ -1048,35 +989,6 @@ mod tests {
         let c = hub.connect(1, at("d#a"));
         drop(c);
         assert_eq!(calls.load(Ordering::SeqCst), 3);
-    }
-
-    #[test]
-    fn the_replay_cache_follows_audience_import_complete_and_the_empty_snapshot() {
-        let hub = Hub::new();
-        hub.emit_to_users(&[1], progress(7, 1));
-        hub.emit_to_users(&[2], progress(8, 1));
-        assert_eq!(hub.progress_current(7).len(), 1);
-        let mut c = hub.connect(1, Identity::default());
-        assert_eq!(got(&mut c), ["sse.connected", "download.progress"]);
-        hub.emit_to_users(
-            &[1],
-            SseEvent::ImportComplete {
-                media_id: 7,
-                title: "t".into(),
-                season_number: Some(1),
-                episode_number: None,
-            },
-        );
-        assert!(hub.progress_current(7).is_empty());
-        hub.emit_to_users(
-            &[2],
-            SseEvent::DownloadProgress {
-                media_id: 8,
-                media_type: MediaKind::Movie,
-                downloads: vec![],
-            },
-        );
-        assert!(hub.progress_current(8).is_empty());
     }
 
     #[test]
