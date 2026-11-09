@@ -98,10 +98,15 @@ final class PositionHeartbeat {
         body = [:]
     }
 
+    /// The CarPlay scene keeps the app-wide state active, so the phone's own scene is read.
+    private static var phoneActive: Bool {
+        UIApplication.shared.connectedScenes.contains { $0 is UIWindowScene && $0.activationState == .foregroundActive }
+    }
+
     /// `state` is sent only with a session: without one the server takes the beat as a plain position save.
     func send(position: Double, duration: Double, state: String) {
         guard let url = url, position.isFinite,
-              UIApplication.shared.applicationState != .active,
+              !Self.phoneActive,
               Date().timeIntervalSince(lastSent) >= Self.interval else { return }
         var payload = body
         payload["positionSeconds"] = position

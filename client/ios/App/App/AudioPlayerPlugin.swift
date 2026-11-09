@@ -54,6 +54,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         case unavailable
     }
 
+    /// The live plugin, for the CarPlay scene, which has no bridge of its own.
+    private(set) static weak var shared: AudioPlayerPlugin?
+    private static let profileKey = "fliks.audioDeviceProfile"
     private static let capacitorFile = "capacitor://localhost/_capacitor_file_/"
 
     private let player = AVQueuePlayer()
@@ -107,6 +110,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }()
 
     public override func load() {
+        Self.shared = self
+        deviceProfile = UserDefaults.standard.string(forKey: Self.profileKey)
         player.automaticallyWaitsToMinimizeStalling = true
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
             guard let self = self, self.player.timeControlStatus == .playing else { return }
@@ -128,6 +133,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func configure(_ call: CAPPluginCall) {
         deviceProfile = call.getString("deviceProfile")
+        UserDefaults.standard.set(deviceProfile, forKey: Self.profileKey)
         call.resolve()
     }
 
@@ -142,6 +148,18 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func detach(_ call: CAPPluginCall) { call.resolve() }
+
+    /// A queue the car chose: it plays here and the web layer, when attached, adopts it from the `queue` event.
+    func playFromCar(_ tracks: [Entry], index: Int) {
+        guard let key = session()?.key else { return }
+        isMusic = true
+        boundKey = key
+        entries = tracks
+        begin(at: index, startAt: 0, autoplay: true)
+        emitQueue()
+    }
+
+    var hasProfile: Bool { deviceProfile != nil }
 
     @objc func setQueue(_ call: CAPPluginCall) {
         let tracks = (call.getArray("tracks") as? [[String: Any]] ?? []).map(Self.entry)
@@ -403,7 +421,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Streams
 
-    private func session() -> (key: String, server: String, token: String)? {
+    func session() -> (key: String, server: String, token: String)? {
         let defaults = UserDefaults.standard
         guard let key = defaults.string(forKey: "CapacitorStorage.fliks_active_session"),
               let raw = defaults.string(forKey: "CapacitorStorage.fliks_sessions"),
@@ -419,7 +437,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// A call under session `key`; a 401 has the web layer refresh the session, then runs once more.
     /// Under another signed-in session nothing is sent and the queue ends.
     @MainActor
-    private func apiCall(_ key: String, _ method: String, _ path: String, body: Data? = nil) async -> (data: Data, status: Int)? {
+    func apiCall(_ key: String, _ method: String, _ path: String, body: Data? = nil) async -> (data: Data, status: Int)? {
         for attempt in 0..<2 {
             guard let s = session(), s.key == key, let url = URL(string: s.server + path) else {
                 if key == boundKey { stopAll() }

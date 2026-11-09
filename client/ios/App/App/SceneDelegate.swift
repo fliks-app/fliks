@@ -6,6 +6,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        if let bridge = CarPlayHost.headless, let window = (scene as? UIWindowScene)?.windows.first {
+            window.rootViewController = bridge
+            CarPlayHost.headless = nil
+        }
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
