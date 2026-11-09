@@ -198,7 +198,7 @@ function createHarness(opts: {
 
   TestBed.configureTestingModule({
     providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
       provideZonelessChangeDetection(),
       // Never render: tests drive the class, and some wait in real time.
       { provide: ComponentFixtureAutoDetect, useValue: false },

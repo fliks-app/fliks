@@ -84,7 +84,7 @@ describe('AudioPlayerService music mode', () => {
       providers: [
       { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,
