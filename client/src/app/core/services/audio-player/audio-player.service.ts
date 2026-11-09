@@ -1200,9 +1200,11 @@ export class AudioPlayerService {
 
   private onPlayState(playing: boolean): void {
     this._playing.set(playing);
-    // Paused too: a silent owner is parked, and a parked owner is never told of a takeover.
+    // Paused too while online: a silent owner is parked, and a parked owner is never told of a takeover.
     clearInterval(this.beatTimer);
-    this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
+    this.beatTimer = setInterval(() => {
+      if (playing || this.network.isOnline()) this.beat();
+    }, BEAT_MS);
     this.beat();
     if (!this.nativeAudio && 'mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   }
