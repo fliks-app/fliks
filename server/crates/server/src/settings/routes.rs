@@ -151,6 +151,10 @@ fn validate(key: &str, value: &str) -> Result<(), AppError> {
             "users_public_mode must be one of the following values: everyone, lan, hidden",
         ]));
     }
+    if key == crate::plugins::picker::ORDER_KEY {
+        crate::plugins::picker::validate_order(value)
+            .map_err(|m| AppError::bad_request(vec![m]))?;
+    }
     crate::email::validate_setting(key, value).map_err(|m| AppError::bad_request(vec![m]))?;
     crate::engine::validate_streaming_setting(key, Some(value))
         .map_err(|m| AppError::bad_request(vec![m]))

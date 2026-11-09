@@ -46,6 +46,15 @@ pub struct Pickers {
     chains: Mutex<HashMap<i32, Chain>>,
 }
 
+/// `acquisition.providerOrder` must be a JSON-encoded array of strings.
+pub fn validate_order(value: &str) -> Result<(), &'static str> {
+    serde_json::from_str::<Vec<String>>(value)
+        .map(|_| ())
+        .map_err(
+            |_| "acquisition.providerOrder must be a JSON array of plugin ids, sent as a string",
+        )
+}
+
 impl Pickers {
     /// Replaces the plugin's sources; whether the list changed.
     pub fn set_sources(&self, id: &str, list: Vec<Source>) -> Result<bool, HostError> {
@@ -424,5 +433,13 @@ mod tests {
             None,
             "an unserved media opens nothing"
         );
+    }
+
+    #[test]
+    fn the_order_setting_must_be_a_json_array_of_strings() {
+        assert!(validate_order(r#"["a","b"]"#).is_ok() && validate_order("[]").is_ok());
+        for bad in [r#"{"a","b"}"#, "a,b", r#"{"a":1}"#, "[1]", ""] {
+            assert!(validate_order(bad).is_err(), "{bad}");
+        }
     }
 }

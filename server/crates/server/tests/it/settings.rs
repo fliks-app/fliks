@@ -529,3 +529,25 @@ async fn users_public_mode_accepts_only_known_values(pool: PgPool) {
         assert_eq!(s, want, "{v}");
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn the_acquisition_order_is_written_as_a_json_string(pool: PgPool) {
+    let c = ctx(pool).await;
+    let put = |body: Value| call(&c.app, "PUT", "/api/settings", Some(&c.admin), body);
+    for (v, want) in [(json!("[\"a\",\"b\"]"), 200), (json!("a,b"), 400)] {
+        let (s, _) = call(
+            &c.app,
+            "PUT",
+            "/api/settings/acquisition.providerOrder",
+            Some(&c.admin),
+            json!({"value": v}),
+        )
+        .await;
+        assert_eq!(s, want, "{v}");
+    }
+    // A JSON array in a bulk write reaches the store as a Postgres array literal.
+    let (s, _) = put(json!({"data": {"acquisition.providerOrder": ["a", "b"]}})).await;
+    assert_eq!(s, 400);
+    let (s, _) = put(json!({"data": {"acquisition.providerOrder": "[\"a\"]"}})).await;
+    assert_eq!(s, 200);
+}
