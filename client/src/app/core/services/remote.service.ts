@@ -9,6 +9,7 @@ import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
+import { SessionSyncService } from './session-sync.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import type { PlaybackSnapshot } from './playback/playback-output';
@@ -118,6 +119,7 @@ export class RemoteService {
   private readonly castSettings = inject(CastSettingsService);
   private readonly cast = inject(CastService);
   private readonly translate = inject(TranslateService);
+  private readonly sessionSync = inject(SessionSyncService);
 
   // ── Controllee ──
 
@@ -140,13 +142,23 @@ export class RemoteService {
   /** Last listing of the selected target; keeps the offline card (the way to release it) reachable after it drops off the listing. */
   private readonly selectedRow = signal<RemoteTarget | null>(null);
 
+  /** Where state is read from and commands go: the selection, else the account session's owner. Reading it hijacks nothing. */
+  readonly observedTargetId = computed(() => this.selectedTargetId() ?? this.sessionSync.observedOwnerTargetId());
+
   readonly selectedTarget = computed(() => {
     const id = this.selectedTargetId();
     if (!id) return null;
     return this.targets().find((t) => t.targetId === id) ?? this.selectedRow();
   });
+  readonly observedTarget = computed(() => {
+    const id = this.observedTargetId();
+    if (!id) return null;
+    return this.targets().find((t) => t.targetId === id) ?? (id === this.selectedTargetId() ? this.selectedRow() : null);
+  });
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
+  /** Following a device, selected or not; only a selection sends this device's next plays there. */
+  readonly isObserving = computed(() => this.observedTargetId() !== null);
 
   private stateAt = 0;
   /** The session a stop retired, so only its own farewell heartbeat is ignored. */
@@ -203,7 +215,7 @@ export class RemoteService {
   /** The selected target left its player. Same treatment as a stop we sent: the
    *  reading goes, and the farewell heartbeat behind it is ignored. */
   noteTargetStopped(targetId: string): void {
-    if (!targetId || targetId !== this.selectedTargetId()) return;
+    if (!targetId || targetId !== this.observedTargetId()) return;
     const pending = this.pendingAction();
     if (pending === 'quality') {
       // Same title and position: the stream is being rebuilt, so keep the reading and show it loading.
@@ -229,11 +241,11 @@ export class RemoteService {
     this.pendingAction.set(null);
   }
 
-  /** A selected target that has yet to report and could still be playing: a restored selection has no state, and the server join can lag a reconnect.
+  /** An observed target that has yet to report and could still be playing: a restored selection has no state, and the server join can lag a reconnect.
    *  A listing that shows it playing nothing settles it: an idle device never reports. */
   readonly awaitingFirstReport = computed(() => {
-    if (!this.selectedTargetId() || this.reportedState()) return false;
-    const row = this.selectedRow();
+    if (!this.observedTargetId() || this.reportedState()) return false;
+    const row = this.observedTarget();
     if (row && !row.nowPlaying) return false;
     return this.wallClock() - this.observingSince < FIRST_REPORT_GRACE_MS;
   });
@@ -282,17 +294,37 @@ export class RemoteService {
 
     // Before the ticker's: the grace window it measures starts here.
     effect(() => {
-      const id = this.selectedTargetId();
+      const id = this.observedTargetId();
       untracked(() => {
         this.observingSince = id ? Date.now() : 0;
       });
     });
 
+    // A session owner taking over is a new device to read: the previous one's reading goes, the listing seeds the next.
+    let observed: string | null = null;
+    effect(() => {
+      const id = this.observedTargetId();
+      untracked(() => {
+        if (id === observed) return;
+        observed = id;
+        if (id !== this.selectedTargetId()) this.reportedState.set(null);
+        if (id) void this.refreshTargets();
+      });
+    });
+
     effect(() => {
       this.reportedState();
-      this.selectedTargetId();
+      this.observedTargetId();
       untracked(() => this.syncTicker());
     });
+
+    this.sessionSync.setLiveSource(
+      () => {
+        const s = this.targetState();
+        return s ? { mediaFileId: s.mediaFileId, mediaId: s.mediaId, episodeId: s.episodeId ?? null } : null;
+      },
+      () => this.interpolatedPosition(),
+    );
 
     // A reconnect remints the connection id, so a list built from live
     // connections is stale: refetch on our own reconnect too.
@@ -446,21 +478,22 @@ export class RemoteService {
           ? rows
           : rows.filter((r) => !r.ownerUsername || r.targetId === selected),
       );
-      const listed = selected ? rows.find((r) => r.targetId === selected) : undefined;
+      const observed = this.observedTargetId();
+      const listed = observed ? rows.find((r) => r.targetId === observed) : undefined;
       if (selected && !listed) {
         this.markOffline(selected);
-      } else if (selected) {
-        this.selectedRow.set(listed ?? null);
+      } else if (listed) {
+        if (selected) this.selectedRow.set(listed);
         this.clearOffline();
         // The target's farewell heartbeat lands after any local clear; a silent target the listing shows empty has stopped (live playback reports every 10s).
         // The listing is the only state a client that just picked an already-playing target has.
-        if (!listed?.nowPlaying) this.stoppedUntilReport = false;
-        if (listed?.nowPlaying && !this.reportedState() && !this.stoppedUntilReport) {
+        if (!listed.nowPlaying) this.stoppedUntilReport = false;
+        if (listed.nowPlaying && !this.reportedState() && !this.stoppedUntilReport) {
           this.reportedState.set(listed.nowPlaying);
           this.stateAt = Date.now();
         }
         const silentFor = Date.now() - this.stateAt;
-        if (listed && !listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
+        if (!listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
           this.reportedState.set(null);
         }
       }
@@ -589,7 +622,7 @@ export class RemoteService {
   /** Fold one state report from the selected target into the controller UI. */
   ingestState(): void {
     const s = this.sse.remoteState();
-    if (!s || s.targetId !== this.selectedTargetId()) return;
+    if (!s || s.targetId !== this.observedTargetId()) return;
     // The target flushes one last heartbeat on its way out of the player; taking
     // it would put the stopped playback straight back on screen.
     if (this.stoppedSessionId && s.sessionId === this.stoppedSessionId) {
@@ -657,7 +690,7 @@ export class RemoteService {
   private syncTicker(): void {
     const playing =
       this.reportedState()?.state === 'playing' ||
-      (this.selectedTargetId() !== null &&
+      (this.observedTargetId() !== null &&
         !this.reportedState() &&
         Date.now() - this.observingSince < FIRST_REPORT_GRACE_MS);
     if (playing && this.tickHandle === null) {

@@ -9,6 +9,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { RemoteService, snapshotFromWire, snapshotToWire, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
+import { SessionSyncService } from './session-sync.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 function frame(over: Partial<RemoteState> = {}): RemoteState {
@@ -39,7 +40,8 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
   };
 }
 
-function setup() {
+function setup(opts: { selected?: string | null } = {}) {
+  const owner = signal<string | null>(null);
   const remoteState = signal<RemoteState | null>(null);
   const sse = {
     commands: new Subject<RemoteCommand>(),
@@ -56,14 +58,59 @@ function setup() {
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, setLiveSource: vi.fn() } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
   const service = TestBed.inject(RemoteService);
-  service.selectedTargetId.set('tv#1');
-  return { service, remoteState, sse };
+  service.selectedTargetId.set(opts.selected === undefined ? 'tv#1' : opts.selected);
+  return { service, remoteState, sse, owner };
 }
+
+describe('RemoteService observation', () => {
+  it('reads the session owner without selecting it', () => {
+    const { service, remoteState, owner } = setup({ selected: null });
+    owner.set('tv#1');
+    remoteState.set(frame());
+    service.ingestState();
+    expect(service.observedTargetId()).toBe('tv#1');
+    expect(service.isObserving()).toBe(true);
+    expect(service.isRemoting()).toBe(false);
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.targetState()?.mediaTitle).toBe('A series');
+  });
+
+  it('lets a selection win over the session owner', () => {
+    const { service, remoteState, owner } = setup({ selected: 'tv#1' });
+    owner.set('pc#1');
+    remoteState.set(frame({ targetId: 'pc#1' }));
+    service.ingestState();
+    expect(service.observedTargetId()).toBe('tv#1');
+    expect(service.targetState()).toBeNull();
+  });
+
+  it('follows a new owner and drops the previous reading', async () => {
+    const { service, remoteState, owner } = setup({ selected: null });
+    owner.set('tv#1');
+    remoteState.set(frame());
+    service.ingestState();
+    owner.set('pc#1');
+    TestBed.tick();
+    expect(service.targetState()).toBeNull();
+    remoteState.set(frame({ targetId: 'pc#1', mediaTitle: 'Other' }));
+    service.ingestState();
+    expect(service.targetState()?.mediaTitle).toBe('Other');
+  });
+
+  it('observes nothing without a selection or an owner', () => {
+    const { service, remoteState } = setup({ selected: null });
+    remoteState.set(frame());
+    service.ingestState();
+    expect(service.isObserving()).toBe(false);
+    expect(service.targetState()).toBeNull();
+  });
+});
 
 /**
  * The target flushes one last heartbeat on its way out of the player, so a stop
@@ -440,6 +487,7 @@ describe('RemoteService mirrors navigation to a target', () => {
           { path: 'settings', children: [] },
         ]),
         { provide: SseService, useValue: sse },
+        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), setLiveSource: vi.fn() } },
         { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],

@@ -87,6 +87,11 @@ export interface RemoteState {
   lastCmdId: string | null;
 }
 
+/** Identity and ownership only: observers refetch `GET /api/session`. */
+export type SessionEvent =
+  | { type: 'session.changed'; epoch: number | null; itemId: number | null; state: string | null; ownerTargetId: string | null }
+  | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number };
+
 export interface PartyStateEvent {
   type: 'party.state';
   partyId: number;
@@ -196,6 +201,8 @@ export class SseService implements OnDestroy {
   readonly subtitleSyncCancelled = new Subject<number>();
   /** A target leaving its player; transient, so not on `lastEvent`, which `remote.targets_changed` replaces before any effect runs. */
   readonly stopped = new Subject<string>();
+  /** `session.changed` / `session.superseded`, on their own Subject like `commands`: a supersede must not be replaced on `lastEvent` before it is read. */
+  readonly sessionEvents = new Subject<SessionEvent>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
   readonly partyEvents = new Subject<PartyEvent>();
   /** Optimizer queue events, on their own Subject: progress ticks every heartbeat and must not flood `lastEvent`. */
@@ -387,6 +394,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type === 'remote.stopped') {
           this.stopped.next(String(data['targetId'] ?? ''));
+          return;
+        }
+        if (data.type === 'session.changed' || data.type === 'session.superseded') {
+          this.sessionEvents.next(data as unknown as SessionEvent);
           return;
         }
         if (data.type.startsWith('party.')) {

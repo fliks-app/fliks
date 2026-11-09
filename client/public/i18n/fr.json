@@ -4006,6 +4006,27 @@
     "error_ownerless_target_requires_admin": "Seul un administrateur peut piloter un appareil sans compte.",
     "error_target_user_missing": "Cet appareil n’a plus de compte."
   },
+  "session": {
+    "another_device": "un autre appareil",
+    "superseded_title": "Lecture reprise sur {{device}}",
+    "superseded_message": "Votre position ({{position}}) est enregistrée.",
+    "resume_here": "Reprendre ici",
+    "close": "Fermer",
+    "play_here": "Lire ici",
+    "resume": "Reprendre",
+    "hide": "Masquer",
+    "parked_device": "{{device}} est hors ligne",
+    "playing_on": "En lecture sur {{device}}",
+    "current": "Session en cours",
+    "resume_at": "Reprendre à {{position}}",
+    "settings_title": "Reprise automatique entre appareils",
+    "settings_hint": "Ce que vous lisez sur un appareil apparaît sur vos autres appareils, pilotable ou reprenable en un geste. Une seule lecture à la fois sur le compte pour les types choisis.",
+    "scope_all": "Tous les types",
+    "scope_chosen": "Types choisis",
+    "resume_only": "reprise seule",
+    "settings_note": "La télévision en direct et les watch parties ne sont pas concernées. Les livres audio suivent le type Livre : ils sont diffusés, donc pilotables.",
+    "saved": "Réglage enregistré"
+  },
   "language": {
     "en": "Anglais",
     "fr": "Français",

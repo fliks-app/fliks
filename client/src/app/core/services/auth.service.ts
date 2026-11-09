@@ -1,6 +1,7 @@
 import { Injectable, Injector, signal, computed, inject, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
+import type { MediaType } from '../enums/media-type.enum';
 import { TranslateService } from '@ngx-translate/core';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
@@ -78,6 +79,10 @@ export interface User {
   spoilerHideOverviews: boolean;
   /** Replace unwatched episode names with their number. */
   spoilerHideTitles: boolean;
+  /** Account playback session shared across devices; absent from an older server. */
+  sessionSync?: boolean;
+  /** Kinds the session covers; null = every kind. */
+  sessionKinds?: MediaType[] | null;
 }
 
 /** Public = instant follow + shared content; private = follow on approval. */

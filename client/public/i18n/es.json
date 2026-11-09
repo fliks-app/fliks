@@ -4006,6 +4006,27 @@
     "error_ownerless_target_requires_admin": "Solo un administrador puede controlar un dispositivo sin cuenta.",
     "error_target_user_missing": "Ese dispositivo ya no tiene cuenta."
   },
+  "session": {
+    "another_device": "otro dispositivo",
+    "superseded_title": "Reproducción retomada en {{device}}",
+    "superseded_message": "Su posición ({{position}}) está guardada.",
+    "resume_here": "Reanudar aquí",
+    "close": "Cerrar",
+    "play_here": "Reproducir aquí",
+    "resume": "Reanudar",
+    "hide": "Ocultar",
+    "parked_device": "{{device}} está sin conexión",
+    "playing_on": "Reproduciendo en {{device}}",
+    "current": "Sesión actual",
+    "resume_at": "Reanudar en {{position}}",
+    "settings_title": "Continuar entre dispositivos",
+    "settings_hint": "Lo que reproduce en un dispositivo aparece en los demás, donde puede controlarlo o retomarlo con un toque. Solo una reproducción a la vez en la cuenta para los tipos elegidos.",
+    "scope_all": "Todos los tipos",
+    "scope_chosen": "Tipos elegidos",
+    "resume_only": "solo reanudar",
+    "settings_note": "La televisión en directo y las watch parties no están incluidas. Los audiolibros siguen el tipo Libro: se transmiten, así que se pueden controlar.",
+    "saved": "Ajuste guardado"
+  },
   "language": {
     "en": "Inglés",
     "fr": "Francés",

@@ -96,22 +96,26 @@ export class PlaybackSession {
   );
   readonly isLocal = computed(() => this.kind() === 'local');
 
-  /** Display metadata of what the cast or remote output plays; null while local or loading. */
+  /** Following the account session's owner while this device plays nothing itself or elsewhere. */
+  readonly observing = computed(() => this.kind() === 'local' && this.injector.get(RemotePlaybackTarget).isObserving());
+
+  /** Display metadata of what the cast, remote or observed output plays; null while local or loading. */
   readonly nowPlaying = inject(NowPlayingMetadataService).track(() => {
-    if (this.kind() === 'local') return null;
-    const { mediaId, episodeId } = this.output()!.item();
+    const observing = this.observing();
+    if (this.kind() === 'local' && !observing) return null;
+    const { mediaId, episodeId } = (observing ? this.injector.get(RemotePlaybackTarget) : this.output()!).item();
     return mediaId ? { mediaId, episodeId } : null;
   });
 
-  /** Name of the device playing, null while local. */
+  /** Name of the device playing, null while local and not observing one. */
   readonly deviceName = computed<string | null>(() => {
     const kind = this.kind();
     const translate = this.injector.get(TranslateService);
     if (kind === 'cast') {
       return this.castSvc().castDevices().find((d) => d.connected)?.name ?? 'Chromecast';
     }
-    if (kind !== 'remote') return null;
-    const t = this.remoteSvc().selectedTarget();
+    if (kind !== 'remote' && !this.observing()) return null;
+    const t = this.remoteSvc().observedTarget();
     const label = t && parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
     return label ? translate.instant(label.key, label.params) : null;
   });

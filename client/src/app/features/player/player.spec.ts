@@ -37,6 +37,7 @@ import { PlayerSettingsService } from '../../core/services/player-settings.servi
 import { DeviceService } from '../../core/services/device.service';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { ENGINE_TRAITS, EngineKind } from '../../core/services/engine-traits';
+import { SessionSyncService } from '../../core/services/session-sync.service';
 
 /*
  * Angular's vitest builder refuses `vi.mock` on relative specifiers, so the
@@ -197,6 +198,7 @@ function createHarness(opts: {
 
   TestBed.configureTestingModule({
     providers: [
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
       provideZonelessChangeDetection(),
       // Never render: tests drive the class, and some wait in real time.
       { provide: ComponentFixtureAutoDetect, useValue: false },
@@ -259,7 +261,7 @@ function createHarness(opts: {
         },
       },
       { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
-      { provide: RemotePlaybackTarget, useValue: { isConnected: () => false } },
+      { provide: RemotePlaybackTarget, useValue: { isConnected: () => false, isObserving: () => false } },
       {
         provide: CastPlayerService,
         useValue: {

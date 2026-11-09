@@ -23,6 +23,7 @@ import {
   type NativeAudioState,
   type NativeAudioTrack,
 } from '../../plugins/audio-player.plugin';
+import { SessionSyncService, type SupersededPlayback } from '../session-sync.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
@@ -107,6 +108,7 @@ export class AudioPlayerService {
   private readonly injector = inject(Injector);
   private readonly nativeAudio = inject(NATIVE_AUDIO);
   private readonly auth = inject(AuthService);
+  private readonly sessionSync = inject(SessionSyncService);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -207,12 +209,25 @@ export class AudioPlayerService {
     window.addEventListener('pagehide', () => this.beatOnExit());
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
+    this.sessionSync.registerPlayer({
+      sessionId: () => this.sessionId,
+      yield: () => this.yieldToTakeover(),
+    });
     let signedIn = !!this.auth.user();
     effect(() => {
       const now = !!this.auth.user();
       if (signedIn && !now) untracked(() => this.dropForSession());
       signedIn = now;
     });
+  }
+
+  /** Another device took the account session: the player closes with its position saved and offers to start again. */
+  private async yieldToTakeover(): Promise<SupersededPlayback | null> {
+    const req = this._track();
+    if (!req) return null;
+    const positionSeconds = this._position();
+    await this.close();
+    return { title: req.title, positionSeconds, resume: () => this.play(req) };
   }
 
   /** The account left: its queue goes without a progress beat, which would reach the next account. */
@@ -1227,6 +1242,7 @@ export class AudioPlayerService {
       .updatePlaybackState(b.mediaId, b.payload)
       .then((r) => {
         if (r?.sessionLost) this.sessionId = undefined;
+        if (r?.superseded && b.payload.sessionId) void this.sessionSync.handleSuperseded(b.payload.sessionId);
         if (!music) this.sync.record(saved);
       })
       .catch(() => (music ? undefined : this.sync.queue(saved)));

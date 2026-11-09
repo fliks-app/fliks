@@ -4006,6 +4006,27 @@
     "error_ownerless_target_requires_admin": "Nur ein Administrator kann ein Gerät ohne Konto steuern.",
     "error_target_user_missing": "Dieses Gerät hat kein Konto mehr."
   },
+  "session": {
+    "another_device": "ein anderes Gerät",
+    "superseded_title": "Wiedergabe auf {{device}} fortgesetzt",
+    "superseded_message": "Ihre Position ({{position}}) ist gespeichert.",
+    "resume_here": "Hier fortsetzen",
+    "close": "Schließen",
+    "play_here": "Hier abspielen",
+    "resume": "Fortsetzen",
+    "hide": "Ausblenden",
+    "parked_device": "{{device}} ist offline",
+    "playing_on": "Läuft auf {{device}}",
+    "current": "Aktuelle Sitzung",
+    "resume_at": "Fortsetzen bei {{position}}",
+    "settings_title": "Geräteübergreifend fortsetzen",
+    "settings_hint": "Was Sie auf einem Gerät abspielen, erscheint auf Ihren anderen Geräten, wo Sie es steuern oder mit einem Tipp übernehmen können. Für die gewählten Typen läuft pro Konto jeweils nur eine Wiedergabe.",
+    "scope_all": "Alle Typen",
+    "scope_chosen": "Ausgewählte Typen",
+    "resume_only": "nur Fortsetzen",
+    "settings_note": "Live-TV und Watch-Partys sind nicht betroffen. Hörbücher folgen dem Typ Buch: Sie werden gestreamt und sind daher steuerbar.",
+    "saved": "Einstellung gespeichert"
+  },
   "language": {
     "en": "Englisch",
     "fr": "Französisch",

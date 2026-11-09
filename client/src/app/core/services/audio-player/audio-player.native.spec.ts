@@ -14,6 +14,7 @@ import { CastPlayerService } from '../cast-player.service';
 import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
 import { AudioPlayerService, type AudioPartyRouter } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
+import { SessionSyncService } from '../session-sync.service';
 
 const track = (id: number): MusicTrackRequest => ({
   itemId: id,
@@ -56,6 +57,7 @@ describe('AudioPlayerService on the native player', () => {
     });
     TestBed.configureTestingModule({
       providers: [
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
