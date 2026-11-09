@@ -63,13 +63,14 @@ const MEDIA_ERROR_NAMES: Record<number, string> = {
   4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
 };
 
-/** Classifies into `{source, code}`: HttpErrorResponse reports its transport status, a Shaka `category` is Shaka, else an engine failure. */
+/** Classifies into `{source, code}`: HttpErrorResponse reports its transport status, a Shaka `category` is Shaka, a `source: 'media'` error keeps it, else an engine failure. */
 export function classifyPlaybackError(
   e: unknown,
 ): { source: PlaybackError['source']; code?: number } {
   if (e instanceof HttpErrorResponse) return { source: 'session', code: e.status };
-  const obj = e as { category?: number; code?: number } | null | undefined;
+  const obj = e as { category?: number; code?: number; source?: string } | null | undefined;
   if (obj?.category != null) return { source: 'shaka', code: obj.code };
+  if (obj?.source === 'media') return { source: 'media', code: obj.code };
   return { source: 'engine', code: obj?.code };
 }
 

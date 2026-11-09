@@ -30,7 +30,7 @@ export class MusicApiService {
   }
 
   /** The library person of an artist a provider found, created when new. */
-  resolveArtist(body: { provider: string; externalId: string; name: string; sortName?: string | null }): Promise<{ id: number }> {
+  resolveArtist(body: { provider: string; externalId: string }): Promise<{ id: number }> {
     return firstValueFrom(this.http.post<{ id: number }>('/api/persons/resolve', body));
   }
 

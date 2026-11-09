@@ -77,7 +77,7 @@ describe('SearchComponent hits', () => {
     const open = (a: ArtistHit) => (c as unknown as { openArtist(a: ArtistHit): Promise<void> }).openArtist(a);
     const a = { provider: 'musicbrainz', externalId: 'x', name: 'N', sortName: null, personId: null } as ArtistHit;
     await open(a);
-    expect(resolveArtist).toHaveBeenCalledWith({ provider: 'musicbrainz', externalId: 'x', name: 'N', sortName: null });
+    expect(resolveArtist).toHaveBeenCalledWith({ provider: 'musicbrainz', externalId: 'x' });
     expect(navigate).toHaveBeenCalledWith(['/artists', 77]);
     await open({ ...a, personId: 5 });
     expect(resolveArtist).toHaveBeenCalledTimes(1);

@@ -35,6 +35,14 @@ describe('webosDevice', () => {
     },
   );
 
+  it('keeps the panel unknown when the UI width is narrow and no flag is sent', () => {
+    chromium(120);
+    (window as any).webOSSystem = { deviceInfo: JSON.stringify({ screenWidth: 1920 }) };
+    expect(webosDevice()?.uhd).toBeNull();
+    (window as any).webOSSystem = { deviceInfo: JSON.stringify({ screenWidth: 1920, uhd: 'false' }) };
+    expect(webosDevice()?.uhd).toBe(false);
+  });
+
   it('survives an unreadable deviceInfo', () => {
     (window as any).webOSSystem = { deviceInfo: '{nope' };
     chromium(94);
