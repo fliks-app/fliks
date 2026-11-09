@@ -1,7 +1,5 @@
 //! Golden ACL vectors (`fixtures/acl/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::{Fixture, blessing, diff};
+use crate::common::{Fixture, blessing, diff};
 use fliks_domain::acl::{Action, Permissions, Subject};
 use serde_json::{Value, json};
 use std::path::PathBuf;

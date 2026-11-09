@@ -1,7 +1,5 @@
 //! Golden subtitle-name vectors (`fixtures/subtitles/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::subtitle_name::*;
 use serde_json::{Value, json};
 

@@ -1,7 +1,5 @@
 //! Golden `ComicInfo.xml` vectors (`fixtures/comics-info`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::comics::{info, name};
 use serde_json::json;
 

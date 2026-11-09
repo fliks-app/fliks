@@ -1,7 +1,5 @@
 //! Golden importer-helper vectors (`fixtures/arr-import`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::arr_import::*;
 use serde_json::{Value, json};
 

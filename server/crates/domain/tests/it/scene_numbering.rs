@@ -19,7 +19,10 @@ fn pairs(p: &[(i64, i64, i64, i64)]) -> SceneMap {
 }
 
 fn map() -> SceneMap {
-    serde_json::from_str(include_str!("../../../fixtures/scene-numbering/map.json")).unwrap()
+    serde_json::from_str(include_str!(
+        "../../../../fixtures/scene-numbering/map.json"
+    ))
+    .unwrap()
 }
 
 fn aired(title: &str) -> (Option<i64>, Option<i64>, bool) {
@@ -153,7 +156,7 @@ fn an_unknown_or_ambiguous_mapping_rejects_numbered_releases() {
 
 fn ambiguous_map() -> SceneMap {
     serde_json::from_str(include_str!(
-        "../../../fixtures/scene-numbering/map-ambiguous.json"
+        "../../../../fixtures/scene-numbering/map-ambiguous.json"
     ))
     .unwrap()
 }

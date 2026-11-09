@@ -172,6 +172,13 @@ pub struct H {
     pub dir: PathBuf,
 }
 
+/// Shared by every plugin test process of one target dir, so each component compiles once.
+fn compile_cache_dir() -> PathBuf {
+    std::env::var("CARGO_TARGET_DIR")
+        .map_or_else(|_| std::env::temp_dir(), PathBuf::from)
+        .join("plugin-compile-cache")
+}
+
 pub fn options(
     s: &Scratch,
     dir: &std::path::Path,
@@ -191,6 +198,7 @@ pub fn options(
         },
         tune: Some(Arc::new(move |c: &mut HostConfig| {
             c.compiler = crate::server_bin();
+            c.compile_cache = Some(compile_cache_dir());
             tune(c);
         })),
         fetch: Fetcher::default(),

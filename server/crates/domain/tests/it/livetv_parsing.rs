@@ -1,8 +1,6 @@
 //! Golden live TV vectors (`fixtures/livetv-parsing/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
+use crate::common::replay;
 use chrono::{DateTime, SecondsFormat, Utc};
-use common::replay;
 use fliks_domain::livetv::{
     guide::{self, Candidate, Matchable},
     m3u::{self, parse_m3u},

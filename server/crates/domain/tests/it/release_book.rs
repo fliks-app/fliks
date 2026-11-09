@@ -1,7 +1,5 @@
 //! Golden audio and text release vectors (`fixtures/release-audio`, `release-text`, `release-book-scoring`, `audio-qualities`, `text-qualities`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::media::family::Family;
 use fliks_domain::release::audio::quality::*;
 use fliks_domain::release::image::quality::*;

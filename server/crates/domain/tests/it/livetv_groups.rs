@@ -1,9 +1,7 @@
 //! Golden restricted-group vectors (`fixtures/livetv-groups/cases.json`, `BLESS=1` rewrites `expected`):
 //! the access operations replayed on the pure `State`, settings reads and writes included.
-mod common;
-
+use crate::common::replay;
 use chrono::{DateTime, Duration, Utc};
-use common::replay;
 use fliks_domain::livetv::access::{
     EXEMPT_KEY, RESTRICTED_KEY, State, VANISHED_KEY, read_group_set, read_vanished,
     restricted_view, write_vanished,

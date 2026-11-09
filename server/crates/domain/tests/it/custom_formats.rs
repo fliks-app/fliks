@@ -1,7 +1,5 @@
 //! Golden custom-format vectors (`fixtures/custom-formats`, `fixtures/app-languages`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::language::APP_LANGUAGES;
 use fliks_domain::release::scoring::*;
 use serde_json::{Value, json};

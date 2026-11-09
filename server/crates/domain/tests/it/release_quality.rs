@@ -1,7 +1,5 @@
 //! Golden release-quality vectors (`fixtures/release-quality`, `fixtures/app-qualities`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::release::parsing::quality::*;
 use serde_json::{Value, json};
 

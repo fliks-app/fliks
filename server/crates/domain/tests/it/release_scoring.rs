@@ -1,7 +1,5 @@
 //! Golden release-scoring vectors (`fixtures/release-scoring`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::release::parsing::season_episode::{ReleaseCoverage, Span};
 use fliks_domain::release::scoring::*;
 use serde::Deserialize;

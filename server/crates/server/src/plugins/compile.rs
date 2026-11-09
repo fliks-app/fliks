@@ -150,7 +150,21 @@ async fn compile(env: &Env, wasm: &[u8]) -> Result<Vec<u8>, LoadError> {
             .map_err(|e| LoadError::Host(e.to_string()))?
             .map_err(|e| LoadError::Invalid(format!("{e:#}")));
     }
-    compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await
+    let Some(dir) = &env.cfg.compile_cache else {
+        return compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await;
+    };
+    let path = cache_path(dir, &sha256_hex(wasm), &fingerprint(&env.engine));
+    if let Ok(bytes) = tokio::fs::read(&path).await {
+        return Ok(bytes);
+    }
+    let bytes = compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await?;
+    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
+    if std::fs::create_dir_all(path.parent().expect("cwasm dir")).is_ok()
+        && std::fs::write(&tmp, &bytes).is_ok()
+    {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+    Ok(bytes)
 }
 
 /// The component from the cache when the row authenticates the file, else compiled and cached.

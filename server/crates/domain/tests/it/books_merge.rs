@@ -1,7 +1,5 @@
 //! Golden book merge vectors (`fixtures/books-merge`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::{
     external_id::Namespace,
     media::family::Family,

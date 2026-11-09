@@ -1,7 +1,5 @@
 //! Scorer and search-ranking vectors (`fixtures/subtitle-search/cases.json`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::{subtitle_flags::HiMode, subtitle_score::*};
 use serde_json::{Value, json};
 use std::collections::HashSet;

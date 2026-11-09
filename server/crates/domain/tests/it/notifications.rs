@@ -1,7 +1,5 @@
 //! Golden notification vectors (`fixtures/notifications/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::notifications::*;
 use serde_json::{Map, Value, json};
 

@@ -1,7 +1,5 @@
 //! Golden naming vectors (`fixtures/naming`; `BLESS=1` rewrites `expected`) and the rules without a vector.
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::naming::*;
 use serde::Deserialize;
 use serde_json::{Value, json};

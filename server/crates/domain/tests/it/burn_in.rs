@@ -1,7 +1,5 @@
 //! Golden burn-in vectors (`fixtures/burn-in/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay_where;
+use crate::common::replay_where;
 use fliks_domain::burn_in::*;
 use serde_json::Value;
 
