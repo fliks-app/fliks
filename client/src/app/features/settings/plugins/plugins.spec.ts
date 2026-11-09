@@ -129,7 +129,7 @@ function cardText(fixture: ComponentFixture<unknown>): string {
     .join('|');
 }
 
-describe('PluginsSettingsComponent — enable/disable', () => {
+describe('PluginsSettingsComponent: enable/disable', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('disabling calls POST .../disable and the row signal reflects the response', async () => {
@@ -163,7 +163,7 @@ describe('PluginsSettingsComponent — enable/disable', () => {
   });
 });
 
-describe('PluginsSettingsComponent — uninstall', () => {
+describe('PluginsSettingsComponent: uninstall', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('VERDICT: uninstalling re-reads the contributions, so the sidebar loses the plugin at once', async () => {
@@ -211,7 +211,7 @@ describe('statusDetail', () => {
   });
 });
 
-describe('PluginsSettingsComponent — cards', () => {
+describe('PluginsSettingsComponent: cards', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('VERDICT: a disabled plugin does not read as active on its card', async () => {
@@ -313,7 +313,7 @@ describe('PluginsSettingsComponent — cards', () => {
   });
 });
 
-describe('PluginsSettingsComponent — refresh all sources', () => {
+describe('PluginsSettingsComponent: refresh all sources', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('refreshes every enabled source, then reloads the catalogue', async () => {
@@ -333,7 +333,7 @@ describe('PluginsSettingsComponent — refresh all sources', () => {
   });
 });
 
-describe('PluginsSettingsComponent — export', () => {
+describe('PluginsSettingsComponent: export', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it.each([
