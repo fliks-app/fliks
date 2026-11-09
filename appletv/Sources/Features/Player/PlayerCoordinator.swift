@@ -136,6 +136,7 @@ import UIKit
         applyPreferredSubtitle(to: item, player: p)
         if autoplay { p.play() } else { p.pause() }
         RemoteControlService.shared.activeCoordinator = self
+        RemoteControlService.shared.supersededPrompt = nil
     }
 
     /// `keepingSubtitle` carries the viewer's pick over a recovery reload of the same file.

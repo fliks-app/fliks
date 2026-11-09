@@ -116,6 +116,32 @@ import UIKit
         onLoadRequested?(p.mediaFileId, p.mediaId, p.episodeId, p.position, false, LaunchTracks(audioId: nil, subtitleId: nil, subtitleSent: false))
     }
 
+    private static let audioKinds: Set<String> = ["album", "book"]
+
+    /// Audio `load`s start in the music player; a book has no tvOS player and is ignored.
+    @MainActor
+    private func loadAudio(_ cmd: RemoteCommand, kind: String) {
+        guard kind == "album", let mediaId = cmd.mediaId else {
+            print("remote: no tvOS player for a \(kind) load (\(cmd.cmdId)), ignoring")
+            return
+        }
+        Task { @MainActor in
+            do {
+                let page = try await MusicAPI.albumPage(mediaId)
+                let all = page.queue(edition: nil)
+                let wanted = cmd.queueItemIds ?? cmd.itemId.map { [$0] } ?? all.map(\.itemId)
+                let tracks = wanted.compactMap { id in all.first { $0.itemId == id } }
+                let current = cmd.queueIndex.flatMap { wanted.indices.contains($0) ? wanted[$0] : nil } ?? cmd.itemId
+                let start = tracks.firstIndex { $0.itemId == current } ?? 0
+                MusicPlayer.shared.resume(tracks, from: start, shuffle: cmd.shuffle ?? false,
+                                          repeatMode: cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? .off,
+                                          position: cmd.positionSeconds ?? 0, autoplay: !(cmd.paused ?? false))
+            } catch {
+                print("remote: audio load \(cmd.cmdId) failed: \(error)")
+            }
+        }
+    }
+
     /// `PlayerCoordinator` is `@MainActor`-isolated (it drives `AVPlayer` and
     /// SwiftUI state directly), so applying a command has to hop there too.
     @MainActor
@@ -125,6 +151,10 @@ import UIKit
             return
         }
         if cmd.action == "load" {
+            if let kind = cmd.kind, Self.audioKinds.contains(kind) {
+                loadAudio(cmd, kind: kind)
+                return
+            }
             guard let mediaFileId = cmd.mediaFileId, let mediaId = cmd.mediaId else {
                 print("remote: load command \(cmd.cmdId) missing mediaFileId/mediaId, ignoring")
                 return
