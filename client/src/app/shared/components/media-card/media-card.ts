@@ -104,10 +104,12 @@ export class MediaCardComponent {
   );
   /** For a square cover the card can't tell from its media (an album given by `imageUrl` alone). */
   readonly square = input(false);
-  /** An audio cover is square: it sits on a blurred fill inside the 2:3 frame. */
+  /** An album is a square card: its cover fills the frame. */
+  protected readonly albumCover = computed(() => this.square() || this.media()?.type === 'album');
+  /** An audiobook cover is square: it sits on a blurred fill inside the 2:3 frame. */
   protected readonly squareCover = computed(() => {
     const b = this.bookInfo();
-    return this.square() || this.media()?.type === 'album' || (!!b && (b.lastFamily ?? (b.formats.length === 1 ? b.formats[0] : 'text')) === 'audio');
+    return this.albumCover() || (!!b && (b.lastFamily ?? (b.formats.length === 1 ? b.formats[0] : 'text')) === 'audio');
   });
 
   // Layout
