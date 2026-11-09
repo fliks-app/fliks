@@ -1250,6 +1250,7 @@ export class AudioPlayerService {
 
   /** Opens a remote queue where the sender left it; the order is the sender's, never reshuffled. */
   private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<void> {
+    if (this.blockedByParty()) return;
     const generation = ++this.generation;
     const { tracks, index } = await this.queueOf(q);
     if (generation !== this.generation || !tracks.length || this.blockedByParty()) return;
@@ -1266,7 +1267,7 @@ export class AudioPlayerService {
     if (cmd.kind === 'album' && cmd.queue?.itemIds.length) {
       return this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
     }
-    if (!cmd.itemId) return;
+    if (!cmd.itemId || this.blockedByParty()) return;
     const generation = ++this.generation;
     const req = cmd.kind === 'album' ? null : cmd.mediaId ? await this.audiobookRequest(cmd.mediaId, cmd.itemId) : null;
     if (generation !== this.generation) return;

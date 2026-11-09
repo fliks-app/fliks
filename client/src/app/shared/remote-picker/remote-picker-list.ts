@@ -120,7 +120,7 @@ export class RemotePickerListComponent {
             : this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
           : null,
       connected: this.session.isLocal() && !resumable,
-      disabled: this.readerHere(),
+      disabled: this.readerHere() && this.session.isLocal(),
     });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
