@@ -59,10 +59,10 @@ Preference columns of `users`: `"sessionSync" boolean NOT NULL DEFAULT false`; `
 Scope
 1. A beat is in scope when the account has `sessionSync = true` and its kind is in `sessionKinds` (or `sessionKinds` is null). The account is `attributedUserId ?? user.id` of the live session (the credited account, like the history). The kind is the live session's `mediaType` tag. The preference is read from `users` at the first beat of a sid only (the claim, rule 4), never per beat.
 2. Out of scope (option off or kind not selected): the `account_sessions` row is neither created, updated nor superseded, and the beat is answered as before. Presence and remote control are unaffected.
-3. Never in scope in this version: live TV, watch parties, `download=1` sessions, and sessions of a client with neither an SSE connection nor a polled target (no target id: Subsonic, OPDS, Kobo). A beat with a `playedAt` (offline replay, `heartbeat.md` rule 21) never claims or updates the row.
+3. Never in scope in this version: live TV, watch parties (a beat whose connection or device is a member of a live party neither claims, updates nor supersedes; its history is written as usual), and sessions of a client with neither an SSE connection nor a polled target (no target id: Subsonic, OPDS, Kobo). A `download=1` session never beats, so nothing excludes it explicitly. A beat with a `playedAt` (offline replay, `heartbeat.md` rule 21) never claims or updates the row.
 
 Claim
-4. The claim happens at the first beat of an engine sid that reaches the hub with a target (a sid the hub has never seen), not at `playback-info`: the audio preload opens sessions that never beat before playing and so claims nothing. A sid claims once; the hub remembers it (sid and target) until the session ends.
+4. The claim happens at the first beat of an engine sid that reaches the hub with a target (a sid the hub has never seen), not at `playback-info`: the audio preload opens sessions that never beat before playing and so claims nothing. A sid claims once; the hub remembers it (sid and target) until the engine can no longer revive it after its session ended (`STREAM_SESSION_REVIVE_TTL_MS`), so a device waking inside that window cannot claim again. A sid found out of scope is remembered until its session ends, so later beats do not read the preference.
 5. The whole decision runs under one lock of the hub, including the write of the row, so two concurrent claims are serialised: the last one in is the owner, the other is superseded on its next beat.
 6. Cases of the first beat of a sid, in order:
    1. no row: insert with `epoch = 1`;
@@ -71,7 +71,7 @@ Claim
 7. After any claim, every other account's row whose `ownerTargetId` is the claiming target and that is not `parked` becomes `parked` and its account gets `session.changed` (a shared device: a guest credited elsewhere took the screen).
 8. A beat of a sid the hub already claimed:
    - the row's `sessionId` is this sid: the current session. Item, file, kind, state, position, duration, queue (when the beat carries one) and the owner target are updated. A `parked` row comes back to the beat's state (a device that recovered within the engine revive window);
-   - the row has another sid owned by another target, or the row's owner changed hands: the session is superseded. The beat is answered `superseded: true` and writes neither `playback_states` nor the row, and no `remote.state` is emitted for it;
+   - the row has another sid owned by another target, or the row's owner changed hands: the session is superseded, whether or not the beat's sender can be identified. The beat is answered `superseded: true` and writes neither `playback_states` nor the row, and no `remote.state` is emitted for it;
    - the row has another sid owned by the same target (a replaced session): ignored for the row, the history write is not blocked, `superseded` is not set;
    - no row (completed or dismissed): ignored.
 9. The row is written when it is created, replaced, when the state, item, file or queue change, on a position jump above 30 s, and at least every 30 s while beating (the trigger of `playback_states`, `heartbeat.md` rule 13). The volatile position of the other beats lives in memory.

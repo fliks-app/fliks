@@ -306,7 +306,7 @@ fn reply(lost: bool, superseded: bool, state: Option<Option<Value>>) -> Response
     }
 }
 
-/// Rule 22: the facts of a beat the account session hub needs; `None` when it is out of its reach.
+/// Rule 22: the facts of a beat that may claim; `None` when it cannot (a party member, no identity, kind or item).
 fn account_beat(
     st: &AppState,
     user: i32,
@@ -320,10 +320,18 @@ fn account_beat(
         PlayState::Buffering => AccountState::Buffering,
         _ => AccountState::Playing,
     };
-    let id = st.hub.identity_for(s.sse_connection_id.as_deref())?;
+    let hub_user = s.user_id.unwrap_or(user);
+    let conn = s.sse_connection_id.as_deref();
+    let id = st.hub.identity_for(conn)?;
+    if st
+        .parties
+        .has_member(hub_user, conn, id.target_id.as_deref())
+    {
+        return None;
+    }
     Some(AccountBeat {
         account,
-        hub_user: s.user_id.unwrap_or(user),
+        hub_user,
         sid: s.session_id.clone(),
         connection: s.sse_connection_id.clone(),
         owner: Owner {
@@ -433,10 +441,13 @@ pub async fn heartbeat(
         lost = engine_lost.unwrap_or(updated.is_none());
         if let Some(u) = &updated {
             let account = attributed.unwrap_or(user);
-            let input = account_beat(&st, user, account, u, item, &body)
-                .filter(|_| client_played_at.is_none());
-            if let Some(input) = input {
-                superseded = st.account_sessions.beat(&st, input).await == Verdict::Superseded;
+            if client_played_at.is_none() {
+                superseded = match account_beat(&st, user, account, u, item, &body) {
+                    Some(input) => {
+                        st.account_sessions.beat(&st, input).await == Verdict::Superseded
+                    }
+                    None => st.account_sessions.is_superseded(account, sid).await,
+                };
             }
             if !superseded {
                 record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
