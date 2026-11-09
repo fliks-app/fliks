@@ -10,7 +10,7 @@ import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
 
-/** Mirrors the remote target this phone observes (selected or the account session's owner) into an Android media notification and applies its controls.
+/** Mirrors the remote target this phone observes (selected or the account session's owner) into an Android media notification / the iOS lock screen and applies its controls.
  *  Position is read untracked (native extrapolates it); Cast keeps the Cast SDK's notification, which Play Services would duplicate. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
@@ -25,7 +25,7 @@ export class RemoteNotificationService {
   private shown = false;
 
   init(): void {
-    if (!this.device.isAndroidNative()) return;
+    if (!this.device.isAndroidNative() && !this.device.isIosNative()) return;
     window.addEventListener('remoteNotificationCommand', (e) => {
       const { action, value } = (e as CustomEvent<{ action: RemoteNotificationAction; value: number }>).detail;
       this.apply(action, value);

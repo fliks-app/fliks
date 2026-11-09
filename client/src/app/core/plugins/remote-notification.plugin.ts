@@ -1,6 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 
-/** Android notification for the device this phone drives (a remote target). Its controls
+/** Android notification / iOS lock screen for the device this phone drives (a remote target). Its controls
  *  arrive as `remoteNotificationCommand` window events. */
 export interface RemoteNotificationPlugin {
   update(options: {
