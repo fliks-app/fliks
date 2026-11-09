@@ -18,7 +18,7 @@
     <p class="text-sm opacity-60">{{ 'session.current' | translate }}</p>
     <p class="truncate font-semibold">{{ f.title }}</p>
     <p class="truncate text-sm opacity-60">
-      {{ (f.parked ? 'session.parked_device' : 'session.playing_on') | translate: { device: f.device } }} · {{ f.detail }}
+      {{ f.line }} · {{ f.detail }}
     </p>
   </div>
 }
@@ -38,7 +38,7 @@
   <!-- Lucide owns the icon's class attribute: a [class.x] toggle on it is overwritten, so the accent goes through [class]. -->
   @let iconClass = row.connected ? 'h-5 w-5 shrink-0 text-info' : 'h-5 w-5 shrink-0';
   <div class="flex items-center gap-1">
-    <button type="button" class="dropdown-item min-w-0 flex-1 text-white" (click)="selectRow(row)">
+    <button type="button" class="dropdown-item min-w-0 flex-1 text-white disabled:opacity-50 disabled:cursor-default" [disabled]="!pressable(row)" (click)="selectRow(row)">
       @if (row.icon === 'cast') {
         <!-- Accented only for the device in use: on every row it read as a state the list does not have. -->
         <svg lucideCast [class]="iconClass"></svg>

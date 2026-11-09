@@ -170,6 +170,15 @@ describe('CastOverlayComponent', () => {
       expect(el.querySelector('button')).toBeNull();
     });
 
+    it('hides a parked reader strip here without deleting the session', () => {
+      const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
+      const { el, fixture, sync } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false }) });
+      Array.from(el.querySelectorAll('button')).at(-1)!.click();
+      fixture.detectChanges();
+      expect(sync.dismiss).not.toHaveBeenCalled();
+      expect(el.querySelector('button')).toBeNull();
+    });
+
     it('offers the device list to transfer the session to', () => {
       const { el } = setup({ local: true, account: accountSession() });
       expect(el.querySelector('[aria-label="session.transfer"]')).not.toBeNull();

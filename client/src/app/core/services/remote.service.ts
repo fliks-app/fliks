@@ -412,7 +412,7 @@ export class RemoteService {
     const loader = this.loaderFor(cmd);
     if (loader) {
       this.lastAppliedCmdId.set(cmd.cmdId);
-      if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
+      if (overPlayer) await this.router.navigateByUrl('/', { replaceUrl: true });
       return loader(cmd);
     }
     if (!cmd.mediaFileId) {
