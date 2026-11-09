@@ -1,0 +1,87 @@
+{
+  "ignore": [
+    "$..positionAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..createdAt",
+    "$..playedAt"
+  ],
+  "name": "session-transfer-reader-refused",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "sessionKinds": null,
+        "sessionSync": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "phone",
+        "name": "Phone"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-2",
+        "formFactor": "tv",
+        "name": "TV"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-2#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 0,
+        "itemId": 101,
+        "mediaFileId": 101,
+        "positionSeconds": 0,
+        "progression": 0.7,
+        "targetId": "dev-1#native"
+      },
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "PUT",
+      "path": "/api/playback/media/101/state"
+    },
+    {
+      "as": "user",
+      "body": {
+        "toTargetId": "dev-2#native"
+      },
+      "expect": {
+        "status": 400
+      },
+      "ignoreBody": true,
+      "method": "POST",
+      "path": "/api/session/transfer"
+    }
+  ]
+}

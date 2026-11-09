@@ -4024,6 +4024,8 @@
     "resume": "Reanudar",
     "hide": "Ocultar",
     "parked_device": "{{device}} está sin conexión",
+    "read_on": "Leído en {{device}}",
+    "open_here": "Abrir aquí",
     "playing_on": "Reproduciendo en {{device}}",
     "current": "Sesión actual",
     "resume_at": "Reanudar en {{position}}",

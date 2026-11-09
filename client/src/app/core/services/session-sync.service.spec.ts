@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +16,7 @@ import { SseService, type SessionEvent } from './sse.service';
 function session(over: Partial<AccountSession> = {}): AccountSession {
   return {
     epoch: 1,
-    item: { id: 5, mediaId: 3, episodeId: 7, mediaFileId: 9, kind: 'movie', title: 'A film', subtitle: null, posterUrl: null },
+    item: { id: 5, mediaId: 3, episodeId: 7, mediaFileId: 9, kind: 'movie', family: 'video', title: 'A film', subtitle: null, posterUrl: null },
     owner: { targetId: 'pc#1', deviceName: 'Desk', formFactor: 'desktop' },
     state: 'playing',
     positionSeconds: 100,
@@ -228,10 +228,34 @@ describe('SessionSyncService play here', () => {
     expect(resumer.mock.calls[0][1]).toBe(640);
   });
 
+  const book = { id: 11, mediaId: 4, episodeId: null, mediaFileId: 2, kind: 'book' as const, family: 'text' as const, title: 'A book', subtitle: null, posterUrl: null };
+
+  it('opens a parked book in the reader', async () => {
+    const { service, flush } = setup();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await flush(session({ item: book, state: 'parked', playing: false, positionSeconds: 0.4, durationSeconds: 1 }));
+    expect(service.isReading(service.session()!)).toBe(true);
+    expect(service.canTransfer()).toBe(false);
+    await service.playHere();
+    expect(navigate).toHaveBeenCalledWith(['/read', 4, 11]);
+  });
+
+  it('keeps an audiobook out of the reader', async () => {
+    const { service, flush } = setup();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const audio = vi.fn().mockResolvedValue(undefined);
+    service.registerResumer('audio', audio);
+    await flush(session({ item: { ...book, family: 'audio' }, state: 'parked', playing: false }));
+    expect(service.isReading(service.session()!)).toBe(false);
+    await service.playHere();
+    expect(audio).toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('starts an album from its stored queue', async () => {
     const { service, flush } = setup();
     const queue = { itemIds: [5, 6], index: 0, shuffle: false, repeat: 'off' as const };
-    await flush(session({ item: { id: 5, mediaId: 2, episodeId: null, mediaFileId: null, kind: 'album', title: 'An album', subtitle: 'A track', posterUrl: null }, queue, state: 'parked', playing: false }));
+    await flush(session({ item: { id: 5, mediaId: 2, episodeId: null, mediaFileId: null, kind: 'album', family: 'audio', title: 'An album', subtitle: 'A track', posterUrl: null }, queue, state: 'parked', playing: false }));
     const resumer = vi.fn().mockResolvedValue(undefined);
     service.registerResumer('audio', resumer);
     expect(service.canPlayHere()).toBe(true);

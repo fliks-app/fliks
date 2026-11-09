@@ -175,7 +175,7 @@ export class RemotePickerListComponent {
   /** Another device of the account can take the session over, unless it already plays it. */
   protected canTransfer(row: PickerRow): boolean {
     const s = this.sync.session();
-    return row.kind === 'remote' && !!s && (this.sync.parked() || s.owner.targetId !== row.id);
+    return row.kind === 'remote' && !!s && this.sync.canTransfer() && (this.sync.parked() || s.owner.targetId !== row.id);
   }
 
   protected async transfer(row: PickerRow): Promise<void> {

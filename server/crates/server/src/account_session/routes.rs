@@ -31,6 +31,7 @@ pub struct ItemDto {
     episode_id: Option<i32>,
     media_file_id: Option<i32>,
     kind: MediaKind,
+    family: Option<String>,
     title: Option<String>,
     subtitle: Option<String>,
     poster_url: Option<String>,
@@ -68,6 +69,7 @@ fn dto(r: Row, shown: store::Shown) -> AccountSessionDto {
             episode_id: shown.episode_id,
             media_file_id: r.media_file_id,
             kind: r.kind,
+            family: shown.family,
             title: shown.title,
             subtitle: shown.subtitle,
             poster_url: shown.poster_url,
@@ -147,6 +149,9 @@ pub async fn transfer(
     let shown = store::shown(&st.db, row.item_id)
         .await?
         .ok_or_else(no_session)?;
+    if matches!(shown.family.as_deref(), Some("text" | "image")) {
+        return Err(AppError::bad_request("session.error_not_transferable"));
+    }
     let queue = row.queue.as_ref();
     let cmd = Command {
         action: crate::events::event::RemoteAction::Load,

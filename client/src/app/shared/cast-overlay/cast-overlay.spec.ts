@@ -8,6 +8,7 @@ import { RemotePlaybackTarget } from '../../core/services/remote-playback-target
 import { SessionSyncService, type AccountSession } from '../../core/services/session-sync.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { SseService } from '../../core/services/sse.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { CastOverlayComponent } from './cast-overlay';
@@ -24,7 +25,7 @@ class PickerListStub {}
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   return {
     epoch: 1,
-    item: { id: 5, mediaId: 3, episodeId: null, mediaFileId: 9, kind: 'movie', title: 'Observed title', subtitle: null, posterUrl: '/p.jpg' },
+    item: { id: 5, mediaId: 3, episodeId: null, mediaFileId: 9, kind: 'movie', family: 'video', title: 'Observed title', subtitle: null, posterUrl: '/p.jpg' },
     owner: { targetId: 'pc#1', deviceName: 'Desk', formFactor: 'desktop' },
     state: 'playing',
     positionSeconds: 65,
@@ -42,6 +43,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     role: signal(over.account ? 'observer' : 'none'),
     parked: signal(over.account?.state === 'parked'),
     canPlayHere: signal(over.canPlayHere ?? false),
+    isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     playHere: vi.fn(),
     dismiss: vi.fn(),
   };
@@ -75,6 +77,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
+      { provide: SseService, useValue: { targetId: signal('phone#1') } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
     ],
@@ -138,12 +141,30 @@ describe('CastOverlayComponent', () => {
     });
 
     it('opens the full controller from the strip of an audio session only', () => {
-      const audio = setup({ local: true, account: accountSession({ item: { ...accountSession().item, kind: 'album' } }) });
+      const audio = setup({ local: true, account: accountSession({ item: { ...accountSession().item, kind: 'album', family: 'audio' } }) });
       expect(audio.el.querySelector('app-session-audio-controller')).not.toBeNull();
       expect(audio.el.querySelectorAll('button').length).toBeGreaterThan(2);
       TestBed.resetTestingModule();
       const video = setup({ local: true, account: accountSession() });
       expect(video.el.querySelector('app-session-audio-controller')).toBeNull();
+    });
+
+    it('shows a reader as read on its device with the percentage, opens here and has no transport', () => {
+      const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
+      const { el, sync } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false, positionSeconds: 0.4, durationSeconds: 1 }) });
+      expect(el.textContent).toContain('session.read_on');
+      expect(el.textContent).toContain('40%');
+      expect(el.textContent).toContain('session.open_here');
+      expect(el.querySelector('[aria-label="session.transfer"]')).toBeNull();
+      expect(el.querySelector('app-session-audio-controller')).toBeNull();
+      (Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('session.open_here')) as HTMLButtonElement).click();
+      expect(sync.playHere).toHaveBeenCalled();
+    });
+
+    it('hides the strip of a book read on this very device', () => {
+      const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
+      const { el } = setup({ local: true, account: accountSession({ item: book, state: 'parked', playing: false, owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }) });
+      expect(el.querySelector('button')).toBeNull();
     });
 
     it('offers the device list to transfer the session to', () => {

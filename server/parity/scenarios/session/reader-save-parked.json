@@ -1,0 +1,99 @@
+{
+  "ignore": [
+    "$..positionAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..createdAt",
+    "$..playedAt"
+  ],
+  "name": "session-reader-save-parked",
+  "seed": "books",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "sessionKinds": null,
+        "sessionSync": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "phone",
+        "name": "Phone"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 0,
+        "itemId": 101,
+        "mediaFileId": 101,
+        "positionSeconds": 0,
+        "progression": 0.4,
+        "targetId": "dev-1#native"
+      },
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "PUT",
+      "path": "/api/playback/media/101/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "durationSeconds": 1.0,
+          "epoch": 1,
+          "item": {
+            "episodeId": null,
+            "family": "text",
+            "id": 101,
+            "kind": "book",
+            "mediaFileId": 101,
+            "mediaId": 101,
+            "posterUrl": "/api/images/media/101/poster",
+            "subtitle": null,
+            "title": "Parity Book Alpha"
+          },
+          "owner": {
+            "deviceName": "Phone",
+            "formFactor": "phone",
+            "targetId": "dev-1#native"
+          },
+          "playing": false,
+          "positionSeconds": 0.4,
+          "queue": null,
+          "state": "parked"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/session"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/session"
+    }
+  ]
+}

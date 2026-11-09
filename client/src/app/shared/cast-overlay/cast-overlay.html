@@ -52,7 +52,9 @@
       <span class="min-w-0">
         <span class="block truncate text-sm font-semibold">{{ s.item.title }}</span>
         <span class="block truncate text-sm text-base-content/60">
-          @if (sync.parked()) {
+          @if (reading()) {
+            {{ 'session.read_on' | translate: { device: s.owner.deviceName ?? ('session.another_device' | translate) } }} · {{ readPercent() }}%
+          } @else if (sync.parked()) {
             {{ 'session.parked_device' | translate: { device: s.owner.deviceName ?? ('session.another_device' | translate) } }}
           } @else {
             {{ detail() }}
@@ -72,16 +74,18 @@
     }
     @if (sync.canPlayHere()) {
       <button type="button" class="btn btn-primary btn-sm" (click)="sync.playHere()">
-        {{ (sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
+        {{ (reading() ? 'session.open_here' : sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
       </button>
     }
-    <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
-      <button trigger type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'session.transfer' | translate"
-              [title]="'session.transfer' | translate">
-        <svg lucideArrowRightLeft class="h-5 w-5"></svg>
-      </button>
-      <app-remote-picker-list />
-    </app-dropdown-menu>
+    @if (!reading()) {
+      <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
+        <button trigger type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'session.transfer' | translate"
+                [title]="'session.transfer' | translate">
+          <svg lucideArrowRightLeft class="h-5 w-5"></svg>
+        </button>
+        <app-remote-picker-list />
+      </app-dropdown-menu>
+    }
     <button type="button" class="btn btn-ghost btn-circle" (click)="hide()" [attr.aria-label]="'session.hide' | translate">
       <svg lucideX class="h-5 w-5"></svg>
     </button>

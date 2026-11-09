@@ -2,7 +2,9 @@
 use super::watched::{self, Watch};
 use crate::sync::MutexExt;
 use crate::{
-    account_session::{BeatIn as AccountBeat, Owner, QueueState, State as AccountState, Verdict},
+    account_session::{
+        BeatIn as AccountBeat, Owner, QueueState, ReadingIn, State as AccountState, Verdict,
+    },
     engine::EngineError,
     events::{
         SseEvent,
@@ -23,7 +25,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::media::kind::MediaKind;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use fliks_engine_core::api::{HeartbeatRequest, SessionKind};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Mutex};
@@ -351,6 +353,54 @@ fn account_beat(
     })
 }
 
+/// `session.md` rule 19: a reader's save leaves a parked row of the item, or removes it once the item is finished.
+#[allow(clippy::too_many_arguments)]
+async fn account_reading(
+    st: &AppState,
+    headers: &HeaderMap,
+    body: &Value,
+    account: i32,
+    item: i32,
+    file: i32,
+    progression: f64,
+    completed: bool,
+) {
+    if completed {
+        st.account_sessions
+            .complete_reading(st, account, item)
+            .await;
+        return;
+    }
+    let Some(kind) = crate::account_session::kind_of(&st.db, item)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return;
+    };
+    let id = st
+        .hub
+        .identity_for(sse_connection_id(body, headers).as_deref());
+    let owner = id.map_or_else(Owner::default, |id| Owner {
+        target_id: id.target_id.filter(|t| !t.is_empty()),
+        device_name: id.device_name,
+        form_factor: id.form_factor,
+    });
+    st.account_sessions
+        .reading(
+            st,
+            ReadingIn {
+                account,
+                owner,
+                kind,
+                item,
+                file,
+                progression,
+            },
+        )
+        .await;
+}
+
 /// A file-bound token beats only for its own file, which must be a part of the item beaten.
 async fn check_bound_file(
     st: &AppState,
@@ -526,12 +576,29 @@ pub async fn heartbeat(
         locator,
         clear_locator: false,
     };
+    let reading = (sid.is_none() && client_played_at.is_none())
+        .then_some(progression)
+        .flatten()
+        .filter(|_| matches!(family, Family::Text | Family::Image));
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     let completed = saved
         .as_ref()
         .is_some_and(|s| s["completed"] == json!(true));
     if let (true, Some(sid)) = (completed, sid) {
         st.account_sessions.complete(&st, history_user, sid).await;
+    }
+    if let Some(progression) = reading {
+        account_reading(
+            &st,
+            &headers,
+            &body,
+            history_user,
+            item,
+            file,
+            progression,
+            completed,
+        )
+        .await;
     }
     Ok(reply(lost, false, Some(saved)))
 }

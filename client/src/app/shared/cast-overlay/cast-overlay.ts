@@ -5,6 +5,7 @@ import { LucideArrowRightLeft, LucidePause, LucidePlay, LucideX } from '@lucide/
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
+import { SseService } from '../../core/services/sse.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { KIND_REGISTRY } from '../../core/media-kinds';
 import { formatTime } from '../../core/utils/player.utils';
@@ -25,6 +26,7 @@ export class CastOverlayComponent {
   protected readonly sync = inject(SessionSyncService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
+  private readonly sse = inject(SseService);
 
   /** Owner whose strip was hidden here: another owner, or no session in between, shows it again. Epochs restart after a deletion, so they are not compared. */
   private readonly hiddenOwner = signal<string | null>(null);
@@ -47,7 +49,19 @@ export class CastOverlayComponent {
   protected readonly observed = computed(() => {
     const s = this.sync.session();
     if (!s || this.device.isTv() || !this.session.isLocal() || this.sync.role() !== 'observer') return null;
+    if (this.sync.isReading(s) && s.owner.targetId === this.sse.targetId()) return null;
     return this.hiddenOwner() === s.owner.targetId && !this.sync.parked() ? null : s;
+  });
+
+  /** A reader's position: read elsewhere, opened here, with a percentage instead of a clock. */
+  protected readonly reading = computed(() => {
+    const s = this.observed();
+    return !!s && this.sync.isReading(s);
+  });
+
+  protected readonly readPercent = computed(() => {
+    const s = this.observed();
+    return s ? Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100) : 0;
   });
 
   protected readonly live = computed(() => this.observed() !== null && !this.sync.parked() && !this.target.isIdle());
@@ -67,8 +81,11 @@ export class CastOverlayComponent {
 
   /** An audio session has a full controller: transport, queue, take over. */
   protected readonly audio = computed(() => {
-    const kind = this.observed()?.item.kind;
-    return !!kind && KIND_REGISTRY[kind].families.includes('audio') && !KIND_REGISTRY[kind].families.includes('video');
+    const item = this.observed()?.item;
+    if (!item) return false;
+    if (item.family) return item.family === 'audio';
+    const families = KIND_REGISTRY[item.kind].families;
+    return families.includes('audio') && !families.includes('video');
   });
 
   protected openController(): void {

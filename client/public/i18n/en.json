@@ -4024,6 +4024,8 @@
     "resume": "Resume",
     "hide": "Hide",
     "parked_device": "{{device}} is offline",
+    "read_on": "Read on {{device}}",
+    "open_here": "Open here",
     "playing_on": "Playing on {{device}}",
     "current": "Current session",
     "resume_at": "Resume at {{position}}",

@@ -240,6 +240,7 @@
           "item": {
             "episodeId": null,
             "id": 13,
+            "family": "video",
             "kind": "movie",
             "mediaFileId": 1,
             "mediaId": 1,
