@@ -105,6 +105,9 @@ services:
   #     - /dev/dri:/dev/dri
   # Every render node under /dev/dri becomes a GPU (gpu0, gpu1...) shared by playback and
   # optimization jobs. To expose only some, list them: - /dev/dri/renderD128 - /dev/dri/renderD129
+  # The same device runs the karaoke lyrics alignment on Vulkan (Intel and AMD, about 2x faster than
+  # the CPU; it falls back to the CPU without it). Mount a volume on /models to keep the models and
+  # the shader cache (the first GPU run compiles for about 30 s).
 
   # ---- NVIDIA NVENC ---- needs nvidia-container-toolkit on the host. Add to
   # the fliks service:
@@ -113,6 +116,7 @@ services:
   #     NVIDIA_VISIBLE_DEVICES: all
   #     # video = NVENC/NVDEC, compute = the CUDA filters (scale_cuda), utility = nvidia-smi
   #     NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+  #     # add graphics for the karaoke alignment on Vulkan: compute,video,utility,graphics
   # Several NVIDIA cards are one GPU each (NVIDIA_VISIBLE_DEVICES: all, or a list of indexes
   # such as 0,1). With an Intel iGPU as well, add the /dev/dri device above next to
   # `runtime: nvidia`: the iGPU and each NVIDIA card are then separate GPUs.
