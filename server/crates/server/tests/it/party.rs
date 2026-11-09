@@ -3100,6 +3100,7 @@ async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (_alice, a) = c.user("alice", true).await;
+    let _stream = c.stream(&a, "da").await;
     let url = singing_party(&c, &a, &[]).await;
     for n in 1..=5 {
         let (s, l) = track(&c, &url, &a, n).await;
