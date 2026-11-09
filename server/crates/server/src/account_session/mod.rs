@@ -128,6 +128,8 @@ struct Entry {
     held: Option<Held>,
     persisted_at: i64,
     persisted_pos: f64,
+    /// For a reader's row: the sid and target of the playback row it replaced.
+    replaced: Option<(String, Option<String>)>,
 }
 
 /// A sid that claimed: the account it claimed for, its target, and when its engine session ended (ms).
@@ -152,13 +154,19 @@ impl Inner {
     /// `None` when it is free to claim again: never claimed, or a reader's row replaced its own.
     fn claimed_verdict(&self, sid: &str) -> Option<Verdict> {
         let claim = self.claimed.get(sid)?;
-        let row = self.rows.get(&claim.account).map(|e| &e.row);
-        if row.is_some_and(|r| r.session_id.starts_with(READER_PREFIX)) {
-            return None;
-        }
-        Some(match row.map(|r| &r.owner.target_id) {
-            Some(owner) if owner != &claim.target => Verdict::Superseded,
-            _ => Verdict::Ignored,
+        let entry = self.rows.get(&claim.account);
+        let owner = match entry {
+            Some(e) if e.row.session_id.starts_with(READER_PREFIX) => match &e.replaced {
+                Some((rsid, target)) if rsid != sid && target != &claim.target => target,
+                _ => return None,
+            },
+            Some(e) => &e.row.owner.target_id,
+            None => return Some(Verdict::Ignored),
+        };
+        Some(if owner != &claim.target {
+            Verdict::Superseded
+        } else {
+            Verdict::Ignored
         })
     }
 }
@@ -275,6 +283,7 @@ impl AccountSessions {
                     held: None,
                     persisted_at: now,
                     persisted_pos: pos,
+                    replaced: None,
                 };
                 (entry.row.user_id, entry)
             })
@@ -413,6 +422,7 @@ impl AccountSessions {
             }),
             persisted_at: 0,
             persisted_pos: 0.0,
+            replaced: None,
         };
         persist(st, &mut entry).await;
         announce(st, b.account, Some(&entry.row));
@@ -482,6 +492,13 @@ impl AccountSessions {
             _ => {}
         }
         let epoch = g.rows.get(&r.account).map_or(1, |e| e.row.epoch);
+        let replaced = g.rows.get(&r.account).and_then(|e| {
+            if e.row.session_id.starts_with(READER_PREFIX) {
+                e.replaced.clone()
+            } else {
+                Some((e.row.session_id.clone(), e.row.owner.target_id.clone()))
+            }
+        });
         let mut entry = Entry {
             row: Row {
                 user_id: r.account,
@@ -500,6 +517,7 @@ impl AccountSessions {
             held: None,
             persisted_at: 0,
             persisted_pos: 0.0,
+            replaced,
         };
         persist(st, &mut entry).await;
         announce(st, r.account, Some(&entry.row));
