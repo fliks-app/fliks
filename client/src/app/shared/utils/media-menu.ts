@@ -21,7 +21,7 @@ export function openMediaMenu(
   cardActions: CardActionsService,
   rows: readonly ResolvedMenuRow[],
   anchor: HTMLElement,
-  meta: { title: string; subtitle?: string; imageUrl: string | null; imageAspect?: 'portrait' | 'landscape' },
+  meta: { title: string; subtitle?: string; imageUrl: string | null; imageAspect?: 'portrait' | 'landscape' | 'square' },
   adapt?: (r: ResolvedMenuRow) => Partial<CardAction>,
 ): void {
   if (!rows.length) return;

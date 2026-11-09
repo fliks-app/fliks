@@ -142,6 +142,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
 
   /** The hero navbar and the backdrop are global state, so a cached page hands
    *  them back on the way out and reclaims them on return. */
+  private heroMenu: ((anchor: HTMLElement) => void) | null = null;
+
+  setHeroMenu(open: ((anchor: HTMLElement) => void) | null): void {
+    const prev = this.heroMenu;
+    this.heroMenu = open;
+    // Parked: restoreChrome declares it again on return.
+    if (this.routeFresh()) return;
+    if (open) this.navbarService.heroMenu.set(open);
+    else if (this.navbarService.heroMenu() === prev) this.navbarService.heroMenu.set(null);
+  }
+
   private releaseChrome(): void {
     this.navbarService.leaveHeroPage();
     this.backgroundService.suspend(this);
@@ -152,6 +163,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     const m = this.media();
     if (m) this.navbarService.enterHeroPage(this.navTitle() ?? m.title, m.logoUrl);
     else this.navbarService.enterHeroPage('');
+    this.navbarService.heroMenu.set(this.heroMenu);
   }
 
   /** Driven by the route param, not ngOnInit: switching episodes reuses this instance and must not refetch the held series. */

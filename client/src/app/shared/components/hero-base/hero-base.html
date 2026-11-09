@@ -11,8 +11,17 @@
       />
     } @else {
       <!-- The poster shares the backdrop's grid cell, so it sits inside the hero without a negative offset. -->
-      <div class="grid">
-        <app-mobile-fanart-hero class="block [grid-area:1/1]" [fanartUrl]="posterUrl()" [blur]="true" />
+      <div class="grid" [class.relative]="mediaType() === 'album'" [style.padding-top]="mediaType() === 'album' ? navbar.heroPaddingTop() : null">
+        @if (mediaType() === 'album') {
+          <!-- A colour wash drawn from the cover, fading into the page, instead of a second picture. -->
+          <div class="pointer-events-none absolute -inset-x-4 -top-4 h-[75svh] overflow-hidden hero-fanart-fade" aria-hidden="true">
+            @if (posterUrl()) {
+              <img [src]="posterUrl()! | resolveUrl: 'thumb'" alt="" class="size-full scale-150 object-cover opacity-70 blur-3xl" />
+            }
+          </div>
+        } @else {
+          <app-mobile-fanart-hero class="block [grid-area:1/1]" [fanartUrl]="posterUrl()" [blur]="true" />
+        }
         @if (loading() && !posterUrl()) {
           <div class="[grid-area:1/1] self-end justify-self-center relative z-20 w-[140px] aspect-2/3 rounded-xl bg-base-300/40 animate-pulse"></div>
         } @else {

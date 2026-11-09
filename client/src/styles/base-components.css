@@ -532,6 +532,21 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   .action-strip-out { animation-duration: 1ms; }
 }
 
+/* The mini player rises from the bottom edge when a track loads and sinks back when it closes. */
+.mini-player-in {
+  animation: mini-player-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mini-player-out {
+  animation: mini-player-in 200ms ease-in reverse forwards;
+}
+@keyframes mini-player-in {
+  from { opacity: 0; transform: translateY(calc(100% + 1rem)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini-player-in,
+  .mini-player-out { animation-duration: 1ms; }
+}
+
 /* KeyboardReorderDirective: the held item shows it can move either way, inside its own box so a scrolling row cannot clip it. */
 .reorder-held::before,
 .reorder-held::after {

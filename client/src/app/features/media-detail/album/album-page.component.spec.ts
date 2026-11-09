@@ -65,6 +65,20 @@ describe('AlbumPageComponent', () => {
     http.expectOne('/api/media/9/music/candidates').flush([]);
   });
 
+  it('draws a work heading only over a group of tracks', () => {
+    const work = (workId: number) => [{ workId, title: 'W' + workId, composerName: null, position: 1 }] as unknown as Track['works'];
+    const { el } = setup([track(1, { works: work(1) }), track(2, { works: work(2) }), track(3, { works: work(2) })]);
+    expect(el.querySelectorAll('[data-testid="work"]').length).toBe(1);
+  });
+
+  it('opens the edition facts from the actions menu', () => {
+    const { fixture, el } = setup([track(1)]);
+    const dialog = el.querySelector('dialog') as HTMLDialogElement;
+    dialog.showModal = vi.fn();
+    (fixture.componentInstance as unknown as { actions: Record<string, () => void> }).actions['media.details']!();
+    expect(dialog.showModal).toHaveBeenCalled();
+  });
+
   it('skips the tracks without a file when playing', () => {
     const { el, player } = setup([track(1, { hasFile: false }), track(2)]);
     (el.querySelector('[data-testid="play"]') as HTMLButtonElement).click();

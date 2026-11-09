@@ -120,6 +120,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.toggle-watched' },
   },
   {
+    // Only the album page handles it: its edition facts live in a dialog.
+    id: 'core.details',
+    slot: 'media.actions',
+    weight: 740,
+    labelKey: 'media_detail.details',
+    icon: 'file-text',
+    action: { kind: 'action', actionId: 'media.details' },
+  },
+  {
     // Groups the two rows that re-read a title from its provider.
     id: 'core.metadata_group',
     slot: 'media.actions',

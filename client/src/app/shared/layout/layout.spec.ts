@@ -160,6 +160,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           canGoBack: () => false,
           navbarTransparent: () => false,
           heroLogoUrl: () => null,
+          heroMenu: () => null,
           heroTitle: () => '',
           isHeroPage: () => !!f.isHeroPage,
           showBackButton: () => false,
