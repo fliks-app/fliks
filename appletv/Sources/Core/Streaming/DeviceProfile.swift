@@ -92,13 +92,33 @@ enum DeviceProfileBuilder {
         )
     }
 
-    /// The device profile plus the audio files AVPlayer opens as they are, for a music track.
+    /// The device profile plus the audio files AVPlayer reports it opens as they are, for a music track.
     static func buildMusic() -> DeviceProfile {
         var profile = build()
-        profile.directPlayProfiles.append(DirectPlayProfile(
-            containers: ["mp3", "flac", "aac", "wav", "mp4"], videoCodecs: [],
-            audioCodecs: ["mp3", "flac", "aac", "alac", "pcm_s16le", "pcm_s24le"]))
+        profile.directPlayProfiles.append(audioFiles)
         return profile
+    }
+
+    private static let audioFiles: DirectPlayProfile = {
+        let f = audioFileFormats()
+        return DirectPlayProfile(containers: f.containers, videoCodecs: [], audioCodecs: f.codecs)
+    }()
+
+    /// Audio files AVFoundation plays, by MIME type: the container and codec names the server's profile uses.
+    static func audioFileFormats(playable: (String) -> Bool = { AVURLAsset.isPlayableExtendedMIMEType($0) })
+        -> (containers: [String], codecs: [String]) {
+        let probes: [(mime: String, containers: [String], codecs: [String])] = [
+            ("audio/mpeg", ["mp3"], ["mp3"]),
+            ("audio/aac", ["aac"], ["aac"]),
+            ("audio/mp4; codecs=\"mp4a.40.2\"", ["mp4"], ["aac"]),
+            ("audio/mp4; codecs=\"alac\"", ["mp4"], ["alac"]),
+            ("audio/flac", ["flac"], ["flac"]),
+            ("audio/wav", ["wav"], ["pcm_s16le", "pcm_s24le"]),
+            ("audio/aiff", ["aiff"], ["pcm_s16be", "pcm_s24be"]),
+        ]
+        let hits = probes.filter { playable($0.mime) }
+        func unique(_ l: [String]) -> [String] { var seen = Set<String>(); return l.filter { seen.insert($0).inserted } }
+        return (unique(hits.flatMap(\.containers)), unique(hits.flatMap(\.codecs)))
     }
 
     // h264 universal; hevc/av1 only when VideoToolbox reports a hardware decoder.

@@ -18,7 +18,7 @@ enum MusicTransport: Equatable {
     private(set) var isBuffering = false
     private(set) var position: Double = 0
     private(set) var duration: Double = 0
-    /// The track the server cannot stream natively, or any failure worth a line on screen.
+    /// A failure worth a line on screen.
     private(set) var notice: String?
     var replayGain: ReplayGain {
         didSet {
@@ -56,7 +56,6 @@ enum MusicTransport: Equatable {
     }
 
     private enum StreamFailure: Error {
-        /// The server would transcode: not served natively, skipped.
         case notPlayable
         case unavailable
     }
@@ -328,17 +327,9 @@ enum MusicTransport: Equatable {
         }
     }
 
-    /// The first playable track from `start` on: one the server would transcode is skipped.
     private func makeItem(from start: Int) async -> (AVPlayerItem, Int)? {
-        var i = start
-        while queue.tracks.indices.contains(i) {
-            switch await makeItem(i) {
-            case .success(let item): return (item, i)
-            case .failure(.notPlayable): i += 1
-            case .failure(.unavailable): return nil
-            }
-        }
-        return nil
+        guard case .success(let item) = await makeItem(start) else { return nil }
+        return (item, start)
     }
 
     private func makeItem(_ i: Int) async -> Result<AVPlayerItem, StreamFailure> {
@@ -346,7 +337,6 @@ enum MusicTransport: Equatable {
         let track = queue.tracks[i]
         switch await resolve(itemId: track.itemId, pitch: track.uid == pitchedUid ? pitchSemitones : 0) {
         case .failure(let failure):
-            if failure == .notPlayable { fail(tr("music.not_playable", track.title)) }
             return .failure(failure)
         case .success(let r):
             guard let url = await streamUrl(r) else { return .failure(.unavailable) }
@@ -358,17 +348,13 @@ enum MusicTransport: Equatable {
 
     // MARK: - Streams
 
-    /// With a key change the server transcodes: its HLS timeline plays instead of a direct file.
+    /// DirectPlay streams the file; any other decision (a key change included) plays the item's HLS timeline.
     private func resolve(itemId: Int, pitch: Int = 0, at startAt: Double = 0) async -> Result<Resolved, StreamFailure> {
         if let known = resolved[itemId] { return .success(known) }
         do {
             let query = pitch == 0 ? "startAt=0" : "startAt=\(startAt)&pitchSemitones=\(pitch)"
             let info: Info = try await api.post("/api/items/\(itemId)/playback-info?\(query)", body: DeviceProfileBuilder.buildMusic())
-            guard pitch != 0 || info.playMethod == "DirectPlay" else {
-                end(session: info.sessionId)
-                return .failure(.notPlayable)
-            }
-            var path = pitch != 0 ? info.playUrl : info.parts?.first?.playUrl ?? info.playUrl
+            var path = Self.streamPath(playMethod: info.playMethod, pitched: pitch != 0, partUrl: info.parts?.first?.playUrl, playUrl: info.playUrl)
             if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
             let r = Resolved(path: path, sessionId: info.sessionId, mediaFileId: info.mediaFileId)
             resolved[itemId] = r
@@ -378,6 +364,11 @@ enum MusicTransport: Equatable {
         } catch {
             return .failure(.unavailable)
         }
+    }
+
+    /// The file's byte-range URL for a DirectPlay answer, the item's HLS URL for any other decision.
+    nonisolated static func streamPath(playMethod: String, pitched: Bool, partUrl: String?, playUrl: String) -> String {
+        playMethod == "DirectPlay" && !pitched ? partUrl ?? playUrl : playUrl
     }
 
     /// A stream token bound to one media file, reused while it has 30 min of life left.

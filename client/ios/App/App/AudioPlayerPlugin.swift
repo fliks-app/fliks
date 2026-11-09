@@ -51,8 +51,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private enum StreamFailure: Error {
-        /// The server would transcode: not served natively, never retried.
-        case notPlayable
         case unavailable
     }
 
@@ -129,8 +127,28 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Plugin methods
 
     @objc func configure(_ call: CAPPluginCall) {
-        deviceProfile = call.getString("deviceProfile")
+        deviceProfile = call.getString("deviceProfile").map(Self.withAudioFiles)
         call.resolve()
+    }
+
+    /// The web layer's profile plus the audio files AVFoundation reports it opens as they are, by MIME type.
+    private static func withAudioFiles(_ profile: String) -> String {
+        let probes: [(mime: String, containers: [String], codecs: [String])] = [
+            ("audio/mpeg", ["mp3"], ["mp3"]),
+            ("audio/aac", ["aac"], ["aac"]),
+            ("audio/mp4; codecs=\"mp4a.40.2\"", ["mp4"], ["aac"]),
+            ("audio/mp4; codecs=\"alac\"", ["mp4"], ["alac"]),
+            ("audio/flac", ["flac"], ["flac"]),
+            ("audio/wav", ["wav"], ["pcm_s16le", "pcm_s24le"]),
+            ("audio/aiff", ["aiff"], ["pcm_s16be", "pcm_s24be"]),
+        ].filter { AVURLAsset.isPlayableExtendedMIMEType($0.mime) }
+        func unique(_ l: [String]) -> [String] { var seen = Set<String>(); return l.filter { seen.insert($0).inserted } }
+        guard var json = (try? JSONSerialization.jsonObject(with: Data(profile.utf8))) as? [String: Any] else { return profile }
+        var direct = json["directPlayProfiles"] as? [[String: Any]] ?? []
+        direct.append(["containers": unique(probes.flatMap(\.containers)), "videoCodecs": [String](),
+                       "audioCodecs": unique(probes.flatMap(\.codecs))])
+        json["directPlayProfiles"] = direct
+        return (try? JSONSerialization.data(withJSONObject: json)).flatMap { String(data: $0, encoding: .utf8) } ?? profile
     }
 
     @objc func attach(_ call: CAPPluginCall) {
@@ -340,17 +358,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// The first playable entry from `start` on: an entry the server would transcode is skipped.
     private func makeItem(from start: Int) async -> (AVPlayerItem, Int)? {
-        var i = start
-        while entries.indices.contains(i) {
-            switch await makeItem(i) {
-            case .success(let item): return (item, i)
-            case .failure(.notPlayable): i += 1
-            case .failure(.unavailable): return nil
-            }
-        }
-        return nil
+        guard entries.indices.contains(start), case .success(let item) = await makeItem(start) else { return nil }
+        return (item, start)
     }
 
     private func makeItem(_ i: Int) async -> Result<AVPlayerItem, StreamFailure> {
@@ -359,9 +369,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if url == nil, let id = entry.itemId {
             switch await resolve(itemId: id) {
             case .success(let r): url = await streamUrl(r)
-            case .failure(let failure):
+            case .failure:
                 notifyListeners("error", data: ["message": "no stream for track \(i)"])
-                return .failure(failure)
+                return .failure(.unavailable)
             }
         }
         guard let url = url else {
@@ -473,12 +483,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
               let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return .failure(.unavailable) }
         let sid = info["sessionId"] as? String ?? ""
         let mediaFileId = (info["mediaFileId"] as? NSNumber)?.intValue ?? 0
-        guard info["playMethod"] as? String == "DirectPlay" else {
-            endSession(Resolved(path: "", sessionId: sid, mediaFileId: mediaFileId))
-            return .failure(.notPlayable)
-        }
+        let direct = info["playMethod"] as? String == "DirectPlay"
         let parts = info["parts"] as? [[String: Any]]
-        guard var path = (parts?.first?["playUrl"] as? String) ?? (info["playUrl"] as? String) else { return .failure(.unavailable) }
+        guard var path = (direct ? parts?.first?["playUrl"] as? String : nil) ?? (info["playUrl"] as? String) else { return .failure(.unavailable) }
         if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
         let r = Resolved(path: path, sessionId: sid, mediaFileId: mediaFileId)
         resolved[itemId] = r

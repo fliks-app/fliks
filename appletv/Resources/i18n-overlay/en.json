@@ -118,7 +118,6 @@
   "media_picker.back": "Back",
   "sidebar.now_playing": "Now Playing",
   "library.type.album": "Albums",
-  "music.not_playable": "\"%@\" cannot be played here",
   "music.nothing_playing": "Nothing is playing",
   "music.tab_albums": "Albums",
   "karaoke.unavailable": "Karaoke is not available on this server."
