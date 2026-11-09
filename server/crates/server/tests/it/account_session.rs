@@ -3,7 +3,8 @@ use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_engine_core::api::SessionKind;
 use fliks_server::{
-    account_session, config::Config, events, playback, presence::LiveSession, state::AppState,
+    account_session, config::Config, events, playback, presence::LiveSession, remote,
+    state::AppState,
 };
 use futures_util::StreamExt;
 use serde_json::{Value, json};
@@ -66,6 +67,7 @@ async fn ctx(pool: PgPool, sync: bool) -> Ctx {
     let app = Router::new()
         .merge(playback::router())
         .merge(account_session::router())
+        .merge(remote::router())
         .merge(events::router())
         .with_state(st.clone());
     Ctx {
@@ -305,4 +307,58 @@ async fn the_option_off_changes_nothing_and_a_parked_session_can_be_dismissed(po
     assert_eq!(off.call("DELETE", "/api/session", None).await.0, 204);
     assert_eq!(off.call("GET", "/api/session", None).await.1, Value::Null);
     assert_eq!(off.call("DELETE", "/api/session", None).await.0, 204);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_transfer_loads_the_session_on_the_target_only_and_changes_nothing(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (mut a, conn_a) = c.device("A#t").await;
+    let (mut b, _) = c.device("B#t").await;
+    let to = |t: &str| Some(json!({ "toTargetId": t }));
+    assert_eq!(
+        c.call("POST", "/api/session/transfer", to("B#t")).await,
+        (
+            404,
+            json!({"error": "Not Found", "message": "session.error_no_session", "statusCode": 404})
+        )
+    );
+    c.presence("s1", &conn_a);
+    c.beat("s1", 100.0, json!({"state": "paused"})).await;
+    drain(&mut a).await;
+    drain(&mut b).await;
+
+    assert_eq!(
+        c.call("POST", "/api/session/transfer", to("A#t")).await.0,
+        400
+    );
+    assert_eq!(
+        c.call("POST", "/api/session/transfer", to("nope")).await.0,
+        404
+    );
+    let (status, ack) = c.call("POST", "/api/session/transfer", to("B#t")).await;
+    assert_eq!(status, 202);
+    assert!(ack["cmdId"].is_string());
+
+    let (on_a, on_b) = (drain(&mut a).await, drain(&mut b).await);
+    assert!(of(&on_a, "remote.command").is_empty(), "{on_a:?}");
+    let load = of(&on_b, "remote.command");
+    assert_eq!(load.len(), 1, "{on_b:?}");
+    let load = load[0];
+    assert_eq!(load["action"], "load");
+    assert_eq!(
+        (load["mediaId"].as_i64(), load["mediaFileId"].as_i64()),
+        (Some(i64::from(c.media)), Some(i64::from(c.file)))
+    );
+    assert_eq!(
+        (load["positionSeconds"].as_f64(), load["paused"].as_bool()),
+        (Some(100.0), Some(true))
+    );
+    assert!(load["episodeId"].is_null() && load["queue"].is_null());
+    let (_, still) = c.call("GET", "/api/session", None).await;
+    assert_eq!(
+        (still["epoch"].clone(), still["owner"]["targetId"].clone()),
+        (json!(1), json!("A#t"))
+    );
+    assert_eq!(still["item"]["mediaId"], c.media);
+    assert!(still["item"]["episodeId"].is_null());
 }

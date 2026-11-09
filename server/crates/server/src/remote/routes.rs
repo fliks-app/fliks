@@ -254,7 +254,7 @@ async fn find_target_owner(
     Ok(None)
 }
 
-async fn authorize_target(
+pub(crate) async fn authorize_target(
     st: &AppState,
     me: &Authed,
     target_id: &str,
@@ -304,6 +304,18 @@ pub async fn command(
     if dto.by_target_id.as_deref() == Some(&target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
+    send(&st, &a, &target_id, owner, &conn, dto)
+}
+
+/// Queues `dto` to one connection of an already authorized target.
+pub(crate) fn send(
+    st: &AppState,
+    a: &Authed,
+    target_id: &str,
+    owner: i32,
+    conn: &str,
+    dto: Command,
+) -> Result<(StatusCode, Json<Value>), AppError> {
     let cmd_id = uuid_v4();
     let claim = (dto.action == RemoteAction::Load)
         .then_some(dto.media_file_id)
@@ -332,11 +344,11 @@ pub async fn command(
         kind: dto.kind,
     };
     // Never `emit_to_user`: a broadcast would let one phone drive every device of the account.
-    if !st.hub.emit_to_connection(owner, &conn, ev) {
+    if !st.hub.emit_to_connection(owner, conn, ev) {
         return Err(offline());
     }
     if let Some(file) = claim {
-        st.hub.claim_attribution(&target_id, a.user.id, file);
+        st.hub.claim_attribution(target_id, a.user.id, file);
     }
     Ok((StatusCode::ACCEPTED, Json(json!({ "cmdId": cmd_id }))))
 }

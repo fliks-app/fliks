@@ -325,7 +325,7 @@ export class RemoteService {
     this.sessionSync.setLiveSource(
       () => {
         const s = this.targetState();
-        return s ? { mediaFileId: s.mediaFileId, mediaId: s.mediaId, episodeId: s.episodeId ?? null } : null;
+        return s ? { mediaFileId: s.mediaFileId } : null;
       },
       () => this.interpolatedPosition(),
     );

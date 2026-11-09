@@ -4020,6 +4020,7 @@
     "close": "Chiudi",
     "play_here": "Riproduci qui",
     "listen_here": "Ascolta su questo dispositivo",
+    "transfer": "Trasferisci",
     "resume": "Riprendi",
     "hide": "Nascondi",
     "parked_device": "{{device}} è offline",

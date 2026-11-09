@@ -1,6 +1,6 @@
 //! `/api/remote/*` and the household fan-out (`docs/spec/remote.md`); target state lives in the hub.
 mod db;
-mod dto;
+pub(crate) mod dto;
 mod fanout;
 mod routes;
 

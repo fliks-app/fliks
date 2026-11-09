@@ -3,6 +3,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
 import {
   LucideAirplay,
+  LucideArrowRightLeft,
   LucideCast,
   LucideMonitor,
   LucideSmartphone,
@@ -39,7 +40,7 @@ export interface PickerRow {
   standalone: true,
   imports: [
     TranslatePipe,
-    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucideAirplay, LucidePlus,
+    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucideAirplay, LucideArrowRightLeft, LucidePlus,
     RouterLink,
   ],
   styles: [':host { display: block; }'],
@@ -169,6 +170,20 @@ export class RemotePickerListComponent {
   refresh(): void {
     void this.remote.refreshTargets();
     if (this.enumerates) void this.castService.getCastDevices({ browse: true });
+  }
+
+  /** Another device of the account can take the session over, unless it already plays it. */
+  protected canTransfer(row: PickerRow): boolean {
+    const s = this.sync.session();
+    return row.kind === 'remote' && !!s && (this.sync.parked() || s.owner.targetId !== row.id);
+  }
+
+  protected async transfer(row: PickerRow): Promise<void> {
+    try {
+      await this.sync.transferTo(row.id);
+    } catch (err) {
+      console.warn('[remote-picker] transfer failed', row.id, err);
+    }
   }
 
   selectRow(row: PickerRow): void {

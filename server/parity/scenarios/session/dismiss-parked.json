@@ -238,9 +238,11 @@
           "durationSeconds": 3600.0,
           "epoch": 1,
           "item": {
+            "episodeId": null,
             "id": 13,
             "kind": "movie",
             "mediaFileId": 1,
+            "mediaId": 1,
             "posterUrl": null,
             "subtitle": null,
             "title": "Parity Movie 01"

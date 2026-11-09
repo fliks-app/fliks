@@ -23,7 +23,7 @@ import {
   type NativeAudioState,
   type NativeAudioTrack,
 } from '../../plugins/audio-player.plugin';
-import { SessionSyncService, type AccountSession, type ResumePoint, type SupersededPlayback } from '../session-sync.service';
+import { SessionSyncService, type AccountSession, type SupersededPlayback } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
@@ -220,7 +220,7 @@ export class AudioPlayerService {
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
     this.remote.registerLoader('audio', (cmd) => this.loadFromRemote(cmd));
     this.remote.validated.subscribe((cmd) => void this.applyRemote(cmd));
-    this.sessionSync.registerResumer('audio', (s, at) => this.resumeSession(s, at));
+    this.sessionSync.registerResumer('audio', (s, positionSeconds) => this.resumeSession(s, positionSeconds));
     this.sessionSync.registerPlayer({
       sessionId: () => this.sessionId,
       active: () => this._track() !== null,
@@ -1242,15 +1242,14 @@ export class AudioPlayerService {
   }
 
   /** "Play here" on a session of another device: its queue and its position now. */
-  private async resumeSession(s: AccountSession, at: ResumePoint): Promise<void> {
+  private async resumeSession(s: AccountSession, positionSeconds: number): Promise<void> {
     const paused = s.state === 'paused' || s.state === 'parked';
     if (s.item.kind === 'album') {
       const q = s.queue ?? { itemIds: [s.item.id], index: 0, shuffle: false, repeat: 'off' as const };
-      return this.startQueue(q, q.shuffle, q.repeat, at.positionSeconds, !paused);
+      return this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused);
     }
-    if (!at.mediaId) return;
-    const req = await this.audiobookRequest(at.mediaId, s.item.id);
-    if (req) await this.play(req, { startAt: at.positionSeconds, paused });
+    const req = await this.audiobookRequest(s.item.mediaId, s.item.id);
+    if (req) await this.play(req, { startAt: positionSeconds, paused });
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */
