@@ -71,8 +71,8 @@
       @if (lyricsMode() === 'full' && audio.musicMode()) {
         <app-lyrics-panel class="min-h-0 flex-1" [itemId]="t.itemId" [fullscreen]="true" (closed)="lyricsMode.set('panel')" />
       } @else {
-      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-ring-safe sm:flex-row" appTvSection>
-        <div class="flex shrink-0 flex-col items-center gap-3 sm:w-64">
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-ring-safe sm:flex-row" [class.short:min-h-56]="lyricsMode() === 'panel'" appTvSection>
+        <div class="flex shrink-0 flex-col items-center gap-3 sm:w-64" [class.max-sm:hidden]="lyricsMode() === 'panel'" [class.short:hidden]="lyricsMode() === 'panel'">
           <div class="flex aspect-square w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
               @if (!coverFailed()) {
@@ -96,9 +96,9 @@
           </div>
         </div>
 
-        <div class="flex min-w-0 flex-1 flex-col gap-4">
+        <div class="flex min-w-0 flex-1 flex-col gap-4" [class.min-h-0]="lyricsMode() === 'panel'">
           @if (audio.musicMode() && lyricsMode() === 'panel') {
-            <app-lyrics-panel class="h-96" [itemId]="t.itemId" />
+            <app-lyrics-panel class="min-h-0 flex-1 sm:h-96 sm:flex-none short:h-auto short:flex-1" [itemId]="t.itemId" />
           } @else if (audio.musicMode()) {
             <section class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">
               <h3 class="menu-title flex items-center gap-2 px-0">
