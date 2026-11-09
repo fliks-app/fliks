@@ -6,7 +6,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/system/events` | `SessionAuthed`; policy: any authenticated user | `device?`, `ff?`, `tvPlatform?`, `name?` (raw strings, no validation) | `text/event-stream`, status 200, stays open | 401 no/invalid credential or disabled user (rule 1); 403 `session_token_required` (rule 2) | registers the connection, evicts superseded same-`targetId` connections, sends `remote.targets_changed` to the user when `device` is given, then `sse.connected` and the progress-cache replay (rule 9) |
+| `GET /api/system/events` | `SessionAuthed`; policy: any authenticated user | `device?`, `ff?`, `tvPlatform?`, `name?` (raw strings, no validation) | `text/event-stream`, status 200, stays open | 401 no/invalid credential or disabled user (rule 1); 403 `session_token_required` (rule 2) | registers the connection, evicts superseded same-`targetId` connections, sends `remote.targets_changed` to the user when `device` is given, then `sse.connected` (rule 9) |
 | `POST /api/system/events/ticket` | `SessionAuthed` | none | 201 `{ticket: string, expiresIn: 30}` | 401; 403 `session_token_required` | stores the ticket in memory (rule 1a) |
 | `GET /api/system/activity` | `Authed`; policy `ability.can(Action.Read, 'Settings')` | `page?`, `limit?` (raw strings) | `{ data: ActivityRow[]; total: number; dropped: number }` | 401; 403 without `read:Settings` | none |
 
@@ -23,18 +23,18 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 6. First bytes on the wire are a single blank line `\n`, before any event.
 7. Wire format of every message: `event: <type>\n` only when the message has a `type` (only `ping` does), then `id: <n>\n`, then one `data: <line>\n` per line of the payload, then a blank line. `<n>` is a per-connection counter starting at **1** and incremented for every message written, pings included (e.g. `id: 1\ndata: {"a":1}\n\nevent: ping\nid: 2\ndata: 30000\n\n`). No `retry:` line.
 8. All events except `ping` are unnamed messages (no `event:` line); `data:` is the JSON of the event: absent fields omitted, `null` kept. Key order is the order at the emitter.
-9. On connect, in this order, synchronously (no event can interleave): (a) a fresh `connectionId` = `randomUUID` (v4) is minted; (b) if `targetId` is set, every existing connection of the same user with the same `targetId` is evicted (rule 22); (c) the connection is registered; (d) if `targetId` is set, `remote.targets_changed` is `emit_to_user(userId)` (so the new stream itself is not yet subscribed and does not receive it; the user's other streams and household viewers do); (e) first message to this client: `sse.connected`; (f) replay of the progress cache (rule 14); (g) subscription to the live bus.
+9. On connect, in this order, synchronously (no event can interleave): (a) a fresh `connectionId` = `randomUUID` (v4) is minted; (b) if `targetId` is set, every existing connection of the same user with the same `targetId` is evicted (rule 22); (c) the connection is registered; (d) if `targetId` is set, `remote.targets_changed` is `emit_to_user(userId)` (so the new stream itself is not yet subscribed and does not receive it; the user's other streams and household viewers do); (e) first message to this client: `sse.connected`; (f) subscription to the live bus.
 10. `sse.connected` payload: `{"type":"sse.connected","connectionId":"<uuid>"}`, delivered only to that connection, never through the bus. The client binds `connectionId` to its live playback sessions (`sseConnectionId`).
 11. Ping: every 30 000 ms (first one 30 s after connect, per connection, not aligned) the connection receives the named message `{type:'ping', data:'30000'}`; wire: `event: ping\nid: <n>\ndata: 30000\n\n`. `data` is the interval in ms as a string; the client uses any bytes to reset its idle timeout. The ping carries data on purpose (an empty buffer would be dropped).
 12. Delivery filter per event: deliver if the envelope has no audience and no connection list (broadcast); or its `connectionIds` contains this connection id; or its `audience` contains this user id. Otherwise skip.
-13. A connection receives only events emitted after step (g) plus the replay of rule 14; there is no `Last-Event-ID` handling and no history.
-14. Replay on connect: `snapshot_for(userId)` of the progress cache yields every cached `download.progress` snapshot whose recipients include this user, each written as an ordinary unnamed message, after `sse.connected` and before live events.
+13. A connection receives only events emitted after step (f); there is no `Last-Event-ID` handling and no history.
+14. No replay on connect: a client that connects later reads `GET /api/acquisition/progress` (`plugins.md` rule 65) for the downloads in flight, then follows `download.progress` for changes.
 
 ### Teardown
 
 15. When the client closes or the hub completes the stream: the ping timer is cleared, the bus subscription removed, the connection deleted; if the connection had a `targetId` (read before deleting; an evicted connection has no entry, so it reads none), `remote.targets_changed` is `emit_to_user(userId)`.
 16. Completing the stream ends the HTTP response, which is how a drop becomes visible to the client (it reconnects).
-   - 15a. A connection queues at most 1024 frames for its stream (a suspended TV or a stalled proxy would otherwise grow it without bound). The emit that finds the queue full closes the connection like a teardown (stream ends after the queued frames, `remote.targets_changed` announced when it was a target, household hook included); the client reconnects and gets the replay cache again.
+   - 15a. A connection queues at most 1024 frames for its stream (a suspended TV or a stalled proxy would otherwise grow it without bound). The emit that finds the queue full closes the connection like a teardown (stream ends after the queued frames, `remote.targets_changed` announced when it was a target, household hook included); the client reconnects and rereads `GET /api/acquisition/progress`.
 
 ### Audiences and emit API
 
@@ -45,14 +45,8 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 21. `emit_to_connection(connectionId, event)` returns a boolean. Polled target (key `polled:<targetId>`): pushed to its queue, `true`; if the queue already holds 20 (`POLLED_QUEUE_MAX`) the event is dropped with a warning and `false`. SSE connection unknown: warning, `false`. Otherwise delivered to exactly that connection only. A caller must not fall back to `emit_to_user` for `remote.command` (it would command every device of the user).
    - 21a. `emit_raw(type, payload, audience)` for plugin events: wire event is `{"type":"plugin.<id>.<type>","payload":<payload>}`; `audience: null` broadcasts, else a user-id list.
 22. Superseded-connection eviction: on connect with a `targetId`, every other connection of the same `userId` and same `targetId` is deleted from the registry and its stream is closed by the server. It stops being a target, receives no teardown announce and is skipped by `drop_connections_for_*`. Rationale: a killed webview or dropped mobile network sends no FIN. Two tabs of one device have different `targetId` and coexist; connections without `targetId` are never evicted; the same `targetId` under another user is not evicted.
-23. Each `emit*` goes through one `dispatch`: when the audience is non-null, a `download.progress` event is recorded into the replay cache with the audience as recipients, and an `import.complete` clears the cache for `(mediaId, seasonNumber, episodeNumber)`. A `download.progress` sent through `emit` (null audience) is not cached. Then the envelope is published on the bus.
+23. Each `emit*` goes through one `dispatch`: the envelope is delivered to the audience, then published on the bus. Nothing is cached.
 24. Backend-internal `subscribe` receives every SSE event envelope's event regardless of audience (including events addressed to one connection through the bus; not polled-queue events and not `sse.connected`/`ping`).
-
-### Progress replay cache (`download.progress`)
-
-25. One entry per `mediaId`: `{event, recipients, recordedAt}`. `record(recipients, event)`: empty `downloads` deletes the entry (an empty snapshot retires the media); otherwise replaces the entry (a snapshot states the whole set; no merge).
-26. `clear(mediaId, seasonNumber?, episodeNumber?)`: no entry: no-op; `seasonNumber == null`: delete the media; else keep a download if its season differs, or if an episode is given and the download's episode differs (a download with no `episodeNumber` is a pack and survives a single-episode clear); no downloads left deletes the entry.
-27. `snapshot_for(userId)`: walks all entries; any entry older than 3 min (against an injectable clock) is deleted regardless of which user connects; returns the events whose recipients include the user. Not persisted; restart empties it. The first `download.progress` after a grab states the cached set plus a placeholder `ref: "pending:<season>:<episode>"` (producer rule). A client that connects later reads `GET /api/acquisition/progress` (`plugins.md` rule 65) for the media in flight, then follows the events; a placeholder that expires (`plugins.md` rule 72) is followed by a new emission.
 
 ### Connection drops (security)
 
@@ -118,9 +112,9 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 6 | `subtitle.failed` | B Us(viewersForMedia) | `{mediaId: number, title: string, language: string, error: string, reason?: string ('translation'|'rate_limit'), scope?: string ('daily'|'per-minute'), automatic?: boolean}` |
 | 7 | `subtitle.list_changed` | B Us(viewersForMedia) | `{mediaId: number}` |
 | 8 | `subtitle.translation_progress` | B Us(viewersForMedia) | `{subtitleId: number, mediaId: number, progress: number (0-100)}` |
-| 9 | `import.complete` | Us(viewersForMedia) | `{mediaId: number, title: string, seasonNumber?: number, episodeNumber?: number}`; clears the replay cache |
+| 9 | `import.complete` | Us(viewersForMedia) | `{mediaId: number, title: string, seasonNumber?: number, episodeNumber?: number}` |
 | 10 | `import.failed` | Us(recipientsForMedia) | `{mediaId: number, title: string, error: string}` |
-| 11 | `download.progress` | Us(viewersForMedia); skipped when empty or when the media row is missing; cached for replay | `{mediaId: number, mediaType: 'movie'|'series', downloads: {ref: string, seasonNumber?: number, episodeNumber?: number, progress: number (0-1), dlspeed: number, eta: number, state: DownloadProgressState}[]}` |
+| 11 | `download.progress` | Us(viewersForMedia); skipped when empty or when the media row is missing | `{mediaId: number, mediaType: 'movie'|'series', downloads: {ref: string, seasonNumber?: number, episodeNumber?: number, progress: number (0-1), dlspeed: number, eta: number, state: DownloadProgressState}[]}` |
 | 12 | `stalled.removed` | Us(recipientsForMedia) | `{title: string}` |
 | 13 | `queue.updated` | B | `{}` |
 | 14 | `activity.changed` | B (debounced 250 ms) | `{}` |
@@ -219,7 +213,6 @@ none (the hub reads no setting; `engine_*`/`streaming_*` keys are in `engine-glu
 |---|---|---|
 | Ping | 30 000 ms per connection | rule 11 |
 | Activity broadcast debounce | 250 ms | rule 48 |
-| Replay-cache sweep | none (swept on `snapshot_for`) | rule 27 |
 | Polled-target expiry | none (swept on list), TTL 30 000 ms | rule 31 |
 | Attribution TTL | checked on take, 60 000 ms | rule 36 |
 | Polled queue bound | 20 events | rule 21 |
@@ -227,7 +220,7 @@ none (the hub reads no setting; `engine_*`/`streaming_*` keys are in `engine-glu
 
 ## Vectors/parity
 
-No fixture set. The Rust unit tests in `server/crates/server/src/events/` (hub, replay cache, activity registry) cover the replay cache, the remote target registry, the activity registry, the audience filter, the wire format (rule 7 byte-exact incl. the `id:` counter and the leading blank line) and the 30 s ping with a paused clock.
+No fixture set. The Rust unit tests in `server/crates/server/src/events/` (hub, activity registry) cover the remote target registry, the activity registry, the audience filter, the wire format (rule 7 byte-exact incl. the `id:` counter and the leading blank line) and the 30 s ping with a paused clock.
 
 Parity scenarios: `server/parity/scenarios/events/` (14 files: SSE handshake and auth variants, `remote.targets_changed` and `pairing.requested` delivery, superseded-connection close, activity list, pagination and 403).
 

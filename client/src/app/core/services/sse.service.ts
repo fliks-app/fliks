@@ -395,7 +395,7 @@ export class SseService implements OnDestroy {
           if (typeof id === 'string' && id) {
             this.connectionId.set(id);
           }
-          // The server replays its live leaves after this event, so the burst is a full snapshot; anything else finished while disconnected would keep a stale badge.
+          // Changes missed while disconnected are not replayed: reread the current state.
           this.downloadProgress.reset();
           void this.downloadProgress.hydrate();
           this.activeProgress.set(new Map());

@@ -2,7 +2,6 @@
 pub mod activity;
 pub mod event;
 mod hub;
-mod replay;
 mod routes;
 mod sse;
 pub mod subject;
