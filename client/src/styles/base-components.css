@@ -555,6 +555,10 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 .cover-out {
   animation: cover-hold 250ms;
 }
+/* The cover must not outlast the bar leaving: its 250 ms keeps the node after the bar's own animation ends. */
+.mini-player-out .cover-out {
+  animation: none;
+}
 @keyframes cover-in {
   from { opacity: 0; }
 }
