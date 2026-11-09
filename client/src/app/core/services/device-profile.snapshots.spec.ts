@@ -53,12 +53,12 @@ const FIXTURES: Record<string, Fixture> = {
     mse: ['avc1', 'hvc1.1.6', 'hvc1.2.4', 'av01.0.08M', 'mp4a.40.2', 'ac-3', 'ec-3'],
     plays: ['video/mp4; codecs="hvc1', 'video/mp4; codecs="dvh1'],
     tvPlatform: 'webos',
-    webOSSystem: { deviceInfo: JSON.stringify({ platformVersion: '10.3.1', screenWidth: 3840, hdr10: true, dolbyVision: true }) },
+    webOSSystem: { deviceInfo: JSON.stringify({ sdkVersion: '10.0.0', screenWidth: 3840, hdr10: true, dolbyVision: true }) },
   },
   'webos-2019-fhd': {
     mse: ['avc1', 'mp4a.40.2'],
     tvPlatform: 'webos',
-    webOSSystem: { deviceInfo: JSON.stringify({ platformVersion: '4.5.0', screenWidth: 1920 }) },
+    webOSSystem: { deviceInfo: JSON.stringify({ sdkVersion: '4.5.0', screenWidth: 1920 }) },
   },
   'desktop-mpv': {
     mse: ['avc1', 'mp4a.40.2'],

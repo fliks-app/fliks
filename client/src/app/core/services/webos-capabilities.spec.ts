@@ -10,29 +10,35 @@ describe('webosDevice', () => {
     vi.restoreAllMocks();
   });
 
-  it('reads the platform, panel and HDR flags from webOSSystem.deviceInfo', () => {
+  it('dates the TV by its Chromium and reads the panel and HDR flags from webOSSystem.deviceInfo', () => {
+    chromium(120);
     (window as any).webOSSystem = {
-      deviceInfo: JSON.stringify({ platformVersion: '10.3.1', screenWidth: 3840, hdr10: true, dolbyVision: 'false' }),
+      deviceInfo: JSON.stringify({ platformVersion: '02.16.30', sdkVersion: '10.0.0', screenWidth: 3840, hdr10: true, dolbyVision: 'false' }),
     };
     expect(webosDevice()).toEqual({ year: 2025, uhd: true, hdr10: true, dolbyVision: false });
   });
 
-  it.each([
-    ['3.0.0', 2016], ['4.5.0', 2018], ['5.0.0', 2020], ['6.0.0', 2021], ['7.0.0', 2022], ['9.1.0', 2024],
-  ])('dates platform %s to model year %i', (platformVersion, year) => {
-    (window as any).webOSSystem = { deviceInfo: JSON.stringify({ platformVersion }) };
-    expect(webosDevice()?.year).toBe(year);
-  });
+  it.each([[132, 2026], [120, 2025], [108, 2024], [94, 2023], [87, 2022], [79, 2021], [68, 2020], [53, 2018]])(
+    'dates Chromium %i to model year %i',
+    (major, year) => {
+      chromium(major);
+      expect(webosDevice()?.year).toBe(year);
+    },
+  );
 
-  it('dates the TV by its Chromium when the firmware gives no platform', () => {
-    chromium(120);
-    expect(webosDevice()).toEqual({ year: 2025, uhd: null, hdr10: null, dolbyVision: null });
-  });
+  it.each([['4.5.0', 2018], ['5.0.0', 2020], ['6.0.0', 2021], ['7.0.0', 2022], ['11.0.0', 2026]])(
+    'falls back to SDK %s, model year %i, when the UA has no Chromium',
+    (sdkVersion, year) => {
+      vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Web0S');
+      (window as any).webOSSystem = { deviceInfo: JSON.stringify({ sdkVersion }) };
+      expect(webosDevice()?.year).toBe(year);
+    },
+  );
 
   it('survives an unreadable deviceInfo', () => {
     (window as any).webOSSystem = { deviceInfo: '{nope' };
     chromium(94);
-    expect(webosDevice()?.year).toBe(2023);
+    expect(webosDevice()).toEqual({ year: 2023, uhd: null, hdr10: null, dolbyVision: null });
   });
 });
 

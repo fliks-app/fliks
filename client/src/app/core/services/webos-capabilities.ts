@@ -12,8 +12,7 @@ export interface WebOsDevice {
 }
 
 interface DeviceInfo {
-  platformVersion?: string;
-  version?: string;
+  /** webOS TV SDK release (`11.0.0` on webOS TV 26); `platformVersion` is the firmware build and says nothing about the release. */
   sdkVersion?: string;
   screenWidth?: number;
   uhd?: boolean | string;
@@ -24,8 +23,8 @@ interface DeviceInfo {
 const flag = (v: boolean | string | undefined): boolean | null =>
   v === undefined ? null : v === true || v === 'true';
 
-/** Model year of a webOS TV platform major version (LG release table: 3.x 2016-17, 4.x 2018-19, 5.0 2020, 6.0 2021, then 7.0 is webOS TV 22). */
-function yearOfPlatform(major: number): number {
+/** Model year of a webOS TV SDK major version (LG release table: 3.x 2016-17, 4.x 2018-19, 5.0 2020, 6.0 2021, then 7.0 is webOS TV 22). */
+function yearOfSdk(major: number): number {
   return major >= 6 ? 2015 + major : ({ 3: 2016, 4: 2018, 5: 2020 } as Record<number, number>)[major] ?? 2016;
 }
 
@@ -34,7 +33,7 @@ const CHROMIUM_YEAR: ReadonlyArray<[chromium: number, year: number]> = [
   [132, 2026], [120, 2025], [108, 2024], [94, 2023], [87, 2022], [79, 2021], [68, 2020], [53, 2018],
 ];
 
-/** `webOSSystem.deviceInfo` (a JSON string), completed by the Chromium version when the firmware omits the platform. */
+/** The model year from the Chromium version the UA carries, else from `webOSSystem.deviceInfo` (a JSON string); the panel and HDR flags only come from the latter. */
 export function webosDevice(): WebOsDevice | null {
   const w = window as unknown as { webOSSystem?: { deviceInfo?: unknown }; PalmSystem?: { deviceInfo?: unknown } };
   let info: DeviceInfo = {};
@@ -44,11 +43,9 @@ export function webosDevice(): WebOsDevice | null {
   } catch {
     // No device info: the Chromium version still dates the TV.
   }
-  const platform = /^(\d+)/.exec(info.platformVersion ?? info.sdkVersion ?? info.version ?? '');
+  const sdk = /^(\d+)/.exec(info.sdkVersion ?? '');
   const chromium = Number(/Chrom(?:e|ium)\/(\d+)/.exec(navigator.userAgent)?.[1]);
-  const year = platform
-    ? yearOfPlatform(Number(platform[1]))
-    : (CHROMIUM_YEAR.find(([c]) => chromium >= c)?.[1] ?? null);
+  const year = CHROMIUM_YEAR.find(([c]) => chromium >= c)?.[1] ?? (sdk ? yearOfSdk(Number(sdk[1])) : null);
   const uhd = flag(info.uhd) ?? (typeof info.screenWidth === 'number' ? info.screenWidth >= 3840 : null);
   return { year, uhd, hdr10: flag(info.hdr10), dolbyVision: flag(info.dolbyVision) };
 }
