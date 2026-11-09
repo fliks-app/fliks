@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucidePause, LucidePlay, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../core/services/device.service';
@@ -21,8 +21,14 @@ export class CastOverlayComponent {
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
 
-  /** Epoch whose strip was hidden here: a new owner shows it again. */
-  private readonly hiddenEpoch = signal<number | null>(null);
+  /** Owner whose strip was hidden here: another owner, or no session in between, shows it again. Epochs restart after a deletion, so they are not compared. */
+  private readonly hiddenOwner = signal<string | null>(null);
+
+  constructor() {
+    effect(() => {
+      if (!this.sync.session()) this.hiddenOwner.set(null);
+    });
+  }
 
   protected readonly artwork = computed(() => {
     const meta = this.session.nowPlaying();
@@ -36,7 +42,7 @@ export class CastOverlayComponent {
   protected readonly observed = computed(() => {
     const s = this.sync.session();
     if (!s || this.device.isTv() || !this.session.isLocal() || this.sync.role() !== 'observer') return null;
-    return this.hiddenEpoch() === s.epoch && !this.sync.parked() ? null : s;
+    return this.hiddenOwner() === s.owner.targetId && !this.sync.parked() ? null : s;
   });
 
   protected readonly live = computed(() => this.observed() !== null && !this.sync.parked() && !this.target.isIdle());
@@ -68,6 +74,6 @@ export class CastOverlayComponent {
     const s = this.observed();
     if (!s) return;
     if (this.sync.parked()) void this.sync.dismiss();
-    else this.hiddenEpoch.set(s.epoch);
+    else this.hiddenOwner.set(s.owner.targetId);
   }
 }

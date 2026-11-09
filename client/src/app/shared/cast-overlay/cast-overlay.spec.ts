@@ -141,6 +141,18 @@ describe('CastOverlayComponent', () => {
       expect(el.querySelector('button')).toBeNull();
     });
 
+    it('shows a new session of the same owner again, even at the same epoch', () => {
+      const { el, fixture, sync } = setup({ local: true, account: accountSession() });
+      Array.from(el.querySelectorAll('button')).at(-1)!.click();
+      fixture.detectChanges();
+      expect(el.querySelector('button')).toBeNull();
+      sync.session.set(null);
+      fixture.detectChanges();
+      sync.session.set(accountSession());
+      fixture.detectChanges();
+      expect(el.textContent).toContain('Observed title');
+    });
+
     it('leaves the output strip to a selected target', () => {
       const { el } = setup({ local: false, account: accountSession() });
       expect(el.textContent).toContain('Title');
