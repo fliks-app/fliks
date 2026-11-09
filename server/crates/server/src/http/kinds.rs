@@ -4,8 +4,13 @@ use fliks_domain::media::kind::MediaKind;
 
 pub const HEADER: &str = "x-fliks-kinds";
 
-/// Kinds of a client that sends no usable `X-Fliks-Kinds`.
-const DEFAULT: [MediaKind; 2] = [MediaKind::Movie, MediaKind::Series];
+/// Kinds of a client that sends no usable `X-Fliks-Kinds`: the 6.0.x apps render books and comics.
+const DEFAULT: [MediaKind; 4] = [
+    MediaKind::Movie,
+    MediaKind::Series,
+    MediaKind::Book,
+    MediaKind::Comic,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Kinds(Vec<MediaKind>);
@@ -70,7 +75,7 @@ mod tests {
 
     #[test]
     fn default_without_header() {
-        assert_eq!(kinds(&[]).names(), ["movie", "series"]);
+        assert_eq!(kinds(&[]).names(), ["movie", "series", "book", "comic"]);
     }
 
     #[test]
@@ -83,6 +88,9 @@ mod tests {
 
     #[test]
     fn nothing_recognised_is_the_default() {
-        assert_eq!(kinds(&["tape,,"]).names(), ["movie", "series"]);
+        assert_eq!(
+            kinds(&["tape,,"]).names(),
+            ["movie", "series", "book", "comic"]
+        );
     }
 }

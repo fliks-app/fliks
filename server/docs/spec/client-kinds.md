@@ -5,7 +5,7 @@ A released client crashes on a media kind it does not render, so the server send
 ## Rules
 
 1. Header `X-Fliks-Kinds: movie,series,book,comic,album`: a comma list of kind names (`MediaKind` wire names), lower-case, repeated headers joined. Names are trimmed and lower-cased; an unknown name is ignored.
-2. A request without the header, or whose header holds no known name, declares `{movie, series}`.
+2. A request without the header, or whose header holds no known name, declares `{movie, series, book, comic}`: released 6.0.x clients render books and comics but send no header. A 5.x client may fail on a book; that is accepted. `album` stays hidden from such a client.
 3. A caller that is no client of the web API (device tokens of OPDS, Kobo and kosync, which resolve `Authed::load`; background work) declares every kind. `/rest` (OpenSubsonic), the OPDS, Kobo and kosync routes, the engine and stream routes and `/engine/*` ignore the header.
 4. Media of an undeclared kind (`media.type`) is absent from every route of rule 5. A count drops the same rows. Nothing else changes: the shape of a returned row is the same, and a declared kind is filtered by the ACL as before.
 5. Filtered routes:

@@ -99,12 +99,12 @@ const LISTS: [(&str, &str, &str); 5] = [
 ];
 
 #[sqlx::test(migrations = false)]
-async fn no_header_is_movie_and_series(pool: PgPool) {
+async fn no_header_is_movie_series_book_and_comic(pool: PgPool) {
     let c = ctx(pool).await;
     for (uri, key, field) in LISTS {
         assert_eq!(
             c.kinds(uri, key, field, None).await,
-            ["movie", "series"],
+            ["book", "comic", "movie", "series"],
             "{uri}"
         );
     }
@@ -132,9 +132,9 @@ async fn counts_item_pages_and_libraries_follow_the_declaration(pool: PgPool) {
         (Some(1), Some(0))
     );
     let (_, by_library) = c.get("/api/media/counts-by-library", None).await;
-    assert_eq!(by_library, serde_json::json!({"1": 2}));
+    assert_eq!(by_library, serde_json::json!({"1": 4}));
     let (_, genres) = c.get("/api/media/genres", None).await;
-    assert_eq!(genres[0]["count"], 2);
+    assert_eq!(genres[0]["count"], 4);
     assert_eq!(c.get("/api/media/5", None).await.0, 404);
     assert_eq!(c.get("/api/media/5", Some("album")).await.0, 200);
     assert_eq!(c.get("/api/media/1", None).await.0, 200);
