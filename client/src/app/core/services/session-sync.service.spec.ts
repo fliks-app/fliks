@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -92,6 +92,23 @@ describe('SessionSyncService role', () => {
     await flush(session({ owner: { targetId: 'phone#other', deviceName: null, formFactor: 'phone' } }));
     expect(service.ownedHere()).toBe(true);
     expect(service.role()).toBe('observer');
+  });
+
+  it('moves the position of a session played elsewhere every second', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, flush } = setup();
+      await flush(session({ positionSeconds: 100, positionAt: new Date().toISOString() }));
+      const s = service.session()!;
+      const read = computed(() => Math.floor(service.positionNow(s)));
+      const before = read();
+      TestBed.tick();
+      vi.advanceTimersByTime(3000);
+      TestBed.tick();
+      expect(read()).toBeGreaterThanOrEqual(before + 3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('has no role without a session', async () => {

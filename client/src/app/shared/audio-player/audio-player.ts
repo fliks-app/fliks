@@ -134,7 +134,7 @@ export class AudioPlayerComponent {
   /** The full player drives another device's session. */
   protected readonly remoteView = this.remoteOut.expanded;
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
-  protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.live());
+  protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.controllable());
   protected readonly queueControls = computed(() => this.controllable() && (!this.remoteView() || this.audio.queue().length > 0));
 
   protected get audio(): AudioOutput {

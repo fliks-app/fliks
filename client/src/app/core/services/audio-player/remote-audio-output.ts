@@ -22,8 +22,9 @@ export class RemoteAudioOutput implements AudioOutput {
   /** Each row keeps its place in the wire queue, which a queue pick names. */
   private readonly rows = signal<{ row: MusicTrackRequest; wireIndex: number }[]>([]);
   private readonly idsKey = computed(() => (this.wire()?.itemIds ?? []).join(','));
-  /** The owner reports itself: its transport answers, else the session is a parked position. */
-  readonly live = computed(() => !this.sync.parked() && !this.target.isIdle());
+  private readonly live = computed(() => !this.sync.parked() && !this.target.isIdle());
+  /** Commands reach a playing owner whether or not its report has arrived; a parked session has no owner to send to. */
+  readonly controllable = computed(() => !this.sync.parked());
   private readonly _expanded = signal(false);
 
   readonly expanded = this._expanded.asReadonly();
@@ -36,8 +37,12 @@ export class RemoteAudioOutput implements AudioOutput {
   });
   readonly shuffle = computed(() => this.wire()?.shuffle ?? false);
   readonly repeat = computed<Repeat>(() => this.wire()?.repeat ?? 'off');
-  readonly playing = computed(() => this.live() && !this.target.uiPaused());
-  readonly position = computed(() => (this.live() ? this.target.position() : (this.session()?.positionSeconds ?? 0)));
+  readonly playing = computed(() => (this.live() ? !this.target.uiPaused() : (this.session()?.playing ?? false) && this.controllable()));
+  readonly position = computed(() => {
+    const s = this.session();
+    if (this.live()) return this.target.position();
+    return s ? Math.min(this.sync.positionNow(s), s.durationSeconds ?? Infinity) : 0;
+  });
   readonly duration = computed(() => (this.live() ? this.target.duration() : (this.session()?.durationSeconds ?? 0)));
   readonly track = computed<AudioRequest | null>(() => {
     const s = this.session();

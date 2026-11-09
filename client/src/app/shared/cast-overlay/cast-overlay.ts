@@ -52,7 +52,9 @@ export class CastOverlayComponent {
   });
 
   protected readonly live = computed(() => this.observed() !== null && !this.sync.parked() && !this.target.isIdle());
-  protected readonly paused = computed(() => this.target.uiPaused());
+  /** The owner answers commands while it plays, whether or not its report has arrived. */
+  protected readonly controllable = computed(() => this.observed() !== null && !this.sync.parked());
+  protected readonly paused = computed(() => (this.live() ? this.target.uiPaused() : !this.observed()?.playing));
 
   protected readonly detail = computed(() => {
     const s = this.observed();
@@ -60,7 +62,15 @@ export class CastOverlayComponent {
     const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
     const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
     const time = dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
-    return `${this.sync.ownerName(s)} · ${time}`;
+    return `${time} · ${this.sync.ownerName(s)}`;
+  });
+
+  protected readonly percent = computed(() => {
+    const s = this.observed();
+    if (!s) return 0;
+    const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
+    const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
+    return dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
   });
 
   private readonly audioView = inject(RemoteAudioOutput);

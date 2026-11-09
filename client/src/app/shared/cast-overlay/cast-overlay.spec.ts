@@ -160,6 +160,13 @@ describe('CastOverlayComponent', () => {
       expect(sync.playHere).toHaveBeenCalled();
     });
 
+    it('keeps pause and a progress bar for a playing session whose owner has not reported yet', () => {
+      const { el, sync } = setup({ local: true, account: accountSession(), live: false });
+      sync.session.set(accountSession({ positionSeconds: 1800 }));
+      expect(el.querySelector('[aria-label="player.pause"]')).not.toBeNull();
+      expect(el.querySelector('progress')).not.toBeNull();
+    });
+
     it('opens the full audio player on the session from the strip of an audio session only', () => {
       const audio = setup({ local: true, account: accountSession({ item: { ...accountSession().item, kind: 'album', family: 'audio' } }) });
       audio.el.querySelector('button')!.click();
