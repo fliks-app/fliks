@@ -1,7 +1,5 @@
 //! Golden vectors of the subtitle text helpers (`fixtures/subtitle-files/cases.json`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::{
     srt::{parse_srt, serialize_srt},
     subtitle_clean::{CleanOptions, clean_subtitle},

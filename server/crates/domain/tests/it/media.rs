@@ -1,7 +1,5 @@
 //! Golden catalog vectors (`fixtures/media-{search-query,similarity,path}`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::media::{path::media_path, search::prefix_tsquery, similarity::*};
 use serde_json::{Value, json};
 

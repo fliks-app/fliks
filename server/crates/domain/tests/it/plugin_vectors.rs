@@ -1,7 +1,5 @@
 //! Golden plugin vectors (`plugins.md` "Vectors/parity", `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::plugins::route::{Matcher, ParamValue};
 use serde_json::{Map, Value, json};
 

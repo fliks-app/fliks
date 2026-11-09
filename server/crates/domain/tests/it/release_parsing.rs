@@ -1,7 +1,5 @@
 //! Golden release-parsing vectors (`fixtures/release-parsing`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::language::APP_LANGUAGES;
 use fliks_domain::release::parsing::attributes::parse_release_attributes;
 use fliks_domain::release::parsing::language::{parse_release_language, resolve_unknown_language};

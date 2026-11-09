@@ -1,7 +1,5 @@
 //! Golden recommendation vectors (`fixtures/recommend/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::recommend::*;
 use serde_json::Value;
 use std::collections::HashSet;

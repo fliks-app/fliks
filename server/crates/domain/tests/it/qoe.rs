@@ -1,7 +1,5 @@
 //! Golden QoE vectors (`fixtures/qoe/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::qoe::*;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -109,7 +107,7 @@ fn qoe_reproduces_expected() {
 
 #[test]
 fn cmcd_dictionary_follows_rfc_8941_like_the_library() {
-    let snap = |raw: &str| common::norm(ser(read_cmcd_raw(raw)));
+    let snap = |raw: &str| crate::common::norm(ser(read_cmcd_raw(raw)));
     for (raw, want) in [
         ("bl=1.5", json!({"bl": 1.5})),
         ("bl=100;x=1", Value::Null),

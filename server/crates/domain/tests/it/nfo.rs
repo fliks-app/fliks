@@ -1,7 +1,5 @@
 //! Golden NFO parser vectors (`fixtures/nfo`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::nfo::parse;
 use serde_json::json;
 

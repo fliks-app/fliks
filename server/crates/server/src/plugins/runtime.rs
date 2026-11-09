@@ -149,6 +149,8 @@ pub struct HostConfig {
     /// The image the compile child runs (`/proc/self/exe` in production).
     pub compiler: PathBuf,
     pub compile_kill: Duration,
+    /// Directory of a shared compile cache keyed by wasm and engine; set by test harnesses only.
+    pub compile_cache: Option<PathBuf>,
     /// A `parity` seam for the SDK harness, which has no server image to start.
     #[cfg(feature = "parity")]
     pub compile_in_process: bool,
@@ -182,6 +184,7 @@ impl HostConfig {
             upstream_override: Arc::new(super::outbound::Override::from_env()),
             compiler: super::compile::own_image(),
             compile_kill: Duration::from_secs(600),
+            compile_cache: None,
             #[cfg(feature = "parity")]
             compile_in_process: false,
         }

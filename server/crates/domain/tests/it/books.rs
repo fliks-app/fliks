@@ -1,7 +1,5 @@
 //! Golden book-file vectors (`fixtures/books-opf`, `books-names`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::books::{filename, isbn, opf};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};

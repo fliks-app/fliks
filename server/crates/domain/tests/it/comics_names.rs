@@ -1,7 +1,5 @@
 //! Golden comic-name vectors (`fixtures/comics-names`; `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::comics::name;
 use serde_json::json;
 

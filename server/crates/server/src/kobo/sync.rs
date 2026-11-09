@@ -16,10 +16,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const LIMIT: usize = 100;
 /// Items read per step of a sync scan.
-const WINDOW: usize = 500;
+pub static WINDOW: AtomicUsize = AtomicUsize::new(500);
 
 /// What the previous answer sent (`b` books, `g` removals, `s` shelves, `sg` shelf removals) and when it read the library.
 #[derive(Serialize, Deserialize, Default)]
@@ -159,10 +160,11 @@ pub async fn library_sync(
     let mut events: Vec<(i32, Event)> = vec![];
     let mut purge = vec![];
     let mut after = start;
+    let window = WINDOW.load(Ordering::Relaxed);
     loop {
-        let mut ids = candidates(db, after, WINDOW).await?;
-        let last = ids.len() < WINDOW;
-        let hi = if last { i32::MAX } else { ids[WINDOW - 1] };
+        let mut ids = candidates(db, after, window).await?;
+        let last = ids.len() < window;
+        let hi = if last { i32::MAX } else { ids[window - 1] };
         let have = rows(db, tid, after, hi).await?;
         ids.extend(have.keys());
         ids.sort_unstable();

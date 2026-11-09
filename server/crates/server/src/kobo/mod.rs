@@ -6,6 +6,7 @@ mod resources;
 mod shelves;
 mod state;
 mod sync;
+pub use sync::WINDOW as SCAN_WINDOW;
 
 use crate::{
     auth::client_ip,

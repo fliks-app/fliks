@@ -1,7 +1,5 @@
 //! Translation core vectors (`fixtures/translation/cases.json`): retry, batching, prompts, register.
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::translation::*;
 use serde_json::{Value, json};

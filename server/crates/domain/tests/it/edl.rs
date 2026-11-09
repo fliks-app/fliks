@@ -1,7 +1,5 @@
 //! Golden EDL vectors (`fixtures/edl/cases.json`, `BLESS=1` rewrites `expected`).
-mod common;
-
-use common::replay;
+use crate::common::replay;
 use fliks_domain::edl::*;
 use serde_json::{Value, json};
 use std::collections::HashMap;
