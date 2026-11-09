@@ -591,7 +591,7 @@ async fn search_and_preview_answer_cards_and_the_issue_list(pool: PgPool) {
         v,
         json!([{"provider": NS, "externalId": "42", "mediaType": "comic", "title": "Alpha Run", "year": 2016,
                 "publisher": "Pub House", "volume": 2, "issueCount": 3, "overview": "A run.",
-                "posterUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "existingMediaId": null}])
+                "posterUrl": "https://img.test/a.jpg", "sourceUrl": "https://cv.test/42", "existingMediaId": null, "state": null, "requestStatus": null}])
     );
     assert_eq!(c.get("/api/metadata/search/comic").await.1, json!([]));
     assert_eq!(
