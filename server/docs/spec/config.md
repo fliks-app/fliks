@@ -52,6 +52,7 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 |---|---|---|
 | `FLIKS_PLUGINS_DISABLED` | none (enabled unless value is exactly `'1'`) | `=== '1'` |
 | `TZ` | `'UTC'` | string as-is (`??`) |
+| `FLIKS_DISABLE_SEARCH_CACHE` | none (the search cache of `metadata.md` rule 11 is on unless value is exactly `1`) | `== "1"` |
 | `FLIKS_DISABLE_CRON` | none (timers run unless value is exactly `1`; `scheduler.md` rule 8) | `== "1"` |
 
 ## Metadata

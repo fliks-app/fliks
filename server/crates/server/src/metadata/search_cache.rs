@@ -9,6 +9,11 @@ use std::{
 pub(crate) const TTL: Duration = Duration::from_secs(600);
 pub(crate) const CAPACITY: usize = 500;
 
+/// `FLIKS_DISABLE_SEARCH_CACHE=1` (exactly `1`): every search asks its providers, as a parity run needs.
+pub(crate) fn enabled() -> bool {
+    std::env::var("FLIKS_DISABLE_SEARCH_CACHE").as_deref() != Ok("1")
+}
+
 pub(crate) struct SearchCache {
     ttl: Duration,
     capacity: usize,

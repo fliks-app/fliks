@@ -45,7 +45,7 @@ Recording through the one command: `PARITY_RECORD=1 PARITY_MODES=up0 parity/run-
 Target (`fliks-server` alone on :4849, a scratch database reset as in the template step above):
 
 ```bash
-export DB_NAME=fliks_parity PORT=4849 JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_CRON=1 FLIKS_CONF_DIR=/tmp/fliks-parity/conf
+export DB_NAME=fliks_parity PORT=4849 JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_CRON=1 FLIKS_DISABLE_SEARCH_CACHE=1 FLIKS_CONF_DIR=/tmp/fliks-parity/conf
 export FLIKS_CAST_DIR=$PWD/public   # from server/
 # engine up: also FLIKS_ENGINE_URL / FLIKS_ENGINE_TOKEN of the engine on :4860, and PARITY_HOST_TOKEN for the runner; engine down: neither
 "$CARGO_TARGET_DIR"/debug/fliks-server

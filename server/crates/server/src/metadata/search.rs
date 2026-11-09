@@ -382,7 +382,8 @@ pub async fn search_hits(
     };
     let lang = lang(&st).await?;
     let key = cache_key(&search, target, (named, pinned), &lang.tmdb_locale);
-    let mut hits = match md.search_cache.get(&key, Instant::now()) {
+    let cached = super::search_cache::enabled().then(|| md.search_cache.get(&key, Instant::now()));
+    let mut hits = match cached.flatten() {
         Some(hits) => hits,
         None => {
             let order = named.into_iter().chain(pinned);
@@ -395,7 +396,9 @@ pub async fn search_hits(
                 let wanted = title.as_deref().unwrap_or(&query);
                 rank_books(&mut hits, wanted, author.as_deref(), wanted_year);
             }
-            md.search_cache.put(key, hits.clone(), Instant::now());
+            if super::search_cache::enabled() {
+                md.search_cache.put(key, hits.clone(), Instant::now());
+            }
             hits
         }
     };
