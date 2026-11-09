@@ -79,46 +79,39 @@
           }
         </app-track-line>
       </button>
-      <span class="hidden md:inline-flex shrink-0 items-center" role="group" [attr.aria-label]="'music.rating' | translate">
-        @for (s of stars; track s) {
-          <button type="button" class="btn btn-ghost btn-xs btn-square" [attr.aria-label]="'music.rate_n' | translate: { n: s }" [attr.aria-pressed]="(t.rating ?? 0) >= s" (click)="rate(t, s)" data-testid="star">
-            <svg lucideStar class="size-4" [class.fill-current]="(t.rating ?? 0) >= s"></svg>
-          </button>
-        }
-      </span>
       <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
         <svg lucideHeart class="size-4" [class.fill-current]="t.favourite"></svg>
       </button>
-      <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'playlists.add_to_playlist_title' | translate" (click)="addToPlaylist(t)">
-        <svg lucideListPlus class="size-4"></svg>
-      </button>
-      @if (party.active()) {
-        <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'karaoke.queue_sing_this' | translate: { title: t.title }" (click)="sing(t)" data-testid="sing-track">
-          <svg lucideMic class="size-4"></svg>
+      <app-dropdown-menu placement="bottom-end" [heading]="t.title">
+        <div trigger tabindex="0" role="button" class="btn btn-ghost btn-xs btn-square shrink-0" [attr.aria-label]="'common.more' | translate" data-testid="track-menu">
+          <svg lucideEllipsisVertical class="size-4"></svg>
+        </div>
+        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="enqueue(t, 'next')" data-testid="track-play-next">
+          <svg lucideListStart class="h-4 w-4"></svg>
+          {{ 'music.play_next' | translate }}
         </button>
-      }
-      <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'music.play_next' | translate" (click)="enqueue(t, 'next')">
-        <svg lucideListStart class="size-4"></svg>
-      </button>
-      <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="!t.hasFile" [attr.aria-label]="'music.add_to_queue' | translate" (click)="enqueue(t, 'last')">
-        <svg lucideListEnd class="size-4"></svg>
-      </button>
+        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="enqueue(t, 'last')" data-testid="track-enqueue">
+          <svg lucideListEnd class="h-4 w-4"></svg>
+          {{ 'music.add_to_queue' | translate }}
+        </button>
+        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="addToPlaylist(t)" data-testid="track-add-playlist">
+          <svg lucideListPlus class="h-4 w-4"></svg>
+          {{ 'playlists.add_to_playlist_title' | translate }}
+        </button>
+        @if (party.active()) {
+          <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="sing(t)" data-testid="sing-track">
+            <svg lucideMic class="h-4 w-4"></svg>
+            {{ 'karaoke.queue_sing_this' | translate: { title: t.title } }}
+          </button>
+        }
+        @if (creditGroups(t).length) {
+          <button type="button" class="dropdown-item text-white" (click)="openCredits(t)" data-testid="track-credits">
+            <svg lucideUsers class="h-4 w-4"></svg>
+            {{ 'music.credits' | translate }}
+          </button>
+        }
+      </app-dropdown-menu>
     </li>
-    @if (creditGroups(t); as groups) {
-      @if (groups.length) {
-        <li class="px-3 pb-1 pl-14">
-          <details>
-            <summary class="cursor-pointer text-sm text-base-content/60">{{ 'music.credits' | translate }}</summary>
-            <dl class="grid grid-cols-[max-content_1fr] gap-x-4 text-sm text-base-content/70">
-              @for (g of groups; track g.role) {
-                <dt>{{ 'music.role_' + g.role | translate }}</dt>
-                <dd>{{ g.names }}</dd>
-              }
-            </dl>
-          </details>
-        </li>
-      }
-    }
   </ng-template>
 
   @for (d of discs(); track d.disc.discNumber) {
@@ -137,4 +130,16 @@
       </ul>
     </app-detail-section>
   }
+  <dialog #creditsDialog class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <app-modal-header [title]="creditsOf()?.title ?? ('music.credits' | translate)" />
+      <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 py-4">
+        @for (g of creditsOf() ? creditGroups(creditsOf()!) : []; track g.role) {
+          <dt class="text-base-content/60">{{ 'music.role_' + g.role | translate }}</dt>
+          <dd>{{ g.names }}</dd>
+        }
+      </dl>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  </dialog>
 }

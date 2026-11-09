@@ -674,37 +674,18 @@ async fn stars_ratings_and_scrobbles_land_on_likes_ratings_and_history(pool: PgP
         .unwrap();
     assert_eq!(bobs, 0, "nothing written when one id is refused");
 
-    assert_eq!(
-        c.alice("setRating", "id=tr-100&rating=4").await["status"],
-        "ok"
-    );
-    assert_eq!(
-        c.alice("setRating", "id=tr-100&rating=5").await["status"],
-        "ok"
-    );
-    assert_eq!(
-        c.alice("getSong", "id=tr-100").await["song"]["userRating"],
-        5
-    );
-    assert_eq!(
-        c.alice("getAlbum", "id=al-10").await["album"]["userRating"],
-        5
-    );
-    assert_eq!(
-        names(
-            &c.alice("getAlbumList2", "type=highest").await["albumList2"]["album"],
-            "name"
-        ),
-        ["First Album"]
-    );
-    assert_eq!(
-        c.alice("setRating", "id=tr-100&rating=0").await["status"],
-        "ok"
-    );
+    for id in ["tr-100", "al-10", "tr-103"] {
+        assert_eq!(
+            code(&c.alice("setRating", &format!("id={id}&rating=4")).await),
+            0
+        );
+    }
     assert!(c.alice("getSong", "id=tr-100").await["song"]["userRating"].is_null());
-    assert_eq!(code(&c.alice("setRating", "id=tr-100&rating=6").await), 0);
-    assert_eq!(code(&c.alice("setRating", "id=al-10&rating=3").await), 0);
-    assert_eq!(code(&c.bob("setRating", "id=tr-103&rating=3").await), 70);
+    assert!(c.alice("getAlbum", "id=al-10").await["album"]["userRating"].is_null());
+    assert_eq!(
+        c.alice("getAlbumList2", "type=highest").await["albumList2"]["album"],
+        json!([])
+    );
 
     let at = "1700000000000";
     for _ in 0..2 {

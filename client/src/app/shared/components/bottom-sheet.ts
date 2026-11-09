@@ -35,6 +35,8 @@ export class BottomSheetComponent {
   readonly heading = input('');
   readonly showBackdrop = input(true);
   readonly rightAligned = input(false);
+  /** Covers the whole viewport instead of the usual bottom card: a full page that slides up and is dismissed by dragging it down. */
+  readonly fullHeight = input(false);
   readonly closed = output<void>();
 
   readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
@@ -50,6 +52,7 @@ export class BottomSheetComponent {
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly dismissCallback = () => this.dismiss();
+  private startX = 0;
   private startY = 0;
   /** True when the touch began with the sheet scrolled to the top; only then can a downward drag dismiss, so a scroll never chains into the close. */
   private startedAtTop = false;
@@ -149,11 +152,17 @@ export class BottomSheetComponent {
   onTouchStart(e: TouchEvent) {
     const el = this.sheet()?.nativeElement;
     if (!el) return;
+    this.startX = e.touches[0].clientX;
     this.startY = e.touches[0].clientY;
     this.prevY = this.startY;
     this.movingDown = true;
     this.startedAtTop = !scrolledBetween(e.target, el);
     this.fromHandle = e.target instanceof Element && !!e.target.closest('[data-sheet-handle]');
+    // A slider or a list drag handle owns its gesture and must never pull the sheet down.
+    if (e.target instanceof Element && e.target.closest('input[type="range"], [cdkDragHandle]')) {
+      this.startedAtTop = false;
+      this.fromHandle = false;
+    }
   }
 
   onTouchMove(e: TouchEvent) {
@@ -161,6 +170,8 @@ export class BottomSheetComponent {
     if (!el) return;
     const y = e.touches[0].clientY;
     const deltaY = y - this.startY;
+    // A mostly horizontal move (a row swipe) is not a dismiss drag.
+    if (!this.dragging() && Math.abs(e.touches[0].clientX - this.startX) > Math.abs(deltaY)) return;
 
     // Only a pull that began at the top becomes a dismiss-drag; scrolling up to the top must not chain into the close.
     const canDrag = this.fromHandle || (this.startedAtTop && !scrolledBetween(e.target, el));

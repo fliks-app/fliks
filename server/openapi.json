@@ -1202,26 +1202,6 @@
         }
       }
     },
-    "/api/items/{itemId}/rating": {
-      "put": {
-        "tags": [
-          "crate::music"
-        ],
-        "operationId": "rate",
-        "responses": {
-          "200": {}
-        }
-      },
-      "delete": {
-        "tags": [
-          "crate::music"
-        ],
-        "operationId": "unrate",
-        "responses": {
-          "204": {}
-        }
-      }
-    },
     "/api/karaoke/models": {
       "get": {
         "tags": [

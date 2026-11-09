@@ -55,14 +55,6 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<Media[]>('/api/playback/recently-played', { params: { limit } }));
   }
 
-  rate(itemId: number, rating: number): Promise<void> {
-    return firstValueFrom(this.http.put<void>(`/api/items/${itemId}/rating`, { rating }));
-  }
-
-  clearRating(itemId: number): Promise<void> {
-    return firstValueFrom(this.http.delete<void>(`/api/items/${itemId}/rating`));
-  }
-
   /** Adds an identified album (a provider hit) to a library. */
   importAlbum(body: { provider: string; externalId: string; libraryId?: number; folderId?: number }): Promise<Media> {
     return firstValueFrom(this.http.post<Media>('/api/media/import', { type: 'album', ...body }));

@@ -126,7 +126,7 @@ FROM media m LEFT JOIN album_details ad ON ad."mediaId" = m.id WHERE m.id = $1"#
     Ok(detail)
 }
 
-/// `TrackRow` of each readable track of `items`, in that order; the caller's favourite, rating and plays.
+/// `TrackRow` of each readable track of `items`, in that order; the caller's favourite and plays.
 pub(crate) async fn track_rows(
     db: &PgPool,
     uid: i32,
@@ -161,7 +161,6 @@ pub(crate) async fn track_rows(
        FROM item_works iw JOIN works w ON w.id = iw."workId"
        LEFT JOIN persons cp ON cp.id = w."composerPersonId" WHERE iw."itemId" = i.id), '[]'::jsonb),
   'favourite', EXISTS (SELECT 1 FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id),
-  'rating', (SELECT r.rating FROM item_ratings r WHERE r."userId" = $1 AND r."itemId" = i.id),
   'playCount', (SELECT count(*) FROM playback_history h WHERE h."userId" = $1 AND h."itemId" = i.id),
   'lastPlayedAt', (SELECT iso_ms(max(h."playedAt")) FROM playback_history h
       WHERE h."userId" = $1 AND h."itemId" = i.id),

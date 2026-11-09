@@ -15,7 +15,7 @@ export class LyricsApiService {
     return firstValueFrom(this.http.put<void>(`/api/items/${itemId}/lyrics`, body));
   }
 
-  patch(id: number, body: { offsetMs?: number; preferred?: boolean; reviewed?: boolean }): Promise<void> {
+  patch(id: number, body: { preferred?: boolean; reviewed?: boolean }): Promise<void> {
     return firstValueFrom(this.http.patch<void>(`/api/lyrics/${id}`, body));
   }
 

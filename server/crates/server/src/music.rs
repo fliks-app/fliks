@@ -1,4 +1,4 @@
-//! Track view, ratings, composers, recordings and recently played (`docs/spec/music.md` rules 44-49).
+//! Track view, composers, recordings and recently played (`docs/spec/music.md` rules 44-49).
 use crate::{
     http::{
         AppError,
@@ -17,18 +17,16 @@ use axum::{
     Json, Router,
     extract::{Query, State},
     http::StatusCode,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject};
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::{Postgres, QueryBuilder};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/tracks", get(tracks))
         .route("/api/music/want-recording", post(want_recording))
-        .route("/api/items/{itemId}/rating", put(rate).delete(unrate))
         .route("/api/composers/{id}/works", get(composer_works))
         .route("/api/works/{id}/recordings", get(recordings))
         .route("/api/playback/recently-played", get(recently_played))
@@ -49,7 +47,6 @@ pub async fn tracks(
             "libraryId",
             "q",
             "favourite",
-            "rated",
             "sortBy",
             "sortOrder",
             "page",
@@ -57,11 +54,8 @@ pub async fn tracks(
         ],
     );
     let (library, text) = (r.int("libraryId"), r.string("q"));
-    let (favourite, rated) = (
-        r.flag("favourite") == Some(true),
-        r.flag("rated") == Some(true),
-    );
-    let sort = r.one_of("sortBy", &["title", "album", "added", "played", "rating"]);
+    let favourite = r.flag("favourite") == Some(true);
+    let sort = r.one_of("sortBy", &["title", "album", "added", "played"]);
     let order = r.one_of("sortOrder", &["asc", "desc", "ASC", "DESC"]);
     let (page, limit) = (r.number("page"), r.number("limit"));
     r.finish()?;
@@ -77,15 +71,10 @@ pub async fn tracks(
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"SELECT i.id FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
 JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
-LEFT JOIN item_ratings r ON r."userId" = "#,
-    );
-    qb.push_bind(uid)
-        .push(
-            r#" AND r."itemId" = i.id
 LEFT JOIN LATERAL (SELECT max(h."playedAt") AS at FROM playback_history h
     WHERE h."userId" = "#,
-        )
-        .push_bind(uid)
+    );
+    qb.push_bind(uid)
         .push(
             r#" AND h."itemId" = i.id) lp ON true
 WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
@@ -115,16 +104,12 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
             .push_bind(uid)
             .push(r#" AND l."itemId" = i.id)"#);
     }
-    if rated {
-        qb.push(" AND r.rating IS NOT NULL");
-    }
     qb.push(" ORDER BY ").push(match sort.as_deref() {
         Some("album") => {
             format!(r#"lower(m.title) {dir}, td."discNumber" {dir}, td.position {dir}"#)
         }
         Some("added") => format!(r#"i."createdAt" {dir}"#),
         Some("played") => format!("lp.at {dir} NULLS LAST"),
-        Some("rating") => format!("r.rating {dir} NULLS LAST"),
         _ => format!("lower(i.title) {dir}"),
     });
     qb.push(", i.id LIMIT ")
@@ -135,12 +120,6 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
     Ok(Json(Value::Array(
         track_rows(&st.db, uid, &acl, &ids).await?,
     )))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RatingDto {
-    rating: i32,
 }
 
 pub(crate) async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
@@ -167,46 +146,6 @@ pub async fn want_recording(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
     crate::media::write::album_import::want_recording(&st, &a, v).await
-}
-
-#[utoipa::path(put, path = "/api/items/{itemId}/rating", responses((status = 200)))]
-pub async fn rate(
-    State(st): State<AppState>,
-    a: Authed,
-    PathParams(item): PathParams<i32>,
-    ValidJson(dto): ValidJson<RatingDto>,
-) -> Result<Json<Value>, AppError> {
-    if !(1..=5).contains(&dto.rating) {
-        return Err(AppError::bad_request(vec![
-            "rating must be between 1 and 5".to_owned(),
-        ]));
-    }
-    assert_track(&st, &a, item).await?;
-    sqlx::query(
-        r#"INSERT INTO item_ratings ("userId", "itemId", rating) VALUES ($1, $2, $3)
-           ON CONFLICT ("userId", "itemId") DO UPDATE SET rating = EXCLUDED.rating"#,
-    )
-    .bind(a.user.id)
-    .bind(item)
-    .bind(dto.rating as i16)
-    .execute(&st.db)
-    .await?;
-    Ok(Json(json!({"itemId": item, "rating": dto.rating})))
-}
-
-#[utoipa::path(delete, path = "/api/items/{itemId}/rating", responses((status = 204)))]
-pub async fn unrate(
-    State(st): State<AppState>,
-    a: Authed,
-    PathParams(item): PathParams<i32>,
-) -> Result<StatusCode, AppError> {
-    assert_track(&st, &a, item).await?;
-    sqlx::query(r#"DELETE FROM item_ratings WHERE "userId" = $1 AND "itemId" = $2"#)
-        .bind(a.user.id)
-        .bind(item)
-        .execute(&st.db)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// The tracks of a readable edition that play the work `{W}` or one of its movements.

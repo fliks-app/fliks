@@ -205,7 +205,7 @@ async fn dispatch(st: &AppState, c: &Caller, endpoint: &str, p: &Params) -> Answ
         "deletePlaylist" => playlists::delete(st, c, p).await,
         "star" => annotate::star(st, c, p, true).await,
         "unstar" => annotate::star(st, c, p, false).await,
-        "setRating" => annotate::set_rating(st, c, p).await,
+        "setRating" => Err(annotate::not_supported()),
         "scrobble" => annotate::scrobble(st, c, p).await,
         _ => Err(SubError::new(0, "Unknown endpoint")),
     }

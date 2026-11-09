@@ -77,11 +77,6 @@ export function toTrackRequest(t: Track, a: AlbumFacts): MusicTrackRequest {
   };
 }
 
-/** Clicking the current star clears the rating. */
-export function nextRating(current: number | null, clicked: number): number | null {
-  return current === clicked ? null : clicked;
-}
-
 export type ReleaseGroup = 'album' | 'ep' | 'single' | 'compilation' | 'live' | 'other';
 export const RELEASE_GROUPS: readonly ReleaseGroup[] = ['album', 'ep', 'single', 'compilation', 'live', 'other'];
 

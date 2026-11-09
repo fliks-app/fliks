@@ -1,7 +1,7 @@
 // Wire contract: smart playlists (`playlists.rules`), camelCase JSON, validated server-side with deny_unknown_fields
 
 export const SORT_BY = [
-  'artist', 'album', 'title', 'year', 'rating', 'playCount', 'lastPlayed', 'addedAt', 'duration', 'popularity', 'random',
+  'artist', 'album', 'title', 'year', 'playCount', 'lastPlayed', 'addedAt', 'duration', 'popularity', 'random',
 ] as const;
 export type SortBy = (typeof SORT_BY)[number];
 
@@ -10,7 +10,7 @@ export type Range = { min?: number; max?: number };
 export type Criterion =
   | { type: 'artist' | 'albumArtist' | 'composer' | 'genre'; name: string }
   | { type: 'work'; title: string }
-  | ({ type: 'year' | 'originalYear' | 'rating' | 'playCount' | 'popularity' } & Range)
+  | ({ type: 'year' | 'originalYear' | 'playCount' | 'popularity' } & Range)
   | { type: 'releaseType'; types: string[] }
   | { type: 'compilation' | 'favourite' | 'lossless'; value: boolean }
   | { type: 'lastPlayed' | 'addedAt'; withinDays?: number; olderThanDays?: number }
@@ -27,7 +27,7 @@ export interface SmartRules {
 }
 
 export const CRITERION_TYPES: readonly CriterionType[] = [
-  'artist', 'albumArtist', 'composer', 'work', 'genre', 'year', 'originalYear', 'releaseType', 'compilation', 'rating',
+  'artist', 'albumArtist', 'composer', 'work', 'genre', 'year', 'originalYear', 'releaseType', 'compilation',
   'favourite', 'playCount', 'lastPlayed', 'addedAt', 'duration', 'lossless', 'codec', 'popularity', 'library',
 ];
 
@@ -59,7 +59,7 @@ const VALUE: Field[] = [{ key: 'value', kind: 'bool', label: 'f_value' }];
 export const CRITERION_FIELDS: Record<CriterionType, Field[]> = {
   artist: NAME, albumArtist: NAME, composer: NAME, genre: NAME,
   work: [{ key: 'title', kind: 'text', label: 'f_title' }],
-  year: MIN_MAX, originalYear: MIN_MAX, rating: MIN_MAX, playCount: MIN_MAX,
+  year: MIN_MAX, originalYear: MIN_MAX, playCount: MIN_MAX,
   popularity: [{ key: 'min', kind: 'float', label: 'f_min' }, { key: 'max', kind: 'float', label: 'f_max' }],
   releaseType: [{ key: 'types', kind: 'types', label: 'f_types' }],
   compilation: VALUE, favourite: VALUE, lossless: VALUE,
@@ -104,7 +104,6 @@ export function criterionValid(c: Criterion): boolean {
     case 'artist': case 'albumArtist': case 'composer': case 'genre': return textValid(c.name);
     case 'work': return textValid(c.title);
     case 'year': case 'originalYear': return rangeValid(c.min, c.max, 0, 9999, true);
-    case 'rating': return rangeValid(c.min, c.max, 1, 5, true);
     case 'playCount': return rangeValid(c.min, c.max, 0, Number.MAX_SAFE_INTEGER, true);
     case 'popularity': return rangeValid(c.min, c.max, 0, Number.MAX_VALUE, false);
     case 'duration': return rangeValid(c.minSeconds, c.maxSeconds, 0, Number.MAX_SAFE_INTEGER, true);

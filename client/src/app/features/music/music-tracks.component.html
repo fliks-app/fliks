@@ -9,7 +9,6 @@
     <select appTvSelect class="select select-bordered select-sm" [attr.aria-label]="'music.filter' | translate" [ngModel]="filter()" (ngModelChange)="filter.set($event)">
       <option value="">{{ 'music.filter_all' | translate }}</option>
       <option value="favourite">{{ 'music.filter_favourites' | translate }}</option>
-      <option value="rated">{{ 'music.filter_rated' | translate }}</option>
     </select>
   </div>
   @if (!list.rows().length) {

@@ -94,7 +94,6 @@ export interface Track {
   credits: TrackCredit[];
   works: TrackWork[];
   favourite: boolean;
-  rating: number | null;
   playCount: number;
   lastPlayedAt: string | null;
 }
@@ -124,8 +123,7 @@ export interface TracksQuery {
   libraryId?: number;
   q?: string;
   favourite?: boolean;
-  rated?: boolean;
-  sortBy?: 'title' | 'album' | 'added' | 'played' | 'rating';
+  sortBy?: 'title' | 'album' | 'added' | 'played';
   sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;

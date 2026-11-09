@@ -36,7 +36,6 @@ pub enum SortBy {
     Album,
     Title,
     Year,
-    Rating,
     PlayCount,
     LastPlayed,
     AddedAt,
@@ -83,10 +82,6 @@ pub enum Criterion {
     },
     Compilation {
         value: bool,
-    },
-    Rating {
-        min: Option<i32>,
-        max: Option<i32>,
     },
     Favourite {
         value: bool,
@@ -168,9 +163,6 @@ fn valid(c: &Criterion) -> bool {
                     PRIMARY_TYPES.contains(&t.as_str()) || SECONDARY_TYPES.contains(&t.as_str())
                 })
         }
-        Criterion::Rating { min, max } => {
-            bounds(*min, *max, 1) && min.is_none_or(|m| m <= 5) && max.is_none_or(|m| m <= 5)
-        }
         Criterion::PlayCount { min, max } => bounds(*min, *max, 0),
         Criterion::LastPlayed {
             within_days,
@@ -233,6 +225,7 @@ mod tests {
     fn unknown_keys_and_types_do_not_parse() {
         assert!(rules(json!([{"type": "genre", "name": "x", "extra": 1}])).is_err());
         assert!(rules(json!([{"type": "mood"}])).is_err());
+        assert!(rules(json!([{"type": "rating", "min": 1}])).is_err());
     }
 
     #[test]
@@ -242,8 +235,6 @@ mod tests {
             json!([{"type": "artist", "name": "  "}]),
             json!([{"type": "year"}]),
             json!([{"type": "year", "min": 2000, "max": 1990}]),
-            json!([{"type": "rating", "min": 0}]),
-            json!([{"type": "rating", "max": 6}]),
             json!([{"type": "lastPlayed", "withinDays": 0}]),
             json!([{"type": "releaseType", "types": ["nope"]}]),
             json!([{"type": "library", "ids": []}]),

@@ -1,4 +1,4 @@
-//! The music reads (`music.md` rules 44-49): list info, detail, tracks, ratings, favourites, playlists.
+//! The music reads (`music.md` rules 44-49): list info, detail, tracks, favourites, playlists.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, state::AppState};
@@ -70,7 +70,7 @@ async fn call(app: &Router, t: &str, method: &str, uri: &str, body: Option<Value
 }
 
 #[sqlx::test(migrations = false)]
-async fn album_reads_tracks_ratings_favourites_and_works(pool: PgPool) {
+async fn album_reads_tracks_favourites_and_works(pool: PgPool) {
     let (app, t) = ctx(&pool).await;
     let (_, list) = call(&app, &t, "GET", "/api/media?type=album", None).await;
     let info = &list["data"][0]["album"];
@@ -102,19 +102,13 @@ async fn album_reads_tracks_ratings_favourites_and_works(pool: PgPool) {
             Some(json!({"rating": 4}))
         )
         .await
-        .1,
-        json!({"itemId": 1, "rating": 4})
+        .0,
+        404
     );
     assert_eq!(
-        call(
-            &app,
-            &t,
-            "PUT",
-            "/api/items/1/rating",
-            Some(json!({"rating": 9}))
-        )
-        .await
-        .0,
+        call(&app, &t, "GET", "/api/tracks?sortBy=rating", None)
+            .await
+            .0,
         400
     );
     assert_eq!(
@@ -129,27 +123,14 @@ async fn album_reads_tracks_ratings_favourites_and_works(pool: PgPool) {
         .0,
         201
     );
-    let (_, rows) = call(
-        &app,
-        &t,
-        "GET",
-        "/api/tracks?favourite=true&rated=true",
-        None,
-    )
-    .await;
+    let (_, rows) = call(&app, &t, "GET", "/api/tracks?favourite=true", None).await;
     assert_eq!(
         (
             rows.as_array().unwrap().len(),
-            &rows[0]["rating"],
+            rows[0].get("rating"),
             &rows[0]["albumTitle"]
         ),
-        (1, &json!(4), &json!("Alpha"))
-    );
-    assert_eq!(
-        call(&app, &t, "DELETE", "/api/items/1/rating", None)
-            .await
-            .0,
-        204
+        (1, None, &json!("Alpha"))
     );
 
     let (_, cw) = call(&app, &t, "GET", "/api/composers/2/works", None).await;

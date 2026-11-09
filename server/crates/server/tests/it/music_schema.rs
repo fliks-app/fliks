@@ -158,13 +158,12 @@ async fn a_track_is_an_ungrouped_item_with_its_facts_and_credits(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn works_nest_movements_and_ratings_are_per_user(pool: PgPool) {
+async fn works_nest_movements(pool: PgPool) {
     seed(&pool).await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO works (id, mbid, title, "composerPersonId") VALUES (1, '{MB}', 'Symphony', 1);
            INSERT INTO works (id, mbid, title, "parentWorkId") VALUES (2, '{MB2}', 'Allegro', 1);
-           INSERT INTO item_works ("itemId", "workId", position) VALUES (1, 2, 0), (2, 2, 1);
-           INSERT INTO item_ratings ("userId", "itemId", rating) VALUES (1, 1, 5);"#
+           INSERT INTO item_works ("itemId", "workId", position) VALUES (1, 2, 0), (2, 2, 1);"#
     )))
     .execute(&pool)
     .await
@@ -173,9 +172,6 @@ async fn works_nest_movements_and_ratings_are_per_user(pool: PgPool) {
         format!(r#"INSERT INTO works (mbid, title) VALUES ('{MB}', 'Again')"#),
         r#"INSERT INTO works (title) VALUES ('')"#.into(),
         r#"UPDATE works SET "parentWorkId" = id WHERE id = 1"#.into(),
-        r#"INSERT INTO item_ratings ("userId", "itemId", rating) VALUES (1, 2, 0)"#.into(),
-        r#"INSERT INTO item_ratings ("userId", "itemId", rating) VALUES (1, 2, 6)"#.into(),
-        r#"INSERT INTO item_ratings ("userId", "itemId", rating) VALUES (1, 1, 4)"#.into(),
     ] {
         assert!(refused(&pool, &bad).await, "{bad}");
     }
@@ -194,11 +190,6 @@ async fn works_nest_movements_and_ratings_are_per_user(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let rated: i64 = sqlx::query_scalar("SELECT count(*) FROM item_ratings")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(rated, 0);
 }
 
 #[sqlx::test(migrations = false)]

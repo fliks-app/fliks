@@ -31,7 +31,6 @@ async fn ctx(pool: &PgPool) -> (Router, String) {
           (3, 10, 1, 'a/03 Three.mp3', 1, 'MP3', '{"audio":[{"codec":"mp3"}]}');
         INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
           (1, 1, 10, 0, 0), (2, 2, 10, 0, 0), (3, 3, 10, 0, 0);
-        INSERT INTO item_ratings ("userId", "itemId", rating) VALUES (1, 2, 5);
         "#,
     )
     .execute(pool)
@@ -108,10 +107,24 @@ async fn smart_playlist_evaluates_and_refuses_writes(pool: PgPool) {
         "POST",
         "/api/playlists/preview",
         Some(json!({"rules": rules(json!([
-        {"type": "rating", "min": 4}, {"type": "genre", "name": "jazz"}]), "title", Value::Null)})),
+        {"type": "codec", "codecs": ["mp3"]}, {"type": "genre", "name": "jazz"}]), "title", Value::Null)})),
     )
     .await;
-    assert_eq!(n["count"], 1);
+    assert_eq!(n["count"], 2);
+    for (criteria, sort) in [
+        (json!([{"type": "rating", "min": 4}]), "title"),
+        (json!([{"type": "genre", "name": "jazz"}]), "rating"),
+    ] {
+        let (s, _, _) = call(
+            &app,
+            &t,
+            "POST",
+            "/api/playlists/preview",
+            Some(json!({"rules": rules(criteria, sort, Value::Null)})),
+        )
+        .await;
+        assert_eq!(s, 400);
+    }
     let (_, n, _) = call(
         &app,
         &t,

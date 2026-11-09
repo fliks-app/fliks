@@ -298,7 +298,6 @@ pub async fn put(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct PatchDto {
-    offset_ms: Option<i32>,
     preferred: Option<bool>,
     reviewed: Option<bool>,
 }
@@ -320,16 +319,6 @@ pub async fn update(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Update, Subject::Media)?;
     let row = row_for(&st, &a, id).await?;
-    if let Some(o) = dto.offset_ms {
-        if o.abs() > lyrics::MAX_OFFSET_MS {
-            return Err(bad("offsetMs is out of range"));
-        }
-        sqlx::query(r#"UPDATE lyrics SET "offsetMs" = $2, reviewed = true WHERE id = $1"#)
-            .bind(id)
-            .bind(o)
-            .execute(&st.db)
-            .await?;
-    }
     if let Some(r) = dto.reviewed {
         sqlx::query("UPDATE lyrics SET reviewed = $2 WHERE id = $1")
             .bind(id)

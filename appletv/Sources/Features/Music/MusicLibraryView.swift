@@ -226,7 +226,6 @@ private struct TracksTab: View {
                     Text(tr("music.sort_album")).tag("album")
                     Text(tr("music.sort_added")).tag("added")
                     Text(tr("music.sort_played")).tag("played")
-                    Text(tr("music.sort_rating")).tag("rating")
                 }
                 .pickerStyle(.menu)
             }
@@ -266,16 +265,11 @@ private struct TracksTab: View {
 
     private func actions(for row: TrackRow, at i: Int) -> TrackActions {
         TrackActions(
-            favourite: row.favourite, rating: row.rating,
+            favourite: row.favourite,
             onFavourite: {
                 let on = !row.favourite
                 rows[i].favourite = on
                 Task { if (try? await MusicAPI.setFavourite(on, mediaId: row.mediaId, itemId: row.itemId)) == nil { rows[i].favourite = !on } }
-            },
-            onRate: { rating in
-                let before = rows[i].rating
-                rows[i].rating = rating
-                Task { if (try? await MusicAPI.rate(rating, itemId: row.itemId)) == nil { rows[i].rating = before } }
             },
             onPlaylist: { picker.open(mediaId: row.mediaId, itemId: row.itemId) },
             onPlayNext: { player.addNext([QueueTrack(row: row)]) },

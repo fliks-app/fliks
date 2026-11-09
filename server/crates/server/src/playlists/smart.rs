@@ -12,7 +12,6 @@ const MEDIA_ARTIST: &str = r#"SELECT p.name AS name, NULL AS credited, p."sortNa
   WHERE c."mediaId" = m.id AND c.role = 'artist' AND c."editionId" IS NULL"#;
 const PLAYS: &str = r#"(SELECT count(*) FROM playback_history h WHERE h."userId" = "#;
 const LAST: &str = r#"(SELECT max(h."playedAt") FROM playback_history h WHERE h."userId" = "#;
-const RATING: &str = r#"(SELECT r.rating FROM item_ratings r WHERE r."userId" = "#;
 const LIKED: &str = r#"EXISTS (SELECT 1 FROM likes l WHERE l."userId" = "#;
 const DURATION: &str = r#"COALESCE(td."durationMs"::float8 / 1000, pf.dur)"#;
 
@@ -143,10 +142,6 @@ fn criterion(qb: &mut Qb, c: &Criterion, owner: i32) {
                 .push_bind(*value)
                 .push(")");
         }
-        Criterion::Rating { min, max } => {
-            let expr = format!("{RATING}{owner} AND r.\"itemId\" = i.id)");
-            range(qb, &expr, *min, *max);
-        }
         Criterion::Favourite { value } => {
             qb.push(format!("({LIKED}{owner} AND l.\"itemId\" = i.id) = "))
                 .push_bind(*value)
@@ -211,7 +206,6 @@ fn sort_expr(by: SortBy, owner: i32) -> String {
         SortBy::Album => "lower(m.title)".into(),
         SortBy::Title => "lower(i.title)".into(),
         SortBy::Year => "m.year".into(),
-        SortBy::Rating => format!("{RATING}{owner} AND r.\"itemId\" = i.id)"),
         SortBy::PlayCount => format!("{PLAYS}{owner} AND h.\"itemId\" = i.id)"),
         SortBy::LastPlayed => format!("{LAST}{owner} AND h.\"itemId\" = i.id)"),
         SortBy::AddedAt => r#"i."createdAt""#.into(),
@@ -221,8 +215,8 @@ fn sort_expr(by: SortBy, owner: i32) -> String {
     }
 }
 
-/// The track item ids the rules select, sorted and limited; `owner` supplies ratings, favourites
-/// and plays, `acl` the readable libraries.
+/// The track item ids the rules select, sorted and limited; `owner` supplies favourites and
+/// plays, `acl` the readable libraries.
 pub async fn evaluate(
     db: &PgPool,
     owner: i32,

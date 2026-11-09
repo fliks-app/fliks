@@ -18,8 +18,6 @@ describe('criterion model', () => {
     expect(criterionValid({ type: 'artist', name: 'Bowie' })).toBe(true);
     expect(criterionValid({ type: 'year', min: 1990, max: 1980 })).toBe(false);
     expect(criterionValid({ type: 'year', min: 1980 })).toBe(true);
-    expect(criterionValid({ type: 'rating', min: 0 })).toBe(false);
-    expect(criterionValid({ type: 'rating', min: 4, max: 5 })).toBe(true);
     expect(criterionValid({ type: 'popularity', max: 0.5 })).toBe(true);
     expect(criterionValid({ type: 'popularity', min: -1 })).toBe(false);
     expect(criterionValid({ type: 'lastPlayed', olderThanDays: 30 })).toBe(true);

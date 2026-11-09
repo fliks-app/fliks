@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, input, output, signal, untracked }
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay } from '@lucide/angular';
+import { LucideMicVocal } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
 import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
@@ -17,7 +17,6 @@ import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
-const OFFSET_LIMIT = 60000;
 const STEM_MODES: StemMode[] = ['original', 'guide', 'instrumental'];
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
 const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttml: 'ttml', xml: 'ttml', srt: 'srt', txt: 'plain' };
@@ -25,7 +24,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideChevronDown, LucideMicVocal, LucidePause, LucidePlay],
+  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
@@ -35,8 +34,10 @@ export class LyricsPanelComponent {
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
   readonly itemId = input.required<number>();
-  readonly fullscreen = input(false);
-  readonly closed = output<void>();
+  /** Shows the offset, import and fetch tools (with `media.edit`). */
+  readonly edit = input(false);
+  /** Whether the track has lyrics, after each load. */
+  readonly found = output<boolean>();
 
   protected readonly res = signal<LyricsResponse | null>(null);
   protected readonly loading = signal(false);
@@ -151,6 +152,7 @@ export class LyricsPanelComponent {
       const r = await run();
       if (this.itemId() !== id) return;
       this.res.set(r);
+      this.found.emit(r.structuredLyrics.length > 0);
       this.mainId.set(null);
       this.layerId.set(null);
     } catch {
@@ -181,14 +183,6 @@ export class LyricsPanelComponent {
 
   private reload(): Promise<void> {
     return this.load(this.itemId());
-  }
-
-  protected nudge(d: StructuredLyrics, delta: number | 'reset'): Promise<void> {
-    const offset = delta === 'reset' ? 0 : Math.min(OFFSET_LIMIT, Math.max(-OFFSET_LIMIT, d.offset + delta));
-    return this.act(async () => {
-      await this.api.patch(d.id, { offsetMs: offset });
-      this.res.update((r) => r && { ...r, structuredLyrics: r.structuredLyrics.map((x) => (x.id === d.id ? { ...x, offset } : x)) });
-    });
   }
 
   protected prefer(d: StructuredLyrics): Promise<void> {

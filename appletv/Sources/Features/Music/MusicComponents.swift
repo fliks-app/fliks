@@ -85,9 +85,7 @@ struct ArtistTile: View {
 /// What a track row offers on a long press.
 struct TrackActions {
     var favourite: Bool
-    var rating: Int?
     var onFavourite: () -> Void
-    var onRate: (Int?) -> Void
     var onPlaylist: () -> Void
     var onPlayNext: () -> Void
     var onQueue: () -> Void
@@ -135,11 +133,6 @@ struct TrackLine: View {
         }
         if let sing = a.onSing {
             Button(action: sing) { Label(tr("karaoke.sing"), systemImage: "music.mic") }
-        }
-        ForEach(1...5, id: \.self) { n in
-            Button { a.onRate(a.rating == n ? nil : n) } label: {
-                Label(trp("music_player.rate_n", ["n": String(n)]), systemImage: (a.rating ?? 0) >= n ? "star.fill" : "star")
-            }
         }
         Button(action: a.onPlayNext) { Label(tr("music.play_next"), systemImage: "text.insert") }
         Button(action: a.onQueue) { Label(tr("music.add_to_queue"), systemImage: "text.append") }
