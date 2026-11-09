@@ -306,7 +306,8 @@ async fn resolve(
         let ok = sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
                  JOIN editions e ON e.id = i."editionId"
-                 WHERE i.id = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) AS "e!""#,
+                 WHERE i.id = $1 AND m."libraryId" = ANY($2)
+                   AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) AS "e!""#,
             item,
             accessible
         )
@@ -380,6 +381,11 @@ async fn resolve(
                    JOIN editions e ON e.id = i."editionId"
                    JOIN media m ON m.id = i."mediaId"
                    WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                     AND (EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+                          OR NOT EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op."itemId" = o.id
+                                         JOIN editions oe ON oe.id = o."editionId"
+                                         WHERE o."mediaId" = m.id
+                                           AND COALESCE(oe."libraryId", m."libraryId") = ANY($2)))
                    ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id"#,
                 media,
                 accessible
@@ -388,8 +394,9 @@ async fn resolve(
             .await?,
             _ => vec![],
         };
-        if listed.len() > 1 {
-            return Ok((listed, true));
+        if !listed.is_empty() {
+            let bulk = listed.len() > 1;
+            return Ok((listed, bulk));
         }
         let item = crate::playback::named_item(&mut *c, media, None)
             .await?

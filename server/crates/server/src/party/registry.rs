@@ -260,13 +260,12 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         season_number: None,
         episode_number: None,
         episode_title: None,
-        track: false,
     });
     PartyItem {
         media_id: item.media_id,
         media_file_id: item.media_file_id,
         episode_id: item.episode_id,
-        item_id: item.item_id.filter(|_| i.track),
+        item_id: item.item_id,
         title: i.title,
         poster_url: i.poster_url,
         fanart_url: i.fanart_url,

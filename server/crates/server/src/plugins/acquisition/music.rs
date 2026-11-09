@@ -2,7 +2,7 @@
 //! playlist mirrored from item ids. The plugin never calls MusicBrainz itself: the host resolves for it.
 use super::*;
 use crate::media::external_ids;
-use crate::metadata::music::target;
+use crate::metadata::music::want::{self, Recording, Refused};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
 use fliks_domain::external_id::{ExternalProvider, Namespace};
@@ -59,30 +59,11 @@ pub(super) async fn with_group(
     Ok(out)
 }
 
-/// The item of `media` a recording names; `owned` keeps only the tracks that have a file.
-async fn item_of(
-    db: &PgPool,
-    media: Option<i32>,
-    recording: &t::RecordingRef,
-    owned: bool,
-) -> sqlx::Result<Option<(i32, i32)>> {
-    let (column, value) = match recording {
-        t::RecordingRef::Isrc(v) => ("isrc", v.as_str()),
-        t::RecordingRef::Mbid(v) => ("\"recordingMbid\"::text", v.as_str()),
-    };
-    sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"SELECT td."mediaId", td."itemId" FROM track_details td
-             JOIN album_details ad ON ad."mediaId" = td."mediaId"
-             JOIN items i ON i.id = td."itemId"
-            WHERE td.{column} = $1 AND ($2::int IS NULL OR td."mediaId" = $2)
-              AND (NOT $3 OR EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = td."itemId"))
-            ORDER BY (i."editionId" = ad."targetEditionId") DESC, td."itemId" LIMIT 1"#
-    )))
-    .bind(value)
-    .bind(media)
-    .bind(owned)
-    .fetch_optional(db)
-    .await
+fn want_ref(r: &t::RecordingRef) -> Recording<'_> {
+    match r {
+        t::RecordingRef::Isrc(v) => Recording::Isrc(v),
+        t::RecordingRef::Mbid(v) => Recording::Mbid(v),
+    }
 }
 
 fn normalized(recording: t::RecordingRef) -> Result<t::RecordingRef, HostError> {
@@ -106,7 +87,7 @@ pub async fn find_recording(
     recording: t::RecordingRef,
 ) -> Result<Option<t::WantedTrack>, HostError> {
     let recording = normalized(recording)?;
-    Ok(item_of(&st.db, None, &recording, true)
+    Ok(want::item_of(&st.db, None, want_ref(&recording), true)
         .await
         .map_err(db_err)?
         .map(|(media, item)| t::WantedTrack {
@@ -157,73 +138,14 @@ async fn check_profile(st: &AppState, group: &str, library: Option<u32>) -> Resu
     ))
 }
 
-async fn has_target(db: &PgPool, media: i32) -> Result<bool, HostError> {
-    sqlx::query_scalar(
-        r#"SELECT COALESCE((SELECT "targetEditionId" IS NOT NULL FROM album_details WHERE "mediaId" = $1), false)"#,
-    )
-    .bind(media)
-    .fetch_one(db)
-    .await
-    .map_err(db_err)
-}
-
-/// The item of `recording` on the album just resolved. An album with no target edition (its provider call
-/// failed) is asked again once; if it still has none the call is retryable, and an album this call made, or
-/// one nobody monitored, goes back to unmonitored.
-async fn held_track(
-    st: &AppState,
-    media: i32,
-    recording: &t::RecordingRef,
-    existed: bool,
-) -> Result<i32, HostError> {
-    if let Some((_, item)) = item_of(&st.db, Some(media), recording, false)
-        .await
-        .map_err(db_err)?
-    {
-        return Ok(item);
+fn refused(e: Refused) -> HostError {
+    match e {
+        Refused::NoTrack => host_err("ERR_NOT_FOUND", "the album has no track of that recording"),
+        Refused::Unavailable => {
+            host_err("unavailable", "the album's releases are not available yet")
+        }
+        Refused::Db(e) => db_err(e),
     }
-    if has_target(&st.db, media).await? {
-        return Err(host_err(
-            "ERR_NOT_FOUND",
-            "the album has no track of that ISRC",
-        ));
-    }
-    let was: bool = sqlx::query_scalar("SELECT monitored FROM media WHERE id = $1")
-        .bind(media)
-        .fetch_one(&st.db)
-        .await
-        .map_err(db_err)?;
-    sqlx::query("UPDATE media SET monitored = true WHERE id = $1")
-        .bind(media)
-        .execute(&st.db)
-        .await
-        .map_err(db_err)?;
-    if let Err(e) = target::ensure(st, media, Priority::Background).await {
-        tracing::warn!("album #{media}: no target edition yet: {}", e.text());
-    }
-    if let Some((_, item)) = item_of(&st.db, Some(media), recording, false)
-        .await
-        .map_err(db_err)?
-    {
-        return Ok(item);
-    }
-    if !existed || !was {
-        sqlx::query("UPDATE media SET monitored = false WHERE id = $1")
-            .bind(media)
-            .execute(&st.db)
-            .await
-            .map_err(db_err)?;
-    }
-    if has_target(&st.db, media).await? {
-        return Err(host_err(
-            "ERR_NOT_FOUND",
-            "the album has no track of that ISRC",
-        ));
-    }
-    Err(host_err(
-        "unavailable",
-        "the album's releases are not available yet",
-    ))
 }
 
 /// The track a recording names, wanted: its item and its album monitored. An album this call creates keeps
@@ -235,11 +157,14 @@ pub async fn want_recording(
     library_id: Option<u32>,
 ) -> Result<t::WantedTrack, HostError> {
     let recording = normalized(recording)?;
-    let known = item_of(&st.db, None, &recording, false)
+    let known = want::item_of(&st.db, None, want_ref(&recording), false)
         .await
         .map_err(db_err)?;
-    let (media, item, fresh) = match known {
-        Some((m, i)) => (m, i, false),
+    let (media, item) = match known {
+        Some((m, i)) => {
+            want::monitor(&st.db, m, i, false).await.map_err(db_err)?;
+            (m, i)
+        }
         None => match &recording {
             t::RecordingRef::Mbid(_) => {
                 return Err(host_err(
@@ -271,33 +196,13 @@ pub async fn want_recording(
                 }
                 let media =
                     resolve_or_create(st, plugin_id, "album", &ids, library_id, None).await? as i32;
-                let found = held_track(st, media, &recording, existed).await?;
-                (media, found, !existed)
+                let item = want::want(st, media, want_ref(&recording), existed)
+                    .await
+                    .map_err(refused)?;
+                (media, item)
             }
         },
     };
-    if fresh {
-        sqlx::query(
-            r#"UPDATE items SET monitored = false
-                WHERE "mediaId" = $1 AND id <> $2
-                  AND "editionId" = (SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1)"#,
-        )
-        .bind(media)
-        .bind(item)
-        .execute(&st.db)
-        .await
-        .map_err(db_err)?;
-    }
-    sqlx::query("UPDATE items SET monitored = true WHERE id = $1")
-        .bind(item)
-        .execute(&st.db)
-        .await
-        .map_err(db_err)?;
-    sqlx::query("UPDATE media SET monitored = true WHERE id = $1 AND NOT monitored")
-        .bind(media)
-        .execute(&st.db)
-        .await
-        .map_err(db_err)?;
     Ok(t::WantedTrack {
         media_id: media as u32,
         item_id: item as u32,

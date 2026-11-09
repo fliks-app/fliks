@@ -17,6 +17,7 @@ mod events_ticket;
 mod fakes;
 mod heartbeat;
 mod importers;
+mod item_pairs;
 mod items;
 mod karaoke;
 mod kobo;

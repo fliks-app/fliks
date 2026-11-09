@@ -6121,7 +6121,7 @@ mod music_ingest {
         let (s, b) = call(&c, "POST", "/api/music/want-recording", &c.admin, want(one)).await;
         assert_eq!((s, b["mediaId"].as_i64()), (201, media), "{b}");
         assert_eq!(monitored(&c).await, ["One", "Two"]);
-        // A recording the target release lacks leaves the album as it is.
+        // A recording the target release lacks wants nothing and leaves the album as it is.
         let other = "11111111-1111-4111-8111-1111111111ff";
         let (s, b) = call(
             &c,
@@ -6131,11 +6131,39 @@ mod music_ingest {
             want(other),
         )
         .await;
-        assert_eq!((s, b["itemId"].is_null()), (201, true), "{b}");
+        assert_eq!(s, 404, "{b}");
         assert_eq!(monitored(&c).await, ["One", "Two"]);
+        // A held album that nobody monitors is monitored again by the want.
+        sqlx::query("UPDATE media SET monitored = false")
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let (s, b) = call(&c, "POST", "/api/music/want-recording", &c.admin, want(one)).await;
+        assert_eq!((s, b["mediaId"].as_i64()), (201, media), "{b}");
+        let on: bool = sqlx::query_scalar("SELECT monitored FROM media")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        assert!(on, "a held, unmonitored album is wanted again");
         let bad = json!({"provider": "tmdb", "externalId": two, "albumExternalId": GROUP});
         let (s, _) = call(&c, "POST", "/api/music/want-recording", &c.admin, bad).await;
         assert_eq!(s, 400);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_recording_the_new_album_lacks_leaves_it_unmonitored_and_wants_nothing(pool: PgPool) {
+        let c = ctx_music(pool, Some(provider())).await;
+        let l = album_lib(&c).await;
+        let other = "11111111-1111-4111-8111-1111111111ff";
+        let body = json!({"provider": "musicbrainz", "externalId": other, "albumExternalId": GROUP, "libraryId": l});
+        let (s, b) = call(&c, "POST", "/api/music/want-recording", &c.admin, body).await;
+        assert_eq!(s, 404, "{b}");
+        let monitored: bool =
+            sqlx::query_scalar("SELECT monitored FROM media WHERE type = 'album'")
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert!(!monitored, "an album nobody wants is not monitored");
     }
 
     #[sqlx::test(migrations = false)]

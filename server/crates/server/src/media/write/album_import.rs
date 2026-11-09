@@ -11,7 +11,11 @@ use crate::{
         external_ids::{self, Link},
         hydrate, wants,
     },
-    metadata::music::{Written, fetch, target, write_album},
+    metadata::music::{
+        Written, fetch, target,
+        want::{self, Recording, Refused},
+        write_album,
+    },
     state::AppState,
 };
 use axum::{Json, http::StatusCode};
@@ -338,45 +342,18 @@ pub(crate) async fn want_recording(
             (media, true)
         }
     };
-    target::ensure(st, media, Priority::Interactive).await?;
-    let edition: Option<i32> =
-        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
-            .bind(media)
-            .fetch_optional(&st.db)
-            .await?
-            .flatten();
-    let tracks: Vec<i32> = match edition {
-        Some(e) => {
-            sqlx::query_scalar(
-                r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
-                   WHERE i."editionId" = $1 AND td."recordingMbid" = $2::text::uuid ORDER BY i.id"#,
-            )
-            .bind(e)
-            .bind(&recording)
-            .fetch_all(&st.db)
-            .await?
-        }
-        None => vec![],
-    };
-    if let (Some(e), false) = (edition, tracks.is_empty()) {
-        let mut tx = st.db.begin().await?;
-        if created {
-            sqlx::query(
-                r#"UPDATE items SET monitored = false WHERE "editionId" = $1 AND id <> ALL($2)"#,
-            )
-            .bind(e)
-            .bind(&tracks)
-            .execute(&mut *tx)
-            .await?;
-        }
-        sqlx::query("UPDATE items SET monitored = true WHERE id = ANY($1)")
-            .bind(&tracks)
-            .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
-    }
+    let item = want::want(st, media, Recording::Mbid(&recording), !created)
+        .await
+        .map_err(|e| match e {
+            Refused::NoTrack => AppError::not_found("The album has no track of that recording"),
+            Refused::Unavailable => AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "The album's releases are not available yet",
+            ),
+            Refused::Db(e) => e.into(),
+        })?;
     Ok((
         StatusCode::CREATED,
-        Json(serde_json::json!({"mediaId": media, "itemId": tracks.first()})),
+        Json(serde_json::json!({"mediaId": media, "itemId": item})),
     ))
 }

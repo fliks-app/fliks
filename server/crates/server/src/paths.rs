@@ -58,3 +58,8 @@ pub fn cache_dir() -> &'static Path {
         writable_or(preferred, "fliks-cache", "cache")
     })
 }
+
+/// The engine's cache root when `FLIKS_TRANSCODE_DIR` places it apart from the cache directory.
+pub fn transcode_dir() -> Option<PathBuf> {
+    env("FLIKS_TRANSCODE_DIR").map(PathBuf::from)
+}

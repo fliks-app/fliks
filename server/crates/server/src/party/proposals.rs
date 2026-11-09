@@ -319,10 +319,8 @@ async fn add_proposals(
         .collect();
     let mut targets = Vec::with_capacity(items.len());
     for item in &items {
-        if !db::item_valid(&st.db, item).await? {
-            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
-        }
         assert_media_accessible(&st.db, item.media_id, &ids).await?;
+        super::routes::check_item(st, item, &ids).await?;
         let (target, track): (i32, bool) = sqlx::query_as(
             r#"SELECT t.id, m.type = 'album' FROM items t JOIN media m ON m.id = t."mediaId"
                WHERE t.id = COALESCE($1, item_of($2, $3))"#,

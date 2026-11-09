@@ -1100,6 +1100,26 @@ async fn music_ctx(pool: PgPool) -> (Ctx, Arc<Scripted>) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_answer_a_later_provider_gave_after_an_earlier_one_failed_is_not_cached(pool: PgPool) {
+    let c = ctx(pool).await;
+    let uri = "/api/metadata/search/movie?q=degraded";
+    c.stub.fail("search/movie", 500);
+    c.tvdb.ok("search/movie", json!([movie(12)]));
+    let (s, first) = call(&c, uri, Some(&c.admin)).await;
+    assert_eq!(s, 200, "{first}");
+    c.stub.ok("search/movie", json!([movie(11)]));
+    let (_, again) = call(&c, uri, Some(&c.admin)).await;
+    assert_ne!(again, first, "the healthy provider is asked again");
+    assert_eq!(c.stub.seen("search/movie").len(), 2);
+    call(&c, uri, Some(&c.admin)).await;
+    assert_eq!(
+        c.stub.seen("search/movie").len(),
+        2,
+        "a healthy answer is kept"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_repeated_search_is_served_from_the_cache_and_still_marked_live(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     c.stub.ok("search/movie", json!([movie(11)]));
@@ -1338,11 +1358,17 @@ async fn an_album_search_targets_artists_and_recordings(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn resolving_an_artist_is_idempotent_and_finds_the_known_person(pool: PgPool) {
+async fn resolving_an_artist_is_idempotent_names_it_from_the_provider_and_never_matches_by_name(
+    pool: PgPool,
+) {
     let (c, mb) = music_ctx(pool.clone()).await;
     mb.serve_persons_of(Namespace::MUSICBRAINZ);
-    let post = |body: Value| {
-        let (app, tok) = (c.app.clone(), c.reader.clone());
+    mb.ok(
+        &format!("person/{MBID}"),
+        json!({"name": "Ana", "sortName": "Ana"}),
+    );
+    let post = |body: Value, tok: String| {
+        let app = c.app.clone();
         async move {
             let res = app
                 .oneshot(
@@ -1366,27 +1392,50 @@ async fn resolving_an_artist_is_idempotent_and_finds_the_known_person(pool: PgPo
             )
         }
     };
-    let body = json!({"provider": "musicbrainz", "externalId": MBID.to_uppercase(), "name": "Ana"});
-    let ((s1, a), (s2, b)) = (post(body.clone()).await, post(body).await);
+    let body = json!({"provider": "musicbrainz", "externalId": MBID.to_uppercase()});
+    assert_eq!(
+        post(body.clone(), c.reader.clone()).await.0,
+        403,
+        "media.create"
+    );
+    let ((s1, a), (s2, b)) = (
+        post(body.clone(), c.admin.clone()).await,
+        post(body, c.admin.clone()).await,
+    );
     assert_eq!((s1, s2, &a["id"]), (200, 200, &b["id"]));
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM persons WHERE name = 'Ana'")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, 1);
+    assert_eq!(n, 1, "the name comes from the provider");
     let other = "8d7bd3c2-34c5-4b2e-9c6f-2e1b8eaf4a33";
     artist_with_id(&pool, 71, other).await;
-    let (_, held) =
-        post(json!({"provider": "musicbrainz", "externalId": other, "name": "Whoever"})).await;
-    assert_eq!(
-        held["id"], 71,
-        "the person holding the id wins over the name"
-    );
+    mb.ok(&format!("person/{other}"), json!({"name": "Whoever"}));
+    let (_, held) = post(
+        json!({"provider": "musicbrainz", "externalId": other}),
+        c.admin.clone(),
+    )
+    .await;
+    assert_eq!(held["id"], 71, "the person holding the id wins");
+    // A person of the same name that holds no MusicBrainz id never takes the id.
+    sqlx::query("INSERT INTO persons (id, name) VALUES (72, 'Namesake')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let third = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+    mb.ok(&format!("person/{third}"), json!({"name": "Namesake"}));
+    let (s, fresh) = post(
+        json!({"provider": "musicbrainz", "externalId": third}),
+        c.admin.clone(),
+    )
+    .await;
+    assert_eq!(s, 200, "{fresh}");
+    assert_ne!(fresh["id"], 72, "the same name is another person");
     for bad in [
-        json!({"provider": "tmdb", "externalId": "1", "name": "A"}),
-        json!({"provider": "musicbrainz", "externalId": "x", "name": "A"}),
-        json!({"provider": "musicbrainz", "externalId": MBID, "name": " "}),
+        json!({"provider": "tmdb", "externalId": "1"}),
+        json!({"provider": "musicbrainz", "externalId": "x"}),
+        json!({"provider": "musicbrainz", "externalId": MBID, "name": "client name"}),
     ] {
-        assert_eq!(post(bad).await.0, 400);
+        assert_eq!(post(bad, c.admin.clone()).await.0, 400);
     }
 }

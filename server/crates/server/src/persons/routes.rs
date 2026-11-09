@@ -15,6 +15,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Query, State},
+    http::StatusCode,
     routing::{get, post},
 };
 use fliks_domain::{
@@ -46,17 +47,16 @@ type Res = Result<Json<Value>, AppError>;
 pub struct ResolveDto {
     provider: String,
     external_id: String,
-    name: String,
-    sort_name: Option<String>,
 }
 
 /// `POST /api/persons/resolve` (`docs/spec/persons.md`): the person of a provider's artist, created when new.
 #[utoipa::path(post, path = "/api/persons/resolve", responses((status = 200)))]
 pub async fn resolve(
     State(st): State<AppState>,
-    _a: Authed,
+    a: Authed,
     ValidJson(dto): ValidJson<ResolveDto>,
 ) -> Res {
+    a.require(Action::Create, Subject::Media)?;
     let known = st.namespaces();
     let ns = known
         .parse(&dto.provider)
@@ -76,16 +76,22 @@ pub async fn resolve(
     let id = known.normalize(ns, dto.external_id.trim()).ok_or_else(|| {
         AppError::bad_request(vec![format!("externalId is not a {} id", dto.provider)])
     })?;
-    let name = dto.name.trim();
-    if name.is_empty() {
-        return Err(AppError::bad_request(vec!["name should not be empty"]));
-    }
+    let artist = service::provider_artist(&st, &id).await?;
+    let name = artist
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| {
+            AppError::with_message(StatusCode::BAD_GATEWAY, "the provider named no artist")
+        })?;
     let mut tx = st.db.begin().await?;
-    let person = crate::metadata::music::people::person(
+    let person = crate::metadata::music::people::person_of_id(
         &mut tx,
         name,
-        Some(&id),
-        dto.sort_name
+        &id,
+        artist
+            .sort_name
             .as_deref()
             .map(str::trim)
             .filter(|n| !n.is_empty()),
