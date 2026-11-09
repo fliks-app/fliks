@@ -4,11 +4,25 @@
   "steps": [
     {
       "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
       "method": "GET",
       "path": "/api/session"
     },
     {
       "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
       "method": "DELETE",
       "path": "/api/session"
     }

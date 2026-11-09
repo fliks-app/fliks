@@ -13,6 +13,12 @@
         "formFactor": "tv",
         "name": "Living room"
       },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
       "method": "POST",
       "path": "/api/remote/register"
     },
@@ -34,11 +40,38 @@
         "repeat": "all",
         "shuffle": true
       },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
       "method": "POST",
       "path": "/api/remote/dev-1%23native/command"
     },
     {
       "as": "user",
+      "expect": {
+        "body": [
+          {
+            "action": "load",
+            "byTargetId": null,
+            "itemId": 5,
+            "kind": "album",
+            "paused": true,
+            "queue": {
+              "index": 0,
+              "itemIds": [
+                5,
+                6,
+                7
+              ]
+            },
+            "repeat": "all",
+            "shuffle": true,
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
       "method": "GET",
       "path": "/api/remote/commands?targetId=dev-1%23native"
     }
