@@ -104,6 +104,11 @@ pub struct UpdateUser {
     pub spoiler_hide_overviews: Option<bool>,
     #[serde(default, deserialize_with = "non_null")]
     pub spoiler_hide_titles: Option<bool>,
+    #[serde(default, deserialize_with = "non_null")]
+    pub session_sync: Option<bool>,
+    /// `null` is every kind.
+    #[serde(default, deserialize_with = "nullable")]
+    pub session_kinds: Option<Option<Vec<MediaKind>>>,
 }
 
 /// Email check: one `@`, a dotted domain, no whitespace.

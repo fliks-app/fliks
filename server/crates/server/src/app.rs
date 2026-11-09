@@ -155,6 +155,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::unvote,
         crate::party::choose,
         crate::party::next_singer,
+        crate::account_session::show,
+        crate::account_session::dismiss,
         remote::targets,
         remote::register,
         remote::commands,
@@ -537,6 +539,7 @@ fn api() -> Router<AppState> {
         .merge(users::router())
         .merge(events::router())
         .merge(remote::router())
+        .merge(crate::account_session::router())
         .merge(crate::device_tokens::router())
         .merge(crate::email::router())
         .merge(crate::kobo::router())

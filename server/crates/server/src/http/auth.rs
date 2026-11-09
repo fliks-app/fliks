@@ -80,6 +80,9 @@ pub struct UserRow {
     pub spoiler_hide_stills: bool,
     pub spoiler_hide_overviews: bool,
     pub spoiler_hide_titles: bool,
+    pub session_sync: bool,
+    /// `None` is every kind (`session.md`).
+    pub session_kinds: Option<Vec<String>>,
 }
 
 /// A `roles` row; `permissions` is the JSON text column parsed (an unparsable value is no permission).
@@ -150,6 +153,7 @@ async fn load_rows(
         u."spoilerHideStills" AS spoiler_hide_stills,
         u."spoilerHideOverviews" AS spoiler_hide_overviews,
         u."spoilerHideTitles" AS spoiler_hide_titles,
+        u."sessionSync" AS session_sync, u."sessionKinds" AS session_kinds,
         r."id" AS "role_row_id?", r."createdAt" AS "role_created_at?", r."updatedAt" AS "role_updated_at?",
         r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
     FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
@@ -206,6 +210,8 @@ async fn load_rows(
                 spoiler_hide_stills: r.spoiler_hide_stills,
                 spoiler_hide_overviews: r.spoiler_hide_overviews,
                 spoiler_hide_titles: r.spoiler_hide_titles,
+                session_sync: r.session_sync,
+                session_kinds: r.session_kinds,
             };
             (user, role)
         })

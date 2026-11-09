@@ -1,0 +1,69 @@
+{
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-command-queue-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "queue",
+        "queue": {
+          "index": 1,
+          "itemIds": [
+            5,
+            6,
+            7
+          ]
+        }
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "action": "queue",
+            "byTargetId": null,
+            "queue": {
+              "index": 1,
+              "itemIds": [
+                5,
+                6,
+                7
+              ]
+            },
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
+    }
+  ]
+}

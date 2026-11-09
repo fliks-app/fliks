@@ -1,0 +1,14 @@
+{
+  "name": "session-get-empty",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/session"
+    }
+  ]
+}

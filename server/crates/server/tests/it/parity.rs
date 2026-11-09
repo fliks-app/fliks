@@ -702,6 +702,8 @@ const ADDITIVE: &[&str] = &[
     "$..identities",
     "$..accessManagedBy",
     "$..hasPassword",
+    "$..sessionSync",
+    "$..sessionKinds",
     "$[*].state",
     "$[*].requestStatus",
 ];

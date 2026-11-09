@@ -1,0 +1,51 @@
+{
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-command-queue-index-out-of-range",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "queue",
+        "queue": {
+          "index": 2,
+          "itemIds": [
+            5,
+            6
+          ]
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "queue.index must be lower than the number of items"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"sessionSync\" AS sync, \"sessionKinds\" AS kinds FROM users WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sync",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "sessionSync"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kinds",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "sessionKinds"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "aa56561b90d3d7221fe0278f3436568f34d01d1cca8890ac3be41f3026594a8d"
+}

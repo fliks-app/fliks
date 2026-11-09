@@ -1,16 +1,19 @@
 //! Keeps presence in step with the engine's feed (`presence.md` rules 13-17).
 use super::Presence;
-use crate::{
-    engine::{Engine, Feed},
-    qoe::Qoe,
-};
+use crate::{engine::Feed, state::AppState};
 use fliks_engine_core::api::EngineEvent;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
 
 /// Subscribes before the engine starts, so the first `Resync` is never missed. Runs for the process.
-pub fn spawn(presence: Presence, engine: Engine, qoe: Qoe) {
-    let rx = engine.subscribe();
-    let on_end = move |sid: &str| qoe.session_ended(sid);
+pub fn spawn(st: &AppState) {
+    let rx = st.engine.subscribe();
+    let (qoe, engine, presence) = (st.qoe.clone(), st.engine.clone(), st.presence.clone());
+    let st = st.clone();
+    let on_end = move |sid: &str| {
+        qoe.session_ended(sid);
+        let (st, sid) = (st.clone(), sid.to_owned());
+        tokio::spawn(async move { st.account_sessions.ended(&st, &sid).await });
+    };
     tokio::spawn(run(rx, presence, on_end, move || engine.resync_events()));
 }
 

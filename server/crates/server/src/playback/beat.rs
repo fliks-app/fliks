@@ -2,6 +2,7 @@
 use super::watched::{self, Watch};
 use crate::sync::MutexExt;
 use crate::{
+    account_session::{BeatIn as AccountBeat, Owner, QueueState, State as AccountState, Verdict},
     engine::EngineError,
     events::{
         SseEvent,
@@ -22,6 +23,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
+use fliks_domain::media::kind::MediaKind;
 use fliks_engine_core::api::{HeartbeatRequest, SessionKind};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Mutex};
@@ -285,11 +287,14 @@ fn emit_state(st: &AppState, user: i32, s: &LiveSession, media: i32, b: &Value) 
         .emit_to_user(user, remote_state(target_id, s, media, b));
 }
 
-/// Rule 17: the four bodies; `sessionLost` is only ever `true` in one.
-fn reply(lost: bool, state: Option<Option<Value>>) -> Response {
+/// Rule 17: the bodies; `sessionLost` and `superseded` are only ever `true` in one.
+fn reply(lost: bool, superseded: bool, state: Option<Option<Value>>) -> Response {
     let mut body = Map::new();
     if lost {
         body.insert("sessionLost".into(), json!(true));
+    }
+    if superseded {
+        body.insert("superseded".into(), json!(true));
     }
     if let Some(s) = state {
         body.insert("state".into(), s.unwrap_or(Value::Null));
@@ -299,6 +304,43 @@ fn reply(lost: bool, state: Option<Option<Value>>) -> Response {
     } else {
         Json(Value::Object(body)).into_response()
     }
+}
+
+/// Rule 22: the facts of a beat the account session hub needs; `None` when it is out of its reach.
+fn account_beat(
+    st: &AppState,
+    user: i32,
+    account: i32,
+    s: &LiveSession,
+    item: Option<i32>,
+    b: &Value,
+) -> Option<AccountBeat> {
+    let state = match s.state {
+        PlayState::Paused => AccountState::Paused,
+        PlayState::Buffering => AccountState::Buffering,
+        _ => AccountState::Playing,
+    };
+    let id = st.hub.identity_for(s.sse_connection_id.as_deref())?;
+    Some(AccountBeat {
+        account,
+        hub_user: s.user_id.unwrap_or(user),
+        sid: s.session_id.clone(),
+        connection: s.sse_connection_id.clone(),
+        owner: Owner {
+            target_id: id.target_id.filter(|t| !t.is_empty()),
+            device_name: id.device_name,
+            form_factor: id.form_factor,
+        },
+        kind: MediaKind::parse(s.media_type.as_deref()?)?,
+        item: item?,
+        file: int(b, "mediaFileId")
+            .and_then(|f| i32::try_from(f).ok())
+            .filter(|f| *f != 0),
+        state,
+        position: s.position,
+        duration: num(b, "durationSeconds"),
+        queue: b.get("queue").and_then(QueueState::from_beat),
+    })
 }
 
 /// A file-bound token beats only for its own file, which must be a part of the item beaten.
@@ -357,13 +399,17 @@ pub async fn heartbeat(
         None => None,
     };
     let mut lost = false;
+    let mut superseded = false;
     let mut attributed = None;
     let mut state_changed = false;
-    if let Some(sid) = body
+    let client_played_at = int(&body, "playedAt")
+        .and_then(DateTime::from_timestamp_millis)
+        .map(|t| t.min(Utc::now()));
+    let sid = body
         .get("sessionId")
         .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-    {
+        .filter(|s| !s.is_empty());
+    if let Some(sid) = sid {
         let engine_lost = engine_beat(&st, user, sid, &body).await?;
         let item = match resolved {
             Some(item) => item,
@@ -386,9 +432,20 @@ pub async fn heartbeat(
             && play_state(&body).is_some_and(|s| before.is_none_or(|b| b.state != s));
         lost = engine_lost.unwrap_or(updated.is_none());
         if let Some(u) = &updated {
-            record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
-            emit_state(&st, user, u, media, &body);
+            let account = attributed.unwrap_or(user);
+            let input = account_beat(&st, user, account, u, item, &body)
+                .filter(|_| client_played_at.is_none());
+            if let Some(input) = input {
+                superseded = st.account_sessions.beat(&st, input).await == Verdict::Superseded;
+            }
+            if !superseded {
+                record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
+                emit_state(&st, user, u, media, &body);
+            }
         }
+    }
+    if superseded {
+        return Ok(reply(lost, true, None));
     }
     let history_user = attributed.unwrap_or(user);
     let key = match named {
@@ -407,9 +464,6 @@ pub async fn heartbeat(
         .filter(|l| l.is_object() && l.to_string().len() <= LOCATOR_MAX)
         .cloned();
     let text_done = progression.is_some_and(|p| p >= fliks_domain::media::finish::TEXT_SHARE);
-    let client_played_at = int(&body, "playedAt")
-        .and_then(DateTime::from_timestamp_millis)
-        .map(|t| t.min(Utc::now()));
     if client_played_at.is_none()
         && !st.debounce.flush_reading(
             &key,
@@ -423,7 +477,7 @@ pub async fn heartbeat(
             }),
         )
     {
-        return Ok(reply(lost, None));
+        return Ok(reply(lost, false, None));
     }
     let file = int(&body, "mediaFileId")
         .and_then(|f| i32::try_from(f).ok())
@@ -441,7 +495,7 @@ pub async fn heartbeat(
         }
     };
     let Some(item) = item else {
-        return Ok(reply(lost, Some(None)));
+        return Ok(reply(lost, false, Some(None)));
     };
     let episode = match named {
         Some(_) => episode_of(&st.db, item).await?,
@@ -462,7 +516,13 @@ pub async fn heartbeat(
         clear_locator: false,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
-    Ok(reply(lost, Some(saved)))
+    let completed = saved
+        .as_ref()
+        .is_some_and(|s| s["completed"] == json!(true));
+    if let (true, Some(sid)) = (completed, sid) {
+        st.account_sessions.complete(&st, history_user, sid).await;
+    }
+    Ok(reply(lost, false, Some(saved)))
 }
 
 #[cfg(test)]
@@ -562,7 +622,7 @@ mod tests {
     }
 
     #[test]
-    fn response_has_the_four_shapes() {
+    fn response_has_its_shapes() {
         let body = |r: Response| async {
             let (p, b) = r.into_parts();
             (
@@ -575,21 +635,29 @@ mod tests {
             .unwrap();
         let st = Some(Some(json!({"id": 1})));
         rt.block_on(async {
-            assert_eq!(body(reply(false, None)).await.1.len(), 0);
+            assert_eq!(body(reply(false, false, None)).await.1.len(), 0);
             assert_eq!(
-                &body(reply(true, None)).await.1[..],
+                &body(reply(true, false, None)).await.1[..],
                 br#"{"sessionLost":true}"#
             );
             assert_eq!(
-                &body(reply(false, st.clone())).await.1[..],
+                &body(reply(true, true, None)).await.1[..],
+                br#"{"sessionLost":true,"superseded":true}"#
+            );
+            assert_eq!(
+                &body(reply(false, true, None)).await.1[..],
+                br#"{"superseded":true}"#
+            );
+            assert_eq!(
+                &body(reply(false, false, st.clone())).await.1[..],
                 br#"{"state":{"id":1}}"#
             );
             assert_eq!(
-                &body(reply(true, st)).await.1[..],
+                &body(reply(true, false, st)).await.1[..],
                 br#"{"sessionLost":true,"state":{"id":1}}"#
             );
             assert_eq!(
-                &body(reply(false, Some(None))).await.1[..],
+                &body(reply(false, false, Some(None))).await.1[..],
                 br#"{"state":null}"#
             );
         });

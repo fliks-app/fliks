@@ -1,0 +1,108 @@
+# Spec: account session ("continue everywhere")
+
+Scope: the one playback an account has at a time, held by the server so every device of the account can show it, drive it and take it over. Transport (targets, commands, SSE) stays in `remote.md` and `events-hub.md`; live engine sessions stay in `presence.md`; the beat that feeds this is in `heartbeat.md` (rules 22-27). This file owns the table, the preference, the claim, the epoch, the parked state and the two routes.
+
+The account session is opt-in (`users."sessionSync"`, default false). With the option off, or for a kind outside the user's scope, nothing here runs and playback behaves as before.
+
+## Routes
+
+Both require a session credential: a `scope:'stream'`/`'cast'` token is rejected with `403 { message: "session_token_required" }` (same as `/api/remote/*`). No CASL policy applies: a caller only ever reaches their own row. 401 for no/invalid credential. Neither route is household-scoped: a grantee or an admin never sees another account's session.
+
+| Method path | Auth | Request | Response | Errors | Side effects |
+|---|---|---|---|---|---|
+| `GET /api/session` | session-only credential | none | `AccountSessionDto` or JSON `null` (200 either way) | 401, 403 `session_token_required` | evaluates staleness (rule 14): a live row whose owner stopped beating becomes `parked` and `session.changed` is emitted |
+| `DELETE /api/session` | session-only credential | none | 204, no body | 401, 403 `session_token_required`, 409 `session.error_not_parked` | deletes a `parked` row and emits `session.changed` with null fields; no row is a 204 no-op |
+
+`POST /api/session/transfer` is not part of this spec yet (a later batch).
+
+`AccountSessionDto` (every key always present, `null` not absent):
+
+```
+{ epoch: number,
+  item: { id: number, mediaFileId: number|null, kind: MediaKind, title: string|null,
+          subtitle: string|null, posterUrl: string|null },
+  owner: { targetId: string|null, deviceName: string|null, formFactor: string|null },
+  state: 'playing'|'paused'|'buffering'|'parked',
+  positionSeconds: number, positionAt: ISO-8601 ms string, playing: boolean,
+  durationSeconds: number|null,
+  queue: { itemIds: number[], index: number, shuffle: boolean, repeat: 'off'|'all'|'one' }|null }
+```
+
+`positionAt` is the server time the position was last reported: observers extrapolate `positionSeconds + (now - positionAt)` while `playing` (`state = 'playing'`). `title` is the media title and `subtitle` the episode or track label, `posterUrl` the same poster the item page uses.
+
+## Data
+
+One row per account, the primary key being the account (`userId`), so the database refuses two sessions.
+
+```sql
+CREATE TABLE account_sessions (
+  "userId" integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  "sessionId" text NOT NULL,
+  epoch bigint NOT NULL,
+  "itemId" integer NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  "mediaFileId" integer REFERENCES media_files(id) ON DELETE SET NULL,
+  kind text NOT NULL CHECK (kind IN (<MediaKind::ALL>)),
+  state text NOT NULL CHECK (state IN ('playing','paused','buffering','parked')),
+  "positionSeconds" double precision NOT NULL,
+  "durationSeconds" double precision,
+  "ownerTargetId" text, "ownerDeviceName" text, "ownerFormFactor" text,
+  queue jsonb,
+  "updatedAt" timestamptz NOT NULL DEFAULT now());
+```
+
+The kind CHECK lists `MediaKind::ALL` (`items.md` rule 39). `"itemId"` and `"mediaFileId"` carry a covering index (every FK has one). Addressing is item-first: no `(mediaId, episodeId)` pair on the wire.
+
+Preference columns of `users`: `"sessionSync" boolean NOT NULL DEFAULT false`; `"sessionKinds" text[]`, `NULL` meaning every kind, with a CHECK that every element is a `MediaKind`. Both are self-writable preferences (`users.md` rule 19) and `PublicUser` keys.
+
+## Rules
+
+Scope
+1. A beat is in scope when the account has `sessionSync = true` and its kind is in `sessionKinds` (or `sessionKinds` is null). The account is `attributedUserId ?? user.id` of the live session (the credited account, like the history). The kind is the live session's `mediaType` tag. The preference is read from `users` at the first beat of a sid only (the claim, rule 4), never per beat.
+2. Out of scope (option off or kind not selected): the `account_sessions` row is neither created, updated nor superseded, and the beat is answered as before. Presence and remote control are unaffected.
+3. Never in scope in this version: live TV, watch parties, `download=1` sessions, and sessions of a client with neither an SSE connection nor a polled target (no target id: Subsonic, OPDS, Kobo). A beat with a `playedAt` (offline replay, `heartbeat.md` rule 21) never claims or updates the row.
+
+Claim
+4. The claim happens at the first beat of an engine sid that reaches the hub with a target (a sid the hub has never seen), not at `playback-info`: the audio preload opens sessions that never beat before playing and so claims nothing. A sid claims once; the hub remembers it (sid and target) until the session ends.
+5. The whole decision runs under one lock of the hub, including the write of the row, so two concurrent claims are serialised: the last one in is the owner, the other is superseded on its next beat.
+6. Cases of the first beat of a sid, in order:
+   1. no row: insert with `epoch = 1`;
+   2. the row is owned by the same target (same `targetId`): the row's `sessionId`, item, file and kind are replaced (next track, next episode, restarted engine session), `epoch` unchanged;
+   3. the row is owned by another target: `epoch += 1`, the row is replaced. When the previous owner was live (`state` not `parked`), `session.superseded` goes to its connection (its command queue when it is a polled target) and its engine session is stopped after `SUPERSEDED_STOP_DELAY` (3 s: the old device saves its position first).
+7. After any claim, every other account's row whose `ownerTargetId` is the claiming target and that is not `parked` becomes `parked` and its account gets `session.changed` (a shared device: a guest credited elsewhere took the screen).
+8. A beat of a sid the hub already claimed:
+   - the row's `sessionId` is this sid: the current session. Item, file, kind, state, position, duration, queue (when the beat carries one) and the owner target are updated. A `parked` row comes back to the beat's state (a device that recovered within the engine revive window);
+   - the row has another sid owned by another target, or the row's owner changed hands: the session is superseded. The beat is answered `superseded: true` and writes neither `playback_states` nor the row, and no `remote.state` is emitted for it;
+   - the row has another sid owned by the same target (a replaced session): ignored for the row, the history write is not blocked, `superseded` is not set;
+   - no row (completed or dismissed): ignored.
+9. The row is written when it is created, replaced, when the state, item, file or queue change, on a position jump above 30 s, and at least every 30 s while beating (the trigger of `playback_states`, `heartbeat.md` rule 13). The volatile position of the other beats lives in memory.
+10. `session.changed` is emitted on a change of owner, item, file, state or queue, on park, completion and dismissal. Never on a plain position tick. Payload: rule 15.
+
+Completion and expiry
+11. When the history write of a beat marks the item completed (the existing completion rule of its family, `heartbeat.md` rule 15), the row of that sid is deleted and `session.changed` is emitted with null fields.
+12. A `parked` row is deleted 24 h (`PARKED_TTL`) after it was parked, when the sweep or boot finds it.
+13. A row also leaves by `DELETE /api/session` (rule 16), by the media being deleted (`ON DELETE CASCADE`), and with its user.
+
+Parked
+14. A row becomes `parked` (position kept, `positionAt` and the 24 h clock set to now) when: (a) its live session has no presence or its `lastBeat` is older than the presence TTL (`STREAM_LIVE_SESSION_TTL_MS`, 30 s), found by a sweep every `SWEEP_EVERY` (15 s) and by `GET /api/session`; (b) the engine reports `SessionEnded` for its sid, or the owner stops it with `DELETE /api/stream/sessions/:sid`; (c) the server boots: every stored row that is not parked is parked before the first request.
+15. `session.changed` payload: `{ epoch: number|null, itemId: number|null, state: string|null, ownerTargetId: string|null }`, all null after a completion or a dismissal. It carries identity and ownership only: observers refetch `GET /api/session`. `session.superseded` payload: `{ sessionId: string, byDeviceName: string|null, epoch: number }`, `sessionId` being the superseded sid. Both are `emit_to_user` to the account, never fanned out to the household.
+16. `DELETE /api/session` on a live row is `409 session.error_not_parked`: to stop a live playback, send `remote.command stop` to its owner.
+
+Safety
+17. The `account_sessions` row is never sent to the household (grantees, admins). `remote.state` is unchanged and still fans out as in `remote.md`.
+
+## Events
+
+| Event | Audience | Payload | Emitter |
+|---|---|---|---|
+| `session.changed` | the account's own connections (`emit_to_user`, no household hook) | rule 15 | claim, update on a change, park, completion, dismissal |
+| `session.superseded` | exactly one connection of the previous owner (its queue for a polled target) | rule 15 | claim from another target |
+
+## Jobs/timers
+
+Sweep every 15 s (rule 14a), `SUPERSEDED_STOP_DELAY` 3 s, `PARKED_TTL` 24 h, persist throttle 30 s. The sweep and boot are the only timers.
+
+## Vectors/parity
+
+Rust unit tests (`crates/server/src/account_session/tests.rs`): concurrent claims leave one owner, a preloaded session without a beat claims nothing, an offline replay claims nothing, the sweep parks a silent owner and drops an old parked row, boot parks everything, an out-of-scope kind or the option off leave the row untouched, a same-target replacement keeps the epoch, a shared device parks the other account's row.
+Integration (`tests/it/account_session.rs`): two SSE streams of one account, claim from the second target, `session.superseded` on the first stream only, `session.changed` on both, the first's next beat answered `superseded`.
+Parity (`server/parity/scenarios/session/`): `get-empty`, `get-after-beat`, `beat-superseded`, `dismiss-parked`, `dismiss-live-409`, `stream-token-forbidden`, `unauthenticated`.

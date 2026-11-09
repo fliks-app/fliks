@@ -1,10 +1,16 @@
 //! Request bodies (`remote/dto/*.ts`); an optional field accepts `null` like `@IsOptional()`.
 use crate::{
-    events::{Num, event::RemoteAction},
+    events::{
+        Num,
+        event::{Queue, RemoteAction, Repeat},
+    },
     http::AppError,
 };
 use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Deserializer};
+
+/// Most items a remote queue carries.
+const QUEUE_MAX: usize = 500;
 
 fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     d: D,
@@ -106,6 +112,10 @@ pub struct Command {
     pub quality_id: Option<String>,
     pub paused: Option<bool>,
     pub by_target_id: Option<String>,
+    pub queue: Option<Queue>,
+    pub shuffle: Option<bool>,
+    pub repeat: Option<Repeat>,
+    pub kind: Option<MediaKind>,
 }
 
 impl Command {
@@ -118,6 +128,19 @@ impl Command {
             Some(n) if n.0 < 0.0 => e.push("level must not be less than 0".into()),
             Some(n) if n.0 > 1.0 => e.push("level must not be greater than 1".into()),
             _ => {}
+        }
+        if let Some(q) = &self.queue {
+            if q.item_ids.len() > QUEUE_MAX {
+                e.push(format!(
+                    "queue.itemIds must contain no more than {QUEUE_MAX} elements"
+                ));
+            }
+            let past_end = !q.item_ids.is_empty() && q.index >= q.item_ids.len() as i64;
+            if q.index < 0 {
+                e.push("queue.index must not be less than 0".into());
+            } else if past_end {
+                e.push("queue.index must be lower than the number of items".into());
+            }
         }
         fail(e)
     }
