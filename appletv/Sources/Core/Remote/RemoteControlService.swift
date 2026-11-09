@@ -22,6 +22,19 @@ import UIKit
     /// The on-screen player, if any. Every action but `load` needs one.
     weak var activeCoordinator: PlayerCoordinator?
 
+    /// Set when another device took the account session over: `RootView` shows the alert.
+    var supersededPrompt: SupersededPrompt?
+    private var supersededGate = SupersededGate()
+
+    struct SupersededPrompt: Identifiable {
+        let id = UUID()
+        let device: String?
+        let mediaFileId: Int
+        let mediaId: Int
+        let episodeId: Int?
+        let position: Double
+    }
+
     private init() {}
 
     // MARK: - Poll lifecycle
@@ -66,8 +79,14 @@ import UIKit
     private func fetchAndApply(targetId: String) async {
         let path = "/api/remote/commands?targetId=\(targetId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? targetId)"
         do {
-            let commands: [RemoteCommand] = try await api.get(path)
-            for cmd in commands { await apply(cmd) }
+            let entries: [RemoteQueueEntry] = try await api.get(path)
+            for entry in entries {
+                switch entry {
+                case .command(let cmd): await apply(cmd)
+                case .superseded(let sid, let device): await sessionSuperseded(sessionId: sid, byDeviceName: device)
+                case .other: break
+                }
+            }
         } catch APIError.badStatus(404, _) {
             // The registry has forgotten this target (backend restart) - only a
             // fresh register() can make us controllable again.
@@ -76,6 +95,25 @@ import UIKit
         } catch {
             print("remote: command poll failed, will retry: \(error)")
         }
+    }
+
+    /// Another device claimed the account session: remember where we were, leave the player, then
+    /// `RootView` offers to take it back. The server skips the superseded session's saves.
+    @MainActor
+    func sessionSuperseded(sessionId: String, byDeviceName: String?) {
+        guard let coordinator = activeCoordinator,
+              supersededGate.accept(sessionId, current: coordinator.playback.sessionId) else { return }
+        supersededPrompt = SupersededPrompt(
+            device: byDeviceName, mediaFileId: coordinator.playback.mediaFileId,
+            mediaId: coordinator.currentItemIds.mediaId, episodeId: coordinator.currentItemIds.episodeId,
+            position: coordinator.currentPosition)
+        coordinator.onStopRequested?()
+    }
+
+    /// "Resume here": loads the item again at the saved position, which claims the session back.
+    @MainActor
+    func resume(_ p: SupersededPrompt) {
+        onLoadRequested?(p.mediaFileId, p.mediaId, p.episodeId, p.position, false, LaunchTracks(audioId: nil, subtitleId: nil, subtitleSent: false))
     }
 
     /// `PlayerCoordinator` is `@MainActor`-isolated (it drives `AVPlayer` and

@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var watched = WatchedStore.shared
     @State private var playlistPicker = PlaylistPicker.shared
     @State private var party = PartyService.shared
+    @State private var remote = RemoteControlService.shared
     @State private var path = NavigationPath()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -31,6 +32,16 @@ struct RootView: View {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
             .onChange(of: scenePhase) { _, _ in updateRemotePolling() }
+            .alert(
+                trp("session.superseded_title", ["device": remote.supersededPrompt?.device ?? tr("session.another_device")]),
+                isPresented: Binding(get: { remote.supersededPrompt != nil }, set: { if !$0 { remote.supersededPrompt = nil } }),
+                presenting: remote.supersededPrompt
+            ) { prompt in
+                Button(tr("session.resume_here")) { remote.resume(prompt) }
+                Button(tr("session.close"), role: .cancel) {}
+            } message: { prompt in
+                Text(trp("session.superseded_message", ["position": PartyMessage.clock(prompt.position)]))
+            }
             .onChange(of: party.active) { _, active in if !active { MusicPartyDriver.shared.detach() } }
             .onAppear {
                 RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused, tracks in

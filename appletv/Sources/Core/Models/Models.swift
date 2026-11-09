@@ -599,6 +599,36 @@ struct LaunchTracks: Hashable {
     let subtitleSent: Bool
 }
 
+/// One entry of the polled queue: the server serialises every `SseEvent` there, not only `remote.command`.
+enum RemoteQueueEntry: Decodable {
+    case command(RemoteCommand)
+    case superseded(sessionId: String, byDeviceName: String?)
+    case other
+
+    private enum Keys: String, CodingKey { case type, sessionId, byDeviceName }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        switch try c.decodeIfPresent(String.self, forKey: .type) {
+        case "session.superseded":
+            self = .superseded(sessionId: try c.decode(String.self, forKey: .sessionId),
+                               byDeviceName: try c.decodeIfPresent(String.self, forKey: .byDeviceName))
+        case "remote.command": self = .command(try RemoteCommand(from: decoder))
+        default: self = .other
+        }
+    }
+}
+
+/// Which `session.superseded` signals to act on: only the player's current sid, once.
+/// Both the beat answer and the queued event fire for one takeover.
+struct SupersededGate {
+    private var handled = Set<String>()
+
+    mutating func accept(_ sessionId: String, current: String?) -> Bool {
+        sessionId == current && handled.insert(sessionId).inserted
+    }
+}
+
 struct RemoteCommand: Decodable {
     let cmdId: String
     /// Unix epoch milliseconds: matches the rest of this codebase's JS-origin timestamps.
