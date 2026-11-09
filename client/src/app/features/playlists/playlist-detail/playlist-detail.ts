@@ -10,6 +10,8 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
+import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
+import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -89,7 +91,7 @@ type PlaylistGroupedEntry =
 
 @Component({
   selector: 'app-playlist-detail',
-  imports: [TvSelectDirective, 
+  imports: [TvSelectDirective, MusicDownloadButtonComponent,
     ModalFooterComponent,
     CachedSrcDirective,
     TranslatePipe,
@@ -141,6 +143,7 @@ export class PlaylistDetailComponent {
   private readonly social = inject(SocialApiService);
   private readonly party = inject(PartyService);
   private readonly audio = inject(AudioPlayerService);
+  protected readonly musicDownloads = inject(MusicDownloadsService);
   protected readonly partyApi = inject(PartyApiService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
@@ -336,6 +339,14 @@ export class PlaylistDetailComponent {
       albumGain: null,
       albumPeak: null,
     };
+  }
+
+  protected readonly trackIds = computed(() => this.trackItems().map((i) => i.track!.itemId));
+  protected readonly tracksSource = () => Promise.resolve(this.trackItems().map((i) => this.toTrackRequest(i)));
+
+  protected toggleTrackDownload(item: PlaylistItem): void {
+    const id = item.track!.itemId;
+    void (this.musicDownloads.itemIds().has(id) ? this.musicDownloads.remove([id]) : this.musicDownloads.download([this.toTrackRequest(item)]));
   }
 
   playAll(): void {

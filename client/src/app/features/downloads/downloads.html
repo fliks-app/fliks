@@ -144,9 +144,48 @@
       </div>
     }
     <div class="flex flex-col gap-3">
-      @for (entry of entries(); track entry.kind === 'movie' ? 'm' + entry.task.id : 's' + entry.show.mediaId) {
+      @for (entry of entries(); track entryKey(entry)) {
         @if (entry.kind === 'movie') {
           <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: entry.task, poster: true }" />
+        } @else if (entry.kind === 'album') {
+          @let album = entry.album;
+          @let albumKey = 'album:' + album.mediaId;
+          @let albumOpen = selectMode() || openKeys().has(albumKey);
+          <div class="card bg-base-100 shadow-sm border border-base-200 pb-1.5">
+            <div class="flex items-center gap-3 px-3 pt-3 pb-1.5 cursor-pointer"
+                 role="button" tabindex="0" [attr.aria-expanded]="albumOpen"
+                 (click)="toggleOpen(albumKey)" (keydown.enter)="toggleOpen(albumKey)">
+              <div class="size-16 shrink-0 rounded overflow-hidden bg-base-300">
+                @if (album.posterUrl) {
+                  <img [cachedSrc]="album.posterUrl | resolveUrl:'thumb'" [alt]="album.title" class="w-full h-full object-cover" />
+                }
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="font-medium text-base line-clamp-1">{{ album.title }}</h3>
+                <p class="text-sm text-base-content/50 mt-0.5 truncate">
+                  {{ 'music.track_count' | translatePlural: album.tasks.length }}@if (album.sizeBytes) { · {{ formatBytes(album.sizeBytes) }} }
+                </p>
+              </div>
+              @if (!selectMode()) {
+                <button
+                  class="btn btn-ghost btn-sm btn-square text-error"
+                  [attr.aria-label]="'downloads.delete_all' | translate"
+                  [title]="'downloads.delete_all' | translate"
+                  (click)="$event.stopPropagation(); deleteGroup(album.tasks, album.title)"
+                >
+                  <svg lucideTrash2 class="h-4 w-4"></svg>
+                </button>
+              }
+              <svg lucideChevronRight [class]="albumOpen ? 'h-4 w-4 shrink-0 transition-transform duration-200 rotate-90' : 'h-4 w-4 shrink-0 transition-transform duration-200'"></svg>
+            </div>
+            <app-collapse [open]="albumOpen">
+              <div class="flex flex-col gap-2 px-3 pb-1.5">
+                @for (task of album.tasks; track task.id) {
+                  <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: false }" />
+                }
+              </div>
+            </app-collapse>
+          </div>
         } @else {
           @let show = entry.show;
           @let showKey = 'show:' + show.mediaId;

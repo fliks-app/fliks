@@ -247,6 +247,13 @@ final class MusicCatalog {
     static MediaItem queueItem(long itemId, long mediaId, String title, String artist, String album,
                                @Nullable String artwork, double duration, double gain, double peak,
                                double albumGain, double albumPeak) {
+        return queueItem(itemId, mediaId, title, artist, album, artwork, duration, gain, peak, albumGain, albumPeak, null);
+    }
+
+    /** With `localUrl` the item plays that downloaded file and resolves no stream. */
+    static MediaItem queueItem(long itemId, long mediaId, String title, String artist, String album,
+                               @Nullable String artwork, double duration, double gain, double peak,
+                               double albumGain, double albumPeak, @Nullable String localUrl) {
         Bundle x = new Bundle();
         x.putLong(X_ITEM, itemId);
         x.putLong(X_MEDIA, mediaId);
@@ -263,7 +270,7 @@ final class MusicCatalog {
         if (!Double.isNaN(duration)) md.setDurationMs((long) (duration * 1000));
         return new MediaItem.Builder()
                 .setMediaId("t:" + itemId)
-                .setUri(SCHEME + "://" + itemId)
+                .setUri(localUrl != null ? Uri.parse(localUrl) : Uri.parse(SCHEME + "://" + itemId))
                 .setMediaMetadata(md.build())
                 .build();
     }

@@ -1,0 +1,14 @@
+@if (downloads.available()) {
+  <button type="button" [class]="buttonClass()" [disabled]="busy()" [attr.aria-label]="label() | translate" [title]="label() | translate" (click)="press()" data-testid="music-download">
+    @if (busy()) {
+      <span class="loading loading-spinner loading-xs"></span>
+    } @else if (state() === 'all') {
+      <svg lucideCircleCheck [class]="iconClass()"></svg>
+    } @else {
+      <svg lucideDownload [class]="iconClass()"></svg>
+    }
+    @if (showLabel()) {
+      {{ label() | translate }}
+    }
+  </button>
+}

@@ -8,18 +8,21 @@ import type { Discography } from '../../core/services/api/music.models';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MediaGridComponent } from '../../shared/components/media-grid/media-grid';
+import { MusicDownloadButtonComponent } from '../../shared/components/music-download-button/music-download-button';
+import { MusicDownloadsService } from '../../core/services/music-downloads.service';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { groupDiscography } from './music-utils';
 
 /** An artist: biography, follow, and the discography by release type with the albums not in the library apart. */
 @Component({
   selector: 'app-artist-page',
-  imports: [TranslatePipe, FollowToggleComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
+  imports: [TranslatePipe, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
   templateUrl: './artist-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ArtistPageComponent {
   private readonly api = inject(MusicApiService);
+  private readonly downloads = inject(MusicDownloadsService);
   protected readonly id = toSignal(inject(ActivatedRoute).paramMap.pipe(map((p) => Number(p.get('id')))), { initialValue: 0 });
   protected readonly data = signal<Discography | null>(null);
   protected readonly loading = signal(true);
@@ -29,6 +32,10 @@ export class ArtistPageComponent {
     const a = this.data()?.artist;
     return [a?.artistType, a?.disambiguation].filter(Boolean).join(' · ');
   });
+
+  /** The tracks of the artist's albums that are in the library. */
+  protected readonly tracks = () =>
+    this.downloads.albumsTracks((this.data()?.albums ?? []).flatMap((a) => (a.mediaId == null ? [] : [a.mediaId])));
 
   constructor() {
     effect(() => {

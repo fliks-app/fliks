@@ -2,6 +2,7 @@ import { Component, signal, computed, inject, effect } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import type { DownloadTask } from '../../core/services/download-cache.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -28,7 +29,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
-import { groupDownloads } from './downloads-grouping';
+import { entryKey, groupDownloads } from './downloads-grouping';
 import { isMediaKind, mediaDetailLink } from '../../core/media-kinds';
 
 const openGroupKeys = signal<ReadonlySet<string>>(new Set());
@@ -41,6 +42,7 @@ const openGroupKeys = signal<ReadonlySet<string>>(new Set());
     RouterLink,
     CachedSrcDirective,
     TranslatePipe,
+    TranslatePluralPipe,
     AutoDownloadRuleComponent,
     ResolveUrlPipe,
     LucideDownload,
@@ -87,6 +89,7 @@ export class DownloadsComponent {
   readonly selectedFailed = computed(() => this.selectedTasks().filter((t) => t.status === 'failed'));
 
   protected readonly formatBytes = formatBytes;
+  protected readonly entryKey = entryKey;
 
 
   readonly items = this.dlManager.tasks;
@@ -226,6 +229,11 @@ export class DownloadsComponent {
     const { book, media } = task;
     if (book?.family === 'text') {
       void this.router.navigate(['/read', task.mediaId, book.itemId]);
+      return;
+    }
+    if (book?.track) {
+      const album = this.items().filter((t) => t.book?.track && t.mediaId === task.mediaId && t.status === 'ready');
+      void this.audio.playTracks(album.map((t) => t.book!.track!), Math.max(0, album.findIndex((t) => t.id === task.id)));
       return;
     }
     if (book) {

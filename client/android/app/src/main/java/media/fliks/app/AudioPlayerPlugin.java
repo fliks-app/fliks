@@ -3,6 +3,7 @@ package media.fliks.app;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
@@ -236,12 +237,18 @@ public class AudioPlayerPlugin extends Plugin {
                         t.optString("artists"), t.optString("albumTitle"),
                         t.isNull("coverUrl") ? null : host.absolute(t.getString("coverUrl")),
                         num(t, "durationSeconds"), num(t, "gain"), num(t, "peak"), num(t, "albumGain"),
-                        num(t, "albumPeak")));
+                        num(t, "albumPeak"), localFile(t.isNull("localUrl") ? null : t.getString("localUrl"))));
             }
         } catch (JSONException e) {
             throw new IllegalArgumentException(e);
         }
         return out;
+    }
+
+    @Nullable
+    private static String localFile(@Nullable String url) {
+        if (url == null || url.isEmpty()) return null;
+        return url.startsWith(CAPACITOR_FILE) ? "file:///" + url.substring(CAPACITOR_FILE.length()) : url;
     }
 
     private static double num(JSONObject o, String key) {

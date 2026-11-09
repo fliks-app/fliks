@@ -31,6 +31,7 @@
         <button type="button" class="btn btn-outline" (click)="play(undefined, true)" data-testid="shuffle">
           <svg lucideShuffle class="size-4"></svg>{{ 'music.shuffle' | translate }}
         </button>
+        <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" [showLabel]="true" buttonClass="btn btn-outline" iconClass="size-4" />
       }
     } @else {
       <div class="flex w-full items-center gap-1">
@@ -40,6 +41,9 @@
         <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addAlbumToPlaylist()" data-testid="add-playlist">
           <svg lucideListPlus class="size-6"></svg>
         </button>
+        @if (playable().length) {
+          <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" buttonClass="flex size-11 shrink-0 cursor-pointer items-center justify-center" iconClass="size-6" />
+        }
         <span class="flex-1"></span>
         @if (playable().length) {
           <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'music.shuffle' | translate" (click)="play(undefined, true)" data-testid="shuffle">
@@ -93,6 +97,9 @@
           @if (!t.hasFile) {
             <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
           }
+          @if (downloads.itemIds().has(t.itemId)) {
+            <svg lucideDownload class="size-4 shrink-0 text-base-content/50" [attr.aria-label]="'downloads.on_device' | translate" data-testid="on-device"></svg>
+          }
         </app-track-line>
       </button>
       <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [class.text-white]="!t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
@@ -114,6 +121,12 @@
           <svg lucideListPlus class="h-4 w-4"></svg>
           {{ 'playlists.add_to_playlist_title' | translate }}
         </button>
+        @if (downloads.available() && t.hasFile) {
+          <button type="button" class="dropdown-item text-white" (click)="toggleDownload(t)" data-testid="track-download">
+            <svg lucideDownload class="h-4 w-4"></svg>
+            {{ (downloads.itemIds().has(t.itemId) ? 'downloads.remove_from_device' : 'downloads.download') | translate }}
+          </button>
+        }
         @if (party.active()) {
           <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="sing(t)" data-testid="sing-track">
             <svg lucideMic class="h-4 w-4"></svg>

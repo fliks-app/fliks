@@ -5,6 +5,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import type { Media } from '../../../core/services/api/media.service';
 import type { AlbumDetail, Track } from '../../../core/services/api/music.models';
 import { AuthService } from '../../../core/services/auth.service';
+import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { bookSpecProviders } from '../book/book-test-setup';
 import { AlbumPageComponent } from './album-page.component';
@@ -24,6 +25,7 @@ function setup(tracks: Track[]) {
     providers: bookSpecProviders(
       { provide: AudioPlayerService, useValue: player },
       { provide: PartyService, useValue: { active: () => false } },
+      { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), state: () => 'none', download: vi.fn(), remove: vi.fn() } },
       { provide: AuthService, useValue: { hasPermission: () => false, user: () => null, sessionEpoch: () => 0 } },
     ),
   });
@@ -86,6 +88,7 @@ describe('AlbumPageComponent', () => {
         providers: bookSpecProviders(
           { provide: AudioPlayerService, useValue: { playTracks: vi.fn(), enqueueTracks: vi.fn() } },
           { provide: PartyService, useValue: { active: () => false } },
+          { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), state: () => 'none', download: vi.fn(), remove: vi.fn() } },
           { provide: AuthService, useValue: { hasPermission: () => canEdit, user: () => null, sessionEpoch: () => 0 } },
         ),
       });

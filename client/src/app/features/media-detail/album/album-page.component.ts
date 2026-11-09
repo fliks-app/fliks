@@ -3,10 +3,11 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
+import { LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
@@ -26,6 +27,7 @@ import {
   artistLine, formatDuration, groupByWork, groupDiscs, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
 } from '../../music/music-utils';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TrackLineComponent } from '../../music/track-line.component';
 import { asAlbumMedia, defaultEditionId } from './album-media';
@@ -41,8 +43,8 @@ interface DiscView {
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    DropdownMenuComponent, ModalHeaderComponent, MediaWantsComponent,
-    LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers,
+    DropdownMenuComponent, ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent,
+    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -59,6 +61,7 @@ export class AlbumPageComponent {
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
   protected readonly party = inject(PartyService);
+  protected readonly downloads = inject(MusicDownloadsService);
   protected readonly like = new LikeController(
     { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
     this.likes,
@@ -133,6 +136,13 @@ export class AlbumPageComponent {
     const list = this.playable();
     const start = startItemId == null ? 0 : Math.max(0, list.findIndex((t) => t.itemId === startItemId));
     return this.player.playTracks(list.map((t) => this.request(t)), start, shuffle ? { shuffle: true } : undefined);
+  }
+
+  protected readonly playableIds = computed(() => this.playable().map((t) => t.itemId));
+  protected readonly albumSource = () => Promise.resolve(this.playable().map((t) => this.request(t)));
+
+  protected toggleDownload(t: Track): void {
+    void (this.downloads.itemIds().has(t.itemId) ? this.downloads.remove([t.itemId]) : this.downloads.download([this.request(t)]));
   }
 
   protected addAlbumToPlaylist(): void {

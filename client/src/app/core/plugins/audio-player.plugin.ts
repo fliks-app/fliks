@@ -38,6 +38,9 @@ export interface NativeAudioCommand {
   value: number;
 }
 
+/** A track of the native queue; `localUrl` is the downloaded file, played with no stream to resolve. */
+export type NativeAudioTrackRequest = MusicTrackRequest & { localUrl?: string };
+
 export interface NativeAudioPart {
   url: string;
 }
@@ -60,9 +63,9 @@ export interface AudioPlayerPlugin {
   attach(): Promise<void>;
   detach(): Promise<void>;
   /** Tracks are named by item; the native side resolves each stream when it loads. */
-  setQueue(o: { tracks: MusicTrackRequest[]; index: number; startAt?: number; autoplay: boolean }): Promise<void>;
+  setQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; startAt?: number; autoplay: boolean }): Promise<void>;
   /** Replaces the order around the current entry, which stays at `index`. */
-  updateQueue(o: { tracks: MusicTrackRequest[]; index: number }): Promise<void>;
+  updateQueue(o: { tracks: NativeAudioTrackRequest[]; index: number }): Promise<void>;
   loadParts(o: {
     parts: NativeAudioPart[];
     index: number;

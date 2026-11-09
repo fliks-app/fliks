@@ -141,7 +141,7 @@ describe('AudioPlayerService on the native player', () => {
     await audio.seek(30);
     expect(plugin['seek']).toHaveBeenCalledWith({ position: 30 });
     audio.setShuffle(true);
-    expect(plugin['updateQueue']).toHaveBeenCalled();
+    await vi.waitFor(() => expect(plugin['updateQueue']).toHaveBeenCalled());
   });
 
   it('adopts a queue the native side built', async () => {

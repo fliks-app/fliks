@@ -16,9 +16,24 @@ export interface ShowGroup<T extends DownloadTask = DownloadTask> {
   sizeBytes: number;
 }
 
+/** The tracks of one album kept on the device, in the order they were started. */
+export interface AlbumGroup<T extends DownloadTask = DownloadTask> {
+  mediaId: number;
+  title: string;
+  posterUrl: string | null;
+  tasks: T[];
+  sizeBytes: number;
+}
+
 export type DownloadEntry<T extends DownloadTask = DownloadTask> =
   | { kind: 'movie'; task: T }
-  | { kind: 'show'; show: ShowGroup<T> };
+  | { kind: 'show'; show: ShowGroup<T> }
+  | { kind: 'album'; album: AlbumGroup<T> };
+
+export function entryKey(e: DownloadEntry): string {
+  // eslint-disable-next-line no-restricted-syntax -- DownloadEntry.kind is a grouping tag, not a MediaType
+  return e.kind === 'movie' ? `m${e.task.id}` : e.kind === 'show' ? `s${e.show.mediaId}` : `a${e.album.mediaId}`;
+}
 
 /** Reads `S01E02 Title` labels saved before the numbers were stored. */
 export function parseEpisodeLabel(label?: string): { season: number; episode: number } | null {
@@ -37,8 +52,11 @@ const sum = (tasks: DownloadTask[]) => tasks.reduce((n, t) => n + (t.sizeBytes ?
 export function groupDownloads<T extends DownloadTask>(tasks: T[]): DownloadEntry<T>[] {
   const entries: DownloadEntry<T>[] = [];
   const shows = new Map<number, T[]>();
+  const albums = new Map<number, T[]>();
   for (const t of tasks) {
-    if (t.episodeId == null && !t.episodeLabel) {
+    if (t.book?.track) {
+      albums.set(t.mediaId, [...(albums.get(t.mediaId) ?? []), t]);
+    } else if (t.episodeId == null && !t.episodeLabel) {
       entries.push({ kind: 'movie', task: t });
     } else {
       shows.set(t.mediaId, [...(shows.get(t.mediaId) ?? []), t]);
@@ -69,9 +87,17 @@ export function groupDownloads<T extends DownloadTask>(tasks: T[]): DownloadEntr
       },
     });
   }
+  for (const [mediaId, list] of albums) {
+    entries.push({
+      kind: 'album',
+      album: { mediaId, title: list[0].media?.title ?? '', posterUrl: list[0].media?.posterUrl ?? null, tasks: list, sizeBytes: sum(list) },
+    });
+  }
   // Local ids come from Date.now(), so they stand in for a missing createdAt.
   const at = (t: DownloadTask) => Date.parse(t.createdAt) || t.id;
-  // eslint-disable-next-line no-restricted-syntax -- DownloadEntry.kind is a grouping tag, not a MediaType
-  const latest = (e: DownloadEntry<T>) => (e.kind === 'movie' ? at(e.task) : Math.max(...e.show.tasks.map(at)));
+  const members = (e: DownloadEntry<T>) =>
+    // eslint-disable-next-line no-restricted-syntax -- DownloadEntry.kind is a grouping tag, not a MediaType
+    e.kind === 'movie' ? [e.task] : e.kind === 'show' ? e.show.tasks : e.album.tasks;
+  const latest = (e: DownloadEntry<T>) => Math.max(...members(e).map(at));
   return entries.sort((a, b) => latest(a) - latest(b));
 }

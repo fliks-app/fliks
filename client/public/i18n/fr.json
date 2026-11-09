@@ -2132,7 +2132,13 @@
     "resume": "Reprendre",
     "auto_rule_label": "Téléchargement auto :",
     "episodes_queued_one": "1 épisode va être téléchargé",
-    "episodes_queued_other": "{{count}} épisodes vont être téléchargés"
+    "episodes_queued_other": "{{count}} épisodes vont être téléchargés",
+    "tracks_added_one": "{{count}} piste ajoutée aux téléchargements",
+    "tracks_added_other": "{{count}} pistes ajoutées aux téléchargements",
+    "tracks_failed_one": "{{count}} piste n’a pas pu être téléchargée",
+    "tracks_failed_other": "{{count}} pistes n’ont pas pu être téléchargées",
+    "tracks_already": "Déjà sur cet appareil",
+    "remove_from_device": "Retirer de cet appareil"
   },
   "setup_checklist": {
     "title": "Configuration",

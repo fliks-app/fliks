@@ -11,6 +11,7 @@ import { OfflineBookStoreService } from './offline-book-store.service';
 import { DownloadNotificationService, type NativeDownloadEvent } from './download-notification.service';
 import { heldStatus, isActive, type DownloadStatus } from './download-status';
 import { AuthService } from './auth.service';
+import type { MusicTrackRequest } from './audio-player/music-queue';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 import { formatSubtitleLabel, offlineCropOf } from '../utils/player.utils';
@@ -53,6 +54,8 @@ export interface BookDownloadTarget {
   posterUrl: string | null;
   artist?: string;
   coverUrl?: string | null;
+  /** A music track: its original file is kept whatever the device would play. */
+  track?: MusicTrackRequest;
 }
 
 /** `S01E02 Title`, the label stored on an episode download. */
@@ -334,6 +337,45 @@ export class DownloadManagerService {
     return this.cache.load().some((t) => t.mediaFileId === mediaFileId && t.status !== 'failed');
   }
 
+  /** The live (non-failed) download of a music track, if any. */
+  trackTask(itemId: number): DownloadTask | undefined {
+    return this.cache.load().find((t) => t.book?.track && t.book.itemId === itemId && t.status !== 'failed');
+  }
+
+  /** Puts each track not already on the device, in order; a refusal (Wi-Fi only) stops the batch, other failures are counted. */
+  async createTracks(tracks: readonly MusicTrackRequest[]): Promise<{ started: number; failed: number; skipped: number }> {
+    let started = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const track of tracks) {
+      if (this.trackTask(track.itemId)) {
+        skipped++;
+        continue;
+      }
+      const failedBefore = this.cache.load().find((t) => t.book?.track && t.book.itemId === track.itemId);
+      if (failedBefore) await this.deleteDownload(failedBefore);
+      try {
+        await this.createBookDownload({
+          mediaId: track.mediaId,
+          itemId: track.itemId,
+          family: 'audio',
+          format: null,
+          fileIds: [],
+          title: track.albumTitle,
+          posterUrl: track.coverUrl,
+          artist: track.artists,
+          coverUrl: track.coverUrl,
+          track,
+        });
+        started++;
+      } catch (err) {
+        if (err instanceof BookDownloadRefused) throw err;
+        failed++;
+      }
+    }
+    return { started, failed, skipped };
+  }
+
   async createDownload(
     mediaFileId: number,
     quality: string,
@@ -459,13 +501,14 @@ export class DownloadManagerService {
       id,
       mediaId: t.mediaId,
       mediaFileId,
-      quality: t.format ?? 'file',
+      quality: t.format ?? (t.track ? 'original' : 'file'),
       status: 'preparing',
       progress: 0,
       auto: opts?.auto,
       createdAt: new Date().toISOString(),
       book,
-      media: { id: t.mediaId, title: t.title, posterUrl: t.posterUrl, type: 'book' },
+      episodeLabel: t.track?.title,
+      media: { id: t.mediaId, title: t.title, posterUrl: t.posterUrl, type: t.track ? 'album' : 'book' },
     };
     this.persistTask(task);
     const abort = new AbortController();
@@ -476,7 +519,20 @@ export class DownloadManagerService {
 
   /** The files of an edition with their span on the item timeline, and how to fetch each. An audio item answers its parts and chapters. */
   private async describeBook(t: BookDownloadTarget): Promise<{ book: OfflineBook; mediaFileId: number; urls: (i: number) => Promise<string> }> {
-    const base = { itemId: t.itemId, family: t.family, format: t.format, artist: t.artist, coverUrl: t.coverUrl };
+    const base = { itemId: t.itemId, family: t.family, format: t.format, artist: t.artist, coverUrl: t.coverUrl, track: t.track };
+    if (t.track) {
+      const info = await this.streamingApi.getItemPlaybackInfo(t.itemId, this.deviceProfile.getProfile());
+      if (info.sessionId) this.streamingApi.stopSession(info.sessionId).catch(() => undefined);
+      const durationS = info.durationSeconds || t.track.durationSeconds || 0;
+      return {
+        mediaFileId: info.mediaFileId,
+        book: { ...base, files: [{ key: String(t.itemId), offsetS: 0, durationS }], durationSeconds: durationS },
+        urls: async () => {
+          await this.auth.ensureStreamToken(info.mediaFileId);
+          return this.streamingApi.getOriginalDownloadUrl(info.mediaFileId);
+        },
+      };
+    }
     if (t.family === 'text') {
       const fileId = t.fileIds[0];
       return {
@@ -559,6 +615,7 @@ export class DownloadManagerService {
           posterUrl: task.media?.posterUrl ?? null,
           artist: task.book.artist,
           coverUrl: task.book.coverUrl,
+          track: task.book.track,
         },
         { auto: task.auto },
       );
