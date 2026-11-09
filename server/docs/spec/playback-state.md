@@ -50,7 +50,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 ### Continue watching
 
 11. One statement (SQL below), per media, then ordered and cut in SQL. Movies (ungrouped items of a `video` edition; an audio or text item stays out until a mixed row exists): not completed, not hidden, `positionSeconds >= 5` (`HISTORY_MIN_WATCH_SECONDS`), scoped by library; `episodeLabel = null`. Series ("next up"): per media the in-progress item (latest `lastPlayedAt`, not completed, `positionSeconds >= 5`, hidden or not) else the item after the highest completed `(group number, item number)` (groups numbered `> 0`) when it exists and has a part and is not completed; `episodeLabel = 'S' || LPAD(season,2,'0') || 'E' || LPAD(ep,2,'0') || COALESCE(' - ' || title,'')`; `id = 0` when there is no state row for the next item; `lastPlayedAt` = the series' most recent non-hidden state. `mediaType` of every row is the media's kind (`media.type`), never derived from whether the item is grouped. `mediaFileId` is the last file played when it is a part of the item, else the first part of the version the state names, else of the item's highest version; a row whose item has no part is dropped, movies included (a client cannot play it). Post-processing per row: `positionSeconds` and `progressPercent` are set to `0` when `positionSeconds < 10` (the item stays listed). Order: `lastPlayedAt` truncated to the millisecond DESC, then the media's kind name (movie before series), then media id; `LIMIT 20`.
-12. `ContinueWatchingItem` fields: `id, mediaId, mediaFileId (number|null), episodeId (number|null), positionSeconds, durationSeconds, progressPercent, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel`; movies have `stillUrl: null`.
+12. `ContinueWatchingItem` fields: `id, mediaId, mediaFileId (number|null), episodeId (number|null), positionSeconds, durationSeconds, progressPercent, lastPlayedAt, mediaTitle, mediaType, posterUrl, fanartUrl, stillUrl, episodeLabel, releaseDate`; movies have `stillUrl: null`. `releaseDate` is `YYYY-MM-DD` or `null`: the episode's `airDate` for an episode row, the media's `release` date (`media-details.md` rule 2) otherwise.
 
 ### History
 
@@ -195,7 +195,7 @@ picked AS (
 SELECT x.id, x."mediaId", x.file AS "mediaFileId", x."episodeId", x.pos AS "positionSeconds",
        x.dur AS "durationSeconds", x."lastPlayedAt", x.title AS "mediaTitle",
        x.poster AS "posterUrl", x.fanart AS "fanartUrl", x.kind AS "mediaType",
-       x.still AS "stillUrl", x.label AS "episodeLabel",
+       x.still AS "stillUrl", x.label AS "episodeLabel", x.rdate AS "releaseDate",
        CASE WHEN COALESCE(x.dur, 0) > 0 THEN ROUND((x.pos / x.dur) * 100) ELSE 0 END AS "progressPercent"
 FROM (
   SELECT c.id, c."mediaId", f.id AS file, c.pos, c.dur, c."lastPlayedAt",
@@ -203,6 +203,9 @@ FROM (
          m.title, m."posterUrl" AS poster, m."fanartUrl" AS fanart,
          m.type AS kind,
          e."stillUrl" AS still,
+         to_char(CASE WHEN e."groupId" IS NOT NULL THEN e."airDate"
+                      ELSE (SELECT d.date FROM media_release_dates d
+                            WHERE d."mediaId" = m.id AND d.kind = 'release') END, 'YYYY-MM-DD') AS rdate,
          CASE WHEN e."groupId" IS NOT NULL
               THEN 'S' || LPAD(s."number"::text, 2, '0') || 'E' || LPAD(e."number"::text, 2, '0')
                    || COALESCE(' - ' || e.title, '') END AS label
