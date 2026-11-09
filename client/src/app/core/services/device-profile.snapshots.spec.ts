@@ -58,7 +58,12 @@ const FIXTURES: Record<string, Fixture> = {
   'webos-2019-fhd': {
     mse: ['avc1', 'mp4a.40.2'],
     tvPlatform: 'webos',
-    webOSSystem: { deviceInfo: JSON.stringify({ sdkVersion: '4.5.0', screenWidth: 1920 }) },
+    webOSSystem: { deviceInfo: JSON.stringify({ sdkVersion: '4.5.0', screenWidth: 1920, uhd: false }) },
+  },
+  'webos-2023-uhd-narrow-ui': {
+    mse: ['avc1', 'mp4a.40.2'],
+    tvPlatform: 'webos',
+    webOSSystem: { deviceInfo: JSON.stringify({ sdkVersion: '7.0.0', screenWidth: 1920 }) },
   },
   'desktop-mpv': {
     mse: ['avc1', 'mp4a.40.2'],

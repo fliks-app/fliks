@@ -756,6 +756,97 @@ exports[`the generated device profile, per platform > webos-2019-fhd 1`] = `
 }
 `;
 
+exports[`the generated device profile, per platform > webos-2023-uhd-narrow-ui 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "flac": 2,
+    "opus": 2,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": false,
+  "dedupesAudioByLanguage": true,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "mp3",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "ac3",
+        "eac3",
+        "aac",
+      ],
+      "containers": [
+        "mkv",
+        "matroska",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 2,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": false,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
 exports[`the generated device profile, per platform > webos-2025-uhd 1`] = `
 {
   "appVersion": undefined,
