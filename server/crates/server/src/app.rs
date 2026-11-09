@@ -157,6 +157,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::next_singer,
         crate::account_session::show,
         crate::account_session::dismiss,
+        crate::account_session::transfer,
         remote::targets,
         remote::register,
         remote::commands,

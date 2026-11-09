@@ -362,3 +362,69 @@ async fn a_reader_save_out_of_scope_leaves_no_row(pool: PgPool) {
         .await;
     assert!(row(&st, off).await.is_none() && row(&st, other).await.is_none());
 }
+
+fn queued(ids: Vec<i64>) -> Option<QueueState> {
+    Some(QueueState {
+        item_ids: ids,
+        index: 0,
+        shuffle: false,
+        repeat: Repeat::Off,
+    })
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_same_owner_claim_keeps_the_queue_only_when_it_holds_the_item(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut first = beat(u, "s1", "tA", i);
+    first.queue = queued(vec![i64::from(i), 99]);
+    s.beat(&st, first).await;
+    s.beat(&st, beat(u, "s2", "tA", i)).await;
+    assert_eq!(row(&st, u).await.unwrap().queue.unwrap().item_ids.len(), 2);
+    let other = item(&pool).await;
+    s.beat(&st, beat(u, "s3", "tA", other)).await;
+    assert!(row(&st, u).await.unwrap().queue.is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_without_a_target_keeps_the_stored_one(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    let mut b = beat(u, "s1", "tA", i);
+    b.owner.target_id = None;
+    s.beat(&st, b).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(r.owner.target_id.as_deref(), Some("tA"));
+}
+
+#[sqlx::test(migrations = false)]
+async fn boot_rebuilds_the_claims_from_the_rows(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    st.account_sessions.beat(&st, beat(u, "s1", "tA", i)).await;
+    st.account_sessions.beat(&st, beat(u, "s2", "tB", i)).await;
+    let fresh = AccountSessions::default();
+    fresh.load(&st).await.unwrap();
+    assert_eq!(
+        fresh.beat(&st, beat(u, "s2", "tB", i)).await,
+        Verdict::Current
+    );
+    assert!(!fresh.is_superseded(u, "s2").await);
+    assert_eq!(
+        fresh.beat(&st, beat(u, "s1", "tA", i)).await,
+        Verdict::Superseded
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_sweep_stamps_a_claim_without_presence(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.sweep(&st).await;
+    assert!(s.0.lock().await.claimed["s1"].ended_at.is_some());
+}

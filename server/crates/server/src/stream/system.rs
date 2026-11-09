@@ -496,6 +496,7 @@ pub async fn command(
         if let Some(stopped) = st.presence.stop(&sid) {
             st.qoe.end_session(&stopped.session_id).await;
         }
+        st.account_sessions.ended(&st, &sid).await;
         if st.engine.runtime() {
             tokio::spawn(async move {
                 if let Err(e) = st.engine.delete_session(&sid, None).await {

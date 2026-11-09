@@ -88,19 +88,27 @@ fn dto(r: Row, shown: store::Shown) -> AccountSessionDto {
     }
 }
 
+/// The row of `user` with what its item shows; a gone item drops the row, a gone file nulls its id.
+async fn current(st: &AppState, user: i32) -> Result<Option<(Row, store::Shown)>, AppError> {
+    let Some(mut row) = st.account_sessions.get(st, user).await else {
+        return Ok(None);
+    };
+    let Some(shown) = store::shown(&st.db, row.item_id, row.media_file_id).await? else {
+        st.account_sessions.forget(user, &row.session_id).await;
+        return Ok(None);
+    };
+    if !shown.file_exists && row.media_file_id.take().is_some() {
+        st.account_sessions.unfile(user, &row.session_id).await;
+    }
+    Ok(Some((row, shown)))
+}
+
 #[utoipa::path(get, path = "/api/session", responses((status = 200)))]
 pub async fn show(
     AxumState(st): AxumState<AppState>,
     SessionAuthed(a): SessionAuthed,
 ) -> Result<Json<Option<AccountSessionDto>>, AppError> {
-    let Some(row) = st.account_sessions.get(&st, a.user.id).await else {
-        return Ok(Json(None));
-    };
-    let Some(shown) = store::shown(&st.db, row.item_id).await? else {
-        st.account_sessions.forget(a.user.id).await;
-        return Ok(Json(None));
-    };
-    Ok(Json(Some(dto(row, shown))))
+    Ok(Json(current(&st, a.user.id).await?.map(|(r, s)| dto(r, s))))
 }
 
 #[utoipa::path(delete, path = "/api/session", responses((status = 204), (status = 409)))]
@@ -126,7 +134,7 @@ fn position_now(r: &Row) -> f64 {
         0.0
     };
     let at = r.position + elapsed;
-    r.duration.map_or(at, |d| at.min(d))
+    r.duration.filter(|d| *d > 0.0).map_or(at, |d| at.min(d))
 }
 
 #[utoipa::path(post, path = "/api/session/transfer", responses((status = 202), (status = 400), (status = 403), (status = 404)))]
@@ -136,19 +144,15 @@ pub async fn transfer(
     ValidJson(body): ValidJson<Transfer>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let no_session = || AppError::not_found("session.error_no_session");
-    let row = st
-        .account_sessions
-        .get(&st, a.user.id)
-        .await
-        .ok_or_else(no_session)?;
+    let (row, shown) = current(&st, a.user.id).await?.ok_or_else(no_session)?;
     let (owner, conn) = authorize_target(&st, &a, &body.to_target_id).await?;
     let held = row.state != State::Parked;
     if held && row.owner.target_id.as_deref() == Some(&body.to_target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
-    let shown = store::shown(&st.db, row.item_id)
-        .await?
-        .ok_or_else(no_session)?;
+    if row.media_file_id.is_none() && shown.family.as_deref() == Some("video") {
+        return Err(no_session());
+    }
     if matches!(shown.family.as_deref(), Some("text" | "image")) {
         return Err(AppError::bad_request("session.error_not_transferable"));
     }

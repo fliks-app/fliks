@@ -23,7 +23,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-/// The old owner saves its position before its engine session goes.
+/// How long the old owner's engine session outlives its supersede, so its beats are still answered.
 pub const SUPERSEDED_STOP_DELAY: Duration = Duration::from_secs(3);
 pub const SWEEP_EVERY: Duration = Duration::from_secs(15);
 const PARKED_TTL: chrono::Duration = chrono::Duration::hours(24);
@@ -249,16 +249,24 @@ impl AccountSessions {
     pub async fn load(&self, st: &AppState) -> Result<(), sqlx::Error> {
         store::park_all(&st.db).await?;
         store::delete_expired(&st.db, Utc::now() - PARKED_TTL).await?;
+        let rows = store::all(&st.db).await?;
         let mut g = self.0.lock().await;
-        g.rows = store::all(&st.db)
-            .await?
+        let now = now_ms() as i64;
+        for row in &rows {
+            let claim = Claim {
+                target: row.owner.target_id.clone(),
+                ended_at: Some(now),
+            };
+            g.claimed.insert(row.session_id.clone(), claim);
+        }
+        g.rows = rows
             .into_iter()
             .map(|row| {
                 let pos = row.position;
                 let entry = Entry {
                     row,
                     held: None,
-                    persisted_at: now_ms() as i64,
+                    persisted_at: now,
                     persisted_pos: pos,
                 };
                 (entry.row.user_id, entry)
@@ -283,9 +291,16 @@ impl AccountSessions {
         if b.owner.target_id.is_none() || g.unscoped.contains(&b.sid) {
             return Verdict::Ignored;
         }
-        if !store::in_scope(&st.db, b.account, b.kind).await {
-            g.unscoped.insert(b.sid);
-            return Verdict::Ignored;
+        match store::in_scope(&st.db, b.account, b.kind).await {
+            Ok(true) => {}
+            Ok(false) => {
+                g.unscoped.insert(b.sid);
+                return Verdict::Ignored;
+            }
+            Err(e) => {
+                tracing::warn!(account = b.account, "account session scope not read: {e}");
+                return Verdict::Ignored;
+            }
         }
         Self::claim(st, &mut g, b).await;
         Verdict::Current
@@ -299,6 +314,16 @@ impl AccountSessions {
             .get(&account)
             .is_some_and(|e| e.row.session_id == sid);
         !current && g.claimed_verdict(account, sid) == Some(Verdict::Superseded)
+    }
+
+    /// The item of the account's row, to tell a superseded beat of another item from one of the row's.
+    pub async fn item_of(&self, account: i32) -> Option<i32> {
+        self.0
+            .lock()
+            .await
+            .rows
+            .get(&account)
+            .map(|e| e.row.item_id)
     }
 
     async fn update(st: &AppState, g: &mut Inner, b: BeatIn) -> Verdict {
@@ -319,7 +344,11 @@ impl AccountSessions {
         if b.queue.is_some() {
             r.queue = b.queue;
         }
-        r.owner = b.owner;
+        let target = b.owner.target_id.or_else(|| r.owner.target_id.take());
+        r.owner = Owner {
+            target_id: target,
+            ..b.owner
+        };
         e.held = Some(Held {
             hub_user: b.hub_user,
             connection: b.connection,
@@ -374,9 +403,9 @@ impl AccountSessions {
                 position: b.position,
                 duration: b.duration,
                 owner: b.owner,
-                queue: b
-                    .queue
-                    .or(prior.and_then(|p| p.row.queue).filter(|_| same_owner)),
+                queue: b.queue.or(prior
+                    .and_then(|p| p.row.queue)
+                    .filter(|q| same_owner && q.item_ids.contains(&i64::from(b.item)))),
                 updated_at: Utc::now(),
             },
             held: Some(Held {
@@ -430,8 +459,13 @@ impl AccountSessions {
     /// A reader saved its position: the account's row becomes a parked row of that item. Never a
     /// claim, an epoch bump or a supersede: a live playback keeps the row (rule 19).
     pub async fn reading(&self, st: &AppState, r: ReadingIn) {
-        if !store::in_scope(&st.db, r.account, r.kind).await {
-            return;
+        match store::in_scope(&st.db, r.account, r.kind).await {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(e) => {
+                tracing::warn!(account = r.account, "account session scope not read: {e}");
+                return;
+            }
         }
         let mut g = self.0.lock().await;
         let prior = g.rows.get(&r.account);
@@ -479,10 +513,11 @@ impl AccountSessions {
             .get(&account)
             .is_some_and(|e| e.row.session_id == sid)
         {
-            g.rows.remove(&account);
             if let Err(e) = store::delete(&st.db, account).await {
                 tracing::warn!(account, "account session not deleted: {e}");
+                return;
             }
+            g.rows.remove(&account);
             announce(st, account, None);
         }
     }
@@ -513,6 +548,11 @@ impl AccountSessions {
         let revive =
             i64::from(crate::engine::lifetime(|k| std::env::var(k).ok()).session_revive_ttl_ms);
         let now = now_ms() as i64;
+        for (sid, c) in g.claimed.iter_mut() {
+            if c.ended_at.is_none() && st.presence.peek(sid).is_none() {
+                c.ended_at = Some(now);
+            }
+        }
         g.claimed.retain(|sid, c| {
             c.ended_at.is_none_or(|t| now - t < revive) || st.presence.peek(sid).is_some()
         });
@@ -524,10 +564,11 @@ impl AccountSessions {
             .map(|(u, _)| *u)
             .collect();
         for user in old {
-            g.rows.remove(&user);
             if let Err(e) = store::delete(&st.db, user).await {
                 tracing::warn!(user, "account session not deleted: {e}");
+                continue;
             }
+            g.rows.remove(&user);
             announce(st, user, None);
         }
     }
@@ -555,18 +596,32 @@ impl AccountSessions {
         g.rows.get(&user).map(|e| e.row.clone())
     }
 
-    /// A row whose item is gone (the database cascaded it) is dropped from memory too.
-    async fn forget(&self, user: i32) {
-        self.0.lock().await.rows.remove(&user);
+    /// A row whose item is gone (the database cascaded it) is dropped from memory too, unless a
+    /// newer row replaced it meanwhile.
+    async fn forget(&self, user: i32, sid: &str) {
+        let mut g = self.0.lock().await;
+        if g.rows.get(&user).is_some_and(|e| e.row.session_id == sid) {
+            g.rows.remove(&user);
+        }
+    }
+
+    /// The file of the row is gone (the database nulled it): memory follows.
+    async fn unfile(&self, user: i32, sid: &str) {
+        if let Some(e) = self.0.lock().await.rows.get_mut(&user)
+            && e.row.session_id == sid
+        {
+            e.row.media_file_id = None;
+        }
     }
 
     pub async fn dismiss(&self, st: &AppState, user: i32) -> Result<(), crate::http::AppError> {
         let mut g = self.0.lock().await;
+        Self::park_silent(st, &mut g, Some(user)).await;
         match g.rows.get(&user).map(|e| e.row.state) {
             None => Ok(()),
             Some(State::Parked) => {
-                g.rows.remove(&user);
                 store::delete(&st.db, user).await?;
+                g.rows.remove(&user);
                 announce(st, user, None);
                 Ok(())
             }

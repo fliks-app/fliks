@@ -5140,6 +5140,20 @@
         }
       }
     },
+    "/api/session/transfer": {
+      "post": {
+        "tags": [
+          "crate::account_session"
+        ],
+        "operationId": "transfer",
+        "responses": {
+          "202": {},
+          "400": {},
+          "403": {},
+          "404": {}
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [

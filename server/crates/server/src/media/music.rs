@@ -177,8 +177,8 @@ WHERE i.id = ANY($3) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
     .bind(items)
     .fetch_all(db)
     .await?;
-    let mut by_id: HashMap<i32, Value> = rows.into_iter().collect();
-    Ok(items.iter().filter_map(|i| by_id.remove(i)).collect())
+    let by_id: HashMap<i32, Value> = rows.into_iter().collect();
+    Ok(items.iter().filter_map(|i| by_id.get(i).cloned()).collect())
 }
 
 /// The `track` object of a playlist item, by track item id.

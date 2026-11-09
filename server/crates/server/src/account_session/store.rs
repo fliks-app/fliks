@@ -5,25 +5,18 @@ use fliks_domain::media::kind::MediaKind;
 use sqlx::PgPool;
 
 /// `session.md` rule 1: the option is on and the kind is selected (null selects every kind).
-pub async fn in_scope(db: &PgPool, account: i32, kind: MediaKind) -> bool {
+pub async fn in_scope(db: &PgPool, account: i32, kind: MediaKind) -> Result<bool, sqlx::Error> {
     let r = sqlx::query!(
         r#"SELECT "sessionSync" AS sync, "sessionKinds" AS kinds FROM users WHERE id = $1"#,
         account
     )
     .fetch_optional(db)
-    .await;
-    match r {
-        Ok(Some(u)) => {
-            u.sync
-                && u.kinds
-                    .is_none_or(|k| k.iter().any(|k| k.as_str() == kind.as_str()))
-        }
-        Ok(None) => false,
-        Err(e) => {
-            tracing::warn!(account, "account session scope not read: {e}");
-            false
-        }
-    }
+    .await?;
+    Ok(r.is_some_and(|u| {
+        u.sync
+            && u.kinds
+                .is_none_or(|k| k.iter().any(|k| k.as_str() == kind.as_str()))
+    }))
 }
 
 pub async fn upsert(db: &PgPool, r: &Row) -> Result<(), sqlx::Error> {
@@ -134,22 +127,30 @@ pub struct Shown {
     pub media_id: i32,
     pub episode_id: Option<i32>,
     pub family: Option<String>,
+    /// Whether the row's file still exists (the database nulls it when the file goes).
+    pub file_exists: bool,
     pub title: Option<String>,
     pub subtitle: Option<String>,
     pub poster_url: Option<String>,
 }
 
-pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error> {
+pub async fn shown(
+    db: &PgPool,
+    item: i32,
+    file: Option<i32>,
+) -> Result<Option<Shown>, sqlx::Error> {
     let r = sqlx::query!(
         r#"SELECT m.title AS "media_title!", m."posterUrl" AS poster_url, m."type"::text AS "kind!",
                   i.title AS item_title, i.number AS item_number, g.number AS "season: i32",
-                  i."mediaId" AS media_id, i."groupId" AS group_id, e.family AS "family?"
+                  i."mediaId" AS media_id, i."groupId" AS group_id, e.family AS "family?",
+                  EXISTS (SELECT 1 FROM media_files f WHERE f.id = $2) AS "file_exists!"
              FROM items i
              JOIN media m ON m.id = i."mediaId"
              LEFT JOIN editions e ON e.id = i."editionId"
              LEFT JOIN item_groups g ON g.id = i."groupId"
             WHERE i.id = $1"#,
-        item
+        item,
+        file
     )
     .fetch_optional(db)
     .await?;
@@ -166,6 +167,7 @@ pub async fn shown(db: &PgPool, item: i32) -> Result<Option<Shown>, sqlx::Error>
             media_id: r.media_id,
             episode_id: r.group_id.map(|_| item),
             family: r.family,
+            file_exists: r.file_exists,
             title: Some(r.media_title),
             subtitle,
             poster_url: r.poster_url,
