@@ -11,7 +11,7 @@ Scope: what the host does with the engine's karaoke jobs (`fliks-engine` `docs/s
 ## Models
 
 4. `GET /api/karaoke/models` (`manage:Settings`) answers the engine's `GET /v1/models` unchanged (`runtime`, with `windowsMl` (`active`, `restart`, `missing`) on a Windows 11 engine, `modelsDir`, `models[]` with `licence {name, text, clear}`, `state`, `downloadedBytes`, `error`). 503 when no engine runs or it lacks `models`.
-5. `POST /api/karaoke/models/:id/download` (`manage:Settings`) body `{acceptLicence: true}` (400 otherwise: the client shows the licence first) starts the engine download, answering the model. `DELETE /api/karaoke/models/:id` (`manage:Settings`) deletes it and every `derived_audio` row made by it (rule 12), answering 204. An unknown id is the engine's 404.
+5. `POST /api/karaoke/models/:id/download` (`manage:Settings`) body `{acceptLicence?: true}`: `acceptLicence` is required (400 otherwise) only for a model whose `licence.clear` is false, a clear licence (MIT, Apache) needing no acceptance since the models are downloaded from upstream, never redistributed starts the engine download, answering the model. `DELETE /api/karaoke/models/:id` (`manage:Settings`) deletes it and every `derived_audio` row made by it (rule 12), answering 204. An unknown id is the engine's 404.
 6. The engine's `ModelChanged` events are re-emitted as `karaoke.model_changed {model}` (the engine's `ModelInfo`) to the users who manage settings only. A model that turns `installed` or is deleted also runs the model invalidation of rule 12.
 
 ## Status

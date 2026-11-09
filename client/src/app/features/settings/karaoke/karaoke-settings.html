@@ -21,14 +21,25 @@
         <fieldset class="flex flex-col gap-2">
           <legend class="font-medium">{{ 'karaoke.admin.verified' | translate }}</legend>
           <p class="text-sm text-base-content/60">{{ 'karaoke.admin.verified_hint' | translate }}</p>
-          <div class="flex flex-wrap gap-4">
-            @for (p of providers; track p) {
-              <label class="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" class="checkbox checkbox-sm" [checked]="verified().includes(p)" (change)="toggleProvider(p, $any($event.target).checked)" />
-                <span>{{ p }}</span>
-              </label>
-            }
-          </div>
+          @if (providers().length) {
+            <div class="flex flex-wrap gap-4">
+              @for (p of providers(); track p) {
+                <label class="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" class="checkbox checkbox-sm" [checked]="verified().includes(p)" (change)="toggleProvider(p, $any($event.target).checked)" />
+                  <span>{{ p }}</span>
+                  @if (p === 'openvino') {
+                    <span class="text-sm text-base-content/60">{{ 'karaoke.admin.verified_openvino' | translate }}</span>
+                  }
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="text-sm" data-testid="karaoke-no-gpu">{{ 'karaoke.admin.verified_none' | translate }}</p>
+          }
+          <details class="text-sm text-base-content/60">
+            <summary class="cursor-pointer">{{ 'karaoke.admin.verified_details_label' | translate }}</summary>
+            <p class="mt-1">{{ 'karaoke.admin.verified_details' | translate }}</p>
+          </details>
         </fieldset>
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" [disabled]="saving() || !budgetValid()" (click)="save()">
@@ -87,9 +98,9 @@
                     <p class="text-sm text-base-content/60">{{ 'karaoke.kind_' + m.kind | translate }} · {{ size(m) }} · {{ 'karaoke.state_' + m.state | translate }}</p>
                   </div>
                   <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
-                    <button type="button" class="btn btn-ghost btn-sm" (click)="review(m)">{{ m.licence.name }}</button>
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="review(m)">{{ 'karaoke.admin.licence_label' | translate: { name: m.licence.name } }}</button>
                     @if (canDownload(m)) {
-                      <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === m.id" (click)="review(m)">{{ 'karaoke.admin.download' | translate }}</button>
+                      <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === m.id" (click)="start(m)">{{ 'karaoke.admin.download' | translate }}</button>
                     }
                     @if (m.state === 'installed' || m.state === 'downloading') {
                       <button type="button" class="btn btn-error btn-outline btn-sm" [disabled]="busy() === m.id" (click)="remove(m)">{{ 'common.delete' | translate }}</button>
@@ -116,7 +127,7 @@
     <div class="modal-box max-w-2xl">
       <app-modal-header [title]="m.licence.name" />
       <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded bg-base-200 p-3 text-sm" tabindex="0">{{ m.licence.text }}</pre>
-      @if (canDownload(m)) {
+      @if (canDownload(m) && !m.licence.clear) {
         <label class="mt-4 flex cursor-pointer items-start gap-3">
           <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" [checked]="accepted()" (change)="accepted.set($any($event.target).checked)" />
           <span>{{ 'karaoke.admin.accept' | translate: { name: m.name } }}</span>
@@ -124,8 +135,8 @@
       }
       <app-modal-footer>
         <button type="button" class="btn" (click)="closeReview()">{{ 'common.close' | translate }}</button>
-        @if (canDownload(m)) {
-          <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="download()">{{ 'karaoke.admin.download' | translate }}</button>
+        @if (canDownload(m) && !m.licence.clear) {
+          <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="confirmDownload()">{{ 'karaoke.admin.download' | translate }}</button>
         }
       </app-modal-footer>
     </div>
