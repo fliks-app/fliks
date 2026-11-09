@@ -45,12 +45,17 @@ pub async fn lock(c: &mut PgConnection) -> sqlx::Result<()> {
         .map(drop)
 }
 
-/// The filesystem root, or a path overlapping the data or cache directory (rule 50.1).
+/// The filesystem root, or a path overlapping the data, cache or transcode directory (rule 50.1).
 pub fn reserved(path: &str) -> bool {
+    reserved_beside(path, crate::paths::transcode_dir().as_deref())
+}
+
+fn reserved_beside(path: &str, transcode: Option<&Path>) -> bool {
     let p = Path::new(path);
     p.components().all(|c| matches!(c, Component::RootDir))
         || [crate::paths::data_dir(), crate::paths::cache_dir()]
             .into_iter()
+            .chain(transcode)
             .any(|d| fsx::dirs_overlap(p, d))
 }
 
@@ -444,5 +449,8 @@ mod tests {
     fn the_filesystem_root_is_reserved() {
         assert!(reserved("/"));
         assert!(!reserved("/srv/media-test"));
+        let work = Path::new("/srv/fliks-work");
+        assert!(reserved_beside("/srv/fliks-work/cache", Some(work)));
+        assert!(!reserved_beside("/srv/media-test", Some(work)));
     }
 }

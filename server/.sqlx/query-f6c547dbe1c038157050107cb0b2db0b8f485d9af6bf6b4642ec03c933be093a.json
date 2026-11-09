@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i.\"mediaId\"\n                 JOIN editions e ON e.id = i.\"editionId\"\n                 WHERE i.id = $1 AND m.\"libraryId\" = ANY($2)\n                   AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)) AS \"e!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f6c547dbe1c038157050107cb0b2db0b8f485d9af6bf6b4642ec03c933be093a"
+}

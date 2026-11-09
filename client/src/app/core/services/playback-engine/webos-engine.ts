@@ -19,6 +19,18 @@ const WEBOS_START_BITRATE = 8_000_000;
 /** Debounce for out-of-buffer seeks: rapid `<video>` reloads crash the webOS pipeline, so this is load-bearing. */
 const SEEK_DEBOUNCE_MS = 280;
 
+/** `MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED`: the native pipeline never started the source. */
+const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+
+/** A rejected `load()`, classified as a `media` error so the copy fallback can retry without the copy. */
+export class WebOsLoadError extends Error {
+  readonly source = 'media' as const;
+  constructor(readonly code: number, message: string, name = 'WebOsLoadError') {
+    super(message);
+    this.name = name;
+  }
+}
+
 /** LG webOS backend driving the shared `<video>`; `mediaOption` gives native resume and a high ABR start.
  *  Out-of-buffer seeks reload at the target, since a native seek sticks on the backend's transient 503. */
 export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngine {
@@ -241,11 +253,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       let settled = false;
       const timer = setTimeout(
         () => finish(() => {
-          // Tagged so loadInternal can tell a slow-stream timeout (don't retry)
-          // from a mediaOption schema rejection (fall back to plain src).
-          const e = new Error('webOS <video> load timeout (30s)');
-          e.name = 'WebOsLoadTimeout';
-          reject(e);
+          // Tagged so loadInternal can tell a slow-stream timeout (don't retry) from a mediaOption schema rejection (fall back to plain src).
+          reject(new WebOsLoadError(MEDIA_ERR_SRC_NOT_SUPPORTED, 'webOS <video> load timeout (30s)', 'WebOsLoadTimeout'));
         }),
         30000,
       );
@@ -266,7 +275,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         v.play().catch(() => { /* autoplay gate — controls let the user resume */ });
         finish(resolve);
       };
-      const onErr = () => finish(() => reject(new Error(mediaErrorMessage(v.error))));
+      const onErr = () => finish(() => reject(new WebOsLoadError(v.error?.code ?? -1, mediaErrorMessage(v.error))));
       v.addEventListener('loadedmetadata', onMeta);
       v.addEventListener('error', onErr);
 

@@ -46,7 +46,8 @@ export function webosDevice(): WebOsDevice | null {
   const sdk = /^(\d+)/.exec(info.sdkVersion ?? '');
   const chromium = Number(/Chrom(?:e|ium)\/(\d+)/.exec(navigator.userAgent)?.[1]);
   const year = CHROMIUM_YEAR.find(([c]) => chromium >= c)?.[1] ?? (sdk ? yearOfSdk(Number(sdk[1])) : null);
-  const uhd = flag(info.uhd) ?? (typeof info.screenWidth === 'number' ? info.screenWidth >= 3840 : null);
+  // A UHD set can report a 1920 UI width, so only a wide screen is evidence: the narrow case stays unknown.
+  const uhd = flag(info.uhd) ?? (typeof info.screenWidth === 'number' && info.screenWidth >= 3840 ? true : null);
   return { year, uhd, hdr10: flag(info.hdr10), dolbyVision: flag(info.dolbyVision) };
 }
 

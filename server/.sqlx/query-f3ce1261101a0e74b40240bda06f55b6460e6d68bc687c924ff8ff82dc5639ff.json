@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id AS \"id!\" FROM items i\n                   JOIN comic_issues ci ON ci.\"itemId\" = i.id\n                   JOIN editions e ON e.id = i.\"editionId\"\n                   JOIN media m ON m.id = i.\"mediaId\"\n                   WHERE i.\"mediaId\" = $1 AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2)\n                     AND (EXISTS (SELECT 1 FROM item_parts ip WHERE ip.\"itemId\" = i.id)\n                          OR NOT EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op.\"itemId\" = o.id\n                                         JOIN editions oe ON oe.id = o.\"editionId\"\n                                         WHERE o.\"mediaId\" = m.id\n                                           AND COALESCE(oe.\"libraryId\", m.\"libraryId\") = ANY($2)))\n                   ORDER BY ci.kind <> 'issue', ci.\"sortNumber\", ci.kind, i.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f3ce1261101a0e74b40240bda06f55b6460e6d68bc687c924ff8ff82dc5639ff"
+}

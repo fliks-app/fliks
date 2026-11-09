@@ -739,7 +739,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** A provider artist opens through the library person holding it, created on the first click. */
   protected async openArtist(a: ArtistHit): Promise<void> {
     try {
-      const id = a.personId ?? (await this.music.resolveArtist({ provider: a.provider, externalId: a.externalId, name: a.name, sortName: a.sortName })).id;
+      const id = a.personId ?? (await this.music.resolveArtist({ provider: a.provider, externalId: a.externalId })).id;
       void this.router.navigate(['/artists', id]);
     } catch {
       /* the global error toast says why */

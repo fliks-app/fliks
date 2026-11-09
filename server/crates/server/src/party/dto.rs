@@ -264,7 +264,7 @@ pub struct PartyItem {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
-    /// A track only: the track's item id.
+    /// The item id of the row, absent when the row names its item by `(mediaId, episodeId)` alone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item_id: Option<i32>,
     pub title: String,

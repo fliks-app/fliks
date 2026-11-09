@@ -10,6 +10,7 @@ use crate::{
     },
     state::AppState,
 };
+use axum::http::StatusCode;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
@@ -140,6 +141,14 @@ where
 
 /// A MusicBrainz artist: the provider keyed by `musicbrainz` answers the whole record, the next providers
 /// of `metadata.provider_order.album` that serve its ids fill a missing image or biography.
+/// The MusicBrainz artist `mbid` as its providers describe it.
+pub async fn provider_artist(st: &AppState, mbid: &str) -> Result<PersonDetails, AppError> {
+    let lang = st.metadata.lang.resolve(None).await?;
+    music_details(&st.metadata, &lang, mbid)
+        .await
+        .map_err(|e| AppError::with_message(StatusCode::BAD_GATEWAY, e))
+}
+
 async fn music_details(
     md: &Metadata,
     lang: &Resolved,

@@ -464,11 +464,21 @@ async fn check_followed(st: &AppState, owner: i32, users: &[i32]) -> R<Vec<i32>>
     Ok(users)
 }
 
-async fn check_item(st: &AppState, item: &Item) -> R<()> {
-    if db::item_valid(&st.db, item).await? {
-        Ok(())
-    } else {
-        Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))
+/// The pair names one item the caller can open: a pair naming several is a 409, an item of a
+/// hidden edition a 404, any other mismatch a 400.
+pub(super) async fn check_item(st: &AppState, item: &Item, acl: &[i32]) -> R<()> {
+    if item.item_id.is_none() && item.episode_id.is_none() {
+        crate::playback::named_item(&st.db, item.media_id, None).await?;
+    }
+    if !db::item_valid(&st.db, item).await? {
+        return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+    }
+    let target = db::target_item(&st.db, item).await?;
+    match target {
+        Some(t) if db::items_open(&st.db, &[t], acl).await? => Ok(()),
+        _ => Err(
+            AppError::not_found(format!("Item #{} not found", target.unwrap_or_default())).into(),
+        ),
     }
 }
 
@@ -483,7 +493,7 @@ async fn initial_programme(st: &AppState, a: &Authed, b: &Create) -> R<Vec<Item>
         let ids = accessible_library_ids(&st.db, a).await?;
         for item in &items {
             assert_media_accessible(&st.db, item.media_id, &ids).await?;
-            check_item(st, item).await?;
+            check_item(st, item, &ids).await?;
         }
         return Ok(items);
     }
@@ -550,7 +560,8 @@ pub async fn create(
     let me = a.user.id;
     let programme = initial_programme(&st, &a, &b).await?;
     if let Some(item) = programme.first() {
-        check_item(&st, item).await?;
+        let ids = accessible_library_ids(&st.db, &a).await?;
+        check_item(&st, item, &ids).await?;
     }
     if let Some(c) = &b.cover {
         c.check(&programme)?;
@@ -1025,6 +1036,26 @@ pub(super) async fn edit_programme(st: &AppState, a: &Authed, row: &mut Row, edi
     edit_held(st, a, row, edit).await
 }
 
+/// A pair without `itemId` is read once, here, as the item it names: it is a 409 when it names several
+/// (`same_row` reads a missing `itemId` as any item of the media, so it could stand for a row it is not).
+async fn name_items(st: &AppState, items: Vec<Item>) -> R<Vec<Item>> {
+    let mut out = Vec::with_capacity(items.len());
+    for mut it in items {
+        if it.item_id.is_none() {
+            if it.episode_id.is_none() {
+                crate::playback::named_item(&st.db, it.media_id, None).await?;
+            }
+            it.item_id = Some(
+                db::target_item(&st.db, &it)
+                    .await?
+                    .ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))?,
+            );
+        }
+        out.push(it);
+    }
+    Ok(out)
+}
+
 /// The system message of a programme edit: what was added and removed, or only a reorder.
 fn programme_note(current: &[db::QueueRow], items: &[Item]) -> Option<(&'static str, Value)> {
     let added = items
@@ -1054,7 +1085,7 @@ pub(super) async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Ed
     let current = db::programme_rows(&st.db, id).await?;
     let replaced = matches!(edit, Edit::Replace(_));
     let items = match edit {
-        Edit::Replace(items) => items,
+        Edit::Replace(items) => name_items(st, items).await?,
         Edit::Requeue(item) => {
             let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
             if row.item().is_none_or(|c| !same_row(&c, &item)) {
@@ -1093,7 +1124,7 @@ pub(super) async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Ed
         assert_media_accessible(&st.db, item.media_id, &ids).await?;
     }
     if !vetted.is_empty() {
-        vet_items(st, id, &vetted).await?;
+        vet_items(st, id, &vetted, &ids).await?;
     }
     let cover = row.cover.as_deref().and_then(|c| c.prune(&items));
     db::set_programme(&st.db, id, &items, cover.as_ref()).await?;
@@ -1159,7 +1190,7 @@ async fn go_live(st: &AppState, a: &Authed, id: i32) -> R<()> {
         .item;
     let ids = accessible_library_ids(&st.db, a).await?;
     assert_media_accessible(&st.db, head.media_id, &ids).await?;
-    vet_items(st, id, std::slice::from_ref(&head)).await?;
+    vet_items(st, id, std::slice::from_ref(&head), &ids).await?;
     let item = db::set_live(&st.db, id)
         .await?
         .ok_or_else(|| machine_err(PartyErr::NoItem))?;
@@ -1204,17 +1235,15 @@ pub(super) async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     Ok(row)
 }
 
-/// Each item belongs to its media and every current member can open them, else 409
-/// `party.error_member_no_access` naming those who cannot.
-async fn vet_items(st: &AppState, id: i32, items: &[Item]) -> R<()> {
+/// Each item belongs to its media and every current member can open it, its edition included,
+/// else 409 `party.error_member_no_access` naming those who cannot. `acl` is the caller's.
+async fn vet_items(st: &AppState, id: i32, items: &[Item], acl: &[i32]) -> R<()> {
+    let mut targets = Vec::with_capacity(items.len());
     for it in items {
-        check_item(st, it).await?;
+        check_item(st, it, acl).await?;
+        targets.extend(db::target_item(&st.db, it).await?);
     }
     let members = st.parties.view(id).map_or_else(Vec::new, |v| v.members);
-    let mut medias: Vec<i32> = items.iter().map(|i| i.media_id).collect();
-    medias.sort_unstable();
-    medias.dedup();
-    let libraries = db::media_libraries(&st.db, &medias).await?;
     let mut denied = vec![];
     let mut checked = vec![];
     for m in &members {
@@ -1222,9 +1251,10 @@ async fn vet_items(st: &AppState, id: i32, items: &[Item]) -> R<()> {
             continue;
         }
         checked.push(m.user_id);
-        let open = user_libraries(st, m.user_id)
-            .await?
-            .is_some_and(|ids| medias.iter().all(|m| can_open(&libraries, &ids, *m)));
+        let open = match user_libraries(st, m.user_id).await? {
+            Some(ids) => db::items_open(&st.db, &targets, &ids).await?,
+            None => false,
+        };
         if !open {
             denied.push(m.username.clone());
         }
@@ -1257,7 +1287,8 @@ pub async fn intent(
     }
     let item: Option<Item> = b.item.map(Into::into);
     if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
-        vet_items(&st, id, std::slice::from_ref(it)).await?;
+        let ids = accessible_library_ids(&st.db, &a).await?;
+        vet_items(&st, id, std::slice::from_ref(it), &ids).await?;
     }
     let plan = match b.action {
         IntentAction::Next | IntentAction::Previous if item.is_none() => Some(

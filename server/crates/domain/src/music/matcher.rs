@@ -196,12 +196,39 @@ pub fn text_distance(a: &str, b: &str) -> f64 {
     levenshtein(&a, &b) as f64 / longest as f64
 }
 
-/// Whether two barcodes name one release, a UPC and its EAN-13 form (leading zeros) being the same.
+/// Whether two barcodes name one release, a UPC and its EAN-13 form (leading zeros) being the same; spaces
+/// and hyphens are not part of the number.
 pub fn same_barcode(a: &str, b: &str) -> bool {
-    a.trim_start_matches('0') == b.trim_start_matches('0')
+    let digits = |s: &str| {
+        s.chars()
+            .filter(char::is_ascii_digit)
+            .collect::<String>()
+            .trim_start_matches('0')
+            .to_owned()
+    };
+    let (a, b) = (digits(a), digits(b));
+    !a.is_empty() && a == b
 }
 
-/// The title without its trailing edition or live qualifier (`Alpha (Deluxe)`, `Alpha - 20th Anniversary`).
+/// Words that make a trailing qualifier an edition of the same album, not another work.
+const EDITION_WORDS: [&str; 13] = [
+    "deluxe",
+    "remaster",
+    "remastered",
+    "expanded",
+    "anniversary",
+    "edition",
+    "bonus",
+    "special",
+    "reissue",
+    "extended",
+    "limited",
+    "collector",
+    "collectors",
+];
+
+/// The title without its trailing edition qualifier (`Alpha (Deluxe)`, `Alpha - 20th Anniversary`); any other
+/// qualifier (`(Live)`, a conductor, a volume) tells another album apart and stays.
 fn core_title(s: &str) -> &str {
     const CUTS: [&str; 5] = [" (", " [", " - ", " \u{2013} ", " \u{2014} "];
     let end = CUTS
@@ -209,7 +236,10 @@ fn core_title(s: &str) -> &str {
         .filter_map(|c| s.find(c))
         .min()
         .unwrap_or(s.len());
-    if end == 0 { s } else { &s[..end] }
+    let edition = normalize(&s[end..])
+        .split(' ')
+        .any(|w| EDITION_WORDS.contains(&w));
+    if end == 0 || !edition { s } else { &s[..end] }
 }
 
 /// The distance of two album titles, an edition qualifier on either side aside.
@@ -717,5 +747,27 @@ mod tests {
         let later = album_distance("Alpha", "Ana", Some(2009), hit);
         assert_eq!(later, 0.0);
         assert!(album_distance("Alpha", "Ana", Some(1980), hit) > later);
+    }
+
+    #[test]
+    fn only_an_edition_qualifier_is_set_aside_from_an_album_title() {
+        let far = |a, b| album_title_distance(a, b) > 0.03;
+        assert!(far(
+            "Symphony No. 5 (Karajan)",
+            "Symphony No. 5 (Bernstein)"
+        ));
+        assert!(far("Greatest Hits - Volume 1", "Greatest Hits - Volume 2"));
+        assert!(far("Alpha", "Alpha (Live)"));
+        assert!(!far("Alpha (Remastered 2011)", "Alpha"));
+        assert!(!far("Alpha [Expanded Edition]", "Alpha (Deluxe)"));
+        assert!(!far("Alpha - 20th Anniversary", "Alpha"));
+    }
+
+    #[test]
+    fn a_barcode_is_its_digits_without_leading_zeros() {
+        assert!(same_barcode("0731453692022", "731453692022"));
+        assert!(same_barcode("7314 5369-2022", "0731453692022"));
+        assert!(!same_barcode("731453692022", "5099962688956"));
+        assert!(!same_barcode("", "0"));
     }
 }

@@ -664,8 +664,6 @@ pub struct ItemInfo {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub episode_title: Option<String>,
-    /// The row is a track of an album: `title` is the track and `series_title` the album.
-    pub track: bool,
 }
 
 /// Media title (with `S01E02` for an episode, the track title for a track) and artwork of every
@@ -742,7 +740,6 @@ pub async fn item_infos(
                         season_number: season,
                         episode_number: number,
                         episode_title: ep_title.filter(|t| !t.is_empty()),
-                        track,
                     },
                 )
             },
@@ -787,6 +784,33 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
     .bind(item.episode_id)
     .bind(MediaKind::seasonal_names())
     .bind(item.item_id)
+    .fetch_one(db)
+    .await
+}
+
+/// The item a pair names: its `item_id`, else the one `item_of` finds.
+pub async fn target_item(db: &PgPool, item: &Item) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar("SELECT COALESCE($1, item_of($2, $3))")
+        .bind(item.item_id)
+        .bind(item.media_id)
+        .bind(item.episode_id)
+        .fetch_one(db)
+        .await
+}
+
+/// Whether every item is in a library of `acl` for its media and for its edition.
+pub async fn items_open(db: &PgPool, items: &[i32], acl: &[i32]) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT NOT EXISTS (
+               SELECT 1 FROM unnest($1::int[]) AS t(id)
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
+                   JOIN media m ON m.id = i."mediaId"
+                   WHERE i.id = t.id AND m."libraryId" = ANY($2)
+                     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)))"#,
+    )
+    .bind(items)
+    .bind(acl)
     .fetch_one(db)
     .await
 }
@@ -996,12 +1020,8 @@ mod tests {
         let infos = item_infos(&pool, &[(1, None, Some(2))]).await.unwrap();
         let info = &infos[&(1, None, Some(2))];
         assert_eq!(
-            (
-                info.title.as_str(),
-                info.series_title.as_deref(),
-                info.track
-            ),
-            ("Two", Some("Album"), true)
+            (info.title.as_str(), info.series_title.as_deref()),
+            ("Two", Some("Album"))
         );
     }
 }

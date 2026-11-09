@@ -214,7 +214,9 @@ mod client_codecs_tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn a_row_holds_the_video_and_the_audio_files_entries_of_the_last_profile(db: PgPool) {
+    async fn a_row_holds_the_whole_last_profile_and_video_audio_ignores_the_audio_files_entry(
+        db: PgPool,
+    ) {
         crate::db::migrate(&db).await.unwrap();
         let profile: DeviceProfile = serde_json::from_value(serde_json::json!({
             "deviceId": "dev-1",
@@ -234,9 +236,6 @@ mod client_codecs_tests {
         assert_eq!(rows.len(), 1);
         let device = crate::optimize::codec::Device::from_profiles(&rows[0].0);
         assert_eq!(device.video, ["h264", "hevc"].into());
-        assert_eq!(
-            device.audio,
-            ["aac", "mp3", "flac"].map(String::from).into()
-        );
+        assert_eq!(device.audio, ["aac"].map(String::from).into());
     }
 }

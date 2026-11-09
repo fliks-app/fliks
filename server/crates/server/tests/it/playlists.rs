@@ -262,6 +262,40 @@ async fn add_expands_a_media_with_several_items_and_keeps_the_book_ambiguous(poo
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_comic_volume_adds_the_issues_that_have_a_file_first(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(
+        r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2), (2, 'q', 2);
+           INSERT INTO media (id, title, type, "libraryId") VALUES (10, 'owned', 'comic', 1), (11, 'unowned', 'comic', 1);
+           INSERT INTO editions (id, "mediaId", family) VALUES (10, 10, 'image'), (11, 11, 'image');
+           INSERT INTO items (id, "mediaId", "editionId", title) VALUES
+             (20, 10, 10, 'i1'), (21, 10, 10, 'i2'), (22, 10, 10, 'i3'), (23, 11, 11, 'j1'), (24, 11, 11, 'j2');
+           INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label) VALUES
+             (20, 10, 'issue', 1, '1'), (21, 10, 'issue', 2, '2'), (22, 10, 'issue', 3, '3'),
+             (23, 11, 'issue', 1, '1'), (24, 11, 'issue', 2, '2');
+           INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+             SELECT n, 10, (SELECT min(id) FROM library_folders), 'f' || n, 1, 'q' FROM generate_series(1, 2) n;
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (20, 1, 10, 0, 0), (22, 2, 10, 0, 0)"#,
+    )
+    .await;
+    let add = async |playlist: i32, media: i32| {
+        let uri = format!("/api/playlists/{playlist}/items");
+        c.call(1, "POST", &uri, json!({"mediaId": media})).await
+    };
+    assert_eq!(
+        add(1, 10).await.1,
+        json!({"added": 2}),
+        "the issues with a file"
+    );
+    assert_eq!(
+        add(2, 11).await.1,
+        json!({"added": 2}),
+        "all of them when none has one"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn items_carry_the_details_of_their_kind_and_the_collection(pool: PgPool) {
     let c = ctx(pool).await;
     c.sql(

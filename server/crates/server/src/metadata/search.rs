@@ -391,12 +391,13 @@ pub async fn search_hits(
                 target,
                 cut: Some(PROVIDER_CUT),
             };
-            let mut hits = walk_with(&st, order, &search, Priority::Interactive, &walk).await?;
+            let (mut hits, degraded) =
+                walk_with(&st, order, &search, Priority::Interactive, &walk).await?;
             if book {
                 let wanted = title.as_deref().unwrap_or(&query);
                 rank_books(&mut hits, wanted, author.as_deref(), wanted_year);
             }
-            if super::search_cache::enabled() {
+            if super::search_cache::enabled() && !degraded {
                 md.search_cache.put(key, hits.clone(), Instant::now());
             }
             hits
@@ -535,14 +536,15 @@ pub(crate) struct Walk {
 }
 
 /// The hits of the first provider with any, trying `first` then the providers serving the kind; an
-/// error only when no provider answered.
+/// error only when no provider answered. `degraded` when a provider tried before the answering one failed
+/// or ran past the cut: the answer is not the one a healthy walk gives.
 pub(crate) async fn walk(
     st: &AppState,
     first: impl Iterator<Item = Namespace>,
     search: &Search<'_>,
     prio: Priority,
 ) -> Result<Vec<Value>, AppError> {
-    walk_with(
+    Ok(walk_with(
         st,
         first,
         search,
@@ -552,7 +554,8 @@ pub(crate) async fn walk(
             cut: None,
         },
     )
-    .await
+    .await?
+    .0)
 }
 
 pub(crate) async fn walk_with(
@@ -561,7 +564,7 @@ pub(crate) async fn walk_with(
     search: &Search<'_>,
     prio: Priority,
     how: &Walk,
-) -> Result<Vec<Value>, AppError> {
+) -> Result<(Vec<Value>, bool), AppError> {
     let (md, kind, known) = (&st.metadata, search.kind, st.namespaces());
     let mut order: Vec<Namespace> = vec![];
     for p in first.chain(md.serving(kind)) {
@@ -604,7 +607,7 @@ pub(crate) async fn walk_with(
                     })
                     .collect();
                 if !hits.is_empty() {
-                    return Ok(hits);
+                    return Ok((hits, failed.is_some()));
                 }
                 answered = true;
             }
@@ -616,7 +619,7 @@ pub(crate) async fn walk_with(
     }
     match (answered, failed) {
         (false, Some((p, e))) => Err(unavailable("search", p, &e)),
-        _ => Ok(vec![]),
+        (_, failed) => Ok((vec![], failed.is_some())),
     }
 }
 

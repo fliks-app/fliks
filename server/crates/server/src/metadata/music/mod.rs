@@ -7,6 +7,7 @@ pub mod routes;
 pub mod target;
 #[cfg(test)]
 pub(crate) mod tests;
+pub mod want;
 pub mod works;
 
 pub use apply::{Written, refresh, write_album, write_edition};

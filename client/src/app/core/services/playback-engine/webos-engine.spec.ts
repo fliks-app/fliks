@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { WebOsEngine, webOsSourceType } from './webos-engine';
+import { describe, expect, it, vi } from 'vitest';
+import { WebOsEngine, WebOsLoadError, webOsSourceType } from './webos-engine';
+import { classifyPlaybackError, isUndecodableError } from './playback-error';
 
 function engineWith(video: Record<string, unknown>) {
   const engine = new WebOsEngine();
@@ -76,5 +77,46 @@ describe('webOsSourceType', () => {
 
   it('keeps the HLS type for a manifest whatever the file type', () => {
     expect(typeOf('/hls/master.m3u8', 'video/x-matroska')).toBe('application/vnd.apple.mpegurl');
+  });
+});
+
+describe('WebOsEngine load failures', () => {
+  function loading(fire?: (listeners: Record<string, () => void>) => void) {
+    const listeners: Record<string, () => void> = {};
+    return {
+      error: { code: 4, message: '' },
+      firstChild: null,
+      appendChild: () => undefined,
+      removeChild: () => undefined,
+      removeAttribute: () => undefined,
+      addEventListener: (e: string, fn: () => void) => (listeners[e] = fn),
+      removeEventListener: () => undefined,
+      load: vi.fn(() => queueMicrotask(() => fire?.(listeners))),
+    };
+  }
+
+  it('rejects a native open failure as a media error the copy fallback treats as undecodable', async () => {
+    const engine = new WebOsEngine();
+    (engine as unknown as { video: unknown }).video = loading((l) => l['error']?.());
+    const e = await engine.load('/api/stream/1/direct', 0).then(() => null, (err) => err);
+    expect(e).toBeInstanceOf(WebOsLoadError);
+    expect(classifyPlaybackError(e)).toEqual({ source: 'media', code: 4 });
+    expect(isUndecodableError({ ...classifyPlaybackError(e), message: e.message })).toBe(true);
+  });
+
+  it('rejects a load timeout the same way, without a second attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new WebOsEngine();
+      const v = loading();
+      (engine as unknown as { video: unknown }).video = v;
+      const pending = engine.load('/api/stream/1/direct', 0).then(() => null, (err) => err);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const e = await pending;
+      expect(e).toMatchObject({ name: 'WebOsLoadTimeout', source: 'media', code: 4 });
+      expect(v.load).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

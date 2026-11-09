@@ -67,22 +67,26 @@ pub struct Device {
 
 impl Device {
     pub fn from_profiles(direct_play_profiles: &Value) -> Self {
-        let list = |key: &str| {
-            direct_play_profiles
-                .as_array()
+        let entries = || direct_play_profiles.as_array().into_iter().flatten();
+        let list = |entry: &Value, key: &str| {
+            entry
+                .get(key)
+                .and_then(Value::as_array)
                 .into_iter()
-                .flatten()
-                .filter_map(|p| p.get(key)?.as_array())
                 .flatten()
                 .filter_map(|c| c.as_str().map(str::to_ascii_lowercase))
                 .collect::<Vec<_>>()
         };
+        // An audio-files entry (no video codec) says nothing about the audio of a video file.
+        let video_entries = || entries().filter(|e| !list(e, "videoCodecs").is_empty());
         Self {
-            video: list("videoCodecs")
-                .iter()
-                .filter_map(|c| canonical(c))
+            video: video_entries()
+                .flat_map(|e| list(e, "videoCodecs"))
+                .filter_map(|c| canonical(&c))
                 .collect(),
-            audio: list("audioCodecs").into_iter().collect(),
+            audio: video_entries()
+                .flat_map(|e| list(e, "audioCodecs"))
+                .collect(),
         }
     }
 }
@@ -161,6 +165,16 @@ mod tests {
             Some(Target::Hevc)
         );
         assert_eq!(resolve(&v, &[all], &caps(true)), Some(Target::Av1));
+    }
+
+    #[test]
+    fn the_audio_files_entry_is_not_a_video_audio_codec() {
+        let d = Device::from_profiles(&serde_json::json!([
+            {"containers": ["mp4"], "videoCodecs": ["H264"], "audioCodecs": ["aac"]},
+            {"containers": ["flac"], "videoCodecs": [], "audioCodecs": ["flac"]},
+        ]));
+        assert_eq!(d.audio, ["aac".to_string()].into());
+        assert_eq!(d.video, ["h264"].into());
     }
 
     #[test]

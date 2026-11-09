@@ -31,6 +31,26 @@ pub async fn person(
     mbid: Option<&str>,
     sort_name: Option<&str>,
 ) -> sqlx::Result<i32> {
+    find_or_create(c, name, mbid, sort_name, true).await
+}
+
+/// `person` that never falls back to the name: the person holding `mbid` (live or alias), else a new one.
+pub async fn person_of_id(
+    c: &mut PgConnection,
+    name: &str,
+    mbid: &str,
+    sort_name: Option<&str>,
+) -> sqlx::Result<i32> {
+    find_or_create(c, name, Some(mbid), sort_name, false).await
+}
+
+async fn find_or_create(
+    c: &mut PgConnection,
+    name: &str,
+    mbid: Option<&str>,
+    sort_name: Option<&str>,
+    by_name: bool,
+) -> sqlx::Result<i32> {
     // Lookup and insert are one step: two writers never both create the artist.
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('music:persons'))")
         .execute(&mut *c)
@@ -41,6 +61,7 @@ pub async fn person(
     };
     let found = match by_id {
         Some(id) => Some(id),
+        None if !by_name => None,
         None => {
             sqlx::query_scalar(
                 r#"SELECT p.id FROM persons p

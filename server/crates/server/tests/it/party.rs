@@ -2259,6 +2259,63 @@ async fn a_selection_every_member_cannot_open_is_refused_and_a_member_without_ac
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_edition_a_member_cannot_open_is_refused_for_that_member(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (name) VALUES ('l2');
+           INSERT INTO library_folders ("libraryId", path) VALUES (2, '/l2');
+           INSERT INTO media (id, title, type, "libraryId") VALUES (50, 'Book', 'book', 1);
+           INSERT INTO editions (id, "mediaId", family, "libraryId") VALUES (50, 50, 'text', 1), (51, 50, 'text', 2);
+           INSERT INTO items (id, "mediaId", "editionId") VALUES (50, 50, 50), (51, 50, 51);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+             VALUES (50, 50, 'b1', 1, 'q', 1), (51, 50, 'b2', 1, 'q', 2);
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+             VALUES (50, 50, 50, 0, 0), (51, 51, 50, 0, 0)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    sqlx::query(r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ($1, 2)"#)
+        .bind(alice)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    c.follow(alice, bob).await;
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "room", "inviteeIds": [bob]})),
+        )
+        .await;
+    let url = format!("/api/parties/{}", p["id"]);
+    let _ca = c.connect(alice, "da");
+    let _cb = c.connect(bob, "db");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let join = json!({"deviceId": d});
+        let (s, _) = c.call("POST", &format!("{url}/join"), t, Some(join)).await;
+        assert_eq!(s, 200);
+    }
+    let pick = |item| json!({"items": [{"mediaId": 50, "itemId": item}]});
+    let (s, e) = c
+        .call("PUT", &format!("{url}/programme"), &a, Some(pick(51)))
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_member_no_access")));
+    assert_eq!(e["usernames"], json!(["bob"]));
+    let (s, _) = c
+        .call("PUT", &format!("{url}/programme"), &a, Some(pick(50)))
+        .await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call("PUT", &format!("{url}/programme"), &b, Some(pick(51)))
+        .await;
+    assert_eq!(s, 403, "only the host edits the programme");
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_programme_is_the_source_of_truth_when_the_start_follows_a_head_the_machine_missed(
     pool: PgPool,
 ) {
