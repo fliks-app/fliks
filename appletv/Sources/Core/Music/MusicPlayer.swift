@@ -117,6 +117,14 @@ enum MusicTransport: Equatable {
         begin(startAt: 0, autoplay: true)
     }
 
+    /// Starts a transferred session: the queue at `start`, at `position`, with its shuffle and repeat.
+    func resume(_ tracks: [QueueTrack], from start: Int, shuffle: Bool, repeatMode: RepeatMode, position: Double, autoplay: Bool) {
+        guard !tracks.isEmpty else { return }
+        queue.set(tracks, start: start, shuffle: shuffle)
+        queue.repeatMode = repeatMode
+        begin(startAt: position, autoplay: autoplay)
+    }
+
     func perform(_ transport: MusicTransport) {
         if intercept?(transport) == true { return }
         apply(transport)

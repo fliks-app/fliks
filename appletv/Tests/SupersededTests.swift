@@ -26,4 +26,16 @@ final class SupersededTests: XCTestCase {
         XCTAssertFalse(gate.accept("s1", current: "s1"))
         XCTAssertFalse(gate.accept("s1", current: nil))
     }
+
+    func testLoadCarriesKindAndQueue() throws {
+        let entries = try decode("""
+        [{"type":"remote.command","cmdId":"c1","expiresAt":1,"action":"load","kind":"album","mediaId":4,
+          "queue":{"itemIds":[7,8],"index":1},"shuffle":true,"repeat":"all"}]
+        """)
+        guard case .command(let cmd) = entries[0] else { return XCTFail("command") }
+        XCTAssertEqual(cmd.kind, "album")
+        XCTAssertEqual(cmd.queueItemIds, [7, 8])
+        XCTAssertEqual(cmd.queueIndex, 1)
+        XCTAssertEqual(cmd.repeatMode, "all")
+    }
 }
