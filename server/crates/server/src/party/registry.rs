@@ -208,6 +208,20 @@ impl Parties {
             .is_some_and(|l| l.room.has_user(user))
     }
 
+    /// Whether `user` is a member of a live party through this SSE connection or this device
+    /// (`target` is `deviceId#tab` or a bare device id).
+    pub fn has_member(&self, user: i32, connection: Option<&str>, target: Option<&str>) -> bool {
+        let device = target.and_then(|t| t.split('#').next());
+        self.inner().live.values().any(|l| {
+            l.room.members.iter().any(|m| {
+                m.user_id == user
+                    && (connection == Some(m.connection_id.as_str())
+                        || target == Some(m.device_id.as_str())
+                        || device == Some(m.device_id.as_str()))
+            })
+        })
+    }
+
     /// Whether an `ended` from this device would take effect right now.
     pub fn can_end(&self, id: i32, user: i32, device: &str, item: Option<&Item>) -> bool {
         self.inner()
@@ -821,4 +835,24 @@ pub async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
         },
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fliks_domain::party::Policy;
+
+    #[test]
+    fn a_member_is_found_by_connection_or_device_but_only_for_its_own_user() {
+        let parties = Parties::default();
+        let mut live = Live::new("room".into(), Policy::Everyone, 1, 0);
+        live.join(1, "a", "dev", "conn", 0);
+        parties.inner().live.insert(7, live);
+        assert!(parties.has_member(1, Some("conn"), None));
+        assert!(parties.has_member(1, None, Some("dev#tab")));
+        assert!(parties.has_member(1, None, Some("dev")));
+        assert!(!parties.has_member(2, Some("conn"), Some("dev#tab")));
+        assert!(!parties.has_member(1, Some("other"), Some("tv#tab")));
+        assert!(!parties.has_member(1, None, None));
+    }
 }

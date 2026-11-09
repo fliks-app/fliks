@@ -264,6 +264,44 @@ async fn a_parked_owner_that_beats_again_resumes_and_a_new_beat_keeps_the_queue(
     );
 }
 
+#[sqlx::test(migrations = false)]
+async fn a_revived_session_of_a_device_that_lost_the_screen_stays_superseded(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.ended(&st, "s1").await;
+    assert_eq!(s.beat(&st, beat(u, "s2", "tB", i)).await, Verdict::Current);
+    assert_eq!(
+        s.beat(&st, beat(u, "s1", "tA", i)).await,
+        Verdict::Superseded
+    );
+    assert!(s.is_superseded(u, "s1").await);
+    assert_eq!(row(&st, u).await.unwrap().session_id, "s2");
+    s.0.lock().await.claimed.get_mut("s1").unwrap().ended_at = Some(0);
+    s.sweep(&st).await;
+    assert!(
+        !s.is_superseded(u, "s1").await,
+        "forgotten past the revive window"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_out_of_scope_sid_reads_the_preference_once_until_it_ends(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", false, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Ignored);
+    sqlx::query(r#"UPDATE users SET "sessionSync" = true WHERE id = $1"#)
+        .bind(u)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Ignored);
+    s.ended(&st, "s1").await;
+    assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Current);
+}
+
 #[test]
 fn a_beat_queue_is_taken_only_when_well_formed() {
     let q = |v: serde_json::Value| QueueState::from_beat(&v);

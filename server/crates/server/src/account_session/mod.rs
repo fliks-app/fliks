@@ -15,7 +15,11 @@ use crate::{
 use chrono::{DateTime, Utc};
 use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::Mutex;
 
 /// The old owner saves its position before its engine session goes.
@@ -125,11 +129,33 @@ struct Entry {
     persisted_pos: f64,
 }
 
+/// A sid that claimed: its target, and when its engine session ended (ms).
+struct Claim {
+    target: Option<String>,
+    ended_at: Option<i64>,
+}
+
 #[derive(Default)]
 struct Inner {
     rows: HashMap<i32, Entry>,
-    /// Every sid that claimed, with its target: a sid claims once (rule 4).
-    claimed: HashMap<String, Option<String>>,
+    /// Every sid that claimed: a sid claims once (rule 4), and an ended one stays until the engine
+    /// can no longer revive it.
+    claimed: HashMap<String, Claim>,
+    /// Sids found out of scope at their first beat, so later beats skip the preference read.
+    unscoped: HashSet<String>,
+}
+
+impl Inner {
+    /// What a beat of an already claimed `sid` is for `account` (rule 8).
+    fn claimed_verdict(&self, account: i32, sid: &str) -> Option<Verdict> {
+        let claim = self.claimed.get(sid)?;
+        Some(
+            match self.rows.get(&account).map(|e| &e.row.owner.target_id) {
+                Some(owner) if owner != &claim.target => Verdict::Superseded,
+                _ => Verdict::Ignored,
+            },
+        )
+    }
 }
 
 /// What a beat changes for its sender (`session.md` rule 8).
@@ -234,19 +260,28 @@ impl AccountSessions {
         if current {
             return Self::update(st, &mut g, b).await;
         }
-        if let Some(target) = g.claimed.get(&b.sid) {
-            let same_device = g.rows.get(&b.account).map(|e| &e.row.owner.target_id);
-            return match same_device {
-                None => Verdict::Ignored,
-                Some(owner) if owner == target => Verdict::Ignored,
-                Some(_) => Verdict::Superseded,
-            };
+        if let Some(v) = g.claimed_verdict(b.account, &b.sid) {
+            return v;
         }
-        if b.owner.target_id.is_none() || !store::in_scope(&st.db, b.account, b.kind).await {
+        if b.owner.target_id.is_none() || g.unscoped.contains(&b.sid) {
+            return Verdict::Ignored;
+        }
+        if !store::in_scope(&st.db, b.account, b.kind).await {
+            g.unscoped.insert(b.sid);
             return Verdict::Ignored;
         }
         Self::claim(st, &mut g, b).await;
         Verdict::Current
+    }
+
+    /// Whether a beat of `sid` is superseded, whatever else is known of its sender.
+    pub async fn is_superseded(&self, account: i32, sid: &str) -> bool {
+        let g = self.0.lock().await;
+        let current = g
+            .rows
+            .get(&account)
+            .is_some_and(|e| e.row.session_id == sid);
+        !current && g.claimed_verdict(account, sid) == Some(Verdict::Superseded)
     }
 
     async fn update(st: &AppState, g: &mut Inner, b: BeatIn) -> Verdict {
@@ -293,7 +328,11 @@ impl AccountSessions {
     }
 
     async fn claim(st: &AppState, g: &mut Inner, b: BeatIn) {
-        g.claimed.insert(b.sid.clone(), b.owner.target_id.clone());
+        let claim = Claim {
+            target: b.owner.target_id.clone(),
+            ended_at: None,
+        };
+        g.claimed.insert(b.sid.clone(), claim);
         let prior = g.rows.remove(&b.account);
         let same_owner = prior
             .as_ref()
@@ -386,10 +425,13 @@ impl AccountSessions {
         }
     }
 
-    /// The engine session `sid` ended: its row is parked and the sid forgotten (rule 14b).
+    /// The engine session `sid` ended: its row is parked and the claim kept for the revive window (rule 14b).
     pub async fn ended(&self, st: &AppState, sid: &str) {
         let mut g = self.0.lock().await;
-        g.claimed.remove(sid);
+        g.unscoped.remove(sid);
+        if let Some(c) = g.claimed.get_mut(sid) {
+            c.ended_at = Some(now_ms() as i64);
+        }
         let Some(e) = g
             .rows
             .values_mut()
@@ -406,6 +448,12 @@ impl AccountSessions {
     pub async fn sweep(&self, st: &AppState) {
         let mut g = self.0.lock().await;
         Self::park_silent(st, &mut g, None).await;
+        let revive =
+            i64::from(crate::engine::lifetime(|k| std::env::var(k).ok()).session_revive_ttl_ms);
+        let now = now_ms() as i64;
+        g.claimed.retain(|sid, c| {
+            c.ended_at.is_none_or(|t| now - t < revive) || st.presence.peek(sid).is_some()
+        });
         let cutoff = Utc::now() - PARKED_TTL;
         let old: Vec<i32> = g
             .rows
