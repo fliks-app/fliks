@@ -29,6 +29,8 @@ export const VERIFIABLE_PROVIDERS = [
   'directml',
 ] as const;
 const MIN_BUDGET_MB = 256;
+/** Microsoft's page of the Windows App SDK runtime installers, which hold the Windows ML runtime. */
+export const WINDOWS_ML_INSTALL_URL = 'https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads';
 
 @Component({
   selector: 'app-karaoke-settings',
@@ -45,6 +47,8 @@ export class KaraokeSettingsComponent implements OnInit {
 
   protected readonly providers = VERIFIABLE_PROVIDERS;
   protected readonly minBudget = MIN_BUDGET_MB;
+  protected readonly windowsMlUrl = WINDOWS_ML_INSTALL_URL;
+  protected readonly checking = signal(false);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly enabled = signal(false);
@@ -101,6 +105,12 @@ export class KaraokeSettingsComponent implements OnInit {
       this.catalogue.set(null);
       this.unavailable.set(true);
     }
+  }
+
+  protected async recheck(): Promise<void> {
+    this.checking.set(true);
+    await this.loadModels();
+    this.checking.set(false);
   }
 
   private replace(model: KaraokeModel): void {

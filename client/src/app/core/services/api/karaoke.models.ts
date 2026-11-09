@@ -39,6 +39,8 @@ export interface KaraokeRuntime {
   providers: string[];
   whisper: boolean;
   rubberband: boolean;
+  /** Windows 11 only: the engine runs the system Windows ML runtime, would after a restart, or lacks it. */
+  windowsMl?: 'active' | 'restart' | 'missing';
 }
 
 export interface KaraokeModels {
