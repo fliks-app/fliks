@@ -139,6 +139,8 @@ export class SessionSyncService {
   private readonly registered = signal(0);
   private readonly resumers: Partial<Record<MediaFamily, SessionResumer>> = {};
   private readonly handled: string[] = [];
+  /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
+  private readonly tick = signal(0);
   private fetching = false;
   private refetch = false;
 
@@ -150,6 +152,12 @@ export class SessionSyncService {
         if (on && connected) void this.refresh();
         else if (!on) this._session.set(null);
       });
+    });
+
+    effect((onCleanup) => {
+      if (this._session()?.state !== 'playing' || this.role() !== 'observer') return;
+      const timer = setInterval(() => this.tick.update((n) => n + 1), 1000);
+      onCleanup(() => clearInterval(timer));
     });
 
     this.registerResumer('video', async (s, positionSeconds) => {
@@ -260,6 +268,7 @@ export class SessionSyncService {
 
   /** The session's position now: the owner's report when observed, else the stored anchor. */
   positionNow(s: AccountSession): number {
+    this.tick();
     if (this.live()) return this.livePosition();
     if (!s.playing) return s.positionSeconds;
     const elapsed = (this.clock.serverNow() - Date.parse(s.positionAt)) / 1000;

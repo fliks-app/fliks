@@ -38,7 +38,12 @@ function session(over: Partial<AccountSession> = {}): AccountSession {
 }
 
 async function setup(account: AccountSession | null, live = true) {
-  const sync = { session: signal(account), parked: signal(account?.state === 'parked'), role: signal(account ? 'observer' : 'none') };
+  const sync = {
+    session: signal(account),
+    parked: signal(account?.state === 'parked'),
+    role: signal(account ? 'observer' : 'none'),
+    positionNow: (s: AccountSession) => s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0),
+  };
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
   const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn() };
   TestBed.configureTestingModule({
@@ -72,10 +77,21 @@ describe('RemoteAudioOutput', () => {
 
   it('reads the stored position and no playback while the session is parked', async () => {
     const { out } = await setup(session({ state: 'parked', playing: false }), false);
-    expect(out.live()).toBe(false);
+    expect(out.controllable()).toBe(false);
     expect(out.playing()).toBe(false);
     expect(out.position()).toBe(64);
     expect(out.duration()).toBe(200);
+  });
+
+  it('follows the stored anchor of a playing session while its owner has not reported', async () => {
+    const at = new Date(Date.now() - 10_000).toISOString();
+    const { out, sync } = await setup(session({ positionAt: at }), false);
+    expect(out.controllable()).toBe(true);
+    expect(out.playing()).toBe(true);
+    expect(out.position()).toBeGreaterThanOrEqual(74);
+    expect(out.position()).toBeLessThan(76);
+    sync.session.set(session({ positionAt: at, positionSeconds: 199, durationSeconds: 200 }));
+    expect(out.position()).toBe(200);
   });
 
   it('sends every action to the observed target', async () => {
