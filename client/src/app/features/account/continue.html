@@ -1,0 +1,34 @@
+<div class="max-w-2xl flex flex-col gap-4">
+  <app-toggle-field
+    [value]="enabled()"
+    (valueChange)="setEnabled($event)"
+    [label]="'session.settings_title' | translate"
+    [hint]="'session.settings_hint' | translate"
+  />
+
+  @if (enabled()) {
+    <div class="join" role="group" [attr.aria-label]="'session.settings_title' | translate">
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="scopeAll()" [attr.aria-pressed]="scopeAll()" (click)="setScope(true)">
+        {{ 'session.scope_all' | translate }}
+      </button>
+      <button type="button" class="btn btn-sm join-item" [class.btn-active]="!scopeAll()" [attr.aria-pressed]="!scopeAll()" (click)="setScope(false)">
+        {{ 'session.scope_chosen' | translate }}
+      </button>
+    </div>
+
+    @if (!scopeAll()) {
+      <div class="flex flex-wrap gap-2 p-1">
+        @for (k of kinds; track k) {
+          <button type="button" class="btn btn-sm" [class.btn-primary]="isChosen(k)" [attr.aria-pressed]="isChosen(k)" (click)="toggleKind(k)">
+            {{ label(k) }}
+            @if (resumeOnly(k)) {
+              <span class="text-sm opacity-70">{{ 'session.resume_only' | translate }}</span>
+            }
+          </button>
+        }
+      </div>
+    }
+
+    <p class="text-sm text-base-content/60">{{ 'session.settings_note' | translate }}</p>
+  }
+</div>
