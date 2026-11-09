@@ -232,6 +232,7 @@ async fn only_a_parked_row_can_be_dismissed(pool: PgPool) {
     let s = &st.account_sessions;
     assert!(s.dismiss(&st, u).await.is_ok(), "no row is a no-op");
     s.beat(&st, beat(u, "s1", "tA", i)).await;
+    alive(&st, "s1");
     assert!(s.dismiss(&st, u).await.is_err());
     s.ended(&st, "s1").await;
     assert!(s.dismiss(&st, u).await.is_ok());
@@ -476,6 +477,28 @@ async fn a_video_sid_beating_after_a_reader_save_claims_normally(pool: PgPool) {
     assert!(!s.is_superseded("s1").await);
     assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Current);
     assert_eq!(row(&st, u).await.unwrap().session_id, "s1");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_revived_superseded_sid_stays_superseded_after_a_reader_save(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.ended(&st, "s1").await;
+    assert_eq!(s.beat(&st, beat(u, "s2", "tB", i)).await, Verdict::Current);
+    s.ended(&st, "s2").await;
+    let mut r = reading(u, i, 0.3);
+    r.owner.target_id = Some("tC".into());
+    s.reading(&st, r).await;
+    assert_eq!(row(&st, u).await.unwrap().session_id, format!("reader:{i}"));
+    assert!(s.is_superseded("s1").await);
+    assert_eq!(
+        s.beat(&st, beat(u, "s1", "tA", i)).await,
+        Verdict::Superseded
+    );
+    assert!(!s.is_superseded("s2").await, "the replaced row's own sid");
+    assert_eq!(s.beat(&st, beat(u, "s2", "tB", i)).await, Verdict::Current);
 }
 
 #[sqlx::test(migrations = false)]
