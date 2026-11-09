@@ -1413,6 +1413,7 @@ export class AudioPlayerService {
         mediaFileId: info.mediaFileId,
         itemId: track.itemId,
         sessionId: this.sessionId,
+        handoff: this.sessionSync.handoffFor(this.sessionId),
         state: this._playing() ? ('playing' as const) : ('paused' as const),
         ...this.volumeReport(),
       } satisfies BeatBody,

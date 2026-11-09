@@ -13,10 +13,17 @@ final class SupersededTests: XCTestCase {
          {"type":"remote.targetsChanged"}]
         """)
         guard case .command(let cmd) = entries[0], cmd.action == "stop" else { return XCTFail("command") }
-        guard case .superseded(let sid, let device) = entries[1] else { return XCTFail("superseded") }
+        guard case .superseded(let sid, let device, let silent) = entries[1] else { return XCTFail("superseded") }
         XCTAssertEqual(sid, "s1")
         XCTAssertEqual(device, "Phone")
+        XCTAssertFalse(silent)
         guard case .other = entries[2] else { return XCTFail("other") }
+    }
+
+    func testSilentFlagIsDecoded() throws {
+        let entries = try decode(#"[{"type":"session.superseded","sessionId":"s1","byDeviceName":null,"epoch":2,"silent":true}]"#)
+        guard case .superseded(_, _, let silent) = entries[0] else { return XCTFail("superseded") }
+        XCTAssertTrue(silent)
     }
 
     func testGateActsOnceAndOnlyOnTheCurrentSession() {

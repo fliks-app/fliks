@@ -49,6 +49,7 @@ fn beat(account: i32, sid: &str, target: &str, item: i32) -> BeatIn {
         position: 10.0,
         duration: Some(100.0),
         queue: None,
+        handoff: false,
     }
 }
 
@@ -523,4 +524,50 @@ async fn the_sweep_stamps_a_claim_without_presence(pool: PgPool) {
     s.beat(&st, beat(u, "s1", "tA", i)).await;
     s.sweep(&st).await;
     assert!(s.0.lock().await.claimed["s1"].ended_at.is_some());
+}
+
+#[test]
+fn a_transfer_record_is_consumed_by_one_claim_of_its_item_inside_the_ttl() {
+    let rec = |g: &mut Inner| {
+        g.handoffs
+            .insert((1, "tB".into()), (7, 1_000 + HANDOFF_TTL_MS));
+    };
+    let mut g = Inner::default();
+    rec(&mut g);
+    assert!(g.take_handoff(1, Some("tB"), 7, 1_000));
+    assert!(!g.take_handoff(1, Some("tB"), 7, 1_000), "consumed once");
+
+    rec(&mut g);
+    assert!(
+        !g.take_handoff(1, Some("tB"), 8, 1_000),
+        "another item is a plain takeover"
+    );
+    assert!(
+        !g.take_handoff(1, Some("tB"), 7, 1_000),
+        "and it dropped the record"
+    );
+
+    rec(&mut g);
+    assert!(
+        !g.take_handoff(1, Some("tB"), 7, 1_000 + HANDOFF_TTL_MS),
+        "lapsed"
+    );
+    assert!(g.handoffs.is_empty());
+
+    rec(&mut g);
+    assert!(!g.take_handoff(2, Some("tB"), 7, 1_000), "another account");
+    assert!(!g.take_handoff(1, None, 7, 1_000));
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_expected_transfer_lapses_with_the_next_record(pool: PgPool) {
+    let st = state(&pool).await;
+    let s = &st.account_sessions;
+    s.0.lock().await.handoffs.insert((1, "old".into()), (7, 0));
+    s.expect_handoff(1, "tB", 7).await;
+    let g = s.0.lock().await;
+    assert_eq!(
+        g.handoffs.keys().collect::<Vec<_>>(),
+        [&(1, "tB".to_owned())]
+    );
 }

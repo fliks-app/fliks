@@ -253,6 +253,7 @@ async fn a_second_device_takes_the_session_and_the_first_is_told_once(pool: PgPo
         (told[0]["sessionId"].clone(), told[0]["epoch"].clone()),
         (json!("s1"), json!(2))
     );
+    assert_eq!(told[0]["silent"], false, "a plain takeover is announced");
     assert!(of(&on_b, "session.superseded").is_empty());
     for stream in [&on_a, &on_b] {
         assert!(!of(stream, "session.changed").is_empty(), "{stream:?}");
@@ -361,4 +362,59 @@ async fn a_transfer_loads_the_session_on_the_target_only_and_changes_nothing(poo
     );
     assert_eq!(still["item"]["mediaId"], c.media);
     assert!(still["item"]["episodeId"].is_null());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_that_says_handoff_supersedes_silently(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (mut a, conn_a) = c.device("A#t").await;
+    let (_b, conn_b) = c.device("B#t").await;
+    c.presence("s1", &conn_a);
+    c.presence("s2", &conn_b);
+    c.beat("s1", 100.0, json!({})).await;
+    drain(&mut a).await;
+
+    c.beat("s2", 150.0, json!({"handoff": true})).await;
+    let on_a = drain(&mut a).await;
+    let told = of(&on_a, "session.superseded");
+    assert_eq!(told.len(), 1, "{on_a:?}");
+    assert_eq!(told[0]["silent"], true);
+    let (_, late) = c.beat("s1", 900.0, json!({})).await;
+    assert_eq!(
+        late,
+        json!({"superseded": true}),
+        "the beat answer is unchanged"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_transfer_makes_the_targets_first_claim_silent_once(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (mut a, conn_a) = c.device("A#t").await;
+    let (mut b, conn_b) = c.device("B#t").await;
+    c.presence("s1", &conn_a);
+    c.presence("s2", &conn_b);
+    c.presence("s3", &conn_a);
+    c.beat("s1", 100.0, json!({})).await;
+    let to_b = Some(json!({ "toTargetId": "B#t" }));
+    assert_eq!(c.call("POST", "/api/session/transfer", to_b).await.0, 202);
+    drain(&mut a).await;
+    drain(&mut b).await;
+
+    c.beat("s2", 100.0, json!({})).await;
+    let on_a = drain(&mut a).await;
+    assert_eq!(
+        of(&on_a, "session.superseded")[0]["silent"],
+        true,
+        "{on_a:?}"
+    );
+
+    // The record was consumed: A taking it back is a plain takeover.
+    c.beat("s3", 200.0, json!({})).await;
+    let on_b = drain(&mut b).await;
+    assert_eq!(
+        of(&on_b, "session.superseded")[0]["silent"],
+        false,
+        "{on_b:?}"
+    );
 }
