@@ -64,17 +64,17 @@
         </button>
       }
       @if (rows().length) {
-        <div class="min-h-0 flex-1 overflow-y-auto">
+        <div class="scroll-ring-safe min-h-0 flex-1 overflow-y-auto">
           <div class="px-1 pb-1 text-sm font-medium text-base-content/60">{{ 'music_player.queue' | translate }}</div>
-          <ul class="scroll-ring-safe">
-            @for (r of rows(); track $index) {
+          <ul>
+            @for (r of rows(); track r.wireIndex; let i = $index) {
               <li>
-                <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left" [class.text-primary]="r.itemId === s.item.id"
-                        [disabled]="!live()" (click)="playAt($index)">
-                  <span class="w-6 text-right text-sm text-base-content/60">{{ $index + 1 }}</span>
+                <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left" [class.text-primary]="r.wireIndex === queue()?.index"
+                        [disabled]="!live()" (click)="playAt(r.wireIndex)">
+                  <span class="w-6 text-right text-sm text-base-content/60">{{ i + 1 }}</span>
                   <span class="min-w-0">
-                    <span class="block truncate text-sm">{{ r.title }}</span>
-                    <span class="block truncate text-sm text-base-content/60">{{ r.artists }}</span>
+                    <span class="block truncate text-sm">{{ r.row.title }}</span>
+                    <span class="block truncate text-sm text-base-content/60">{{ r.row.artists }}</span>
                   </span>
                 </button>
               </li>

@@ -50,6 +50,8 @@ export class RemotePickerListComponent {
   /** Emit the pick instead of acting, so a host with a running session moves that playback itself; leaving a device is never delegated. */
   readonly delegate = input(false);
   readonly picked = output<PickerRow>();
+  /** The main press of a device row moves the account session to it instead of selecting it. */
+  readonly transferOnly = input(false);
 
   protected readonly remote = inject(RemoteService);
   protected readonly castService = inject(CastService);
@@ -75,9 +77,10 @@ export class RemotePickerListComponent {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
     const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
+    const position = this.sync.positionNow(s);
     return {
       title: s.item.title,
-      detail: s.item.subtitle ? `${s.item.subtitle} · ${formatTime(s.positionSeconds)}` : formatTime(s.positionSeconds),
+      detail: s.item.subtitle ? `${s.item.subtitle} · ${formatTime(position)}` : formatTime(position),
       device,
       parked: this.sync.parked(),
     };
@@ -187,6 +190,10 @@ export class RemotePickerListComponent {
   }
 
   selectRow(row: PickerRow): void {
+    if (this.transferOnly() && row.kind === 'remote') {
+      if (this.canTransfer(row)) void this.transfer(row);
+      return;
+    }
     // The system picker is also where AirPlay is left, so `connected` changes
     // nothing here.
     if (row.kind === 'airplay') {

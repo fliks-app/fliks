@@ -132,6 +132,8 @@ export class SessionSyncService {
     this.registerResumer('video', async (s, positionSeconds) => {
       if (!s.item.mediaFileId) return;
       const episode = s.item.episodeId ? { episodeId: s.item.episodeId } : {};
+      // A mounted player reuses its route: leave /watch first so it remounts on the new file.
+      if (this.router.url.startsWith('/watch')) await this.router.navigateByUrl('/', { skipLocationChange: true });
       await this.router.navigate(['/watch', s.item.mediaFileId], {
         queryParams: { mediaId: s.item.mediaId, ...episode, t: Math.floor(positionSeconds) },
       });
@@ -240,6 +242,7 @@ export class SessionSyncService {
 
   private resumerFor(s: AccountSession): SessionResumer | undefined {
     const family = s.item.family ?? KIND_REGISTRY[s.item.kind].families.find((f) => this.resumers[f]);
+    if (family === 'video' && !s.item.mediaFileId) return undefined;
     return family && this.resumers[family];
   }
 

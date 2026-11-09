@@ -311,7 +311,7 @@ export class RemoteService {
       untracked(() => {
         if (id === observed) return;
         observed = id;
-        if (id !== this.selectedTargetId()) this.reportedState.set(null);
+        if (!id || id !== this.selectedTargetId()) this.reportedState.set(null);
         if (id) void this.refreshTargets();
       });
     });
@@ -407,9 +407,12 @@ export class RemoteService {
   /** `load` is the one action the player cannot own: its command effect filters
    *  on the file it already has, and an idle device has no player at all. */
   private async applyLoad(cmd: RemoteCommand): Promise<void> {
+    // Only an on-screen player needs the bounce to remount; elsewhere it would flash the home page.
+    const overPlayer = this.router.url.startsWith('/watch');
     const loader = this.loaderFor(cmd);
     if (loader) {
       this.lastAppliedCmdId.set(cmd.cmdId);
+      if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
       return loader(cmd);
     }
     if (!cmd.mediaFileId) {
@@ -421,8 +424,6 @@ export class RemoteService {
     if (cmd.mediaId) queryParams['mediaId'] = cmd.mediaId;
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
-    // Only an on-screen player needs the bounce to remount; elsewhere it would flash the home page.
-    const overPlayer = this.router.url.startsWith('/watch');
     if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
     await this.router.navigate(['/watch', cmd.mediaFileId], {
       queryParams,
