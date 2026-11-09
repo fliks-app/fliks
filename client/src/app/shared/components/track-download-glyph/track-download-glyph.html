@@ -1,0 +1,7 @@
+@if (task(); as d) {
+  @if (d.status === 'ready') {
+    <svg lucideCircleArrowDown class="size-4 shrink-0 text-primary" [attr.aria-label]="'downloads.on_device' | translate" data-testid="on-device"></svg>
+  } @else {
+    <span class="radial-progress shrink-0 text-primary" [style.--value]="d.progress" style="--size: 0.875rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress" [attr.aria-label]="'downloads.downloading' | translate"></span>
+  }
+}

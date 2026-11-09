@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
+import { LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePause, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -44,7 +44,7 @@ interface DiscView {
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
     DropdownMenuComponent, ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent,
-    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers,
+    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePause, LucidePlay, LucideShuffle, LucideUsers,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -56,7 +56,7 @@ export class AlbumPageComponent {
 
   private readonly music = inject(MusicApiService);
   private readonly likes = inject(LikesApiService);
-  private readonly player = inject(AudioPlayerService);
+  protected readonly player = inject(AudioPlayerService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
@@ -132,10 +132,20 @@ export class AlbumPageComponent {
     return toTrackRequest(t, facts);
   }
 
-  protected play(startItemId?: number, shuffle = false): Promise<void> {
+  protected play(startItemId?: number): Promise<void> {
     const list = this.playable();
     const start = startItemId == null ? 0 : Math.max(0, list.findIndex((t) => t.itemId === startItemId));
-    return this.player.playTracks(list.map((t) => this.request(t)), start, shuffle ? { shuffle: true } : undefined);
+    return this.player.playTracks(list.map((t) => this.request(t)), start);
+  }
+
+  protected readonly playingItemId = computed(() => (this.player.musicMode() ? this.player.track()?.itemId : null));
+  private readonly albumLoaded = computed(() => this.player.musicMode() && this.player.track()?.mediaId === this.media().id);
+  protected readonly albumPlaying = computed(() => this.albumLoaded() && this.player.playing());
+
+  /** Pauses or resumes this album when it is the one loaded, else starts it. */
+  protected togglePlay(): void {
+    if (this.albumLoaded()) this.player.toggle();
+    else void this.play();
   }
 
   protected readonly playableIds = computed(() => this.playable().map((t) => t.itemId));

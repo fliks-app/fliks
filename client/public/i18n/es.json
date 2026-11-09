@@ -2134,8 +2134,6 @@
     "auto_rule_label": "Descarga automática:",
     "episodes_queued_one": "Se descargará 1 episodio",
     "episodes_queued_other": "Se descargarán {{count}} episodios",
-    "tracks_added_one": "{{count}} pista añadida a las descargas",
-    "tracks_added_other": "{{count}} pistas añadidas a las descargas",
     "tracks_failed_one": "No se pudo descargar {{count}} pista",
     "tracks_failed_other": "No se pudieron descargar {{count}} pistas",
     "tracks_already": "Ya está en este dispositivo",

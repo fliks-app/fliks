@@ -139,7 +139,7 @@ export class MusicQueue {
     this.pos = -1;
   }
 
-  private neighbour(step: 1 | -1): MusicTrackRequest | null {
+  neighbour(step: 1 | -1): MusicTrackRequest | null {
     const n = this.list.length;
     if (!n || this.pos < 0) return null;
     const i = this.pos + step;

@@ -1,9 +1,11 @@
 @if (downloads.available()) {
   <button type="button" [class]="buttonClass()" [disabled]="busy()" [attr.aria-label]="label() | translate" [title]="label() | translate" (click)="press()" data-testid="music-download">
-    @if (busy()) {
-      <span class="loading loading-spinner loading-xs"></span>
+    @if (progress(); as p) {
+      <span class="radial-progress text-primary" [style.--value]="p" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="p"></span>
+    } @else if (busy()) {
+      <span class="radial-progress text-primary" style="--value: 0; --size: 1.25rem; --thickness: 2px" role="progressbar" aria-valuenow="0"></span>
     } @else if (state() === 'all') {
-      <svg lucideCircleCheck [class]="iconClass()"></svg>
+      <svg lucideCircleArrowDown [class]="iconClass()" class="text-primary"></svg>
     } @else {
       <svg lucideDownload [class]="iconClass()"></svg>
     }

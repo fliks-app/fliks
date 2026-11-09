@@ -547,6 +547,25 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   .mini-player-out { animation-duration: 1ms; }
 }
 
+/* A new mini player cover fades in over the old one, which stays until it is covered. */
+.cover-in {
+  z-index: 1;
+  animation: cover-in 250ms ease-out;
+}
+.cover-out {
+  animation: cover-hold 250ms;
+}
+@keyframes cover-in {
+  from { opacity: 0; }
+}
+@keyframes cover-hold {
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover-in,
+  .cover-out { animation-duration: 1ms; }
+}
+
 /* KeyboardReorderDirective: the held item shows it can move either way, inside its own box so a scrolling row cannot clip it. */
 .reorder-held::before,
 .reorder-held::after {
