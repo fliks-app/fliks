@@ -47,7 +47,7 @@ describe('AudioPlayerService', () => {
             positionRequest: () => ({ url: '/x', init: {} }),
           },
         },
-        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}), getAudioProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
         { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true } },

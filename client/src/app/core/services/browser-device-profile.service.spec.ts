@@ -588,3 +588,19 @@ describe('BrowserDeviceProfileService: TV codec detection', () => {
     }
   });
 });
+
+describe('BrowserDeviceProfileService, getAudioProfile', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('appends an audio-only entry the audio element opens and keeps the video entries', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation((m) => (m === 'audio/mpeg' ? 'probably' : ''));
+    const service = configure({ isTv: () => false, tvPlatform: () => null, isDesktopNative: () => false } as DeviceService);
+    const video = service.getProfile().directPlayProfiles;
+    const list = service.getAudioProfile().directPlayProfiles;
+    expect(list.slice(0, -1)).toEqual(video);
+    expect(list.at(-1)).toEqual({ containers: ['mp3'], videoCodecs: [], audioCodecs: ['mp3'] });
+  });
+});
