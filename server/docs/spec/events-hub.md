@@ -156,6 +156,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
 | 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed (`plugins.md` rule 63) |
+| 40b | `acquisition.queue` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue (`plugins.md` rule 75) |
 | 41 | `party.state` | C (each member of the party) | `{partyId: number, rev: number, state: 'idle'|'waiting'|'paused'|'playing', item: PartyItem, anchor: {position: number, serverTimeMs: number}, whenMs: number|null, by: {userId, username}|null, action: string|null}` (`watch-party.md`) |
 | 42 | `party.members` | C (members) | `{partyId, rev, members: PartyMember[]}` |
 | 43 | `party.settings` | C (members) | `{partyId, rev, name: string, policy: 'everyone'|'host_only'}` |

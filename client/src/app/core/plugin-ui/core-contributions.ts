@@ -15,6 +15,8 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
 
   { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', action: { kind: 'route', path: '/requests' } },
+  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
+  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
 ];
 

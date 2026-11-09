@@ -2,9 +2,7 @@
 use super::harness::*;
 use fliks_server::events::DomainEvent;
 use fliks_server::plugins::acquisition;
-use fliks_server::plugins::runtime::fliks::plugin::types::{
-    CandidatesQuery, DownloadProgress, DownloadState, Target,
-};
+use fliks_server::plugins::runtime::fliks::plugin::types::{CandidatesQuery, Target};
 use fliks_server::plugins::sweep::Outcome;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -153,25 +151,13 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     // A media with a download in flight at any plugin is skipped.
     forget(&h).await;
     offer(&h, A, json!([release("a", 3)])).await;
-    let held = DownloadProgress {
-        ref_: "o".into(),
-        unit: None,
-        progress: 0.1,
-        bytes_per_second: None,
-        eta_seconds: None,
-        state: DownloadState::Active,
-    };
-    let gates = fliks_server::plugins::events::progress_gates();
-    gates
-        .set(&h.st, "other", 1, std::slice::from_ref(&held))
-        .await
-        .unwrap();
+    queue_set(&h, "other", 1, &["o"]).await;
     assert_eq!(
         h.st.plugins.acquire(&t1).await,
         Outcome::Skipped("in flight")
     );
     assert!(grabbed(&h, A, 1).await.is_none());
-    gates.set(&h.st, "other", 1, &[]).await.unwrap();
+    queue_set(&h, "other", 1, &[]).await;
 
     // A request sweeps that media only.
     h.st.hub

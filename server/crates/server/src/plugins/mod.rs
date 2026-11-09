@@ -20,6 +20,8 @@ pub mod outbound;
 pub mod packages;
 pub mod picker;
 pub mod provider;
+pub mod queue;
+pub mod queue_routes;
 mod register;
 pub mod registry;
 pub mod routes;
@@ -356,6 +358,7 @@ impl Plugins {
                     .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
             }
             events::progress_gates().forget(app, id).await;
+            queue::close_plugin(app, id).await;
         }
         self.registry.withdraw(id, true);
     }

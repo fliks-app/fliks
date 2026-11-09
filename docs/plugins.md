@@ -53,10 +53,10 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   |---|---|
   | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, `media.resolveOrCreate` (it tells which titles exist), and, because both answer with media identity for the whole library, `acquisition.candidates` and `releases.match` |
   | `media:create` | `media.resolveOrCreate` (with `media:read`): adds a title to a library when none holds it. The import runs the request hooks, so it also adopts and approves the pending requests for that title. An update that newly declares it waits for an admin. |
-  | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet` |
+  | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet`, `acquisition.inFlight`, `queue.set` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
-  | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set`, `progress.set` |
+  | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set` |
   | `config:rw` | `config.get`, `config.set` |
 
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
@@ -131,6 +131,15 @@ answer is the whole list, no streaming), ranks the releases across providers by 
 and POSTs the `grab` route of the best one's provider with the release's fields. A `search` called
 that way answers the releases the provider would grab, best first; the core drops any with a
 rejection. A provider's own feed sync stays its own and checks `acquisition.inFlight` first.
+
+The core owns the queue and the history; a provider only runs transfers. It reports them with
+`queue.set` (scope `acquisition:candidates`), its **full** list of transfers at each change and at
+each poll: entries are upserted by `ref` (its own stable id for a transfer), the open ones missing
+from the list close as removed, and a transfer that finished is reported once with the state
+`imported` or `failed`. The core shows one Queue and one History page. To let a user act on an open
+entry, declare `acquisition.queueActions` in the manifest, each a `POST` route of the plugin:
+`{"pause": "/queue/pause", "resume": ..., "remove": ..., "retryImport": ...}`; the core calls it as
+the system with `{ref}` (`{ref, blocklist}` for `remove`) and the next `queue.set` shows the result.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 

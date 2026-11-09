@@ -68,19 +68,34 @@ fn path(tpl: &str, tg: &t::Target) -> String {
         .replace(":id", &tg.media_id.to_string())
 }
 
+/// Why a route call to a provider failed.
+pub enum RouteError {
+    Unavailable,
+    Failed(String),
+}
+
+impl std::fmt::Display for RouteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unavailable => f.write_str("provider not running"),
+            Self::Failed(m) => f.write_str(m),
+        }
+    }
+}
+
 impl Plugins {
-    async fn call_route(
+    pub async fn call_route(
         &self,
         id: &str,
         method: &str,
         path: String,
         query: Vec<(String, String)>,
         body: Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, RouteError> {
         let rt = self
             .rt(id)
             .filter(|r| r.state() == State::Ready)
-            .ok_or("provider not running")?;
+            .ok_or(RouteError::Unavailable)?;
         let req = HttpRequest {
             method: method.into(),
             path,
@@ -88,13 +103,16 @@ impl Plugins {
             body: serde_json::to_vec(&body).unwrap_or_default(),
             principal: Principal::System,
         };
-        let res = rt.http(req, false).await.map_err(|e| format!("{e:?}"))?;
+        let res = rt
+            .http(req, false)
+            .await
+            .map_err(|e| RouteError::Failed(format!("{e:?}")))?;
         if !(200..300).contains(&res.status) {
-            return Err(format!(
+            return Err(RouteError::Failed(format!(
                 "status {}: {}",
                 res.status,
                 String::from_utf8_lossy(&res.body)
-            ));
+            )));
         }
         Ok(serde_json::from_slice(&res.body).unwrap_or(Value::Null))
     }
@@ -114,7 +132,10 @@ impl Plugins {
             .first()
             .map(|u| &u.ref_)
             .filter(|_| tg.kind == "series");
-        match events::progress_gates().in_flight("", tg.media_id as i32, unit) {
+        let Some(app) = self.app() else {
+            return Outcome::Skipped("not ready");
+        };
+        match events::in_flight(app, "", tg.media_id as i32, unit).await {
             Ok(v) if v.is_empty() => {}
             _ => return Outcome::Skipped("in flight"),
         }

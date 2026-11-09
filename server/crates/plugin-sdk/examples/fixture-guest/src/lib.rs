@@ -172,6 +172,14 @@ fn grab(req: &Request) -> Result<Response, String> {
     ok(json!({}))
 }
 
+/// A queue action route: keeps the request body in the `qaction.<name>` setting.
+fn qaction(req: &Request) -> Result<Response, String> {
+    let body = String::from_utf8_lossy(&req.body).into_owned();
+    let key = format!("qaction.{}", req.param("name").unwrap_or_default());
+    host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
+    ok(json!({}))
+}
+
 fn config(_: &Request) -> Result<Response, String> {
     match host::config_get(None) {
         Ok(v) => ok(Json::Object(
@@ -210,6 +218,7 @@ static ROUTES: LazyLock<Router> = LazyLock::new(|| {
         .route("GET", "/config", config)
         .route("GET", "/search/:id", search)
         .route("POST", "/grab/:id", grab)
+        .route("POST", "/qaction/:name", qaction)
         .route("GET", "/test/*rest", test_route)
         .route("POST", "/test/*rest", test_route)
 });
@@ -429,6 +438,42 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 })
                 .collect();
             host_result(host::acquisition_sources_set(&list))
+        }
+        "queueset" => {
+            let media = req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1);
+            let state = match req.query("state").unwrap_or("active") {
+                "queued" => t::QueueState::Queued,
+                "paused" => t::QueueState::Paused,
+                "importing" => t::QueueState::Importing,
+                "import-failed" => t::QueueState::ImportFailed,
+                "imported" => t::QueueState::Imported,
+                "failed" => t::QueueState::Failed,
+                _ => t::QueueState::Active,
+            };
+            let list: Vec<t::QueueEntry> = req
+                .query("refs")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|r| !r.is_empty())
+                .map(|r| t::QueueEntry {
+                    ref_: r.to_owned(),
+                    media_id: media,
+                    unit: None,
+                    source_id: "s1".into(),
+                    source_name: "Source".into(),
+                    title: format!("Release {r}"),
+                    quality: "WEBDL-1080p".into(),
+                    method: t::GrabMethod::Manual,
+                    info_url: Some("https://example.test/info".into()),
+                    state,
+                    progress: 0.25,
+                    size_bytes: Some(1000),
+                    bytes_per_second: Some(10.0),
+                    eta_seconds: Some(60.0),
+                    error: None,
+                })
+                .collect();
+            host_result(host::queue_set(&list))
         }
         "inflight" => {
             let n = |k: &str| req.query(k).and_then(|v| v.parse::<u32>().ok());

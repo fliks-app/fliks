@@ -10,6 +10,76 @@
     "version": "1"
   },
   "paths": {
+    "/api/acquisition/history": {
+      "get": {
+        "tags": [],
+        "operationId": "history_list",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "history_clear",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/acquisition/history/{id}": {
+      "delete": {
+        "tags": [],
+        "operationId": "history_delete",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/acquisition/queue": {
+      "get": {
+        "tags": [],
+        "operationId": "queue_list",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/acquisition/queue/{id}": {
+      "delete": {
+        "tags": [],
+        "operationId": "queue_remove",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/acquisition/queue/{id}/pause": {
+      "post": {
+        "tags": [],
+        "operationId": "queue_pause",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/acquisition/queue/{id}/resume": {
+      "post": {
+        "tags": [],
+        "operationId": "queue_resume",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/acquisition/queue/{id}/retry-import": {
+      "post": {
+        "tags": [],
+        "operationId": "queue_retry_import",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/annotations/{id}": {
       "delete": {
         "tags": [

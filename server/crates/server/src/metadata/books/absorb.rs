@@ -212,9 +212,11 @@ mod tests {
         "subtitle_files",
         "wants",
     ];
-    /// Left to cascade: the attach on the holder and the cleanup job derive them again, and a book
-    /// has no other kind's details nor aliases of a music id.
+    /// Left to cascade: the attach on the holder and the cleanup job derive them again, a book
+    /// has no other kind's details nor aliases of a music id, and a provider's queue row names a
+    /// transfer of the absorbed duplicate (the provider's own record of it dies with the media).
     const DROPPED: &[&str] = &[
+        "acquisition_queue",
         "album_details",
         "cleanup_candidates",
         "comic_details",
