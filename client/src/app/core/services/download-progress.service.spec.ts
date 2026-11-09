@@ -187,7 +187,7 @@ describe('DownloadProgressService — clearMedia', () => {
   });
 });
 
-describe('DownloadProgressService \u2014 hydrate', () => {
+describe('DownloadProgressService hydrate', () => {
   function makeHttp(): { svc: DownloadProgressService; http: HttpTestingController } {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

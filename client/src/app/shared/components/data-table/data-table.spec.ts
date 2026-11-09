@@ -742,7 +742,7 @@ describe('DataTableComponent — refreshing', () => {
   });
 });
 
-describe('DataTableComponent — row patches', () => {
+describe('DataTableComponent row patches', () => {
   it('replaces only the rows of the same id and ignores an unknown one', async () => {
     const patches = new Subject<readonly Record<string, unknown>[] | null>();
     const fixture = await createComponent({
