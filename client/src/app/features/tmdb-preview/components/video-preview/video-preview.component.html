@@ -166,14 +166,7 @@
 
 <app-trailer-dialog #trailerDialog />
 
-<app-request-modal
-  [qualityProfiles]="qualityProfiles()"
-  [languageProfiles]="languageProfiles()"
-  [libraries]="libraries()"
-  (requested)="refreshExistingRequests()"
-/>
-
-<app-import-modal />
+<app-add-dialog (done)="onAdded($event)" />
 <app-request-decline-modal
   [requestId]="decline.forId()"
   [reasonText]="decline.reasonText()"

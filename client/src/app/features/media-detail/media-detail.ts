@@ -19,7 +19,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaLibraryDialogComponent } from '../../shared/components/media-library-dialog/media-library-dialog';
-import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
+import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
 import { serverMessage } from '../../core/utils/server-message';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -50,7 +50,7 @@ import { MEDIA_DETAIL_HOST, type HandedEpisode, type MediaDetailHost } from './m
     ReleasesModalComponent,
     MediaDetailProfilesModalComponent,
     MediaLibraryDialogComponent,
-    RequestModalComponent,
+    AddDialogComponent,
     NgComponentOutlet,
     TvSectionDirective,
   ],
@@ -103,7 +103,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     { media: this.mediaService, markers: this.markersApi, toast: this.toast, translate: this.translate },
   );
   readonly requestFlow = new RequestFlowController(
-    { media: () => this.media(), requestModal: () => this.requestModal() },
+    { media: () => this.media(), addDialog: () => this.addDialog() },
     {
       auth: this.auth,
       requests: this.requestsApi,
@@ -553,5 +553,5 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   }
 
   private readonly trackingModals = inject(TrackingModalService);
-  private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
+  private readonly addDialog = viewChild(AddDialogComponent);
 }

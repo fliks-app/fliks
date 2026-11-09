@@ -5,6 +5,10 @@ import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { Media } from './media.service';
 import { assertNever, kindOf } from '../../media-kinds';
+import { abortable } from '../../utils/abortable';
+import type { FliksRequestStatus } from './requests.service';
+
+export type HitState = 'owned' | 'wanted' | 'missing';
 
 /** What every search answers (`/api/metadata/search/{kind}`), plus the extras of the hit's kind. */
 export interface SearchHit {
@@ -16,6 +20,10 @@ export interface SearchHit {
   year: number | null;
   posterUrl: string | null;
   existingMediaId: number | null;
+  /** What the media held for this hit is: `owned` has a file, `wanted` is monitored without one, `missing` is neither. */
+  state?: HitState | null;
+  /** The status of the caller's newest request for this hit. */
+  requestStatus?: FliksRequestStatus | null;
   /** Video hits only. */
   existingMediaType?: MediaType | null;
   /** Absent on a result of a provider that is not TMDB. */
@@ -30,6 +38,8 @@ export interface SearchHit {
   genreIds?: number[];
   subtitle?: string | null;
   authors?: string[];
+  /** Album hits: the artists' names. */
+  artists?: string[];
   series?: { name: string; position: string | null } | null;
   editionCount?: number | null;
   publisher?: string | null;
@@ -46,6 +56,29 @@ export interface MetadataSearchResult extends SearchHit {
   rating: number;
   genres: string[];
   existingMediaType: MediaType | null;
+}
+
+/** An artist the music provider found; `personId` is the library person holding it. */
+export interface ArtistHit {
+  provider: string;
+  externalId: string;
+  name: string;
+  sortName: string | null;
+  disambiguation: string | null;
+  artistType: string | null;
+  country: string | null;
+  personId: number | null;
+}
+
+/** A recording the music provider found, with the album it is listed under; `trackId` is a track of the library that plays. */
+export interface RecordingHit {
+  provider: string;
+  externalId: string;
+  title: string;
+  artists: string[];
+  durationMs: number | null;
+  album: SearchHit;
+  trackId: number | null;
 }
 
 export interface SearchOptions {
@@ -195,17 +228,31 @@ export class MetadataService {
   private readonly http = inject(HttpClient);
 
   /** One search for every kind; the server walks the providers serving it. */
-  search(kind: MediaType, q: string, opts: SearchOptions = {}) {
+  search(kind: MediaType, q: string, opts: SearchOptions = {}, signal?: AbortSignal) {
+    return abortable(
+      this.http.get<SearchHit[]>(`/api/metadata/search/${kindOf(kind).providerSegment}`, this.searchRequest(q, opts)),
+      signal,
+    );
+  }
+
+  searchArtists(q: string, opts: SearchOptions = {}, signal?: AbortSignal) {
+    return abortable(this.http.get<ArtistHit[]>('/api/metadata/search/album', this.searchRequest(q, opts, 'artist')), signal);
+  }
+
+  searchRecordings(q: string, opts: SearchOptions = {}, signal?: AbortSignal) {
+    return abortable(this.http.get<RecordingHit[]>('/api/metadata/search/album', this.searchRequest(q, opts, 'recording')), signal);
+  }
+
+  /** A provider search a failure of which leaves its section empty: the server cuts a slow provider at 3 s. */
+  private searchRequest(q: string, opts: SearchOptions, target?: string) {
     let params = new HttpParams();
     if (q) params = params.set('q', q);
+    if (target) params = params.set('target', target);
     for (const [key, value] of Object.entries(opts)) {
       if (value != null && value !== '') params = params.set(key, String(value));
     }
-    // The server tries providers in turn, each allowed 10 s, until one answers hits.
-    const context = new HttpContext().set(API_TIMEOUT_MS, 60_000);
-    return firstValueFrom(
-      this.http.get<SearchHit[]>(`/api/metadata/search/${kindOf(kind).providerSegment}`, { params, context }),
-    );
+    const context = new HttpContext().set(API_TIMEOUT_MS, 20_000).set(SKIP_ERROR_TOAST, true);
+    return { params, context };
   }
 
   getTrendingMovies(window: 'day' | 'week' = 'week') { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/movie', { params: { window } })); }

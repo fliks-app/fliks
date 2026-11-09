@@ -892,7 +892,7 @@
   },
   "search": {
     "title": "Suche",
-    "placeholder": "Film oder Serie suchen...",
+    "placeholder": "Filme, Serien, Bücher und Musik suchen...",
     "hint": "Tippen Sie, um in Ihrer Bibliothek und externen Anbietern zu suchen.",
     "hint_local": "Tippen Sie, um in Ihrer Bibliothek zu suchen.",
     "tab_videos": "Videos",
@@ -922,7 +922,14 @@
     "year_from": "Von",
     "year_to": "Bis",
     "apply": "Suchen",
-    "clear": "Löschen"
+    "clear": "Löschen",
+    "zone_library": "In Ihrer Bibliothek",
+    "zone_provider": "Nicht in Ihrer Bibliothek",
+    "filter_music": "Musik",
+    "add_album": "Album hinzufügen",
+    "request_album": "Album anfragen",
+    "want_track": "Diesen Titel wünschen",
+    "partial": "Einige Anbieter haben nicht rechtzeitig geantwortet."
   },
   "discover": {
     "seasons_failed": "Staffeln konnten nicht geladen werden",
@@ -3873,7 +3880,9 @@
     "action_open": "Öffnen",
     "action_play": "Abspielen",
     "remove_from_list": "Aus dieser Liste entfernen",
-    "actions": "Aktionen"
+    "actions": "Aktionen",
+    "chip_missing": "Fehlt",
+    "chip_wanted": "Gewünscht"
   },
   "cast": {
     "error": {

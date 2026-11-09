@@ -52,7 +52,8 @@ export type BarStatus =
   | 'unreleased'
   | 'queued';
 
-export type CardBadge = 'library' | 'pending' | 'declined' | 'added' | null;
+/** `library` owned, `wanted` and `missing` held without a file (chips), `pending` and `declined` a request, `added` just added. */
+export type CardBadge = 'library' | 'wanted' | 'missing' | 'pending' | 'declined' | 'added' | null;
 export type CardStatus = 'watched' | 'missing' | null;
 
 /** What the device holds for the card's title: shown as a glyph when ready, a ring while in flight. */
@@ -660,6 +661,18 @@ export class MediaCardComponent {
         return { text: this.translate.instant('kinds.comic'), class: 'badge-warning' };
       case 'album':
         return { text: this.translate.instant('kinds.album'), class: 'badge-primary' };
+      default:
+        return null;
+    }
+  });
+
+  /** The text chip of a title the library holds without a file, normal colours. */
+  protected readonly stateChip = computed((): { text: string; class: string } | null => {
+    switch (this.badge()) {
+      case 'wanted':
+        return { text: this.translate.instant('media_card.chip_wanted'), class: 'badge-info' };
+      case 'missing':
+        return { text: this.translate.instant('media_card.chip_missing'), class: 'badge-warning' };
       default:
         return null;
     }

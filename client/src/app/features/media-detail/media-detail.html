@@ -235,12 +235,5 @@
 <!-- Request modal - only relevant for users who can request (regular
      requesters). Profiles + libraries already loaded by media-detail. -->
 @if (requestFlow.canRequest()) {
-  <app-request-modal
-    #requestModal
-    [qualityProfiles]="qualityProfileOptions()"
-    [languageProfiles]="languageProfileOptions()"
-    [libraries]="libraries()"
-    [librariesLoading]="profilesOptionsLoading()"
-    (requested)="requestFlow.onSubmitted()"
-  />
+  <app-add-dialog (done)="requestFlow.onSubmitted()" />
 }

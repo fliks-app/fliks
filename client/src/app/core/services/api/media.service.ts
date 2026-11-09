@@ -5,6 +5,7 @@ import type { Family } from '../../enums/family.enum';
 import { MediaType } from '../../enums/media-type.enum';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { abortable } from '../../utils/abortable';
 import { saveFile } from '../../plugins/save-file.plugin';
 import { ServerVersionService } from '../server-version.service';
 
@@ -382,7 +383,7 @@ export class MediaService {
     );
   }
 
-  async getAll(params: SearchParams = {}, opts: CacheRead = {}): Promise<MediaPage> {
+  async getAll(params: SearchParams = {}, opts: CacheRead = {}, signal?: AbortSignal): Promise<MediaPage> {
     if (params.view && !(await this.serverVersion.supportsWhenKnown('5.2.0'))) params = { ...params, view: undefined };
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
@@ -394,8 +395,9 @@ export class MediaService {
       httpParams = httpParams.set(key, String(value));
     }
     const headers = cacheHeaders(opts);
-    return firstValueFrom(
+    return abortable(
       this.http.get<MediaPage>('/api/media', headers ? { params: httpParams, headers } : { params: httpParams }),
+      signal,
     );
   }
 

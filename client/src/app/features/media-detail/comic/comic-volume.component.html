@@ -33,7 +33,7 @@
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </a>
         } @else {
-          <div class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2" [class.opacity-50]="i.mediaFileId == null" data-testid="issue">
+          <div class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2" data-testid="issue">
             <ng-container *ngTemplateOutlet="row; context: { $implicit: i, kind: kind }" />
           </div>
         }

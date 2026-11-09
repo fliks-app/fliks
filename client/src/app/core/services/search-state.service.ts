@@ -1,12 +1,22 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, effect, type WritableSignal } from '@angular/core';
 import { Media } from './api/media.service';
-import { MetadataSearchResult, SearchHit, TmdbGenre } from './api/metadata.service';
+import { ArtistHit, MetadataSearchResult, RecordingHit, SearchHit, TmdbGenre } from './api/metadata.service';
+import type { MusicPersonRow, TrackRow } from './api/music.models';
+import type { CollectionSummary, PersonListItem } from './api/books.models';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
 import type { MediaType } from '../enums/media-type.enum';
 
 const EXTERNAL_KEY = 'fliks-search-external';
+
+/** What one search asks: the library and the providers, each of its own kinds. */
+export type SearchSource =
+  | 'media' | 'tracks' | 'artists' | 'authors' | 'series'
+  | 'movie' | 'tv' | 'book' | 'album' | 'artist' | 'recording';
+
+export const LOCAL_SOURCES: SearchSource[] = ['media', 'tracks', 'artists', 'authors', 'series'];
+export const PROVIDER_SOURCES: SearchSource[] = ['movie', 'tv', 'book', 'album', 'artist', 'recording'];
 
 @Injectable({ providedIn: 'root' })
 export class SearchStateService {
@@ -21,10 +31,25 @@ export class SearchStateService {
   private readonly persistExternal = effect(() => {
     localStorage.setItem(EXTERNAL_KEY, String(this.externalEnabled()));
   });
+  /** The library zone: media rows of every kind, tracks, artists, authors and book series. */
   readonly localResults = signal<Media[]>([]);
-  readonly localLoading = signal(false);
-  readonly externalResults = signal<SearchHit[]>([]);
-  readonly externalLoading = signal(false);
+  readonly localTracks = signal<TrackRow[]>([]);
+  readonly localArtists = signal<MusicPersonRow[]>([]);
+  readonly localAuthors = signal<PersonListItem[]>([]);
+  readonly localSeries = signal<CollectionSummary[]>([]);
+  /** The provider zone, one list per source so each lands on its own. */
+  readonly movieHits = signal<SearchHit[]>([]);
+  readonly seriesHits = signal<SearchHit[]>([]);
+  readonly bookHits = signal<SearchHit[]>([]);
+  readonly albumHits = signal<SearchHit[]>([]);
+  readonly artistHits = signal<ArtistHit[]>([]);
+  readonly recordingHits = signal<RecordingHit[]>([]);
+  /** Sources asked and not answered yet, and those that failed or timed out. */
+  readonly pending = signal<ReadonlySet<SearchSource>>(new Set());
+  readonly failed = signal<ReadonlySet<SearchSource>>(new Set());
+  readonly localLoading = computed(() => LOCAL_SOURCES.some((k) => this.pending().has(k)));
+  readonly externalLoading = computed(() => PROVIDER_SOURCES.some((k) => this.pending().has(k)));
+  readonly externalFailed = computed(() => PROVIDER_SOURCES.some((k) => this.failed().has(k)));
   readonly peopleResults = signal<SocialUser[]>([]);
   readonly peopleLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
@@ -97,23 +122,28 @@ export class SearchStateService {
     this.genreFilterRequest.set({ genreId, n: ++this.genreFilterCounter });
   }
 
-  /** Only titles not already in the library (owned ones go to {@link ownedExternalResults}); narrowed by the panel filters while a query is active. */
-  readonly filteredExternalResults = computed(() => {
-    const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
-    const rows = this.externalResults().filter(
-      (r) => r.existingMediaId == null && (r.tmdbId == null || !localTmdbIds.has(r.tmdbId)),
-    );
-    return this.applyPanelFilters(rows);
-  });
+  /** Video hits of the providers, best rated first, the panel filters applied. */
+  readonly externalResults = computed(() =>
+    this.applyPanelFilters([...this.movieHits(), ...this.seriesHits()].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))),
+  );
 
-  /** Library titles the provider matched by other metadata (franchise, keywords) that the title search missed, deduped against local. */
-  readonly ownedExternalResults = computed(() => {
-    const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
-    const rows = this.externalResults().filter(
-      (r) => r.existingMediaId != null && (r.tmdbId == null || !localTmdbIds.has(r.tmdbId)),
-    );
-    return this.applyPanelFilters(rows);
+  /** Whether a hit of the provider zone is held by the library: the library zone shows those the local search did not return. */
+  readonly localMediaIds = computed(() => new Set(this.localResults().map((m) => m.id)));
+
+  /** Hits with no row in the library: the provider zone. */
+  readonly videoToAdd = computed(() => this.externalResults().filter((r) => r.existingMediaId == null));
+  /** Library titles the provider matched by other metadata (franchise, keywords) that the title search missed. */
+  readonly videoHeld = computed(() => this.externalResults().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
+  readonly booksToAdd = computed(() => this.applyPanelFilters(this.bookHits().filter((r) => r.existingMediaId == null)));
+  readonly booksHeld = computed(() => this.bookHits().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
+  readonly albumsToAdd = computed(() => this.albumHits().filter((r) => r.existingMediaId == null));
+  readonly albumsHeld = computed(() => this.albumHits().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
+  readonly artistsToAdd = computed(() => {
+    const local = new Set(this.localArtists().map((a) => a.id));
+    return this.artistHits().filter((a) => a.personId == null || !local.has(a.personId));
   });
+  /** Tracks the library does not hold: a recording the library has plays from the local list. */
+  readonly recordingsToAdd = computed(() => this.recordingHits().filter((r) => r.trackId == null));
 
   /** Sorts only on a rating/recency pick (default keeps provider relevance); genre matches by TMDB id with a name fallback. */
   applyPanelFilters<T extends SearchHit>(rows: T[]): T[] {
@@ -147,11 +177,16 @@ export class SearchStateService {
 
   clear() {
     this.query.set('');
-    this.localResults.set([]);
-    this.externalResults.set([]);
+    this.clearResults();
     this.peopleResults.set([]);
-    this.localLoading.set(false);
-    this.externalLoading.set(false);
     this.peopleLoading.set(false);
+  }
+
+  /** Empties every zone and its pending marks. */
+  clearResults() {
+    for (const l of [this.localResults, this.localTracks, this.localArtists, this.localAuthors, this.localSeries]) (l as WritableSignal<unknown[]>).set([]);
+    for (const l of [this.movieHits, this.seriesHits, this.bookHits, this.albumHits, this.artistHits, this.recordingHits]) (l as WritableSignal<unknown[]>).set([]);
+    this.pending.set(new Set());
+    this.failed.set(new Set());
   }
 }

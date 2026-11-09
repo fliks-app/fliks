@@ -7,7 +7,7 @@ import { SearchContentType } from './search-filters';
   selector: 'app-content-type-toggle',
   imports: [TranslatePipe],
   templateUrl: './content-type-toggle.html',
-  host: { class: 'join' },
+  host: { class: 'join max-w-full overflow-x-auto scroll-ring-safe' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ContentTypeToggleComponent {
@@ -19,6 +19,6 @@ export class ContentTypeToggleComponent {
     { value: 'movie', labelKey: 'search.filter_movies' },
     { value: 'series', labelKey: 'search.filter_series' },
     ...(this.withBooks() ? [{ value: 'book' as const, labelKey: 'books_search.filter_books' }] : []),
-    ...(this.withMusic() ? [{ value: 'album' as const, labelKey: 'music.filter_albums' }] : []),
+    ...(this.withMusic() ? [{ value: 'album' as const, labelKey: 'search.filter_music' }] : []),
   ]);
 }

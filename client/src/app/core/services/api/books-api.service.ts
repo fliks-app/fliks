@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { abortable } from '../../utils/abortable';
 import type { Media } from './media.service';
 import type {
   BookChapter, BookImportBody, BookPreview, BookSearchResult, BookSourceDelete, BookSourcePut,
@@ -21,16 +22,16 @@ export class BooksApiService {
     );
   }
 
-  collections(params: Params = {}) {
-    return firstValueFrom(this.http.get<CollectionSummary[]>('/api/collections', { params }));
+  collections(params: Params = {}, signal?: AbortSignal) {
+    return abortable(this.http.get<CollectionSummary[]>('/api/collections', { params }), signal);
   }
 
   collection(id: number) {
     return firstValueFrom(this.http.get<CollectionDetail>(`/api/collections/${id}`));
   }
 
-  persons(params: Params = {}) {
-    return firstValueFrom(this.http.get<PersonListItem[]>('/api/persons', { params }));
+  persons(params: Params = {}, signal?: AbortSignal) {
+    return abortable(this.http.get<PersonListItem[]>('/api/persons', { params }), signal);
   }
 
   personWorks(id: number, role: 'author' | 'narrator') {

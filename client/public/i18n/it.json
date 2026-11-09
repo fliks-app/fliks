@@ -892,7 +892,7 @@
   },
   "search": {
     "title": "Ricerca",
-    "placeholder": "Cerca un film o una serie...",
+    "placeholder": "Cerca film, serie, libri e musica...",
     "hint": "Digita per cercare nella tua libreria e nei fornitori esterni.",
     "hint_local": "Digita per cercare nella tua libreria.",
     "tab_videos": "Video",
@@ -922,7 +922,14 @@
     "year_from": "Da",
     "year_to": "A",
     "apply": "Cerca",
-    "clear": "Cancella"
+    "clear": "Cancella",
+    "zone_library": "Nella tua libreria",
+    "zone_provider": "Fuori dalla tua libreria",
+    "filter_music": "Musica",
+    "add_album": "Aggiungi album",
+    "request_album": "Richiedi album",
+    "want_track": "Desidera questo brano",
+    "partial": "Alcuni fornitori non hanno risposto in tempo."
   },
   "discover": {
     "seasons_failed": "Impossibile caricare le stagioni",
@@ -3873,7 +3880,9 @@
     "action_open": "Apri",
     "action_play": "Riproduci",
     "remove_from_list": "Rimuovi da questa playlist",
-    "actions": "Azioni"
+    "actions": "Azioni",
+    "chip_missing": "Mancante",
+    "chip_wanted": "Desiderato"
   },
   "cast": {
     "error": {
