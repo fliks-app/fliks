@@ -121,14 +121,13 @@ export class ReleaseGrabController {
     }
   }
 
-  /** Grabs the best release of every given want at once, from the first provider in order serving the base; a failure is toasted by the global interceptor. */
+  /** Grabs the best release of every given want at once, picked by the core across every provider; a failure is toasted by the global interceptor. */
   async grabBest(base: AcquisitionBase, wants: readonly Want[]): Promise<void> {
     const key = baseKey(base);
-    const provider = this.api.providersFor(base)[0];
-    if (this.bestBusy().has(key) || !wants.length || !provider) return;
+    if (this.bestBusy().has(key) || !wants.length || !this.api.providersFor(base).length) return;
     this.bestBusy.update((s) => new Set(s).add(key));
     try {
-      await Promise.allSettled(wants.map((w) => this.withGrabPhase(base, () => this.api.grab(provider.pluginId, targetFor(base, w), {}))));
+      await Promise.allSettled(wants.map((w) => this.withGrabPhase(base, () => this.api.grabBest(targetFor(base, w)))));
     } finally {
       this.bestBusy.update((s) => {
         const next = new Set(s);

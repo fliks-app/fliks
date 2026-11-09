@@ -159,6 +159,19 @@ fn echo(req: &Request) -> Result<Response, String> {
     ok(json!({ "method": req.method, "body": body, "query": query }))
 }
 
+/// A release picker's `search`: the releases set in the `releases` setting, as JSON.
+fn search(_: &Request) -> Result<Response, String> {
+    ok(serde_json::from_str::<Json>(&mode("releases")).unwrap_or(json!([])))
+}
+
+/// A release picker's `grab`: keeps the request body in the `grabbed.<id>` setting.
+fn grab(req: &Request) -> Result<Response, String> {
+    let body = String::from_utf8_lossy(&req.body).into_owned();
+    let key = format!("grabbed.{}", req.param("id").unwrap_or_default());
+    host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
+    ok(json!({}))
+}
+
 fn config(_: &Request) -> Result<Response, String> {
     match host::config_get(None) {
         Ok(v) => ok(Json::Object(
@@ -195,6 +208,8 @@ static ROUTES: LazyLock<Router> = LazyLock::new(|| {
         .route("POST", "/echo", echo)
         .route("GET", "/path/:p", path)
         .route("GET", "/config", config)
+        .route("GET", "/search/:id", search)
+        .route("POST", "/grab/:id", grab)
         .route("GET", "/test/*rest", test_route)
         .route("POST", "/test/*rest", test_route)
 });

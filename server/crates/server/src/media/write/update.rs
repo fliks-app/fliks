@@ -702,6 +702,43 @@ pub async fn patch_profiles(
     Ok(Json(detail_or_404(&st, &a, id).await?))
 }
 
+/// `POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target.
+#[utoipa::path(post, path = "/api/media/{id}/grab-best", responses((status = 200)))]
+pub async fn grab_best(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+    ValidJson(v): ValidJson<Value>,
+) -> Result<Json<Value>, AppError> {
+    use crate::plugins::sweep::Outcome;
+    let id = gate(&st, &a, Action::Grab, id).await?;
+    let num = |k: &str| v[k].as_u64().and_then(|n| u32::try_from(n).ok());
+    let family = match v["family"].as_str() {
+        None => None,
+        Some(f) => Some(
+            fliks_domain::media::family::Family::parse(f)
+                .ok_or_else(|| AppError::bad_request("family is not a known family"))?,
+        ),
+    };
+    let language = v["language"].as_str().map(str::to_owned);
+    let target = crate::plugins::acquisition::context(
+        &st,
+        id as u32,
+        family,
+        language,
+        num("groupId"),
+        num("itemId"),
+    )
+    .await
+    .map_err(|e| AppError::bad_request(e.message))?
+    .ok_or_else(|| AppError::not_found("nothing to acquire for this target"))?;
+    match st.plugins.acquire(&target).await {
+        Outcome::Grabbed(provider) => Ok(Json(json!({"provider": provider}))),
+        Outcome::NoRelease => Err(AppError::not_found("No release worth grabbing was found")),
+        Outcome::Skipped(why) => Err(AppError::conflict(format!("Nothing to grab: {why}"))),
+    }
+}
+
 /// `PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.
 #[utoipa::path(patch, path = "/api/media/bulk", responses((status = 200)))]
 pub async fn bulk(

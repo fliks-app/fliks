@@ -231,7 +231,7 @@ mod tests {
         };
         let body = format!("{e:?}");
         assert!(body.contains(
-            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, MediaCleanup, FollowRefresh, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata"
+            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, AcquisitionSweep, MediaCleanup, FollowRefresh, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata"
         ));
         assert!(classify("Backup", &[]).unwrap() == Kind::Rust);
         assert!(classify("LiveTvGuidePrune", &[]).unwrap() == Kind::Rust);

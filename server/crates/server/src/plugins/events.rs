@@ -388,9 +388,6 @@ pub async fn publish(
                 st.hub.emit(SseEvent::QueueUpdated {});
                 crate::media_servers::dispatch_detached(st, "download.complete");
             }
-            t::AcquisitionEvent::Failed(f) if f.reason == super::picker::NO_RELEASE => {
-                st.plugins.no_release(st, plugin, f.media_id as i32).await;
-            }
             t::AcquisitionEvent::Failed(f) => {
                 let id = f.media_id as i32;
                 let to = recipients(st, Some(id)).await;

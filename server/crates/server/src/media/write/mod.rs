@@ -53,6 +53,7 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
         .route("/api/media/{id}/library", patch(patch_library))
         .route("/api/media/{id}/move", post(move_media))
         .route("/api/media/{id}/profiles", patch(patch_profiles))
+        .route("/api/media/{id}/grab-best", post(grab_best))
         .route("/api/media/{id}/identify", post(identify))
         .route("/api/media/{id}/music/candidates", get(album_candidates))
         .route("/api/media/{id}/refresh", post(refresh))

@@ -112,11 +112,11 @@ describe('MediaDetailReleasePickerService', () => {
     await promise;
   });
 
-  it('posts a null language for a grab-best on an any-language want', async () => {
+  it('posts a grab-best to the core, a null language for an any-language want', async () => {
     await install(ROUTES);
-    const promise = service.grab('fliks.acme', target());
-    const req = http.expectOne('/api/plugins/fliks.acme/7/grab');
-    expect(req.request.body).toEqual({ family: 'video', language: null });
+    const promise = service.grabBest(target({ kind: 'series', level: 'item', itemId: 12 }));
+    const req = http.expectOne('/api/media/7/grab-best');
+    expect(req.request.body).toEqual({ itemId: 12, family: 'video', language: null });
     req.flush(null);
     await promise;
   });

@@ -17,6 +17,7 @@ function setup() {
     providersFor: vi.fn(() => [{ pluginId: 'p.one', name: 'One', routes: { byKind: {} }, sources: [] }]),
     search: vi.fn(async () => []),
     grab: vi.fn(async () => {}),
+    grabBest: vi.fn(async () => {}),
   };
   const modal = { showModal: vi.fn() };
   TestBed.configureTestingModule({
@@ -38,8 +39,8 @@ describe('ReleaseGrabController', () => {
   it('grabs the best release of every given want, each aimed by its family and language', async () => {
     const { api, grabs } = setup();
     await grabs.grabBest(BOOK, [want({ family: 'text', language: 'fr' }), want({ id: 2, family: 'audio' })]);
-    expect(api.grab).toHaveBeenCalledWith('p.one', { ...BOOK, family: 'text', language: 'fr' }, {});
-    expect(api.grab).toHaveBeenCalledWith('p.one', { ...BOOK, family: 'audio', language: null }, {});
+    expect(api.grabBest).toHaveBeenCalledWith({ ...BOOK, family: 'text', language: 'fr' });
+    expect(api.grabBest).toHaveBeenCalledWith({ ...BOOK, family: 'audio', language: null });
     expect(grabs.isBestBusy(BOOK)).toBe(false);
   });
 
@@ -66,14 +67,12 @@ describe('ReleaseGrabController', () => {
     expect(grabs.grabState().get('r1')).toBe('ok');
   });
 
-  it('grabs a release from the provider that found it, and grab-best from the first provider in order', async () => {
+  it('grabs a release from the provider that found it', async () => {
     const { api, grabs } = setup();
     api.providersFor.mockReturnValue([
       { pluginId: 'p.first', name: 'First', routes: { byKind: {} }, sources: [] },
       { pluginId: 'p.second', name: 'Second', routes: { byKind: {} }, sources: [] },
     ]);
-    await grabs.grabBest(BOOK, [want({})]);
-    expect(api.grab).toHaveBeenLastCalledWith('p.first', expect.anything(), {});
     await grabs.search(BOOK, [want({})]);
     await grabs.grabRelease({ downloadUrl: 'x', title: 't', sourceId: 'a', pluginId: 'p.second', allowed: true } as never, 'r2');
     expect(api.grab).toHaveBeenLastCalledWith('p.second', expect.anything(), expect.anything());
@@ -83,6 +82,6 @@ describe('ReleaseGrabController', () => {
     const { api, grabs } = setup();
     api.providersFor.mockReturnValue([]);
     await grabs.grabBest(BOOK, [want({})]);
-    expect(api.grab).not.toHaveBeenCalled();
+    expect(api.grabBest).not.toHaveBeenCalled();
   });
 });

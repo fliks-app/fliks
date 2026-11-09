@@ -27,6 +27,7 @@ pub mod runtime;
 pub mod scheduled;
 pub mod sources;
 pub mod staging;
+pub mod sweep;
 pub mod ui;
 pub mod units;
 #[cfg(test)]
@@ -482,6 +483,7 @@ impl Plugins {
                 tokio::spawn(async move { st3.plugins.staging.sweep().await });
             },
         );
+        sweep::spawn_tick(st);
         let st4 = st.clone();
         tokio::spawn(async move { sources::refresh_all(&st4, true).await });
         let me = self.clone();
@@ -493,22 +495,23 @@ impl Plugins {
             return;
         };
         let name = payload["type"].as_str().unwrap_or_default().to_owned();
+        self.push_to_plugins(&name, &payload);
         if name == picker::REQUESTED {
             let (me, st) = (self.clone(), st.clone());
-            let ev = payload.clone();
-            tokio::spawn(async move { me.arbitrate(&st, ev).await });
-        } else {
-            self.push_to_plugins(&name, &payload);
+            let ids: Vec<u32> = payload["mediaIds"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| u32::try_from(v.as_i64()?).ok())
+                .collect();
+            tokio::spawn(async move { me.request_sweep(&st, ids).await });
         }
         webhooks::dispatch(st, &name, payload);
     }
 
     /// A settings write: the owning running plugin gets `config-changed` unless it wrote it.
     pub fn settings_changed(self: &Arc<Self>, keys: &[String], origin: Option<&str>) {
-        if keys
-            .iter()
-            .any(|k| k == picker::ORDER_KEY || k == picker::FALLBACK_KEY)
-        {
+        if keys.iter().any(|k| k == picker::ORDER_KEY) {
             let me = self.clone();
             tokio::spawn(async move { me.load_acquisition_settings().await });
         }

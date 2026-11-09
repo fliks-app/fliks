@@ -181,7 +181,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 | `media.season.monitored.changed` | `{mediaId: number, seasonNumber: number, monitored: boolean}` |
 | `media.removed` | `{mediaId: number, externalIds: ExternalId[], mediaType: string}` |
 | `media.files.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number, source: 'download'|'disk'}` |
-| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (to plugins also `provider?: string`, `plugins.md` rule 66) |
+| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (starts the core's acquisition sweep of those media, `plugins.md` rule 66) |
 | `acquisition.grabbed` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` |
 | `request.created` | `{requestId: number, mediaType: string, externalIds: ExternalId[], userId: number|null, kind: string, seasons: number[]|null}` |
 | `request.approved` | `{requestId: number, mediaId: number|null, mediaType: string, externalIds: ExternalId[], seasons: number[]|null, approvedByUserId: number|null}` |
