@@ -1,16 +1,7 @@
 import { Component, Signal, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
-import {
-  LucideAirplay,
-  LucideArrowRightLeft,
-  LucideCast,
-  LucideMonitor,
-  LucideSmartphone,
-  LucideTablet,
-  LucidePlus,
-  LucideTv,
-} from '@lucide/angular';
+import { LucideArrowRightLeft, LucidePlus } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
@@ -22,13 +13,16 @@ import { SessionStripService } from '../cast-overlay/session-strip.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
+import { PlaybackDevice } from '../../core/services/playback-device.service';
+import { deviceIconFor, type DeviceIcon } from '../../core/utils/device-icon';
+import { DeviceIconComponent } from '../device-chip/device-icon';
 
 const LAST_USED_KEY = 'fliks.remote.lastUsedPickerRow';
 
 export interface PickerRow {
   kind: 'local' | 'remote' | 'cast' | 'cast-web' | 'airplay';
   id: string;
-  icon: 'tv' | 'tablet' | 'phone' | 'monitor' | 'cast' | 'airplay';
+  icon: DeviceIcon;
   label: string;
   subtitle: string | null;
   /** Casting to this row already: pressing it leaves the device instead. */
@@ -43,7 +37,7 @@ export interface PickerRow {
   standalone: true,
   imports: [
     TranslatePipe,
-    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucideAirplay, LucideArrowRightLeft, LucidePlus,
+    LucideArrowRightLeft, LucidePlus, DeviceIconComponent,
     RouterLink,
   ],
   styles: [':host { display: block; }'],
@@ -55,6 +49,8 @@ export class RemotePickerListComponent {
   readonly picked = output<PickerRow>();
   /** The main press of a device row moves the account session to it instead of selecting it. */
   readonly transferOnly = input(false);
+  /** Shows the device playing now above the rows, with its volume. */
+  readonly card = input(false);
 
   protected readonly remote = inject(RemoteService);
   protected readonly castService = inject(CastService);
@@ -64,6 +60,7 @@ export class RemotePickerListComponent {
   protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
   private readonly strip = inject(SessionStripService);
+  protected readonly playing = inject(PlaybackDevice);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -89,6 +86,15 @@ export class RemotePickerListComponent {
       line: this.sync.line(s),
     };
   });
+
+  /** What the current device plays: the observed session's title, else the cast or remote output's. */
+  protected readonly cardTrack = computed(
+    () => this.sync.session()?.item.title ?? this.session.nowPlaying()?.title ?? null,
+  );
+
+  protected onVolume(event: Event): void {
+    this.playing.setVolume(+(event.target as HTMLInputElement).value / 100);
+  }
 
   private readPercent(s: { positionSeconds: number; durationSeconds: number | null }): number {
     return Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100);
@@ -155,7 +161,7 @@ export class RemotePickerListComponent {
       rows.push({
         kind: 'remote',
         id: t.targetId,
-        icon: this.iconForRemote(t),
+        icon: deviceIconFor(t.formFactor),
         label: this.deviceLabel(t),
         subtitle: connected
           ? this.translate.instant('remote.stop_controlling')
@@ -265,15 +271,6 @@ export class RemotePickerListComponent {
   deviceLabel(t: RemoteTarget): string {
     const label = parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
     return label ? this.translate.instant(label.key, label.params) : t.targetId;
-  }
-
-  private iconForRemote(t: RemoteTarget): 'tv' | 'tablet' | 'phone' | 'monitor' {
-    switch (t.formFactor) {
-      case 'tv': return 'tv';
-      case 'tablet': return 'tablet';
-      case 'phone': return 'phone';
-      default: return 'monitor';
-    }
   }
 
   private readLastUsed(): string | null {

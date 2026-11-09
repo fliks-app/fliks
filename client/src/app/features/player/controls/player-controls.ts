@@ -35,6 +35,8 @@ import {
 } from '../../playback-settings/playback-options';
 import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
+import { DeviceChipComponent } from '../../../shared/device-chip/device-chip';
+import { PlaybackDevice } from '../../../core/services/playback-device.service';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
@@ -114,6 +116,7 @@ const SWIPE_MIN_PX = 50;
     CachedSrcDirective,
     SelectedOptionDirective,
     RemotePickerListComponent,
+    DeviceChipComponent,
     TranslatePipe,
     LucideCaptions,
     LucideCheck,
@@ -318,6 +321,7 @@ export class PlayerControlsComponent {
   readonly orientationLocked = input(false);
   /** A destination can be picked: a Cast receiver is reachable, or a remote
    *  target is online. Same gate as the top bar's picker. */
+  protected readonly playingDevice = inject(PlaybackDevice);
   readonly canPickDevice = input(false);
   readonly castConnected = input(false);
   /** The output playback is on: when it keeps its own subtitle style, the appearance panel edits that. */

@@ -12,7 +12,10 @@
         <span class="block truncate text-sm font-semibold">
           {{ o.isIdle() ? ('remote.idle_message' | translate) : session.nowPlaying()?.title }}
         </span>
-        <span class="block truncate text-xs text-base-content/60">{{ session.deviceName() }}</span>
+        <span class="flex items-center gap-1 text-sm text-info">
+          <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
+          <span class="truncate">{{ session.deviceName() }}</span>
+        </span>
       </span>
     </button>
     @if (!o.isIdle() && !o.targetOffline()) {
@@ -57,7 +60,13 @@
           } @else if (sync.parked()) {
             {{ sync.line(s) }}
           } @else {
-            {{ detail() }}
+            <span class="flex items-center gap-1">
+              <span class="flex min-w-0 items-center gap-1 text-info">
+                <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
+                <span class="truncate">{{ sync.ownerName(s) }}</span>
+              </span>
+              <span class="shrink-0">· {{ time() }}</span>
+            </span>
           }
         </span>
         @if (!reading() && !sync.parked() && percent() > 0) {
@@ -86,7 +95,7 @@
                 [title]="'session.transfer' | translate" (click)="refreshTransfer()">
           <svg lucideArrowRightLeft class="h-5 w-5"></svg>
         </button>
-        <app-remote-picker-list [transferOnly]="true" />
+        <app-remote-picker-list [transferOnly]="true" [card]="true" />
       </app-dropdown-menu>
     }
     <button type="button" class="btn btn-ghost btn-circle" (click)="hide()" [attr.aria-label]="'session.hide' | translate">

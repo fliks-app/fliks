@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
+import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { SessionSyncService, type AccountSession } from '../../core/services/session-sync.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { RemoteService } from '../../core/services/remote.service';
@@ -25,6 +26,7 @@ class DropdownStub {
 @Component({ selector: 'app-remote-picker-list', template: '' })
 class PickerListStub {
   readonly transferOnly = input(false);
+  readonly card = input(false);
 }
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
@@ -97,6 +99,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
       { provide: AudioPlayerService, useValue: { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) } },
       { provide: RemoteAudioOutput, useValue: audioView },
+      { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
       { provide: SseService, useValue: { targetId: signal('phone#1') } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },

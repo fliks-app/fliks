@@ -1,0 +1,12 @@
+<button
+  type="button"
+  class="btn btn-ghost btn-sm h-10 max-w-48 min-w-10 shrink gap-2 px-2 font-normal"
+  [class.text-info]="device.name()"
+  [attr.aria-label]="device.name() ? ('session.playing_on' | translate: { device: device.name() }) : ('remote.this_device' | translate)"
+  data-testid="device-chip"
+>
+  <app-device-icon [icon]="device.icon()" iconClass="h-5 w-5 shrink-0" />
+  @if (device.name(); as name) {
+    <span class="truncate text-sm">{{ name }}</span>
+  }
+</button>
