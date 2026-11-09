@@ -544,7 +544,8 @@ export const routes: Routes = [
           { path: 'naming', loadComponent: () => import('./features/settings/naming/naming').then((m) => m.NamingSettingsComponent) },
           { path: 'notifications', loadComponent: () => import('./features/settings/notifications/notifications').then((m) => m.NotificationsSettingsComponent) },
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
-          { path: 'plugins', loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
+          { path: 'plugins', data: { reuse: true }, loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
+          { path: 'plugins/:pluginId', loadComponent: () => import('./features/settings/plugins/plugin-detail/plugin-detail').then((m) => m.PluginDetailComponent) },
           { path: 'plugin-catalogue', loadComponent: () => import('./features/settings/plugins/plugin-catalogue/plugin-catalogue-page').then((m) => m.PluginCataloguePageComponent) },
           {
             path: 'plugins/:pluginId/:view',

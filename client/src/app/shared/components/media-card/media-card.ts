@@ -187,6 +187,8 @@ export class MediaCardComponent {
   readonly liked = input<boolean | null>(null);
   /** Caller-owned action the `card.actions` registry can't express; spliced between watched toggle and Remove. */
   readonly extraActions = input<CardAction[]>([]);
+  /** The menu holds `extraActions` alone: a card that stands for no media (a plugin). */
+  readonly actionsOnly = input(false);
   /** Library media id for "add to playlist" when the card isn't fed by `[media]`; falls back to `media().id`. */
   readonly playlistMediaId = input<number | null>(null);
   /** Episode id for the "add to playlist" action on episode-backed cards
@@ -308,7 +310,7 @@ export class MediaCardComponent {
       anchor: button.closest('figure') ?? button,
       title: this._title(),
       imageUrl: this._img(),
-      imageAspect: this.aspect(),
+      imageAspect: this.albumCover() ? 'square' : this.aspect(),
       subtitle: this._subtitle(),
       placement: 'card-top',
     });
@@ -585,6 +587,7 @@ export class MediaCardComponent {
    * `extraActions` splices in after the watched toggle, before Remove. */
   protected readonly cardActions = computed((): CardAction[] => {
     if (this.selectOnly()) return [];
+    if (this.actionsOnly()) return this.extraActions();
     const ctx = this.cardActionsContext();
     const watched = this.status() === 'watched';
     const rows = resolveMenuContributions({

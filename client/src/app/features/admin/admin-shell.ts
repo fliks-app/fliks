@@ -3,12 +3,14 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideShield } from '@lucide/angular';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
+import { CardActionsPanelComponent } from '../../shared/components/card-actions-panel/card-actions-panel';
 import { SettingsIconComponent } from './settings-icon';
 import { SettingsSectionsService } from './settings-sections.service';
 
 @Component({
   selector: 'app-admin-shell',
   imports: [
+    CardActionsPanelComponent,
     RouterLink, TranslatePipe,
     SettingsDrawerComponent, SettingsIconComponent,
     LucideShield,

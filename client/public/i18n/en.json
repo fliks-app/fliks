@@ -3060,12 +3060,8 @@
       "upload": "Import a plugin",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
-      "col_plugin": "Plugin",
       "col_version": "Version",
-      "col_tier": "Tier",
-      "col_trust": "Trust",
       "col_status": "Status",
-      "col_enabled": "Enabled",
       "tier_data": "Data",
       "tier_process": "Process",
       "status_active": "Active",
@@ -3120,7 +3116,10 @@
           "scope": "Access: {{value}}",
           "ingestroot": "Add files under: {{value}}",
           "job": "Run a scheduled job: {{value}}",
-          "webhook": "Subscribe to server events"
+          "webhook": "Subscribe to server events",
+          "namespace": "Own the \"{{value}}\" identifiers",
+          "provider": "Provide {{value}} metadata",
+          "network": "Reach services on the local network"
         },
         "unverified_ack": "I understand this plugin's publisher is not verified, and I want to install it anyway.",
         "confirm": "Install",
@@ -3174,7 +3173,10 @@
           "url_duplicate": "A source with this URL already exists.",
           "key_invalid": "The public key must be base64-encoded and decode to exactly 32 bytes.",
           "generic": "Unable to add this source."
-        }
+        },
+        "refresh_all": "Refresh all sources",
+        "refresh_all_ok": "Sources refreshed.",
+        "refresh_all_error": "Refresh failed: {{list}}"
       },
       "catalogue": {
         "title": "Catalogue",
@@ -3217,6 +3219,25 @@
         "include_secrets": "Include secrets",
         "include_secrets_hint": "API keys and passwords are written in clear in the file. Keep it private.",
         "error": "Unable to export the plugin."
+      },
+      "update_badge": "Update",
+      "details": "Details",
+      "enable": "Enable",
+      "disable": "Disable",
+      "detail": {
+        "id": "Identifier",
+        "source": "Source",
+        "homepage": "Website",
+        "no_permissions": "No particular permission.",
+        "permissions_on_install": "Permissions are shown before installing.",
+        "info": "Information",
+        "not_found": "Plugin not found."
+      },
+      "category": {
+        "metadata": "Metadata providers",
+        "download": "Download providers",
+        "notifications": "Notifications",
+        "other": "Other"
       }
     },
     "cleanup": {

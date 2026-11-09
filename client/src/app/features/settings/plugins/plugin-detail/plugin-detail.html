@@ -1,0 +1,129 @@
+<div class="flex flex-col gap-6">
+  <a routerLink="/admin/settings/plugins" class="btn btn-ghost btn-sm gap-1 w-fit">
+    <svg lucideChevronLeft class="h-4 w-4"></svg>
+    {{ 'settings.plugins.catalogue.back' | translate }}
+  </a>
+
+  @if (state.loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (entry(); as e) {
+    <div class="flex flex-col sm:flex-row gap-5 sm:items-start">
+      <span
+        class="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-base-300 shrink-0 overflow-hidden shadow-md"
+        [style.view-transition-name]="posterName(e.id)"
+      >
+        @if (e.logo) {
+          <img [src]="e.logo" (error)="hideBrokenLogo($event)" alt="" class="w-full h-full object-contain" />
+        }
+      </span>
+      <div class="flex flex-col gap-3 min-w-0">
+        <div class="min-w-0">
+          <h1 class="text-2xl font-bold truncate">{{ e.name }}</h1>
+          @if (author()) {
+            <p class="text-sm text-base-content/60 truncate">{{ 'settings.plugins.catalogue.by' | translate: { author: author() } }}</p>
+          }
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          @if (e.installed; as row) {
+            <app-error-badge
+              class="flex"
+              [error]="statusDetail()"
+              [label]="status()!.labelKey | translate"
+              [badgeClass]="status()!.cssClass"
+              titleKey="settings.plugins.col_status"
+            />
+            <span class="badge badge-sm" [class]="trustBadgeFor(row.signature).cssClass">
+              {{ trustBadgeFor(row.signature).labelKey | translate: trustBadgeFor(row.signature).params }}
+            </span>
+          }
+          <span class="badge badge-ghost badge-sm">
+            {{ ((e.installed?.kind ?? e.catalog?.plugin?.kind) === 'data' ? 'settings.plugins.tier_data' : 'settings.plugins.tier_process') | translate }}
+          </span>
+        </div>
+
+        @if (actions().length) {
+          <div class="flex flex-wrap gap-2">
+            @for (a of actions(); track a.labelKey ?? a.label) {
+              <button
+                type="button"
+                class="btn btn-sm"
+                [class.btn-primary]="a.tone === 'success'"
+                [class.btn-ghost]="a.tone !== 'success'"
+                [class.text-error]="a.tone === 'danger'"
+                [disabled]="state.busyId() === e.id"
+                (click)="a.run()"
+              >
+                @if (state.busyId() === e.id && a.tone === 'success') {
+                  <span class="loading loading-spinner loading-xs"></span>
+                }
+                {{ a.labelKey ? (a.labelKey | translate) : a.label }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (heldDetail(); as held) {
+      <div role="alert" class="alert alert-warning text-sm py-2">{{ held }}</div>
+    }
+
+    @if (description()) {
+      <p class="text-sm text-base-content/80 whitespace-pre-line max-w-3xl">{{ description() }}</p>
+    }
+
+    <div class="grid gap-6 md:grid-cols-2">
+      <section>
+        <h2 class="text-lg font-bold mb-3">{{ 'settings.plugins.consent.capabilities_title' | translate }}</h2>
+        @if (!e.installed) {
+          <p class="text-sm text-base-content/60">{{ 'settings.plugins.detail.permissions_on_install' | translate }}</p>
+        } @else if (capabilities().length) {
+          <ul class="list-disc list-inside text-sm space-y-1">
+            @for (label of capabilities(); track $index) {
+              <li>{{ label }}</li>
+            }
+          </ul>
+        } @else {
+          <p class="text-sm text-base-content/60">{{ 'settings.plugins.detail.no_permissions' | translate }}</p>
+        }
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{{ 'settings.plugins.detail.info' | translate }}</h2>
+        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt class="text-base-content/60">{{ 'settings.plugins.detail.id' | translate }}</dt>
+          <dd class="truncate">{{ e.id }}</dd>
+          @if (e.installed; as row) {
+            <dt class="text-base-content/60">{{ 'settings.plugins.col_version' | translate }}</dt>
+            <dd>{{ row.version }}</dd>
+          } @else if (e.catalog?.latestVersion; as latest) {
+            <dt class="text-base-content/60">{{ 'settings.plugins.col_version' | translate }}</dt>
+            <dd>{{ latest }}</dd>
+          }
+          @if (e.catalog; as c) {
+            <dt class="text-base-content/60">{{ 'settings.plugins.detail.source' | translate }}</dt>
+            <dd class="truncate" [title]="c.sourceUrl">{{ c.sourceUrl }}</dd>
+          }
+          @if (e.installed?.homepage; as homepage) {
+            <dt class="text-base-content/60">{{ 'settings.plugins.detail.homepage' | translate }}</dt>
+            <dd class="truncate"><a [href]="homepage" target="_blank" rel="noopener noreferrer" class="link">{{ homepage }}</a></dd>
+          }
+        </dl>
+      </section>
+
+      @if (e.installed?.kind === 'process' && metrics(); as m) {
+        <section>
+          <h2 class="text-lg font-bold mb-3">{{ 'settings.plugins.metrics.toggle' | translate }}</h2>
+          <app-plugin-metrics-panel [entry]="m" />
+        </section>
+      }
+    </div>
+  } @else {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.plugins.detail.not_found' | translate }}</p>
+  }
+</div>
+
+<app-plugin-install-consent #consentSheet (installed)="state.onInstalled($event)" />

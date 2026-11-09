@@ -3081,12 +3081,8 @@
       "upload": "Plugin importieren",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
-      "col_plugin": "Plugin",
       "col_version": "Version",
-      "col_tier": "Tier",
-      "col_trust": "Trust",
       "col_status": "Status",
-      "col_enabled": "Enabled",
       "tier_data": "Data",
       "tier_process": "Process",
       "status_active": "Active",
@@ -3141,7 +3137,10 @@
           "scope": "Access: {{value}}",
           "ingestroot": "Add files under: {{value}}",
           "job": "Run a scheduled job: {{value}}",
-          "webhook": "Subscribe to server events"
+          "webhook": "Subscribe to server events",
+          "namespace": "Own the \"{{value}}\" identifiers",
+          "provider": "Provide {{value}} metadata",
+          "network": "Reach services on the local network"
         },
         "unverified_ack": "I understand this plugin's publisher is not verified, and I want to install it anyway.",
         "confirm": "Install",
@@ -3195,7 +3194,10 @@
           "url_duplicate": "Eine Quelle mit dieser URL existiert bereits.",
           "key_invalid": "Der öffentliche Schlüssel muss base64-kodiert sein und genau 32 Bytes ergeben.",
           "generic": "Diese Quelle konnte nicht hinzugefügt werden."
-        }
+        },
+        "refresh_all": "Alle Quellen aktualisieren",
+        "refresh_all_ok": "Quellen aktualisiert.",
+        "refresh_all_error": "Aktualisierung fehlgeschlagen: {{list}}"
       },
       "catalogue": {
         "title": "Katalog",
@@ -3238,6 +3240,25 @@
         "include_secrets": "Geheimnisse einschließen",
         "include_secrets_hint": "API-Schlüssel und Passwörter stehen im Klartext in der Datei. Halte sie privat.",
         "error": "Das Plugin konnte nicht exportiert werden."
+      },
+      "update_badge": "Update",
+      "details": "Details",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "detail": {
+        "id": "Kennung",
+        "source": "Quelle",
+        "homepage": "Website",
+        "no_permissions": "Keine besonderen Berechtigungen.",
+        "permissions_on_install": "Die Berechtigungen werden vor der Installation angezeigt.",
+        "info": "Informationen",
+        "not_found": "Plugin nicht gefunden."
+      },
+      "category": {
+        "metadata": "Metadatenanbieter",
+        "download": "Download-Anbieter",
+        "notifications": "Benachrichtigungen",
+        "other": "Sonstige"
       }
     },
     "cleanup": {

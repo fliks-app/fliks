@@ -39,12 +39,12 @@
         }
 
         @if (r.capabilities?.length) {
-          <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
+          <p class="text-sm font-semibold uppercase tracking-wider text-base-content/50 mb-2">
             {{ 'settings.plugins.consent.capabilities_title' | translate }}
           </p>
           <ul class="list-disc list-inside text-sm mb-4 space-y-1">
-            @for (capability of r.capabilities; track capability) {
-              <li>{{ capabilityLabel(capability) }}</li>
+            @for (label of capabilityLabels(r.capabilities); track label) {
+              <li>{{ label }}</li>
             }
           </ul>
         }
