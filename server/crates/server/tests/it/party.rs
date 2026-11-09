@@ -2935,6 +2935,202 @@ async fn a_played_track_can_be_proposed_again_and_moves_to_the_end_of_the_progra
     assert_eq!(now["item"]["itemId"], 5001);
 }
 
+/// A live party on the film, its host (alice) joined as device `da`, with `others` (user, token, device) joined.
+async fn singing_party(c: &Ctx, alice: &str, others: &[(i32, &str, &str)]) -> String {
+    let ids: Vec<i32> = others.iter().map(|o| o.0).collect();
+    let url = bare_party(c, alice, &ids).await;
+    assert_eq!(
+        c.call(
+            "POST",
+            &format!("{url}/select"),
+            alice,
+            Some(json!({"mediaId": 1}))
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        c.call("POST", &format!("{url}/start"), alice, None).await.0,
+        200
+    );
+    assert_eq!(join(c, &url, alice, "da").await.0, 200);
+    for (_, tok, device) in others {
+        assert_eq!(join(c, &url, tok, device).await.0, 200);
+    }
+    url
+}
+
+async fn programme_items(c: &Ctx, url: &str) -> Vec<i32> {
+    let id: i32 = url.rsplit('/').next().unwrap().parse().unwrap();
+    sqlx::query_scalar(
+        r#"SELECT "itemId" FROM watch_party_items WHERE "partyId" = $1 ORDER BY position"#,
+    )
+    .bind(id)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn two_hosts_ending_the_same_song_advance_the_party_once(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (_alice, a) = c.user("alice", true).await;
+    let _stream = c.stream(&a, "da").await;
+    let url = singing_party(&c, &a, &[]).await;
+    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
+    assert_eq!(track(&c, &url, &a, 2).await.0, 201);
+    let (_, now) = c.call("GET", &url, &a, None).await;
+    assert_eq!(now["live"]["playback"]["state"], "idle");
+
+    let body = json!({"from": {"mediaId": 1}, "deviceId": "da"});
+    let next = format!("{url}/proposals/next");
+    let calls = (0..2).map(|_| c.call("POST", &next, &a, Some(body.clone())));
+    let results = futures_util::future::join_all(calls).await;
+    assert!(results.iter().all(|r| r.0 == 200));
+    assert_eq!(
+        programme_items(&c, &url).await.len(),
+        2,
+        "one song was taken"
+    );
+    let (_, now) = c.call("GET", &url, &a, None).await;
+    assert_eq!(now["item"]["itemId"], 5001);
+    assert_eq!(now["live"]["playback"]["state"], "waiting");
+    let left = now["proposals"].as_array().unwrap().len();
+    assert_eq!(left, 1, "the second song still waits");
+
+    // The party is no longer idle on the film: a late call changes nothing.
+    let (s, _) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, Some(body))
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(programme_items(&c, &url).await.len(), 2);
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/proposals/next"),
+            &a,
+            Some(json!({"from": {"mediaId": 1}})),
+        )
+        .await;
+    assert_eq!(
+        (s, msg(&e)),
+        (400, Some("party.error_invalid")),
+        "from needs a device"
+    );
+}
+
+/// An album in a second library that alice opens and nobody else does: items 6001 and 6002.
+async fn hidden_album(c: &Ctx, alice: i32) {
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO libraries (name) VALUES ('l2');
+           INSERT INTO library_user_access ("userId", "libraryId") VALUES ({alice}, 2);
+           INSERT INTO media (id, title, type, "libraryId") VALUES (600, 'Hidden album', 'album', 2);
+           INSERT INTO editions (id, "mediaId", family) VALUES (600, 600, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", title)
+             SELECT 6000 + n, 600, 600, 'h' || n FROM generate_series(1, 2) n;
+           INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+             SELECT 600, 'h' || n, 1, 'q', (SELECT min(id) FROM library_folders) FROM generate_series(1, 2) n;
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version")
+             SELECT 6000 + n, f.id, 600, 0 FROM generate_series(1, 2) n
+             JOIN media_files f ON f."relativePath" = 'h' || n AND f."mediaId" = 600"#
+    )))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_head_song_a_member_cannot_open_is_passed_over_and_named(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    hidden_album(&c, alice).await;
+    let _sa = c.stream(&a, "da").await;
+    let _sb = c.stream(&b, "db").await;
+    let url = singing_party(&c, &a, &[(bob, &b, "db")]).await;
+    let hidden = c
+        .call(
+            "POST",
+            &format!("{url}/proposals"),
+            &a,
+            Some(json!({"mediaId": 600, "itemId": 6001})),
+        )
+        .await;
+    assert_eq!(hidden.0, 201);
+    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
+
+    let (s, p) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .await;
+    assert_eq!(s, 200);
+    let o = programme_items(&c, &url).await;
+    assert_eq!((o.len(), o[1]), (2, 5001));
+    let pending: Vec<_> = p["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|q| q["item"]["itemId"].clone())
+        .collect();
+    assert_eq!(
+        pending,
+        [json!(6001)],
+        "the passed-over song keeps its place"
+    );
+    assert!(
+        systems(&p)
+            .iter()
+            .any(|(k, args)| k == "item_skipped" && args["mediaId"] == 600)
+    );
+
+    let (s, e) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .await;
+    assert_eq!(
+        (s, msg(&e), e["usernames"].clone()),
+        (409, Some("party.error_member_no_access"), json!(["bob"]))
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (_alice, a) = c.user("alice", true).await;
+    let _stream = c.stream(&a, "da").await;
+    let url = singing_party(&c, &a, &[]).await;
+    for n in 1..=5 {
+        let (s, l) = track(&c, &url, &a, n).await;
+        assert_eq!(s, 201);
+        let pid = l
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["item"]["itemId"] == 5000 + n)
+            .unwrap()["id"]
+            .as_i64()
+            .unwrap();
+        let (choose, cancel) = (
+            format!("{url}/proposals/{pid}/choose"),
+            format!("{url}/proposals/{pid}"),
+        );
+        let (chosen, cancelled) = tokio::join!(
+            c.call("POST", &choose, &a, None),
+            c.call("DELETE", &cancel, &a, None),
+        );
+        let in_programme = programme_items(&c, &url).await.contains(&(5000 + n));
+        assert_eq!(chosen.0 == 200, in_programme, "round {n}");
+        assert_ne!(
+            chosen.0 == 200,
+            cancelled.0 == 204,
+            "round {n}: exactly one wins"
+        );
+    }
+}
+
 /// A second library with a film in it, which alice opens and nobody else does.
 async fn hidden_film(c: &Ctx, alice: i32) {
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

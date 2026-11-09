@@ -1047,7 +1047,7 @@ fn programme_note(current: &[db::QueueRow], items: &[Item]) -> Option<(&'static 
 
 /// `edit_programme` for a caller that holds the gate; the items added, and the head before the
 /// start, must be open to every member.
-async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
+pub(super) async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
     let id = row.id;
     *row = row_of(st, id).await?;
     require_open(row)?;
@@ -1316,7 +1316,7 @@ pub async fn intent(
 
 /// The step to take in the programme, judged for every user in the party right now, and the item
 /// it was computed from; `None` when the programme is empty.
-async fn queue_step(
+pub(super) async fn queue_step(
     st: &AppState,
     row: &Row,
     forward: bool,
@@ -1332,6 +1332,24 @@ async fn queue_step(
     users.dedup();
     let step = steps::step(st, rows, &current, forward, &users).await?;
     Ok(Some((step, current)))
+}
+
+/// Moves the party on to the next row of its programme as an `intent` `next` of `device` would. The caller
+/// holds the gate.
+pub(super) async fn advance_held(st: &AppState, row: &Row, me: i32, device: &str) -> R<()> {
+    let (step, _) = queue_step(st, row, true)
+        .await?
+        .ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid"))?;
+    mutate_held(st, row.id, |l| {
+        let rev = l.room.rev;
+        match l.advance(me, device, rev, step, now_ms()) {
+            Ok((_, e)) => (Ok(()), e),
+            Err(e) => (Err(e), vec![]),
+        }
+    })
+    .await
+    .ok_or_else(not_live)?
+    .map_err(machine_err)
 }
 
 async fn run(

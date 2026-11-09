@@ -27,9 +27,8 @@ final class DeferredMediaSource extends CompositeMediaSource<Void> {
     private final MediaSource.Factory factory;
     private final Opener opener;
     private final Executor io;
-    @Nullable private volatile IOException failure;
+    private final PrepareAttempts attempts = new PrepareAttempts();
     @Nullable private MediaSource child;
-    private boolean released;
 
     DeferredMediaSource(MediaItem item, MediaSource.Factory factory, Opener opener, Executor io) {
         this.item = item;
@@ -47,24 +46,25 @@ final class DeferredMediaSource extends CompositeMediaSource<Void> {
     protected void prepareSourceInternal(@Nullable TransferListener transferListener) {
         super.prepareSourceInternal(transferListener);
         Handler playback = Util.createHandlerForCurrentLooper();
+        int attempt = attempts.begin();
+        child = null;
         io.execute(() -> {
             try {
                 MediaItem real = opener.open(item);
                 playback.post(() -> {
-                    if (released) return;
+                    if (!attempts.isCurrent(attempt)) return;
                     child = factory.createMediaSource(real);
                     prepareChildSource(null, child);
                 });
             } catch (IOException e) {
-                failure = e;
+                attempts.fail(attempt, e);
             }
         });
     }
 
     @Override
     public void maybeThrowSourceInfoRefreshError() throws IOException {
-        IOException e = failure;
-        if (e != null) throw e;
+        attempts.throwIfFailed();
         super.maybeThrowSourceInfoRefreshError();
     }
 
@@ -85,7 +85,7 @@ final class DeferredMediaSource extends CompositeMediaSource<Void> {
 
     @Override
     protected void releaseSourceInternal() {
-        released = true;
+        attempts.end();
         child = null;
         super.releaseSourceInternal();
     }

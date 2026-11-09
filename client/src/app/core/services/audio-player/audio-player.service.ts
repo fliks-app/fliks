@@ -540,17 +540,20 @@ export class AudioPlayerService {
     const file = this.castStemFile;
     if (!req || file === null) return;
     const mode = this._stemMode();
-    const kind = mode === 'original' ? null : mode === 'guide' && this.castStemKinds.includes('guide') ? 'guide' : 'instrumental';
+    const kind = mode === 'original' ? null : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
     if (kind === this.castKind) return;
     const generation = this.generation;
     const position = this._position();
     const autoplay = this._playing();
     const cast = this.injector.get(CastPlayerService);
+    const current = () => generation === this.generation;
     if (kind) {
-      if (!(await cast.castStem(req, file, kind, position, autoplay))) return void this.onStemsFailed();
+      if (!(await cast.castStem(req, file, kind, this.castStemTypes[kind] ?? 'audio/ogg', position, autoplay, current))) {
+        return void (current() && this.onStemsFailed());
+      }
     } else {
-      const info = await cast.castTrack(req, autoplay, position);
-      if (!info) return void this.onStemsFailed();
+      const info = await cast.castTrack(req, autoplay, position, current);
+      if (!info) return void (current() && this.onStemsFailed());
       if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
       this.info = info;
       this.sessionId = info.sessionId;
@@ -736,7 +739,7 @@ export class AudioPlayerService {
       if (!ready) return this.dropStems();
       if (this.casting) {
         this.castStemFile = state.fileId;
-        this.castStemKinds = Object.keys(state.stems) as StemKind[];
+        this.castStemTypes = Object.fromEntries(Object.entries(state.stems).map(([k, v]) => [k, v.contentType]));
         return this._stemsAvailable.set(true);
       }
       if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
@@ -806,7 +809,8 @@ export class AudioPlayerService {
 
   private nativeStemFile: number | null = null;
   private castStemFile: number | null = null;
-  private castStemKinds: StemKind[] = [];
+  /** Content type of each stem the receiver may load. */
+  private castStemTypes: Partial<Record<StemKind, string>> = {};
   private castKind: StemKind | null = null;
 
   /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */

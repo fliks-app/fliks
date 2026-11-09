@@ -238,15 +238,23 @@ export class CastPlayerService {
   }
 
   /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
-  async castStem(t: CastTrack, fileId: number, kind: StemKind, position: number, autoplay: boolean): Promise<boolean> {
+  async castStem(
+    t: CastTrack,
+    fileId: number,
+    kind: StemKind,
+    contentType: string,
+    position: number,
+    autoplay: boolean,
+    current: () => boolean = () => true,
+  ): Promise<boolean> {
     const [token, castInfo] = await Promise.all([this.authService.ensureStreamToken(fileId), this.authService.getCastInfo()]);
-    if (!token) return false;
+    if (!token || !current()) return false;
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
     const url = `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
     try {
       await this.cast.loadMedia({
         url,
-        contentType: 'audio/ogg',
+        contentType,
         title: t.title,
         subtitle: t.artists,
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
@@ -264,11 +272,15 @@ export class CastPlayerService {
   }
 
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
-  async castTrack(t: CastTrack, autoplay = true, startAt = 0) {
+  async castTrack(t: CastTrack, autoplay = true, startAt = 0, current: () => boolean = () => true) {
     const [pi, castInfo] = await Promise.all([
       this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
       this.authService.getCastInfo(),
     ]);
+    if (!current()) {
+      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
+      return null;
+    }
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
     const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
     try {

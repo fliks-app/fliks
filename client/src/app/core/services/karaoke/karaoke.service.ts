@@ -90,7 +90,7 @@ export class KaraokeService {
         this.pending.push(f);
         if (this.pending.length >= MAX_FRAMES_PER_BATCH) this.flush();
       }, () => this.mediaMs());
-      if (this.party.party() && !this.party.isHost()) this.relay.open('singer');
+      if (this.party.party() && !this.relay.isDisplay()) this.relay.open('singer');
       this.flushTimer = setInterval(() => this.flush(), FLUSH_MS);
       this.singing.set(true);
     } catch (err) {

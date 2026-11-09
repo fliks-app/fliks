@@ -247,10 +247,32 @@ pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) ->
     Ok(unlink(paths).await)
 }
 
+/// The bytes the budget can act on: imports are copies of library files that eviction never removes.
 pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
-    sqlx::query_scalar(r#"SELECT COALESCE(sum(size), 0)::bigint FROM derived_audio"#)
-        .fetch_one(db)
-        .await
+    sqlx::query_scalar(
+        r#"SELECT COALESCE(sum(size), 0)::bigint FROM derived_audio WHERE provider <> 'import'"#,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// Tracks with a file and no valid stems, newest first, leaving out `failed` (rule 16): a file with both
+/// imports is done, like [`valid`].
+pub async fn unprepared(db: &PgPool, failed: &[i32], limit: i64) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
+           JOIN item_parts ip ON ip."itemId" = i.id AND ip.version = (
+             SELECT min(version) FROM item_parts WHERE "itemId" = i.id)
+           WHERE (SELECT count(*) FROM derived_audio d WHERE d."mediaFileId" = ip."mediaFileId") < 3
+             AND (SELECT count(DISTINCT d.kind) FROM derived_audio d
+                  WHERE d."mediaFileId" = ip."mediaFileId" AND d.provider = 'import') < 2
+             AND i.id <> ALL($1)
+           ORDER BY i.id DESC LIMIT $2"#,
+    )
+    .bind(failed)
+    .bind(limit)
+    .fetch_all(db)
+    .await
 }
 
 /// Rule 14: the file last used longest ago first, all its rows at once, until the total fits `budget` bytes.

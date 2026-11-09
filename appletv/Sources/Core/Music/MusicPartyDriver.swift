@@ -72,20 +72,20 @@ final class MusicPartyDriver {
     /// The host's natural end: the server idles the party and moves it along its queue.
     private func ended() {
         guard party.active, party.isHost, let item = party.live?.item, item.isTrack else { return }
-        advanceFrom = item.itemId
+        advanceFrom = item
         Task { await party.sendEnded(mediaId: item.mediaId, episodeId: item.episodeId, itemId: item.itemId) }
     }
 
     /// The track the host's end was sent for, until the party moves on or idles on it.
-    private var advanceFrom: Int?
+    private var advanceFrom: PartyItem?
 
     /// An idle party with songs in the singer queue goes on to the next singer.
     private func advanceSinger(_ live: PartyLiveState) {
         guard let from = advanceFrom else { return }
-        if live.item.itemId != from { advanceFrom = nil }
+        if live.item.itemId != from.itemId { advanceFrom = nil }
         else if live.state == "idle" {
             advanceFrom = nil
-            if party.isHost, !party.singerQueue.isEmpty { Task { await party.playSinger() } }
+            if party.isHost, !party.singerQueue.isEmpty { Task { await party.advanceSinger(from: from) } }
         }
     }
 

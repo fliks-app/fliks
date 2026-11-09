@@ -44,6 +44,11 @@ export class KaraokeRelayService {
     void this.dial();
   }
 
+  /** True while this device is the party's display: it scores its own frames, any other device sings through the relay. */
+  isDisplay(): boolean {
+    return this.role === 'display';
+  }
+
   /** With `only`, leaves a socket of the other role alone. */
   close(only?: RelayRole): void {
     if (only && this.role !== only) return;

@@ -136,8 +136,9 @@ pub async fn file(
     for (lang, name, format, text) in sidecars(audio, listing, &order).await {
         if let (Some(dir), Some((v, i))) = (audio.parent(), ultrastar_stems(&text)) {
             for (kind, n) in [("vocals", v), ("instrumental", i)] {
-                if let Some(src) = n.and_then(|n| stem_path(dir, &n, listing))
-                    && crate::karaoke::store::import(
+                if let Some(src) = n.and_then(|n| stem_path(dir, &n, listing)) {
+                    // A failed copy keeps the copy held: the header still names the kind.
+                    if let Err(e) = crate::karaoke::store::import(
                         &st.db,
                         file,
                         kind,
@@ -145,8 +146,9 @@ pub async fn file(
                         duration_ms.unwrap_or(0),
                     )
                     .await
-                    .is_ok()
-                {
+                    {
+                        tracing::warn!("karaoke stem \"{kind}\" of file #{file} not imported: {e}");
+                    }
                     imported.push(kind);
                 }
             }

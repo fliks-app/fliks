@@ -2,11 +2,11 @@
 //! Proposals; `docs/spec/karaoke.md` rule 37).
 use super::{
     db,
-    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn, ProposalsIn, VoteIn},
-    registry::{item_dtos, note},
+    dto::{NextIn, PartyDto, PartyItem, ProposalDto, ProposalIn, ProposalsIn, VoteIn},
+    registry::{hold, item_dtos, note, note_held},
     routes::{
-        Edit, R, conceal_items, edit_programme, fail, host_of, member_row, not_found, require_host,
-        require_open,
+        Edit, PartyError, R, advance_held, conceal_items, edit_held, fail, host_of, member_row,
+        not_found, require_host, require_open,
     },
 };
 use crate::{
@@ -25,7 +25,10 @@ use axum::{
     http::StatusCode,
     routing::{delete, post},
 };
-use fliks_domain::{js::now_ms, party::Item};
+use fliks_domain::{
+    js::now_ms,
+    party::{Item, State as PlayState, same_row},
+};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -479,6 +482,8 @@ pub async fn unpropose(
 ) -> R<StatusCode> {
     let me = a.user.id;
     let row = open_row(&st, id, me).await?;
+    // The gate orders a cancel against a `choose` of the same proposal.
+    let _held = hold(&st, id).await;
     if proposal(&st, id, pid).await?.0 != me && host_of(&st, &row) != me {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_not_author"));
     }
@@ -576,6 +581,7 @@ pub async fn choose(
     let me = a.user.id;
     let mut row = open_row(&st, id, me).await?;
     require_host(&st, &row, me)?;
+    let _held = hold(&st, id).await;
     take(&st, &a, &mut row, pid).await?;
     Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }
@@ -586,21 +592,68 @@ pub async fn next_singer(
     State(st): State<AppState>,
     SessionAuthed(a): SessionAuthed,
     PathParams(id): PathParams<i32>,
+    ValidJson(b): ValidJson<NextIn>,
 ) -> R<Json<PartyDto>> {
     let me = a.user.id;
     let mut row = open_row(&st, id, me).await?;
     require_host(&st, &row, me)?;
-    let head = queue(&st.db, id)
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_queue_empty"))?;
-    take(&st, &a, &mut row, head).await?;
+    let advance = match (b.from, b.device_id) {
+        (Some(from), Some(device)) => Some((Item::from(from), device)),
+        (None, _) => None,
+        (Some(_), None) => return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid")),
+    };
+    let _held = hold(&st, id).await;
+    if let Some((from, _)) = &advance {
+        let idle_on_from = st.parties.view(id).is_some_and(|v| {
+            v.item.as_ref().is_some_and(|i| same_row(i, from))
+                && v.playback.is_some_and(|p| p.state == PlayState::Idle)
+        });
+        if !idle_on_from {
+            return Ok(Json(super::routes::dto(&st, &row, me, true).await?));
+        }
+    }
+    let queue = queue(&st.db, id).await?;
+    if queue.is_empty() {
+        return Err(fail(StatusCode::CONFLICT, "party.error_queue_empty"));
+    }
+    // A head some member cannot open is passed over, not left to block the queue.
+    let mut passed = vec![];
+    let mut refused = None;
+    let mut taken = false;
+    for pid in queue {
+        match take(&st, &a, &mut row, pid).await {
+            Ok(()) => {
+                taken = true;
+                break;
+            }
+            Err(e @ PartyError::Extra(_, "party.error_member_no_access", ..)) => {
+                passed.push(proposal(&st, id, pid).await?.1);
+                refused.get_or_insert(e);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    if !taken {
+        return Err(refused.expect("a non-empty queue"));
+    }
+    for item in &passed {
+        note_held(
+            &st,
+            &row,
+            "item_skipped",
+            &a.user.username,
+            item_args(item, json!({})),
+        )
+        .await?;
+    }
+    if let Some((_, device)) = advance {
+        advance_held(&st, &row, me, &device).await?;
+    }
     Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }
 
 /// Appends proposal `pid`'s item to the programme; a track proposal leaves the queue but keeps
-/// its singer's turn.
+/// its singer's turn. The caller holds the party's gate.
 async fn take(st: &AppState, a: &Authed, row: &mut db::Row, pid: i32) -> R<()> {
     let (_, item) = proposal(st, row.id, pid).await?;
     let track = item.item_id.is_some();
@@ -609,7 +662,7 @@ async fn take(st: &AppState, a: &Authed, row: &mut db::Row, pid: i32) -> R<()> {
     } else {
         Edit::Append(item.clone())
     };
-    edit_programme(st, a, row, edit).await?;
+    edit_held(st, a, row, edit).await?;
     if track {
         sqlx::query(r#"UPDATE watch_party_proposals SET "chosenAt" = now() WHERE id = $1"#)
             .bind(pid)
@@ -617,7 +670,7 @@ async fn take(st: &AppState, a: &Authed, row: &mut db::Row, pid: i32) -> R<()> {
             .await?;
         announce(st, row).await?;
     }
-    note(
+    note_held(
         st,
         row,
         "proposal_chosen",

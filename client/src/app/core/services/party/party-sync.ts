@@ -331,7 +331,7 @@ export class PartySync {
       if (!sameItem(live.item, from)) this.advanceFrom = null;
       else if (live.state === 'idle') {
         this.advanceFrom = null;
-        if (this.party.isHost() && this.party.singerQueue().length > 0) void this.party.playSinger();
+        if (this.party.isHost() && this.party.singerQueue().length > 0) void this.party.advanceSinger(from);
       }
     });
   });

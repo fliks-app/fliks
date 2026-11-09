@@ -171,14 +171,24 @@ describe('PartyService singer queue', () => {
     expect(svc.filmProposals()).toEqual([film]);
   });
 
-  it('proposes a track and plays the next singer with a next intent', async () => {
+  it('proposes a track and plays the next singer with a next intent on the answered revision', async () => {
     const { svc, api } = setup();
     svc.applySnapshot(dto(1));
     api.nextSinger.mockResolvedValue(dto(2));
     expect(await svc.proposeTrack(9, 5001)).toBe(true);
     expect(api.proposeTrack).toHaveBeenCalledWith(7, 9, 5001);
     await svc.playSinger();
-    expect(api.intent).toHaveBeenCalledWith(7, expect.objectContaining({ action: 'next' }));
+    expect(api.intent).toHaveBeenCalledWith(7, expect.objectContaining({ action: 'next', baseRev: 2 }));
+  });
+
+  it('moves on in one request naming the item it idles on, then applies the answer', async () => {
+    const { svc, api } = setup();
+    svc.applySnapshot(dto(1));
+    api.nextSinger.mockResolvedValue(dto(4));
+    await svc.advanceSinger({ mediaId: 1, itemId: 100 });
+    expect(api.nextSinger).toHaveBeenCalledWith(7, { from: { mediaId: 1, itemId: 100 }, deviceId: expect.any(String) });
+    expect(api.intent).not.toHaveBeenCalled();
+    expect(svc.live()?.rev).toBe(4);
   });
 });
 

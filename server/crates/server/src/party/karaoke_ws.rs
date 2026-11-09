@@ -27,15 +27,42 @@ const MAX_BYTES: usize = 4096;
 /// Batches a socket may send per second; the phones send about four.
 const MAX_PER_SECOND: u32 = 20;
 const RECHECK: Duration = Duration::from_secs(5);
+/// Sockets one user may hold open on one party (a phone and a TV, with room to reconnect).
+const MAX_SOCKETS: usize = 4;
 
 type Sink = mpsc::Sender<String>;
 type Displays = HashMap<i32, Vec<(u64, Sink)>>;
 
-/// The display sockets of each party.
+/// The display sockets of each party, and how many sockets each member holds.
 #[derive(Clone, Default)]
-pub struct Relay(Arc<Mutex<Displays>>);
+pub struct Relay(Arc<Mutex<Displays>>, Arc<Mutex<HashMap<(i32, i32), usize>>>);
+
+/// One open socket of a member; the count drops with it.
+struct Slot(Relay, (i32, i32));
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        let mut all = self.0.1.lock().unwrap();
+        if let Some(n) = all.get_mut(&self.1) {
+            *n -= 1;
+            if *n == 0 {
+                all.remove(&self.1);
+            }
+        }
+    }
+}
 
 impl Relay {
+    fn open(&self, party: i32, user: i32) -> Option<Slot> {
+        let mut all = self.1.lock().unwrap();
+        let n = all.entry((party, user)).or_default();
+        if *n >= MAX_SOCKETS {
+            return None;
+        }
+        *n += 1;
+        Some(Slot(self.clone(), (party, user)))
+    }
+
     fn add(&self, party: i32, id: u64, tx: Sink) {
         self.0
             .lock()
@@ -117,12 +144,17 @@ pub async fn karaoke_ws(
     if display && host_of(&st, &row) != user {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_not_host"));
     }
+    let slot = st
+        .relay
+        .open(id, user)
+        .ok_or_else(|| fail(StatusCode::TOO_MANY_REQUESTS, "party.error_rate_limited"))?;
     Ok(ws
         .max_message_size(MAX_BYTES)
-        .on_upgrade(move |s| serve(st, id, user, display, s)))
+        .max_frame_size(MAX_BYTES)
+        .on_upgrade(move |s| serve(st, id, user, display, slot, s)))
 }
 
-async fn serve(st: AppState, party: i32, user: i32, display: bool, mut ws: WebSocket) {
+async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, mut ws: WebSocket) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let (tx, mut rx) = mpsc::channel::<String>(64);
@@ -154,7 +186,8 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, mut ws: WebSo
                 _ => {}
             },
             _ = recheck.tick() => {
-                if !st.parties.has_user(party, user) {
+                let host = st.parties.brief(party).is_some_and(|b| b.host_id == user);
+                if !st.parties.has_user(party, user) || (display && !host) {
                     break;
                 }
             }
@@ -191,6 +224,17 @@ mod tests {
         let mut b = Bucket(Instant::now(), 0);
         let ok = (0..30).filter(|_| b.allow()).count();
         assert_eq!(ok, MAX_PER_SECOND as usize);
+    }
+
+    #[test]
+    fn a_member_holds_a_few_sockets_and_a_closed_one_frees_its_place() {
+        let r = Relay::default();
+        let held: Vec<_> = (0..MAX_SOCKETS).filter_map(|_| r.open(1, 7)).collect();
+        assert_eq!(held.len(), MAX_SOCKETS);
+        assert!(r.open(1, 7).is_none());
+        assert!(r.open(1, 8).is_some() && r.open(2, 7).is_some());
+        drop(held);
+        assert!(r.open(1, 7).is_some());
     }
 
     #[tokio::test]
