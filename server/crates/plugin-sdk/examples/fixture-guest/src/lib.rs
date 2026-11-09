@@ -415,11 +415,13 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 .collect();
             host_result(host::acquisition_sources_set(&list))
         }
-        "failed" => host_result(host::events_publish(&[t::AcquisitionEvent::Failed(t::Failed {
-            media_id: req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1),
-            title: "t".into(),
-            reason: req.query("reason").unwrap_or("no-release").to_owned(),
-        })])),
+        "failed" => host_result(host::events_publish(&[t::AcquisitionEvent::Failed(
+            t::Failed {
+                media_id: req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1),
+                title: "t".into(),
+                reason: req.query("reason").unwrap_or("no-release").to_owned(),
+            },
+        )])),
         "emit" => host_result(host::events_emit_own(
             "ping",
             r#"{"n":1}"#,
