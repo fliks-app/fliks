@@ -67,6 +67,7 @@ volumes/*
 !/scripts/with-test-postgres.sh
 !/scripts/embedded-postgres.conf
 !/scripts/fetch-reaction-emoji.py
+!/scripts/e2e-session/
 logos/
 plans/
 # Scratch documentation stays local; the plugin contract is shared, so it is tracked.
