@@ -231,6 +231,7 @@ function createHarness(opts: {
         provide: RemoteService,
         useValue: {
           validated: new Subject<RemoteCommand>(),
+          registerLoader: vi.fn(),
           markApplied: vi.fn(),
           lastAppliedCmdId: () => null,
         },

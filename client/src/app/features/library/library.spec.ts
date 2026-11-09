@@ -6,6 +6,7 @@ import { EMPTY, Subject } from 'rxjs';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
 import { LibraryComponent } from './library';
+import { RemoteService } from '../../core/services/remote.service';
 import { Media, MediaService } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
@@ -103,6 +104,7 @@ function createHarness(remembered?: number) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      { provide: RemoteService, useValue: { registerLoader: vi.fn(), validated: new Subject(), markApplied: vi.fn(), lastAppliedCmdId: signal<string | null>(null) } },
       {
         provide: ActivatedRoute,
         useValue: {
