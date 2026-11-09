@@ -170,6 +170,29 @@ async fn run_logged(pool: &PgPool) -> Result<(), MigrateError> {
 mod tests {
     use super::*;
 
+    /// Test databases are copies of a migrated template1: these tests start from an empty one.
+    async fn empty(admin: &PgPool) -> PgPool {
+        let name = format!("empty_{}", crate::config::random_hex(6));
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE DATABASE {name} TEMPLATE template0"
+        )))
+        .execute(admin)
+        .await
+        .unwrap();
+        PgPool::connect_with(admin.connect_options().as_ref().clone().database(&name))
+            .await
+            .unwrap()
+    }
+
+    async fn dispose(admin: &PgPool, pool: PgPool) {
+        let name = pool.connect_options().get_database().unwrap().to_owned();
+        pool.close().await;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP DATABASE {name}")))
+            .execute(admin)
+            .await
+            .unwrap();
+    }
+
     async fn create_typeorm_migrations(pool: &PgPool) -> Result<(), sqlx::Error> {
         sqlx::query(
             "CREATE TABLE migrations (
@@ -184,7 +207,8 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn adopt_typeorm_maps_typeorm_ledger(pool: PgPool) -> sqlx::Result<()> {
+    async fn adopt_typeorm_maps_typeorm_ledger(admin: PgPool) -> sqlx::Result<()> {
+        let pool = empty(&admin).await;
         create_typeorm_migrations(&pool).await?;
 
         sqlx::query("INSERT INTO migrations (timestamp, name) VALUES ($1, $2)")
@@ -230,11 +254,13 @@ mod tests {
             .await?;
         assert_eq!(count, 2);
 
+        dispose(&admin, pool).await;
         Ok(())
     }
 
     #[sqlx::test(migrations = false)]
-    async fn adopt_typeorm_rejects_unknown_typeorm_row(pool: PgPool) -> sqlx::Result<()> {
+    async fn adopt_typeorm_rejects_unknown_typeorm_row(admin: PgPool) -> sqlx::Result<()> {
+        let pool = empty(&admin).await;
         create_typeorm_migrations(&pool).await?;
 
         sqlx::query("INSERT INTO migrations (timestamp, name) VALUES ($1, $2)")
@@ -251,11 +277,13 @@ mod tests {
                 .expect("existence check")
         );
 
+        dispose(&admin, pool).await;
         Ok(())
     }
 
     #[sqlx::test(migrations = false)]
-    async fn adopt_typeorm_refuses_synchronize_built_database(pool: PgPool) -> sqlx::Result<()> {
+    async fn adopt_typeorm_refuses_synchronize_built_database(admin: PgPool) -> sqlx::Result<()> {
+        let pool = empty(&admin).await;
         create_typeorm_migrations(&pool).await?;
         sqlx::query("CREATE TABLE users (id serial PRIMARY KEY)")
             .execute(&pool)
@@ -265,13 +293,15 @@ mod tests {
         assert!(err.to_string().contains("empty migrations ledger"), "{err}");
         assert!(!table_exists(&pool, "_sqlx_migrations").await.unwrap());
 
+        dispose(&admin, pool).await;
         Ok(())
     }
 
     #[sqlx::test(migrations = false)]
     async fn adopt_typeorm_refuses_synchronize_database_without_ledger(
-        pool: PgPool,
+        admin: PgPool,
     ) -> sqlx::Result<()> {
+        let pool = empty(&admin).await;
         sqlx::query("CREATE TABLE users (id serial PRIMARY KEY)")
             .execute(&pool)
             .await?;
@@ -280,6 +310,7 @@ mod tests {
         assert!(err.to_string().contains("empty migrations ledger"), "{err}");
         assert!(!table_exists(&pool, "_sqlx_migrations").await.unwrap());
 
+        dispose(&admin, pool).await;
         Ok(())
     }
 }

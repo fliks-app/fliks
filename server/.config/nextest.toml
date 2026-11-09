@@ -2,3 +2,12 @@
 # The slow tests wait on Postgres, sockets and timers rather than CPU: twice the 4 vCPU runner.
 test-threads = 8
 slow-timeout = { period = "60s", terminate-after = 5 }
+
+# Per-test times, to spot the next slow one.
+[profile.ci.junit]
+path = "junit.xml"
+
+# Longest tests first, so a shard does not end on one 30 s test.
+[[profile.default.overrides]]
+filter = "test(/^plugins::/) | test(/^backup_restore::/) | test(/^kobo::sync_/)"
+priority = 10
