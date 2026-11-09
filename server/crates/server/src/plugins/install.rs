@@ -6,7 +6,7 @@ use crate::sync::MutexExt;
 use axum::http::StatusCode;
 use nodejs_semver::Version;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 /// `PluginInstallException`: `{code, message}` with its status.
 #[derive(Debug, Clone, PartialEq)]
@@ -112,6 +112,24 @@ pub struct Summary {
     status_message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     held_update: Option<Value>,
+    description: Value,
+    author: Value,
+    homepage: Value,
+    capabilities: Vec<String>,
+    descriptions: Map<String, Value>,
+}
+
+/// `<root>.description` of each locale of the manifest's `i18n`: a translation every core accepts.
+fn descriptions(m: &Value) -> Map<String, Value> {
+    let Some(key) = manifest::i18n_root(m).map(|r| format!("{r}.description")) else {
+        return Map::new();
+    };
+    m["i18n"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(locale, dict)| Some((locale.clone(), dict.get(&key)?.clone())))
+        .collect()
 }
 
 /// An upgrade from a `pluginApi` 1 package by the same key carries the grant forward.
@@ -146,6 +164,14 @@ impl Plugins {
                 String::new()
             },
             held_update: p.held_update.clone(),
+            description: p.manifest["description"].clone(),
+            author: p.manifest["author"].clone(),
+            homepage: p.manifest["homepage"].clone(),
+            capabilities: manifest::capabilities(
+                &p.manifest,
+                manifest::requests_network(&p.manifest),
+            ),
+            descriptions: descriptions(&p.manifest),
         }
     }
 
@@ -603,5 +629,17 @@ impl Plugins {
             None => Ok(()),
             Some(r) => Err(ie(StatusCode::SERVICE_UNAVAILABLE, "PLUGIN_UNAVAILABLE", r)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn descriptions_read_the_root_description_of_each_locale() {
+        let m = json!({"i18n": {"en": {"acme.title": "T"}, "fr": {"acme.description": "Données", "acme.title": "T"}}});
+        assert_eq!(Value::Object(descriptions(&m)), json!({"fr": "Données"}));
+        assert!(descriptions(&json!({})).is_empty());
     }
 }

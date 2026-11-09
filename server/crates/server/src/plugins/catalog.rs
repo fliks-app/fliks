@@ -113,6 +113,10 @@ pub fn filter(doc: &Value, running: &str, skip_range: bool) -> Value {
             if let Some(l) = p.get("logo") {
                 e.insert("logo".into(), l.clone());
             }
+            // Optional and only shown: a malformed one is dropped, never fails the document.
+            if let Some(c) = p.get("category").filter(|c| c.is_string()) {
+                e.insert("category".into(), c.clone());
+            }
             e.insert(
                 "installable".into(),
                 Value::Array(ok.into_iter().cloned().collect()),
@@ -201,6 +205,29 @@ mod tests {
     }
 
     #[test]
+    fn filter_keeps_a_string_category_only() {
+        let ok = "a".repeat(64);
+        let entry = |c: Value| {
+            json!({"id":"p","name":"P","description":"","author":"a","kind":"process",
+            "category": c, "versions":[v("1.0.0",3,">=5.0.0 <6.0.0",&ok)]})
+        };
+        let doc =
+            parse(&serde_json::to_vec(&json!({"plugins": [entry(json!("metadata"))]})).unwrap())
+                .unwrap();
+        assert_eq!(
+            filter(&doc, "5.0.0", false)["plugins"][0]["category"],
+            "metadata"
+        );
+        let doc =
+            parse(&serde_json::to_vec(&json!({"plugins": [entry(json!(3))]})).unwrap()).unwrap();
+        assert!(
+            filter(&doc, "5.0.0", false)["plugins"][0]
+                .get("category")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn filter_and_hidden() {
         let ok = "a".repeat(64);
         let doc = json!({"plugins": [{"id":"p","name":"P","description":"","author":"a","kind":"process",
@@ -219,6 +246,7 @@ mod tests {
         assert_eq!(got, ["1.0.0", "1.1.0"]);
         assert_eq!(p["hidden"], json!({"count": 3, "minFliksVersion": "6.0.0"}));
         assert!(p.get("logo").is_none());
+        assert!(p.get("category").is_none());
         assert_eq!(f["denyList"], json!([]));
         assert_eq!(newest(Some(&f), "p").as_deref(), Some("1.1.0"));
     }

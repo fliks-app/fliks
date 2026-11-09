@@ -17,6 +17,12 @@
         >
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
         </button>
+        <button type="button" class="dropdown-item text-white" [disabled]="state.refreshing()" (click)="state.refreshAllSources()">
+          @if (state.refreshing()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'settings.plugins.sources.refresh_all' | translate }}
+        </button>
         <button type="button" class="dropdown-item text-white" (click)="openSources()">
           {{ 'settings.plugins.sources.manage_button' | translate }}
         </button>
@@ -34,113 +40,42 @@
     <input #fileInput type="file" accept=".fkplugin,.zip" class="hidden" (change)="onFilePicked($event)" />
   </div>
 
-  @if (loading()) {
+  @if (state.loading()) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
-  } @else if (listError()) {
-    <div role="alert" class="alert alert-error">{{ listError() }}</div>
-  } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'settings.plugins.empty' | translate }}</p>
+  } @else if (state.listError()) {
+    <div role="alert" class="alert alert-error">{{ state.listError() }}</div>
   } @else {
-    <div class="overflow-x-auto rounded-lg border border-base-200">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>{{ 'settings.plugins.col_plugin' | translate }}</th>
-            <th>{{ 'settings.plugins.col_version' | translate }}</th>
-            <th>{{ 'settings.plugins.col_tier' | translate }}</th>
-            <th>{{ 'settings.plugins.col_trust' | translate }}</th>
-            <th>{{ 'settings.plugins.col_status' | translate }}</th>
-            <th>{{ 'settings.plugins.col_enabled' | translate }}</th>
-            <th class="text-end w-32"></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of rows(); track row.pluginId) {
-            <tr>
-              <td>
-                <div class="flex items-center gap-3">
-                  <span class="w-8 h-8 rounded bg-base-200 shrink-0 flex items-center justify-center overflow-hidden">
-                    <img [src]="logoUrl(row.pluginId)" (error)="hideBrokenLogo($event)" alt="" class="w-full h-full object-contain" />
-                  </span>
-                  <div class="min-w-0">
-                    <p class="font-medium truncate">{{ row.name }}</p>
-                    <p class="text-sm text-base-content/50 truncate">{{ row.pluginId }}</p>
-                  </div>
-                </div>
-              </td>
-              <td class="text-sm">{{ row.version }}</td>
-              <td>
-                <span class="badge badge-ghost badge-sm">
-                  {{ (row.kind === 'data' ? 'settings.plugins.tier_data' : 'settings.plugins.tier_process') | translate }}
-                </span>
-              </td>
-              <td>
-                <span class="badge badge-sm" [class]="trustBadgeFor(row.signature).cssClass">
-                  {{ trustBadgeFor(row.signature).labelKey | translate: trustBadgeFor(row.signature).params }}
-                </span>
-              </td>
-              <td>
-                <app-error-badge
-                  [error]="statusDetail(row)"
-                  [label]="statusBadgeFor(row).labelKey | translate"
-                  [badgeClass]="statusBadgeFor(row).cssClass"
-                  titleKey="settings.plugins.col_status"
-                />
-                @if (row.heldUpdate; as held) {
-                  <div class="mt-1">
-                    <app-error-badge
-                      [error]="heldDetail(row)"
-                      [label]="'settings.plugins.held_update.badge' | translate: { version: held.version }"
-                      badgeClass="badge-warning"
-                      titleKey="settings.plugins.held_update.title"
-                    />
-                  </div>
-                }
-              </td>
-              <td>
-                <app-toggle-field
-                  [label]="''"
-                  [value]="row.enabled"
-                  (valueChange)="toggleEnabled(row, $event)"
-                  [disabled]="togglingId() === row.pluginId"
-                  toggleClass="toggle-primary toggle-sm"
-                />
-              </td>
-              <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="exportData(row)">
-                  {{ 'settings.plugins.export.button' | translate }}
-                </button>
-                @if (row.origin !== 'bundled') {
-                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="uninstall(row)">
-                    {{ 'settings.plugins.uninstall' | translate }}
-                  </button>
-                }
-              </td>
-            </tr>
-            @if (row.kind === 'process') {
-            <tr>
-              <td colspan="7" class="pt-0">
-                <details class="metrics-details">
-                  <summary class="text-sm text-base-content/60 cursor-pointer select-none">
-                    {{ 'settings.plugins.metrics.toggle' | translate }}
-                  </summary>
-                  <div class="mt-1">
-                    <app-plugin-metrics-panel [entry]="metricsEntryFor(row)" />
-                  </div>
-                </details>
-              </td>
-            </tr>
-            }
-          }
-        </tbody>
-      </table>
-    </div>
+    @for (c of state.categories(); track c.id) {
+      <app-horizontal-scroller [title]="'settings.plugins.category.' + c.id | translate" class="block">
+        @for (e of c.entries; track e.id) {
+          <ng-container *ngTemplateOutlet="card; context: { $implicit: e }" />
+        }
+      </app-horizontal-scroller>
+    } @empty {
+      <p class="text-center py-12 text-base-content/50">{{ 'settings.plugins.empty' | translate }}</p>
+    }
   }
 
-  <app-plugin-sources #sourcesDialog />
+  <app-plugin-sources #sourcesDialog (changed)="state.reloadCatalogue()" />
   <app-plugin-settings #settingsDialog />
 </div>
 
-<app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />
+<ng-template #card let-e>
+  <app-media-card
+    class="shrink-0 w-28 sm:w-32 lg:w-40"
+    [square]="true"
+    [imageUrl]="e.logo"
+    [title]="e.name"
+    [subtitle]="state.subtitleFor(e)"
+    [topLeftBadge]="state.badgeFor(e)"
+    [dimmed]="e.installed ? !e.installed.enabled : false"
+    [posterName]="posterName(e.id)"
+    [actionsOnly]="true"
+    [extraActions]="actionsById().get(e.id) ?? []"
+    [link]="['/admin/settings/plugins', e.id]"
+  />
+</ng-template>
+
+<app-plugin-install-consent #consentSheet (installed)="state.onInstalled($event)" />

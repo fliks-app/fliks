@@ -3084,12 +3084,8 @@
       "upload": "Importa un plugin",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
-      "col_plugin": "Plugin",
       "col_version": "Version",
-      "col_tier": "Tier",
-      "col_trust": "Trust",
       "col_status": "Status",
-      "col_enabled": "Enabled",
       "tier_data": "Data",
       "tier_process": "Process",
       "status_active": "Active",
@@ -3144,7 +3140,10 @@
           "scope": "Access: {{value}}",
           "ingestroot": "Add files under: {{value}}",
           "job": "Run a scheduled job: {{value}}",
-          "webhook": "Subscribe to server events"
+          "webhook": "Subscribe to server events",
+          "namespace": "Own the \"{{value}}\" identifiers",
+          "provider": "Provide {{value}} metadata",
+          "network": "Reach services on the local network"
         },
         "unverified_ack": "I understand this plugin's publisher is not verified, and I want to install it anyway.",
         "confirm": "Install",
@@ -3198,7 +3197,10 @@
           "url_duplicate": "Esiste già una fonte con questo URL.",
           "key_invalid": "La chiave pubblica deve essere codificata in base64 e decodificarsi in esattamente 32 byte.",
           "generic": "Impossibile aggiungere questa fonte."
-        }
+        },
+        "refresh_all": "Aggiorna tutte le sorgenti",
+        "refresh_all_ok": "Sorgenti aggiornate.",
+        "refresh_all_error": "Aggiornamento non riuscito: {{list}}"
       },
       "catalogue": {
         "title": "Catalogo",
@@ -3241,6 +3243,25 @@
         "include_secrets": "Includi i segreti",
         "include_secrets_hint": "Le chiavi API e le password sono scritte in chiaro nel file. Tienilo privato.",
         "error": "Impossibile esportare il plugin."
+      },
+      "update_badge": "Aggiornamento",
+      "details": "Dettagli",
+      "enable": "Attiva",
+      "disable": "Disattiva",
+      "detail": {
+        "id": "Identificativo",
+        "source": "Sorgente",
+        "homepage": "Sito web",
+        "no_permissions": "Nessun permesso particolare.",
+        "permissions_on_install": "I permessi vengono mostrati prima dell'installazione.",
+        "info": "Informazioni",
+        "not_found": "Plugin non trovato."
+      },
+      "category": {
+        "metadata": "Fornitori di metadati",
+        "download": "Fornitori di download",
+        "notifications": "Notifiche",
+        "other": "Altri"
       }
     },
     "cleanup": {

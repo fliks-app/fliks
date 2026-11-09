@@ -1165,7 +1165,12 @@ async fn installed_shapes_carry_the_client_keys() {
     let r = h.install(&pack(&m, "0.1.0", &w, None)).await;
     assert_eq!(keys(&r), ["pluginId", "status", "version"], "{r}");
     let summary = [
+        "author",
+        "capabilities",
+        "description",
+        "descriptions",
         "enabled",
+        "homepage",
         "kind",
         "name",
         "origin",

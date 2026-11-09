@@ -1,105 +1,56 @@
-import {
-  Component,
-  ElementRef,
-  OnInit,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { LucideEllipsisVertical } from '@lucide/angular';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { saveFile } from '../../../core/plugins/save-file.plugin';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ToastService } from '../../../core/services/toast.service';
-import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import { TranslatePipe } from '@ngx-translate/core';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
-import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
-import {
-  PluginsApiService,
-  PluginSummary,
-  PluginInspectReport,
-  PluginInstallResult,
-  PluginMetricsEntry,
-} from '../../../core/services/api/plugins-api.service';
+import { HorizontalScrollerComponent } from '../../../shared/components/horizontal-scroller';
+import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
+import { PluginInspectReport, PluginsApiService } from '../../../core/services/api/plugins-api.service';
+import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { PluginInstallConsentComponent } from './plugin-install-consent/plugin-install-consent';
 import { PluginSourcesComponent } from './plugin-sources/plugin-sources';
 import { PluginSettingsComponent } from './plugin-settings/plugin-settings';
-import { PluginMetricsPanelComponent } from './plugin-metrics-panel/plugin-metrics-panel';
-import { ErrorBadgeComponent } from '../../../shared/components/error-badge';
-import { trustBadgeFor } from './plugin-trust';
+import { PluginsState, pluginPosterName } from './plugins-state';
 
 @Component({
   selector: 'app-plugins-settings',
   imports: [
+    NgTemplateOutlet,
     RouterLink,
     LucideEllipsisVertical,
     TranslatePipe,
     DropdownMenuComponent,
-    ToggleFieldComponent,
+    HorizontalScrollerComponent,
+    MediaCardComponent,
     PluginInstallConsentComponent,
     PluginSettingsComponent,
     PluginSourcesComponent,
-    PluginMetricsPanelComponent,
-    ErrorBadgeComponent,
   ],
   templateUrl: './plugins.html',
 })
 export class PluginsSettingsComponent implements OnInit {
   private readonly api = inject(PluginsApiService);
-  private readonly translate = inject(TranslateService);
-  private readonly toast = inject(ToastService);
-  private readonly registry = inject(PluginUiRegistryService);
-  private readonly confirmation = inject(ConfirmationService);
+  protected readonly state = inject(PluginsState);
 
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private readonly consentSheet = viewChild<PluginInstallConsentComponent>('consentSheet');
   private readonly sourcesDialog = viewChild<PluginSourcesComponent>('sourcesDialog');
   private readonly settingsDialog = viewChild<PluginSettingsComponent>('settingsDialog');
 
-  readonly rows = signal<PluginSummary[]>([]);
-  readonly metricsByPluginId = signal<Map<string, PluginMetricsEntry>>(new Map());
-  readonly loading = signal(true);
-  readonly listError = signal('');
   readonly uploading = signal(false);
-  readonly togglingId = signal<string | null>(null);
+  protected readonly posterName = pluginPosterName;
+  // Cached so the card is still stamped when its detail page morphs back into it.
+  private readonly routeFresh = keepRouteFresh({ refresh: () => void this.state.reload() });
 
-  readonly trustBadgeFor = trustBadgeFor;
+  /** Built once per entry list, so a card's menu input only changes with its plugin. */
+  readonly actionsById = computed(() => {
+    const open = (report: PluginInspectReport) => this.consentSheet()?.open(report);
+    return new Map(this.state.installed().map((e) => [e.id, this.state.actionsFor(e, open)]));
+  });
 
   ngOnInit(): void {
-    this.reload();
-  }
-
-  async reload(): Promise<void> {
-    this.loading.set(true);
-    this.listError.set('');
-    try {
-      this.rows.set(await this.api.list());
-    } catch {
-      this.listError.set(this.translate.instant('settings.plugins.load_error'));
-    } finally {
-      this.loading.set(false);
-    }
-    // Best-effort: a metrics fetch failure never blocks the row list above it depends on.
-    try {
-      const entries = await this.api.metrics();
-      this.metricsByPluginId.set(new Map(entries.map((e) => [e.pluginId, e])));
-    } catch {
-      this.metricsByPluginId.set(new Map());
-    }
-  }
-
-  metricsEntryFor(row: PluginSummary): PluginMetricsEntry {
-    return this.metricsByPluginId().get(row.pluginId) ?? { pluginId: row.pluginId, kind: row.kind, metrics: null };
-  }
-
-  logoUrl(pluginId: string): string {
-    return this.api.logoUrl(pluginId);
-  }
-
-  /** No logo entry, or the plugin isn't registered (a `failed` row) — the route 404s either way; keep the placeholder box empty. */
-  hideBrokenLogo(event: Event): void {
-    (event.target as HTMLImageElement).style.display = 'none';
+    void this.state.reload();
   }
 
   pickFile(): void {
@@ -115,11 +66,9 @@ export class PluginsSettingsComponent implements OnInit {
 
     this.uploading.set(true);
     try {
-      const report: PluginInspectReport = await this.api.inspect(file);
-      this.consentSheet()?.open(report);
+      this.consentSheet()?.open(await this.api.inspect(file));
     } catch {
-      // Same as the catalogue path: the global error interceptor already toasts the server's
-      // message, so a second one here just repeats it.
+      // The global error interceptor already toasts the server's message.
     } finally {
       this.uploading.set(false);
     }
@@ -131,115 +80,5 @@ export class PluginsSettingsComponent implements OnInit {
 
   openSettings(): void {
     void this.settingsDialog()?.open();
-  }
-
-  async onInstalled(result: PluginInstallResult): Promise<void> {
-    await this.reload();
-    await this.registry.load();
-    if (result.status === 'active') {
-      this.toast.success(this.translate.instant('settings.plugins.installed'));
-    } else {
-      this.toast.warning(
-        this.translate.instant('settings.plugins.install_failed_but_kept', {
-          id: result.pluginId,
-          reason: result.detail ?? result.reason ?? '',
-        }),
-      );
-    }
-  }
-
-  /** Idempotent on the backend, so a stray double-click never 409s — only the in-flight guard here matters for the UI. */
-  /** What the row is actually doing, in the order that matters to an operator: their own off
-   *  switch, then a failed activation, then a process that is up but not answering. */
-  statusBadgeFor(row: PluginSummary): { labelKey: string; cssClass: string } {
-    if (!row.enabled) return { labelKey: 'settings.plugins.status_disabled', cssClass: 'badge-ghost' };
-    if (row.status === 'failed') return { labelKey: 'settings.plugins.status_failed', cssClass: 'badge-error' };
-    if (row.processState && row.processState !== 'ready') {
-      return { labelKey: 'settings.plugins.status_unavailable', cssClass: 'badge-warning' };
-    }
-    return { labelKey: 'settings.plugins.status_active', cssClass: 'badge-success' };
-  }
-
-  /** Why the badge reads what it reads: the boot failure, then the process stderr tail. */
-  statusDetail(row: PluginSummary): string | null {
-    const parts = [row.status === 'failed' ? row.statusReason : null, row.statusMessage];
-    const detail = parts.filter((p) => p?.trim()).join('\n\n');
-    return detail || null;
-  }
-
-  /** The held update's explanation for the badge modal. */
-  heldDetail(row: PluginSummary): string | null {
-    const h = row.heldUpdate;
-    if (!h) return null;
-    const key = h.reason === 'new-scopes' ? 'new_scopes' : 'failed';
-    return this.translate.instant(`settings.plugins.held_update.${key}`, { version: h.version, detail: h.detail });
-  }
-
-  async toggleEnabled(row: PluginSummary, enabled: boolean): Promise<void> {
-    if (this.togglingId()) return;
-    this.togglingId.set(row.pluginId);
-    try {
-      const updated = enabled ? await this.api.enable(row.pluginId) : await this.api.disable(row.pluginId);
-      this.rows.update((rows) => rows.map((r) => (r.pluginId === updated.pluginId ? updated : r)));
-      // The nav, the settings sidebar and every action slot read the registry — without this
-      // a toggled plugin's entries only appear or vanish on the next full page load.
-      await this.registry.load();
-      if (updated.status === 'failed') {
-        this.toast.warning(
-          this.translate.instant('settings.plugins.enable_failed_but_kept', {
-            id: updated.pluginId,
-            reason: updated.statusReason ?? '',
-          }),
-        );
-      } else {
-        this.toast.success(
-          this.translate.instant(enabled ? 'settings.plugins.enabled_toast' : 'settings.plugins.disabled_toast'),
-        );
-      }
-    } catch {
-      this.toast.error(this.translate.instant('settings.plugins.toggle_error'));
-    } finally {
-      this.togglingId.set(null);
-    }
-  }
-
-  async exportData(row: PluginSummary): Promise<void> {
-    const { ok, toggle } = await this.confirmation.confirmWithToggle({
-      title: this.translate.instant('settings.plugins.export.title', { name: row.name }),
-      message: this.translate.instant('settings.plugins.export.message'),
-      toggleLabel: this.translate.instant('settings.plugins.export.include_secrets'),
-      toggleHint: this.translate.instant('settings.plugins.export.include_secrets_hint'),
-    });
-    if (!ok) return;
-    try {
-      await saveFile(await this.api.exportData(row.pluginId, toggle), `${row.pluginId}.export.json`);
-    } catch {
-      this.toast.error(this.translate.instant('settings.plugins.export.error'));
-    }
-  }
-
-  async uninstall(row: PluginSummary): Promise<void> {
-    const tables =
-      row.kind === 'process' ? await this.api.dataUsage(row.pluginId).then((u) => u.tables, () => []) : [];
-    const summary = tables.map((t) => `${t.name} (${t.rows})`).join(', ');
-    const { ok, toggle: deleteData } = await this.confirmation.confirmWithToggle({
-      title: this.translate.instant('common.confirm'),
-      message:
-        this.translate.instant('settings.plugins.confirm_uninstall', { name: row.name }) +
-        (summary ? ' ' + this.translate.instant('settings.plugins.uninstall_data_summary', { list: summary }) : ''),
-      variant: 'danger',
-      toggleLabel: this.translate.instant('settings.plugins.uninstall_delete_data'),
-      toggleHint: this.translate.instant('settings.plugins.uninstall_delete_data_hint'),
-    });
-    if (!ok) return;
-
-    try {
-      await this.api.uninstall(row.pluginId, deleteData);
-      await this.reload();
-      await this.registry.load();
-      this.toast.success(this.translate.instant('settings.plugins.uninstalled'));
-    } catch {
-      this.toast.error(this.translate.instant('settings.plugins.uninstall_error'));
-    }
   }
 }

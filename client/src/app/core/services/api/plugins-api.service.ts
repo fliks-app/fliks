@@ -24,6 +24,13 @@ export interface PluginSummary {
   statusMessage?: string;
   /** An update the unattended path did not install, with the reason. */
   heldUpdate?: { version: string; reason: 'new-scopes' | 'failed'; detail: string };
+  description: string;
+  author: string;
+  homepage: string | null;
+  /** Same strings as the inspect report's `capabilities`. */
+  capabilities: string[];
+  /** `description` translated by the manifest's i18n, per locale. */
+  descriptions: Record<string, string>;
 }
 
 /** Mirrors backend `ProcessPluginMetrics` (`supervisor/plugin-supervisor.ts`). */
@@ -103,8 +110,19 @@ export interface CatalogPluginEntry {
   author: string;
   kind: PluginKind;
   logo?: string;
+  /** Optional: a plugin with none is placed by its capabilities. */
+  category?: string;
   installable: CatalogVersionEntry[];
   hidden: CatalogHiddenSummary | null;
+}
+
+/** One plugin a cached catalog offers, with the source it came from. */
+export interface CatalogueRow {
+  sourceId: number;
+  sourceUrl: string;
+  plugin: CatalogPluginEntry;
+  /** The highest installable version: core sorts `installable` oldest to newest. */
+  latestVersion: string | null;
 }
 
 export interface PluginSourceCatalog {
@@ -194,6 +212,21 @@ export class PluginsApiService {
 
   getSourceCatalog(id: number) {
     return firstValueFrom(this.http.get<PluginSourceCatalog>(`/api/plugins/sources/${id}/catalog`));
+  }
+
+  /** Every cached catalog merged; a source whose catalog fails to load contributes nothing. */
+  async catalogue(): Promise<{ sources: PluginSourceRow[]; rows: CatalogueRow[] }> {
+    const sources = await this.listSources();
+    const catalogs = await Promise.all(sources.map((s) => this.getSourceCatalog(s.id).catch(() => null)));
+    const rows = sources.flatMap((source, i) =>
+      (catalogs[i]?.cachedCatalog?.plugins ?? []).map((plugin) => ({
+        sourceId: source.id,
+        sourceUrl: source.url,
+        plugin,
+        latestVersion: plugin.installable.at(-1)?.version ?? null,
+      })),
+    );
+    return { sources, rows };
   }
 
   inspectFromCatalog(sourceId: number, pluginId: string, version: string) {

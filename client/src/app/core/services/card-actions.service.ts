@@ -49,8 +49,8 @@ export class CardActionsService {
   /** Poster/thumbnail shown in the panel header. Null = none. */
   readonly imageUrl = signal<string | null>(null);
   /** Aspect ratio of the header thumbnail — portrait posters (movie/series/
-   *  season) vs landscape stills (episode). */
-  readonly imageAspect = signal<'portrait' | 'landscape'>('portrait');
+   *  season) vs landscape stills (episode) vs square covers (album). */
+  readonly imageAspect = signal<'portrait' | 'landscape' | 'square'>('portrait');
   /** Secondary line under the title in the panel header (e.g. year). */
   readonly subtitle = signal<string>('');
   /** Whether the panel is currently open. */
@@ -71,7 +71,7 @@ export class CardActionsService {
     anchor: HTMLElement;
     title?: string;
     imageUrl?: string | null;
-    imageAspect?: 'portrait' | 'landscape';
+    imageAspect?: 'portrait' | 'landscape' | 'square';
     subtitle?: string;
     placement?: CardActionsPlacement;
   }) {

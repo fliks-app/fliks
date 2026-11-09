@@ -3084,12 +3084,8 @@
       "upload": "Importer un plugin",
       "load_error": "Impossible de charger la liste des plugins.",
       "empty": "Aucun plugin installé.",
-      "col_plugin": "Plugin",
       "col_version": "Version",
-      "col_tier": "Niveau",
-      "col_trust": "Confiance",
       "col_status": "Statut",
-      "col_enabled": "Activé",
       "tier_data": "Données",
       "tier_process": "Processus",
       "status_active": "Actif",
@@ -3144,7 +3140,10 @@
           "scope": "Accès : {{value}}",
           "ingestroot": "Ajouter des fichiers dans : {{value}}",
           "job": "Exécuter une tâche planifiée : {{value}}",
-          "webhook": "S'abonner aux événements du serveur"
+          "webhook": "S'abonner aux événements du serveur",
+          "namespace": "Gérer les identifiants « {{value}} »",
+          "provider": "Fournir les métadonnées : {{value}}",
+          "network": "Accéder aux services du réseau local"
         },
         "unverified_ack": "Je comprends que l'éditeur de ce plugin n'est pas vérifié, et je veux quand même l'installer.",
         "confirm": "Installer",
@@ -3198,7 +3197,10 @@
           "url_duplicate": "Une source avec cette URL existe déjà.",
           "key_invalid": "La clé publique doit être encodée en base64 et faire exactement 32 octets une fois décodée.",
           "generic": "Impossible d'ajouter cette source."
-        }
+        },
+        "refresh_all": "Actualiser toutes les sources",
+        "refresh_all_ok": "Sources actualisées.",
+        "refresh_all_error": "Échec de l'actualisation : {{list}}"
       },
       "catalogue": {
         "title": "Catalogue",
@@ -3241,6 +3243,25 @@
         "include_secrets": "Inclure les secrets",
         "include_secrets_hint": "Les clés d'API et les mots de passe sont écrits en clair dans le fichier. Gardez-le privé.",
         "error": "Impossible d'exporter le plugin."
+      },
+      "update_badge": "Mise à jour",
+      "details": "Détails",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "detail": {
+        "id": "Identifiant",
+        "source": "Source",
+        "homepage": "Site web",
+        "no_permissions": "Aucune permission particulière.",
+        "permissions_on_install": "Les permissions sont présentées avant l'installation.",
+        "info": "Informations",
+        "not_found": "Plugin introuvable."
+      },
+      "category": {
+        "metadata": "Fournisseurs de métadonnées",
+        "download": "Fournisseurs de téléchargement",
+        "notifications": "Notifications",
+        "other": "Autres"
       }
     },
     "cleanup": {

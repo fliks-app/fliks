@@ -2,22 +2,14 @@ import { Component, OnInit, inject, input, output, signal } from '@angular/core'
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideChevronDown } from '@lucide/angular';
 import {
-  CatalogPluginEntry,
+  CatalogueRow,
   CatalogVersionEntry,
   PluginInspectReport,
   PluginsApiService,
 } from '../../../../core/services/api/plugins-api.service';
+import { compareVersions } from '../../../../core/utils/semver';
 import { DropdownToggleDirective } from '../../../../shared/directives/dropdown-toggle.directive';
 import { SelectedOptionDirective } from '../../../../shared/directives/selected-option.directive';
-
-interface CatalogueRow {
-  sourceId: number;
-  sourceUrl: string;
-  plugin: CatalogPluginEntry;
-  /** ponytail: last entry of `installable`, not a semver max — catalogs are expected to list
-   *  versions oldest-to-newest; revisit with a real semver sort if a catalog ever violates that. */
-  latestVersion: string | null;
-}
 
 /** What every cached catalog offers, merged across sources. */
 @Component({
@@ -53,21 +45,8 @@ export class PluginCatalogueComponent implements OnInit {
     this.loading.set(true);
     this.loadError.set('');
     try {
-      const sources = await this.api.listSources();
+      const { sources, rows } = await this.api.catalogue();
       this.hasAnySource.set(sources.length > 0);
-
-      const catalogs = await Promise.all(sources.map((s) => this.api.getSourceCatalog(s.id).catch(() => null)));
-      const rows: CatalogueRow[] = [];
-      sources.forEach((source, i) => {
-        for (const plugin of catalogs[i]?.cachedCatalog?.plugins ?? []) {
-          rows.push({
-            sourceId: source.id,
-            sourceUrl: source.url,
-            plugin,
-            latestVersion: plugin.installable.at(-1)?.version ?? null,
-          });
-        }
-      });
       this.rows.set(rows);
     } catch {
       this.loadError.set(this.translate.instant('settings.plugins.catalogue.load_error'));
@@ -76,11 +55,11 @@ export class PluginCatalogueComponent implements OnInit {
     }
   }
 
-  /** The version this card would install if not already installed; null when absent or on the newest. The list is ordered oldest to newest by core's parser, so the last entry is the target. */
+  /** The newest version when it is above the installed one; null when absent or already as new. */
   updateTarget(row: CatalogueRow): string | null {
     const installed = this.installedVersions().get(row.plugin.id);
     if (!installed || !row.latestVersion) return null;
-    return installed === row.latestVersion ? null : row.latestVersion;
+    return compareVersions(row.latestVersion, installed) > 0 ? row.latestVersion : null;
   }
 
   /** The version actually running, which is the only one a card has to state. What else the

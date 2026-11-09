@@ -16,6 +16,7 @@ import {
 } from '../../../../core/services/api/plugins-api.service';
 import { trustBadgeFor, requiresAcknowledgement } from '../plugin-trust';
 import { refusalMessageKey } from '../plugin-refusal';
+import { capabilityLabels } from '../plugin-capability';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
@@ -72,28 +73,8 @@ export class PluginInstallConsentComponent {
     if (id) void this.api.discardStaged(id).catch(() => undefined);
   }
 
-  /** `ui:<slot>` / `config:<id>` / `scope:<name>` / `ingestroot:<path>` / `job:<name>` / `webhook`
-   *  — see `deriveCapabilities` on the backend. */
-  capabilityLabel(capability: string): string {
-    const separator = capability.indexOf(':');
-    const prefix = separator === -1 ? capability : capability.slice(0, separator);
-    const value = separator === -1 ? '' : capability.slice(separator + 1);
-    switch (prefix) {
-      case 'ui':
-        return this.translate.instant('settings.plugins.consent.capability.ui', { value });
-      case 'config':
-        return this.translate.instant('settings.plugins.consent.capability.config', { value });
-      case 'scope':
-        return this.translate.instant('settings.plugins.consent.capability.scope', { value });
-      case 'ingestroot':
-        return this.translate.instant('settings.plugins.consent.capability.ingestroot', { value });
-      case 'job':
-        return this.translate.instant('settings.plugins.consent.capability.job', { value });
-      case 'webhook':
-        return this.translate.instant('settings.plugins.consent.capability.webhook');
-      default:
-        return capability;
-    }
+  capabilityLabels(capabilities: readonly string[]): string[] {
+    return capabilityLabels(this.translate, capabilities);
   }
 
   async confirm(): Promise<void> {
