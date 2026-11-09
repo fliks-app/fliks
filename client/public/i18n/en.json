@@ -4013,6 +4013,7 @@
     "resume_here": "Resume here",
     "close": "Close",
     "play_here": "Play here",
+    "listen_here": "Listen on this device",
     "resume": "Resume",
     "hide": "Hide",
     "parked_device": "{{device}} is offline",

@@ -49,6 +49,8 @@ export interface SupersededPlayback {
 /** A local player (video, music) that holds an engine session and can be stopped by a takeover. */
 export interface SessionPlayer {
   sessionId(): string | undefined;
+  /** This device plays something itself (also what does not claim the session: live TV, a party, a download). */
+  active(): boolean;
   /** Stops playback after saving the position; null when it had nothing to resume. */
   yield(): Promise<SupersededPlayback | null>;
 }
@@ -99,14 +101,21 @@ export class SessionSyncService {
   /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */
   readonly observedOwnerTargetId = computed<string | null>(() => {
     const s = this._session();
-    if (!s || this.role() !== 'observer' || s.state === 'parked' || this.device.isTv()) return null;
+    if (!s || this.role() !== 'observer' || s.state === 'parked' || this.device.isTv() || this.localPlaying()) return null;
     return s.owner.targetId;
+  });
+
+  /** Whether a local player is busy: it then wins over observing the other device. */
+  readonly localPlaying = computed(() => {
+    this.registered();
+    return [...this.players].some((p) => p.active());
   });
 
   /** The owner is gone: position kept, resumable anywhere. */
   readonly parked = computed(() => this._session()?.state === 'parked');
 
   private readonly players = new Set<SessionPlayer>();
+  private readonly registered = signal(0);
   private readonly resumers: Partial<Record<MediaFamily, SessionResumer>> = {};
   private readonly handled: string[] = [];
   private fetching = false;
@@ -139,7 +148,9 @@ export class SessionSyncService {
   }
 
   private onEvent(e: SessionEvent): void {
-    if (e.type === 'session.changed') void this.refresh();
+    if (e.type === 'session.changed') {
+      if (this.enabled()) void this.refresh();
+    }
     else void this.handleSuperseded(e.sessionId, e.byDeviceName);
   }
 
@@ -156,7 +167,7 @@ export class SessionSyncService {
         const s = await firstValueFrom(
           this.http.get<AccountSession | null>('/api/session', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
         );
-        this._session.set(s);
+        if (this.enabled()) this._session.set(s);
       } while (this.refetch);
     } catch (err) {
       console.warn('[session] failed to read the account session', err);
@@ -173,7 +184,11 @@ export class SessionSyncService {
 
   registerPlayer(p: SessionPlayer): () => void {
     this.players.add(p);
-    return () => this.players.delete(p);
+    this.registered.update((n) => n + 1);
+    return () => {
+      this.players.delete(p);
+      this.registered.update((n) => n + 1);
+    };
   }
 
   registerResumer(family: MediaFamily, resumer: SessionResumer): () => void {
@@ -232,9 +247,11 @@ export class SessionSyncService {
     return family && this.resumers[family];
   }
 
+  /** What a start needs beyond the stored session: the media pair for video, the queue alone for an album. */
   private knownFor(s: AccountSession): LiveReport | null {
     const k = this.known();
-    return k && k.mediaFileId === s.item.mediaFileId ? k : null;
+    if (k && k.mediaFileId === s.item.mediaFileId) return k;
+    return s.item.kind === 'album' ? { mediaFileId: s.item.mediaFileId ?? 0, mediaId: null, episodeId: null } : null;
   }
 
   /** Whether this device can start the item: it has an adapter for the kind and has seen the media the session omits. */

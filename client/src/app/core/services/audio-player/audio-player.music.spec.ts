@@ -12,6 +12,10 @@ import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
+import { RemoteService } from '../remote.service';
+import { MusicApiService } from '../api/music-api.service';
+import type { RemoteCommand } from '../sse.service';
+import { Subject } from 'rxjs';
 
 const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRequest => ({
   itemId: id,
@@ -45,10 +49,21 @@ describe('AudioPlayerService music mode', () => {
     seek: vi.fn(),
     stop: vi.fn(),
   };
+  type Loader = (cmd: RemoteCommand) => Promise<void>;
+  const loaders: Record<string, Loader> = {};
+  let validated = new Subject<RemoteCommand>();
+  const markApplied = vi.fn();
+  const trackRequests = vi.fn(async (ids: readonly number[]) => ids.map((i) => track(i)));
+  const cmd = (action: RemoteCommand['action'], extra: Partial<RemoteCommand> = {}): RemoteCommand => ({
+    type: 'remote.command', cmdId: 'c1', expiresAt: Date.now() + 10_000, byTargetId: null, action, ...extra,
+  });
   const els = (a: AudioPlayerService) => (a as unknown as { els: HTMLAudioElement[] }).els;
 
   beforeEach(() => {
     localStorage.clear();
+    validated = new Subject<RemoteCommand>();
+    markApplied.mockClear();
+    trackRequests.mockClear();
     cast.isConnected.set(false);
     castTrack.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
@@ -67,7 +82,9 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: MusicApiService, useValue: { trackRequests } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,
@@ -318,6 +335,75 @@ describe('AudioPlayerService music mode', () => {
       expect(audio.elementRate()).toBe(1.05);
       expect(audio.rate()).toBe(1);
       expect(localStorage.getItem('fliks.audio.prefs')).toBeNull();
+    });
+  });
+
+  describe('remote control', () => {
+    it('publishes its queue on the first beat and again only when it changes', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      const beat = () => (audio as unknown as { beat(): void }).beat();
+      updatePlaybackState.mockClear();
+      beat();
+      beat();
+      const [first, second] = updatePlaybackState.mock.calls.map((c) => c[1]);
+      expect(first.queue).toEqual({ itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' });
+      expect(second.queue).toBeUndefined();
+      audio.setRepeat('all');
+      beat();
+      expect(updatePlaybackState.mock.calls[2][1].queue.repeat).toBe('all');
+    });
+
+    it('applies transport, shuffle and repeat commands and acknowledges them', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2), track(3)]);
+      validated.next(cmd('next'));
+      await vi.waitFor(() => expect(audio.queueIndex()).toBe(1));
+      validated.next(cmd('prev', { cmdId: 'c2' }));
+      await vi.waitFor(() => expect(audio.queueIndex()).toBe(0));
+      validated.next(cmd('repeat', { repeat: 'one' }));
+      validated.next(cmd('shuffle', { shuffle: true }));
+      await vi.waitFor(() => expect([audio.repeat(), audio.shuffle()]).toEqual(['one', true]));
+      expect(markApplied).toHaveBeenCalledWith('c2');
+    });
+
+    it('ignores commands while nothing plays', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      validated.next(cmd('next'));
+      await Promise.resolve();
+      expect(markApplied).not.toHaveBeenCalled();
+      expect(audio.active()).toBe(false);
+    });
+
+    it('stops on a stop command and sets the level on volume and mute', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      validated.next(cmd('volume', { level: 0.4 }));
+      await vi.waitFor(() => expect(els(audio)[0].volume).toBeCloseTo(0.4));
+      validated.next(cmd('mute', { muted: true }));
+      await vi.waitFor(() => expect(els(audio)[0].volume).toBe(0));
+      validated.next(cmd('stop'));
+      await vi.waitFor(() => expect(audio.active()).toBe(false));
+    });
+
+    it('loads a queue at its position, paused, through the audio loader', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await loaders['audio'](
+        cmd('load', { kind: 'album', itemId: 2, queue: { itemIds: [1, 2, 3], index: 1 }, shuffle: true, repeat: 'all', positionSeconds: 75, paused: true }),
+      );
+      expect(getItemPlaybackInfo).toHaveBeenCalledWith(2, {}, { startAt: 75 });
+      expect([audio.queueIndex(), audio.shuffle(), audio.repeat(), audio.queue().length]).toEqual([1, true, 'all', 3]);
+      expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    });
+
+    it('replaces the queue under the running track without restarting it', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      getItemPlaybackInfo.mockClear();
+      validated.next(cmd('queue', { queue: { itemIds: [3, 1, 4], index: 1 } }));
+      await vi.waitFor(() => expect(audio.queue().map((t) => t.itemId)).toEqual([3, 1, 4]));
+      expect(audio.queueIndex()).toBe(1);
+      expect(getItemPlaybackInfo).not.toHaveBeenCalled();
     });
   });
 });

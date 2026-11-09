@@ -52,6 +52,14 @@ export class MusicQueue {
     this.setShuffle(shuffle, random);
   }
 
+  /** Takes a play order as it is, flagged shuffled or not, without reordering it. */
+  adopt(tracks: readonly MusicTrackRequest[], index: number, shuffled: boolean): void {
+    this.original = tracks.map((t) => ({ ...t }));
+    this.list = [...this.original];
+    this.pos = this.list.length ? Math.min(Math.max(0, index), this.list.length - 1) : -1;
+    this.shuffled = shuffled;
+  }
+
   /** Shuffling keeps the current track first; turning it off restores the original order around it. */
   setShuffle(on: boolean, random: () => number = Math.random): void {
     const cur = this.current;

@@ -35,13 +35,14 @@ function setup(opts: { enabled?: boolean; tv?: boolean; confirm?: boolean } = {}
     targetId: signal<string | null>('phone#1'),
   };
   const confirm = vi.fn().mockResolvedValue(opts.confirm ?? false);
+  const user = signal<{ sessionSync: boolean }>({ sessionSync: opts.enabled ?? true });
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: AuthService, useValue: { user: signal({ sessionSync: opts.enabled ?? true }) } },
+      { provide: AuthService, useValue: { user } },
       { provide: DeviceService, useValue: { isTv: () => !!opts.tv } },
       { provide: ClockService, useValue: { serverNow: () => Date.now() } },
       { provide: ConfirmationService, useValue: { confirm } },
@@ -56,7 +57,7 @@ function setup(opts: { enabled?: boolean; tv?: boolean; confirm?: boolean } = {}
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { service, sse, http, confirm, flush };
+  return { service, sse, http, confirm, flush, user };
 }
 
 describe('SessionSyncService role', () => {
@@ -141,7 +142,7 @@ describe('SessionSyncService takeover', () => {
 
   const player = (sid: string | undefined, resume = vi.fn()) => {
     const yielded = vi.fn().mockResolvedValue({ title: 'A film', positionSeconds: 754, resume });
-    const p: SessionPlayer = { sessionId: () => sid, yield: yielded };
+    const p: SessionPlayer = { sessionId: () => sid, active: () => true, yield: yielded };
     return { p, yielded, resume };
   };
 
@@ -231,6 +232,18 @@ describe('SessionSyncService play here', () => {
     expect(resumer.mock.calls[0][1].positionSeconds).toBe(640);
   });
 
+  it('starts an album from its stored queue with no live report from the owner', async () => {
+    const { service, flush } = setup();
+    const queue = { itemIds: [5, 6], index: 0, shuffle: false, repeat: 'off' as const };
+    await flush(session({ item: { id: 5, mediaFileId: null, kind: 'album', title: 'An album', subtitle: 'A track', posterUrl: null }, queue, state: 'parked', playing: false }));
+    const resumer = vi.fn().mockResolvedValue(undefined);
+    service.registerResumer('audio', resumer);
+    expect(service.canPlayHere()).toBe(true);
+    await service.playHere();
+    expect(resumer.mock.calls[0][0].queue).toEqual(queue);
+    expect(resumer.mock.calls[0][1].positionSeconds).toBe(100);
+  });
+
   it('does nothing for the owner', async () => {
     const { service, flush } = setup();
     await flush(session({ owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }));
@@ -238,5 +251,33 @@ describe('SessionSyncService play here', () => {
     service.registerResumer('video', resumer);
     await service.playHere();
     expect(resumer).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionSyncService setting and local playback', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('drops a session that comes back after the setting was turned off', async () => {
+    const { service, http, flush, user } = setup();
+    await flush(session());
+    user.set({ sessionSync: false });
+    TestBed.tick();
+    expect(service.session()).toBeNull();
+    service.refresh();
+    http.expectOne('/api/session').flush(session());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(service.session()).toBeNull();
+  });
+
+  it('stops observing the owner while this device plays something itself', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    expect(service.observedOwnerTargetId()).toBe('pc#1');
+    const busy = signal(true);
+    service.registerPlayer({ sessionId: () => undefined, active: busy, yield: vi.fn() });
+    expect(service.observedOwnerTargetId()).toBeNull();
+    busy.set(false);
+    expect(service.observedOwnerTargetId()).toBe('pc#1');
   });
 });

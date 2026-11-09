@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { abortable } from '../../utils/abortable';
 import type { Media } from './media.service';
+import type { MusicTrackRequest } from '../audio-player/music-queue';
+import { trackRowRequest } from '../../../features/music/music-utils';
 import type {
   AlbumCandidate,
   ComposerWork,
@@ -21,6 +23,13 @@ export class MusicApiService {
     let params = new HttpParams();
     for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== false) params = params.set(k, String(v));
     return abortable(this.http.get<TrackRow[]>('/api/tracks', { params }), signal);
+  }
+
+  /** The tracks of a remote queue as the player takes them; ids the caller cannot read are left out. */
+  async trackRequests(ids: readonly number[]): Promise<MusicTrackRequest[]> {
+    if (!ids.length) return [];
+    const rows = await this.tracks({ ids: ids.join(',') });
+    return rows.map((t) => trackRowRequest(t));
   }
 
   people(role: 'artist' | 'composer', q: { libraryId?: number; q?: string; page?: number; limit?: number } = {}, signal?: AbortSignal): Promise<MusicPersonRow[]> {

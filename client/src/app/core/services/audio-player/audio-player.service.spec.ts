@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserDeviceProfileService } from '../browser-device-profile.service';
@@ -8,6 +8,10 @@ import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { AudioPlayerService } from './audio-player.service';
 import { SessionSyncService } from '../session-sync.service';
+import { RemoteService } from '../remote.service';
+import { MusicApiService } from '../api/music-api.service';
+import type { RemoteCommand } from '../sse.service';
+import { Subject } from 'rxjs';
 
 const info = {
   playMethod: 'DirectPlay',
@@ -37,7 +41,9 @@ describe('AudioPlayerService', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: RemoteService, useValue: { registerLoader: vi.fn(), validated: new Subject<RemoteCommand>(), markApplied: vi.fn(), lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,

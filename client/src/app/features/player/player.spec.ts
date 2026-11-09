@@ -198,7 +198,7 @@ function createHarness(opts: {
 
   TestBed.configureTestingModule({
     providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, handleSuperseded: vi.fn() } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
       provideZonelessChangeDetection(),
       // Never render: tests drive the class, and some wait in real time.
       { provide: ComponentFixtureAutoDetect, useValue: false },
@@ -231,6 +231,7 @@ function createHarness(opts: {
         provide: RemoteService,
         useValue: {
           validated: new Subject<RemoteCommand>(),
+          registerLoader: vi.fn(),
           markApplied: vi.fn(),
           lastAppliedCmdId: () => null,
         },

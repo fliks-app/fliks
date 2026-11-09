@@ -402,6 +402,40 @@ describe('RemoteService applyLoad', () => {
     expect(((await loadedWith({}))?.state as any).snapshot.paused).toBe(false);
   });
 
+  it('hands an audio load to the audio loader and never opens the player', async () => {
+    const { service } = setup();
+    const loader = vi.fn().mockResolvedValue(undefined);
+    service.registerLoader('audio', loader);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const cmd = { ...loadCmd(), kind: 'album', itemId: 4, queue: { itemIds: [4], index: 0 } } as RemoteCommand;
+    TestBed.inject(SseService).commands.next(cmd);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledWith(cmd));
+    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(service.lastAppliedCmdId()).toBe('cmd-load');
+  });
+
+  it('treats a load with no kind, or a video kind, as video', async () => {
+    const { service } = setup();
+    const loader = vi.fn();
+    service.registerLoader('audio', loader);
+    const navigateSpy = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    TestBed.inject(SseService).commands.next(loadCmd());
+    TestBed.inject(SseService).commands.next({ ...loadCmd(), kind: 'movie' });
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalledTimes(2));
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it('passes the new audio actions to the player as validated commands', () => {
+    const { service } = setup();
+    const seen: string[] = [];
+    service.validated.subscribe((c) => seen.push(c.action));
+    for (const action of ['prev', 'shuffle', 'repeat', 'queue'] as const) {
+      TestBed.inject(SseService).commands.next({ ...loadCmd(), action });
+    }
+    expect(seen).toEqual(['prev', 'shuffle', 'repeat', 'queue']);
+  });
+
   it('round-trips a snapshot through the wire', () => {
     const snapshot = {
       item: { fileId: 42, mediaId: 7, episodeId: 3 },

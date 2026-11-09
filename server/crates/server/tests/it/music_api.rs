@@ -111,6 +111,34 @@ async fn album_reads_tracks_favourites_and_works(pool: PgPool) {
             .0,
         400
     );
+    let (_, by_ids) = call(&app, &t, "GET", "/api/tracks?ids=2,999,1", None).await;
+    let order: Vec<_> = by_ids
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["itemId"].clone())
+        .collect();
+    assert_eq!(order, vec![json!(2), json!(1)]);
+    assert_eq!(
+        call(&app, &t, "GET", "/api/tracks?ids=1,x", None).await.0,
+        400
+    );
+    let too_many = (1..=501)
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    assert_eq!(
+        call(
+            &app,
+            &t,
+            "GET",
+            &format!("/api/tracks?ids={too_many}"),
+            None
+        )
+        .await
+        .0,
+        400
+    );
     assert_eq!(
         call(
             &app,

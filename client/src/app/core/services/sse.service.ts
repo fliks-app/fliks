@@ -41,7 +41,8 @@ export interface RemoteCommand {
   byTargetId: string | null;
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
-    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality' | 'browse';
+    | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue'
+    | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
   mediaType?: MediaType;
   mediaFileId?: number;
@@ -54,6 +55,17 @@ export interface RemoteCommand {
   subtitleId?: string | null;
   qualityId?: string;
   paused?: boolean;
+  queue?: WireQueue;
+  shuffle?: boolean;
+  repeat?: 'off' | 'all' | 'one';
+  /** Family of the item to load; absent means video (an older sender). */
+  kind?: MediaType;
+}
+
+/** An audio playback's queue on the wire: item ids in play order and the current index. */
+export interface WireQueue {
+  itemIds: number[];
+  index: number;
 }
 
 export interface RemoteState {

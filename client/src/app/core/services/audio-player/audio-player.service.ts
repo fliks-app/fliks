@@ -23,7 +23,10 @@ import {
   type NativeAudioState,
   type NativeAudioTrack,
 } from '../../plugins/audio-player.plugin';
-import { SessionSyncService, type SupersededPlayback } from '../session-sync.service';
+import { SessionSyncService, type AccountSession, type ResumePoint, type SupersededPlayback } from '../session-sync.service';
+import { RemoteService } from '../remote.service';
+import { MusicApiService } from '../api/music-api.service';
+import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
@@ -85,6 +88,8 @@ interface Prefs {
   preamp: number;
 }
 
+type BeatBody = Parameters<StreamingApiService['updatePlaybackState']>[1];
+
 const BEAT_MS = 15_000;
 const PRELOAD_S = 20;
 const RESTART_S = 3;
@@ -109,6 +114,8 @@ export class AudioPlayerService {
   private readonly nativeAudio = inject(NATIVE_AUDIO);
   private readonly auth = inject(AuthService);
   private readonly sessionSync = inject(SessionSyncService);
+  private readonly remote = inject(RemoteService);
+  private readonly music = inject(MusicApiService);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -196,6 +203,8 @@ export class AudioPlayerService {
   private partyRouter: AudioPartyRouter | null = null;
   /** Voice-chat ducking factor, never persisted. */
   private duck = 1;
+  private level = 1;
+  private muted = false;
   /** True while the native player holds the playing track; it resolves the streams of a music queue itself. */
   private nativeOn = false;
   private nativeReady = false;
@@ -209,8 +218,12 @@ export class AudioPlayerService {
     window.addEventListener('pagehide', () => this.beatOnExit());
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
+    this.remote.registerLoader('audio', (cmd) => this.loadFromRemote(cmd));
+    this.remote.validated.subscribe((cmd) => void this.applyRemote(cmd));
+    this.sessionSync.registerResumer('audio', (s, at) => this.resumeSession(s, at));
     this.sessionSync.registerPlayer({
       sessionId: () => this.sessionId,
+      active: () => this._track() !== null,
       yield: () => this.yieldToTakeover(),
     });
     let signedIn = !!this.auth.user();
@@ -237,7 +250,7 @@ export class AudioPlayerService {
   }
 
   /** Starts the item, or resumes it when it is the one loaded. */
-  async play(req: AudioRequest): Promise<void> {
+  async play(req: AudioRequest, opts: { startAt?: number; paused?: boolean } = {}): Promise<void> {
     if (this.blockedByParty()) return;
     if (this._track()?.itemId === req.itemId && this.info) {
       if (this.nativeOn ? !this._playing() : this.el()?.paused) this.toggle();
@@ -280,6 +293,7 @@ export class AudioPlayerService {
           } as PlaybackInfoResponse)
         : opened!;
       if (queued) info.startAtSeconds = queued.positionSeconds;
+      if (opts.startAt !== undefined) info.startAtSeconds = opts.startAt;
       this.info = info;
       this.sessionId = info.sessionId;
       this.parts = local ? local.parts : this.partsOf(info);
@@ -287,7 +301,7 @@ export class AudioPlayerService {
       this._chapters.set(this.chaptersOf(info));
       this.setupMediaSession(req);
       const start = info.startAtSeconds ?? 0;
-      await this.load(start, true);
+      await this.load(start, opts.paused !== true);
     } catch {
       if (generation === this.generation) await this.close();
     } finally {
@@ -366,7 +380,11 @@ export class AudioPlayerService {
   }
 
   cycleRepeat(): void {
-    this.mq.repeat = ({ off: 'all', all: 'one', one: 'off' } as const)[this.mq.repeat];
+    this.setRepeat(({ off: 'all', all: 'one', one: 'off' } as const)[this.mq.repeat]);
+  }
+
+  setRepeat(mode: Repeat): void {
+    this.mq.repeat = mode;
     this.dropPreload();
     this.syncQueue();
     if (this.nativeOn) void this.nativeAudio!.setRepeat({ mode: this.mq.repeat });
@@ -477,22 +495,22 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
-  private async startMusic(req: MusicTrackRequest, autoplay = true): Promise<void> {
+  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0): Promise<void> {
     const generation = ++this.generation;
     await this.release();
     this._pitch.set(0);
     this._musicMode.set(true);
     this._track.set(this.audioOf(req));
     this._loading.set(true);
-    this._position.set(0);
+    this._position.set(startAt);
     this._duration.set(req.durationSeconds ?? 0);
     this._chapters.set([]);
     this._bookmarks.set([]);
     try {
       if (this.network.isOnline()) await this.sync.flush();
       if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
-      if (this.nativeAudio) return await this.startNative(autoplay);
-      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: 0 });
+      if (this.nativeAudio) return await this.startNative(autoplay, startAt);
+      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt });
       if (generation !== this.generation) {
         if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
         return;
@@ -502,7 +520,7 @@ export class AudioPlayerService {
       this.parts = this.partsOf(info);
       this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
       this.setupMediaSession(this._track()!);
-      await this.load(0, autoplay);
+      await this.load(startAt, autoplay);
       void this.refreshStems();
     } catch {
       if (generation === this.generation) await this.close();
@@ -687,7 +705,7 @@ export class AudioPlayerService {
   private applyStemGains(): void {
     if (this.nativeAudio) return this.pushNativeStems();
     if (!this.stems?.loaded) return;
-    this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck);
+    this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck * this.userLevel());
     void this.audioCtx?.resume().catch(() => undefined);
   }
 
@@ -706,7 +724,7 @@ export class AudioPlayerService {
 
   /** A GainNode when the stream is same-origin (a cross-origin element would go silent through Web Audio), else attenuation by `volume`. */
   private applyGain(el: HTMLAudioElement, req: MusicTrackRequest | null, url: string): void {
-    const factor = this.gainOf(req) * this.duck * this.mix().main;
+    const factor = this.gainOf(req) * this.duck * this.userLevel() * this.mix().main;
     let node = this.gainNodes.get(el);
     const ctx = !node && factor !== 1 && sameOrigin(url) ? this.context() : null;
     if (ctx) {
@@ -1178,20 +1196,145 @@ export class AudioPlayerService {
     const next = this.bookQueue.advance();
     if (!next) return;
     try {
-      const media = await this.mediaService.getOne(next.mediaId);
-      const book = asBookMedia(media)?.book;
-      const edition = book?.editions.find((e) => e.family === 'audio' && e.hasFile && e.itemId != null);
-      if (!book || !edition?.itemId) return;
-      await this.play({
-        mediaId: next.mediaId,
-        itemId: edition.itemId,
-        title: media.title,
-        artist: book.authors.map((a) => a.name).join(', '),
-        coverUrl: edition.coverUrl ?? media.posterUrl,
-      });
+      const req = await this.audiobookRequest(next.mediaId);
+      if (req) await this.play(req);
     } catch {
       // The failed request already toasted.
     }
+  }
+
+  private userLevel(): number {
+    return this.muted ? 0 : this.level;
+  }
+
+  /** Web elements only: a native or cast output keeps its own volume. */
+  private volumeReport() {
+    const supportsVolume = !this.nativeOn && !this.casting;
+    return { supportsVolume, ...(supportsVolume && { volume: this.level, muted: this.muted }) };
+  }
+
+  private async queueOf(q: WireQueue): Promise<{ tracks: MusicTrackRequest[]; index: number }> {
+    const tracks = await this.music.trackRequests(q.itemIds);
+    return { tracks, index: Math.max(0, tracks.findIndex((t) => t.itemId === q.itemIds[q.index])) };
+  }
+
+  /** Opens a remote queue where the sender left it; the order is the sender's, never reshuffled. */
+  private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<void> {
+    const { tracks, index } = await this.queueOf(q);
+    if (!tracks.length || this.blockedByParty()) return;
+    this.mq.adopt(tracks, index, shuffle);
+    this.mq.repeat = repeat;
+    this.syncQueue();
+    await this.startMusic(this.mq.current!, autoplay, startAt);
+  }
+
+  /** `load` of an audio family: an album queue, or the audio edition of a book. */
+  private async loadFromRemote(cmd: RemoteCommand): Promise<void> {
+    const startAt = cmd.positionSeconds ?? 0;
+    const autoplay = cmd.paused !== true;
+    if (cmd.queue?.itemIds.length) {
+      return this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
+    }
+    if (!cmd.itemId) return;
+    const req = cmd.kind === 'album' ? null : cmd.mediaId ? await this.audiobookRequest(cmd.mediaId, cmd.itemId) : null;
+    if (req) return this.play(req, { startAt, paused: !autoplay });
+    return this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
+  }
+
+  /** "Play here" on a session of another device: its queue and its position now. */
+  private async resumeSession(s: AccountSession, at: ResumePoint): Promise<void> {
+    const paused = s.state === 'paused' || s.state === 'parked';
+    if (s.item.kind === 'album') {
+      const q = s.queue ?? { itemIds: [s.item.id], index: 0, shuffle: false, repeat: 'off' as const };
+      return this.startQueue(q, q.shuffle, q.repeat, at.positionSeconds, !paused);
+    }
+    if (!at.mediaId) return;
+    const req = await this.audiobookRequest(at.mediaId, s.item.id);
+    if (req) await this.play(req, { startAt: at.positionSeconds, paused });
+  }
+
+  /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */
+  private async applyRemote(cmd: RemoteCommand): Promise<void> {
+    if (!this._track() || this.blockedByParty()) return;
+    const music = this._musicMode();
+    switch (cmd.action) {
+      case 'play':
+        this.resume();
+        break;
+      case 'pause':
+        this.pause();
+        break;
+      case 'playpause':
+        this.toggle();
+        break;
+      case 'seek':
+        if (cmd.positionSeconds !== undefined) await this.seek(cmd.positionSeconds);
+        break;
+      case 'next':
+        this.next();
+        break;
+      case 'prev':
+        this.previous();
+        break;
+      case 'stop':
+        await this.close();
+        break;
+      case 'volume':
+        if (cmd.level !== undefined) this.setLevel(cmd.level, this.muted);
+        break;
+      case 'mute':
+        this.setLevel(this.level, cmd.muted ?? !this.muted);
+        break;
+      case 'shuffle':
+        if (music) this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
+        break;
+      case 'repeat':
+        if (music) this.setRepeat(cmd.repeat ?? this.mq.repeat);
+        break;
+      case 'queue':
+        if (music && cmd.queue) await this.replaceQueue(cmd.queue, cmd.shuffle ?? this.mq.shuffle);
+        break;
+      default:
+        return;
+    }
+    this.remote.markApplied(cmd.cmdId);
+    this.beat();
+  }
+
+  private setLevel(level: number, muted: boolean): void {
+    this.level = Math.min(1, Math.max(0, level));
+    this.muted = muted;
+    this.applyGains();
+  }
+
+  /** Swaps the queue under the running track; another current track starts it. */
+  private async replaceQueue(q: WireQueue, shuffle: boolean): Promise<void> {
+    const { tracks, index } = await this.queueOf(q);
+    if (!tracks.length) return;
+    if (tracks[index].itemId !== this.mq.current?.itemId) {
+      this.mq.adopt(tracks, index, shuffle);
+      this.syncQueue();
+      return this.startMusic(this.mq.current!);
+    }
+    this.mq.adopt(tracks, index, shuffle);
+    this.dropPreload();
+    this.syncQueue();
+    this.pushQueue();
+  }
+
+  /** The audio edition of a book as a request, or null when it has none. */
+  private async audiobookRequest(mediaId: number, itemId?: number): Promise<AudioRequest | null> {
+    const media = await this.mediaService.getOne(mediaId);
+    const book = asBookMedia(media)?.book;
+    const edition = book?.editions.find((e) => e.family === 'audio' && e.hasFile && e.itemId != null && (!itemId || e.itemId === itemId));
+    if (!book || !edition?.itemId) return null;
+    return {
+      mediaId,
+      itemId: edition.itemId,
+      title: media.title,
+      artist: book.authors.map((a) => a.name).join(', '),
+      coverUrl: edition.coverUrl ?? media.posterUrl,
+    };
   }
 
   private onError(): void {
@@ -1226,8 +1369,9 @@ export class AudioPlayerService {
         itemId: track.itemId,
         sessionId: this.sessionId,
         state: this._playing() ? ('playing' as const) : ('paused' as const),
-      },
-    };
+        ...this.volumeReport(),
+      } satisfies BeatBody,
+    } as { mediaId: number; payload: BeatBody };
   }
 
   /** A beat the server does not take is kept, and replayed once it answers. */
@@ -1235,6 +1379,10 @@ export class AudioPlayerService {
     const b = this.body();
     if (!b) return;
     const { positionSeconds, durationSeconds, mediaFileId, itemId } = b.payload;
+    const queue = this.queueToSend();
+    if (queue) b.payload.queue = queue;
+    const ack = this.remote.lastAppliedCmdId();
+    if (ack) b.payload.lastCmdId = ack;
     const saved = { mediaId: b.mediaId, mediaFileId, itemId, positionSeconds, durationSeconds };
     const music = this._musicMode();
     if (!this.network.isOnline()) return music ? undefined : void this.sync.queue(saved);
@@ -1245,7 +1393,27 @@ export class AudioPlayerService {
         if (r?.superseded && b.payload.sessionId) void this.sessionSync.handleSuperseded(b.payload.sessionId);
         if (!music) this.sync.record(saved);
       })
-      .catch(() => (music ? undefined : this.sync.queue(saved)));
+      .catch(() => {
+        if (queue) this.queueSent = null;
+        if (!music) this.sync.queue(saved);
+      });
+  }
+
+  /** What the last beat carried: the queue goes out on the first beat of a session and when it changes. */
+  private queueSent: string | null = null;
+
+  private queueToSend(): BeatBody['queue'] | null {
+    if (!this._musicMode() || !this.mq.tracks.length) return null;
+    const value = {
+      itemIds: this.mq.tracks.map((t) => t.itemId),
+      index: this.mq.index,
+      shuffle: this.mq.shuffle,
+      repeat: this.mq.repeat,
+    };
+    const key = `${this.sessionId}:${JSON.stringify(value)}`;
+    if (key === this.queueSent) return null;
+    this.queueSent = key;
+    return value;
   }
 
   private beatOnExit(): void {
@@ -1389,7 +1557,7 @@ export class AudioPlayerService {
     void this.nativeAudio.setRouted({ routed });
   }
 
-  private async startNative(autoplay: boolean): Promise<void> {
+  private async startNative(autoplay: boolean, startAt = 0): Promise<void> {
     const n = this.nativeAudio!;
     this.nativeOn = true;
     this.nativeIndex = this.mq.index;
@@ -1399,7 +1567,7 @@ export class AudioPlayerService {
     this.pushGain();
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
-    await n.setQueue({ tracks: [...this.mq.tracks], index: this.mq.index, autoplay });
+    await n.setQueue({ tracks: [...this.mq.tracks], index: this.mq.index, autoplay, ...(startAt > 0 && { startAt }) });
     void this.refreshStems();
   }
 

@@ -656,6 +656,8 @@ export class StreamingApiService {
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
+      /** An audio playback's queue, sent when it changes and on the first beat. */
+      queue?: { itemIds: number[]; index: number; shuffle: boolean; repeat: 'off' | 'all' | 'one' };
       qoe?: QoeSample;
     },
   ) {
