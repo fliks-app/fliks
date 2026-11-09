@@ -77,6 +77,23 @@ describe('SessionSyncService role', () => {
     expect(service.observedOwnerTargetId()).toBeNull();
   });
 
+  it('owns a parked session of an earlier page load of this device, and a live one only by its exact target', async () => {
+    const { service, flush, sse } = setup();
+    await flush(session({ state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } }));
+    expect(service.ownedHere()).toBe(true);
+    expect(service.parkedHere()).toBe(true);
+    expect(service.ownerName(service.session()!)).toBe('session.another_device');
+    sse.targetId.set('tablet#1');
+    expect(service.ownedHere()).toBe(false);
+  });
+
+  it('keeps another tab of this device an observer of a live session', async () => {
+    const { service, flush } = setup();
+    await flush(session({ owner: { targetId: 'phone#other', deviceName: null, formFactor: 'phone' } }));
+    expect(service.ownedHere()).toBe(true);
+    expect(service.role()).toBe('observer');
+  });
+
   it('has no role without a session', async () => {
     const { service, flush } = setup();
     await flush(null);

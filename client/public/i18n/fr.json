@@ -4036,6 +4036,7 @@
     "resume": "Reprendre",
     "hide": "Masquer",
     "parked_device": "{{device}} est hors ligne",
+    "parked_here": "Arrêté sur cet appareil",
     "read_on": "Lu sur {{device}}",
     "open_here": "Ouvrir ici",
     "playing_on": "En lecture sur {{device}}",

@@ -4036,6 +4036,7 @@
     "resume": "Fortsetzen",
     "hide": "Ausblenden",
     "parked_device": "{{device}} ist offline",
+    "parked_here": "Auf diesem Gerät angehalten",
     "read_on": "Gelesen auf {{device}}",
     "open_here": "Hier öffnen",
     "playing_on": "Läuft auf {{device}}",

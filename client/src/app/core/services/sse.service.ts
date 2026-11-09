@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject, effect, untracked, OnDestroy } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
@@ -10,6 +10,7 @@ import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 import { getOrCreateDeviceId } from '../utils/device-info';
+import { parseDeviceLabel } from '../utils/format-device-label';
 import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
@@ -341,11 +342,8 @@ export class SseService implements OnDestroy {
     params.set('ff', this.device.formFactor());
     const tvPlatform = this.device.tvPlatform();
     if (tvPlatform) params.set('tvPlatform', tvPlatform);
-    // A name its owner chose beats anything derivable from the User-Agent, and
-    // it is a proper noun, so it travels verbatim like the browser and OS do.
-    await this.systemInfo.ready();
+    const deviceName = await this.ownName();
     if (generation !== this.generation || this.eventSource) return;
-    const deviceName = this.systemInfo.deviceName();
     if (deviceName) params.set('name', deviceName);
 
     let base = '/api/system/events';
@@ -472,6 +470,15 @@ export class SseService implements OnDestroy {
       this.retryHandle = setTimeout(() => void this.connect(), this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
+  }
+
+  /** A name its owner chose beats the label derived from the User-Agent, as it does in the picker; both travel verbatim. */
+  private async ownName(): Promise<string> {
+    await this.systemInfo.ready();
+    const chosen = this.systemInfo.deviceName();
+    if (chosen) return chosen;
+    const label = parseDeviceLabel(navigator.userAgent, this.systemInfo.systemName());
+    return label ? firstValueFrom(this.translate.get(label.key, label.params)) : '';
   }
 
   /** Cached: the device id is a persisted async read. A standalone shell has one webview, so it gets a bare id that survives relaunch,

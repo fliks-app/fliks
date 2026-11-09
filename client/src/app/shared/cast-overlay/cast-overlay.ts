@@ -1,9 +1,10 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, viewChild } from '@angular/core';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideArrowRightLeft, LucidePause, LucidePlay, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { SessionStripService } from './session-strip.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
@@ -12,13 +13,12 @@ import { formatTime } from '../../core/utils/player.utils';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
-import { SessionAudioControllerComponent } from './session-audio-controller';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, SessionAudioControllerComponent, ResolveUrlPipe, TranslatePipe],
+  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, ResolveUrlPipe, TranslatePipe],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
@@ -26,7 +26,6 @@ export class CastOverlayComponent {
   protected readonly sync = inject(SessionSyncService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
-  private readonly translate = inject(TranslateService);
   protected readonly strip = inject(SessionStripService);
   private readonly transferList = viewChild(RemotePickerListComponent);
 
@@ -58,14 +57,13 @@ export class CastOverlayComponent {
   protected readonly detail = computed(() => {
     const s = this.observed();
     if (!s) return '';
-    const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
     const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
     const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
     const time = dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
-    return `${device} · ${time}`;
+    return `${this.sync.ownerName(s)} · ${time}`;
   });
 
-  private readonly controller = viewChild(SessionAudioControllerComponent);
+  private readonly audioView = inject(RemoteAudioOutput);
 
   /** An audio session has a full controller: transport, queue, take over. */
   protected readonly audio = computed(() => {
@@ -76,8 +74,8 @@ export class CastOverlayComponent {
     return families.includes('audio') && !families.includes('video');
   });
 
-  protected openController(): void {
-    this.controller()?.open();
+  protected openAudio(): void {
+    this.audioView.expand();
   }
 
   protected open(): void {

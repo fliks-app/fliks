@@ -18,7 +18,7 @@ import { RemoteService, RemoteTarget } from '../../core/services/remote.service'
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SessionSyncService } from '../../core/services/session-sync.service';
-import { SseService } from '../../core/services/sse.service';
+import { SessionStripService } from '../cast-overlay/session-strip.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
@@ -63,7 +63,7 @@ export class RemotePickerListComponent {
   private readonly session = inject(PlaybackSession);
   protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
-  private readonly sse = inject(SseService);
+  private readonly strip = inject(SessionStripService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -80,25 +80,15 @@ export class RemotePickerListComponent {
   protected readonly followed = computed(() => {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
-    const device = s.owner.deviceName ?? this.translate.instant('session.another_device');
     const reading = this.sync.isReading(s);
-    if (reading && this.readerHere()) return null;
+    if (this.strip.here()) return null;
     const position = reading ? `${this.readPercent(s)}%` : formatTime(this.sync.positionNow(s));
     return {
       title: s.item.title,
       detail: s.item.subtitle ? `${s.item.subtitle} · ${position}` : position,
-      line: this.translate.instant(
-        reading ? 'session.read_on' : this.sync.parked() ? 'session.parked_device' : 'session.playing_on',
-        { device },
-      ),
+      line: this.sync.line(s),
     };
   });
-
-  /** The book or comic position is saved by this very device. */
-  private readerHere(): boolean {
-    const s = this.sync.session();
-    return !!s && this.sync.isReading(s) && s.owner.targetId === this.sse.targetId();
-  }
 
   private readPercent(s: { positionSeconds: number; durationSeconds: number | null }): number {
     return Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100);
@@ -107,7 +97,7 @@ export class RemotePickerListComponent {
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
     const session = this.sync.session();
-    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.readerHere();
+    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.strip.here();
     rows.push({
       kind: 'local',
       id: 'local',
@@ -120,7 +110,7 @@ export class RemotePickerListComponent {
             : this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
           : null,
       connected: this.session.isLocal() && !resumable,
-      disabled: this.readerHere() && this.session.isLocal(),
+      disabled: this.strip.here() && this.session.isLocal(),
     });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();

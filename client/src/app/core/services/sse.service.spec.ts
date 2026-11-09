@@ -161,7 +161,7 @@ describe('SseService: session change', () => {
 describe('SseService: native dial credential', () => {
   const urls: string[] = [];
 
-  async function dial(ticket: string | null): Promise<string> {
+  async function dial(ticket: string | null, deviceName = ''): Promise<string> {
     vi.restoreAllMocks();
     urls.length = 0;
     vi.stubGlobal(
@@ -199,7 +199,7 @@ describe('SseService: native dial credential', () => {
         },
         { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
         { provide: DeviceService, useValue: { formFactor: () => 'phone', tvPlatform: () => null } },
-        { provide: SystemInfoService, useValue: { ready: async () => {}, deviceName: () => null } },
+        { provide: SystemInfoService, useValue: { ready: async () => {}, deviceName: () => deviceName, systemName: () => 'Linux' } },
       ],
     });
     const sse = TestBed.inject(SseService);
@@ -216,6 +216,12 @@ describe('SseService: native dial credential', () => {
     expect(url).toContain('https://srv/api/system/events?');
     expect(url).toContain('ticket=tk1');
     expect(url).not.toContain('token=');
+  });
+
+  it('names the device after its own name, else after its browser and system', async () => {
+    expect(new URL(await dial('tk', 'Desk')).searchParams.get('name')).toBe('Desk');
+    // The translation key stands in for the label: no catalogue is loaded here.
+    expect(new URL(await dial('tk')).searchParams.get('name')).toBe('system.device_browser_on_os');
   });
 
   it('falls back to the access token when no ticket can be minted', async () => {
