@@ -1,6 +1,7 @@
 import Foundation
 import Capacitor
 import AudioToolbox
+import AVFoundation
 
 @objc(AudioCapabilitiesPlugin)
 public class AudioCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -52,7 +53,23 @@ public class AudioCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
             "codecs": codecs,
             "maxChannels": maxChannels,
             "channelsByCodec": channelsByCodec,
+            "audioFiles": Self.audioFiles(),
         ])
+    }
+
+    /// The audio files AVFoundation reports it opens as they are, by MIME type, in the server's container and codec names.
+    static func audioFiles(playable: (String) -> Bool = { AVURLAsset.isPlayableExtendedMIMEType($0) }) -> [String: [String]] {
+        let probes: [(mime: String, containers: [String], codecs: [String])] = [
+            ("audio/mpeg", ["mp3"], ["mp3"]),
+            ("audio/aac", ["aac"], ["aac"]),
+            ("audio/mp4; codecs=\"mp4a.40.2\"", ["mp4"], ["aac"]),
+            ("audio/mp4; codecs=\"alac\"", ["mp4"], ["alac"]),
+            ("audio/flac", ["flac"], ["flac"]),
+            ("audio/wav", ["wav"], ["pcm_s16le", "pcm_s24le"]),
+            ("audio/aiff", ["aiff"], ["pcm_s16be", "pcm_s24be"]),
+        ].filter { playable($0.mime) }
+        func unique(_ l: [String]) -> [String] { var seen = Set<String>(); return l.filter { seen.insert($0).inserted } }
+        return ["containers": unique(probes.flatMap(\.containers)), "videoCodecs": [], "audioCodecs": unique(probes.flatMap(\.codecs))]
     }
 
     /// The set of audio format IDs the system can decode.

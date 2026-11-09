@@ -20,6 +20,8 @@ export interface CastDeviceCapabilities {
   av1Main10?: boolean;
   /** The TV the receiver drives presents HDR. */
   hdr?: boolean;
+  /** The audio files the receiver opens as they are (v3). */
+  audioFiles?: { containers: string[]; videoCodecs: string[]; audioCodecs: string[] };
 }
 
 export interface CastSettings {

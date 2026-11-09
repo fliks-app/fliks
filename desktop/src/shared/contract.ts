@@ -108,6 +108,9 @@ export interface DesktopSystemInfo {
  *  True only when Windows mpv's probe confirmed `gpu-next` init; false everywhere else. */
 export interface DesktopPlayerCapabilities {
   canReshapeDolbyVision: boolean;
+  /** mpv's decoder codec names and lavf demuxer names; absent when mpv could not be asked. */
+  decoders?: string[];
+  demuxers?: string[];
 }
 
 /** main → renderer event envelope, sent on the single IPC.event channel. */

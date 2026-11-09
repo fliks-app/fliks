@@ -11,7 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 
-/** The audio files the native player opens as they are, from the device's own decoders. */
+/** The audio files the device opens as they are, from its own decoders; the web layer sends them with the rest of the profile. */
 final class NativeAudioFormats {
     private NativeAudioFormats() {}
 
@@ -49,14 +49,5 @@ final class NativeAudioFormats {
         if (!mimes.contains(mime)) return;
         codecs.add(codec);
         for (String c : fileContainers) containers.add(c);
-    }
-
-    /** The web layer's profile plus this device's audio files. */
-    static String withAudioFiles(String profile) throws JSONException {
-        JSONObject p = new JSONObject(profile);
-        JSONArray direct = p.optJSONArray("directPlayProfiles");
-        if (direct == null) p.put("directPlayProfiles", direct = new JSONArray());
-        direct.put(directPlay(decoderMimes()));
-        return p.toString();
     }
 }

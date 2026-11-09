@@ -398,6 +398,7 @@ app.whenReady().then(async () => {
   const addon = nativeRequire(
     path.join(nativeBase, 'native', 'build', 'Release', 'fliks_compositor.node'),
   ) as CompositorAddon;
+  (await import('./window/backends/capabilities')).probeListsWith(addon);
 
   // The OFFSCREEN window renders the Angular UI to a transparent bitmap; the
   // addon's SDL window is the only visible surface.

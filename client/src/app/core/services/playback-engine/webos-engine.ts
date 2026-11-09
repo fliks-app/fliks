@@ -29,6 +29,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _duration = 0;
   /** Last URL handed to `load()` — the base for reload-on-seek. */
   private loadedUrl = '';
+  /** MIME of a raw progressive file, sent to the native pipeline as the `<source>` type. */
+  private directMime: string | undefined;
   private boundListeners: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [];
   private audioTrackListeners: Array<[string, EventListener]> = [];
   private frameCbHandle: number | null = null;
@@ -197,9 +199,10 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Loading ─────────────────────────────────────────────────────────
 
-  async load(url: string, startTime?: number): Promise<void> {
+  async load(url: string, startTime?: number, mimeType?: string): Promise<void> {
     if (!this.video) throw new Error('WebOsEngine not initialised');
     this.loadedUrl = url;
+    this.directMime = mimeType;
     this.frameBaseline = null;
     this.resetFirstFrame();
     this.clearSeekDebounce();
@@ -270,7 +273,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       if (useMediaOption) {
         const source = document.createElement('source');
         source.src = url;
-        source.setAttribute('type', webOsSourceType(url, startTime));
+        source.setAttribute('type', webOsSourceType(url, startTime, this.directMime));
         v.appendChild(source);
       } else {
         v.src = url;
@@ -541,7 +544,7 @@ function setStartAt(url: string, position: number): string {
 }
 
 /** Build the `<source>` `type` with webOS's `mediaOption` JSON (native resume, high HLS start rung); unknown keys are ignored. */
-function webOsSourceType(url: string, startTime: number): string {
+export function webOsSourceType(url: string, startTime: number, directMime = 'video/mp4'): string {
   const isHls = /\.m3u8(\?|$)/i.test(url);
   const option: Record<string, unknown> = {};
   if (startTime > 0) {
@@ -551,7 +554,7 @@ function webOsSourceType(url: string, startTime: number): string {
     option['adaptiveStreaming'] = { bps: { start: WEBOS_START_BITRATE }, seamlessPlay: true };
   }
   const mediaOption = { mediaTransportType: isHls ? 'HLS' : 'URI', option };
-  const mime = isHls ? 'application/vnd.apple.mpegurl' : 'video/mp4';
+  const mime = isHls ? 'application/vnd.apple.mpegurl' : directMime;
   return `${mime};mediaOption=${encodeURI(JSON.stringify(mediaOption))}`;
 }
 

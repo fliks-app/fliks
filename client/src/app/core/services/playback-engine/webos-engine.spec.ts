@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WebOsEngine } from './webos-engine';
+import { WebOsEngine, webOsSourceType } from './webos-engine';
 
 function engineWith(video: Record<string, unknown>) {
   const engine = new WebOsEngine();
@@ -63,5 +63,18 @@ describe('WebOsEngine.getQoeSample', () => {
   it('has no buffer figure when the playhead is outside every range', async () => {
     const engine = engineWith({ currentTime: 99 });
     expect((await engine.getQoeSample())?.bufferAheadS).toBeNull();
+  });
+});
+
+describe('webOsSourceType', () => {
+  const typeOf = (url: string, mime?: string) => decodeURIComponent(webOsSourceType(url, 0, mime)).split(';')[0];
+
+  it('tells the native pipeline the container of a raw file', () => {
+    expect(typeOf('/api/stream/1/file', 'video/x-matroska')).toBe('video/x-matroska');
+    expect(typeOf('/api/stream/1/file')).toBe('video/mp4');
+  });
+
+  it('keeps the HLS type for a manifest whatever the file type', () => {
+    expect(typeOf('/hls/master.m3u8', 'video/x-matroska')).toBe('application/vnd.apple.mpegurl');
   });
 });

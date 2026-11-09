@@ -245,7 +245,7 @@ export class AudioPlayerService {
         // Replayed first: the server's playedAt guard orders it against progress from another device.
         if (this.network.isOnline()) await this.sync.flush();
         opened = await this.streaming
-          .getItemPlaybackInfo(req.itemId, this.profile())
+          .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile())
           .catch((e) => {
             if (!local) throw e;
             return null;
@@ -477,7 +477,7 @@ export class AudioPlayerService {
       if (this.network.isOnline()) await this.sync.flush();
       if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
       if (this.nativeAudio) return await this.startNative(autoplay);
-      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.profile(), { startAt: 0 });
+      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: 0 });
       if (generation !== this.generation) {
         if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
         return;
@@ -565,7 +565,7 @@ export class AudioPlayerService {
     this.preTried = next;
     const generation = this.generation;
     void this.streaming
-      .getItemPlaybackInfo(next.itemId, this.profile(), { startAt: 0 })
+      .getItemPlaybackInfo(next.itemId, this.deviceProfile.getProfile(), { startAt: 0 })
       .then((info) => {
         const stale = generation !== this.generation || this.preTried !== next;
         if (stale || info.playMethod !== 'DirectPlay') {
@@ -762,7 +762,7 @@ export class AudioPlayerService {
     const generation = ++this.generation;
     const position = this._position();
     const autoplay = this._playing();
-    const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.profile(), { startAt: position, pitchSemitones: n }).catch(() => null);
+    const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: position, pitchSemitones: n }).catch(() => null);
     if (!info || generation !== this.generation) {
       if (info?.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
       return;
@@ -793,7 +793,7 @@ export class AudioPlayerService {
     if (!req || !this._musicMode() || this.casting || this.nativeAudio) return;
     const generation = ++this.generation;
     const position = this._position();
-    const profile = { ...this.profile(), rejectCopy: true };
+    const profile = { ...this.deviceProfile.getProfile(), rejectCopy: true };
     const info = await this.streaming.getItemPlaybackInfo(req.itemId, profile, { startAt: position }).catch(() => null);
     if (!info || generation !== this.generation || info.playMethod === 'DirectPlay') {
       if (info?.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
@@ -1340,14 +1340,10 @@ export class AudioPlayerService {
     });
     void n.addListener('error', () => this.onError());
     void n.addListener('refresh', () => void this.auth.refreshAccessToken());
+    await this.deviceProfile.whenNativeProbed();
     await n.configure({ deviceProfile: JSON.stringify(this.deviceProfile.getProfile()) });
     this.pushGain();
     await n.attach();
-  }
-
-  /** Native builds keep the shared profile; every page-driven element opens what it reports. */
-  private profile(): DeviceProfile {
-    return this.nativeAudio ? this.deviceProfile.getProfile() : this.deviceProfile.getAudioProfile();
   }
 
   private pushGain(): void {

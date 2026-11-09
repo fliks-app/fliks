@@ -35,6 +35,8 @@ export type CompositorAddon = {
   raise(): void;
   setCursorVisible(visible: boolean): void;
   setCursorShape(shape: number): void;
+  /** The decoder and demuxer lists of a throwaway mpv. */
+  probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
 };
 

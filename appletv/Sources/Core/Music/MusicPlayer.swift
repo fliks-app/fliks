@@ -353,7 +353,7 @@ enum MusicTransport: Equatable {
         if let known = resolved[itemId] { return .success(known) }
         do {
             let query = pitch == 0 ? "startAt=0" : "startAt=\(startAt)&pitchSemitones=\(pitch)"
-            let info: Info = try await api.post("/api/items/\(itemId)/playback-info?\(query)", body: DeviceProfileBuilder.buildMusic())
+            let info: Info = try await api.post("/api/items/\(itemId)/playback-info?\(query)", body: DeviceProfileBuilder.build())
             var path = Self.streamPath(playMethod: info.playMethod, pitched: pitch != 0, partUrl: info.parts?.first?.playUrl, playUrl: info.playUrl)
             if let q = path.firstIndex(of: "?") { path = String(path[..<q]) }
             let r = Resolved(path: path, sessionId: info.sessionId, mediaFileId: info.mediaFileId)

@@ -59,12 +59,7 @@ public class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void configure(PluginCall call) {
         String profile = call.getString("deviceProfile");
-        try {
-            if (profile != null) host.setDeviceProfile(NativeAudioFormats.withAudioFiles(profile));
-        } catch (org.json.JSONException e) {
-            call.reject("bad device profile");
-            return;
-        }
+        if (profile != null) host.setDeviceProfile(profile);
         call.resolve();
     }
 

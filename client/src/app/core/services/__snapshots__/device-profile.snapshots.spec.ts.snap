@@ -1,0 +1,861 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the generated device profile, per platform > android-native 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "aac": 8,
+    "flac": 8,
+    "opus": 8,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxHeight": 2160,
+      "maxWidth": 4096,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": true,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "mobile",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "mp3",
+        "flac",
+        "opus",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+        "webm",
+        "mkv",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "vp9",
+        "avc3",
+        "hev1",
+        "dvh1",
+        "dvhe",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "mp3",
+        "flac",
+      ],
+      "containers": [
+        "mp3",
+        "flac",
+      ],
+      "videoCodecs": [],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 6,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": true,
+  "supportsHlsSubtitles": true,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": true,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > chrome-desktop 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "aac": 8,
+    "flac": 8,
+    "opus": 8,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxLevel": 186,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+    {
+      "codec": "av1",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "high",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": true,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "opus",
+        "flac",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+        "webm",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "av1",
+        "vp9",
+        "vp8",
+        "avc3",
+        "hev1",
+        "dvh1",
+        "dvhe",
+        "dav1",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "mp3",
+        "flac",
+        "vorbis",
+        "opus",
+      ],
+      "containers": [
+        "mp3",
+        "flac",
+        "ogg",
+        "opus",
+      ],
+      "videoCodecs": [],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 2,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": true,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": true,
+  "supportsHlsSubtitles": true,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": true,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > desktop-mpv 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "aac": 8,
+    "flac": 8,
+    "opus": 8,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 10,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+        "high 10",
+        "high 10 intra",
+        "high 4:2:2",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+    {
+      "codec": "av1",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "high",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": true,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "ac3",
+        "eac3",
+        "opus",
+        "flac",
+        "dts",
+        "truehd",
+      ],
+      "containers": [
+        "mp4",
+        "mov",
+        "m4v",
+        "mkv",
+        "webm",
+        "ts",
+        "m2ts",
+        "mts",
+        "avi",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "av1",
+        "vp9",
+        "mpeg2video",
+        "vc1",
+        "avc3",
+        "hev1",
+        "dvh1",
+        "dvhe",
+        "dav1",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": [
+    7,
+  ],
+  "maxAudioChannels": 8,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": true,
+  "supportsAbr": false,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": false,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": true,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": true,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > firefox-no-hevc 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "aac": 8,
+    "flac": 8,
+    "opus": 8,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "av1",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "high",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": true,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "opus",
+        "flac",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+        "webm",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "av1",
+        "vp9",
+        "vp8",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "mp3",
+        "flac",
+      ],
+      "containers": [
+        "mp3",
+        "flac",
+      ],
+      "videoCodecs": [],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 2,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": true,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": false,
+  "supportsHlsSubtitles": true,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": true,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > ios-native 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "aac": 8,
+    "flac": 8,
+    "opus": 8,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxLevel": 186,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": true,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "mobile",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "alac",
+        "mp3",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "mp3",
+        "aac",
+        "alac",
+      ],
+      "containers": [
+        "mp3",
+        "aac",
+        "mp4",
+      ],
+      "videoCodecs": [],
+    },
+  ],
+  "dolbyVisionProfiles": [
+    5,
+    8,
+  ],
+  "maxAudioChannels": 8,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": true,
+  "supportsHdr": true,
+  "supportsHlsSubtitles": true,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": true,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > tizen-2019 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "flac": 2,
+    "opus": 2,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 51,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxLevel": 153,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": false,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+        "mkv",
+        "ts",
+        "m2ts",
+        "avi",
+        "webm",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "avc3",
+        "hev1",
+        "dvh1",
+        "dvhe",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 2,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": false,
+  "supportsDolbyVision": false,
+  "supportsHdr": false,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": true,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": true,
+}
+`;
+
+exports[`the generated device profile, per platform > tizen-2021 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "flac": 2,
+    "opus": 2,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 51,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxLevel": 153,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+    {
+      "codec": "av1",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": false,
+  "dedupesAudioByLanguage": undefined,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "ac3",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+        "mkv",
+        "ts",
+        "m2ts",
+        "avi",
+        "webm",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "av1",
+        "vp9",
+        "avc3",
+        "hev1",
+        "dvh1",
+        "dvhe",
+        "dav1",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 6,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": false,
+  "supportsDolbyVision": false,
+  "supportsHdr": true,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": true,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": true,
+}
+`;
+
+exports[`the generated device profile, per platform > webos-2019-fhd 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "flac": 2,
+    "opus": 2,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": false,
+  "dedupesAudioByLanguage": true,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "mp3",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "ac3",
+        "eac3",
+        "aac",
+        "mp3",
+      ],
+      "containers": [
+        "mkv",
+        "matroska",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "vp9",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 2,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": false,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;
+
+exports[`the generated device profile, per platform > webos-2025-uhd 1`] = `
+{
+  "appVersion": undefined,
+  "audioChannelsByCodec": {
+    "flac": 2,
+    "opus": 2,
+  },
+  "codecConditions": [
+    {
+      "codec": "h264",
+      "maxBitDepth": 8,
+      "maxLevel": 62,
+      "profiles": [
+        "baseline",
+        "constrained baseline",
+        "main",
+        "high",
+      ],
+    },
+    {
+      "codec": "hevc",
+      "maxBitDepth": 10,
+      "maxLevel": 186,
+      "profiles": [
+        "main",
+        "main 10",
+      ],
+    },
+    {
+      "codec": "av1",
+      "maxBitDepth": 10,
+      "profiles": [
+        "main",
+        "high",
+      ],
+    },
+  ],
+  "cropsBlackBarsLocally": false,
+  "dedupesAudioByLanguage": true,
+  "deviceId": undefined,
+  "deviceName": undefined,
+  "deviceType": "desktop",
+  "directPlayProfiles": [
+    {
+      "audioCodecs": [
+        "aac",
+        "ac3",
+        "eac3",
+        "mp3",
+      ],
+      "containers": [
+        "mp4",
+        "m4v",
+        "mov",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+        "av1",
+        "dvh1",
+      ],
+    },
+    {
+      "audioCodecs": [
+        "ac3",
+        "eac3",
+        "aac",
+      ],
+      "containers": [
+        "mkv",
+        "matroska",
+      ],
+      "videoCodecs": [
+        "h264",
+        "avc1",
+        "hevc",
+        "h265",
+        "hvc1",
+      ],
+    },
+  ],
+  "dolbyVisionProfiles": undefined,
+  "maxAudioChannels": 6,
+  "maxStreamingBitrate": 0,
+  "probesSegZero": false,
+  "supportsAbr": true,
+  "supportsDirectPlay": true,
+  "supportsDolbyVision": false,
+  "supportsHdr": true,
+  "supportsHlsSubtitles": false,
+  "supportsIFrameTrickPlay": undefined,
+  "supportsImageSubtitles": false,
+  "supportsMuxedAudioRendition": undefined,
+  "switchesDirectPlayAudio": undefined,
+  "systemName": undefined,
+  "tonemapsHdrLocally": false,
+  "useTs": false,
+  "useTsOnSingleAudio": false,
+}
+`;

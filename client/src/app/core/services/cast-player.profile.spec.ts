@@ -48,3 +48,19 @@ describe('getCastDeviceProfile video side', () => {
     expect(profile({ ...caps, hevcMain10: false }).supportsHdr).toBe(false);
   });
 });
+
+describe('getCastDeviceProfile audio files', () => {
+  const files = { containers: ['mp3', 'flac'], videoCodecs: [], audioCodecs: ['mp3', 'flac'] };
+
+  it('carries the audio files the receiver reports, after the video entry, on every profile', () => {
+    const p = profile({ audioCodecs, videoCodecs: ['h264'], v: 3, audioFiles: files });
+    expect(p.directPlayProfiles).toHaveLength(2);
+    expect(p.directPlayProfiles[1]).toEqual(files);
+    expect(p.codecConditions).toContainEqual({ codec: 'flac', maxBitDepth: 24 });
+    expect(p.directPlayProfiles[0].videoCodecs).toEqual(['h264', 'avc1', 'avc3']);
+  });
+
+  it('lists none for a receiver that does not report them', () => {
+    expect(profile({ audioCodecs, videoCodecs: ['h264'], v: 2 }).directPlayProfiles).toHaveLength(1);
+  });
+});

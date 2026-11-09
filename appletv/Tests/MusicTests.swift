@@ -22,6 +22,16 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(formats.codecs, ["mp3", "alac"])
     }
 
+    func testVideoContainersFollowTheAudiovisualTypes() {
+        XCTAssertEqual(DeviceProfileBuilder.videoContainers(types: ["video/mp4", "video/x-m4v", "audio/mpeg"]), ["mp4", "m4v"])
+        XCTAssertEqual(DeviceProfileBuilder.videoContainers(types: []), [])
+    }
+
+    func testTheProfileCarriesTheAudioFilesEntryOnEveryRequest() {
+        XCTAssertEqual(DeviceProfileBuilder.build().directPlayProfiles.count, 2)
+        XCTAssertEqual(DeviceProfileBuilder.build().directPlayProfiles.last?.videoCodecs, [])
+    }
+
     func testShuffleKeepsCurrentFirstAndRestoresOrder() {
         var q = MusicQueue()
         q.set((1...6).map { track($0) }, start: 2)
