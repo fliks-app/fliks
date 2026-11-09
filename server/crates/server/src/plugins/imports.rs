@@ -400,9 +400,10 @@ impl host::Host for Ctx {
     }
     async fn events_publish(&mut self, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
         let app = self.app();
+        let id = self.sh.id.clone();
         call!(self, "events.publish", ["events:emit"], HOST_CALL, async {
             let app = app?;
-            super::events::publish(&app, events).await
+            super::events::publish(&app, &id, events).await
         })
     }
     async fn notifications_dispatch_grab_started(
@@ -461,12 +462,43 @@ impl host::Host for Ctx {
         downloads: Vec<t::DownloadProgress>,
     ) -> Result<(), HostError> {
         let app = self.app();
+        let id = self.sh.id.clone();
         call!(self, "progress.set", ["events:emit"], HOST_CALL, async {
             let app = app?;
             super::events::progress_gates()
-                .set(&app, media_id as i32, &downloads)
+                .set(&app, &id, media_id as i32, &downloads)
                 .await
         })
+    }
+
+    async fn acquisition_sources_set(&mut self, sources: Vec<t::Source>) -> Result<(), HostError> {
+        let app = self.app();
+        let id = self.sh.id.clone();
+        call!(
+            self,
+            "acquisition.sourcesSet",
+            ["acquisition:candidates"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                let list = sources
+                    .into_iter()
+                    .map(|s| super::picker::Source {
+                        id: s.id,
+                        name: s.name,
+                        kinds: s.kinds,
+                    })
+                    .collect();
+                if app.plugins.pickers.set_sources(&id, list)? {
+                    app.hub.emit_raw(
+                        "acquisition.sources",
+                        serde_json::json!({"pluginId": id}),
+                        None,
+                    );
+                }
+                Ok(())
+            }
+        )
     }
 
     async fn deadline_remaining_ms(&mut self) -> u64 {

@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -100,18 +100,47 @@ pub async fn push_progress(st: &AppState, media_id: i32, downloads: Vec<Download
 
 struct Gate {
     last: Instant,
-    pending: Option<Vec<Download>>,
+    dirty: bool,
     armed: bool,
 }
 
-/// `progress.set`: one emission per media per second, the newest of a window wins.
 #[derive(Default)]
-pub struct Progress(Mutex<HashMap<i32, Gate>>);
+struct Inner {
+    gates: HashMap<i32, Gate>,
+    /// Each plugin's set per media (`plugins.md` rule 65); a media's emission is their union.
+    sets: HashMap<i32, BTreeMap<String, Vec<Download>>>,
+}
+
+impl Inner {
+    fn store(&mut self, plugin: &str, media: i32, set: Vec<Download>) {
+        let by_plugin = self.sets.entry(media).or_default();
+        if set.is_empty() {
+            by_plugin.remove(plugin);
+        } else {
+            by_plugin.insert(plugin.to_owned(), set);
+        }
+        if by_plugin.is_empty() {
+            self.sets.remove(&media);
+        }
+    }
+
+    fn union(&self, media: i32) -> Vec<Download> {
+        self.sets
+            .get(&media)
+            .map(|m| m.values().flatten().cloned().collect())
+            .unwrap_or_default()
+    }
+}
+
+/// `progress.set`: per (media, plugin) sets, one emission per media per second, the newest wins.
+#[derive(Default)]
+pub struct Progress(Mutex<Inner>);
 
 impl Progress {
     pub async fn set(
         &'static self,
         st: &AppState,
+        plugin: &str,
         media_id: i32,
         downloads: &[t::DownloadProgress],
     ) -> Result<(), HostError> {
@@ -120,32 +149,34 @@ impl Progress {
             .map(download_of)
             .collect::<Result<_, _>>()?;
         let now = Instant::now();
-        let wait = {
+        let (wait, now_set) = {
             let mut g = self.0.lock_clean();
-            match g.get_mut(&media_id) {
+            g.store(plugin, media_id, set);
+            let union = g.union(media_id);
+            match g.gates.get_mut(&media_id) {
                 Some(gate) if now - gate.last < PROGRESS_MIN => {
-                    gate.pending = Some(set.clone());
+                    gate.dirty = true;
                     if gate.armed {
                         return Ok(());
                     }
                     gate.armed = true;
-                    Some(PROGRESS_MIN - (now - gate.last))
+                    (Some(PROGRESS_MIN - (now - gate.last)), union)
                 }
                 _ => {
-                    g.insert(
+                    g.gates.insert(
                         media_id,
                         Gate {
                             last: now,
-                            pending: None,
+                            dirty: false,
                             armed: false,
                         },
                     );
-                    None
+                    (None, union)
                 }
             }
         };
         let Some(wait) = wait else {
-            push_progress(st, media_id, set).await;
+            push_progress(st, media_id, now_set).await;
             return Ok(());
         };
         let st = st.clone();
@@ -157,22 +188,57 @@ impl Progress {
         tokio::time::sleep(wait).await;
         let pending = {
             let mut g = self.0.lock_clean();
-            let Some(gate) = g.get_mut(&media_id) else {
+            let Some(gate) = g.gates.get_mut(&media_id) else {
                 return;
             };
             gate.armed = false;
-            match gate.pending.take() {
-                Some(p) => {
-                    gate.last = Instant::now();
-                    p
-                }
-                None => {
-                    g.remove(&media_id);
-                    return;
-                }
+            if gate.dirty {
+                gate.dirty = false;
+                gate.last = Instant::now();
+                g.union(media_id)
+            } else {
+                g.gates.remove(&media_id);
+                return;
             }
         };
         push_progress(&st, media_id, pending).await;
+    }
+
+    /// The plugin's set plus a placeholder, pushed at once (`acquisition.grabbed`).
+    async fn placeholder(&self, st: &AppState, plugin: &str, media_id: i32, d: Download) {
+        let union = {
+            let mut g = self.0.lock_clean();
+            let mut set = g
+                .sets
+                .get(&media_id)
+                .and_then(|m| m.get(plugin))
+                .cloned()
+                .unwrap_or_default();
+            set.push(d);
+            g.store(plugin, media_id, set);
+            g.union(media_id)
+        };
+        push_progress(st, media_id, union).await;
+    }
+
+    /// The plugin stopped: its sets go and every media it held gets the union that remains.
+    pub async fn forget(&self, st: &AppState, plugin: &str) {
+        let left: Vec<(i32, Vec<Download>)> = {
+            let mut g = self.0.lock_clean();
+            let held: Vec<i32> = g
+                .sets
+                .iter()
+                .filter(|(_, m)| m.contains_key(plugin))
+                .map(|(id, _)| *id)
+                .collect();
+            for id in &held {
+                g.store(plugin, *id, vec![]);
+            }
+            held.into_iter().map(|id| (id, g.union(id))).collect()
+        };
+        for (id, set) in left {
+            push_progress(st, id, set).await;
+        }
     }
 }
 
@@ -210,7 +276,11 @@ async fn check_family(st: &AppState, media_id: u32, family: t::Family) -> Result
 }
 
 /// Rule 33, in order; an event naming a family or unit the host cannot serve refuses the whole call.
-pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
+pub async fn publish(
+    st: &AppState,
+    plugin: &str,
+    events: Vec<t::AcquisitionEvent>,
+) -> Result<(), HostError> {
     for e in &events {
         match e {
             t::AcquisitionEvent::Grabbed(g) => {
@@ -235,8 +305,7 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<
                     season_number: season,
                     episode_number: episode,
                 });
-                let mut set = st.hub.progress_current(g.media_id.into());
-                set.push(Download {
+                let placeholder = Download {
                     r#ref: match Family::from(g.family) {
                         Family::Video => format!(
                             "pending:{}:{}",
@@ -251,8 +320,10 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<
                     dlspeed: Num(0.0),
                     eta: Num(0.0),
                     state: DownloadState::Queued,
-                });
-                push_progress(st, g.media_id as i32, set).await;
+                };
+                progress_gates()
+                    .placeholder(st, plugin, g.media_id as i32, placeholder)
+                    .await;
             }
             t::AcquisitionEvent::Imported(i) => {
                 let id = i.media_id as i32;
@@ -276,6 +347,9 @@ pub async fn publish(st: &AppState, events: Vec<t::AcquisitionEvent>) -> Result<
                 );
                 st.hub.emit(SseEvent::QueueUpdated {});
                 crate::media_servers::dispatch_detached(st, "download.complete");
+            }
+            t::AcquisitionEvent::Failed(f) if f.reason == super::picker::NO_RELEASE => {
+                st.plugins.no_release(st, plugin, f.media_id as i32).await;
             }
             t::AcquisitionEvent::Failed(f) => {
                 let id = f.media_id as i32;
@@ -312,5 +386,59 @@ pub async fn emit_own(st: &AppState, id: &str, kind: &str, payload: Value, audie
             let to = recipients(st, Some(m as i32)).await;
             st.hub.emit_raw(&ty, payload, Some(&to));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn dl(r#ref: &str) -> Download {
+        Download {
+            r#ref: r#ref.into(),
+            season_number: None,
+            episode_number: None,
+            progress: Num(0.5),
+            dlspeed: Num(0.0),
+            eta: Num(0.0),
+            state: DownloadState::Active,
+        }
+    }
+
+    fn refs(i: &Inner, media: i32) -> Vec<String> {
+        i.union(media).into_iter().map(|d| d.r#ref).collect()
+    }
+
+    #[test]
+    fn two_plugins_keep_their_own_set_and_the_union_is_in_plugin_order() {
+        let mut i = Inner::default();
+        i.store("b", 1, vec![dl("b1")]);
+        i.store("a", 1, vec![dl("a1"), dl("a2")]);
+        assert_eq!(refs(&i, 1), ["a1", "a2", "b1"]);
+        i.store("a", 1, vec![dl("a3")]);
+        assert_eq!(refs(&i, 1), ["a3", "b1"], "a replaces only its own set");
+        i.store("b", 1, vec![]);
+        assert_eq!(refs(&i, 1), ["a3"]);
+        i.store("a", 1, vec![]);
+        assert!(refs(&i, 1).is_empty() && i.sets.is_empty());
+    }
+
+    #[test]
+    fn concurrent_sets_of_two_plugins_never_overwrite_each_other() {
+        let p = Arc::new(Progress::default());
+        let run = |plugin: &'static str| {
+            let p = p.clone();
+            std::thread::spawn(move || {
+                for n in 0..500 {
+                    p.0.lock_clean()
+                        .store(plugin, 1, vec![dl(&format!("{plugin}{n}"))]);
+                }
+            })
+        };
+        let (a, b) = (run("a"), run("b"));
+        a.join().unwrap();
+        b.join().unwrap();
+        assert_eq!(refs(&p.0.lock_clean(), 1), ["a499", "b499"]);
     }
 }

@@ -8,6 +8,7 @@ mod harness;
 mod namespaces;
 pub(crate) mod net;
 mod no_tmdb;
+mod pickers;
 mod provider;
 mod provider_host;
 mod roles;

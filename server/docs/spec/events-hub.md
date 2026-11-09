@@ -153,6 +153,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
+| 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed (`plugins.md` rule 63) |
 | 41 | `party.state` | C (each member of the party) | `{partyId: number, rev: number, state: 'idle'|'waiting'|'paused'|'playing', item: PartyItem, anchor: {position: number, serverTimeMs: number}, whenMs: number|null, by: {userId, username}|null, action: string|null}` (`watch-party.md`) |
 | 42 | `party.members` | C (members) | `{partyId, rev, members: PartyMember[]}` |
 | 43 | `party.settings` | C (members) | `{partyId, rev, name: string, policy: 'everyone'|'host_only'}` |
@@ -180,7 +181,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 | `media.season.monitored.changed` | `{mediaId: number, seasonNumber: number, monitored: boolean}` |
 | `media.removed` | `{mediaId: number, externalIds: ExternalId[], mediaType: string}` |
 | `media.files.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number, source: 'download'|'disk'}` |
-| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` |
+| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (to plugins also `provider?: string`, `plugins.md` rule 66) |
 | `acquisition.grabbed` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` |
 | `request.created` | `{requestId: number, mediaType: string, externalIds: ExternalId[], userId: number|null, kind: string, seasons: number[]|null}` |
 | `request.approved` | `{requestId: number, mediaId: number|null, mediaType: string, externalIds: ExternalId[], seasons: number[]|null, approvedByUserId: number|null}` |

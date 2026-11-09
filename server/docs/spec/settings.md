@@ -79,6 +79,7 @@ This domain stores every key; the semantics belong to consumers. Registry of doc
 
 | Key(s) | Consumer parsing/default | In-memory cache or listener |
 |---|---|---|
+| `acquisition.providerOrder`, `acquisition.fallback` | JSON array of plugin ids written as a string (`[]`; any other value is a 400); `'false'` disables, else on (`plugins.md` rules 64, 66) | the plugin host keeps both in memory, refreshed from the change notification |
 | `streaming_segment_duration`, `streaming_qsv_preset`, `streaming_tonemap_algo`, `streaming_tonemap_curve`, `streaming_cache_max_gb`, `streaming_cache_ttl_hours`, `streaming_ffmpeg_slots`, `streaming_auto_quality_mode`, `streaming_auto_crop_enabled`, `streaming_gpu_render_node`, `streaming_throttle_enabled`, `streaming_throttle_threshold_seconds` | streaming settings cache load | cache + engine push |
 | `password_login` (`everyone` default; `admins` needs an enabled provider, else 409), `oidc_auto_launch` (empty or the id of an enabled provider) | `POST /api/auth/login`, `GET /api/auth/oidc` (`auth.md` rules 78 and 69); written by an admin only (`is_admin`, 403 for a `settings.access` role) | none |
 | `users_public_mode` (`everyone`; write accepts `everyone`, `lan`, `hidden` only) | `GET /api/auth/users-public`, read per request (`auth.md` rule 43) | none |

@@ -220,13 +220,15 @@ impl Registry {
         map.keys().min().cloned()
     }
 
-    pub fn release_picker_for(&self, id: &str) -> Option<Value> {
-        let t = self.r();
-        (Self::winner(&t.pickers).as_deref() == Some(id)).then(|| t.pickers.get(id).cloned())?
+    pub fn release_picker_of(&self, id: &str) -> Option<Value> {
+        self.r().pickers.get(id).cloned()
     }
 
-    pub fn release_picker_winner(&self) -> Option<String> {
-        Self::winner(&self.r().pickers)
+    /// Every plugin declaring `ui.releasePicker`, by id.
+    pub fn release_picker_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.r().pickers.keys().cloned().collect();
+        ids.sort();
+        ids
     }
 
     pub fn pre_roll(&self) -> Option<(String, String)> {

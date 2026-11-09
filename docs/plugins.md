@@ -53,7 +53,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   |---|---|
   | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, `media.resolveOrCreate` (it tells which titles exist), and, because both answer with media identity for the whole library, `acquisition.candidates` and `releases.match` |
   | `media:create` | `media.resolveOrCreate` (with `media:read`): adds a title to a library when none holds it. The import runs the request hooks, so it also adopts and approves the pending requests for that title. An update that newly declares it waits for an admin. |
-  | `acquisition:candidates` | `acquisition.candidates`, `releases.match` |
+  | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
   | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set`, `progress.set` |
@@ -119,6 +119,15 @@ for an any-language want), `q` and `sid`; `grab` takes a JSON body with `family`
 manual-release fields (`downloadUrl`, `sourceTitle`, `sourceId`, `force`, `infoUrl`; none for a
 grab-best). A kind the server does not serve is accepted and ignored.
 
+Every plugin declaring `ui.releasePicker` is an acquisition provider; any number may be installed.
+A provider calls `acquisition.sourcesSet` (scope `acquisition:candidates`) at `start` and after any
+change of what it can search, with its sources `{id, name, kinds}` (an indexer, an account, ...):
+the buttons and the releases dialog show a provider's tabs per source. The admin orders providers
+with the setting `acquisition.providerOrder` (a JSON array of plugin ids) and turns the fallback
+across providers on or off with `acquisition.fallback`. For `media.acquisition.requested` a provider
+acts only when the event's `provider` is its own id, and answers `acquisition.failed` with the
+reason `no-release` when it finds nothing, so the core can ask the next provider.
+
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 
 - `form` — key/value settings stored in `app_settings` under `plugin.<id>.<key>`, rendered by
@@ -161,7 +170,7 @@ core change adding a `kind`, not a plugin shipping code.
 **`ui.player`** declares one route, `{ preRollRoute: string }`, that must name a `POST` entry in
 this manifest's own `routes[]` — the same rule `releasePicker` applies to its own routes. Only one
 plugin's declaration is ever live: if more than one declares it, the lexicographically smallest
-plugin id wins and the others are logged and ignored, exactly like `releasePicker`.
+plugin id wins and the others are logged and ignored.
 
 Before a `playback-info` response goes out, core POSTs `{ mediaFileId, mediaId, episodeId }` to the
 winning plugin's route on behalf of the requesting user and expects back a JSON array of items

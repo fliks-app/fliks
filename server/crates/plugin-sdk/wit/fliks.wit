@@ -214,6 +214,8 @@ interface types {
     eta-seconds: option<f64>,
     state: download-state,
   }
+  /// One thing an acquisition provider can search: an indexer, an account.
+  record source { id: string, name: string, kinds: list<kind> }
 }
 
 interface host {
@@ -221,7 +223,7 @@ interface host {
     target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
     ingest-result, acquisition-event, audience, download-progress, family, unit-ref, host-error,
-    json, kind, external-id, recording-ref, wanted-track,
+    json, kind, external-id, recording-ref, wanted-track, source,
   };
 
   /// `family` none is the media's first want; `language` picks among the wants of a book's family.
@@ -262,6 +264,9 @@ interface host {
   counts-set: func(key: string, value: u64) -> result<_, host-error>;
   events-emit-own: func(event-type: string, payload: json, audience: audience) -> result<_, host-error>;
   progress-set: func(media-id: u32, downloads: list<download-progress>) -> result<_, host-error>;
+
+  /// Replaces the sources this plugin offers as an acquisition provider; needs `acquisition:candidates`.
+  acquisition-sources-set: func(sources: list<source>) -> result<_, host-error>;
 
   deadline-remaining-ms: func() -> u64;
 
