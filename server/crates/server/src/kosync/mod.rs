@@ -222,7 +222,12 @@ async fn put_progress(
         locator: None,
         clear_locator: true,
     };
-    record_watch(&st.db, caller.user, r.media, &watch).await?;
+    let saved = record_watch(&st.db, caller.user, r.media, &watch).await?;
+    if saved.is_some_and(|s| s["completed"] == json!(true)) {
+        st.account_sessions
+            .complete_reading(&st, caller.user, r.item)
+            .await;
+    }
     Ok(reply())
 }
 

@@ -187,7 +187,12 @@ pub async fn put(
             locator: None,
             clear_locator: true,
         };
-        record_watch(&st.db, user, b.media, &watch).await?;
+        let saved = record_watch(&st.db, user, b.media, &watch).await?;
+        if saved.is_some_and(|s| s["completed"] == json!(true)) {
+            st.account_sessions
+                .complete_reading(&st, user, b.item)
+                .await;
+        }
         let at: Option<DateTime<Utc>> = sqlx::query_scalar(
             r#"SELECT "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = $2"#,
         )

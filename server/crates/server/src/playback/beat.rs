@@ -353,8 +353,7 @@ fn account_beat(
     })
 }
 
-/// `session.md` rule 19: a reader's save leaves a parked row of the item, or removes it once the item is finished.
-#[allow(clippy::too_many_arguments)]
+/// `session.md` rule 19: a reader's save leaves a parked row of the item; none without an owner.
 async fn account_reading(
     st: &AppState,
     headers: &HeaderMap,
@@ -363,14 +362,16 @@ async fn account_reading(
     item: i32,
     file: i32,
     progression: f64,
-    completed: bool,
 ) {
-    if completed {
-        st.account_sessions
-            .complete_reading(st, account, item)
-            .await;
+    let Some(id) = st
+        .hub
+        .identity_for(sse_connection_id(body, headers).as_deref())
+    else {
         return;
-    }
+    };
+    let Some(target_id) = id.target_id.filter(|t| !t.is_empty()) else {
+        return;
+    };
     let Some(kind) = crate::account_session::kind_of(&st.db, item)
         .await
         .ok()
@@ -378,20 +379,16 @@ async fn account_reading(
     else {
         return;
     };
-    let id = st
-        .hub
-        .identity_for(sse_connection_id(body, headers).as_deref());
-    let owner = id.map_or_else(Owner::default, |id| Owner {
-        target_id: id.target_id.filter(|t| !t.is_empty()),
-        device_name: id.device_name,
-        form_factor: id.form_factor,
-    });
     st.account_sessions
         .reading(
             st,
             ReadingIn {
                 account,
-                owner,
+                owner: Owner {
+                    target_id: Some(target_id),
+                    device_name: id.device_name,
+                    form_factor: id.form_factor,
+                },
                 kind,
                 item,
                 file,
@@ -501,12 +498,12 @@ pub async fn heartbeat(
                 Some(Some(input)) => {
                     st.account_sessions.beat(&st, input).await == Verdict::Superseded
                 }
-                _ => st.account_sessions.is_superseded(account, sid).await,
+                _ => st.account_sessions.is_superseded(sid).await,
             };
         }
         if superseded {
             // Another item than the row's is the old device's own progress (rule 8).
-            keep_history = item.is_some() && st.account_sessions.item_of(account).await != item;
+            keep_history = item.is_some() && st.account_sessions.item_of(sid).await != item;
         } else if let Some(u) = &updated {
             record_qoe(&st, user, u, body.get("qoe").unwrap_or(&Value::Null));
             emit_state(&st, user, u, media, &body);
@@ -594,18 +591,12 @@ pub async fn heartbeat(
     if let (true, Some(sid)) = (completed, sid) {
         st.account_sessions.complete(&st, history_user, sid).await;
     }
-    if let Some(progression) = reading {
-        account_reading(
-            &st,
-            &headers,
-            &body,
-            history_user,
-            item,
-            file,
-            progression,
-            completed,
-        )
-        .await;
+    if completed && sid.is_none() {
+        st.account_sessions
+            .complete_reading(&st, history_user, item)
+            .await;
+    } else if let Some(progression) = reading {
+        account_reading(&st, &headers, &body, history_user, item, file, progression).await;
     }
     Ok(reply(lost, superseded, Some(saved)))
 }
