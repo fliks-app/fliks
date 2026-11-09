@@ -162,6 +162,7 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
         h.st.plugins.acquire(&t1, false).await,
         Outcome::Grabbed(A.into())
     );
+    forget(&h).await;
     offer(&h, A, json!([])).await;
     assert_eq!(h.st.plugins.acquire(&t1, false).await, Outcome::NoRelease);
 
