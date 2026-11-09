@@ -1,0 +1,29 @@
+{
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-command-repeat-invalid",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "repeat",
+        "repeat": "sideways"
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

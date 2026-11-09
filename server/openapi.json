@@ -5047,6 +5047,27 @@
         }
       }
     },
+    "/api/session": {
+      "get": {
+        "tags": [
+          "crate::account_session"
+        ],
+        "operationId": "show",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::account_session"
+        ],
+        "operationId": "dismiss",
+        "responses": {
+          "204": {},
+          "409": {}
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [

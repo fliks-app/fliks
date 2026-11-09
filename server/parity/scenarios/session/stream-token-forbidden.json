@@ -1,0 +1,34 @@
+{
+  "capture": {
+    "st": "$.steps[0].body.streamToken"
+  },
+  "ignore": [
+    "$..streamToken",
+    "$..expiresAt"
+  ],
+  "name": "session-stream-token-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    },
+    {
+      "as": "anon",
+      "headers": {
+        "Authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/session"
+    },
+    {
+      "as": "anon",
+      "headers": {
+        "Authorization": "Bearer {st}"
+      },
+      "method": "DELETE",
+      "path": "/api/session"
+    }
+  ]
+}

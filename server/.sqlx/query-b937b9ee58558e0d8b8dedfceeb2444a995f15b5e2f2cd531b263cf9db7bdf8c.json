@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE account_sessions SET state = 'parked', \"updatedAt\" = now() WHERE state <> 'parked'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b937b9ee58558e0d8b8dedfceeb2444a995f15b5e2f2cd531b263cf9db7bdf8c"
+}

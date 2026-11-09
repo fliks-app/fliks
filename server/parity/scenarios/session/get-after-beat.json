@@ -1,0 +1,102 @@
+{
+  "capture": {
+    "s1": "$.steps[2].body.sessionId"
+  },
+  "engine": "up",
+  "ignore": [
+    "$.sessionId",
+    "$.playUrl",
+    "$..hwAccel",
+    "$.profileHash",
+    "$.tonemapAlgo",
+    "$..sessionId",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..positionAt",
+    "$..startedAt",
+    "$..lastActivity",
+    "$..playbackId",
+    "$..engineStatus",
+    "$..transcodePercent"
+  ],
+  "name": "session-get-after-beat",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "sessionKinds": null,
+        "sessionSync": true
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    },
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 1,
+        "positionSeconds": 100,
+        "quality": "original",
+        "sessionId": "{s1}",
+        "state": "playing",
+        "targetId": "dev-1#native"
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/1/state"
+    },
+    {
+      "as": "user",
+      "method": "GET",
+      "path": "/api/session"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{s1}"
+    },
+    {
+      "as": "user",
+      "method": "DELETE",
+      "path": "/api/session"
+    }
+  ]
+}

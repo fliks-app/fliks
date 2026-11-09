@@ -455,6 +455,18 @@ impl Hub {
             })
     }
 
+    /// What the SSE connection or polled target `connection_id` knows about itself.
+    pub fn identity_for(&self, connection_id: Option<&str>) -> Option<Identity> {
+        let id = connection_id?;
+        let g = self.lock();
+        g.conns.get(id).map(|c| c.identity.clone()).or_else(|| {
+            g.polled
+                .iter()
+                .find(|((_, key), _)| key == id)
+                .map(|(_, p)| p.identity.clone())
+        })
+    }
+
     /// Targets owned by `user`, newest first.
     pub fn list_for_user(&self, user: i32) -> Vec<Target> {
         self.collect(Some(user), Instant::now())

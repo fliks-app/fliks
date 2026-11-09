@@ -326,6 +326,10 @@ pub async fn command(
         subtitle_id: dto.subtitle_id,
         quality_id: dto.quality_id,
         paused: dto.paused,
+        queue: dto.queue,
+        shuffle: dto.shuffle,
+        repeat: dto.repeat,
+        kind: dto.kind,
     };
     // Never `emit_to_user`: a broadcast would let one phone drive every device of the account.
     if !st.hub.emit_to_connection(owner, &conn, ev) {

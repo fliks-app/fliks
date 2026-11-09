@@ -1,0 +1,182 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"userId\" AS user_id, \"sessionId\" AS session_id, epoch, \"itemId\" AS item_id,\n                  \"mediaFileId\" AS media_file_id, kind, state, \"positionSeconds\" AS position,\n                  \"durationSeconds\" AS duration, \"ownerTargetId\" AS target_id,\n                  \"ownerDeviceName\" AS device_name, \"ownerFormFactor\" AS form_factor, queue,\n                  \"updatedAt\" AS updated_at\n             FROM account_sessions",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "userId"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "sessionId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "item_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "itemId"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "media_file_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "mediaFileId"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "position",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "positionSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "duration",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "durationSeconds"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "target_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "ownerTargetId"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "device_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "ownerDeviceName"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "form_factor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "ownerFormFactor"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "queue",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "queue"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "account_sessions",
+            "name": "updatedAt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "61722399671255a613baaf21022bdb76f156e9af0bef9e31e67581fef2e0a7d5"
+}

@@ -104,10 +104,30 @@ pub enum RemoteAction {
     Volume,
     Mute,
     Next,
+    Prev,
+    Shuffle,
+    Repeat,
+    Queue,
     Audio,
     Subtitle,
     Quality,
     Browse,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Repeat {
+    Off,
+    All,
+    One,
+}
+
+/// The queue of an audio playback and the position in it (`remote.md` rule 35).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct Queue {
+    pub item_ids: Vec<i64>,
+    pub index: i64,
 }
 
 /// `Option<Option<T>>` as the wire shows it: absent is `None`, `null` is `Some(None)`.
@@ -416,6 +436,14 @@ pub enum SseEvent {
         quality_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         paused: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        queue: Option<Queue>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shuffle: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repeat: Option<Repeat>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<MediaKind>,
     },
     #[serde(rename = "remote.state")]
     RemoteState {
@@ -452,6 +480,20 @@ pub enum SseEvent {
     RemoteTargetsChanged {},
     #[serde(rename = "remote.stopped")]
     RemoteStopped { target_id: String },
+    /// Identity and ownership of the account session; observers refetch it (`session.md` rule 15).
+    #[serde(rename = "session.changed")]
+    SessionChanged {
+        epoch: Option<i64>,
+        item_id: Option<i64>,
+        state: Option<String>,
+        owner_target_id: Option<String>,
+    },
+    #[serde(rename = "session.superseded")]
+    SessionSuperseded {
+        session_id: String,
+        by_device_name: Option<String>,
+        epoch: i64,
+    },
     #[serde(rename = "social.followed")]
     SocialFollowed {
         user_id: i64,

@@ -31,6 +31,8 @@ KOReader sync: [`spec/kosync.md`](spec/kosync.md) (kosync server: routes, wire, 
 Library optimization: [`spec/optimize.md`](spec/optimize.md) (profiles, presets, difference computation, codec choice, candidate selection, preview); remote workers: [`spec/library-optimize-workers.md`](spec/library-optimize-workers.md).
 Send to device: [`spec/email-devices.md`](spec/email-devices.md) (admin SMTP settings, e-mail devices, mailing a book edition file, limits).
 
+Account session: [`spec/session.md`](spec/session.md) (one playback per account shown on every device, claim and epoch, parked state, `GET`/`DELETE /api/session`).
+
 Scene numbering: [`spec/scene-numbering.md`](spec/scene-numbering.md) (TheXEM scene to aired mapping of releases and files).
 
 Items: [`spec/items.md`](spec/items.md) (item groups, items, editions and item parts: what a media is made of).

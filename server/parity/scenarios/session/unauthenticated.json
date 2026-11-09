@@ -1,0 +1,16 @@
+{
+  "name": "session-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "method": "GET",
+      "path": "/api/session"
+    },
+    {
+      "as": "anon",
+      "method": "DELETE",
+      "path": "/api/session"
+    }
+  ]
+}

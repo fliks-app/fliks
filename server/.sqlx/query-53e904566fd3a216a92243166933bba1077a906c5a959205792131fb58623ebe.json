@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM account_sessions WHERE state = 'parked' AND \"updatedAt\" < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "53e904566fd3a216a92243166933bba1077a906c5a959205792131fb58623ebe"
+}

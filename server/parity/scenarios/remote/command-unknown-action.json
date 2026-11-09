@@ -27,7 +27,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "action must be one of the following values: load, play, pause, playpause, stop, seek, volume, mute, next, audio, subtitle, quality, browse"
+            "action must be one of the following values: load, play, pause, playpause, stop, seek, volume, mute, next, prev, shuffle, repeat, queue, audio, subtitle, quality, browse"
           ],
           "statusCode": 400
         },

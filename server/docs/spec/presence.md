@@ -56,6 +56,7 @@ Readers
 23. `DELETE /api/stream/sessions/:sid`: owner = registry `userId` if present else the engine's `ownerId` (`GET /v1/sessions/{sid}`, only when `engine.runtime`, errors -> null); a known owner different from the caller needs `Manage Settings`, else 403 `Not your session`; then (if the entry has a `userId`) emits `remote.stopped { targetId }` when `targetIdFor(sseConnectionId)` resolves, plus `remote.targets_changed`, to that user; `stop(sid)`; engine `deleteSession` (idempotent) when `engine.runtime`; status 204 even for an unknown sid.
 24. Other readers: QoE load probe `activeSessions = list().length` with `activeTranscodes = EngineEventsService.activeJobs`; scan-backfill cron skips its tick while `size() > 0`; QoE events route uses `peek(sid) ?? qoe.trackedSession(sid)` and requires `live.userId === user.id || live.attributedUserId === user.id` else 403 `Not your session`, silent 204 for an unknown session.
 25. Presence is per-process memory: a second host instance would not share it; the engine list is the source of truth after any restart (rule 15). Persistence is not required: no consumer reads presence from the database, and the resync + lazy restore rebuild it.
+26. The account session hub (`session.md`) reads presence, never writes it: a row is parked when its sid has no presence or no beat within the TTL, and when `stop(sid)` runs through `SessionEnded` or `DELETE /api/stream/sessions/:sid` (rule 23).
 
 ## SQL
 

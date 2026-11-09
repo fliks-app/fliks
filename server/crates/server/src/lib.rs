@@ -1,3 +1,4 @@
+pub mod account_session;
 pub mod annotations;
 pub mod app;
 pub mod atomic_file;
@@ -135,16 +136,13 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         tracing::warn!("provider namespaces not loaded: {e}");
     }
     lyrics::queue::spawn_sweep(state.clone());
-    presence::spawn(
-        state.presence.clone(),
-        state.engine.clone(),
-        state.qoe.clone(),
-    );
+    presence::spawn(&state);
     livetv::spawn(&state);
     qoe::spawn(&state.qoe);
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
+    account_session::spawn(&state).await;
     media::write::recover(&state).await;
     ingest::books::backfill_unmatched(&state).await;
     ingest::books::merge::resume_backfills(&state).await;

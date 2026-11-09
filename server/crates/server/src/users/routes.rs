@@ -357,8 +357,20 @@ fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
         edl_auto_skip_commercials,
         spoiler_hide_stills,
         spoiler_hide_overviews,
-        spoiler_hide_titles
+        spoiler_hide_titles,
+        session_sync
     );
+    if let Some(kinds) = dto.session_kinds.clone() {
+        t.session_kinds = kinds.map(|ks| {
+            let mut out: Vec<String> = vec![];
+            for k in ks.iter().map(|k| k.as_str().to_owned()) {
+                if !out.contains(&k) {
+                    out.push(k);
+                }
+            }
+            out
+        });
+    }
     if let Some(v) = dto.library_order.clone() {
         t.library_order = Jsonb(v);
     }
@@ -382,6 +394,7 @@ async fn save_user(
         "shareLikes" = $16, "shareStats" = $17, "shareDisabled" = $18, "hideSpoilers" = $19,
         "edlEnabled" = $20, "edlAutoSkipCommercials" = $21, "spoilerHideStills" = $22,
         "spoilerHideOverviews" = $23, "spoilerHideTitles" = $24,
+        "sessionSync" = $25, "sessionKinds" = $26,
         "updatedAt" = now() WHERE "id" = $1"#,
         id,
         &t.username,
@@ -406,7 +419,9 @@ async fn save_user(
         t.edl_auto_skip_commercials,
         t.spoiler_hide_stills,
         t.spoiler_hide_overviews,
-        t.spoiler_hide_titles
+        t.spoiler_hide_titles,
+        t.session_sync,
+        t.session_kinds.as_deref()
     )
         .execute(&mut *tx)
         .await?;

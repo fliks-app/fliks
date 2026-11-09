@@ -1,0 +1,46 @@
+{
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-command-load-with-queue",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "load",
+        "itemId": 5,
+        "kind": "album",
+        "paused": true,
+        "queue": {
+          "index": 0,
+          "itemIds": [
+            5,
+            6,
+            7
+          ]
+        },
+        "repeat": "all",
+        "shuffle": true
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
+    }
+  ]
+}
