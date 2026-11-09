@@ -3,7 +3,7 @@ import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
-import { BrowserDeviceProfileService } from '../browser-device-profile.service';
+import { BrowserDeviceProfileService, type DeviceProfile } from '../browser-device-profile.service';
 import { Capacitor } from '@capacitor/core';
 import { MediaService } from '../api/media.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
@@ -245,7 +245,7 @@ export class AudioPlayerService {
         // Replayed first: the server's playedAt guard orders it against progress from another device.
         if (this.network.isOnline()) await this.sync.flush();
         opened = await this.streaming
-          .getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile())
+          .getItemPlaybackInfo(req.itemId, this.profile())
           .catch((e) => {
             if (!local) throw e;
             return null;
@@ -477,7 +477,7 @@ export class AudioPlayerService {
       if (this.network.isOnline()) await this.sync.flush();
       if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
       if (this.nativeAudio) return await this.startNative(autoplay);
-      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: 0 });
+      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.profile(), { startAt: 0 });
       if (generation !== this.generation) {
         if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
         return;
@@ -565,7 +565,7 @@ export class AudioPlayerService {
     this.preTried = next;
     const generation = this.generation;
     void this.streaming
-      .getItemPlaybackInfo(next.itemId, this.deviceProfile.getProfile(), { startAt: 0 })
+      .getItemPlaybackInfo(next.itemId, this.profile(), { startAt: 0 })
       .then((info) => {
         const stale = generation !== this.generation || this.preTried !== next;
         if (stale || info.playMethod !== 'DirectPlay') {
@@ -762,7 +762,7 @@ export class AudioPlayerService {
     const generation = ++this.generation;
     const position = this._position();
     const autoplay = this._playing();
-    const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt: position, pitchSemitones: n }).catch(() => null);
+    const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.profile(), { startAt: position, pitchSemitones: n }).catch(() => null);
     if (!info || generation !== this.generation) {
       if (info?.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
       return;
@@ -772,14 +772,36 @@ export class AudioPlayerService {
     this.dropStems();
     this._stemMode.set('original');
     this.applyGains();
+    await this.swapInfo(info);
+    await this.load(position, autoplay);
+    if (n === 0) void this.refreshStems();
+  }
+
+  /** Makes `info` the open session, closing the previous one. */
+  private async swapInfo(info: PlaybackInfoResponse): Promise<void> {
     await this.hls?.destroy().catch(() => undefined);
     this.hls = null;
     if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
     this.info = info;
     this.sessionId = info.sessionId;
     this.parts = this.partsOf(info);
-    await this.load(position, autoplay);
-    if (n === 0) void this.refreshStems();
+  }
+
+  /** A Direct Play file the element reported it opens but cannot play: the track restarts as a transcode from the same position. */
+  private async reopenTranscoded(): Promise<void> {
+    const req = this.mq.current;
+    if (!req || !this._musicMode() || this.casting || this.nativeAudio) return;
+    const generation = ++this.generation;
+    const position = this._position();
+    const profile = { ...this.profile(), rejectCopy: true };
+    const info = await this.streaming.getItemPlaybackInfo(req.itemId, profile, { startAt: position }).catch(() => null);
+    if (!info || generation !== this.generation || info.playMethod === 'DirectPlay') {
+      if (info?.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+      return;
+    }
+    this.dropPreload();
+    await this.swapInfo(info);
+    await this.load(position, true);
   }
 
   private nativeStemFile: number | null = null;
@@ -1156,6 +1178,7 @@ export class AudioPlayerService {
   private onError(): void {
     this._playing.set(false);
     this._loading.set(false);
+    if (this.info?.playMethod === 'DirectPlay' && this._musicMode()) void this.reopenTranscoded();
   }
 
   /** A play or pause key: a party hears it as a toggle, and only when it changes something. */
@@ -1320,6 +1343,11 @@ export class AudioPlayerService {
     await n.configure({ deviceProfile: JSON.stringify(this.deviceProfile.getProfile()) });
     this.pushGain();
     await n.attach();
+  }
+
+  /** Native builds keep the shared profile; every page-driven element opens what it reports. */
+  private profile(): DeviceProfile {
+    return this.nativeAudio ? this.deviceProfile.getProfile() : this.deviceProfile.getAudioProfile();
   }
 
   private pushGain(): void {

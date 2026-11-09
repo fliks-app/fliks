@@ -80,7 +80,7 @@ describe('AudioPlayerService music mode', () => {
         { provide: CastService, useValue: cast },
         { provide: CastPlayerService, useValue: { castTrack, castStem } },
         { provide: KaraokeApiService, useValue: { itemState } },
-        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}), getAudioProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
         { provide: StorageScopeService, useValue: { suffix: () => 's', canPersist: () => true, scope: () => 's' } },
@@ -112,6 +112,25 @@ describe('AudioPlayerService music mode', () => {
     await audio.setPitch(0);
     expect(audio.pitch()).toBe(0);
     expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 30, pitchSemitones: 0 });
+  });
+
+  it('plays a Direct Play file the element cannot open again as a transcode, from the same position', async () => {
+    // The transcode loads through the element's own HLS support, not Shaka.
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    (audio as unknown as { _position: { set(n: number): void } })._position.set(30);
+    getItemPlaybackInfo.mockResolvedValueOnce({
+      playMethod: 'Transcode',
+      playUrl: '/hls/1',
+      mediaFileId: 10,
+      sessionId: 'sid1b',
+      durationSeconds: 100,
+    });
+    els(audio)[0].dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(stopSession).toHaveBeenCalledWith('sid1'));
+    expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, { rejectCopy: true }, { startAt: 30 });
+    expect((audio as unknown as { info: { sessionId: string } }).info.sessionId).toBe('sid1b');
   });
 
   it('goes to the next track, and restarts the current one when past 3 seconds', async () => {

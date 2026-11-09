@@ -12,6 +12,7 @@ import { isTizenCropSupported } from './playback-engine/tizen-engine';
 import { getDeviceName, getOrCreateDeviceId } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
+import { probeAudioDirectPlay, undecodableAudioFormats } from './audio-direct-play';
 
 interface HdrPlugin {
   isSupported(): Promise<{
@@ -208,6 +209,8 @@ export class BrowserDeviceProfileService {
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
   private desktopCanReshapeDolbyVision = false;
   private desktopProbe: Promise<void> | null = null;
+  private audioProbe: HTMLAudioElement | null = null;
+  private undecodableAudio: ReadonlySet<string> = new Set();
 
   /** Behavioural traits of the engine this device plays with. */
   engineTraits(): EngineTraits {
@@ -250,6 +253,9 @@ export class BrowserDeviceProfileService {
       VideoCaps.getSupported()
         .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
         .catch(() => { this.nativeVideo = null; });
+    }
+    if (!Capacitor.isNativePlatform()) {
+      void undecodableAudioFormats().then((denied) => (this.undecodableAudio = denied));
     }
     // Windows mpv can fall back off gpu-next at startup (old driver); the flag
     // is only read on Windows, the one desktop backend that can reshape DV.
@@ -326,6 +332,14 @@ export class BrowserDeviceProfileService {
       dolbyVisionProfiles: forceDisableHdr ? undefined : dolbyVisionProfiles,
       useTs: useTsOverride,
     };
+  }
+
+  /** `getProfile()` plus what the page's own audio element opens (web, TV and desktop shell alike), as an audio-only entry: the recorded video codecs stay whole. */
+  getAudioProfile(): DeviceProfile {
+    this.audioProbe ??= new Audio();
+    const profile = this.getProfile();
+    const audio = probeAudioDirectPlay(this.audioProbe, this.undecodableAudio);
+    return { ...profile, directPlayProfiles: [...profile.directPlayProfiles, audio] };
   }
 
   /** Whether the display hardware supports HDR (ignoring user preference). */
