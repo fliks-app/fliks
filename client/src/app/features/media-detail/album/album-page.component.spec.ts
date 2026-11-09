@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,13 +20,24 @@ const edition = (id: number) => ({ id, title: null, country: 'FR', hasFiles: tru
 const album = (tracks: Track[]) =>
   ({ primaryType: 'Album', secondaryTypes: [], orphaned: false, targetEditionId: 1, artists: [{ id: 5, name: 'Band', creditedName: null, joinPhrase: null }], editions: [edition(1), edition(2)], tracks }) as unknown as AlbumDetail;
 
+const playerStub = () => ({
+  playTracks: vi.fn(async () => {}),
+  enqueueTracks: vi.fn(),
+  toggle: vi.fn(),
+  setShuffle: vi.fn(),
+  shuffle: signal(false),
+  musicMode: signal(false),
+  playing: signal(false),
+  track: signal<{ mediaId: number; itemId: number } | null>(null),
+});
+
 function setup(tracks: Track[]) {
-  const player = { playTracks: vi.fn(async () => {}), enqueueTracks: vi.fn() };
+  const player = playerStub();
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
       { provide: AudioPlayerService, useValue: player },
       { provide: PartyService, useValue: { active: () => false } },
-      { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), state: () => 'none', download: vi.fn(), remove: vi.fn() } },
+      { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
       { provide: AuthService, useValue: { hasPermission: () => false, user: () => null, sessionEpoch: () => 0 } },
     ),
   });
@@ -86,9 +98,9 @@ describe('AlbumPageComponent', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         providers: bookSpecProviders(
-          { provide: AudioPlayerService, useValue: { playTracks: vi.fn(), enqueueTracks: vi.fn() } },
+          { provide: AudioPlayerService, useValue: playerStub() },
           { provide: PartyService, useValue: { active: () => false } },
-          { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), state: () => 'none', download: vi.fn(), remove: vi.fn() } },
+          { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
           { provide: AuthService, useValue: { hasPermission: () => canEdit, user: () => null, sessionEpoch: () => 0 } },
         ),
       });
@@ -103,6 +115,25 @@ describe('AlbumPageComponent', () => {
     dialog.showModal = vi.fn();
     actions['media.edit-profiles']!();
     expect(dialog.showModal).toHaveBeenCalled();
+  });
+
+  it('toggles shuffle without starting playback', () => {
+    const { el, player } = setup([track(1)]);
+    (el.querySelector('[data-testid="shuffle"]') as HTMLButtonElement).click();
+    expect(player.setShuffle).toHaveBeenCalledWith(true);
+    expect(player.playTracks).not.toHaveBeenCalled();
+  });
+
+  it('pauses the album it plays and marks its current track', () => {
+    const { el, fixture, player } = setup([track(1), track(2)]);
+    player.musicMode.set(true);
+    player.playing.set(true);
+    player.track.set({ mediaId: 9, itemId: 2 });
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="play"]') as HTMLButtonElement).click();
+    expect(player.toggle).toHaveBeenCalled();
+    expect(player.playTracks).not.toHaveBeenCalled();
+    expect(el.querySelectorAll('[data-testid="track"] .text-primary').length).toBe(1);
   });
 
   it('skips the tracks without a file when playing', () => {

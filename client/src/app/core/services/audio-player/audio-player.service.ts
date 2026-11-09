@@ -346,6 +346,13 @@ export class AudioPlayerService {
     if (t) this.syncQueue(), void this.goTo(t);
   }
 
+  /** The track a skip in that direction would play, without moving. */
+  neighbour(step: 1 | -1): MusicTrackRequest | null {
+    // The queue's signal mirrors, read so that a computed caller follows the queue.
+    if (!this._musicMode() || this._queueIndex() < 0 || !this._queue().length || !this._repeat()) return null;
+    return this.mq.neighbour(step);
+  }
+
   /** Restarts the track past a few seconds, else the previous one. */
   /** `restart` false skips the "past 3 s restarts the track" rule: a remote prev means the previous track. */
   previous(restart = true): void {

@@ -22,7 +22,7 @@
       @for (r of list.rows(); track r.itemId; let i = $index) {
         <li class="flex items-center gap-1 rounded-lg pe-1 hover:bg-base-200" data-testid="track-row">
           <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:outline-2 disabled:cursor-default" [disabled]="!r.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="play(i)">
-            <app-track-line [title]="r.title" [subtitle]="line(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
+            <app-track-line [title]="r.title" [itemId]="r.itemId" [subtitle]="line(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
               <svg lead lucidePlay class="size-4 shrink-0 text-base-content/50"></svg>
               @if (!r.hasFile) {
                 <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>

@@ -2134,8 +2134,6 @@
     "auto_rule_label": "Download automático:",
     "episodes_queued_one": "1 episódio será baixado",
     "episodes_queued_other": "{{count}} episódios serão baixados",
-    "tracks_added_one": "{{count}} faixa adicionada às transferências",
-    "tracks_added_other": "{{count}} faixas adicionadas às transferências",
     "tracks_failed_one": "Não foi possível transferir {{count}} faixa",
     "tracks_failed_other": "Não foi possível transferir {{count}} faixas",
     "tracks_already": "Já está neste dispositivo",

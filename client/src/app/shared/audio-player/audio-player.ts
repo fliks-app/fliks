@@ -1,6 +1,7 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
@@ -9,6 +10,7 @@ import {
   LucideArrowUp,
   LucideArrowUpToLine,
   LucideChevronDown,
+  LucideSquare,
   LucideChevronRight,
   LucideGauge,
   LucideHeart,
@@ -61,6 +63,8 @@ import { PopoverMenuComponent } from '../components/popover-menu';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { DropListSettleDirective } from '../directives/drop-list-settle.directive';
 import { SwipeRemoveDirective } from '../directives/swipe-remove.directive';
+import { coverTint } from '../utils/cover-tint';
+import { SwipeSkipDirective } from '../directives/swipe-skip.directive';
 import { LyricsPanelComponent } from './lyrics/lyrics-panel';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
@@ -76,6 +80,8 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     CdkDropList,
     DropListSettleDirective,
     SwipeRemoveDirective,
+    SwipeSkipDirective,
+    RouterLink,
     NgTemplateOutlet,
     BottomSheetComponent,
     PopoverMenuComponent,
@@ -92,6 +98,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideArrowUp,
     LucideArrowUpToLine,
     LucideChevronDown,
+    LucideSquare,
     LucideChevronRight,
     LucideGauge,
     LucideHeart,
@@ -139,6 +146,11 @@ export class AudioPlayerComponent {
     source: () => this.audio.track()?.coverUrl,
     computation: () => false,
   });
+  /** Kept across tracks until the new cover has loaded, so the bar doesn't flash back to grey. */
+  protected readonly tint = linkedSignal<string | null | undefined, string | null>({
+    source: () => this.local.track()?.coverUrl,
+    computation: (url, prev) => (url ? (prev?.value ?? null) : null),
+  });
   private readonly likes = inject(LikesApiService);
   private readonly playlists = inject(AddToPlaylistService);
   private readonly mediaApi = inject(MediaService);
@@ -152,6 +164,16 @@ export class AudioPlayerComponent {
   protected readonly asSheet = computed(() => this.device.isTouch() || this.device.isTv());
 
   protected readonly clock = formatTime;
+  protected readonly swipeDx = signal(0);
+  /** Swipe offset as a fraction of the title width: the title is gone at 40%, the neighbour shows from 50% to 80%. */
+  protected readonly swipeOut = computed(() => Math.max(0, 1 - Math.abs(this.swipeDx()) / 0.4));
+  protected readonly swipeIn = computed(() => Math.min(1, Math.max(0, (Math.abs(this.swipeDx()) - 0.5) / 0.3)));
+  /** No swipe past either end of the queue, nor on a single track that repeat-all would loop onto itself. */
+  protected readonly swipeable = computed(() => {
+    const many = this.local.queue().length > 1;
+    return { next: many && !!this.local.neighbour(1), previous: many && !!this.local.neighbour(-1) };
+  });
+  protected readonly peek = computed(() => (this.swipeDx() ? this.local.neighbour(this.swipeDx() < 0 ? 1 : -1) : null));
   protected readonly percent = computed(() => {
     const d = this.audio.duration();
     return d ? Math.min(100, (this.audio.position() / d) * 100) : 0;
@@ -181,6 +203,8 @@ export class AudioPlayerComponent {
   protected readonly menuOpen = signal(false);
   protected readonly levelOpen = signal(false);
   protected readonly fav = signal(false);
+  /** The track's first credited artist, else the album's. */
+  protected readonly artistId = signal<number | null>(null);
   protected readonly replayGains = REPLAY_GAINS;
   private readonly albums = new Map<number, Promise<AlbumDetail | null>>();
 
@@ -246,6 +270,7 @@ export class AudioPlayerComponent {
   /** The caller's favourite and rating come with the album detail. */
   private async loadTrackState(mediaId: number, itemId: number): Promise<void> {
     this.fav.set(false);
+    this.artistId.set(null);
     let album = this.albums.get(mediaId);
     if (!album) {
       album = this.mediaApi
@@ -254,8 +279,11 @@ export class AudioPlayerComponent {
         .catch(() => null);
       this.albums.set(mediaId, album);
     }
-    const track = (await album)?.tracks.find((x) => x.itemId === itemId);
-    if (track && this.audio.track()?.itemId === itemId) this.fav.set(track.favourite);
+    const a = await album;
+    const track = a?.tracks.find((x) => x.itemId === itemId);
+    if (this.audio.track()?.itemId !== itemId) return;
+    if (track) this.fav.set(track.favourite);
+    this.artistId.set(track?.artists.find((x) => x.id != null)?.id ?? a?.artists[0]?.id ?? null);
   }
 
   private async loadLyricsState(itemId: number): Promise<void> {
@@ -265,6 +293,12 @@ export class AudioPlayerComponent {
       () => false,
     );
     if (this.audio.track()?.itemId === itemId) this.hasLyrics.set(found);
+  }
+
+  protected async tintFrom(img: HTMLImageElement): Promise<void> {
+    const src = img.currentSrc;
+    const tint = await coverTint(src);
+    if (img.isConnected && img.currentSrc === src) this.tint.set(tint);
   }
 
   protected toggleSelected(q: MusicTrackRequest): void {

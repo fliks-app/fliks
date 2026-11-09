@@ -320,7 +320,10 @@
       </div>
       <div class="min-w-0 flex-1">
         <p class="font-medium truncate">{{ t.title }}</p>
-        <p class="text-sm text-base-content/60 truncate">{{ t.artists.join(', ') }} · {{ t.albumTitle }}</p>
+        <p class="flex items-center gap-1.5 text-sm text-base-content/60">
+          <app-track-download-glyph [itemId]="t.itemId" />
+          <span class="truncate">{{ t.artists.join(', ') }} · {{ t.albumTitle }}</span>
+        </p>
       </div>
       <span class="shrink-0 text-sm text-base-content/60 tabular-nums">{{ formatDuration(t.durationSeconds) }}</span>
     } @else {

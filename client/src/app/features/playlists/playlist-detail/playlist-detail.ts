@@ -11,6 +11,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
+import { TrackDownloadGlyphComponent } from '../../../shared/components/track-download-glyph/track-download-glyph';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -91,7 +92,7 @@ type PlaylistGroupedEntry =
 
 @Component({
   selector: 'app-playlist-detail',
-  imports: [TvSelectDirective, MusicDownloadButtonComponent,
+  imports: [TvSelectDirective, MusicDownloadButtonComponent, TrackDownloadGlyphComponent,
     ModalFooterComponent,
     CachedSrcDirective,
     TranslatePipe,

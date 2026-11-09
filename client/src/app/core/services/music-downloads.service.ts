@@ -22,10 +22,18 @@ export class MusicDownloadsService {
 
   readonly available = computed(() => !this.tv.isTv());
 
-  /** Item ids of the tracks on the device or on their way. */
-  readonly itemIds = computed(
-    () => new Set(this.manager.tasks().filter((t) => t.book?.track && t.status !== 'failed').map((t) => t.book!.itemId)),
+  /** The tasks of the tracks on the device or on their way, by item id. */
+  readonly tracks = computed(
+    () => new Map(this.manager.tasks().filter((t) => t.book?.track && t.status !== 'failed').map((t) => [t.book!.itemId, t])),
   );
+  readonly itemIds = computed(() => new Set(this.tracks().keys()));
+
+  /** The overall progress of those of `itemIds` still on their way, null when none is. */
+  progress(itemIds: readonly number[]): number | null {
+    const tasks = itemIds.map((id) => this.tracks().get(id)).filter((t) => !!t);
+    if (!tasks.some((t) => t.status !== 'ready')) return null;
+    return Math.round(tasks.reduce((s, t) => s + (t.status === 'ready' ? 100 : t.progress), 0) / tasks.length);
+  }
 
   state(itemIds: readonly number[]): TracksOnDevice {
     const have = this.itemIds();
@@ -56,14 +64,13 @@ export class MusicDownloadsService {
     return (await Promise.all(mediaIds.map((id) => this.albumTracks(id)))).flat();
   }
 
-  /** Starts the tracks not yet on the device and tells the viewer how it went. */
+  /** Starts the tracks not yet on the device; the icons show the progress, a toast only what went wrong. */
   async download(tracks: readonly MusicTrackRequest[]): Promise<void> {
     if (!tracks.length) return;
     try {
       const { started, failed } = await this.manager.createTracks(tracks);
       if (failed) this.toast.error(translatePlural(this.translate, 'downloads.tracks_failed', failed));
-      else if (started) this.toast.success(translatePlural(this.translate, 'downloads.tracks_added', started));
-      else this.toast.info(this.translate.instant('downloads.tracks_already'));
+      else if (!started) this.toast.info(this.translate.instant('downloads.tracks_already'));
     } catch (err) {
       this.toast.error(err instanceof BookDownloadRefused ? err.message : this.translate.instant('downloads.failed'));
     }
