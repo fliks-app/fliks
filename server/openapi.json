@@ -35,6 +35,16 @@
         }
       }
     },
+    "/api/acquisition/progress": {
+      "get": {
+        "tags": [],
+        "summary": "What is in flight now, one `download.progress` snapshot per media the caller can open: a client that\nconnects late reads this and then follows the events.",
+        "operationId": "progress",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/acquisition/queue": {
       "get": {
         "tags": [],
@@ -2447,10 +2457,10 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target.",
+        "summary": "`POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target, run in\nthe background (a search can outlast a proxy's timeout); the outcome comes as `acquisition.grab-best`.",
         "operationId": "grab_best",
         "responses": {
-          "200": {}
+          "202": {}
         }
       }
     },
