@@ -72,11 +72,15 @@
                   }
                 </div>
                 <div class="flex flex-nowrap gap-3 overflow-x-auto overflow-y-hidden text-sm tabular-nums text-base-content/70 whitespace-nowrap">
-                  <span>{{ formatBytes(r.size) }}</span>
+                  <span>{{ r.size > 0 ? formatBytes(r.size) : '-' }}</span>
                   <span>
-                    <span class="text-success">▲{{ r.seeders }}</span>
-                    <span class="text-base-content/40 mx-0.5">/</span>
-                    <span class="text-warning">▼{{ r.leechers }}</span>
+                    @if (r.seeders != null && r.leechers != null) {
+                      <span class="text-success">▲{{ r.seeders }}</span>
+                      <span class="text-base-content/40 mx-0.5">/</span>
+                      <span class="text-warning">▼{{ r.leechers }}</span>
+                    } @else {
+                      <span class="text-base-content/40">-</span>
+                    }
                   </span>
                   <span>{{ r.sourceName }}</span>
                 </div>
@@ -136,11 +140,21 @@
               }
             </td>
           }
-          <td class="hidden sm:table-cell text-sm tabular-nums text-right whitespace-nowrap">{{ formatBytes(r.size) }}</td>
+          <td class="hidden sm:table-cell text-sm tabular-nums text-right whitespace-nowrap">
+            @if (r.size > 0) {
+              {{ formatBytes(r.size) }}
+            } @else {
+              <span class="text-base-content/40">-</span>
+            }
+          </td>
           <td class="hidden sm:table-cell text-sm tabular-nums whitespace-nowrap">
-            <span class="text-success">▲{{ r.seeders }}</span>
-            <span class="text-base-content/40 mx-0.5">/</span>
-            <span class="text-warning">▼{{ r.leechers }}</span>
+            @if (r.seeders != null && r.leechers != null) {
+              <span class="text-success">▲{{ r.seeders }}</span>
+              <span class="text-base-content/40 mx-0.5">/</span>
+              <span class="text-warning">▼{{ r.leechers }}</span>
+            } @else {
+              <span class="text-base-content/40">-</span>
+            }
           </td>
           <td class="hidden sm:table-cell text-sm">{{ r.sourceName }}</td>
           <td class="hidden sm:table-cell w-10">

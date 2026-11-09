@@ -213,7 +213,10 @@ pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
         }
     }
 
-    if !o.allowed_langs.is_empty() && o.allowed_langs.is_disjoint(&o.language_ids) {
+    if !o.allowed_langs.is_empty()
+        && !o.language_ids.is_empty()
+        && o.allowed_langs.is_disjoint(&o.language_ids)
+    {
         out.push(rej("LANGUAGE_NOT_ALLOWED", vec![]));
     }
     if o.is_blocklisted {

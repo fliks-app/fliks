@@ -28,8 +28,9 @@ export interface MovieRelease {
   languages: { id: number; name: string }[];
   languageAllowed: boolean;
   size: number;
-  seeders: number;
-  leechers: number;
+  /** Null for a provider with no swarm (a direct download). */
+  seeders: number | null;
+  leechers: number | null;
   rejections: { code: string; params?: Record<string, number | string> }[];
   freeleech: boolean;
   downloadVolumeFactor: number;

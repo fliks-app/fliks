@@ -327,6 +327,7 @@ pub(super) fn score_one(
         blocklisted,
         languages: langs,
         language_allowed: opts.allowed_langs.is_empty()
+            || lang_ids.is_empty()
             || !opts.allowed_langs.is_disjoint(&lang_ids),
         rejections,
         retail: p.retail,
