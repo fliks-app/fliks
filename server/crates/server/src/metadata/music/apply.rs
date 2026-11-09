@@ -642,9 +642,15 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
     if write_album(st, media, ns, &fetched, &id, &lang, prio).await? != Written::Done {
         return Ok(true);
     }
+    let target: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
+            .bind(media)
+            .fetch_optional(&st.db)
+            .await?
+            .flatten();
     for (edition, ed) in read {
         match ed {
-            Some(ed) => write_edition(st, media, edition, &ed, false).await?,
+            Some(ed) => write_edition(st, media, edition, &ed, target == Some(edition)).await?,
             None => {
                 sqlx::query(
                     r#"UPDATE editions SET "orphanedAt" = COALESCE("orphanedAt", now()) WHERE id = $1"#,
@@ -654,6 +660,10 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
                 .await?;
             }
         }
+    }
+    match target {
+        Some(edition) => super::target::leave_owned(&st.db, media, edition).await?,
+        None => drop(super::target::ensure_any(st, media, prio).await?),
     }
     Ok(true)
 }

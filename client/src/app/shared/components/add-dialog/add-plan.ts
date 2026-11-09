@@ -88,14 +88,14 @@ export function profileDefaults(lib: LibrarySummary | null, c: Choices) {
 }
 
 /** Whether the add needs no question: one library takes the kind and nothing else is to be picked. */
-export function askNothing(req: AddRequest, mode: AddMode, c: Choices): boolean {
+export function askNothing(req: AddRequest, c: Choices): boolean {
   if (req.alwaysAsk || kindOf(req.kind).hasSeasons) return false;
   const fit = compatible(c.libraries, req.kind);
   if (fit.length !== 1) return false;
   const d = profileDefaults(fit[0], c);
   if (req.kind === 'movie') return d.quality != null;
   if (req.kind === 'book') return d.want != null;
-  if (req.kind === 'album') return mode === 'import' || d.want != null;
+  if (req.kind === 'album') return !!req.recording && d.want != null;
   return false;
 }
 

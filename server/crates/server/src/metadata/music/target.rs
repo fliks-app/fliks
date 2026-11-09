@@ -33,7 +33,7 @@ async fn album(db: &PgPool, media: i32) -> sqlx::Result<Option<Album>> {
 }
 
 /// A monitored track whose recording an item of another media already has a file for is no longer wanted.
-async fn leave_owned(db: &PgPool, media: i32, edition: i32) -> sqlx::Result<()> {
+pub(super) async fn leave_owned(db: &PgPool, media: i32, edition: i32) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE items i SET monitored = false FROM track_details td
            WHERE td."itemId" = i.id AND i."editionId" = $1 AND i.monitored AND td."recordingMbid" IS NOT NULL
@@ -105,10 +105,22 @@ async fn held_edition(db: &PgPool, media: i32) -> sqlx::Result<Option<i32>> {
 /// files targets the edition they made. `false` when there was nothing to do: not monitored, no id, or a
 /// target already set.
 pub async fn ensure(st: &AppState, media: i32, prio: Priority) -> Result<bool, AppError> {
-    let Some(a) = album(&st.db, media).await? else {
-        return Ok(false);
-    };
-    let (true, Some(id), Some(library), None) = (a.monitored, a.id, a.library, a.target) else {
+    match album(&st.db, media).await? {
+        Some(a) if a.monitored => pick(st, media, a, prio).await,
+        _ => Ok(false),
+    }
+}
+
+/// `ensure` for an album that is not monitored too: its tracks are made, unmonitored.
+pub async fn ensure_any(st: &AppState, media: i32, prio: Priority) -> Result<bool, AppError> {
+    match album(&st.db, media).await? {
+        Some(a) => pick(st, media, a, prio).await,
+        None => Ok(false),
+    }
+}
+
+async fn pick(st: &AppState, media: i32, a: Album, prio: Priority) -> Result<bool, AppError> {
+    let (Some(id), Some(library), None) = (a.id, a.library, a.target) else {
         return Ok(false);
     };
     if a.parts {
@@ -131,6 +143,40 @@ pub async fn ensure(st: &AppState, media: i32, prio: Priority) -> Result<bool, A
     leave_owned(&st.db, media, edition).await?;
     set_target(&st.db, media, edition).await?;
     Ok(true)
+}
+
+/// The tracklist of the release a new album of the library would target.
+pub async fn preview(
+    st: &AppState,
+    group: &str,
+    library: i32,
+    prio: Priority,
+) -> Result<Vec<fliks_domain::music::provider::Track>, AppError> {
+    let lang = crate::metadata::library_language(st, library).await?;
+    let fetched = fetch(st, NS, group, &lang, prio).await?;
+    let profile = libraries::metadata_profile(&st.db, library).await?;
+    let cfg = identify::config(st).await;
+    let Some(release) = pick_target(&fetched.releases, &profile, &cfg) else {
+        return Ok(vec![]);
+    };
+    Ok(fetch_edition(st, NS, &release.external_id, &lang, prio)
+        .await?
+        .tracks)
+}
+
+/// Keeps monitored only the tracks of the target edition whose recording is in `recordings`.
+pub async fn select_recordings(db: &PgPool, media: i32, recordings: &[String]) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE items i SET monitored = false FROM track_details td
+           WHERE td."itemId" = i.id AND td."recordingMbid" IS NOT NULL AND i.monitored
+             AND i."editionId" = (SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1)
+             AND NOT (td."recordingMbid"::text = ANY($2))"#,
+    )
+    .bind(media)
+    .bind(recordings)
+    .execute(db)
+    .await
+    .map(drop)
 }
 
 /// An album asked for as a whole (a request): its target picked when it has none, then every track of the
@@ -278,5 +324,26 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(wanted, [false, true]);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_picked_selection_leaves_the_other_recordings_unmonitored(db: PgPool) {
+        two_albums(&db).await;
+        let edition: i32 = sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = 2"#)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        set_target(&db, 2, edition).await.unwrap();
+        select_recordings(&db, 2, &["44444444-4444-4444-4444-444444444444".to_owned()])
+            .await
+            .unwrap();
+        let monitored: Vec<bool> = sqlx::query_scalar(
+            r#"SELECT i.monitored FROM items i WHERE i."mediaId" = 2 ORDER BY i.id"#,
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        // the recording outside the selection is dropped, the track with no recording id stays
+        assert_eq!(monitored, [false, true]);
     }
 }

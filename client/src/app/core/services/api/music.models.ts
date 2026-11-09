@@ -188,6 +188,16 @@ export interface WorkRecording {
   mediaFileId: number | null;
 }
 
+// GET /api/music/albums/tracks
+export interface AlbumPreviewTrack {
+  recordingId: string | null;
+  discNumber: number;
+  position: number;
+  number: number | null;
+  title: string;
+  durationMs: number | null;
+}
+
 // GET /api/media/:id/music/candidates
 export interface AlbumCandidate {
   /** Release-group id and release id at the provider (MusicBrainz). */

@@ -21,13 +21,51 @@ use crate::{
 use axum::{Json, http::StatusCode};
 use fliks_domain::{
     external_id::Namespace,
-    media::{kind::MediaKind, wants::WantSpec},
+    media::{
+        kind::MediaKind,
+        wants::{WantSpec, parse_wants_profiled},
+    },
     metadata::limiter::Priority,
     naming,
 };
 use serde_json::Value;
 
-const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
+const FIELDS: [&str; 7] = [
+    "type",
+    "provider",
+    "externalId",
+    "libraryId",
+    "folderId",
+    "wants",
+    "monitoredRecordings",
+];
+
+/// The optional `wants` of the body: audio wants that each name a profile.
+async fn body_wants(st: &AppState, b: &Body) -> Result<Option<Vec<WantSpec>>, AppError> {
+    let Some(w) = b.0.get("wants").filter(|w| !w.is_null()) else {
+        return Ok(None);
+    };
+    let specs =
+        parse_wants_profiled(w, MediaKind::Album).map_err(|m| AppError::bad_request(vec![m]))?;
+    wants::check_profiles(&st.db, &specs).await?;
+    Ok(Some(specs))
+}
+
+/// The recordings that stay monitored, when the body names them.
+fn body_recordings(b: &Body) -> Result<Option<Vec<String>>, AppError> {
+    let bad =
+        || AppError::bad_request(vec!["monitoredRecordings must be a list of ids".to_owned()]);
+    match b.0.get("monitoredRecordings") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) if !a.is_empty() => a
+            .iter()
+            .map(|v| v.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()
+            .map(Some)
+            .ok_or_else(bad),
+        Some(_) => Err(bad()),
+    }
+}
 
 pub(super) async fn import_album(
     st: &AppState,
@@ -56,6 +94,7 @@ pub(super) async fn import_album(
     {
         return Err(AppError::conflict(TAKEN));
     }
+    let (specs, recordings) = (body_wants(st, &b).await?, body_recordings(&b)?);
     let target = resolve_target(st, a, MediaKind::Album, library, folder).await?;
     let media = create_album_from(
         st,
@@ -67,11 +106,14 @@ pub(super) async fn import_album(
             user: Some(a.user.id).filter(|u| *u != 0),
             links: vec![],
             seasons: None,
-            wants: None,
+            wants: specs.as_deref(),
             prio: Priority::Interactive,
         },
     )
     .await?;
+    if let Some(r) = recordings {
+        target::select_recordings(&st.db, media, &r).await?;
+    }
     let acl = accessible_library_ids(&st.db, a).await?;
     let out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
         .await?
@@ -267,12 +309,13 @@ pub async fn import_album_for_request(
     }
 }
 
-const WANT_FIELDS: [&str; 5] = [
+const WANT_FIELDS: [&str; 6] = [
     "provider",
     "externalId",
     "albumExternalId",
     "libraryId",
     "folderId",
+    "wants",
 ];
 
 /// `POST /api/music/want-recording` (`docs/spec/music.md` rule 73): one track of a release group wanted.
@@ -290,6 +333,7 @@ pub(crate) async fn want_recording(
         "must be a string",
     )?;
     let (library, folder) = (b.id("libraryId")?.flatten(), b.id("folderId")?.flatten());
+    let specs = body_wants(st, &b).await?;
     let known = st.namespaces();
     let ns = known
         .parse(&name)
@@ -334,7 +378,7 @@ pub(crate) async fn want_recording(
                     user: Some(a.user.id).filter(|u| *u != 0),
                     links: vec![],
                     seasons: None,
-                    wants: None,
+                    wants: specs.as_deref(),
                     prio: Priority::Interactive,
                 },
             )

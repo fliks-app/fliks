@@ -397,6 +397,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::music::works::detail,
         crate::music::tracks,
         crate::music::want_recording,
+        crate::music::album_tracks,
         crate::music::composer_works,
         crate::music::recordings,
         crate::music::recently_played,

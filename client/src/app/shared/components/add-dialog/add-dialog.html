@@ -35,6 +35,37 @@
       />
     }
 
+    @if (picksTracks()) {
+      @if (tracksFailed()) {
+        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.tracks_unavailable' | translate }}</div>
+      } @else if (tracksLoading()) {
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+      } @else if (tracks().length) {
+        <div class="mt-4 overflow-x-auto rounded-lg border border-base-200 max-h-80 overflow-y-auto" data-testid="track-picker">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th class="w-12">
+                  <input type="checkbox" class="toggle toggle-sm toggle-primary" [checked]="selectedTracks().size === tracks().length" (change)="toggleAllTracks()" />
+                </th>
+                <th colspan="2">{{ 'music.tracks' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of tracks(); track t.position) {
+                @let on = selectedTracks().has(t.recordingId!);
+                <tr class="hover" [class.opacity-50]="!on">
+                  <td><input type="checkbox" class="toggle toggle-sm toggle-primary" [checked]="on" (change)="toggleTrack(t.recordingId!)" /></td>
+                  <td class="font-medium">{{ t.title }}</td>
+                  <td class="text-base-content/60">{{ formatDuration(t.durationMs == null ? null : t.durationMs / 1000) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+
     @if (kind() === 'book') {
       <div class="mt-4">
         <span class="label-text text-base-content/60">{{ 'wants.title' | translate }}</span>
@@ -86,7 +117,7 @@
             </select>
           </label>
         }
-        @if (kind() === 'album' && mode() === 'request' && choices().wantQuality.length) {
+        @if (kind() === 'album' && choices().wantQuality.length) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="audioQualityId()" (ngModelChange)="audioQualityId.set(+$event)">

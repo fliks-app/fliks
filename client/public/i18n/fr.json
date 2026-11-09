@@ -972,6 +972,7 @@
     "status_monitored": "Surveillée",
     "status_not_monitored": "Non surveillée",
     "seasons_unavailable": "Liste des saisons indisponible : toutes les saisons sauf les spéciaux seront surveillées.",
+    "tracks_unavailable": "Liste des pistes indisponible : toutes les pistes seront surveillées.",
     "seasons_unavailable_request": "Liste des saisons indisponible : la série entière sera demandée.",
     "advanced_options": "Options avancées",
     "select_seasons": "Sélectionner la/les saison(s)",
