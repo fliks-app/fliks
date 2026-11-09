@@ -1,7 +1,7 @@
 //! Provider orchestration, negative cache, the fetch sweep and write-back (`docs/spec/music.md` rules 68-70).
 use super::store::{self, New};
 use crate::{
-    metadata::{LyricsHit, LyricsQuery},
+    metadata::{LyricsHit, LyricsQuery, MetadataProvider},
     settings::setting_value,
     state::AppState,
 };
@@ -9,7 +9,7 @@ use fliks_domain::{
     lyrics::{self, Format, Parsed, Sync},
     metadata::limiter::Priority,
 };
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
 /// A miss or an instrumental answer is not asked again of the same provider for this long.
@@ -23,13 +23,23 @@ async fn flag(st: &AppState, key: &str, default: bool) -> bool {
     }
 }
 
-pub(super) async fn order(st: &AppState) -> Vec<String> {
-    setting_value(&st.db, "lyrics.provider_order")
+async fn list(st: &AppState, key: &str) -> Vec<String> {
+    setting_value(&st.db, key)
         .await
         .ok()
         .flatten()
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default()
+}
+
+/// The available lyrics providers in `lyrics.provider_order`, less those of `lyrics.disabled_providers`.
+async fn providers(st: &AppState) -> Vec<Arc<dyn MetadataProvider>> {
+    let off = list(st, "lyrics.disabled_providers").await;
+    let mut all = st
+        .metadata
+        .lyrics_providers(&list(st, "lyrics.provider_order").await);
+    all.retain(|p| !off.iter().any(|n| n == p.id().as_str()));
+    all
 }
 
 #[derive(sqlx::FromRow)]
@@ -116,7 +126,7 @@ pub async fn fetch(
         language: None,
     };
     let mut fallback: Option<(String, LyricsHit, Parsed)> = None;
-    for p in st.metadata.lyrics_providers(&order(st).await) {
+    for p in providers(st).await {
         let ns = p.id().as_str().to_owned();
         if !force && lookup_fresh(st, item, &ns).await {
             continue;
@@ -294,9 +304,8 @@ pub async fn enqueue_missing(st: &AppState, media: Option<i32>) {
     if !flag(st, "lyrics.auto_fetch", true).await {
         return;
     }
-    let ns: Vec<String> = st
-        .metadata
-        .lyrics_providers(&order(st).await)
+    let ns: Vec<String> = providers(st)
+        .await
         .iter()
         .map(|p| p.id().as_str().to_owned())
         .collect();

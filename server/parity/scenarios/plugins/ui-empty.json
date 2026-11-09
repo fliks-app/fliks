@@ -19,6 +19,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "audible"
               ]
@@ -34,6 +35,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "audnexus"
               ]
@@ -49,6 +51,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "bnf"
               ]
@@ -124,6 +127,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": false,
               "namespaces": [
                 "fanarttv"
               ]
@@ -139,6 +143,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "googlebooks"
               ]
@@ -188,6 +193,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": true,
               "namespaces": [
                 "fliks.lrclib:lrclib"
               ]
@@ -262,6 +268,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": false,
               "namespaces": [
                 "musicbrainz"
               ]
@@ -277,6 +284,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "openlibrary"
               ]
@@ -332,6 +340,7 @@
               "kinds": [
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "fliks.thexem:xem"
               ]
@@ -389,6 +398,7 @@
                 "movie",
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "tmdb"
               ]
@@ -446,6 +456,7 @@
                 "movie",
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "tvdb"
               ]
@@ -471,6 +482,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "audible"
               ]
@@ -486,6 +498,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "audnexus"
               ]
@@ -501,6 +514,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "bnf"
               ]
@@ -576,6 +590,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": false,
               "namespaces": [
                 "fanarttv"
               ]
@@ -591,6 +606,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "googlebooks"
               ]
@@ -640,6 +656,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": true,
               "namespaces": [
                 "fliks.lrclib:lrclib"
               ]
@@ -714,6 +731,7 @@
               "kinds": [
                 "album"
               ],
+              "lyrics": false,
               "namespaces": [
                 "musicbrainz"
               ]
@@ -729,6 +747,7 @@
               "kinds": [
                 "book"
               ],
+              "lyrics": false,
               "namespaces": [
                 "openlibrary"
               ]
@@ -784,6 +803,7 @@
               "kinds": [
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "fliks.thexem:xem"
               ]
@@ -841,6 +861,7 @@
                 "movie",
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "tmdb"
               ]
@@ -898,6 +919,7 @@
                 "movie",
                 "series"
               ],
+              "lyrics": false,
               "namespaces": [
                 "tvdb"
               ]
