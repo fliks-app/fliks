@@ -1,5 +1,8 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
+import { DeviceChipComponent } from '../device-chip/device-chip';
+import { DropdownMenuComponent } from '../components/dropdown-menu';
+import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { Component, ElementRef, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -86,6 +89,9 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     BottomSheetComponent,
     PopoverMenuComponent,
     MarqueeComponent,
+    DeviceChipComponent,
+    DropdownMenuComponent,
+    RemotePickerListComponent,
     TranslatePipe,
     ResolveUrlPipe,
     CachedSrcDirective,
@@ -161,6 +167,11 @@ export class AudioPlayerComponent {
   /** Touch and TV get a full-height sheet; a modal dialog sits in the top layer and would hide the menu's own sheet. */
   protected readonly isTouch = this.device.isTouch;
   protected readonly isTv = this.device.isTv;
+  private readonly deviceList = viewChild(RemotePickerListComponent);
+
+  protected refreshDevices(): void {
+    this.deviceList()?.refresh();
+  }
   protected readonly asSheet = computed(() => this.device.isTouch() || this.device.isTv());
 
   protected readonly clock = formatTime;

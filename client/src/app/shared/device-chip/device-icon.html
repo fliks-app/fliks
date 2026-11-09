@@ -1,0 +1,8 @@
+@switch (icon()) {
+  @case ('cast') { <svg lucideCast [class]="iconClass()"></svg> }
+  @case ('airplay') { <svg lucideAirplay [class]="iconClass()"></svg> }
+  @case ('tv') { <svg lucideTv [class]="iconClass()"></svg> }
+  @case ('tablet') { <svg lucideTablet [class]="iconClass()"></svg> }
+  @case ('phone') { <svg lucideSmartphone [class]="iconClass()"></svg> }
+  @default { <svg lucideMonitor [class]="iconClass()"></svg> }
+}

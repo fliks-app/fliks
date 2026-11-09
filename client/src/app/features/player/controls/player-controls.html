@@ -76,16 +76,20 @@
            player's own dropdown / sheet so it survives fullscreen. -->
       @if (canPickDevice()) {
         <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'devices'">
-          <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected() || airPlayConnected()" [class.text-white]="!castConnected() && !airPlayConnected() && !castConnecting()" [disabled]="castConnecting()" [attr.aria-label]="'remote.picker_title' | translate" (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)">
-            @if (castConnecting()) {
-              <span class="loading loading-spinner loading-md"></span>
-            } @else {
-              <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-            }
-          </button>
+          @if (playingDevice.name()) {
+            <app-device-chip (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)" />
+          } @else {
+            <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected() || airPlayConnected()" [class.text-white]="!castConnected() && !airPlayConnected() && !castConnecting()" [disabled]="castConnecting()" [attr.aria-label]="'remote.picker_title' | translate" (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)">
+              @if (castConnecting()) {
+                <span class="loading loading-spinner loading-md"></span>
+              } @else {
+                <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+              }
+            </button>
+          }
           @if (!isMobileTouch()) {
             <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[60vh] overflow-y-auto p-1 mt-2">
-              <app-remote-picker-list [delegate]="true" (picked)="pickDevice.emit($event); closeDropdown()" />
+              <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event); closeDropdown()" />
             </div>
           }
         </div>
@@ -379,7 +383,7 @@
 
 <app-bottom-sheet [open]="activeSheet() === 'devices'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-2 pb-4">
-    <app-remote-picker-list [delegate]="true" (picked)="pickDevice.emit($event); closeSheet()" />
+    <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event); closeSheet()" />
   </div>
 </app-bottom-sheet>
 

@@ -2,6 +2,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideArrowRightLeft, LucidePause, LucidePlay, LucideX } from '@lucide/angular';
+import { DeviceIconComponent } from '../device-chip/device-icon';
+import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
@@ -18,7 +20,7 @@ import { CachedSrcDirective } from '../directives/cached-src.directive';
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, ResolveUrlPipe, TranslatePipe],
+  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
@@ -27,6 +29,7 @@ export class CastOverlayComponent {
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
   protected readonly strip = inject(SessionStripService);
+  protected readonly playing = inject(PlaybackDevice);
   private readonly transferList = viewChild(RemotePickerListComponent);
 
   protected readonly artwork = computed(() => {
@@ -56,13 +59,12 @@ export class CastOverlayComponent {
   protected readonly controllable = computed(() => this.observed() !== null && !this.sync.parked());
   protected readonly paused = computed(() => (this.live() ? this.target.uiPaused() : !this.observed()?.playing));
 
-  protected readonly detail = computed(() => {
+  protected readonly time = computed(() => {
     const s = this.observed();
     if (!s) return '';
     const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
     const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
-    const time = dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
-    return `${time} · ${this.sync.ownerName(s)}`;
+    return dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
   });
 
   protected readonly percent = computed(() => {

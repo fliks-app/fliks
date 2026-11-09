@@ -425,6 +425,12 @@
         </button>
       </div>
       <div class="flex items-center gap-1" appTvRow>
+        @if (!isTv()) {
+          <app-dropdown-menu placement="top-start" [heading]="'remote.picker_title' | translate">
+            <app-device-chip trigger (click)="refreshDevices()" />
+            <app-remote-picker-list [card]="true" [transferOnly]="true" />
+          </app-dropdown-menu>
+        }
         @if (!remoteView()) {
           <button type="button" class="btn btn-ghost btn-circle" (click)="local.close()" [attr.aria-label]="'audio_player.close' | translate" data-testid="audio-stop">
             <svg lucideSquare class="h-4 w-4" fill="currentColor"></svg>

@@ -13,6 +13,32 @@
   }
 </div>
 
+@if (card() && playing.name(); as deviceName) {
+  <div class="mx-1 mb-2 rounded-box bg-base-300/60 px-3 py-3 text-white" data-testid="device-card">
+    <div class="flex items-center gap-3">
+      <app-device-icon [icon]="playing.icon()" iconClass="h-6 w-6 shrink-0 text-info" />
+      <div class="min-w-0 flex-1">
+        <p class="truncate font-semibold text-info">{{ deviceName }}</p>
+        @if (cardTrack(); as track) {
+          <p class="truncate text-sm opacity-60">{{ track }}</p>
+        }
+      </div>
+    </div>
+    @if (playing.canSetVolume()) {
+      <input
+        type="range"
+        class="range range-info range-xs mt-3 w-full"
+        min="0"
+        max="100"
+        [value]="playing.volume() * 100"
+        (input)="onVolume($event)"
+        [attr.aria-label]="'player.volume' | translate"
+        data-testid="device-volume"
+      />
+    }
+  </div>
+}
+
 @if (followed(); as f) {
   <div class="px-3 py-2 mb-1 border-b border-white/10 text-white">
     <p class="text-sm opacity-60">{{ 'session.current' | translate }}</p>
@@ -35,24 +61,11 @@
 }
 
 @for (row of pickerRows(); track row.kind + row.id) {
-  <!-- Lucide owns the icon's class attribute: a [class.x] toggle on it is overwritten, so the accent goes through [class]. -->
+  <!-- Accented only for the device in use: on every row it read as a state the list does not have. -->
   @let iconClass = row.connected ? 'h-5 w-5 shrink-0 text-info' : 'h-5 w-5 shrink-0';
   <div class="flex items-center gap-1">
     <button type="button" class="dropdown-item min-w-0 flex-1 text-white disabled:opacity-50 disabled:cursor-default" [disabled]="!pressable(row)" (click)="selectRow(row)">
-      @if (row.icon === 'cast') {
-        <!-- Accented only for the device in use: on every row it read as a state the list does not have. -->
-        <svg lucideCast [class]="iconClass"></svg>
-      } @else if (row.icon === 'airplay') {
-        <svg lucideAirplay [class]="iconClass"></svg>
-      } @else if (row.icon === 'tv') {
-        <svg lucideTv [class]="iconClass"></svg>
-      } @else if (row.icon === 'tablet') {
-        <svg lucideTablet [class]="iconClass"></svg>
-      } @else if (row.icon === 'phone') {
-        <svg lucideSmartphone [class]="iconClass"></svg>
-      } @else {
-        <svg lucideMonitor [class]="iconClass"></svg>
-      }
+      <app-device-icon [icon]="row.icon" [iconClass]="iconClass" />
       <span class="flex flex-col items-start min-w-0 flex-1">
         <span class="truncate w-full text-left">{{ row.label }}</span>
         @if (row.subtitle) {
