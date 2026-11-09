@@ -30,6 +30,11 @@ dc up -d
 
 The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect `pg_restore` errors only for tables dropped by later migrations (e.g. `delay_profiles`) and their sequences, plus `migrations_id_seq`.
 
+## Migrations
+
+- Keep the number of files in `server/migrations/` low: one migration per PR, grouping every schema change of that PR (tables, columns, constraints, backfills), never one file per table or per step.
+- A change to something your own PR introduced goes into that PR's migration, not a follow-up file. A migration already in a release is never edited; the unreleased ones of a large plan are consolidated before its verification.
+
 ## Cast dev app ID
 
 - Never edit the prod Cast app ID (`66BF4DAE`) to test a receiver: put your own in the gitignored `.env.local` (`FLIKS_CAST_APP_ID`, see `cast-receiver/README.md`); dev builds read it, release builds never do.
