@@ -9,10 +9,14 @@ const W_TRACKS: f64 = 2.0;
 const W_TRACK_ARTIST: f64 = 2.0;
 const W_TRACK_LENGTH: f64 = 2.0;
 const W_RECORDING: f64 = 10.0;
+const W_ISRC: f64 = 4.0;
 const W_DISCS: f64 = 1.0;
 const W_MEDIA: f64 = 1.0;
 const W_YEAR: f64 = 1.0;
+const W_BARCODE: f64 = 2.0;
 const W_TRACK_INDEX: f64 = 1.0;
+/// Per assigned pair, on top of the track's own distance: the position names the release, not the track.
+const W_POSITION: f64 = 2.0;
 const W_UNMATCHED: f64 = 0.9;
 const W_MISSING: f64 = 0.6;
 const W_COUNTRY: f64 = 0.5;
@@ -22,6 +26,8 @@ const W_CATALOG: f64 = 0.5;
 const LENGTH_SPAN_S: f64 = 10.0;
 /// A pair of tracks further than this is the worst track of the album.
 pub const WORST_TRACK: f64 = 0.4;
+/// A pair of tracks further than this is no pair: the file is left over.
+const FAR_TRACK: f64 = 0.5;
 /// The Hungarian method is cubic: a larger album is assigned greedily.
 const EXACT_LIMIT: usize = 400;
 
@@ -70,6 +76,7 @@ pub struct LocalTrack {
     pub number: Option<i32>,
     pub duration_ms: Option<i32>,
     pub recording: Option<String>,
+    pub isrc: Option<String>,
 }
 
 /// What the files of a folder say about their album.
@@ -81,6 +88,7 @@ pub struct Local {
     pub media: Option<String>,
     pub label: Option<String>,
     pub catalog: Option<String>,
+    pub barcode: Option<String>,
     pub discs: Option<i32>,
     pub tracks: Vec<LocalTrack>,
 }
@@ -93,6 +101,7 @@ pub struct RemoteTrack {
     pub number: Option<i32>,
     pub duration_ms: Option<i32>,
     pub recording: Option<String>,
+    pub isrc: Option<String>,
 }
 
 /// A release of a provider, with its tracklist.
@@ -105,6 +114,7 @@ pub struct Remote {
     pub media: Option<String>,
     pub label: Option<String>,
     pub catalog: Option<String>,
+    pub barcode: Option<String>,
     pub discs: Option<i32>,
     pub tracks: Vec<RemoteTrack>,
 }
@@ -186,6 +196,27 @@ pub fn text_distance(a: &str, b: &str) -> f64 {
     levenshtein(&a, &b) as f64 / longest as f64
 }
 
+/// Whether two barcodes name one release, a UPC and its EAN-13 form (leading zeros) being the same.
+pub fn same_barcode(a: &str, b: &str) -> bool {
+    a.trim_start_matches('0') == b.trim_start_matches('0')
+}
+
+/// The title without its trailing edition or live qualifier (`Alpha (Deluxe)`, `Alpha - 20th Anniversary`).
+fn core_title(s: &str) -> &str {
+    const CUTS: [&str; 5] = [" (", " [", " - ", " \u{2013} ", " \u{2014} "];
+    let end = CUTS
+        .iter()
+        .filter_map(|c| s.find(c))
+        .min()
+        .unwrap_or(s.len());
+    if end == 0 { s } else { &s[..end] }
+}
+
+/// The distance of two album titles, an edition qualifier on either side aside.
+fn album_title_distance(a: &str, b: &str) -> f64 {
+    text_distance(a, b).min(text_distance(core_title(a), core_title(b)))
+}
+
 /// Weighted penalties: the distance is their weighted mean.
 #[derive(Default)]
 struct Penalties(Vec<(f64, f64)>);
@@ -197,6 +228,10 @@ impl Penalties {
 
     fn text(&mut self, weight: f64, a: &str, b: &str) {
         self.add(weight, text_distance(a, b));
+    }
+
+    fn album(&mut self, a: &str, b: &str) {
+        self.add(W_ALBUM, album_title_distance(a, b));
     }
 
     fn distance(&self) -> f64 {
@@ -225,6 +260,10 @@ pub fn track_distance(l: &LocalTrack, r: &RemoteTrack) -> f64 {
     }
     if let (Some(a), Some(b)) = (&l.recording, &r.recording) {
         p.add(W_RECORDING, f64::from(a != b));
+    }
+    // A shared ISRC is evidence; a different one is not, a remaster is coded again.
+    if l.isrc.is_some() && l.isrc == r.isrc {
+        p.add(W_ISRC, 0.0);
     }
     p.distance()
 }
@@ -326,7 +365,7 @@ fn greedy(cost: &[Vec<f64>]) -> Vec<Option<usize>> {
 /// The distance of `local` to `remote` and the tracks assigned between them.
 pub fn score(local: &Local, remote: &Remote, cfg: &Config) -> Scored {
     let mut p = Penalties::default();
-    p.text(W_ALBUM, &local.album, &remote.album);
+    p.album(&local.album, &remote.album);
     if !local.artist.is_empty() && !remote.artist.is_empty() {
         p.text(W_ARTIST, &local.artist, &remote.artist);
     }
@@ -344,6 +383,9 @@ pub fn score(local: &Local, remote: &Remote, cfg: &Config) -> Scored {
     if let (Some(a), Some(b)) = (local.discs, remote.discs) {
         p.add(W_DISCS, f64::from(a != b));
     }
+    if let (Some(a), Some(b)) = (&local.barcode, &remote.barcode) {
+        p.add(W_BARCODE, f64::from(!same_barcode(a, b)));
+    }
     if let (Some(a), Some(b)) = (&local.label, &remote.label) {
         p.text(W_LABEL, a, b);
     }
@@ -359,20 +401,34 @@ pub fn score(local: &Local, remote: &Remote, cfg: &Config) -> Scored {
         .iter()
         .map(|l| remote.tracks.iter().map(|r| track_distance(l, r)).collect())
         .collect();
-    let assignment = assign(&cost);
+    let assignment: Vec<Option<usize>> = assign(&cost)
+        .into_iter()
+        .enumerate()
+        .map(|(i, j)| j.filter(|j| cost[i][*j] <= FAR_TRACK))
+        .collect();
     let mut worst: f64 = 0.0;
     for (i, j) in assignment.iter().enumerate() {
         if let Some(j) = j {
             p.add(W_TRACKS, cost[i][*j]);
+            if let (Some(a), Some(b)) = (local.tracks[i].number, remote.tracks[*j].number) {
+                p.add(W_POSITION, f64::from(a != b));
+            }
             worst = worst.max(cost[i][*j]);
         }
     }
     let matched = assignment.iter().flatten().count();
-    for _ in matched..local.tracks.len() {
+    // A file the release does not hold keeps the album in review; the more of the release is owned,
+    // the more a missing track says against it, so a lone single of a long album is not penalised.
+    let leftover = local.tracks.len() - matched;
+    if leftover > 0 {
+        worst = 1.0;
+    }
+    for _ in 0..leftover {
         p.add(W_UNMATCHED, 1.0);
     }
+    let share = matched as f64 / remote.tracks.len().max(1) as f64;
     for _ in matched..remote.tracks.len() {
-        p.add(W_MISSING, 1.0);
+        p.add(W_MISSING * share, 1.0);
     }
     Scored {
         distance: p.distance(),
@@ -389,12 +445,13 @@ pub fn album_distance(
     hit: (&str, &str, Option<i32>),
 ) -> f64 {
     let mut p = Penalties::default();
-    p.text(W_ALBUM, album, hit.0);
+    p.album(album, hit.0);
     if !artist.is_empty() && !hit.1.is_empty() {
         p.text(W_ARTIST, artist, hit.1);
     }
+    // A pressing never predates the group's first release, but may follow it by decades.
     if let (Some(a), Some(b)) = (year, hit.2) {
-        p.add(W_YEAR, f64::from((a - b).abs()) / 4.0);
+        p.add(W_YEAR, f64::from((b - a).max(0)) / 4.0);
     }
     p.distance()
 }
@@ -553,5 +610,112 @@ mod tests {
         let s = score(&local, &remote, &Config::default());
         assert!(s.worst_track > WORST_TRACK && s.distance <= Config::default().review);
         assert_eq!(s.verdict(&Config::default()), Verdict::Review);
+    }
+
+    const TITLES: [&str; 14] = [
+        "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven",
+        "Twelve", "Thirteen", "Fourteen",
+    ];
+
+    fn owned(numbers: &[usize]) -> Local {
+        Local {
+            tracks: numbers
+                .iter()
+                .map(|n| lt(TITLES[n - 1], *n as i32, 200))
+                .collect(),
+            ..folder(&[])
+        }
+    }
+
+    #[test]
+    fn a_partial_album_is_identified_from_the_tracks_it_holds() {
+        let cfg = Config::default();
+        let long = release(&TITLES);
+        for numbers in [
+            &[4][..],
+            &[2, 7, 11],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+        ] {
+            let s = score(&owned(numbers), &long, &cfg);
+            assert_eq!(
+                s.verdict(&cfg),
+                Verdict::Auto,
+                "{numbers:?}: {}",
+                s.distance
+            );
+        }
+        let twelve = release(&TITLES[..12]);
+        let s = score(&owned(&[3, 4, 5]), &twelve, &cfg);
+        assert_eq!(s.verdict(&cfg), Verdict::Auto, "{}", s.distance);
+    }
+
+    #[test]
+    fn a_track_the_release_does_not_hold_keeps_it_out_of_the_automatic_band() {
+        let cfg = Config::default();
+        let mut local = owned(&[4]);
+        local.tracks[0].title = "Another Song".into();
+        let s = score(&local, &release(&TITLES), &cfg);
+        assert_ne!(s.verdict(&cfg), Verdict::Auto, "{}", s.distance);
+        local.tracks[0].number = Some(20);
+        local.tracks[0].duration_ms = Some(50_000);
+        let far = score(&local, &release(&TITLES), &cfg);
+        assert_eq!(far.worst_track, 1.0);
+        assert_eq!(far.assignment, [None]);
+        // Two of three files left over: still no automatic match.
+        let mut two = owned(&[1, 2, 3]);
+        two.tracks[1].title = "Nope".into();
+        two.tracks[2].title = "Nada".into();
+        assert_ne!(
+            score(&two, &release(&TITLES), &cfg).verdict(&cfg),
+            Verdict::Auto
+        );
+    }
+
+    #[test]
+    fn the_album_a_track_number_fits_beats_a_single_with_the_same_title() {
+        let cfg = Config::default();
+        let album = release(&["One", "Two", "Three", "Four", "Five"]);
+        let mut single = release(&["Four", "Other"]);
+        single.album = "Alpha".into();
+        let local = owned(&[4]);
+        assert!(score(&local, &album, &cfg).distance < score(&local, &single, &cfg).distance);
+    }
+
+    #[test]
+    fn a_complete_edition_beats_a_longer_one_and_the_barcode_names_the_pressing() {
+        let cfg = Config::default();
+        let local = folder(&TITLES[..12]);
+        let (std, deluxe) = (release(&TITLES[..12]), release(&TITLES));
+        assert!(score(&local, &std, &cfg).distance < score(&local, &deluxe, &cfg).distance);
+        let mut a = release(&TITLES[..12]);
+        let mut b = release(&TITLES[..12]);
+        (a.barcode, b.barcode) = (Some("0731453692022".into()), Some("5099962688956".into()));
+        let mut one = owned(&[4]);
+        one.barcode = Some("731453692022".into());
+        assert!(score(&one, &a, &cfg).distance < score(&one, &b, &cfg).distance);
+    }
+
+    #[test]
+    fn a_shared_isrc_and_an_edition_qualifier_do_not_hurt_a_retitled_track() {
+        let cfg = Config::default();
+        let mut local = owned(&[4]);
+        local.album = "Alpha - 20th Anniversary Edition".into();
+        local.tracks[0].title = "Four (Live)".into();
+        let mut remote = release(&TITLES);
+        let without = score(&local, &remote, &cfg).distance;
+        local.tracks[0].isrc = Some("FRZ039702160".into());
+        remote.tracks[3].isrc = Some("FRZ039702160".into());
+        assert!(score(&local, &remote, &cfg).distance < without);
+        local.album = "Alpha".into();
+        assert!(album_title_distance("Alpha (Deluxe)", "Alpha") < 0.01);
+        assert!(album_title_distance("Alpha Live", "Alpha") > 0.2);
+    }
+
+    #[test]
+    fn a_reissue_year_after_the_first_release_costs_nothing_in_a_search_hit() {
+        let hit = ("Alpha", "Ana", Some(1995));
+        let later = album_distance("Alpha", "Ana", Some(2009), hit);
+        assert_eq!(later, 0.0);
+        assert!(album_distance("Alpha", "Ana", Some(1980), hit) > later);
     }
 }

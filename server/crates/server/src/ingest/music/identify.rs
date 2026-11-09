@@ -105,6 +105,7 @@ fn local_of(title: &str, tags: &[TrackTags]) -> Local {
         ),
         label: common(tags.iter().filter_map(|t| t.label.clone())),
         catalog: common(tags.iter().filter_map(|t| t.catalog.clone())),
+        barcode: common(tags.iter().filter_map(|t| t.barcode.clone())),
         discs: tags.iter().filter_map(|t| t.disc_total.or(t.disc)).max(),
         tracks: tags
             .iter()
@@ -120,6 +121,7 @@ fn local_of(title: &str, tags: &[TrackTags]) -> Local {
                 number: t.track,
                 duration_ms: t.duration_ms,
                 recording: t.recording.clone(),
+                isrc: t.isrc.clone(),
             })
             .collect(),
     }
@@ -147,6 +149,7 @@ fn remote_of(album: &Album, ed: &Edition) -> Remote {
         media: ed.release.media.map(str::to_owned),
         label: ed.release.label.clone(),
         catalog: ed.release.catalog_number.clone(),
+        barcode: ed.release.barcode.clone(),
         discs: ed.release.disc_count,
         tracks: ed
             .tracks
@@ -164,13 +167,14 @@ fn remote_of(album: &Album, ed: &Edition) -> Remote {
                 number: t.number,
                 duration_ms: t.duration_ms,
                 recording: t.recording_id.clone(),
+                isrc: t.isrc.clone(),
             })
             .collect(),
     }
 }
 
-/// The release the files are best, among the releases of one group: the one the tags name, else the closest
-/// to the files in track count and pressing preferences, fetched with their tracks.
+/// The release the files are best, among the releases of one group: the one the tags name, else the ones the
+/// files may be (barcode, room for the files, year, track count, pressing preferences), fetched with their tracks.
 async fn best_release(
     st: &AppState,
     f: &Fetched,
@@ -187,7 +191,18 @@ async fn best_release(
     };
     let mut releases = f.releases.clone();
     releases.sort_by_key(|r| {
+        let barcode = match (&local.barcode, &r.barcode) {
+            (Some(a), Some(b)) => !matcher::same_barcode(a, b),
+            _ => true,
+        };
+        let year_gap = match (local.year, r.release_date) {
+            (Some(y), Some(d)) => (chrono::Datelike::year(&d) - y).abs(),
+            _ => i32::MAX,
+        };
         (
+            barcode,
+            r.track_count.is_some_and(|c| c < n),
+            year_gap,
             r.track_count.map_or(i32::MAX, |c| (c - n).abs()),
             rank(&cfg.countries, r.country.as_deref()),
             rank(&cfg.media, r.media),
@@ -235,7 +250,8 @@ async fn search_groups(
     let search = Search {
         kind: MediaKind::Album,
         query: &query,
-        year: local.year.map(i64::from),
+        // The tag year is the pressing's: a reissue sits decades after the group's first release.
+        year: None,
         title: Some(&local.album),
         author: Some(local.artist.as_str()).filter(|a| !a.is_empty()),
         author_id: artist_id,
@@ -275,6 +291,19 @@ struct Found {
     fetched: Fetched,
     edition: Edition,
     scored: Scored,
+}
+
+impl Found {
+    fn describe(&self, how: &str) -> String {
+        format!(
+            "release group {} release {} \"{}\" ({how}), similarity {:.0}%, worst track {:.2}",
+            self.fetched.album.external_id,
+            self.edition.release.external_id,
+            self.edition.release.title,
+            self.scored.similarity() * 100.0,
+            self.scored.worst_track,
+        )
+    }
 }
 
 async fn language(st: &AppState, media: i32) -> Result<Resolved, AppError> {
@@ -433,6 +462,7 @@ pub async fn identify(
                 edition,
                 scored,
             };
+            tracing::info!("album #{media}: {}", found.describe("named by its tags"));
             return Ok(match apply(st, media, found, &lang, prio).await? {
                 true => Outcome::Applied,
                 false => Outcome::Nothing,
@@ -486,13 +516,33 @@ pub async fn identify(
     review.sort_by(|a, b| b.similarity.total_cmp(&a.similarity));
     match best {
         Some(b) if apply_best && b.scored.verdict(&cfg) == Verdict::Auto => {
+            tracing::info!("album #{media}: applying {}", b.describe("best match"));
             Ok(match apply(st, media, b, &lang, prio).await? {
                 true => Outcome::Applied,
                 false => Outcome::Nothing,
             })
         }
-        _ if !review.is_empty() => Ok(Outcome::Review(review)),
-        _ => Ok(Outcome::Nothing),
+        best if !review.is_empty() => {
+            if let Some(b) = best {
+                tracing::info!(
+                    "album #{media}: {} candidate(s) for review, best {}",
+                    review.len(),
+                    b.describe("best match")
+                );
+            }
+            Ok(Outcome::Review(review))
+        }
+        Some(b) => {
+            tracing::info!(
+                "album #{media}: no match, closest {}",
+                b.describe("below the review threshold")
+            );
+            Ok(Outcome::Nothing)
+        }
+        None => {
+            tracing::info!("album #{media}: no match, the search found no release group");
+            Ok(Outcome::Nothing)
+        }
     }
 }
 
