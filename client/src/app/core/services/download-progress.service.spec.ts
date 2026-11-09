@@ -1,10 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { DownloadProgressItem, DownloadProgressService } from './download-progress.service';
 
 function make(): DownloadProgressService {
   TestBed.resetTestingModule();
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()] });
   return TestBed.inject(DownloadProgressService);
 }
 
@@ -185,40 +187,48 @@ describe('DownloadProgressService — clearMedia', () => {
   });
 });
 
-/**
- * The backstop, not the removal mechanism: it catches a publisher that died or was
- * reconfigured, where no further snapshot will ever arrive to state the truth.
- */
-describe('DownloadProgressService — staleness sweep', () => {
-  const sweep = (svc: DownloadProgressService) =>
-    (svc as unknown as { sweepStale: () => void }).sweepStale();
-  const age = (svc: DownloadProgressService, ms: number) => {
-    for (const entry of svc.progress().values()) {
-      if (entry.updatedAt != null) entry.updatedAt -= ms;
+describe('DownloadProgressService \u2014 hydrate', () => {
+  function makeHttp(): { svc: DownloadProgressService; http: HttpTestingController } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    });
+    return { svc: TestBed.inject(DownloadProgressService), http: TestBed.inject(HttpTestingController) };
+  }
+
+  const snapshot = (mediaId: number, ref: string) => ({
+    mediaId,
+    mediaType: 'movie',
+    downloads: [download({ ref, progress: 0.2 })],
+  });
+
+  it('states what is in flight for a client that connects late', async () => {
+    const { svc, http } = makeHttp();
+    const done = svc.hydrate();
+    http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
+    await done;
+    expect([...svc.progress().keys()]).toEqual([1, 2]);
+  });
+
+  it('never replaces a media a later event already stated', async () => {
+    const { svc, http } = makeHttp();
+    const done = svc.hydrate();
+    movie(svc, [download({ progress: 0.9 })], 1);
+    http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
+    await done;
+    expect(svc.progress().get(1)?.percent).toBe(90);
+    expect(svc.progress().has(2)).toBe(true);
+  });
+
+  it('keeps a download that has not changed for minutes', async () => {
+    vi.useFakeTimers();
+    try {
+      const svc = make();
+      movie(svc, [download()]);
+      vi.advanceTimersByTime(10 * 60_000);
+      expect(svc.progress().has(1)).toBe(true);
+    } finally {
+      vi.useRealTimers();
     }
-  };
-
-  it('keeps a media still being reported', () => {
-    const svc = make();
-    series(svc, [download({ ref: 'aaa', seasonNumber: 1 })]);
-    sweep(svc);
-    expect(svc.progress().has(1)).toBe(true);
-  });
-
-  it('drops a media whose snapshots stopped arriving', () => {
-    const svc = make();
-    series(svc, [download({ ref: 'aaa', seasonNumber: 1 })]);
-    age(svc, 4 * 60_000);
-    sweep(svc);
-    expect(svc.progress().has(1)).toBe(false);
-  });
-
-  it('a fresh snapshot renews the whole media, not one leaf at a time', () => {
-    const svc = make();
-    series(svc, [download({ ref: 'aaa', seasonNumber: 1 })]);
-    age(svc, 4 * 60_000);
-    series(svc, [download({ ref: 'aaa', seasonNumber: 1 })]);
-    sweep(svc);
-    expect(svc.progress().has(1)).toBe(true);
   });
 });

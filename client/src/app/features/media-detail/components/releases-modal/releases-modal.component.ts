@@ -137,7 +137,7 @@ export class ReleasesModalComponent {
     ];
   });
 
-  /** The list the table renders. "Tous" is already in the server's relevance order, and a
+  /** The list the table renders. "Tous" is already merged by score across providers, and a
    *  per-indexer tab is a filter over it, so neither sorts anything client-side. */
   readonly visibleReleases = computed(() => {
     const tab = this.activeTab();

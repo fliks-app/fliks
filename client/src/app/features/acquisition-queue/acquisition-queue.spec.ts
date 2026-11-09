@@ -6,6 +6,9 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
+import { By } from '@angular/platform-browser';
+import { SseService } from '../../core/services/sse.service';
+import { DataTableComponent } from '../../shared/components/data-table/data-table';
 import { AcquisitionQueueComponent } from './acquisition-queue';
 
 function setup(view: 'queue' | 'history') {
@@ -57,5 +60,21 @@ describe('AcquisitionQueueComponent', () => {
     expect(resolve('table.open-media', { id: 1, mediaId: 7 })).toBeUndefined();
     resolve('table.open-media', { id: 1, mediaId: 7, mediaType: 'movie' })!();
     expect(navigateByUrl).toHaveBeenCalledWith(expect.stringContaining('7'));
+  });
+
+  it('patches the rows a provider report names and reloads on a report without rows', async () => {
+    const { fixture, http } = setup('queue');
+    const row = (id: number, progress: number) => ({ id, title: `t${id}`, state: 'active', progress });
+    http
+      .expectOne((r) => r.url === '/api/acquisition/queue')
+      .flush({ data: [row(1, 10), row(2, 20)], total: 2, page: 1, pageSize: 25 });
+    await fixture.whenStable();
+    const table = fixture.debugElement.query(By.directive(DataTableComponent)).componentInstance as DataTableComponent;
+    const sse = TestBed.inject(SseService);
+    sse.queueEvents.next({ type: 'acquisition.queue', payload: { rows: [row(2, 55)] } });
+    expect(table.rows().map((r) => r['progress'])).toEqual([10, 55]);
+    http.verify();
+    sse.queueEvents.next({ type: 'acquisition.queue', payload: { rows: null } });
+    http.expectOne((r) => r.url === '/api/acquisition/queue').flush({ data: [], total: 0, page: 1, pageSize: 25 });
   });
 });

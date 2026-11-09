@@ -211,6 +211,10 @@ export class SseService implements OnDestroy {
   readonly karaokeEvents = new Subject<SseEvent>();
   /** Pairing requests and cancellations, routed on their own Subject: two in one tick must both reach the approver. */
   readonly pairingEvents = new Subject<SseEvent>();
+  /** Outcome of a grab-best the user started: each one matters to the request waiting for it. */
+  readonly grabBestEvents = new Subject<SseEvent>();
+  /** Queue reports of the providers, on their own Subject: they tick with every poll and must not flood `lastEvent`. */
+  readonly queueEvents = new Subject<SseEvent>();
   /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
@@ -381,6 +385,7 @@ export class SseService implements OnDestroy {
           }
           // The server replays its live leaves after this event, so the burst is a full snapshot; anything else finished while disconnected would keep a stale badge.
           this.downloadProgress.reset();
+          void this.downloadProgress.hydrate();
           this.activeProgress.set(new Map());
           // A reconnect means we don't know what we missed while disconnected.
           void invalidatePrefix('/api/media');
@@ -410,6 +415,14 @@ export class SseService implements OnDestroy {
         }
         if (data.type.startsWith('karaoke.')) {
           this.karaokeEvents.next(data);
+          return;
+        }
+        if (data.type === 'acquisition.grab-best') {
+          this.grabBestEvents.next(data);
+          return;
+        }
+        if (data.type === 'acquisition.queue') {
+          this.queueEvents.next(data);
           return;
         }
         if (data.type === 'pairing.requested' || data.type === 'pairing.cancelled') {

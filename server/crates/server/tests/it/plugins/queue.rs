@@ -1,6 +1,10 @@
 //! The acquisition queue and history (`plugins.md` rules 69-75) through the fixture plugin.
 use super::harness::*;
 use fliks_server::events::Bus;
+use fliks_server::plugins::queue;
+use fliks_server::plugins::runtime::fliks::plugin::types::{
+    GrabMethod, QueueEntry, QueueState, UnitRef,
+};
 use serde_json::{Value, json};
 
 async fn report(h: &H, refs: &str, state: &str, media: i32) {
@@ -41,6 +45,17 @@ async fn rows(h: &H, which: &str) -> Vec<Value> {
     v["data"].as_array().unwrap().clone()
 }
 
+/// A media in a library every user can open.
+async fn add_media(h: &H, id: i32, kind: &str) {
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (720, 'L', '["movie","comic"]') ON CONFLICT DO NOTHING;
+           INSERT INTO media (id, title, type, "libraryId") VALUES ({id}, 'Placeholder', '{kind}', 720)"#
+    )))
+    .execute(&h.st.db)
+    .await
+    .unwrap();
+}
+
 async fn setting(h: &H, key: &str) -> Option<Value> {
     let v: Option<String> = sqlx::query_scalar("SELECT value FROM app_settings WHERE key = $1")
         .bind(format!("plugin.fliks.fixture.{key}"))
@@ -68,11 +83,7 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
     let installed = h.install(&pack(&m, "0.1.0", &w, None)).await;
     assert_eq!(installed["status"], "active", "{installed}");
     let media = 720_001;
-    sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'Placeholder', 'movie')")
-        .bind(media)
-        .execute(&h.st.db)
-        .await
-        .unwrap();
+    add_media(&h, media, "movie").await;
     let mut rx = h.st.hub.subscribe();
 
     // A snapshot upserts; the next one without `b` moves it to the history.
@@ -197,6 +208,206 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
         .await;
     assert_eq!(st, 204);
     assert!(rows(&h, "history").await.is_empty());
+    h.finish().await;
+    s.finish().await;
+}
+
+fn entry(r: &str, media: u32, unit: Option<UnitRef>, title: &str) -> QueueEntry {
+    QueueEntry {
+        ref_: r.into(),
+        media_id: media,
+        unit,
+        source_id: "s".into(),
+        source_name: "S".into(),
+        title: title.into(),
+        quality: String::new(),
+        method: GrabMethod::Auto,
+        info_url: None,
+        state: QueueState::Active,
+        progress: 0.5,
+        size_bytes: None,
+        bytes_per_second: None,
+        eta_seconds: None,
+        error: None,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bad_entry_is_refused_alone_and_the_rest_of_the_snapshot_applies() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("queue_bad").await else {
+        return;
+    };
+    let h = harness(&s, "queue_bad", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    add_media(&h, 720_010, "movie").await;
+    add_media(&h, 720_011, "comic").await;
+    let issue = UnitRef {
+        group: None,
+        number: Some(3.5),
+        end_number: None,
+        label: None,
+        absolute: None,
+    };
+    let set = |entries: Vec<QueueEntry>| {
+        let st = h.st.clone();
+        async move { queue::set(&st, "fliks.fixture", entries).await.unwrap() }
+    };
+    // A comic issue (no group, fractional) and an empty quality are fine; the empty title is refused alone.
+    set(vec![
+        entry("a", 720_010, None, "A"),
+        entry("issue", 720_011, Some(issue), "Issue"),
+        entry("bad", 720_010, None, ""),
+    ])
+    .await;
+    let q = rows(&h, "queue").await;
+    let mut refs: Vec<_> = q.iter().map(|r| r["ref"].as_str().unwrap()).collect();
+    refs.sort_unstable();
+    assert_eq!(refs, ["a", "issue"]);
+    let unit: (Option<i32>, Option<i32>) =
+        sqlx::query_as(r#"SELECT season, episode FROM acquisition_queue WHERE "ref" = 'issue'"#)
+            .fetch_one(&h.st.db)
+            .await
+            .unwrap();
+    assert_eq!(unit, (None, None));
+
+    // A refused entry leaves its open row alone; only a name the snapshot omits closes.
+    set(vec![
+        entry("a", 720_010, None, ""),
+        entry("issue", 720_011, None, "Issue"),
+    ])
+    .await;
+    let q = rows(&h, "queue").await;
+    assert_eq!(q.len(), 2, "the refused entry did not close its row");
+    let a = q.iter().find(|r| r["ref"] == "a").unwrap();
+    assert_eq!(a["sourceTitle"], "A");
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deleted_history_stays_deleted_and_a_returning_transfer_reuses_its_row() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("queue_hist").await else {
+        return;
+    };
+    let h = harness(&s, "queue_hist", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    add_media(&h, 720_020, "movie").await;
+    let media = 720_020;
+
+    // A transfer missing from one snapshot closes removed; its return reopens that row, then it imports: one row.
+    report(&h, "x", "active", media).await;
+    report(&h, "y", "active", media).await;
+    report(&h, "y", "active", media).await;
+    report(&h, "x", "active", media).await;
+    assert_eq!(rows(&h, "queue").await.len(), 1);
+    assert!(
+        rows(&h, "history").await.iter().all(|r| r["ref"] != "x"),
+        "reopened, not duplicated"
+    );
+    report(&h, "y", "active", media).await;
+    report(&h, "x,y", "imported", media).await;
+    let hist = rows(&h, "history").await;
+    assert_eq!(hist.iter().filter(|r| r["ref"] == "x").count(), 1);
+    assert!(hist.iter().all(|r| r["state"] == "imported"), "{hist:?}");
+
+    // A provider that keeps reporting a finished transfer never brings deleted history back, whatever the order of the two.
+    for _ in 0..8 {
+        let (_, cleared) = tokio::join!(
+            report(&h, "x,y", "imported", media),
+            h.call("DELETE", "/api/acquisition/history", Some(&h.admin), None)
+        );
+        assert_eq!(cleared.0, 204);
+    }
+    let (st, _) = h
+        .call("DELETE", "/api/acquisition/history", Some(&h.admin), None)
+        .await;
+    assert_eq!(st, 204);
+    report(&h, "x,y", "imported", media).await;
+    assert!(rows(&h, "history").await.is_empty());
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_queue_lists_only_open_libraries_and_its_actions_need_queue_manage() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("queue_perm").await else {
+        return;
+    };
+    let h = harness(&s, "queue_perm", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    add_media(&h, 720_030, "movie").await;
+    report(&h, "a", "imported", 720_030).await;
+    let hist_id = rows(&h, "history").await[0]["id"].as_i64().unwrap();
+
+    let role = |perms: &str| {
+        let q = format!(
+            r#"WITH r AS (INSERT INTO roles (name, permissions) VALUES ('r' || nextval('roles_id_seq'), '{perms}') RETURNING id)
+               UPDATE users SET "roleId" = (SELECT id FROM r) WHERE username = 'user'"#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(q)).execute(&h.st.db)
+    };
+    let user = |m: &'static str, uri: String| {
+        let (h, t) = (&h, h.user.clone());
+        async move { h.call(m, &uri, Some(&t), None).await }
+    };
+    role(r#"["media.grab"]"#).await.unwrap();
+    // No library of its own: the list is empty and the actions are refused.
+    assert_eq!(
+        user("GET", "/api/acquisition/history".into()).await.1["total"],
+        0
+    );
+    assert_eq!(
+        user("DELETE", format!("/api/acquisition/history/{hist_id}"))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        user("DELETE", "/api/acquisition/history".into()).await.0,
+        403
+    );
+
+    // With the library it sees the row, and still cannot delete without `queue.manage`.
+    sqlx::query(r#"INSERT INTO library_user_access ("libraryId", "userId") SELECT 720, id FROM users WHERE username = 'user'"#)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        user("GET", "/api/acquisition/history".into()).await.1["total"],
+        1
+    );
+    assert_eq!(
+        user("DELETE", format!("/api/acquisition/history/{hist_id}"))
+            .await
+            .0,
+        403
+    );
+    role(r#"["media.grab","queue.manage"]"#).await.unwrap();
+    assert_eq!(
+        user("DELETE", format!("/api/acquisition/history/{hist_id}"))
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        user("GET", "/api/acquisition/history".into()).await.1["total"],
+        0
+    );
     h.finish().await;
     s.finish().await;
 }

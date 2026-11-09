@@ -2,6 +2,7 @@
 use super::harness::*;
 use fliks_server::events::DomainEvent;
 use fliks_server::plugins::acquisition;
+use fliks_server::plugins::events::progress_gates;
 use fliks_server::plugins::runtime::fliks::plugin::types::{CandidatesQuery, Target};
 use fliks_server::plugins::sweep::Outcome;
 use serde_json::{Value, json};
@@ -60,6 +61,10 @@ async fn forget(h: &H) {
         .execute(&h.st.db)
         .await
         .unwrap();
+    // A grab puts its media in flight until its plugin reports.
+    for id in [A, B] {
+        progress_gates().retire(id);
+    }
 }
 
 async fn target(h: &H, media: u32) -> Target {
@@ -122,14 +127,20 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     offer(&h, A, json!([release("a", 3)])).await;
     offer(&h, B, json!([release("b", 5)])).await;
     let t1 = target(&h, 1).await;
-    assert_eq!(h.st.plugins.acquire(&t1).await, Outcome::Grabbed(B.into()));
+    assert_eq!(
+        h.st.plugins.acquire(&t1, false).await,
+        Outcome::Grabbed(B.into())
+    );
     assert_eq!(grabbed(&h, B, 1).await.unwrap()["sourceTitle"], "b");
     assert!(grabbed(&h, A, 1).await.is_none());
 
     // A tie goes to the first provider in order (by id until the admin orders them).
     forget(&h).await;
     offer(&h, B, json!([release("b", 3)])).await;
-    assert_eq!(h.st.plugins.acquire(&t1).await, Outcome::Grabbed(B.into()));
+    assert_eq!(
+        h.st.plugins.acquire(&t1, false).await,
+        Outcome::Grabbed(B.into())
+    );
     h.set("acquisition.providerOrder", &json!([A, B]).to_string())
         .await;
     until("the provider order", Duration::from_secs(10), async || {
@@ -137,27 +148,51 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     })
     .await;
     forget(&h).await;
-    assert_eq!(h.st.plugins.acquire(&t1).await, Outcome::Grabbed(A.into()));
+    assert_eq!(
+        h.st.plugins.acquire(&t1, false).await,
+        Outcome::Grabbed(A.into())
+    );
 
     // A release a provider would not grab (rejected) never wins.
     forget(&h).await;
     let mut rejected = release("rejected", 9);
     rejected["rejections"] = json!([{"code": "x"}]);
     offer(&h, B, json!([rejected])).await;
-    assert_eq!(h.st.plugins.acquire(&t1).await, Outcome::Grabbed(A.into()));
+    assert_eq!(
+        h.st.plugins.acquire(&t1, false).await,
+        Outcome::Grabbed(A.into())
+    );
     offer(&h, A, json!([])).await;
-    assert_eq!(h.st.plugins.acquire(&t1).await, Outcome::NoRelease);
+    assert_eq!(h.st.plugins.acquire(&t1, false).await, Outcome::NoRelease);
 
     // A media with a download in flight at any plugin is skipped.
     forget(&h).await;
     offer(&h, A, json!([release("a", 3)])).await;
     queue_set(&h, "other", 1, &["o"]).await;
     assert_eq!(
-        h.st.plugins.acquire(&t1).await,
+        h.st.plugins.acquire(&t1, false).await,
         Outcome::Skipped("in flight")
     );
     assert!(grabbed(&h, A, 1).await.is_none());
     queue_set(&h, "other", 1, &[]).await;
+
+    // Two sweeps of one media grab it once: the claim spans the in-flight check and the grab.
+    forget(&h).await;
+    offer(&h, A, json!([release("a", 3)])).await;
+    let (x, y) = tokio::join!(
+        h.st.plugins.acquire(&t1, false),
+        h.st.plugins.acquire(&t1, true)
+    );
+    let mut got = [format!("{x:?}"), format!("{y:?}")];
+    got.sort();
+    assert_eq!(
+        got,
+        ["Grabbed(\"fliks.fixture\")", "Skipped(\"in flight\")"]
+    );
+    // The grab says how it was asked for.
+    let body = grabbed(&h, A, 1).await.unwrap();
+    assert!(matches!(body["method"].as_str(), Some("auto" | "manual")));
+    forget(&h).await;
 
     // A request sweeps that media only.
     h.st.hub

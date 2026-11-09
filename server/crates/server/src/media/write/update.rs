@@ -702,14 +702,15 @@ pub async fn patch_profiles(
     Ok(Json(detail_or_404(&st, &a, id).await?))
 }
 
-/// `POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target.
-#[utoipa::path(post, path = "/api/media/{id}/grab-best", responses((status = 200)))]
+/// `POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target, run in
+/// the background (a search can outlast a proxy's timeout); the outcome comes as `acquisition.grab-best`.
+#[utoipa::path(post, path = "/api/media/{id}/grab-best", responses((status = 202)))]
 pub async fn grab_best(
     State(st): State<AppState>,
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
     ValidJson(v): ValidJson<Value>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<(StatusCode, Json<Value>), AppError> {
     use crate::plugins::sweep::Outcome;
     let id = gate(&st, &a, Action::Grab, id).await?;
     let num = |k: &str| v[k].as_u64().and_then(|n| u32::try_from(n).ok());
@@ -732,11 +733,25 @@ pub async fn grab_best(
     .await
     .map_err(|e| AppError::bad_request(e.message))?
     .ok_or_else(|| AppError::not_found("nothing to acquire for this target"))?;
-    match st.plugins.acquire(&target).await {
-        Outcome::Grabbed(provider) => Ok(Json(json!({"provider": provider}))),
-        Outcome::NoRelease => Err(AppError::not_found("No release worth grabbing was found")),
-        Outcome::Skipped(why) => Err(AppError::conflict(format!("Nothing to grab: {why}"))),
-    }
+    let user = a.user.id;
+    // The request's own scope, echoed so the client matches the outcome to its call.
+    let scope = json!({"mediaId": id, "family": v["family"], "groupId": num("groupId"), "itemId": num("itemId")});
+    tokio::spawn(async move {
+        let (outcome, detail) = match st.plugins.acquire(&target, true).await {
+            Outcome::Grabbed(p) => ("grabbed", p),
+            Outcome::NoRelease => ("none", String::new()),
+            Outcome::Skipped(why) => ("skipped", why.to_owned()),
+            Outcome::Busy => ("busy", String::new()),
+            Outcome::Error(m) => ("error", m),
+            Outcome::TimedOut(p) => ("timeout", p),
+        };
+        st.hub.emit_raw(
+            "acquisition.grab-best",
+            json!({"scope": scope, "outcome": outcome, "detail": detail}),
+            Some(&[user]),
+        );
+    });
+    Ok((StatusCode::ACCEPTED, Json(json!({"mediaId": id}))))
 }
 
 /// `PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.

@@ -1,5 +1,6 @@
 //! `/api/acquisition/queue` and `/api/acquisition/history` (`plugins.md` rules 73-74).
 use crate::http::{AppError, auth::Authed, validate::PathParams};
+use crate::libraries::accessible_library_ids;
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -15,6 +16,7 @@ use sqlx::FromRow;
 
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
+    progress,
     queue_list,
     history_list,
     history_delete,
@@ -28,6 +30,7 @@ pub struct Doc;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/acquisition/progress", get(progress))
         .route("/api/acquisition/queue", get(queue_list))
         .route("/api/acquisition/queue/{id}", delete(queue_remove))
         .route("/api/acquisition/queue/{id}/pause", post(queue_pause))
@@ -136,6 +139,18 @@ fn wire(r: Row) -> Value {
     })
 }
 
+/// The wire rows of these ids, in id order.
+pub(super) async fn rows_by_id(db: &sqlx::PgPool, ids: &[i32]) -> Vec<Value> {
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{SELECT} WHERE q.id = ANY($1) ORDER BY q.id"
+    )))
+    .bind(ids)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    rows.into_iter().map(wire).collect()
+}
+
 /// `%`, `_` and `\` match themselves in a `LIKE`.
 fn like(q: &str) -> String {
     let mut out = String::from("%");
@@ -151,6 +166,7 @@ fn like(q: &str) -> String {
 
 async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Value>, AppError> {
     a.require(Action::Grab, Subject::Media)?;
+    let libraries = accessible_library_ids(&st.db, a).await?;
     let (page, size) = p.window();
     let (q, state) = if open {
         (None, None)
@@ -170,7 +186,8 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
     let filter = format!(
         r#" WHERE q."finishedAt" {closed}
             AND ($1::text IS NULL OR q.title ILIKE $1 OR m.title ILIKE $1)
-            AND ($2::text IS NULL OR q.state = $2)"#
+            AND ($2::text IS NULL OR q.state = $2)
+            AND q."deletedAt" IS NULL AND m."libraryId" = ANY($3)"#
     );
     let like = q.map(like);
     let order = if open {
@@ -183,13 +200,15 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
     )))
     .bind(&like)
     .bind(state)
+    .bind(&libraries)
     .fetch_one(&st.db)
     .await?;
     let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{SELECT}{filter} ORDER BY {order} LIMIT $3 OFFSET $4"
+        "{SELECT}{filter} ORDER BY {order} LIMIT $4 OFFSET $5"
     )))
     .bind(&like)
     .bind(state)
+    .bind(&libraries)
     .bind(size)
     .bind((page - 1) * size)
     .fetch_all(&st.db)
@@ -200,6 +219,37 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
         "page": page,
         "pageSize": size,
     })))
+}
+
+/// What is in flight now, one `download.progress` snapshot per media the caller can open: a client that
+/// connects late reads this and then follows the events.
+#[utoipa::path(get, path = "/api/acquisition/progress", responses((status = 200)))]
+pub async fn progress(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
+    let libraries = accessible_library_ids(&st.db, &a).await?;
+    let gates = crate::plugins::events::progress_gates();
+    let mut media: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT "mediaId" FROM acquisition_queue WHERE "finishedAt" IS NULL AND state = ANY($1)"#,
+    )
+    .bind(super::queue::IN_FLIGHT.map(String::from).to_vec())
+    .fetch_all(&st.db)
+    .await?;
+    media.extend(gates.media_ids());
+    let visible: Vec<(i32, String)> = sqlx::query_as(
+        r#"SELECT id, type FROM media WHERE id = ANY($1) AND "libraryId" = ANY($2) ORDER BY id"#,
+    )
+    .bind(&media)
+    .bind(&libraries)
+    .fetch_all(&st.db)
+    .await?;
+    let mut out = Vec::with_capacity(visible.len());
+    for (id, kind) in visible {
+        let mut downloads = super::queue::downloads(&st.db, id).await;
+        downloads.extend(gates.union(id));
+        if !downloads.is_empty() {
+            out.push(json!({"mediaId": id, "mediaType": kind, "downloads": downloads}));
+        }
+    }
+    Ok(Json(Value::Array(out)))
 }
 
 #[utoipa::path(get, path = "/api/acquisition/queue", responses((status = 200)))]
@@ -226,12 +276,17 @@ pub async fn history_delete(
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Result<StatusCode, AppError> {
-    a.require(Action::Grab, Subject::Media)?;
-    let done =
-        sqlx::query(r#"DELETE FROM acquisition_queue WHERE id = $1 AND "finishedAt" IS NOT NULL"#)
-            .bind(id?.0)
-            .execute(&st.db)
-            .await?;
+    a.require(Action::Manage, Subject::Queue)?;
+    let libraries = accessible_library_ids(&st.db, &a).await?;
+    let done = sqlx::query(
+        r#"UPDATE acquisition_queue SET "deletedAt" = now()
+           WHERE id = $1 AND "finishedAt" IS NOT NULL AND "deletedAt" IS NULL
+             AND "mediaId" IN (SELECT id FROM media WHERE "libraryId" = ANY($2))"#,
+    )
+    .bind(id?.0)
+    .bind(&libraries)
+    .execute(&st.db)
+    .await?;
     if done.rows_affected() == 0 {
         return Err(AppError::not_found("History entry not found"));
     }
@@ -240,10 +295,16 @@ pub async fn history_delete(
 
 #[utoipa::path(delete, path = "/api/acquisition/history", responses((status = 204)))]
 pub async fn history_clear(State(st): State<AppState>, a: Authed) -> Result<StatusCode, AppError> {
-    a.require(Action::Grab, Subject::Media)?;
-    sqlx::query(r#"DELETE FROM acquisition_queue WHERE "finishedAt" IS NOT NULL"#)
-        .execute(&st.db)
-        .await?;
+    a.require(Action::Manage, Subject::Queue)?;
+    let libraries = accessible_library_ids(&st.db, &a).await?;
+    sqlx::query(
+        r#"UPDATE acquisition_queue SET "deletedAt" = now()
+           WHERE "finishedAt" IS NOT NULL AND "deletedAt" IS NULL
+             AND "mediaId" IN (SELECT id FROM media WHERE "libraryId" = ANY($1))"#,
+    )
+    .bind(&libraries)
+    .execute(&st.db)
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -275,12 +336,15 @@ async fn act(
     name: &str,
     blocklist: Option<bool>,
 ) -> Result<StatusCode, AppError> {
-    a.require(Action::Grab, Subject::Media)?;
+    a.require(Action::Manage, Subject::Queue)?;
     let (states, key) = action(name);
+    let libraries = accessible_library_ids(&st.db, a).await?;
     let row: Option<(String, String, String)> = sqlx::query_as(
-        r#"SELECT "pluginId", "ref", state FROM acquisition_queue WHERE id = $1 AND "finishedAt" IS NULL"#,
+        r#"SELECT q."pluginId", q."ref", q.state FROM acquisition_queue q JOIN media m ON m.id = q."mediaId"
+           WHERE q.id = $1 AND q."finishedAt" IS NULL AND m."libraryId" = ANY($2)"#,
     )
     .bind(id)
+    .bind(&libraries)
     .fetch_optional(&st.db)
     .await?;
     let (plugin, r#ref, state) = row.ok_or_else(|| AppError::not_found("Queue entry not found"))?;
@@ -302,6 +366,12 @@ async fn act(
         .map_err(|e| match e {
             crate::plugins::sweep::RouteError::Unavailable => {
                 AppError::plain(StatusCode::SERVICE_UNAVAILABLE, "PLUGIN_UNAVAILABLE")
+            }
+            crate::plugins::sweep::RouteError::Busy => {
+                AppError::plain(StatusCode::SERVICE_UNAVAILABLE, "PLUGIN_BUSY")
+            }
+            crate::plugins::sweep::RouteError::TimedOut => {
+                AppError::plain(StatusCode::GATEWAY_TIMEOUT, "PLUGIN_TIMEOUT")
             }
             crate::plugins::sweep::RouteError::Failed(m) => {
                 AppError::with_message(StatusCode::BAD_GATEWAY, m)

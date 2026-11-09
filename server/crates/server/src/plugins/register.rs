@@ -467,7 +467,8 @@ impl Plugins {
                 self.registry.pre_roll_winner().unwrap_or_default()
             );
         }
-        if p.rt.is_some() {
+        if let Some(rt) = &p.rt {
+            self.watch_acquisition(rt.clone());
             self.registry.set_jobs(&id, p.declared.jobs.clone());
             self.start_crons(&id, &p.declared.jobs);
         }

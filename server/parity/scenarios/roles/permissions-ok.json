@@ -21,7 +21,8 @@
           "parties.create",
           "parties.manage",
           "parties.read_public",
-          "books.email"
+          "books.email",
+          "queue.manage"
         ],
         "status": 200
       },

@@ -41,7 +41,7 @@ interface Run extends ProviderSearch {
   roster: IndexerRosterEntry[];
 }
 
-/** Runs one release search over every given provider, merging the partial results each pushes while its sources answer (in provider order).
+/** Runs one release search over every given provider, merging the partial results each pushes while its sources answer, best score first.
  *  Each `search.partial` is the complete re-ranked list of its provider, so a skipped intermediate event loses nothing; the HTTP answer stays authoritative. */
 @Injectable({ providedIn: 'root' })
 export class ReleaseSearchStreamService {
@@ -55,7 +55,7 @@ export class ReleaseSearchStreamService {
     this.latest.set(sinks.releases, token);
     const runs: Run[] = searches.map((s) => ({ ...s, searchId: searchToken(), releases: [], roster: [] }));
     const live = () => this.latest.get(sinks.releases) === token;
-    const publishReleases = () => sinks.releases.set(runs.flatMap((r) => r.releases));
+    const publishReleases = () => sinks.releases.set(mergeByScore(runs));
     const publishRoster = () => sinks.indexers.set(runs.flatMap((r) => r.roster));
     const stop = this.listen(runs, live, publishRoster, publishReleases);
     try {
@@ -67,7 +67,7 @@ export class ReleaseSearchStreamService {
       );
       const failed = answers.find((a): a is PromiseRejectedResult => a.status === 'rejected');
       if (failed && answers.every((a) => a.status === 'rejected')) throw failed.reason;
-      return runs.flatMap((r) => r.releases);
+      return mergeByScore(runs);
     } finally {
       stop();
       // The answer ends the search: a source still pending never got its completion event, and its tab would spin forever.
@@ -104,6 +104,13 @@ export class ReleaseSearchStreamService {
     );
     return () => ref.destroy();
   }
+}
+
+/** Every provider's releases by rank, then custom-format score, best first; the sort is stable, so a tie keeps provider order (the core's sweep orders the same way). */
+function mergeByScore(runs: Run[]): MovieRelease[] {
+  return runs
+    .flatMap((r) => r.releases)
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0) || (b.customFormatScore ?? 0) - (a.customFormatScore ?? 0));
 }
 
 function stamp(pluginId: string, releases: MovieRelease[]): MovieRelease[] {

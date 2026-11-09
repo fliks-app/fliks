@@ -49,6 +49,8 @@ pub enum Subject {
     Role,
     Party,
     EmailDevice,
+    /// The acquisition queue's actions and the history's deletion.
+    Queue,
     Settings,
     All,
     /// `plugin:<id>:<name>`, stored whole.
@@ -74,6 +76,7 @@ impl FromStr for Subject {
             "Role" => Self::Role,
             "Party" => Self::Party,
             "EmailDevice" => Self::EmailDevice,
+            "Queue" => Self::Queue,
             "Settings" => Self::Settings,
             "all" => Self::All,
             _ if is_plugin_subject(s) => Self::Plugin(s.to_owned()),
@@ -191,6 +194,9 @@ impl Permissions {
         }
         if has("books.email") {
             grant(Create, S::EmailDevice);
+        }
+        if has("queue.manage") {
+            grant(Manage, S::Queue);
         }
         if has("parties.create") {
             grant(Create, S::Party);

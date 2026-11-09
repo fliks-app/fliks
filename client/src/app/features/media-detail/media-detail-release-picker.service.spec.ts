@@ -2,6 +2,10 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { TranslateService } from '@ngx-translate/core';
+import { Subject } from 'rxjs';
+import { SseService } from '../../core/services/sse.service';
+import { ToastService } from '../../core/services/toast.service';
 import { MediaDetailReleasePickerService, resolveReleasePickerUrl } from './media-detail-release-picker.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { AcquisitionTarget } from '../../core/acquisition/acquisition';
@@ -54,6 +58,8 @@ describe('MediaDetailReleasePickerService', () => {
   let http: HttpTestingController;
   let service: MediaDetailReleasePickerService;
   let registry: PluginUiRegistryService;
+  const grabBestEvents = new Subject<Record<string, unknown>>();
+  const toast = { error: vi.fn() };
 
   const install = async (releasePicker: PluginUiEntry['releasePicker']) => {
     const promise = registry.load();
@@ -72,8 +78,12 @@ describe('MediaDetailReleasePickerService', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: SseService, useValue: { grabBestEvents } },
+        { provide: ToastService, useValue: toast },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],
     });
+    toast.error.mockClear();
     http = TestBed.inject(HttpTestingController);
     service = TestBed.inject(MediaDetailReleasePickerService);
     registry = TestBed.inject(PluginUiRegistryService);
@@ -112,13 +122,28 @@ describe('MediaDetailReleasePickerService', () => {
     await promise;
   });
 
-  it('posts a grab-best to the core, a null language for an any-language want', async () => {
+  const outcome = (name: string, scope: Record<string, unknown> = {}) =>
+    grabBestEvents.next({ outcome: name, scope: { mediaId: 7, family: 'video', groupId: null, itemId: 12, ...scope } });
+
+  it('posts a grab-best to the core, a null language for an any-language want, and waits for its outcome', async () => {
     await install(ROUTES);
     const promise = service.grabBest(target({ kind: 'series', level: 'item', itemId: 12 }));
     const req = http.expectOne('/api/media/7/grab-best');
     expect(req.request.body).toEqual({ itemId: 12, family: 'video', language: null });
-    req.flush(null);
+    req.flush({ mediaId: 7 }, { status: 202, statusText: 'Accepted' });
+    outcome('grabbed', { itemId: 99 });
+    outcome('grabbed');
     await promise;
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('toasts and throws an outcome that grabbed nothing, even one that lands before the 202', async () => {
+    await install(ROUTES);
+    const promise = service.grabBest(target({ kind: 'series', level: 'item', itemId: 12 }));
+    outcome('none');
+    http.expectOne('/api/media/7/grab-best').flush({ mediaId: 7 }, { status: 202, statusText: 'Accepted' });
+    await expect(promise).rejects.toThrow('grab-best: none');
+    expect(toast.error).toHaveBeenCalledWith('media_detail.grab_best_none');
   });
 
   it('builds the proxied item search URL of a series and of a comic', async () => {

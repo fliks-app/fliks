@@ -60,6 +60,7 @@ async function createComponent(opts: {
   pageSize?: number;
   refreshMs?: number;
   refreshOn?: string[];
+  rowPatches?: Subject<readonly Record<string, unknown>[] | null>;
   sseEvent?: WritableSignal<{ type: string } | null>;
   confirmation?: unknown;
   bulkSelect?: boolean;
@@ -103,6 +104,7 @@ async function createComponent(opts: {
   if (opts.pageSize) fixture.componentRef.setInput('pageSize', opts.pageSize);
   if (opts.refreshMs) fixture.componentRef.setInput('refreshMs', opts.refreshMs);
   if (opts.refreshOn) fixture.componentRef.setInput('refreshOn', opts.refreshOn);
+  if (opts.rowPatches) fixture.componentRef.setInput('rowPatches', opts.rowPatches);
   if (opts.bulkSelect) fixture.componentRef.setInput('bulkSelect', opts.bulkSelect);
   fixture.detectChanges();
   await fixture.whenStable();
@@ -737,6 +739,28 @@ describe('DataTableComponent — refreshing', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('DataTableComponent — row patches', () => {
+  it('replaces only the rows of the same id and ignores an unknown one', async () => {
+    const patches = new Subject<readonly Record<string, unknown>[] | null>();
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }, { id: 2, name: 'B' }]) },
+      rowPatches: patches,
+    });
+    patches.next([{ id: 2, name: 'B2' }, { id: 9, name: 'ghost' }]);
+    expect(fixture.componentInstance.rows()).toEqual([{ id: 1, name: 'A' }, { id: 2, name: 'B2' }]);
+  });
+
+  it('a null emission reloads the list', async () => {
+    const get = vi.fn(() => of([{ id: 1 }]));
+    const patches = new Subject<readonly Record<string, unknown>[] | null>();
+    const fixture = await createComponent({ http: { get }, rowPatches: patches });
+    const before = get.mock.calls.length;
+    patches.next(null);
+    fixture.detectChanges();
+    expect(get.mock.calls.length).toBe(before + 1);
   });
 });
 

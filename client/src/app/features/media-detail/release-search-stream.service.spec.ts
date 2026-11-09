@@ -6,8 +6,8 @@ import type { MovieRelease } from './media-detail-release-picker.service';
 
 const PLUGIN_ID = 'acme.acquire';
 
-function release(title: string): MovieRelease {
-  return { title, downloadUrl: `magnet:${title}`, sourceId: 1, sourceName: 'ix' } as MovieRelease;
+function release(title: string, score: Partial<Pick<MovieRelease, 'rank' | 'customFormatScore'>> = {}): MovieRelease {
+  return { title, downloadUrl: `magnet:${title}`, sourceId: 1, sourceName: 'ix', ...score } as MovieRelease;
 }
 
 function setup() {
@@ -212,6 +212,24 @@ describe('ReleaseSearchStreamService', () => {
     b.finish([release('b1')]);
     expect((await run).map((r) => r.pluginId)).toEqual([PLUGIN_ID, 'acme.other']);
     expect(indexers().map((i) => i.state)).toEqual(['done', 'done']);
+  });
+
+  it('orders the merged list by rank then custom-format score, a tie keeping provider order', async () => {
+    const { service, releases, indexers, deliver } = setup();
+    const a = deferredFetch();
+    const b = deferredFetch();
+    const fromA = [release('a-low', { rank: 1 }), release('a-tie', { rank: 5, customFormatScore: 10 }), release('a-top', { rank: 5, customFormatScore: 50 })];
+    const fromB = [release('b-tie', { rank: 5, customFormatScore: 10 }), release('b-best', { rank: 9 })];
+    const run = service.run([acme(a.fetch), { pluginId: 'acme.other', name: 'Other', fetch: b.fetch }], { releases, indexers });
+    const expected = ['b-best', 'a-top', 'a-tie', 'b-tie', 'a-low'];
+
+    await deliver(`plugin.${PLUGIN_ID}.search.partial`, { searchId: a.searchId(), releases: fromA });
+    await deliver('plugin.acme.other.search.partial', { searchId: b.searchId(), releases: fromB });
+    expect(releases().map((r) => r.title)).toEqual(expected);
+
+    a.finish(fromA);
+    b.finish(fromB);
+    expect((await run).map((r) => r.title)).toEqual(expected);
   });
 
   it('answers with the providers that succeeded when one fails, and throws only when all do', async () => {
