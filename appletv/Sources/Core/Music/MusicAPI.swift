@@ -50,15 +50,6 @@ enum MusicAPI {
         let body = Target(mediaId: mediaId, episodeId: itemId)
         if on { try await api.post("/api/likes", body: body) } else { try await api.delete("/api/likes", body: body) }
     }
-
-    /// `nil` clears the rating.
-    static func rate(_ rating: Int?, itemId: Int) async throws {
-        if let rating {
-            try await api.put("/api/items/\(itemId)/rating", body: ["rating": rating])
-        } else {
-            try await api.delete("/api/items/\(itemId)/rating")
-        }
-    }
 }
 
 extension QueueTrack {

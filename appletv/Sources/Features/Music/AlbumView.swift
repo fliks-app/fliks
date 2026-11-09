@@ -133,9 +133,8 @@ struct AlbumView: View {
     private func actions(_ t: Track, _ page: AlbumPage, _ edition: AlbumEdition?) -> TrackActions {
         let item = QueueTrack(track: t, album: page, edition: edition)
         return TrackActions(
-            favourite: t.favourite, rating: t.rating,
+            favourite: t.favourite,
             onFavourite: { toggleFavourite(t, page) },
-            onRate: { rate(t, $0) },
             onPlaylist: { picker.open(mediaId: page.id, itemId: t.itemId) },
             onPlayNext: { player.addNext([item]) },
             onQueue: { player.addLast([item]) },
@@ -200,12 +199,5 @@ struct AlbumView: View {
         let on = !tracks[i].favourite
         tracks[i].favourite = on
         Task { if (try? await MusicAPI.setFavourite(on, mediaId: page.id, itemId: t.itemId)) == nil { tracks[i].favourite = !on } }
-    }
-
-    private func rate(_ t: Track, _ rating: Int?) {
-        guard let i = tracks.firstIndex(where: { $0.itemId == t.itemId }) else { return }
-        let before = tracks[i].rating
-        tracks[i].rating = rating
-        Task { if (try? await MusicAPI.rate(rating, itemId: t.itemId)) == nil { tracks[i].rating = before } }
     }
 }

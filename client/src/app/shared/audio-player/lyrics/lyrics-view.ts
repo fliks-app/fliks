@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
@@ -40,6 +40,8 @@ export class LyricsViewComponent {
   private anchor = { pos: 0, at: 0 };
   private frame = 0;
   private manualUntil = 0;
+  /** The first scroll of a view lands on the playing line at once; only later ones glide. */
+  private placed = false;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.frame));
@@ -52,13 +54,21 @@ export class LyricsViewComponent {
       cancelAnimationFrame(this.frame);
       if (run) untracked(() => this.tick());
     });
+    afterNextRender(() => {
+      this.scrollToLine(untracked(this.active), 'instant');
+      this.placed = true;
+    });
     effect(() => {
       const i = this.active();
-      const box = this.scroller()?.nativeElement;
-      const el = box?.querySelector<HTMLElement>(`[data-line="${i}"]`);
-      if (!box || !el || performance.now() < this.manualUntil) return;
-      box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2, behavior: 'smooth' });
+      if (this.placed) this.scrollToLine(i, 'smooth');
     });
+  }
+
+  private scrollToLine(i: number, behavior: ScrollBehavior): void {
+    const box = this.scroller()?.nativeElement;
+    const el = box?.querySelector<HTMLElement>(`[data-line="${i}"]`);
+    if (!box || !el || performance.now() < this.manualUntil) return;
+    box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2, behavior });
   }
 
   private tick(): void {

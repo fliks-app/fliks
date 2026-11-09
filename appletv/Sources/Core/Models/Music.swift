@@ -119,7 +119,6 @@ struct Track: Codable, Hashable, Identifiable {
     let artists: [TrackArtist]
     let credits: [TrackCredit]
     var favourite: Bool
-    var rating: Int?
     let playCount: Int
     let lastPlayedAt: String?
 
@@ -165,7 +164,6 @@ struct TrackRow: Codable, Hashable, Identifiable {
     let peak: Double?
     let artists: [TrackArtist]
     var favourite: Bool
-    var rating: Int?
 
     var id: Int { itemId }
 }

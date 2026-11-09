@@ -1,0 +1,23 @@
+.marquee-fade {
+  mask-image: linear-gradient(to right, transparent, #000 1rem, #000 calc(100% - 1rem), transparent);
+}
+
+.marquee-run {
+  animation: marquee-loop var(--duration) linear infinite;
+}
+
+@keyframes marquee-loop {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(var(--shift));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-run {
+    animation: none;
+  }
+}

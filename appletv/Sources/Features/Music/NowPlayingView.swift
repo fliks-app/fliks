@@ -8,7 +8,6 @@ struct NowPlayingView: View {
     @State private var party = PartyService.shared
     @State private var showQueue = false
     @State private var favourite: Bool?
-    @State private var rating: Int?
     @State private var lyrics: StructuredLyrics?
     @State private var showLyrics = false
     @State private var showKaraoke = false
@@ -79,7 +78,7 @@ struct NowPlayingView: View {
         .padding(.horizontal, 80)
         .padding(.vertical, 50)
         .onAppear { backdrop.url = t.coverUrl }
-        .onChange(of: t.uid) { _, _ in favourite = nil; rating = nil; backdrop.url = t.coverUrl }
+        .onChange(of: t.uid) { _, _ in favourite = nil; backdrop.url = t.coverUrl }
         .task(id: t.itemId) {
             lyrics = nil
             lyrics = await LyricsAPI.main(itemId: t.itemId)

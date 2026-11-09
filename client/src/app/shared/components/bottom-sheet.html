@@ -2,7 +2,7 @@
   <!-- Backdrop: CSS @starting-style fades it in. Preventing the pointerdown default keeps the tap from blurring the opener (its ring flickered). -->
   <div
     [class]="
-      'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
+      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + (fullHeight() ? 'z-[94] ' : 'z-[100] ') +
       (showBackdrop() ? 'bg-black/60' : '')
     "
     [class.opacity-0]="dismissing()"
@@ -13,8 +13,12 @@
   <div
     #sheet
     [class]="
-      'fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
-      (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto')
+      'fixed bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
+      (fullHeight() ? 'z-[95] ' : 'z-[101] ') +
+      (fullHeight()
+        ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
+        : 'bg-neutral/95 backdrop-blur-xl rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+          (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
     [class.animate-slide-up]="!dismissing()"
     [style.transform]="sheetTransform()"
@@ -25,7 +29,12 @@
     (touchend)="onTouchEnd()"
   >
     <!-- Drag handle + optional title; sticky so the title survives scrolling, the 4px gap keeps it off the first item's focus ring. -->
-    <div data-sheet-handle class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
+    <div
+      data-sheet-handle
+      class="sticky top-0 z-10 pb-1 mb-1 cursor-grab"
+      [class]="fullHeight() ? 'bg-base-100 shrink-0' : 'bg-neutral'"
+      [style.padding-top]="fullHeight() ? 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' : '0.75rem'"
+    >
       <div class="flex justify-center">
         <div class="w-10 h-1 rounded-full bg-white/20"></div>
       </div>
@@ -34,6 +43,8 @@
       }
     </div>
     <!-- Content -->
-    <ng-content></ng-content>
+    <div [class]="fullHeight() ? 'flex min-h-0 flex-1 flex-col' : 'contents'">
+      <ng-content></ng-content>
+    </div>
   </div>
 }

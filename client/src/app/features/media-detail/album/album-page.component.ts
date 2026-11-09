@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideStar } from '@lucide/angular';
+import { TranslatePipe } from '@ngx-translate/core';
+import { LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -13,7 +13,6 @@ import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
-import { ToastService } from '../../../core/services/toast.service';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
@@ -22,8 +21,10 @@ import { FactsGridComponent, type Fact } from '../../../shared/components/facts-
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { LikeController } from '../../../shared/utils/like-controller';
 import {
-  artistLine, formatDuration, groupByWork, groupDiscs, nextRating, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
+  artistLine, formatDuration, groupByWork, groupDiscs, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
 } from '../../music/music-utils';
+import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TrackLineComponent } from '../../music/track-line.component';
 import { asAlbumMedia, defaultEditionId } from './album-media';
 
@@ -32,14 +33,14 @@ interface DiscView {
   sections: WorkSection[];
 }
 
-const STARS = [1, 2, 3, 4, 5] as const;
 
 /** The page of an album, rendered by the media detail page for the `album` kind. */
 @Component({
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideStar,
+    DropdownMenuComponent, ModalHeaderComponent,
+    LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePlay, LucideShuffle, LucideUsers,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -55,8 +56,6 @@ export class AlbumPageComponent {
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
   protected readonly party = inject(PartyService);
-  private readonly toast = inject(ToastService);
-  private readonly translate = inject(TranslateService);
   protected readonly like = new LikeController(
     { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
     this.likes,
@@ -68,7 +67,7 @@ export class AlbumPageComponent {
     return a ? defaultEditionId(a) : null;
   });
   protected readonly edition = computed<AlbumEdition | null>(() => this.album()?.editions.find((e) => e.id === this.editionId()) ?? null);
-  /** The caller's heart and stars as just set, over the loaded tracks. */
+  /** The caller's heart as just set, over the loaded tracks. */
   private readonly overrides = linkedSignal<Media, Map<number, Partial<Track>>>({ source: this.media, computation: () => new Map() });
   protected readonly tracks = computed(() =>
     (this.album()?.tracks ?? [])
@@ -97,7 +96,6 @@ export class AlbumPageComponent {
       { label: 'music.release_date', value: e?.releaseDate, format: 'date' },
     ];
   });
-  protected readonly stars = STARS;
   protected readonly line = artistLine;
 
   protected editionLabel(e: AlbumEdition): string {
@@ -135,6 +133,8 @@ export class AlbumPageComponent {
     this.player.enqueueTracks([this.request(t)], where);
   }
 
+  protected readonly creditsOf = signal<Track | null>(null);
+  private readonly creditsDialog = viewChild<ElementRef<HTMLDialogElement>>('creditsDialog');
   protected readonly candidates = signal<AlbumCandidate[] | null>(null);
   protected readonly reviewing = signal(false);
 
@@ -177,15 +177,9 @@ export class AlbumPageComponent {
     }
   }
 
-  protected async rate(t: Track, star: number): Promise<void> {
-    const next = nextRating(t.rating, star);
-    this.patch(t.itemId, { rating: next });
-    try {
-      await (next == null ? this.music.clearRating(t.itemId) : this.music.rate(t.itemId, next));
-    } catch {
-      this.patch(t.itemId, { rating: t.rating });
-      this.toast.error(this.translate.instant('music.rating_failed'));
-    }
+  protected openCredits(t: Track): void {
+    this.creditsOf.set(t);
+    this.creditsDialog()?.nativeElement.showModal();
   }
 
   protected creditGroups(t: Track): { role: string; names: string }[] {

@@ -12,7 +12,7 @@ import { AlbumPageComponent } from './album-page.component';
 const track = (itemId: number, o: Partial<Track> = {}): Track => ({
   itemId, editionId: 1, mediaFileId: itemId, hasFile: true, orphaned: false, discNumber: 1, discTitle: null, position: itemId,
   trackNumber: itemId, label: null, title: 'T' + itemId, durationSeconds: 100, explicit: false, gain: null, peak: null, artists: [],
-  credits: [], works: [], favourite: false, rating: null, playCount: 0, lastPlayedAt: null, ...o,
+  credits: [], works: [], favourite: false, playCount: 0, lastPlayedAt: null, ...o,
 });
 const edition = (id: number) => ({ id, title: null, country: 'FR', hasFiles: true, orphaned: false, albumGain: -6, albumPeak: 1 });
 const album = (tracks: Track[]) =>
@@ -69,21 +69,6 @@ describe('AlbumPageComponent', () => {
     const { el, player } = setup([track(1, { hasFile: false }), track(2)]);
     (el.querySelector('[data-testid="play"]') as HTMLButtonElement).click();
     expect((player.playTracks.mock.calls[0] as unknown[])[0]).toHaveLength(1);
-  });
-
-  it('rates a track and clears it on the same star', async () => {
-    const { fixture, http, el } = setup([track(1)]);
-    const star = (n: number) => el.querySelectorAll('[data-testid="star"]')[n - 1] as HTMLButtonElement;
-    star(4).click();
-    http.expectOne((r) => r.method === 'PUT' && r.url === '/api/items/1/rating').flush(null);
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(star(4).getAttribute('aria-pressed')).toBe('true');
-    star(4).click();
-    http.expectOne((r) => r.method === 'DELETE' && r.url === '/api/items/1/rating').flush(null);
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(star(4).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('likes a track through the item like', () => {

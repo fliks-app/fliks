@@ -1,19 +1,22 @@
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
   LucideArrowDown,
+  LucideArrowLeft,
   LucideArrowUp,
+  LucideArrowUpToLine,
   LucideChevronDown,
+  LucideChevronRight,
   LucideGauge,
   LucideHeart,
   LucideListMusic,
-  LucideMaximize,
   LucideMicVocal,
   LucideRepeat,
   LucideRepeat1,
   LucideShuffle,
-  LucideStar,
   LucideMoon,
   LucideMusic,
   LucidePause,
@@ -23,6 +26,12 @@ import {
   LucideSkipBack,
   LucideSkipForward,
   LucideTrash2,
+  LucideCheck,
+  LucideEllipsisVertical,
+  LucideGripVertical,
+  LucideListPlus,
+  LucidePencil,
+  LucideVolume2,
   LucideX,
 } from '@lucide/angular';
 import {
@@ -31,14 +40,23 @@ import {
   SPEEDS,
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
+import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
+import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { MediaService } from '../../core/services/api/media.service';
-import { MusicApiService } from '../../core/services/api/music-api.service';
+import { LyricsApiService } from '../../core/services/api/lyrics-api.service';
 import type { AlbumDetail } from '../../core/services/api/music.models';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { AuthService } from '../../core/services/auth.service';
+import { DeviceService } from '../../core/services/device.service';
 import { formatTime } from '../../core/utils/player.utils';
+import { BottomSheetComponent } from '../components/bottom-sheet';
+import { MarqueeComponent } from '../components/marquee';
+import { PopoverMenuComponent } from '../components/popover-menu';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { DropListSettleDirective } from '../directives/drop-list-settle.directive';
+import { SwipeRemoveDirective } from '../directives/swipe-remove.directive';
 import { LyricsPanelComponent } from './lyrics/lyrics-panel';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
@@ -49,6 +67,15 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 @Component({
   selector: 'app-audio-player',
   imports: [
+    CdkDrag,
+    CdkDragHandle,
+    CdkDropList,
+    DropListSettleDirective,
+    SwipeRemoveDirective,
+    NgTemplateOutlet,
+    BottomSheetComponent,
+    PopoverMenuComponent,
+    MarqueeComponent,
     TranslatePipe,
     ResolveUrlPipe,
     CachedSrcDirective,
@@ -57,19 +84,20 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     TvSectionDirective,
     LucideBookmarkPlus,
     LucideArrowDown,
+    LucideArrowLeft,
     LucideArrowUp,
+    LucideArrowUpToLine,
     LucideChevronDown,
+    LucideChevronRight,
     LucideGauge,
     LucideHeart,
     LucideListMusic,
-    LucideMaximize,
-    LucideMicVocal,
+      LucideMicVocal,
     LucideRepeat,
     LucideRepeat1,
     LucideShuffle,
-    LucideStar,
     LucideMoon,
-  LucideMusic,
+    LucideMusic,
     LucidePause,
     LucidePlay,
     LucideRotateCcw,
@@ -77,6 +105,12 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideSkipBack,
     LucideSkipForward,
     LucideTrash2,
+    LucideCheck,
+    LucideEllipsisVertical,
+    LucideGripVertical,
+    LucideListPlus,
+    LucidePencil,
+    LucideVolume2,
     LucideX,
   ],
   templateUrl: './audio-player.html',
@@ -89,9 +123,16 @@ export class AudioPlayerComponent {
     computation: () => false,
   });
   private readonly likes = inject(LikesApiService);
+  private readonly playlists = inject(AddToPlaylistService);
   private readonly mediaApi = inject(MediaService);
-  private readonly musicApi = inject(MusicApiService);
+  private readonly lyricsApi = inject(LyricsApiService);
+  protected readonly canEditLyrics = inject(AuthService).hasPermission('media.edit');
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly device = inject(DeviceService);
+  /** Touch and TV get a full-height sheet; a modal dialog sits in the top layer and would hide the menu's own sheet. */
+  protected readonly isTouch = this.device.isTouch;
+  protected readonly isTv = this.device.isTv;
+  protected readonly asSheet = computed(() => this.device.isTouch() || this.device.isTv());
 
   protected readonly clock = formatTime;
   protected readonly percent = computed(() => {
@@ -110,16 +151,32 @@ export class AudioPlayerComponent {
     return s?.kind === 'duration' ? this.clock(this.audio.sleepLeft()) : null;
   });
 
-  protected readonly lyricsMode = signal<'off' | 'panel' | 'full'>('off');
-  protected readonly stars = [1, 2, 3, 4, 5];
+  /** The viewer's choice; `lyricsShown` is what is shown, since a track without lyrics has no panel. */
+  protected readonly lyricsOn = signal(false);
+  /** Whether the playing track has lyrics; null until known. */
+  protected readonly hasLyrics = signal<boolean | null>(null);
+  /** The edit tools of the lyrics panel, opened from the menu. */
+  protected readonly lyricsEdit = signal(false);
+  protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
+  protected readonly queueOpen = signal(false);
+  protected readonly queueEditing = signal(false);
+  protected readonly selected = signal<ReadonlySet<MusicTrackRequest>>(new Set());
+  protected readonly menuOpen = signal(false);
+  protected readonly levelOpen = signal(false);
   protected readonly fav = signal(false);
-  protected readonly rating = signal<number | null>(null);
+  protected readonly replayGains = REPLAY_GAINS;
   private readonly albums = new Map<number, Promise<AlbumDetail | null>>();
 
   constructor() {
     effect(() => {
       const t = this.audio.musicMode() ? this.audio.track() : null;
-      if (t) untracked(() => void this.loadTrackState(t.mediaId, t.itemId));
+      if (t) {
+        untracked(() => {
+          this.lyricsEdit.set(false);
+          void this.loadTrackState(t.mediaId, t.itemId);
+          void this.loadLyricsState(t.itemId);
+        });
+      }
     });
     effect(() => {
       const el = this.dialog()?.nativeElement;
@@ -135,7 +192,13 @@ export class AudioPlayerComponent {
   }
 
   protected toggleLyrics(): void {
-    this.lyricsMode.set(this.lyricsMode() === 'off' ? 'panel' : 'off');
+    this.lyricsEdit.set(false);
+    this.lyricsOn.set(!this.lyricsShown());
+  }
+
+  protected editLyrics(): void {
+    this.lyricsOn.set(true);
+    this.lyricsEdit.set(true);
   }
 
   protected cycleRate(): void {
@@ -164,7 +227,6 @@ export class AudioPlayerComponent {
   /** The caller's favourite and rating come with the album detail. */
   private async loadTrackState(mediaId: number, itemId: number): Promise<void> {
     this.fav.set(false);
-    this.rating.set(null);
     let album = this.albums.get(mediaId);
     if (!album) {
       album = this.mediaApi
@@ -174,10 +236,77 @@ export class AudioPlayerComponent {
       this.albums.set(mediaId, album);
     }
     const track = (await album)?.tracks.find((x) => x.itemId === itemId);
-    if (track && this.audio.track()?.itemId === itemId) {
-      this.fav.set(track.favourite);
-      this.rating.set(track.rating);
+    if (track && this.audio.track()?.itemId === itemId) this.fav.set(track.favourite);
+  }
+
+  private async loadLyricsState(itemId: number): Promise<void> {
+    this.hasLyrics.set(null);
+    const found = await this.lyricsApi.get(itemId).then(
+      (r) => r.structuredLyrics.length > 0,
+      () => false,
+    );
+    if (this.audio.track()?.itemId === itemId) this.hasLyrics.set(found);
+  }
+
+  protected toggleSelected(q: MusicTrackRequest): void {
+    const next = new Set(this.selected());
+    if (!next.delete(q)) next.add(q);
+    this.selected.set(next);
+  }
+
+  /** Editing selects a row; the playing one is neither selectable nor a restart. */
+  protected onQueueRowClick(q: MusicTrackRequest, i: number): void {
+    if (!this.queueEditing()) void this.audio.playQueueAt(i);
+    else if (i !== this.audio.queueIndex()) this.toggleSelected(q);
+  }
+
+  protected closeMenu(): void {
+    this.menuOpen.set(false);
+    this.levelOpen.set(false);
+  }
+
+  protected closeQueue(): void {
+    this.queueOpen.set(false);
+    this.stopEditingQueue();
+  }
+
+  protected stopEditingQueue(): void {
+    this.queueEditing.set(false);
+    this.selected.set(new Set());
+  }
+
+  /** Puts the selected tracks right after the playing one, in queue order. */
+  protected moveSelectedToTop(): void {
+    const current = this.audio.queue()[this.audio.queueIndex()];
+    let slot = 0;
+    for (const q of this.audio.queue().filter((t) => this.selected().has(t) && t !== current)) {
+      const from = this.audio.queue().indexOf(q);
+      const cur = this.audio.queueIndex();
+      this.audio.moveInQueue(from, from > cur ? cur + 1 + slot : cur + slot);
+      slot++;
     }
+    this.selected.set(new Set());
+  }
+
+  protected removeSelected(): void {
+    const indexes = this.audio.queue().flatMap((t, i) => (this.selected().has(t) ? [i] : []));
+    for (const i of indexes.reverse()) this.audio.removeFromQueue(i);
+    this.selected.set(new Set());
+  }
+
+  /** The playing track stays put, and a track never crosses it. */
+  protected readonly sortAllowed = (index: number, drag: CdkDrag<number>): boolean => {
+    const cur = this.audio.queueIndex();
+    return index !== cur && drag.data > cur === index > cur;
+  };
+
+  protected onQueueDrop(e: CdkDragDrop<unknown>): void {
+    if (e.previousIndex !== e.currentIndex) this.audio.moveInQueue(e.previousIndex, e.currentIndex);
+  }
+
+  protected addToPlaylist(): void {
+    const t = this.audio.track();
+    if (t) this.playlists.open({ itemId: t.itemId });
   }
 
   protected async toggleFavourite(): Promise<void> {
@@ -191,23 +320,6 @@ export class AudioPlayerComponent {
     } catch {
       this.fav.set(was);
     }
-  }
-
-  /** Clicking the star that is already the rating clears it. */
-  protected async rate(n: number): Promise<void> {
-    const t = this.audio.track();
-    if (!t) return;
-    const was = this.rating();
-    this.rating.set(was === n ? null : n);
-    try {
-      await (was === n ? this.musicApi.clearRating(t.itemId) : this.musicApi.rate(t.itemId, n));
-    } catch {
-      this.rating.set(was);
-    }
-  }
-
-  protected cycleReplayGain(): void {
-    this.audio.setReplayGain(next(REPLAY_GAINS, this.audio.replayGain()));
   }
 
   protected cyclePreamp(): void {

@@ -29,8 +29,8 @@ export class MusicTracksComponent {
   private readonly player = inject(AudioPlayerService);
   protected readonly query = signal('');
   protected readonly sortBy = signal<Sort>('title');
-  protected readonly filter = signal<'' | 'favourite' | 'rated'>('');
-  protected readonly sorts: Sort[] = ['title', 'album', 'added', 'played', 'rating'];
+  protected readonly filter = signal<'' | 'favourite'>('');
+  protected readonly sorts: Sort[] = ['title', 'album', 'added', 'played'];
   protected readonly fmt = formatDuration;
   protected readonly line = artistLine;
   protected readonly list = new PagedList<TrackRow>((page) => {
@@ -39,7 +39,6 @@ export class MusicTracksComponent {
       libraryId: this.libraryId(),
       q: this.query() || undefined,
       favourite: this.filter() === 'favourite',
-      rated: this.filter() === 'rated',
       sortBy,
       sortOrder: sortBy === 'title' || sortBy === 'album' ? 'asc' : 'desc',
       page,

@@ -1,0 +1,13 @@
+<div #box class="overflow-hidden whitespace-nowrap" [class.marquee-fade]="overflowing()">
+  <span
+    class="inline-flex"
+    [class.marquee-run]="overflowing()"
+    [style.--shift.px]="-(width() + gap)"
+    [style.--duration.s]="(width() + gap) / 32"
+  >
+    <span #line class="inline-block">{{ text() }}</span>
+    @if (overflowing()) {
+      <span class="inline-block" [style.padding-left.px]="gap" aria-hidden="true">{{ text() }}</span>
+    }
+  </span>
+</div>

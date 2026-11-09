@@ -1,21 +1,9 @@
-<section class="flex h-full min-h-0 flex-col gap-3" [class.p-4]="fullscreen()" data-testid="lyrics-panel">
-  @if (fullscreen()) {
-    <div class="flex items-center gap-2" appTvSection>
-      <button type="button" class="btn btn-ghost btn-circle" (click)="closed.emit()" [attr.aria-label]="'lyrics.close_full' | translate">
-        <svg lucideChevronDown class="h-6 w-6"></svg>
-      </button>
-      <span class="min-w-0 flex-1 truncate text-center text-lg font-semibold">{{ audio.track()?.title }}</span>
-      @if (karaokeOn() && shown()) {
-        <button type="button" class="btn btn-circle" [class.btn-primary]="stage()" [attr.aria-pressed]="stage()" (click)="stage.set(!stage())" [attr.aria-label]="'karaoke.view' | translate" data-testid="karaoke-view-toggle">
-          <svg lucideMicVocal class="h-6 w-6"></svg>
-        </button>
-      }
-      <button type="button" class="btn btn-primary btn-circle" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
-        @if (audio.playing()) {
-          <svg lucidePause class="h-6 w-6"></svg>
-        } @else {
-          <svg lucidePlay class="h-6 w-6"></svg>
-        }
+<section class="flex h-full min-h-0 flex-col gap-3" data-testid="lyrics-panel">
+  @if (karaokeOn() && shown()) {
+    <div class="flex justify-end" appTvSection>
+      <button type="button" class="btn btn-sm gap-1" [class.btn-primary]="stage()" [attr.aria-pressed]="stage()" (click)="stage.set(!stage())" data-testid="karaoke-view-toggle">
+        <svg lucideMicVocal class="h-4 w-4"></svg>
+        {{ 'karaoke.view' | translate }}
       </button>
     </div>
   }
@@ -98,20 +86,20 @@
     <p class="text-sm text-error" role="alert">{{ 'lyrics.error' | translate }}</p>
   }
 
-  <div class="min-h-0 flex-1" [class.min-h-64]="!fullscreen()">
+  <div class="min-h-24 flex-1">
     @if (mode() === 'view') {
-      @if (fullscreen() && kState(); as k) {
+      @if (kState(); as k) {
         @if (k.cdg) {
           <app-cdg-canvas class="mx-auto mb-3 block w-full max-w-3xl" [fileId]="k.fileId" data-testid="karaoke-cdg" />
         }
       }
       @if (loading() && !res()) {
-        <span class="loading loading-spinner"></span>
+        <!-- Nothing until the lyrics land, so "no lyrics" never flashes. -->
       } @else if (shown(); as d) {
-        @if (stage() && fullscreen() && karaokeOn()) {
+        @if (stage() && karaokeOn()) {
           <app-karaoke-stage [doc]="d" [title]="audio.track()?.title ?? ''" />
         } @else {
-          <app-lyrics-view [doc]="d" [layer]="under()" [large]="fullscreen()" />
+          <app-lyrics-view [doc]="d" [layer]="under()" />
         }
       } @else if (res()?.instrumental) {
         <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
@@ -182,20 +170,16 @@
     }
   </div>
 
-  @if (canEdit && !fullscreen() && mode() === 'view') {
-    <div class="flex flex-wrap items-center gap-2" appTvSection data-testid="lyrics-tools">
+  @if (canEdit && edit() && mode() === 'view') {
+    <div class="flex shrink-0 flex-wrap gap-2" appTvSection data-testid="lyrics-tools">
       @if (shown(); as d) {
-        <span class="text-sm text-base-content/60" aria-hidden="true">{{ d.offset }} ms</span>
-        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, -500)">-500</button>
-        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, -100)">-100</button>
-        <button type="button" class="btn btn-sm" [disabled]="busy() || d.offset === 0" (click)="nudge(d, 'reset')">{{ 'lyrics.offset_reset' | translate }}</button>
-        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, 100)">+100</button>
-        <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="nudge(d, 500)">+500</button>
         <button type="button" class="btn btn-sm" [disabled]="busy() || d.preferred" (click)="prefer(d)">{{ 'lyrics.prefer' | translate }}</button>
-        <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="remove(d)">{{ 'lyrics.delete' | translate }}</button>
       }
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="mode.set('import')">{{ 'lyrics.import' | translate }}</button>
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="fetchFromProviders()">{{ 'lyrics.fetch' | translate }}</button>
+      @if (shown(); as d) {
+        <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="remove(d)">{{ 'lyrics.delete' | translate }}</button>
+      }
     </div>
   }
 </section>

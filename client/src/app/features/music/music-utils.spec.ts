@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtistAlbum, Track } from '../../core/services/api/music.models';
-import { artistLine, formatDuration, groupByWork, groupDiscography, groupDiscs, nextRating, releaseGroup, toTrackRequest } from './music-utils';
+import { artistLine, formatDuration, groupByWork, groupDiscography, groupDiscs, releaseGroup, toTrackRequest } from './music-utils';
 
 const track = (o: Partial<Track>): Track => ({
   itemId: 1, editionId: 1, mediaFileId: 1, hasFile: true, orphaned: false, discNumber: 1, discTitle: null, position: 1,
   trackNumber: 1, label: null, title: 't', durationSeconds: 60, explicit: false, gain: -3, peak: 0.9, artists: [], credits: [],
-  works: [], favourite: false, rating: null, playCount: 0, lastPlayedAt: null, ...o,
+  works: [], favourite: false, playCount: 0, lastPlayedAt: null, ...o,
 });
 const album = (o: Partial<ArtistAlbum>): ArtistAlbum => ({
   mediaId: 1, externalId: null, title: 'a', year: 2000, primaryType: 'Album', secondaryTypes: [], posterUrl: null, owned: true,
@@ -38,12 +38,6 @@ describe('music utils', () => {
   it('builds a queue request, falling back to the album artists', () => {
     const r = toTrackRequest(track({ itemId: 7 }), { mediaId: 3, title: 'Alb', coverUrl: 'c', artists: 'Band', albumGain: -5, albumPeak: 1 });
     expect(r).toMatchObject({ itemId: 7, mediaId: 3, artists: 'Band', albumTitle: 'Alb', gain: -3, albumGain: -5 });
-  });
-
-  it('clears a rating on the same star', () => {
-    expect(nextRating(3, 3)).toBeNull();
-    expect(nextRating(3, 4)).toBe(4);
-    expect(nextRating(null, 1)).toBe(1);
   });
 
   it('classifies release types', () => {
