@@ -197,7 +197,7 @@ export class KaraokeSettingsComponent implements OnInit {
 }
 
 function parseProviders(raw: string | null | undefined): string[] {
-  if (raw == null) return ['coreml', 'cuda', 'migraphx'];
+  if (raw == null) return ['coreml', 'cuda', 'migraphx', 'directml'];
   try {
     const v: unknown = JSON.parse(raw);
     return Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : [];

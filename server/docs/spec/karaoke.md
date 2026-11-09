@@ -4,7 +4,7 @@ Scope: what the host does with the engine's karaoke jobs (`fliks-engine` `docs/s
 
 ## Setting and engine
 
-1. Karaoke is a core feature turned on by the setting `karaoke.enabled` (`true`, default off). Settings read by this spec, all in the generic settings store: `karaoke.enabled`, `karaoke.background` (default `true`), `karaoke.disk_budget_mb` (default 4096, at least 256), `karaoke.queue_cap` (default 2, 1 to 20), `karaoke.verified_providers` (JSON array of the engine's provider names: `cuda`, `nvtensorrtrtx`, `amdgpu`, `migraphx`, `coreml`, `openvino`, `qnn`, `vitisai`, `webgpu`, `directml`; default `["coreml","cuda","migraphx"]`).
+1. Karaoke is a core feature turned on by the setting `karaoke.enabled` (`true`, default off). Settings read by this spec, all in the generic settings store: `karaoke.enabled`, `karaoke.background` (default `true`), `karaoke.disk_budget_mb` (default 4096, at least 256), `karaoke.queue_cap` (default 2, 1 to 20), `karaoke.verified_providers` (JSON array of the engine's provider names: `cuda`, `nvtensorrtrtx`, `amdgpu`, `migraphx`, `coreml`, `openvino`, `qnn`, `vitisai`, `webgpu`, `directml`; default `["coreml","cuda","migraphx","directml"]`).
 2. A step needs an engine feature: `Separate` needs `karaoke-separate`, `Align` `karaoke-align`, `Melody` `karaoke-melody`, the model routes `models` (`hello.features`). Each also needs an installed model of its kind: the engine's default for the kind when it is installed, else the first installed one in the engine's list. Every job names that model.
 3. Only the local engine runs these jobs; the files they write are under `<cache dir>/karaoke/<mediaFileId>/`, a path the host names, never overwritten by the engine (each file name ends in 8 random hex digits).
 
