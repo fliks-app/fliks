@@ -1,19 +1,21 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { WantsApiService, type Want, type WantFamily, type WantSpec } from '../../../core/services/api/wants-api.service';
-import { WantsEditorComponent, wantKey } from '../../../shared/components/wants-editor/wants-editor';
+import { WantsEditorComponent, wantKey } from '../wants-editor/wants-editor';
 import { ToastService } from '../../../core/services/toast.service';
 import { WantsStore } from '../../../core/acquisition/acquisition';
 
 /** The formats and languages a work is wished in, and which of them are already owned. */
 @Component({
-  selector: 'app-book-wants',
+  selector: 'app-media-wants',
   imports: [TranslatePipe, WantsEditorComponent],
-  templateUrl: './book-wants.component.html',
+  templateUrl: './media-wants.html',
   host: { class: 'block' },
 })
-export class BookWantsComponent {
+export class MediaWantsComponent {
   readonly mediaId = input.required<number>();
+  /** The families this kind can be wished in. */
+  readonly families = input<readonly WantFamily[]>(['text', 'audio']);
 
   private readonly api = inject(WantsApiService);
   private readonly toast = inject(ToastService);

@@ -143,7 +143,7 @@
     <div class="modal-box max-w-lg">
       <app-modal-header [title]="'wants.title' | translate" />
       @if (wantsOpen()) {
-        <app-book-wants [mediaId]="m.id" />
+        <app-media-wants [mediaId]="m.id" />
       }
     </div>
     <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>

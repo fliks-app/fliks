@@ -60,7 +60,7 @@ describe('AlbumPageComponent', () => {
 
   it('identifies from the actions menu by listing the candidate releases', () => {
     const { fixture, http } = setup([track(1)]);
-    const actions = (fixture.componentInstance as unknown as { actions: Record<string, () => void> }).actions;
+    const actions = (fixture.componentInstance as unknown as { actions: () => Record<string, () => void> }).actions();
     actions['media.identify']!();
     http.expectOne('/api/media/9/music/candidates').flush([]);
   });
@@ -75,7 +75,30 @@ describe('AlbumPageComponent', () => {
     const { fixture, el } = setup([track(1)]);
     const dialog = el.querySelector('dialog') as HTMLDialogElement;
     dialog.showModal = vi.fn();
-    (fixture.componentInstance as unknown as { actions: Record<string, () => void> }).actions['media.details']!();
+    (fixture.componentInstance as unknown as { actions: () => Record<string, () => void> }).actions()['media.details']!();
+    expect(dialog.showModal).toHaveBeenCalled();
+  });
+
+  it('offers the profiles of its audio want only to an editor', () => {
+    const actionsOf = (canEdit: boolean) => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: bookSpecProviders(
+          { provide: AudioPlayerService, useValue: { playTracks: vi.fn(), enqueueTracks: vi.fn() } },
+          { provide: PartyService, useValue: { active: () => false } },
+          { provide: AuthService, useValue: { hasPermission: () => canEdit, user: () => null, sessionEpoch: () => 0 } },
+        ),
+      });
+      const fixture = TestBed.createComponent(AlbumPageComponent);
+      fixture.componentRef.setInput('media', { id: 9, type: 'album', title: 'Alb', posterUrl: null, providers: [{}], album: album([track(1)]) } as unknown as Media);
+      fixture.detectChanges();
+      return { fixture, actions: (fixture.componentInstance as unknown as { actions: () => Record<string, () => void> }).actions() };
+    };
+    expect(actionsOf(false).actions['media.edit-profiles']).toBeUndefined();
+    const { fixture, actions } = actionsOf(true);
+    const dialog = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="wants-dialog"]') as HTMLDialogElement;
+    dialog.showModal = vi.fn();
+    actions['media.edit-profiles']!();
     expect(dialog.showModal).toHaveBeenCalled();
   });
 
