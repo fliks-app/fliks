@@ -21,10 +21,10 @@ import Foundation
     /// Active rung: the persisted pick at start, then whatever the backend reports for the session.
     private(set) var qualityId = "auto"
 
-    private var mediaFileId = 0
+    private(set) var mediaFileId = 0
     private var mediaId = 0
     private var episodeId: Int?
-    private var sessionId: String?
+    private(set) var sessionId: String?
     private var destroyed = false
     /// One per viewing: survives the sid changes of recover() and quality switches.
     private var playbackId = UUID().uuidString
@@ -307,7 +307,7 @@ import Foundation
             let targetId: String?
             let qoe: Qoe
         }
-        struct Response: Decodable { let sessionLost: Bool? }
+        struct Response: Decodable { let sessionLost: Bool?; let superseded: Bool? }
         let level = audioLevel?()
         let body = Body(
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
@@ -324,7 +324,8 @@ import Foundation
         return Task {
             await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
-            if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
+            if res.superseded == true { await RemoteControlService.shared.sessionSuperseded(sessionId: sid, byDeviceName: nil) }
+            else if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
         }
     }
 
