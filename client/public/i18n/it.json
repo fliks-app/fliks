@@ -4036,6 +4036,7 @@
     "resume": "Riprendi",
     "hide": "Nascondi",
     "parked_device": "{{device}} è offline",
+    "parked_here": "Fermato su questo dispositivo",
     "read_on": "Letto su {{device}}",
     "open_here": "Apri qui",
     "playing_on": "In riproduzione su {{device}}",

@@ -1,4 +1,4 @@
-import { Component, input, provideZonelessChangeDetection, signal } from '@angular/core';
+import { Component, computed, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,8 @@ import { SessionSyncService, type AccountSession } from '../../core/services/ses
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
+import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
+import { deviceIdOf } from '../../core/services/remote-target-id';
 import { SseService } from '../../core/services/sse.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
@@ -40,11 +42,22 @@ function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   };
 }
 
-function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?: AccountSession | null; canPlayHere?: boolean; live?: boolean } = {}) {
+function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?: AccountSession | null; canPlayHere?: boolean; live?: boolean; localTrack?: number } = {}) {
+  const account = signal(over.account ?? null);
+  const parked = signal(over.account?.state === 'parked');
+  const ownedHere = computed(() => {
+    const t = account()?.owner.targetId;
+    return !!t && deviceIdOf(t) === 'phone';
+  });
   const sync = {
-    session: signal(over.account ?? null),
+    session: account,
+    ownedHere,
+    parkedHere: computed(() => parked() && ownedHere()),
     role: signal(over.account ? 'observer' : 'none'),
-    parked: signal(over.account?.state === 'parked'),
+    parked,
+    ownerName: (a: AccountSession) => a.owner.deviceName ?? 'session.another_device',
+    line: (a: AccountSession) =>
+      ownedHere() && parked() ? 'session.parked_here' : `${a.item.family === 'text' ? 'session.read_on' : parked() ? 'session.parked_device' : 'session.playing_on'} ${a.owner.deviceName ?? ''}`,
     canPlayHere: signal(over.canPlayHere ?? false),
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     playHere: vi.fn(),
@@ -73,6 +86,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     openPlayer: vi.fn(),
     command: vi.fn(),
   };
+  const audioView = { expand: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
       provideTranslateService(),
@@ -81,7 +95,8 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
-      { provide: AudioPlayerService, useValue: { active: signal(false) } },
+      { provide: AudioPlayerService, useValue: { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) } },
+      { provide: RemoteAudioOutput, useValue: audioView },
       { provide: SseService, useValue: { targetId: signal('phone#1') } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
@@ -93,7 +108,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
   });
   const fixture = TestBed.createComponent(CastOverlayComponent);
   fixture.detectChanges();
-  return { el: fixture.nativeElement as HTMLElement, fixture, session, output, sync, target };
+  return { el: fixture.nativeElement as HTMLElement, fixture, session, output, sync, target, audioView };
 }
 
 describe('CastOverlayComponent', () => {
@@ -145,13 +160,14 @@ describe('CastOverlayComponent', () => {
       expect(sync.playHere).toHaveBeenCalled();
     });
 
-    it('opens the full controller from the strip of an audio session only', () => {
+    it('opens the full audio player on the session from the strip of an audio session only', () => {
       const audio = setup({ local: true, account: accountSession({ item: { ...accountSession().item, kind: 'album', family: 'audio' } }) });
-      expect(audio.el.querySelector('app-session-audio-controller')).not.toBeNull();
-      expect(audio.el.querySelectorAll('button').length).toBeGreaterThan(2);
+      audio.el.querySelector('button')!.click();
+      expect(audio.audioView.expand).toHaveBeenCalled();
       TestBed.resetTestingModule();
       const video = setup({ local: true, account: accountSession() });
-      expect(video.el.querySelector('app-session-audio-controller')).toBeNull();
+      video.el.querySelector('button')!.click();
+      expect(video.audioView.expand).not.toHaveBeenCalled();
     });
 
     it('shows a reader as read on its device with the percentage, opens here and has no transport', () => {
@@ -161,7 +177,6 @@ describe('CastOverlayComponent', () => {
       expect(el.textContent).toContain('40%');
       expect(el.textContent).toContain('session.open_here');
       expect(el.querySelector('[aria-label="session.transfer"]')).toBeNull();
-      expect(el.querySelector('app-session-audio-controller')).toBeNull();
       (Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('session.open_here')) as HTMLButtonElement).click();
       expect(sync.playHere).toHaveBeenCalled();
     });
@@ -170,6 +185,21 @@ describe('CastOverlayComponent', () => {
       const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
       const { el } = setup({ local: true, account: accountSession({ item: book, state: 'parked', playing: false, owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }) });
       expect(el.querySelector('button')).toBeNull();
+    });
+
+    it('hides the strip of a session parked by an earlier page load of this device while its player holds the track', () => {
+      const track = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const };
+      const parked = accountSession({ item: track, state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } });
+      expect(setup({ local: true, canPlayHere: true, live: false, account: parked, localTrack: 5 }).el.querySelector('button')).toBeNull();
+    });
+
+    it('words a session parked by this device as this device, and still offers to resume it', () => {
+      const track = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const };
+      const parked = accountSession({ item: track, state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } });
+      const { el } = setup({ local: true, canPlayHere: true, live: false, account: parked });
+      expect(el.textContent).toContain('session.parked_here');
+      expect(el.textContent).not.toContain('session.another_device');
+      expect(el.textContent).toContain('session.resume');
     });
 
     it('hides a parked reader strip here without deleting the session', () => {

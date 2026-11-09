@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import type { MediaType } from '../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { formatTime } from '../utils/player.utils';
+import { deviceIdOf } from './remote-target-id';
 import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
 import { ClockService } from './party/clock.service';
@@ -96,6 +97,13 @@ export class SessionSyncService {
     return mine ? 'owner' : 'observer';
   });
 
+  /** The session's owner is this device, in this page load or an earlier one (a reload changes the tab part of the target id). */
+  readonly ownedHere = computed(() => {
+    const owner = this._session()?.owner.targetId;
+    const me = this.sse.targetId();
+    return !!owner && !!me && deviceIdOf(owner) === deviceIdOf(me);
+  });
+
   /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */
   readonly observedOwnerTargetId = computed<string | null>(() => {
     const s = this._session();
@@ -111,6 +119,21 @@ export class SessionSyncService {
 
   /** The owner is gone: position kept, resumable anywhere. */
   readonly parked = computed(() => this._session()?.state === 'parked');
+
+  /** Parked by this device's own earlier page load. */
+  readonly parkedHere = computed(() => this.parked() && this.ownedHere());
+
+  /** The owner's device name, which a client that cannot name itself leaves out. */
+  ownerName(s: AccountSession): string {
+    return s.owner.deviceName ?? this.translate.instant('session.another_device');
+  }
+
+  /** Where the session is: read, parked or playing, on which device. */
+  line(s: AccountSession): string {
+    if (this.parkedHere()) return this.translate.instant('session.parked_here');
+    const key = this.isReading(s) ? 'session.read_on' : this.parked() ? 'session.parked_device' : 'session.playing_on';
+    return this.translate.instant(key, { device: this.ownerName(s) });
+  }
 
   private readonly players = new Set<SessionPlayer>();
   private readonly registered = signal(0);
@@ -211,7 +234,8 @@ export class SessionSyncService {
     const stopped = await player.yield();
     if (!stopped) return;
     if (!byDeviceName) await this.refresh();
-    const device = byDeviceName ?? this._session()?.owner.deviceName ?? this.translate.instant('session.another_device');
+    const s = this._session();
+    const device = byDeviceName ?? (s ? this.ownerName(s) : this.translate.instant('session.another_device'));
     const resume = await this.confirmation.confirm({
       title: this.translate.instant('session.superseded_title', { device }),
       message: [

@@ -35,7 +35,7 @@
        [class.opacity-80]="sync.parked()"
        [style.bottom]="strip.aboveAudio() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'">
     @if (audio()) {
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left" (click)="openController()">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left" (click)="openAudio()">
         <ng-container *ngTemplateOutlet="info" />
       </button>
     } @else {
@@ -53,9 +53,9 @@
         <span class="block truncate text-sm font-semibold">{{ s.item.title }}</span>
         <span class="block truncate text-sm text-base-content/60">
           @if (reading()) {
-            {{ 'session.read_on' | translate: { device: s.owner.deviceName ?? ('session.another_device' | translate) } }} · {{ readPercent() }}%
+            {{ sync.line(s) }} · {{ readPercent() }}%
           } @else if (sync.parked()) {
-            {{ 'session.parked_device' | translate: { device: s.owner.deviceName ?? ('session.another_device' | translate) } }}
+            {{ sync.line(s) }}
           } @else {
             {{ detail() }}
           }
@@ -90,7 +90,4 @@
       <svg lucideX class="h-5 w-5"></svg>
     </button>
   </div>
-}
-@if (audio()) {
-  <app-session-audio-controller />
 }

@@ -25,6 +25,7 @@ import {
   LucideRotateCw,
   LucideSkipBack,
   LucideSkipForward,
+  LucideSmartphone,
   LucideTrash2,
   LucideCheck,
   LucideEllipsisVertical,
@@ -40,6 +41,8 @@ import {
   SPEEDS,
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
+import type { AudioOutput } from '../../core/services/audio-player/audio-output';
+import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
@@ -50,6 +53,7 @@ import type { AlbumDetail } from '../../core/services/api/music.models';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
+import { SessionSyncService } from '../../core/services/session-sync.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { BottomSheetComponent } from '../components/bottom-sheet';
 import { MarqueeComponent } from '../components/marquee';
@@ -63,7 +67,7 @@ import { TvSectionDirective } from '../directives/tv-section.directive';
 
 const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 
-/** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. */
+/** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. The full player shows the local player, or the audio session of another device while that one is opened. */
 @Component({
   selector: 'app-audio-player',
   imports: [
@@ -104,6 +108,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideRotateCw,
     LucideSkipBack,
     LucideSkipForward,
+    LucideSmartphone,
     LucideTrash2,
     LucideCheck,
     LucideEllipsisVertical,
@@ -116,7 +121,19 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
   templateUrl: './audio-player.html',
 })
 export class AudioPlayerComponent {
-  protected readonly audio = inject(AudioPlayerService);
+  protected readonly local = inject(AudioPlayerService);
+  private readonly remoteOut = inject(RemoteAudioOutput);
+  protected readonly sync = inject(SessionSyncService);
+  /** The full player drives another device's session. */
+  protected readonly remoteView = this.remoteOut.expanded;
+  /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
+  protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.live());
+  protected readonly queueControls = computed(() => this.controllable() && (!this.remoteView() || this.audio.queue().length > 0));
+
+  protected get audio(): AudioOutput {
+    return this.remoteView() ? this.remoteOut : this.local;
+  }
+
   /** Reset by every new cover: a cover that fails to load shows the placeholder, not a broken image. */
   protected readonly coverFailed = linkedSignal<string | null | undefined, boolean>({
     source: () => this.audio.track()?.coverUrl,
@@ -145,10 +162,10 @@ export class AudioPlayerComponent {
     const s = this.scrub();
     return s === null ? this.audio.position() : (s / 1000) * this.audio.duration();
   });
-  protected readonly chapter = computed(() => this.audio.chapters()[this.audio.chapterIndex()] ?? null);
+  protected readonly chapter = computed(() => this.local.chapters()[this.local.chapterIndex()] ?? null);
   protected readonly sleepLabel = computed(() => {
-    const s = this.audio.sleep();
-    return s?.kind === 'duration' ? this.clock(this.audio.sleepLeft()) : null;
+    const s = this.local.sleep();
+    return s?.kind === 'duration' ? this.clock(this.local.sleepLeft()) : null;
   });
 
   /** The viewer's choice; `lyricsShown` is what is shown, since a track without lyrics has no panel. */
@@ -174,7 +191,9 @@ export class AudioPlayerComponent {
         untracked(() => {
           this.lyricsEdit.set(false);
           void this.loadTrackState(t.mediaId, t.itemId);
-          void this.loadLyricsState(t.itemId);
+          // Lyrics follow the local clock and its karaoke stems: another device's session has none.
+          if (this.remoteView()) this.hasLyrics.set(false);
+          else void this.loadLyricsState(t.itemId);
         });
       }
     });
@@ -202,25 +221,25 @@ export class AudioPlayerComponent {
   }
 
   protected cycleRate(): void {
-    this.audio.setRate(SPEEDS[(SPEEDS.indexOf(this.audio.rate()) + 1) % SPEEDS.length]);
+    this.local.setRate(SPEEDS[(SPEEDS.indexOf(this.local.rate()) + 1) % SPEEDS.length]);
   }
 
   protected cycleSkipBack(): void {
-    this.audio.setSkips(next(SKIP_STEPS, this.audio.skipBack()), this.audio.skipForward());
+    this.local.setSkips(next(SKIP_STEPS, this.local.skipBack()), this.local.skipForward());
   }
 
   protected cycleSkipForward(): void {
-    this.audio.setSkips(this.audio.skipBack(), next(SKIP_STEPS, this.audio.skipForward()));
+    this.local.setSkips(this.local.skipBack(), next(SKIP_STEPS, this.local.skipForward()));
   }
 
   /** Off, then each duration, then the end of the chapter, then off. */
   protected cycleSleep(): void {
-    const s = this.audio.sleep();
-    if (!s) this.audio.setSleep({ minutes: SLEEP_STEPS[0] });
-    else if (s.kind === 'chapter') this.audio.setSleep(null);
+    const s = this.local.sleep();
+    if (!s) this.local.setSleep({ minutes: SLEEP_STEPS[0] });
+    else if (s.kind === 'chapter') this.local.setSleep(null);
     else {
       const minutes = SLEEP_STEPS[SLEEP_STEPS.indexOf(s.minutes) + 1];
-      this.audio.setSleep(minutes ? { minutes } : 'chapter');
+      this.local.setSleep(minutes ? { minutes } : 'chapter');
     }
   }
 
@@ -277,20 +296,20 @@ export class AudioPlayerComponent {
 
   /** Puts the selected tracks right after the playing one, in queue order. */
   protected moveSelectedToTop(): void {
-    const current = this.audio.queue()[this.audio.queueIndex()];
+    const current = this.local.queue()[this.local.queueIndex()];
     let slot = 0;
-    for (const q of this.audio.queue().filter((t) => this.selected().has(t) && t !== current)) {
-      const from = this.audio.queue().indexOf(q);
-      const cur = this.audio.queueIndex();
-      this.audio.moveInQueue(from, from > cur ? cur + 1 + slot : cur + slot);
+    for (const q of this.local.queue().filter((t) => this.selected().has(t) && t !== current)) {
+      const from = this.local.queue().indexOf(q);
+      const cur = this.local.queueIndex();
+      this.local.moveInQueue(from, from > cur ? cur + 1 + slot : cur + slot);
       slot++;
     }
     this.selected.set(new Set());
   }
 
   protected removeSelected(): void {
-    const indexes = this.audio.queue().flatMap((t, i) => (this.selected().has(t) ? [i] : []));
-    for (const i of indexes.reverse()) this.audio.removeFromQueue(i);
+    const indexes = this.local.queue().flatMap((t, i) => (this.selected().has(t) ? [i] : []));
+    for (const i of indexes.reverse()) this.local.removeFromQueue(i);
     this.selected.set(new Set());
   }
 
@@ -301,7 +320,7 @@ export class AudioPlayerComponent {
   };
 
   protected onQueueDrop(e: CdkDragDrop<unknown>): void {
-    if (e.previousIndex !== e.currentIndex) this.audio.moveInQueue(e.previousIndex, e.currentIndex);
+    if (e.previousIndex !== e.currentIndex) this.local.moveInQueue(e.previousIndex, e.currentIndex);
   }
 
   protected addToPlaylist(): void {
@@ -323,11 +342,16 @@ export class AudioPlayerComponent {
   }
 
   protected cyclePreamp(): void {
-    this.audio.setPreamp(next(PREAMP_STEPS, this.audio.preamp()));
+    this.local.setPreamp(next(PREAMP_STEPS, this.local.preamp()));
   }
 
   protected goTo(b: AudioBookmark): void {
-    void this.audio.seek(b.position);
+    void this.local.seek(b.position);
+  }
+
+  protected async listenHere(): Promise<void> {
+    this.remoteOut.collapse();
+    await this.sync.playHere();
   }
 
   protected onDialogClose(): void {
