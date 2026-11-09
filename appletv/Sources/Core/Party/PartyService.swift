@@ -313,6 +313,22 @@ import Foundation
         await sendIntent("next")
     }
 
+    /// Host: the party idles on `item` and a song waits; the server moves on in one step, whichever host device asks first.
+    func advanceSinger(from item: PartyItem) async {
+        struct Ref: Encodable { let mediaId: Int; let episodeId: Int?; let itemId: Int? }
+        struct Body: Encodable { let from: Ref; let deviceId: String }
+        guard let id = party?.id else { return }
+        let body = Body(from: Ref(mediaId: item.mediaId, episodeId: item.episodeId, itemId: item.itemId), deviceId: deviceId)
+        do {
+            let dto: Party = try await APIClient.shared.post("/api/parties/\(id)/proposals/next", body: body)
+            applySnapshot(dto)
+        } catch APIError.badStatus(409, let message) where message == "party.error_queue_empty" {
+            return
+        } catch {
+            show(describe(error))
+        }
+    }
+
     func sendMessage(_ text: String) async {
         struct Body: Encodable { let deviceId: String; let text: String }
         guard let id = party?.id else { return }

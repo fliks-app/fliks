@@ -62,14 +62,19 @@
     return cues.map((c) => (t <= c.start ? 0 : t >= c.end || c.end <= c.start ? 100 : ((t - c.start) / (c.end - c.start)) * 100));
   }
 
-  /** The latest sender to connect owns the lyrics; true when another sender held them (its document is stale). */
+  /** The sender of the current LOAD owns the lyrics; true when another sender held them (its document is stale). */
   function claim(state, senderId) {
     const replaced = !!state.sender && state.sender !== senderId;
     state.sender = senderId;
     return replaced;
   }
 
-  const api = { createAssembler, activeIndex, segments, fills, claim };
+  /** Whether `senderId` may send lyrics: nobody owns them yet, or it does. */
+  function owns(state, senderId) {
+    return !state.sender || state.sender === senderId;
+  }
+
+  const api = { createAssembler, activeIndex, segments, fills, claim, owns };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FliksLyrics = api;
 })(typeof self !== 'undefined' ? self : this);

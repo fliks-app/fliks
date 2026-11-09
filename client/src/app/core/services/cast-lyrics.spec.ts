@@ -1,4 +1,4 @@
-import { CAST_LYRICS_CHUNK, castLyricsJson, chunkLyrics } from './cast-lyrics';
+import { CAST_LYRICS_CHUNK, castLyricsJson, chunkLyrics, sliceByBytes } from './cast-lyrics';
 import type { StructuredLyrics } from './api/lyrics.models';
 
 const doc = (n: number): StructuredLyrics => ({
@@ -11,8 +11,23 @@ describe('cast lyrics', () => {
     const d = doc(600);
     const msgs = chunkLyrics(d, 7, 3);
     expect(msgs.length).toBeGreaterThan(1);
-    expect(msgs.every((m) => m.data.length <= CAST_LYRICS_CHUNK && m.seq === 3 && m.parts === msgs.length)).toBe(true);
+    expect(msgs.every((m) => new TextEncoder().encode(JSON.stringify(m)).length < 64 * 1024 && m.seq === 3 && m.parts === msgs.length)).toBe(true);
     expect(msgs.map((m) => m.data).join('')).toBe(castLyricsJson(d));
+  });
+
+  it('sizes parts by the UTF-8 bytes of the message, not by characters', () => {
+    const d = doc(1);
+    d.line = [{ start: 0, value: '\u{1F3A4}"\\\u00e9'.repeat(30_000) }] as StructuredLyrics['line'];
+    const msgs = chunkLyrics(d, 7, 1);
+    expect(msgs.length).toBeGreaterThan(2);
+    expect(msgs.every((m) => new TextEncoder().encode(JSON.stringify(m)).length < 64 * 1024)).toBe(true);
+    expect(msgs.map((m) => m.data).join('')).toBe(castLyricsJson(d));
+  });
+
+  it('never cuts a surrogate pair', () => {
+    const parts = sliceByBytes('\u{1F3A4}'.repeat(10), 9);
+    expect(parts.join('')).toBe('\u{1F3A4}'.repeat(10));
+    expect(parts.every((p) => p.length % 2 === 0)).toBe(true);
   });
 
   it('sends one part for a short document and drops pitch', () => {

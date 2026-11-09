@@ -223,16 +223,20 @@ describe('AudioPlayerService music mode', () => {
     cast.isConnected.set(true);
     castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
     castStem.mockResolvedValue(true);
-    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: {} } });
+    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: { contentType: 'audio/mpeg' } } });
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
     await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
     (audio as unknown as { _position: { set(n: number): void } })._position.set(30);
     audio.setStemMode('guide');
-    await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 30, true));
+    await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 'audio/mpeg', 30, true, expect.any(Function)));
+    const current = castStem.mock.calls[0][6] as () => boolean;
+    expect(current()).toBe(true);
     audio.setStemMode('original');
-    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30));
+    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function)));
     expect(stopSession).toHaveBeenCalledWith('cs');
+    await audio.close();
+    expect(current()).toBe(false);
   });
 
   describe('driven by a party', () => {

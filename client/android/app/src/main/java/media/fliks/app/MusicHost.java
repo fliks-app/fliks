@@ -140,6 +140,8 @@ final class MusicHost {
     private boolean jsEditing;
     private boolean externalQueue;
     private int lastIndex = -1;
+    /** The track whose failed load was retried once; cleared when playback resumes. */
+    private int recoveredAt = -1;
     private long lastBeat;
     private String mode;
     private int preamp;
@@ -602,6 +604,7 @@ final class MusicHost {
         public void onIsPlayingChanged(boolean playing) {
             main.removeCallbacks(tick);
             if (playing) {
+                recoveredAt = -1;
                 main.post(tick);
             } else beat(false);
             emitState();
@@ -620,6 +623,12 @@ final class MusicHost {
 
         @Override
         public void onPlayerError(PlaybackException error) {
+            int index = exo.getCurrentMediaItemIndex();
+            if (recoveredAt != index) {
+                recoveredAt = index;
+                exo.prepare();
+                return;
+            }
             JSObject o = new JSObject();
             o.put("message", String.valueOf(error.getMessage()));
             emit("error", o);

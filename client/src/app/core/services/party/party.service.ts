@@ -35,7 +35,7 @@ import { mediaQuerySignal } from '../../utils/viewport';
 import { ClockService } from './clock.service';
 import { ReactionsService } from './reactions.service';
 import { AudioPartyHost } from './audio-party-host';
-import { sameItem } from './party-item';
+import { itemIn, sameItem, type ItemRef } from './party-item';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -686,11 +686,22 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     try {
-      await (proposalId === undefined ? this.api.nextSinger(id) : this.api.choose(id, proposalId));
+      this.applySnapshot(await (proposalId === undefined ? this.api.nextSinger(id) : this.api.choose(id, proposalId)));
     } catch {
       return;
     }
     await this.sendIntent('next');
+  }
+
+  /** Host: the party idles on `from` and a song waits; the server moves on in one step, whichever host device asks first. */
+  async advanceSinger(from: ItemRef): Promise<void> {
+    const id = this.party()?.id;
+    if (id == null) return;
+    try {
+      this.applySnapshot(await this.api.nextSinger(id, { from: itemIn(from), deviceId: this.deviceId() }));
+    } catch {
+      return;
+    }
   }
 
   async reportStatus(status: 'ready' | 'buffering', position: number): Promise<void> {

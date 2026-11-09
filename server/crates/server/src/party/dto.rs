@@ -165,6 +165,14 @@ pub struct IntentIn {
     pub base_rev: u64,
 }
 
+/// `from` and `deviceId` together make `proposals/next` also move the party on, only while it idles on `from`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct NextIn {
+    pub from: Option<ItemIn>,
+    pub device_id: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct StatusIn {

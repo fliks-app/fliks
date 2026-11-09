@@ -276,9 +276,9 @@ export class PartyApiService {
     return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals`, { mediaId, itemId }));
   }
 
-  /** Host: `choose` of the head of the singer queue. */
-  nextSinger(id: number) {
-    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/proposals/next`, {}));
+  /** Host: `choose` of the head of the singer queue; with `from` and `deviceId` it also moves the party on, only while it idles on `from`. */
+  nextSinger(id: number, advance?: { from: PartyItemIn; deviceId: string }) {
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/proposals/next`, advance ?? {}));
   }
 
   unpropose(id: number, proposalId: number) {

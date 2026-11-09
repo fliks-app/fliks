@@ -32,7 +32,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
     singerQueue: signal<unknown[]>([]),
-    playSinger: vi.fn().mockResolvedValue(undefined),
+    advanceSinger: vi.fn().mockResolvedValue(undefined),
     closed,
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
@@ -241,10 +241,11 @@ describe('PartySync queue', () => {
     TestBed.tick();
     party.live.set({ state: 'idle', item: { mediaId: 1 } });
     TestBed.tick();
-    expect(party.playSinger).toHaveBeenCalledTimes(1);
+    expect(party.advanceSinger).toHaveBeenCalledTimes(1);
+    expect(party.advanceSinger).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 1 }));
     party.live.set({ state: 'idle', item: { mediaId: 1 } });
     TestBed.tick();
-    expect(party.playSinger).toHaveBeenCalledTimes(1);
+    expect(party.advanceSinger).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the answer on a film to the server', async () => {

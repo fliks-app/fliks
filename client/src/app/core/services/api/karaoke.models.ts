@@ -57,7 +57,7 @@ export interface KaraokeItemState {
   /** The `Align` or `Melody` failure of the last run; the stems are ready. */
   lyricsError?: string;
   fileId: number;
-  stems: Partial<Record<StemKind, { size: number; durationMs: number }>>;
+  stems: Partial<Record<StemKind, { size: number; durationMs: number; contentType: string }>>;
   lyrics: boolean;
   melody: boolean;
   /** A `.cdg` file sits next to the track (MP3+G). */

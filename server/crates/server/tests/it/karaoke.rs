@@ -481,3 +481,124 @@ async fn without_a_cdg_the_state_says_so_and_the_route_is_404_or_401(pool: PgPoo
         401
     );
 }
+
+async fn import_row(st: &AppState, file: i32, kind: &str, provider: &str) {
+    store::put(
+        &st.db,
+        &New {
+            file,
+            kind,
+            model: "ultrastar",
+            model_version: "1",
+            provider,
+            path: "/nowhere",
+            size: 10,
+            duration_ms: 200_000,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+async fn second_track(st: &AppState) {
+    sqlx::raw_sql(
+        r#"INSERT INTO items (id, "mediaId", "editionId", title) VALUES (2, 10, 1, 'Two');
+           INSERT INTO track_details ("itemId", "mediaId", "discNumber", position, "durationMs") VALUES (2, 10, 1, 2, 200000);
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (2, 2, 10, 0, 0);"#,
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_background_pass_skips_a_track_with_both_imported_stems(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    second_track(&st).await;
+    assert_eq!(store::unprepared(&st.db, &[], 20).await.unwrap(), [2, 1]);
+    import_row(&st, 1, "vocals", "import").await;
+    assert_eq!(
+        store::unprepared(&st.db, &[], 20).await.unwrap(),
+        [2, 1],
+        "one import is not enough"
+    );
+    import_row(&st, 1, "instrumental", "import").await;
+    assert_eq!(store::unprepared(&st.db, &[], 20).await.unwrap(), [2]);
+    assert_eq!(
+        store::unprepared(&st.db, &[2], 20).await.unwrap(),
+        Vec::<i32>::new()
+    );
+    for kind in store::KINDS {
+        import_row(&st, 2, kind, "cpu").await;
+    }
+    assert!(store::unprepared(&st.db, &[], 20).await.unwrap().is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn imports_stay_out_of_the_disk_budget_they_cannot_be_evicted_for(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    for kind in ["vocals", "instrumental"] {
+        import_row(&st, 1, kind, "import").await;
+    }
+    assert_eq!(store::total(&st.db).await.unwrap(), 0);
+    for kind in store::KINDS {
+        import_row(&st, 2, kind, "cpu").await;
+    }
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(store::total(&st.db).await.unwrap(), 30);
+    assert_eq!(
+        store::evict(&st.db, 30).await.unwrap(),
+        0,
+        "the generated stems fit alone"
+    );
+    assert_eq!(store::evict(&st.db, 0).await.unwrap(), 3);
+    assert_eq!(store::rows(&st.db, 1).await.unwrap().len(), 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failed_copy_keeps_the_imported_stem_the_header_still_names(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let (_app, st, _t) = ctx(&pool).await;
+    let dir = Dir::new();
+    std::fs::write(dir.path().join("1.flac"), b"x").unwrap();
+    std::fs::write(dir.path().join("v.mp3"), b"vocals").unwrap();
+    std::fs::write(dir.path().join("i.mp3"), b"instr").unwrap();
+    std::fs::write(
+        dir.path().join("1.txt"),
+        "#TITLE:T\n#BPM:120\n#VOCALS:v.mp3\n#INSTRUMENTAL:i.mp3\n: 0 4 0 la\nE\n",
+    )
+    .unwrap();
+    let audio = dir.path().join("1.flac");
+    let run = || async {
+        let listing = fliks_server::lyrics::discover::listing(dir.path()).await;
+        fliks_server::lyrics::discover::file(
+            &st,
+            1,
+            1,
+            &audio,
+            Some(200_000),
+            &Default::default(),
+            &listing,
+        )
+        .await
+        .unwrap();
+    };
+    run().await;
+    let held = store::rows(&st.db, 1).await.unwrap();
+    assert_eq!(held.len(), 2);
+    // A longer vocals file that cannot be read: the copy fails, the held one stays.
+    std::fs::write(dir.path().join("v.mp3"), b"vocals, longer").unwrap();
+    std::fs::set_permissions(
+        dir.path().join("v.mp3"),
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+    run().await;
+    let after = store::rows(&st.db, 1).await.unwrap();
+    assert_eq!(after.len(), 2);
+    assert!(store::valid(&st.db, 1, "m", "1").await.unwrap());
+    let _ = std::fs::remove_dir_all(store::file_dir(1));
+}

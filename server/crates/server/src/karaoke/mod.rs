@@ -261,7 +261,7 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     for r in &rows {
         stems.insert(
             r.kind.clone(),
-            json!({"size": r.size, "durationMs": r.duration_ms}),
+            json!({"size": r.size, "durationMs": r.duration_ms, "contentType": mime_of(&r.path)}),
         );
     }
     let imported = |k: &str| {

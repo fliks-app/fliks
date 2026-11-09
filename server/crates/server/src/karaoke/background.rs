@@ -85,18 +85,7 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
     }
     let budget = super::budget_bytes(st).await;
     let failed: Vec<i32> = fail_list(&st.karaoke);
-    let tracks: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
-           JOIN item_parts ip ON ip."itemId" = i.id AND ip.version = (
-             SELECT min(version) FROM item_parts WHERE "itemId" = i.id)
-           WHERE (SELECT count(*) FROM derived_audio d WHERE d."mediaFileId" = ip."mediaFileId") < 3
-             AND i.id <> ALL($1)
-           ORDER BY i.id DESC LIMIT $2"#,
-    )
-    .bind(&failed)
-    .bind(PER_WAKE)
-    .fetch_all(&st.db)
-    .await?;
+    let tracks = store::unprepared(&st.db, &failed, PER_WAKE).await?;
     for item in tracks {
         if store::total(&st.db).await? >= budget / 10 * 9 || !allowed(st).await {
             break;

@@ -20,7 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
-const { createAssembler, activeIndex, segments, fills, claim } = self.FliksLyrics;
+const { createAssembler, activeIndex, segments, fills, claim, owns } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -569,6 +569,7 @@ playerManager.setMessageInterceptor(
       prepareEdl(media, loadRequest);
       cueState.fileId = media.customData ? media.customData.mediaFileId ?? null : null;
       cueState.sender = loadRequest.senderId || null;
+      if (cueState.sender && claim(lyricsState, cueState.sender)) dropLyrics();
       // Tell CAF the segments are fMP4 so Shaka picks the right HLS
       // demuxer up-front instead of probing seg-0 with the TS parser
       // (which fails silently on init.mp4 + .m4s output).
@@ -814,7 +815,7 @@ function dropLyrics() {
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   const msg = event.data;
   if (!msg || (msg.kind !== 'lyrics' && msg.kind !== 'lyrics_clear')) return;
-  if (lyricsState.sender && lyricsState.sender !== event.senderId) return;
+  if (!owns(lyricsState, event.senderId)) return;
   lyricsState.sender = event.senderId;
   if (msg.kind === 'lyrics_clear') return dropLyrics();
   const doc = lyricsState.add(msg);
@@ -822,9 +823,6 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
     lyricsState.doc = doc;
     lyricsState.shown = -2;
   }
-});
-context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, (event) => {
-  if (claim(lyricsState, event.senderId)) dropLyrics();
 });
 context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
   if (event.senderId === lyricsState.sender) {
