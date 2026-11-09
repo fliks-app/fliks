@@ -105,11 +105,10 @@ jobs:
         run: pod install
         working-directory: client/ios/App
 
-      # Archived ad-hoc signed: with automatic signing, `xcodebuild archive` asks
+      # Archived unsigned: with automatic signing, `xcodebuild archive` asks
       # Apple for a *development* profile, which ties every release to having a
       # registered device on the team. The export below re-signs for the App
-      # Store, and that profile type needs none. An unsigned archive would drop
-      # the entitlements file (CarPlay Audio), so the ad-hoc signature carries it.
+      # Store, and that profile type needs none.
       - name: Archive iOS app
         working-directory: client/ios/App
         env:
@@ -128,11 +127,13 @@ jobs:
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
             CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
             DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_ALLOWED=NO \
             clean archive
+
+      # An unsigned archive has no entitlements, so the export would sign without CarPlay Audio.
+      - name: Embed entitlements in the archive
+        working-directory: client/ios/App
+        run: codesign -f -s - --entitlements App/App.entitlements build/App.xcarchive/Products/Applications/App.app
 
       - name: Export signed IPA
         working-directory: client/ios/App
