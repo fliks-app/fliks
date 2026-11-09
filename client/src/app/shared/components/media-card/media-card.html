@@ -6,7 +6,8 @@
   <!-- Image -->
   <figure
     class="group relative bg-base-300 rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow cursor-pointer"
-    [class.aspect-2/3]="aspect() === 'portrait'"
+    [class.aspect-2/3]="aspect() === 'portrait' && !albumCover()"
+    [class.aspect-square]="aspect() === 'portrait' && albumCover()"
     [class.aspect-video]="aspect() === 'landscape'"
     [class.border-2]="highlighted()"
     [class.border-primary]="highlighted()"
@@ -25,7 +26,7 @@
     @if (posters().length) {
       <app-poster-mosaic [posters]="posters()" [gridFrom]="2" />
     } @else if (_img() && !imgFailed()) {
-      @if (squareCover()) {
+      @if (squareCover() && !albumCover()) {
         <img
           [cachedSrc]="_img()! | resolveUrl:'thumb'"
           alt=""
@@ -42,9 +43,9 @@
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
         class="w-full h-full select-none"
-        [class.object-cover]="!squareCover()"
-        [class.object-contain]="squareCover()"
-        [class.relative]="squareCover()"
+        [class.object-cover]="!squareCover() || albumCover()"
+        [class.object-contain]="squareCover() && !albumCover()"
+        [class.relative]="squareCover() && !albumCover()"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"

@@ -856,6 +856,14 @@ describe('MediaCardComponent: book card', () => {
     expect(host(text).querySelector('img.object-cover')).not.toBeNull();
   });
 
+  it('draws an album as a square card with its cover filling the frame', async () => {
+    const h = await createFixture(FULL_MEMBER, { imageUrl: '/c.jpg', title: 'Album', square: true });
+    expect(host(h).querySelector('figure.aspect-square')).not.toBeNull();
+    expect(host(h).querySelector('figure.aspect-2\\/3')).toBeNull();
+    expect(host(h).querySelector('img.blur-xl')).toBeNull();
+    expect(host(h).querySelector('img.object-cover')).not.toBeNull();
+  });
+
   it('has no Identify action', async () => {
     const movie = await createFixture(ADMIN, { media: makeMedia() });
     const h = await createFixture(ADMIN, { media: bookMedia(bookListInfoFixture) });
