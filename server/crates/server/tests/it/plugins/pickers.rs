@@ -1,6 +1,6 @@
 //! Acquisition providers (`plugins.md` section K) through the fixture plugin.
 use super::harness::*;
-use fliks_server::events::{Bus, DomainEvent, SseEvent};
+use fliks_server::events::{Bus, SseEvent};
 use fliks_server::plugins::runtime::fliks::plugin::types::{DownloadProgress, DownloadState};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -23,10 +23,6 @@ async fn call(h: &H, route: &str, q: &[(&str, &str)]) -> Value {
     serde_json::from_slice(&r.body).unwrap()
 }
 
-fn logs(text: &str) -> usize {
-    fliks_server::system::logs::query("", text, None).len()
-}
-
 async fn entry(h: &H) -> Value {
     let (_, ui) = h.call("GET", "/api/plugins/ui", Some(&h.admin), None).await;
     ui.as_array()
@@ -38,7 +34,7 @@ async fn entry(h: &H) -> Value {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_provider_publishes_sources_and_receives_arbitrated_requests() {
+async fn a_provider_publishes_sources_and_reads_in_flight() {
     let Some((mut m, w)) = fixture() else { return };
     let Some(s) = Scratch::create("pickers").await else {
         return;
@@ -81,29 +77,7 @@ async fn a_provider_publishes_sources_and_receives_arbitrated_requests() {
     );
     call(&h, "sources", &[("ids", "a,b"), ("kinds", "movie")]).await;
 
-    let (movie, album) = (710_005, 710_006);
-    for (id, kind) in [(movie, "movie"), (album, "album")] {
-        sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'm', $2)")
-            .bind(id)
-            .bind(kind)
-            .execute(&h.st.db)
-            .await
-            .unwrap();
-    }
-    h.st.hub
-        .emit_domain(DomainEvent::MediaAcquisitionRequested {
-            media_ids: vec![movie.into(), album.into()],
-            reason: "t".into(),
-        });
-    until(
-        "the arbitrated request",
-        Duration::from_secs(10),
-        async || logs("\"provider\":\"fliks.fixture\"") == 1 && logs("\"mediaIds\":[710006]") >= 1,
-    )
-    .await;
-
-    // `no-release` is the arbitration signal (no toast, no queue refresh); any other reason is a failure.
-    call(&h, "failed", &[("media", "710005")]).await;
+    // A failure is an `import.failed`; the old `no-release` signal is no longer special.
     call(&h, "failed", &[("media", "710005"), ("reason", "boom")]).await;
     tokio::time::sleep(Duration::from_millis(300)).await;
     let (mut sources, mut failed, mut queue) = (0, vec![], 0);
@@ -117,6 +91,15 @@ async fn a_provider_publishes_sources_and_receives_arbitrated_requests() {
     }
     assert_eq!(sources, 1, "an unchanged list is not announced again");
     assert_eq!((failed, queue), (vec!["boom".to_owned()], 1));
+    let (movie, album) = (710_005, 710_006);
+    for (id, kind) in [(movie, "movie"), (album, "album")] {
+        sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'm', $2)")
+            .bind(id)
+            .bind(kind)
+            .execute(&h.st.db)
+            .await
+            .unwrap();
+    }
 
     // `acquisition.inFlight` (rule 67): another plugin's set shows, the caller's own never does.
     let held = |ref_: &str| DownloadProgress {

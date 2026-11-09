@@ -157,7 +157,7 @@ Request routes and the lifecycle emit NO SSE events (`GET /api/system/events` ca
 |---|---|---|---|---|
 | `request.created` | domain (hub bus; plugin webhooks read it) | `{requestId: number, mediaType: string, externalIds: {provider: string, value: string}[], userId: number\|null, kind: string, seasons: number[]\|null}` | `POST /api/requests` ADD only (rule 18) | plugin webhook/process dispatchers |
 | `request.approved` | domain | `{requestId, mediaId: number\|null, mediaType, externalIds, seasons: number[]\|null, approvedByUserId: number\|null}` | auto-approved create; ADD `approve`. Not for DELETE-kind approve, not for `onMediaImported` promotions | plugin dispatchers |
-| `media.acquisition.requested` | domain | `{mediaIds: number[], reason: string}` | `approve` ADD and the auto-approved create of a book (`'request-approved'`, only when media non-null); `onMediaImported` (`'media-imported'`, only when a request was touched) | acquisition owner (plugin dispatchers) |
+| `media.acquisition.requested` | domain | `{mediaIds: number[], reason: string}` | `approve` ADD and the auto-approved create of a book (`'request-approved'`, only when media non-null); `onMediaImported` (`'media-imported'`, only when a request was touched) | the core's acquisition sweep (`plugins.md` rule 66) and the plugins |
 | `import.complete` | consumed, SSE bus, audience-blind (hub rule 24) | `{mediaId, title, seasonNumber?, episodeNumber?}` (lifecycle uses `mediaId` only) | plugin host (rule 35) | `onImportComplete` |
 | `acquisition.grabbed` | consumed, domain | `{mediaId, family, seasonNumber?, episodeNumber?}` (lifecycle uses `mediaId`, `seasonNumber`) | plugin host (rule 35) | `markInProgress` |
 

@@ -1,4 +1,5 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   CdkDrag,
@@ -12,17 +13,16 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TvService } from '../../../core/services/tv.service';
-import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { listOf, ranked } from '../lyrics/lyrics-settings';
 
-const KEYS = { order: 'acquisition.providerOrder', fallback: 'acquisition.fallback' };
+const KEYS = { order: 'acquisition.providerOrder', interval: 'acquisition.sweepInterval' };
 
 @Component({
   selector: 'app-acquisition-settings',
   imports: [
     TranslatePipe,
-    ToggleFieldComponent,
+    FormsModule,
     CdkDropList,
     DropListSettleDirective,
     CdkDrag,
@@ -43,7 +43,7 @@ export class AcquisitionSettingsComponent implements OnInit {
 
   readonly loading = signal(true);
   readonly saving = signal(false);
-  readonly fallback = signal(true);
+  readonly interval = signal('360');
   private readonly order = signal<string[]>([]);
 
   /** Installed providers in the stored order; a provider the order does not name follows by id. */
@@ -57,7 +57,7 @@ export class AcquisitionSettingsComponent implements OnInit {
     try {
       const map = await this.api.getAll();
       this.order.set(listOf(map[KEYS.order]));
-      this.fallback.set(map[KEYS.fallback] !== 'false');
+      this.interval.set(map[KEYS.interval] ?? '360');
     } catch {
       this.toast.error(this.translate.instant('settings.acquisition.load_error'));
     } finally {
@@ -77,7 +77,7 @@ export class AcquisitionSettingsComponent implements OnInit {
     try {
       await this.api.setBulk({
         [KEYS.order]: JSON.stringify(this.rows().map((r) => r.id)),
-        [KEYS.fallback]: String(this.fallback()),
+        [KEYS.interval]: String(this.interval()),
       });
       this.toast.success(this.translate.instant('settings.acquisition.saved'));
     } catch {

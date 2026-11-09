@@ -51,6 +51,14 @@
             "triggerable": true
           },
           {
+            "cron": "0 * * * *",
+            "labelKey": "system.cmd_acquisition_sweep",
+            "lastStatus": null,
+            "name": "AcquisitionSweep",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
             "cron": "0 05 * * *",
             "labelKey": "system.cmd_media_cleanup",
             "lastStatus": null,

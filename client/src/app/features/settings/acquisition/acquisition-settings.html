@@ -64,12 +64,15 @@
           </div>
         </div>
 
-        <app-toggle-field
-          [value]="fallback()"
-          (valueChange)="fallback.set($event)"
-          [label]="'settings.acquisition.fallback' | translate"
-          [hint]="'settings.acquisition.fallback_hint' | translate"
-          toggleClass="toggle-sm toggle-primary" />
+        <label class="form-control w-full max-w-xs">
+          <div class="label">
+            <span class="label-text">{{ 'settings.acquisition.sweep_interval' | translate }}</span>
+          </div>
+          <input type="number" class="input input-bordered input-sm w-full" min="1" [ngModel]="interval()" (ngModelChange)="interval.set($event)" />
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.acquisition.sweep_interval_hint' | translate }}</span>
+          </div>
+        </label>
 
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">

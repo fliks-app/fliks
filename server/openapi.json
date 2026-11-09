@@ -2392,6 +2392,18 @@
         }
       }
     },
+    "/api/media/{id}/grab-best": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target.",
+        "operationId": "grab_best",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media/{id}/identify": {
       "post": {
         "tags": [

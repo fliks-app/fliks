@@ -47,12 +47,12 @@ impl Drop for Claim {
     }
 }
 
-/// One timer per job Rust schedules; the subtitle ticks are `subtitles::scheduler::spawn_tick`'s (rule 31). Timers die with the runtime.
+/// One timer per job Rust schedules; the ticked jobs are their own (rule 31). Timers die with the runtime.
 pub fn spawn(st: &AppState) {
     let tz = cron::server_tz();
     for &(name, expr, _) in names::CORE
         .iter()
-        .filter(|(n, ..)| !names::SUBTITLE.contains(n))
+        .filter(|(n, ..)| !names::TICKED.contains(n))
         .chain(names::LIVETV.iter())
     {
         let st = st.clone();

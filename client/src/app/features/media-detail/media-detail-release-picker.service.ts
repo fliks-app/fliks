@@ -80,6 +80,13 @@ export class MediaDetailReleasePickerService {
     return firstValueFrom(this.http.post<void>(url, { family: target.family, language: target.language ?? null, ...body }));
   }
 
+  /** The core's search across every provider and grab of the best release (`POST /api/media/:id/grab-best`). */
+  async grabBest(target: AcquisitionTarget): Promise<void> {
+    const { groupId, itemId, family, language } = target;
+    const body = { groupId, itemId, family, language: language ?? null };
+    return firstValueFrom(this.http.post<void>(`/api/media/${target.mediaId}/grab-best`, body));
+  }
+
   /** Throws rather than firing a malformed request: every caller picked the provider from `providersFor`. */
   private resolve(pluginId: string, target: AcquisitionTarget, which: keyof ReleasePickerPair): string {
     const pair = this.providersFor(target).find((p) => p.pluginId === pluginId)?.routes.byKind[target.kind]?.[target.level];

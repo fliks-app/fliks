@@ -83,6 +83,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       { name: 'SubtitleSearch', label: 'system.cmd_subtitle_search' },
       { name: 'SubtitleUpgrade', label: 'system.cmd_subtitle_upgrade' },
     ]},
+    { type: 'single', name: 'AcquisitionSweep', label: 'system.cmd_acquisition_sweep' },
     { type: 'group', label: 'system.cmd_group_rescan', items: [
       { name: 'RescanAll', label: 'system.cmd_rescan_all' },
       { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },

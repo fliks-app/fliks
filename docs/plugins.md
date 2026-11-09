@@ -123,10 +123,14 @@ Every plugin declaring `ui.releasePicker` is an acquisition provider; any number
 A provider calls `acquisition.sourcesSet` (scope `acquisition:candidates`) at `start` and after any
 change of what it can search, with its sources `{id, name, kinds}` (an indexer, an account, ...):
 the buttons and the releases dialog show a provider's tabs per source. The admin orders providers
-with the setting `acquisition.providerOrder` (a JSON array of plugin ids) and turns the fallback
-across providers on or off with `acquisition.fallback`. For `media.acquisition.requested` a provider
-acts only when the event's `provider` is its own id, and answers `acquisition.failed` with the
-reason `no-release` when it finds nothing, so the core can ask the next provider.
+with the setting `acquisition.providerOrder` (a JSON array of plugin ids); it breaks ties.
+A provider only searches and grabs: the core decides automatic acquisition. For every wanted media
+(on a schedule, `acquisition.sweepInterval` minutes, and on `media.acquisition.requested`) it calls
+the `search` route of every provider with a source for the kind, as the system (no `sid`, so the
+answer is the whole list, no streaming), ranks the releases across providers by the core's own score
+and POSTs the `grab` route of the best one's provider with the release's fields. A `search` called
+that way answers the releases the provider would grab, best first; the core drops any with a
+rejection. A provider's own feed sync stays its own and checks `acquisition.inFlight` first.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 

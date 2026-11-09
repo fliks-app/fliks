@@ -14,6 +14,7 @@ mod provider_host;
 mod roles;
 mod runtime;
 mod sql;
+mod sweep;
 
 /// The spec's WIT block and the SDK's WIT file are one text (`plugins.md` WIT section).
 #[test]

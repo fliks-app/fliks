@@ -1,7 +1,7 @@
 //! The job name lists of `scheduler.md` rules 10 and 15; they equal `core-scheduler-jobs.ts`.
 
 /// `(name, cron, labelKey)`, in listing order; every one is triggerable.
-pub const CORE: [(&str, &str, &str); 7] = [
+pub const CORE: [(&str, &str, &str); 8] = [
     ("Backup", "0 02 * * *", "system.cmd_backup"),
     (
         "RefreshMetadata",
@@ -22,6 +22,11 @@ pub const CORE: [(&str, &str, &str); 7] = [
         "SubtitleUpgrade",
         "0 0-23/6 * * *",
         "system.cmd_subtitle_upgrade",
+    ),
+    (
+        "AcquisitionSweep",
+        "0 * * * *",
+        "system.cmd_acquisition_sweep",
     ),
     ("MediaCleanup", "0 05 * * *", "system.cmd_media_cleanup"),
     ("FollowRefresh", "0 06 * * *", "system.cmd_follow_refresh"),
@@ -52,8 +57,8 @@ pub const TRIGGER_ONLY: [&str; 7] = [
     "DetectMissingMarkers",
 ];
 
-/// Their tick is the subtitle tick (`subtitles::scheduler::spawn_tick`), not the runner's (rule 31).
-pub const SUBTITLE: [&str; 2] = ["SubtitleSearch", "SubtitleUpgrade"];
+/// Jobs run by their own interval tick, not the runner's: the subtitle ticks (rule 31) and the acquisition sweep.
+pub const TICKED: [&str; 3] = ["SubtitleSearch", "SubtitleUpgrade", "AcquisitionSweep"];
 
 /// Housekeeping tick of rule 26: not listed, not triggerable.
 pub const PRUNE_CRON: &str = "0 03 * * *";

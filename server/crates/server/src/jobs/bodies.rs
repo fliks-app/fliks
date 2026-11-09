@@ -31,6 +31,10 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "DetectMissingMarkers" => markers(st, name, true).await,
         "SubtitleSearch" => crate::subtitles::scheduler::search_missing(st).await,
         "SubtitleUpgrade" => crate::subtitles::scheduler::upgrade(st).await,
+        "AcquisitionSweep" => {
+            st.plugins.sweep(st, None).await;
+            Ok(())
+        }
         "LiveTvSourceRefresh" => crate::livetv::jobs::refresh_sources(st).await,
         "LiveTvGuideRefresh" => crate::livetv::jobs::refresh_guides(st).await,
         "LiveTvGuidePrune" => crate::livetv::jobs::prune_guide(st).await,
