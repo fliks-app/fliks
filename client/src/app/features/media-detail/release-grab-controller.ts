@@ -97,10 +97,12 @@ export class ReleaseGrabController {
     this.grabState.set(new Map());
     this.loading.set(true);
     try {
-      const rows = await this.stream.run((searchId) => this.api.search(target, undefined, searchId), {
-        releases: this.releases,
-        indexers: this.indexers,
-      });
+      const searches = this.api.providersFor(target).map((p) => ({
+        pluginId: p.pluginId,
+        name: p.name,
+        fetch: (searchId: string) => this.api.search(p.pluginId, target, undefined, searchId),
+      }));
+      const rows = await this.stream.run(searches, { releases: this.releases, indexers: this.indexers });
       if (this.target() !== target) return;
       this.releases.set(rows);
     } catch (err: unknown) {
@@ -119,13 +121,14 @@ export class ReleaseGrabController {
     }
   }
 
-  /** Grabs the best release of every given want at once; a failure is toasted by the global interceptor. */
+  /** Grabs the best release of every given want at once, from the first provider in order serving the base; a failure is toasted by the global interceptor. */
   async grabBest(base: AcquisitionBase, wants: readonly Want[]): Promise<void> {
     const key = baseKey(base);
-    if (this.bestBusy().has(key) || !wants.length) return;
+    const provider = this.api.providersFor(base)[0];
+    if (this.bestBusy().has(key) || !wants.length || !provider) return;
     this.bestBusy.update((s) => new Set(s).add(key));
     try {
-      await Promise.allSettled(wants.map((w) => this.withGrabPhase(base, () => this.api.grab(targetFor(base, w), {}))));
+      await Promise.allSettled(wants.map((w) => this.withGrabPhase(base, () => this.api.grab(provider.pluginId, targetFor(base, w), {}))));
     } finally {
       this.bestBusy.update((s) => {
         const next = new Set(s);
@@ -137,10 +140,11 @@ export class ReleaseGrabController {
 
   async grabRelease(r: MovieRelease, key: string): Promise<void> {
     const target = this.target();
-    if (!target) return;
+    const pluginId = r.pluginId ?? (target && this.api.providersFor(target)[0]?.pluginId);
+    if (!target || !pluginId) return;
     this.grabBusy.set(key);
     try {
-      await this.withGrabPhase(target, () => this.api.grab(target, releaseGrabBody(r)));
+      await this.withGrabPhase(target, () => this.api.grab(pluginId, target, releaseGrabBody(r)));
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
     } catch {
       this.grabState.update((s) => new Map(s).set(key, 'error'));

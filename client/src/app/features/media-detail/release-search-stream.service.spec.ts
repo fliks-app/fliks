@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ReleaseSearchStreamService, type IndexerRosterEntry } from './release-search-stream.service';
 import { SseService } from '../../core/services/sse.service';
-import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { MovieRelease } from './media-detail-release-picker.service';
 
 const PLUGIN_ID = 'acme.acquire';
@@ -11,17 +10,13 @@ function release(title: string): MovieRelease {
   return { title, downloadUrl: `magnet:${title}`, sourceId: 1, sourceName: 'ix' } as MovieRelease;
 }
 
-function setup(pluginId: string | null = PLUGIN_ID) {
+function setup() {
   const lastEvent = signal<Record<string, unknown> | null>(null);
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: SseService, useValue: { lastEvent } },
-      {
-        provide: PluginUiRegistryService,
-        useValue: { releasePicker: () => (pluginId ? { pluginId, routes: {} } : null) },
-      },
     ],
   });
   const service = TestBed.inject(ReleaseSearchStreamService);
@@ -51,11 +46,13 @@ function deferredFetch() {
   };
 }
 
+const acme = (fetch: (searchId: string) => Promise<MovieRelease[]>) => ({ pluginId: PLUGIN_ID, name: 'Acme', fetch });
+
 describe('ReleaseSearchStreamService', () => {
   it('mints a search id and hands it to the request, so the server knows who to push to', async () => {
     const { service, releases, indexers } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
     expect(f.searchId()).toBeTruthy();
     f.finish([]);
     await run;
@@ -64,7 +61,7 @@ describe('ReleaseSearchStreamService', () => {
   it('applies a partial: the roster and the whole re-ranked list both land', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
 
     await deliver(`plugin.${PLUGIN_ID}.search.partial`, {
       searchId: f.searchId(),
@@ -81,7 +78,7 @@ describe('ReleaseSearchStreamService', () => {
   it('a roster-only event updates the tabs and leaves the list alone', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
     releases.set([release('a')]);
 
     await deliver(`plugin.${PLUGIN_ID}.search.state`, {
@@ -99,7 +96,7 @@ describe('ReleaseSearchStreamService', () => {
   it('VERDICT: another search on the same account is ignored — two open modals must not cross', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
 
     await deliver(`plugin.${PLUGIN_ID}.search.partial`, {
       searchId: 'someone-elses-search',
@@ -116,7 +113,7 @@ describe('ReleaseSearchStreamService', () => {
   it('VERDICT: events stop being applied once the search has answered', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
     f.finish([release('final')]);
     await run;
 
@@ -132,7 +129,7 @@ describe('ReleaseSearchStreamService', () => {
   it('VERDICT: an indexer left pending when the answer lands stops spinning', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
 
     await deliver(`plugin.${PLUGIN_ID}.search.state`, {
       searchId: f.searchId(),
@@ -151,7 +148,7 @@ describe('ReleaseSearchStreamService', () => {
   it('ignores another plugin’s events entirely', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
+    const run = service.run([acme(f.fetch)], { releases, indexers });
 
     await deliver('plugin.other.plugin.search.partial', {
       searchId: f.searchId(),
@@ -167,8 +164,8 @@ describe('ReleaseSearchStreamService', () => {
     const { service, releases, indexers, deliver } = setup();
     const first = deferredFetch();
     const second = deferredFetch();
-    const run1 = service.run(first.fetch, { releases, indexers });
-    const run2 = service.run(second.fetch, { releases, indexers });
+    const run1 = service.run([acme(first.fetch)], { releases, indexers });
+    const run2 = service.run([acme(second.fetch)], { releases, indexers });
 
     await deliver(`plugin.${PLUGIN_ID}.search.partial`, {
       searchId: first.searchId(),
@@ -189,11 +186,45 @@ describe('ReleaseSearchStreamService', () => {
     expect(indexers()[0]?.state).toBe('done');
   });
 
-  it('still returns the answer when no plugin contributes a release picker', async () => {
-    const { service, releases, indexers } = setup(null);
-    const f = deferredFetch();
-    const run = service.run(f.fetch, { releases, indexers });
-    f.finish([release('a')]);
+  it('merges the rosters and releases of two providers, stamping each release with its provider', async () => {
+    const { service, releases, indexers, deliver } = setup();
+    const a = deferredFetch();
+    const b = deferredFetch();
+    const run = service.run(
+      [acme(a.fetch), { pluginId: 'acme.other', name: 'Other', fetch: b.fetch }],
+      { releases, indexers },
+    );
+
+    await deliver('plugin.acme.other.search.partial', {
+      searchId: b.searchId(),
+      indexers: [{ id: 1, name: 'acct', state: 'done' }],
+      releases: [release('b1')],
+    });
+    await deliver(`plugin.${PLUGIN_ID}.search.partial`, {
+      searchId: a.searchId(),
+      indexers: [{ id: 1, name: 'alpha', state: 'pending' }],
+      releases: [release('a1')],
+    });
+
+    expect(indexers().map((i) => [i.pluginId, i.name])).toEqual([[PLUGIN_ID, 'alpha'], ['acme.other', 'acct']]);
+    expect(releases().map((r) => [r.pluginId, r.title])).toEqual([[PLUGIN_ID, 'a1'], ['acme.other', 'b1']]);
+    a.finish([release('a1')]);
+    b.finish([release('b1')]);
+    expect((await run).map((r) => r.pluginId)).toEqual([PLUGIN_ID, 'acme.other']);
+    expect(indexers().map((i) => i.state)).toEqual(['done', 'done']);
+  });
+
+  it('answers with the providers that succeeded when one fails, and throws only when all do', async () => {
+    const { service, releases, indexers } = setup();
+    const ok = deferredFetch();
+    const run = service.run(
+      [acme(ok.fetch), { pluginId: 'acme.other', name: 'Other', fetch: () => Promise.reject(new Error('down')) }],
+      { releases, indexers },
+    );
+    ok.finish([release('a')]);
     expect((await run).map((r) => r.title)).toEqual(['a']);
+
+    const failing = (pluginId: string) => ({ pluginId, name: pluginId, fetch: () => Promise.reject(new Error('down')) });
+    await expect(service.run([failing('x'), failing('y')], { releases, indexers })).rejects.toThrow('down');
   });
 });

@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Calidad actual",
     "search_upgrade_releases": "Buscar releases superiores",
     "grab_upgrade_best": "Descargar la mejor mejora",
+    "grab_best": "Descargar la mejor release",
+    "search_releases": "Buscar releases",
     "custom_search_placeholder": "Búsqueda personalizada (opcional, sustituye el título)",
     "subtitles_section": "Subtítulos",
     "search_subtitles": "Buscar subtítulos",
@@ -2195,6 +2197,7 @@
       "optimize": "Ajustes",
       "optimize_workers": "Workers",
       "karaoke": "Karaoke",
+      "acquisition": "Descargas",
       "lyrics": "Letras"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Ejecútalo con:",
         "confirm_revoke": "¿Revocar el token de {{name}}? Sus trabajos vuelven a la cola."
       }
+    },
+    "acquisition": {
+      "title": "Descargas",
+      "subtitle": "Qué proveedores de descarga se consultan primero y qué ocurre cuando uno no encuentra nada.",
+      "provider_order": "Orden de los proveedores",
+      "provider_order_hint": "El primer proveedor que sirve un título se usa para las búsquedas automáticas y la descarga rápida.",
+      "drag": "Arrastrar para reordenar",
+      "move_up": "Subir",
+      "move_down": "Bajar",
+      "providers_empty": "No hay ningún proveedor de descarga instalado.",
+      "fallback": "Probar el siguiente proveedor",
+      "fallback_hint": "Si un proveedor no encuentra nada en una búsqueda automática, consultar al siguiente.",
+      "load_error": "No se pudieron cargar los ajustes.",
+      "saved": "Ajustes guardados."
     },
     "lyrics": {
       "title": "Letras",

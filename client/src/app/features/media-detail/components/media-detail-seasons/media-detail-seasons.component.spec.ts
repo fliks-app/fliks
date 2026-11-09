@@ -88,7 +88,7 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
       { provide: AddToPlaylistService, useValue: { open: () => {} } },
       {
         provide: PluginUiRegistryService,
-        useValue: { contributionsFor: (slot: SlotId) => opts.registry?.[slot] ?? [] },
+        useValue: { contributionsFor: (slot: SlotId) => opts.registry?.[slot] ?? [], providersFor: () => [] },
       },
       { provide: WantsStore, useValue: { load: async () => {}, wantsOf: () => [WANT] } },
       {

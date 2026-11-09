@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Current quality",
     "search_upgrade_releases": "Search for higher-quality releases",
     "grab_upgrade_best": "Download the best upgrade",
+    "grab_best": "Download the best release",
+    "search_releases": "Search releases",
     "custom_search_placeholder": "Custom search (optional, replaces the title)",
     "subtitles_section": "Subtitles",
     "search_subtitles": "Search subtitles",
@@ -2195,6 +2197,7 @@
       "optimize": "Settings",
       "optimize_workers": "Workers",
       "karaoke": "Karaoke",
+      "acquisition": "Downloads",
       "lyrics": "Lyrics"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Start it with:",
         "confirm_revoke": "Revoke the token of {{name}}? Its jobs return to the queue."
       }
+    },
+    "acquisition": {
+      "title": "Downloads",
+      "subtitle": "Which download providers are queried first, and what happens when one finds nothing.",
+      "provider_order": "Provider order",
+      "provider_order_hint": "The first provider that serves a title is used for automatic searches and for the quick download.",
+      "drag": "Drag to reorder",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "providers_empty": "No download provider is installed.",
+      "fallback": "Try the next provider",
+      "fallback_hint": "When a provider finds nothing for an automatic search, ask the next one.",
+      "load_error": "Unable to load the settings.",
+      "saved": "Settings saved."
     },
     "lyrics": {
       "title": "Lyrics",

@@ -10,6 +10,7 @@ import {
 } from '../../core/acquisition/acquisition';
 import { resolveMediaAction, type MediaActionHandlers } from '../../core/plugin-ui/media-action-registry';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
+import { withCoreAcquisition } from '../../core/plugin-ui/acquisition-contributions';
 import { resolveMenuContributions, type ResolvedMenuRow } from '../../core/plugin-ui/resolve-menu-contributions';
 import type { WhenContext } from '../../core/plugin-ui/when-evaluator';
 import { ReleaseGrabController } from '../../features/media-detail/release-grab-controller';
@@ -66,18 +67,26 @@ export class MediaActionsController {
       isTouch: this.device.isTouch(),
       surface: 'detail',
       ...acquisitionWhen(this.acquisition(), this.cfg.base().kind),
+      hasAcquisitionProvider: this.pluginUi.providersFor(this.cfg.base().kind, this.cfg.base().level).length > 0,
     };
   });
 
   /** The plugin has something to offer at this level: gates a button that would open an empty menu. */
   readonly available = computed(
-    () => SLOTS[this.cfg.base().level].some((slot) => this.pluginUi.contributionsFor(slot).length > 0) && aimedWants(this.acquisition()).length > 0,
+    () => this.rowContributions().length > 0 && aimedWants(this.acquisition()).length > 0,
+  );
+
+  private readonly rowContributions = computed(() =>
+    withCoreAcquisition(
+      this.cfg.base().level,
+      this.whenContext(),
+      SLOTS[this.cfg.base().level].flatMap((slot) => this.pluginUi.contributionsFor(slot)),
+    ),
   );
 
   readonly rows = computed<ResolvedMenuRow[]>(() => {
-    const base = this.cfg.base();
     return resolveMenuContributions({
-      contributions: [...(this.cfg.core ?? []), ...SLOTS[base.level].flatMap((slot) => this.pluginUi.contributionsFor(slot))],
+      contributions: [...(this.cfg.core ?? []), ...this.rowContributions()],
       ctx: this.whenContext(),
       guards: this.cfg.guards,
       resolveAction: (id) => this.resolve(id),

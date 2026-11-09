@@ -108,6 +108,7 @@ interface MediaFixture {
   grabs?: Partial<ReleaseGrabController>;
   monitoredLoading?: boolean;
   deleteLoading?: boolean;
+  provider?: boolean;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
   /** The episode page of a series: its menu carries no title-wide entries, and no deletion request. */
   episodeInstance?: boolean;
@@ -204,7 +205,10 @@ async function createFixture(
       },
       {
         provide: PluginUiRegistryService,
-        useValue: { contributionsFor: (slot: SlotId) => media.registry?.[slot] ?? [] },
+        useValue: {
+          contributionsFor: (slot: SlotId) => media.registry?.[slot] ?? [],
+          providersFor: () => (media.provider ? [{ pluginId: 'p', name: 'P', routes: { byKind: {} }, sources: [] }] : []),
+        },
       },
       {
         provide: WantsStore,
@@ -698,6 +702,24 @@ describe('DetailHeroComponent - release-picker actions are plugin-contributed, n
     const shown = labels(fixture);
     expect(shown).not.toContain('x.grab_best');
     expect(shown).not.toContain('x.search_releases');
+  });
+
+  it('with a provider serving the title, core owns both rows and the plugin duplicates collapse', async () => {
+    const grabs = { search: vi.fn(async () => {}), grabBest: vi.fn(async () => {}) };
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: releasePickerRegistry,
+      provider: true,
+      grabs,
+    });
+    const shown = labels(fixture);
+    expect(shown).toContain('media_detail.grab_best');
+    expect(shown).toContain('media_detail.search_releases');
+    expect(shown).not.toContain('x.grab_best');
+    expect(shown).not.toContain('x.search_releases');
+    flatActions(fixture)[shown.indexOf('media_detail.search_releases')].run();
+    expect(grabs.search).toHaveBeenCalledTimes(1);
   });
 
   it('a plugin contribution surfaces both actions and routes clicks to the release picker', async () => {

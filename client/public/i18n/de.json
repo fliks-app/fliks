@@ -1275,6 +1275,8 @@
     "upgrade_current_quality": "Aktuelle Qualität",
     "search_upgrade_releases": "Höherwertige Releases suchen",
     "grab_upgrade_best": "Bestes Upgrade herunterladen",
+    "grab_best": "Beste Release herunterladen",
+    "search_releases": "Releases suchen",
     "custom_search_placeholder": "Benutzerdefinierte Suche (optional, ersetzt den Titel)",
     "subtitles_section": "Untertitel",
     "search_subtitles": "Untertitel suchen",
@@ -2195,6 +2197,7 @@
       "optimize": "Einstellungen",
       "optimize_workers": "Worker",
       "karaoke": "Karaoke",
+      "acquisition": "Downloads",
       "lyrics": "Songtexte"
     },
     "engine": {
@@ -3805,6 +3808,20 @@
         "start_command": "Starte ihn mit:",
         "confirm_revoke": "Token von {{name}} widerrufen? Seine Jobs kehren in die Warteschlange zurück."
       }
+    },
+    "acquisition": {
+      "title": "Downloads",
+      "subtitle": "Welche Download-Anbieter zuerst abgefragt werden und was passiert, wenn einer nichts findet.",
+      "provider_order": "Reihenfolge der Anbieter",
+      "provider_order_hint": "Der erste Anbieter, der einen Titel bedient, wird für automatische Suchen und den schnellen Download verwendet.",
+      "drag": "Zum Umsortieren ziehen",
+      "move_up": "Nach oben",
+      "move_down": "Nach unten",
+      "providers_empty": "Es ist kein Download-Anbieter installiert.",
+      "fallback": "Nächsten Anbieter versuchen",
+      "fallback_hint": "Findet ein Anbieter bei einer automatischen Suche nichts, wird der nächste gefragt.",
+      "load_error": "Einstellungen konnten nicht geladen werden.",
+      "saved": "Einstellungen gespeichert."
     },
     "lyrics": {
       "title": "Songtexte",

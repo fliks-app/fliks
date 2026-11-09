@@ -21,7 +21,7 @@ export function isUnprofiledReleaseError(err: unknown): boolean {
  *  plugin to skip the allowed-quality guard it enforces for an unattended grab. */
 export function releaseGrabBody(
   r: MovieRelease,
-): { downloadUrl: string; sourceTitle: string; sourceId: number; infoUrl?: string; force?: true } {
+): { downloadUrl: string; sourceTitle: string; sourceId: number | string; infoUrl?: string; force?: true } {
   return {
     downloadUrl: r.downloadUrl,
     sourceTitle: r.title,
