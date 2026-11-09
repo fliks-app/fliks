@@ -130,6 +130,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             clean archive
 
+      # An unsigned archive has no entitlements, so the export would sign without CarPlay Audio.
+      - name: Embed entitlements in the archive
+        working-directory: client/ios/App
+        run: codesign -f -s - --entitlements App/App.entitlements build/App.xcarchive/Products/Applications/App.app
+
       - name: Export signed IPA
         working-directory: client/ios/App
         env:
@@ -145,6 +150,13 @@ jobs:
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER_ID" \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+
+      # The CarPlay Audio entitlement must survive the unsigned archive and the re-sign at export.
+      - name: Check IPA entitlements
+        working-directory: client/ios/App/build
+        run: |
+          unzip -q export/App.ipa -d ipa
+          codesign -d --entitlements - ipa/Payload/App.app 2>&1 | tee /dev/stderr | grep -q com.apple.developer.carplay-audio
 
       # `altool --upload-app` is the only ASC upload path that takes an
       # API key on the command line — `xcrun notarytool` is for

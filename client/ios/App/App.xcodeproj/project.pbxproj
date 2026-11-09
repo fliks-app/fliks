@@ -43,6 +43,8 @@
 		F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A01 /* WebAuthPlugin.swift */; };
 		F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C1 /* CalendarPlugin.swift */; };
 		F1000001AAAA000000000B02 /* AudioPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */; };
+		F9B000020000000000000001 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B000010000000000000001 /* CarPlaySceneDelegate.swift */; };
+		F9B000020000000000000002 /* CarPlayCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B000010000000000000002 /* CarPlayCatalog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +113,9 @@
 		F1000001AAAA000000000A01 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000C1 /* CalendarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerPlugin.swift; sourceTree = "<group>"; };
+		F9B000010000000000000001 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		F9B000010000000000000002 /* CarPlayCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayCatalog.swift; sourceTree = "<group>"; };
+		F9B0000100000000000000E1 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -168,6 +173,9 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				F9A0000100000000000000A1 /* SceneDelegate.swift */,
+				F9B0000100000000000000E1 /* App.entitlements */,
+				F9B000010000000000000002 /* CarPlayCatalog.swift */,
+				F9B000010000000000000001 /* CarPlaySceneDelegate.swift */,
 				F1000001AAAA000000000C01 /* Debug.xcconfig */,
 				F1000001AAAA000000000011 /* FlksViewController.swift */,
 				F1000001AAAA000000000012 /* HdrPlugin.swift */,
@@ -387,6 +395,8 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				F9A0000200000000000000A1 /* SceneDelegate.swift in Sources */,
+				F9B000020000000000000002 /* CarPlayCatalog.swift in Sources */,
+				F9B000020000000000000001 /* CarPlaySceneDelegate.swift in Sources */,
 				F1000001AAAA000000000001 /* FlksViewController.swift in Sources */,
 				F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */,
 				F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */,
@@ -570,6 +580,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fliks;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
@@ -593,6 +604,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fliks;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
