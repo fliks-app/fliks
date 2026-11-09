@@ -28,6 +28,10 @@ export const VERIFIABLE_PROVIDERS = [
   'webgpu',
   'directml',
 ] as const;
+/** The verifiable providers the engine reports, in display order; the rest stay stored untouched. */
+export function reportedProviders(reported: readonly string[]): string[] {
+  return VERIFIABLE_PROVIDERS.filter((p) => reported.includes(p));
+}
 const MIN_BUDGET_MB = 256;
 /** Microsoft's page of the Windows App SDK runtime installers, which hold the Windows ML runtime. */
 export const WINDOWS_ML_INSTALL_URL = 'https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads';
@@ -45,7 +49,6 @@ export class KaraokeSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('licence');
 
-  protected readonly providers = VERIFIABLE_PROVIDERS;
   protected readonly minBudget = MIN_BUDGET_MB;
   protected readonly windowsMlUrl = WINDOWS_ML_INSTALL_URL;
   protected readonly checking = signal(false);
@@ -63,6 +66,7 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly busy = signal<string | null>(null);
   protected readonly reviewing = signal<KaraokeModel | null>(null);
   protected readonly accepted = signal(false);
+  protected readonly providers = computed(() => reportedProviders(this.catalogue()?.runtime.providers ?? []));
   protected readonly budgetValid = computed(() => Number(this.budget()) >= MIN_BUDGET_MB);
 
   constructor() {
@@ -162,13 +166,22 @@ export class KaraokeSettingsComponent implements OnInit {
     return m.state === 'absent' || m.state === 'failed';
   }
 
-  protected async download(): Promise<void> {
+  /** A clear licence downloads at once; any other opens the acceptance dialog. */
+  protected start(m: KaraokeModel): void {
+    if (m.licence.clear) void this.download(m, false);
+    else this.review(m);
+  }
+
+  protected async confirmDownload(): Promise<void> {
     const m = this.reviewing();
-    if (!m || !this.accepted()) return;
+    if (m && this.accepted()) await this.download(m, true);
+  }
+
+  private async download(m: KaraokeModel, accept: boolean): Promise<void> {
     this.reviewing.set(null);
     this.busy.set(m.id);
     try {
-      this.replace(await this.api.download(m.id, true));
+      this.replace(await this.api.download(m.id, accept));
     } catch {
       // The interceptor toasts the reason.
     } finally {

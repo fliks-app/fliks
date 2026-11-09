@@ -208,7 +208,21 @@ pub async fn models(State(st): State<AppState>, a: Authed) -> Result<Json<Value>
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct DownloadDto {
+    #[serde(default)]
     accept_licence: bool,
+}
+
+/// A clear licence needs no acceptance; an unknown id is left to the engine's 404.
+fn licence_accepted(
+    models: &[fliks_engine_core::api::ModelInfo],
+    id: &str,
+    accepted: bool,
+) -> bool {
+    accepted
+        || models
+            .iter()
+            .find(|m| m.id == id)
+            .is_none_or(|m| m.licence.clear)
 }
 
 #[utoipa::path(post, path = "/api/karaoke/models/{id}/download", responses((status = 200), (status = 202), (status = 400), (status = 404)))]
@@ -219,7 +233,8 @@ pub async fn download(
     ValidJson(dto): ValidJson<DownloadDto>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     manage_settings(&a)?;
-    if !dto.accept_licence {
+    let models = st.engine.models().await.map_err(engine_err)?.models;
+    if !licence_accepted(&models, &id, dto.accept_licence) {
         return Err(AppError::bad_request(vec![
             "acceptLicence must be true".to_owned(),
         ]));
@@ -565,6 +580,17 @@ mod tests {
             "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn only_an_unclear_licence_needs_acceptance() {
+        let mut unclear = model("u", "alignment", false, "absent");
+        unclear.licence.clear = false;
+        let models = [model("c", "alignment", false, "absent"), unclear];
+        assert!(licence_accepted(&models, "c", false));
+        assert!(licence_accepted(&models, "gone", false));
+        assert!(!licence_accepted(&models, "u", false));
+        assert!(licence_accepted(&models, "u", true));
     }
 
     #[test]
