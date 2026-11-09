@@ -41,7 +41,7 @@ pub use background::spawn;
 const SLOTS: usize = 2;
 const DEFAULT_BUDGET_MB: i64 = 4096;
 const MIN_BUDGET_MB: i64 = 256;
-const DEFAULT_VERIFIED: [&str; 3] = ["coreml", "cuda", "migraphx"];
+const DEFAULT_VERIFIED: [&str; 4] = ["coreml", "cuda", "migraphx", "directml"];
 /// The engine's provider names, in its order (`PROVIDERS` of the engine's karaoke module).
 const GPU_PROVIDERS: [&str; 10] = [
     "cuda",
