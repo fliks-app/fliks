@@ -1,22 +1,22 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import type { MediaType } from '../../../core/enums/media-type.enum';
-import { KIND_REGISTRY, MEDIA_KINDS } from '../../../core/media-kinds';
-import { UpdateUserBody, UsersApiService } from '../../../core/services/api/users-api.service';
-import { AuthService } from '../../../core/services/auth.service';
-import { ToastService } from '../../../core/services/toast.service';
-import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import type { MediaType } from '../../core/enums/media-type.enum';
+import { KIND_REGISTRY, MEDIA_KINDS } from '../../core/media-kinds';
+import { UpdateUserBody, UsersApiService } from '../../core/services/api/users-api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
+import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 
 /** Kinds a reader opens at the last known place: no exclusivity, no remote control. */
 const RESUME_ONLY: readonly MediaType[] = ['book', 'comic'];
 
 /** Account setting: one playback at a time, followed and taken over from any device. */
 @Component({
-  selector: 'app-session-sync-settings',
+  selector: 'app-account-continue',
   imports: [TranslatePipe, ToggleFieldComponent],
-  templateUrl: './session-sync-settings.html',
+  templateUrl: './continue.html',
 })
-export class SessionSyncSettingsComponent {
+export class AccountContinueComponent {
   private readonly api = inject(UsersApiService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);

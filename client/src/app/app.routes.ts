@@ -430,6 +430,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'continue',
+        loadComponent: () =>
+          import('./features/account/continue').then(
+            (m) => m.AccountContinueComponent,
+          ),
+      },
+      {
         path: 'devices',
         loadComponent: () =>
           import('./features/account/devices').then(
