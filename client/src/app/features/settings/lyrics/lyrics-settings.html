@@ -20,16 +20,66 @@
           [hint]="'settings.lyrics.auto_fetch_hint' | translate"
           toggleClass="toggle-sm toggle-primary" />
 
-        <label class="form-control w-full max-w-lg">
-          <div class="label">
-            <span class="label-text">{{ 'settings.lyrics.provider_order' | translate }}</span>
+        <div class="flex flex-col gap-2 max-w-lg">
+          <div>
+            <span class="text-sm">{{ 'settings.lyrics.provider_order' | translate }}</span>
+            <p class="text-sm text-base-content/50">{{ 'settings.lyrics.provider_order_hint' | translate }}</p>
           </div>
-          <textarea class="textarea textarea-bordered w-full font-mono text-sm" rows="3"
-            [ngModel]="order()" (ngModelChange)="order.set($event)"></textarea>
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.lyrics.provider_order_hint' | translate }}</span>
+          <div cdkDropList (cdkDropListDropped)="reorder($event.previousIndex, $event.currentIndex)" class="flex flex-col gap-2">
+            @for (r of rows(); track r.namespace; let i = $index; let last = $last) {
+              <div
+                cdkDrag
+                [cdkDragDisabled]="tv.isTv()"
+                class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+                [class.opacity-60]="disabled().has(r.namespace)"
+              >
+                <div *cdkDragPlaceholder class="h-[2.625rem] w-full rounded-lg bg-base-300"></div>
+                @if (!tv.isTv()) {
+                  <button
+                    type="button"
+                    cdkDragHandle
+                    class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                    [attr.aria-label]="'settings.lyrics.drag' | translate"
+                  >
+                    <svg lucideGripVertical class="h-4 w-4"></svg>
+                  </button>
+                }
+                <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
+                <span class="flex flex-1 min-w-0 items-baseline gap-2">
+                  <span class="font-medium truncate">{{ r.name }}</span>
+                  <span class="font-mono text-sm text-base-content/50">{{ r.namespace }}</span>
+                </span>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="i === 0"
+                  (click)="reorder(i, i - 1)"
+                  [attr.aria-label]="'settings.lyrics.move_up' | translate"
+                >
+                  <svg lucideArrowUp class="h-4 w-4"></svg>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="last"
+                  (click)="reorder(i, i + 1)"
+                  [attr.aria-label]="'settings.lyrics.move_down' | translate"
+                >
+                  <svg lucideArrowDown class="h-4 w-4"></svg>
+                </button>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-primary"
+                  [checked]="!disabled().has(r.namespace)"
+                  (change)="toggle(r.namespace, $any($event.target).checked)"
+                  [attr.aria-label]="'settings.lyrics.enabled' | translate"
+                />
+              </div>
+            } @empty {
+              <p class="text-sm text-base-content/60">{{ 'settings.lyrics.providers_empty' | translate }}</p>
+            }
           </div>
-        </label>
+        </div>
 
         <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.lyrics.section_files' | translate }}</h2>

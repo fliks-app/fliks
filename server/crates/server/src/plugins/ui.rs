@@ -158,9 +158,12 @@ impl Plugins {
                         .as_object()
                         .map(|o| o.keys().collect())
                         .unwrap_or_default();
+                    let lyrics = block["kinds"]["album"]
+                        .as_array()
+                        .is_some_and(|c| c.iter().any(|c| c == "lyrics"));
                     e.insert(
                         "provider".into(),
-                        json!({"namespaces": names, "kinds": kinds}),
+                        json!({"namespaces": names, "kinds": kinds, "lyrics": lyrics}),
                     );
                 }
                 if let Some(rp) = self.registry.release_picker_for(id) {
