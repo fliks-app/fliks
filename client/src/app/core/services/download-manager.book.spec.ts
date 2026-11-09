@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { MusicTrackRequest } from './audio-player/music-queue';
 import { DownloadManagerService, type BookDownloadTarget } from './download-manager.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -75,6 +76,10 @@ function setup(initial: DownloadTask[] = [], opts: { wifiOnly?: boolean; connect
   return { service, books, streaming, saved: () => saved, settled };
 }
 
+const track = (itemId: number): MusicTrackRequest => ({
+  itemId, mediaId: 7, title: `T${itemId}`, artists: 'A', albumTitle: 'Album', coverUrl: '/c.jpg', durationSeconds: 200, gain: null, peak: null, albumGain: null, albumPeak: null,
+});
+
 describe('DownloadManagerService, book downloads', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -104,6 +109,35 @@ describe('DownloadManagerService, book downloads', () => {
       files: [{ key: `${saved()[0].id}-40-0`, offsetS: 0, durationS: 10 }, { key: `${saved()[0].id}-40-1`, offsetS: 10, durationS: 20 }],
     });
     expect(saved()[0]).toMatchObject({ status: 'ready', sizeBytes: 100, mediaFileId: 400 });
+  });
+
+  it('keeps the original file of each track under one album and skips the ones already there', async () => {
+    const { service, books, streaming, saved, settled } = setup();
+    const first = await service.createTracks([track(1), track(2)]);
+    await settled();
+    const again = await service.createTracks([track(2), track(3)]);
+    await settled();
+    expect(first).toEqual({ started: 2, failed: 0, skipped: 0 });
+    expect(again).toEqual({ started: 1, failed: 0, skipped: 1 });
+    expect(streaming.stopSession).toHaveBeenCalledTimes(3);
+    expect(books.storeFile.mock.calls[0][2]).toBe('/api/stream/400?download=1');
+    expect(saved().map((t) => t.book?.itemId)).toEqual([1, 2, 3]);
+    expect(saved()[0]).toMatchObject({
+      status: 'ready', mediaId: 7, mediaFileId: 400, quality: 'original', episodeLabel: 'T1',
+      media: { type: 'album', title: 'Album' },
+      book: { family: 'audio', track: { itemId: 1 }, files: [{ offsetS: 0, durationS: 30 }] },
+    });
+  });
+
+  it('replaces a failed track download instead of stacking a second one', async () => {
+    const { service, saved, settled } = setup();
+    await service.createTracks([track(1)]);
+    await settled();
+    saved()[0].status = 'failed';
+    await service.createTracks([track(1)]);
+    await settled();
+    expect(saved()).toHaveLength(1);
+    expect(saved()[0].status).toBe('ready');
   });
 
   it('flags a failed transfer and drops what was stored', async () => {

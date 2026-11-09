@@ -2132,7 +2132,13 @@
     "resume": "Fortsetzen",
     "auto_rule_label": "Auto-Download:",
     "episodes_queued_one": "1 Folge wird heruntergeladen",
-    "episodes_queued_other": "{{count}} Folgen werden heruntergeladen"
+    "episodes_queued_other": "{{count}} Folgen werden heruntergeladen",
+    "tracks_added_one": "{{count}} Titel zu den Downloads hinzugefügt",
+    "tracks_added_other": "{{count}} Titel zu den Downloads hinzugefügt",
+    "tracks_failed_one": "{{count}} Titel konnte nicht geladen werden",
+    "tracks_failed_other": "{{count}} Titel konnten nicht geladen werden",
+    "tracks_already": "Bereits auf diesem Gerät",
+    "remove_from_device": "Von diesem Gerät entfernen"
   },
   "setup_checklist": {
     "title": "Konfiguration",

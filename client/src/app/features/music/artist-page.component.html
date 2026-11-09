@@ -6,7 +6,10 @@
       @if (subtitle()) {
         <p class="text-sm text-base-content/60">{{ subtitle() }}</p>
       }
-      <app-follow-toggle headerActions kind="person" role="artist" [targetId]="d.artist.id" />
+      <div headerActions class="flex flex-wrap items-center gap-2">
+        <app-follow-toggle kind="person" role="artist" [targetId]="d.artist.id" />
+        <app-music-download-button [tracks]="tracks" [showLabel]="true" buttonClass="btn btn-sm gap-2" />
+      </div>
     </app-person-header>
 
     @for (g of groups().groups; track g.key) {

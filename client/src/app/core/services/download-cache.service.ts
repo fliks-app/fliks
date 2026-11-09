@@ -5,6 +5,7 @@ import { StorageScopeService } from './storage-scope.service';
 import type { OfflineCrop } from '../utils/player.utils';
 import type { EdlRange } from '../utils/edl-policy';
 import { normalizeStatus, type DownloadStatus } from './download-status';
+import type { MusicTrackRequest } from './audio-player/music-queue';
 
 /** Client-side download task tracked in localStorage. */
 export interface OfflineSubtitle {
@@ -33,6 +34,8 @@ export interface OfflineBook {
   durationSeconds?: number;
   artist?: string;
   coverUrl?: string | null;
+  /** Set on a music track: the queue entry the player opens offline. */
+  track?: MusicTrackRequest;
 }
 
 export interface DownloadTask {

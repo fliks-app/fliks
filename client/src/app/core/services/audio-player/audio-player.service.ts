@@ -22,6 +22,7 @@ import {
   type NativeAudioQueue,
   type NativeAudioState,
   type NativeAudioTrack,
+  type NativeAudioTrackRequest,
 } from '../../plugins/audio-player.plugin';
 import { SessionSyncService, type AccountSession, type SupersededPlayback } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
@@ -196,7 +197,7 @@ export class AudioPlayerService {
   private casting = false;
   private cast: CastService | null = null;
   private readonly mq = new MusicQueue();
-  private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string } | null = null;
+  private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
   private preTried: MusicTrackRequest | null = null;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
@@ -519,14 +520,23 @@ export class AudioPlayerService {
       if (this.network.isOnline()) await this.sync.flush();
       if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
       if (this.nativeAudio) return await this.startNative(autoplay, startAt);
-      const info = await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt });
+      const local = await this.localParts(req.itemId);
+      const opened = !local || this.network.isOnline()
+        ? await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt }).catch((e) => {
+            if (!local) throw e;
+            return null;
+          })
+        : null;
       if (generation !== this.generation) {
-        if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+        if (opened?.sessionId) void this.streaming.stopSession(opened.sessionId).catch(() => undefined);
         return;
       }
+      const info = local
+        ? ({ ...opened, mediaFileId: local.mediaFileId, playMethod: 'DirectPlay', durationSeconds: local.book.durationSeconds || opened?.durationSeconds } as PlaybackInfoResponse)
+        : opened!;
       this.info = info;
       this.sessionId = info.sessionId;
-      this.parts = this.partsOf(info);
+      this.parts = local ? local.parts : this.partsOf(info);
       this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
       this.setupMediaSession(this._track()!);
       await this.load(startAt, autoplay);
@@ -609,20 +619,29 @@ export class AudioPlayerService {
     if (!next || this.casting || this.routed({ type: 'drives' }) || this.preTried === next || this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
     this.preTried = next;
     const generation = this.generation;
-    void this.streaming
-      .getItemPlaybackInfo(next.itemId, this.deviceProfile.getProfile(), { startAt: 0 })
-      .then((info) => {
+    void this.localParts(next.itemId)
+      .then(async (local) => {
+        const opened = !local || this.network.isOnline()
+          ? await this.streaming.getItemPlaybackInfo(next.itemId, this.deviceProfile.getProfile(), { startAt: 0 }).catch((e) => {
+              if (!local) throw e;
+              return null;
+            })
+          : null;
         const stale = generation !== this.generation || this.preTried !== next;
-        if (stale || info.playMethod !== 'DirectPlay') {
-          if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+        if (stale || (!local && opened?.playMethod !== 'DirectPlay')) {
+          if (opened?.sessionId) void this.streaming.stopSession(opened.sessionId).catch(() => undefined);
           return;
         }
-        const url = this.partsOf(info)[0].url;
+        const info = local
+          ? ({ ...opened, mediaFileId: local.mediaFileId, playMethod: 'DirectPlay', durationSeconds: local.book.durationSeconds || opened?.durationSeconds } as PlaybackInfoResponse)
+          : opened!;
+        const parts = local ? local.parts : this.partsOf(info);
+        const url = parts[0].url;
         const standby = this.els[1 - this.current];
         standby.src = url;
         standby.load();
         this.applyGain(standby, next, url);
-        this.pre = { req: next, info, url };
+        this.pre = { req: next, info, url, parts };
       })
       .catch(() => undefined);
   }
@@ -652,7 +671,7 @@ export class AudioPlayerService {
     this.current = 1 - this.current;
     this.info = pre.info;
     this.sessionId = pre.info.sessionId;
-    this.parts = this.partsOf(pre.info);
+    this.parts = pre.parts;
     this.partIndex = 0;
     this._track.set(this.audioOf(pre.req));
     this._duration.set(pre.info.durationSeconds ?? pre.req.durationSeconds ?? 0);
@@ -1573,7 +1592,22 @@ export class AudioPlayerService {
   }
 
   private pushQueue(): void {
-    if (this.nativeOn && this._musicMode()) void this.nativeAudio!.updateQueue({ tracks: [...this.mq.tracks], index: this.mq.index });
+    if (!this.nativeOn || !this._musicMode()) return;
+    const { tracks, index } = { tracks: this.mq.tracks, index: this.mq.index };
+    this.pushed = this.pushed.then(async () => this.nativeAudio?.updateQueue({ tracks: await this.nativeTracks(tracks), index })).catch(() => undefined);
+  }
+
+  /** Pushes land in the order they were made, whatever the time each one took to resolve its files. */
+  private pushed: Promise<unknown> = Promise.resolve();
+
+  /** The queue for the native player: a downloaded track carries the file to play, the others are resolved by native. */
+  private async nativeTracks(tracks: readonly MusicTrackRequest[]): Promise<NativeAudioTrackRequest[]> {
+    return Promise.all(
+      tracks.map(async (t) => {
+        const local = await this.localParts(t.itemId);
+        return local ? { ...t, localUrl: local.parts[0].url } : { ...t };
+      }),
+    );
   }
 
   /** Controls outside the app go to the party while one drives the audio. */
@@ -1595,7 +1629,7 @@ export class AudioPlayerService {
     this.pushGain();
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
-    await n.setQueue({ tracks: [...this.mq.tracks], index: this.mq.index, autoplay, ...(startAt > 0 && { startAt }) });
+    await n.setQueue({ tracks: await this.nativeTracks(this.mq.tracks), index: this.mq.index, autoplay, ...(startAt > 0 && { startAt }) });
     void this.refreshStems();
   }
 

@@ -2132,7 +2132,13 @@
     "resume": "Riprendi",
     "auto_rule_label": "Download automatico:",
     "episodes_queued_one": "Verrà scaricato 1 episodio",
-    "episodes_queued_other": "Verranno scaricati {{count}} episodi"
+    "episodes_queued_other": "Verranno scaricati {{count}} episodi",
+    "tracks_added_one": "{{count}} brano aggiunto ai download",
+    "tracks_added_other": "{{count}} brani aggiunti ai download",
+    "tracks_failed_one": "Impossibile scaricare {{count}} brano",
+    "tracks_failed_other": "Impossibile scaricare {{count}} brani",
+    "tracks_already": "Già su questo dispositivo",
+    "remove_from_device": "Rimuovi da questo dispositivo"
   },
   "setup_checklist": {
     "title": "Configurazione",

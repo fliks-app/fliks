@@ -568,6 +568,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         e.peak = num(t["peak"])
         e.albumGain = num(t["albumGain"])
         e.albumPeak = num(t["albumPeak"])
+        if let local = t["localUrl"] as? String, !local.isEmpty { e.url = fileUrl(local) }
         return e
     }
 
