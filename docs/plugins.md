@@ -56,7 +56,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet`, `acquisition.inFlight`, `queue.set` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
-  | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set`, `progress.set` |
+  | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set` |
   | `config:rw` | `config.get`, `config.set` |
 
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required

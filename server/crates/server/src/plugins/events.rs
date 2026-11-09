@@ -9,9 +9,6 @@ use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
-
-const PROGRESS_MIN: Duration = Duration::from_secs(1);
 
 /// Enabled users who can open the media's page (`viewersForMedia`); admins-equivalent when none.
 pub async fn viewers(st: &AppState, media_id: Option<i32>) -> Vec<i32> {
@@ -56,29 +53,6 @@ async fn media_row(st: &AppState, id: i32) -> Option<(String, MediaKind)> {
     Some((title, MediaKind::parse(&kind)?))
 }
 
-fn state_of(s: t::DownloadState) -> DownloadState {
-    match s {
-        t::DownloadState::Queued => DownloadState::Queued,
-        t::DownloadState::Active => DownloadState::Active,
-        t::DownloadState::Stalled => DownloadState::Stalled,
-        t::DownloadState::Paused => DownloadState::Paused,
-        t::DownloadState::Importing => DownloadState::Importing,
-    }
-}
-
-fn download_of(d: &t::DownloadProgress) -> Result<Download, HostError> {
-    let (season, episode) = units::video(d.unit.as_ref())?;
-    Ok(Download {
-        r#ref: d.ref_.clone(),
-        season_number: season.map(i64::from),
-        episode_number: episode.map(i64::from),
-        progress: Num(d.progress),
-        dlspeed: Num(d.bytes_per_second.unwrap_or(0.0)),
-        eta: Num(d.eta_seconds.unwrap_or(0.0)),
-        state: state_of(d.state),
-    })
-}
-
 /// One `download.progress` to the media's viewers (`downloads` plus the queue's open rows); nothing when there are none.
 pub async fn push_progress(st: &AppState, media_id: i32, mut downloads: Vec<Download>) {
     let recipients = viewers(st, Some(media_id)).await;
@@ -99,33 +73,13 @@ pub async fn push_progress(st: &AppState, media_id: i32, mut downloads: Vec<Down
     );
 }
 
-struct Gate {
-    last: Instant,
-    dirty: bool,
-    armed: bool,
-}
-
+/// The `acquisition.grabbed` placeholders (`plugins.md` rule 72): a transfer is in flight from the grab until
+/// its plugin's next `queue.set`.
 #[derive(Default)]
-struct Inner {
-    gates: HashMap<i32, Gate>,
-    /// Each plugin's set per media (`plugins.md` rule 65); a media's emission is their union.
-    sets: HashMap<i32, BTreeMap<String, Vec<Download>>>,
-}
+pub struct Progress(Mutex<HashMap<i32, BTreeMap<String, Vec<Download>>>>);
 
-impl Inner {
-    fn store(&mut self, plugin: &str, media: i32, set: Vec<Download>) {
-        let by_plugin = self.sets.entry(media).or_default();
-        if set.is_empty() {
-            by_plugin.remove(plugin);
-        } else {
-            by_plugin.insert(plugin.to_owned(), set);
-        }
-        if by_plugin.is_empty() {
-            self.sets.remove(&media);
-        }
-    }
-
-    /// The plugins other than `caller` holding a download that covers `(season, episode)` of the media.
+impl Progress {
+    /// The plugins other than `caller` holding a placeholder that covers `(season, episode)` of the media.
     fn in_flight(
         &self,
         media: i32,
@@ -142,7 +96,8 @@ impl Inner {
                     && d.episode_number.is_none_or(|n| n == i64::from(e))
             }
         };
-        self.sets
+        self.0
+            .lock_clean()
             .get(&media)
             .into_iter()
             .flatten()
@@ -151,140 +106,50 @@ impl Inner {
             .collect()
     }
 
-    fn union(&self, media: i32) -> Vec<Download> {
-        self.sets
+    /// The media's placeholders.
+    pub fn union(&self, media: i32) -> Vec<Download> {
+        self.0
+            .lock_clean()
             .get(&media)
             .map(|m| m.values().flatten().cloned().collect())
             .unwrap_or_default()
     }
-}
 
-/// `progress.set`: per (media, plugin) sets, one emission per media per second, the newest wins.
-#[derive(Default)]
-pub struct Progress(Mutex<Inner>);
-
-impl Progress {
-    pub async fn set(
-        &'static self,
-        st: &AppState,
-        plugin: &str,
-        media_id: i32,
-        downloads: &[t::DownloadProgress],
-    ) -> Result<(), HostError> {
-        let set: Vec<Download> = downloads
-            .iter()
-            .map(download_of)
-            .collect::<Result<_, _>>()?;
-        let now = Instant::now();
-        let (wait, now_set) = {
-            let mut g = self.0.lock_clean();
-            g.store(plugin, media_id, set);
-            let union = g.union(media_id);
-            match g.gates.get_mut(&media_id) {
-                Some(gate) if now - gate.last < PROGRESS_MIN => {
-                    gate.dirty = true;
-                    if gate.armed {
-                        return Ok(());
-                    }
-                    gate.armed = true;
-                    (Some(PROGRESS_MIN - (now - gate.last)), union)
-                }
-                _ => {
-                    g.gates.insert(
-                        media_id,
-                        Gate {
-                            last: now,
-                            dirty: false,
-                            armed: false,
-                        },
-                    );
-                    (None, union)
-                }
-            }
-        };
-        let Some(wait) = wait else {
-            push_progress(st, media_id, now_set).await;
-            return Ok(());
-        };
-        let st = st.clone();
-        tokio::spawn(async move { self.flush(st, media_id, wait).await });
-        Ok(())
-    }
-
-    async fn flush(&'static self, st: AppState, media_id: i32, wait: Duration) {
-        tokio::time::sleep(wait).await;
-        let pending = {
-            let mut g = self.0.lock_clean();
-            let Some(gate) = g.gates.get_mut(&media_id) else {
-                return;
-            };
-            gate.armed = false;
-            if gate.dirty {
-                gate.dirty = false;
-                gate.last = Instant::now();
-                g.union(media_id)
-            } else {
-                g.gates.remove(&media_id);
-                return;
-            }
-        };
-        push_progress(&st, media_id, pending).await;
-    }
-
-    /// The media's in-memory sets (`progress.set` and placeholders).
-    pub fn union(&self, media: i32) -> Vec<Download> {
-        self.0.lock_clean().union(media)
-    }
-
-    /// Drops the plugin's sets (it reports through `queue.set`); the media they held.
+    /// Drops the plugin's placeholders; the media they held.
     pub fn retire(&self, plugin: &str) -> Vec<i32> {
         let mut g = self.0.lock_clean();
         let held: Vec<i32> = g
-            .sets
             .iter()
             .filter(|(_, m)| m.contains_key(plugin))
             .map(|(id, _)| *id)
             .collect();
         for id in &held {
-            g.store(plugin, *id, vec![]);
+            if let Some(m) = g.get_mut(id) {
+                m.remove(plugin);
+                if m.is_empty() {
+                    g.remove(id);
+                }
+            }
         }
         held
     }
 
-    /// The plugin's set plus a placeholder, pushed at once (`acquisition.grabbed`).
+    /// The plugin's placeholders plus one, pushed at once (`acquisition.grabbed`).
     async fn placeholder(&self, st: &AppState, plugin: &str, media_id: i32, d: Download) {
-        let union = {
-            let mut g = self.0.lock_clean();
-            let mut set = g
-                .sets
-                .get(&media_id)
-                .and_then(|m| m.get(plugin))
-                .cloned()
-                .unwrap_or_default();
-            set.push(d);
-            g.store(plugin, media_id, set);
-            g.union(media_id)
-        };
-        push_progress(st, media_id, union).await;
+        self.0
+            .lock_clean()
+            .entry(media_id)
+            .or_default()
+            .entry(plugin.to_owned())
+            .or_default()
+            .push(d);
+        push_progress(st, media_id, self.union(media_id)).await;
     }
 
-    /// The plugin stopped: its sets go and every media it held gets the union that remains.
+    /// The plugin stopped: its placeholders go and every media it held gets the set that remains.
     pub async fn forget(&self, st: &AppState, plugin: &str) {
-        let left: Vec<(i32, Vec<Download>)> = {
-            let mut g = self.0.lock_clean();
-            let held: Vec<i32> = g
-                .sets
-                .iter()
-                .filter(|(_, m)| m.contains_key(plugin))
-                .map(|(id, _)| *id)
-                .collect();
-            for id in &held {
-                g.store(plugin, *id, vec![]);
-            }
-            held.into_iter().map(|id| (id, g.union(id))).collect()
-        };
-        for (id, set) in left {
-            push_progress(st, id, set).await;
+        for id in self.retire(plugin) {
+            push_progress(st, id, self.union(id)).await;
         }
     }
 }
@@ -299,8 +164,6 @@ pub async fn in_flight(
 ) -> Result<Vec<String>, HostError> {
     let (season, episode) = units::video(unit)?;
     let mut ids: BTreeSet<String> = progress_gates()
-        .0
-        .lock_clean()
         .in_flight(media_id, plugin, season, episode)
         .into_iter()
         .collect();
@@ -459,7 +322,6 @@ pub async fn emit_own(st: &AppState, id: &str, kind: &str, payload: Value, audie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     fn dl(r#ref: &str) -> Download {
         Download {
@@ -473,22 +335,11 @@ mod tests {
         }
     }
 
-    fn refs(i: &Inner, media: i32) -> Vec<String> {
-        i.union(media).into_iter().map(|d| d.r#ref).collect()
-    }
-
-    #[test]
-    fn two_plugins_keep_their_own_set_and_the_union_is_in_plugin_order() {
-        let mut i = Inner::default();
-        i.store("b", 1, vec![dl("b1")]);
-        i.store("a", 1, vec![dl("a1"), dl("a2")]);
-        assert_eq!(refs(&i, 1), ["a1", "a2", "b1"]);
-        i.store("a", 1, vec![dl("a3")]);
-        assert_eq!(refs(&i, 1), ["a3", "b1"], "a replaces only its own set");
-        i.store("b", 1, vec![]);
-        assert_eq!(refs(&i, 1), ["a3"]);
-        i.store("a", 1, vec![]);
-        assert!(refs(&i, 1).is_empty() && i.sets.is_empty());
+    fn put(p: &Progress, plugin: &str, media: i32, set: Vec<Download>) {
+        p.0.lock_clean()
+            .entry(media)
+            .or_default()
+            .insert(plugin.to_owned(), set);
     }
 
     fn dl_at(season: Option<i64>, episode: Option<i64>) -> Download {
@@ -500,64 +351,53 @@ mod tests {
     }
 
     #[test]
+    fn placeholders_are_per_plugin_and_retire_with_their_plugin() {
+        let p = Progress::default();
+        put(&p, "b", 1, vec![dl("b1")]);
+        put(&p, "a", 1, vec![dl("a1"), dl("a2")]);
+        let refs = |m| -> Vec<String> { p.union(m).into_iter().map(|d| d.r#ref).collect() };
+        assert_eq!(refs(1), ["a1", "a2", "b1"]);
+        assert_eq!(p.retire("a"), [1]);
+        assert_eq!(refs(1), ["b1"]);
+        assert!(p.retire("a").is_empty());
+        p.retire("b");
+        assert!(refs(1).is_empty() && p.0.lock_clean().is_empty());
+    }
+
+    #[test]
     fn in_flight_skips_the_caller_and_matches_units() {
-        let mut i = Inner::default();
-        i.store("a", 1, vec![dl_at(Some(2), Some(3))]);
-        i.store("b", 1, vec![dl_at(Some(2), None)]);
-        i.store("c", 1, vec![dl_at(Some(5), Some(1))]);
-        fn f(i: &Inner, caller: &str, s: Option<u32>, e: Option<u32>) -> Vec<String> {
-            i.in_flight(1, caller, s, e)
-        }
+        let p = Progress::default();
+        put(&p, "a", 1, vec![dl_at(Some(2), Some(3))]);
+        put(&p, "b", 1, vec![dl_at(Some(2), None)]);
+        put(&p, "c", 1, vec![dl_at(Some(5), Some(1))]);
+        let f = |caller: &str, s: Option<u32>, e: Option<u32>| p.in_flight(1, caller, s, e);
         assert_eq!(
-            f(&i, "a", None, None),
+            f("a", None, None),
             ["b", "c"],
             "no unit: any download, caller excluded"
         );
         assert_eq!(
-            f(&i, "z", Some(2), Some(3)),
+            f("z", Some(2), Some(3)),
             ["a", "b"],
             "a pack covers its episode"
         );
         assert_eq!(
-            f(&i, "z", Some(2), Some(4)),
+            f("z", Some(2), Some(4)),
             ["b"],
             "another episode of the season"
         );
         assert_eq!(
-            f(&i, "z", Some(2), None),
+            f("z", Some(2), None),
             ["a", "b"],
             "a group meets the season's downloads"
         );
-        assert_eq!(f(&i, "z", Some(5), Some(1)), ["c"]);
-        assert!(i.in_flight(2, "z", None, None).is_empty());
-        i.store("d", 1, vec![dl_at(None, None)]);
+        assert_eq!(f("z", Some(5), Some(1)), ["c"]);
+        assert!(p.in_flight(2, "z", None, None).is_empty());
+        put(&p, "d", 1, vec![dl_at(None, None)]);
         assert_eq!(
-            f(&i, "z", Some(9), Some(9)),
+            f("z", Some(9), Some(9)),
             ["d"],
             "a whole-media download covers all"
         );
-        i.store("d", 1, vec![]);
-        assert!(
-            f(&i, "z", Some(9), Some(9)).is_empty(),
-            "an empty set clears"
-        );
-    }
-
-    #[test]
-    fn concurrent_sets_of_two_plugins_never_overwrite_each_other() {
-        let p = Arc::new(Progress::default());
-        let run = |plugin: &'static str| {
-            let p = p.clone();
-            std::thread::spawn(move || {
-                for n in 0..500 {
-                    p.0.lock_clean()
-                        .store(plugin, 1, vec![dl(&format!("{plugin}{n}"))]);
-                }
-            })
-        };
-        let (a, b) = (run("a"), run("b"));
-        a.join().unwrap();
-        b.join().unwrap();
-        assert_eq!(refs(&p.0.lock_clean(), 1), ["a499", "b499"]);
     }
 }

@@ -383,3 +383,33 @@ pub fn fixture() -> Option<(Value, Vec<u8>)> {
 pub async fn allow_unsigned(h: &H) {
     h.set("plugins.allow_unsigned", "true").await;
 }
+
+/// A plugin's snapshot of one active transfer per `refs` entry of `media`, through `queue.set`.
+pub async fn queue_set(h: &H, plugin: &str, media: u32, refs: &[&str]) {
+    use fliks_server::plugins::runtime::fliks::plugin::types::{
+        GrabMethod, QueueEntry, QueueState,
+    };
+    let entries = refs
+        .iter()
+        .map(|r| QueueEntry {
+            ref_: (*r).into(),
+            media_id: media,
+            unit: None,
+            source_id: "s".into(),
+            source_name: "S".into(),
+            title: "Release".into(),
+            quality: "WEBDL-1080p".into(),
+            method: GrabMethod::Auto,
+            info_url: None,
+            state: QueueState::Active,
+            progress: 0.1,
+            size_bytes: None,
+            bytes_per_second: None,
+            eta_seconds: None,
+            error: None,
+        })
+        .collect();
+    fliks_server::plugins::queue::set(&h.st, plugin, entries)
+        .await
+        .unwrap();
+}

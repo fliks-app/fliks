@@ -456,21 +456,6 @@ impl host::Host for Ctx {
             Ok(())
         })
     }
-    async fn progress_set(
-        &mut self,
-        media_id: u32,
-        downloads: Vec<t::DownloadProgress>,
-    ) -> Result<(), HostError> {
-        let app = self.app();
-        let id = self.sh.id.clone();
-        call!(self, "progress.set", ["events:emit"], HOST_CALL, async {
-            let app = app?;
-            super::events::progress_gates()
-                .set(&app, &id, media_id as i32, &downloads)
-                .await
-        })
-    }
-
     async fn acquisition_sources_set(&mut self, sources: Vec<t::Source>) -> Result<(), HostError> {
         let app = self.app();
         let id = self.sh.id.clone();

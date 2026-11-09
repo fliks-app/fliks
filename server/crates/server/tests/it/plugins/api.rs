@@ -906,95 +906,15 @@ async fn restore_stops_and_reregisters_plugins() {
     s.finish().await;
 }
 
-/// `progress.set` (rule 33): one emission per media per second, the newest of a window wins.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn progress_is_coalesced_per_media() {
-    use fliks_server::events::{Bus, SseEvent};
-    use fliks_server::plugins::runtime::fliks::plugin::types::{DownloadProgress, DownloadState};
-    let Some(s) = Scratch::create("progress").await else {
-        return;
-    };
-    let h = harness(&s, "progress", |_| {}).await;
-    let mut rx = h.st.hub.subscribe();
-    let d = |p: f64| DownloadProgress {
-        ref_: "a".into(),
-        unit: None,
-        progress: p,
-        bytes_per_second: None,
-        eta_seconds: None,
-        state: DownloadState::Active,
-    };
-    let gates = fliks_server::plugins::events::progress_gates();
-    let media = 424_242;
-    sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'm', 'movie')")
-        .bind(media)
-        .execute(&h.st.db)
-        .await
-        .unwrap();
-    let t = std::time::Instant::now();
-    let seen = Arc::new(Mutex::new(vec![]));
-    let sink = seen.clone();
-    let collect = tokio::spawn(async move {
-        while let Ok(bus) = rx.recv().await {
-            if let Bus::Sse(SseEvent::DownloadProgress {
-                media_id,
-                downloads,
-                ..
-            }) = &*bus
-                && *media_id == i64::from(media)
-            {
-                let v = serde_json::to_value(downloads).unwrap();
-                let first = v.as_array().unwrap().first().map(|d| d["progress"].clone());
-                sink.lock()
-                    .unwrap()
-                    .push((t.elapsed().as_millis() / 500, first));
-            }
-        }
-    });
-    for p in [0.1, 0.2, 0.3] {
-        gates.set(&h.st, "fliks.x", media, &[d(p)]).await.unwrap();
-    }
-    tokio::time::sleep(Duration::from_millis(2500)).await;
-    gates.set(&h.st, "fliks.x", media, &[d(0.4)]).await.unwrap();
-    gates.set(&h.st, "fliks.x", media, &[]).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    collect.abort();
-    let seen = seen.lock().unwrap().clone();
-    // Emitted at once, then the newest of the window after 1 s; the same after an idle gap.
-    let at: Vec<_> = seen.iter().map(|(_, p)| p.clone()).collect();
-    assert_eq!(
-        at,
-        vec![Some(json!(0.1)), Some(json!(0.3)), Some(json!(0.4)), None],
-        "{seen:?}"
-    );
-    assert_eq!(
-        seen.iter().map(|(t, _)| *t).collect::<Vec<_>>(),
-        vec![0, 2, 5, 7],
-        "{seen:?}"
-    );
-    h.finish().await;
-    s.finish().await;
-}
-
-/// `progress.set` (rule 65): two plugins on one media never overwrite each other; the emission is the union.
+/// `queue.set` (rule 65): two plugins on one media never overwrite each other; the emission is the union.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn progress_of_two_plugins_is_their_union() {
     use fliks_server::events::{Bus, SseEvent};
-    use fliks_server::plugins::runtime::fliks::plugin::types::{DownloadProgress, DownloadState};
     let Some(s) = Scratch::create("progress_union").await else {
         return;
     };
     let h = harness(&s, "progress_union", |_| {}).await;
     let mut rx = h.st.hub.subscribe();
-    let d = |r: &str| DownloadProgress {
-        ref_: r.into(),
-        unit: None,
-        progress: 0.5,
-        bytes_per_second: None,
-        eta_seconds: None,
-        state: DownloadState::Active,
-    };
-    let gates = fliks_server::plugins::events::progress_gates();
     let media = 424_243;
     sqlx::query("INSERT INTO media (id, title, type) VALUES ($1, 'm', 'movie')")
         .bind(media)
@@ -1017,11 +937,10 @@ async fn progress_of_two_plugins_is_their_union() {
             }
         }
     });
-    gates.set(&h.st, "b", media, &[d("b1")]).await.unwrap();
-    gates.set(&h.st, "a", media, &[d("a1")]).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    gates.set(&h.st, "b", media, &[]).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    queue_set(&h, "b", media as u32, &["b1"]).await;
+    queue_set(&h, "a", media as u32, &["a1"]).await;
+    queue_set(&h, "b", media as u32, &[]).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     collect.abort();
     assert_eq!(
         *seen.lock().unwrap(),

@@ -398,7 +398,7 @@ pub async fn downloads(db: &PgPool, media: i32) -> Vec<Download> {
     let rows: Vec<Progress7> =
         sqlx::query_as(
             r#"SELECT "ref", season, episode, progress, "bytesPerSecond", eta, state FROM acquisition_queue
-               WHERE "mediaId" = $1 AND "finishedAt" IS NULL AND state = ANY($2) ORDER BY id"#,
+               WHERE "mediaId" = $1 AND "finishedAt" IS NULL AND state = ANY($2) ORDER BY "pluginId", id"#,
         )
         .bind(media)
         .bind(IN_FLIGHT.map(String::from).to_vec())
