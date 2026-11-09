@@ -1,6 +1,7 @@
 //! Acquisition providers (`plugins.md` section K) through the fixture plugin.
 use super::harness::*;
 use fliks_server::events::{Bus, DomainEvent, SseEvent};
+use fliks_server::plugins::runtime::fliks::plugin::types::{DownloadProgress, DownloadState};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -116,6 +117,43 @@ async fn a_provider_publishes_sources_and_receives_arbitrated_requests() {
     }
     assert_eq!(sources, 1, "an unchanged list is not announced again");
     assert_eq!((failed, queue), (vec!["boom".to_owned()], 1));
+
+    // `acquisition.inFlight` (rule 67): another plugin's set shows, the caller's own never does.
+    let held = |ref_: &str| DownloadProgress {
+        ref_: ref_.into(),
+        unit: None,
+        progress: 0.1,
+        bytes_per_second: None,
+        eta_seconds: None,
+        state: DownloadState::Active,
+    };
+    let gates = fliks_server::plugins::events::progress_gates();
+    gates
+        .set(&h.st, "other", movie, &[held("o")])
+        .await
+        .unwrap();
+    gates
+        .set(&h.st, "fliks.fixture", album, &[held("f")])
+        .await
+        .unwrap();
+    let m = movie.to_string();
+    assert_eq!(
+        call(&h, "inflight", &[("media", &m)]).await["ok"],
+        json!(["other"])
+    );
+    assert_eq!(
+        call(
+            &h,
+            "inflight",
+            &[("media", &m), ("group", "1"), ("number", "2")]
+        )
+        .await["ok"],
+        json!(["other"])
+    );
+    assert_eq!(
+        call(&h, "inflight", &[("media", &album.to_string())]).await["ok"],
+        json!([])
+    );
 
     assert_eq!(h.st.plugins.pickers.sources_of("fliks.fixture").len(), 2);
     h.call(

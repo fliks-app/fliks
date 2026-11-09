@@ -124,6 +124,32 @@ impl Inner {
         }
     }
 
+    /// The plugins other than `caller` holding a download that covers `(season, episode)` of the media.
+    fn in_flight(
+        &self,
+        media: i32,
+        caller: &str,
+        season: Option<u32>,
+        episode: Option<u32>,
+    ) -> Vec<String> {
+        // ponytail: a Download has no family, so one family in flight blocks every family of a book or album.
+        let covers = |d: &Download| match (season, episode) {
+            (None, _) => true,
+            (Some(s), None) => d.season_number.is_none_or(|n| n == i64::from(s)),
+            (Some(s), Some(e)) => {
+                d.season_number.is_none_or(|n| n == i64::from(s))
+                    && d.episode_number.is_none_or(|n| n == i64::from(e))
+            }
+        };
+        self.sets
+            .get(&media)
+            .into_iter()
+            .flatten()
+            .filter(|(plugin, set)| plugin.as_str() != caller && set.iter().any(covers))
+            .map(|(plugin, _)| plugin.clone())
+            .collect()
+    }
+
     fn union(&self, media: i32) -> Vec<Download> {
         self.sets
             .get(&media)
@@ -202,6 +228,20 @@ impl Progress {
             }
         };
         push_progress(&st, media_id, pending).await;
+    }
+
+    /// The other plugins with a download in flight that covers `unit` of the media (`plugins.md` rule 67).
+    pub fn in_flight(
+        &self,
+        plugin: &str,
+        media_id: i32,
+        unit: Option<&t::UnitRef>,
+    ) -> Result<Vec<String>, HostError> {
+        let (season, episode) = units::video(unit)?;
+        Ok(self
+            .0
+            .lock_clean()
+            .in_flight(media_id, plugin, season, episode))
     }
 
     /// The plugin's set plus a placeholder, pushed at once (`acquisition.grabbed`).
@@ -422,6 +462,58 @@ mod tests {
         assert_eq!(refs(&i, 1), ["a3"]);
         i.store("a", 1, vec![]);
         assert!(refs(&i, 1).is_empty() && i.sets.is_empty());
+    }
+
+    fn dl_at(season: Option<i64>, episode: Option<i64>) -> Download {
+        Download {
+            season_number: season,
+            episode_number: episode,
+            ..dl("x")
+        }
+    }
+
+    #[test]
+    fn in_flight_skips_the_caller_and_matches_units() {
+        let mut i = Inner::default();
+        i.store("a", 1, vec![dl_at(Some(2), Some(3))]);
+        i.store("b", 1, vec![dl_at(Some(2), None)]);
+        i.store("c", 1, vec![dl_at(Some(5), Some(1))]);
+        fn f(i: &Inner, caller: &str, s: Option<u32>, e: Option<u32>) -> Vec<String> {
+            i.in_flight(1, caller, s, e)
+        }
+        assert_eq!(
+            f(&i, "a", None, None),
+            ["b", "c"],
+            "no unit: any download, caller excluded"
+        );
+        assert_eq!(
+            f(&i, "z", Some(2), Some(3)),
+            ["a", "b"],
+            "a pack covers its episode"
+        );
+        assert_eq!(
+            f(&i, "z", Some(2), Some(4)),
+            ["b"],
+            "another episode of the season"
+        );
+        assert_eq!(
+            f(&i, "z", Some(2), None),
+            ["a", "b"],
+            "a group meets the season's downloads"
+        );
+        assert_eq!(f(&i, "z", Some(5), Some(1)), ["c"]);
+        assert!(i.in_flight(2, "z", None, None).is_empty());
+        i.store("d", 1, vec![dl_at(None, None)]);
+        assert_eq!(
+            f(&i, "z", Some(9), Some(9)),
+            ["d"],
+            "a whole-media download covers all"
+        );
+        i.store("d", 1, vec![]);
+        assert!(
+            f(&i, "z", Some(9), Some(9)).is_empty(),
+            "an empty set clears"
+        );
     }
 
     #[test]

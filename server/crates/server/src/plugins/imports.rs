@@ -501,6 +501,23 @@ impl host::Host for Ctx {
         )
     }
 
+    async fn acquisition_in_flight(
+        &mut self,
+        media_id: u32,
+        unit: Option<t::UnitRef>,
+    ) -> Result<Vec<String>, HostError> {
+        let id = self.sh.id.clone();
+        call!(
+            self,
+            "acquisition.inFlight",
+            ["acquisition:candidates"],
+            HOST_CALL,
+            async {
+                super::events::progress_gates().in_flight(&id, media_id as i32, unit.as_ref())
+            }
+        )
+    }
+
     async fn deadline_remaining_ms(&mut self) -> u64 {
         self.deadline
             .saturating_duration_since(Instant::now())
