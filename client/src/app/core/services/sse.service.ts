@@ -213,7 +213,7 @@ export class SseService implements OnDestroy {
   /** Id of a subtitle whose running or queued sync was cancelled. */
   readonly subtitleSyncCancelled = new Subject<number>();
   /** A target leaving its player; transient, so not on `lastEvent`, which `remote.targets_changed` replaces before any effect runs. */
-  readonly stopped = new Subject<string>();
+  readonly stopped = new Subject<{ targetId: string; sessionId: string | null }>();
   /** `session.changed` / `session.superseded`, on their own Subject like `commands`: a supersede must not be replaced on `lastEvent` before it is read. */
   readonly sessionEvents = new Subject<SessionEvent>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
@@ -408,7 +408,7 @@ export class SseService implements OnDestroy {
           return;
         }
         if (data.type === 'remote.stopped') {
-          this.stopped.next(String(data['targetId'] ?? ''));
+          this.stopped.next({ targetId: String(data['targetId'] ?? ''), sessionId: typeof data['sessionId'] === 'string' ? data['sessionId'] : null });
           return;
         }
         if (data.type === 'session.changed' || data.type === 'session.superseded') {

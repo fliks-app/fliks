@@ -98,8 +98,10 @@ export class CastOverlayComponent {
     this.session.command({ type: 'toggle' });
   }
 
+  /** Read from the session too: the owner may not have reported since this device started following it. */
   protected toggleObserved(): void {
-    this.target.togglePlayPause();
+    if (this.paused()) this.target.play();
+    else void this.target.pause();
   }
 
   protected hide(): void {

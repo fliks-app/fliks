@@ -45,7 +45,7 @@ function setup(opts: { selected?: string | null } = {}) {
   const remoteState = signal<RemoteState | null>(null);
   const sse = {
     commands: new Subject<RemoteCommand>(),
-    stopped: new Subject<string>(),
+    stopped: new Subject<{ targetId: string; sessionId: string | null }>(),
     remoteState,
     lastEvent: signal(null),
     connectionId: signal<string | null>(null),
@@ -146,7 +146,7 @@ describe('RemoteService stop handling', () => {
     // Read from a subject, not the shared last-value signal: the server emits
     // `remote.targets_changed` immediately after, which replaced the stop
     // before any effect had run.
-    sse.stopped.next('tv#1');
+    sse.stopped.next({ targetId: 'tv#1', sessionId: null });
 
     expect(service.targetState()).toBeNull();
   });
@@ -159,7 +159,7 @@ describe('RemoteService stop handling', () => {
     // Same title at the same place: the stop is the old session leaving, so the
     // poster, title and position stay and the card only reads as loading.
     service.pendingAction.set('quality');
-    sse.stopped.next('tv#1');
+    sse.stopped.next({ targetId: 'tv#1', sessionId: null });
 
     expect(service.targetState()?.mediaTitle).toBe('A series');
     expect(service.restarting()).toBe(true);
@@ -275,6 +275,18 @@ describe('RemoteService stop handling', () => {
     remoteState.set(frame({ positionSeconds: 31 }));
     service.ingestState();
     expect(service.targetState()).toBeNull();
+  });
+
+  it('keeps the reading when the target stops another of its sessions', () => {
+    const { service, remoteState, sse } = setup();
+    remoteState.set(frame({ sessionId: 'sid-1' }));
+    service.ingestState();
+
+    sse.stopped.next({ targetId: 'tv#1', sessionId: 'preload' });
+    remoteState.set(frame({ sessionId: 'sid-1', positionSeconds: 40 }));
+    service.ingestState();
+
+    expect(service.targetState()?.positionSeconds).toBe(40);
   });
 
   it('ignores a stop announced for another target', () => {
@@ -508,7 +520,7 @@ describe('RemoteService browse', () => {
 describe('RemoteService mirrors navigation to a target', () => {
   async function routerSetup() {
     const remoteState = signal<RemoteState | null>(null);
-    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<string>(), remoteState, lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
+    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<{ targetId: string; sessionId: string | null }>(), remoteState, lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
     TestBed.configureTestingModule({
       providers: [
         RemoteService,

@@ -59,6 +59,10 @@ export interface SessionPlayer {
   active(): boolean;
   /** Stops playback after saving the position; null when it had nothing to resume. */
   yield(): Promise<SupersededPlayback | null>;
+  /** The item it holds for the account session; null when it holds none or plays for a party. */
+  itemId?(): number | null;
+  /** Beats now: the server answers a takeover this player missed, and learns its new connection. */
+  report?(): void;
 }
 
 /** What the owner's own report names: the file it plays, to tell its live reading from another item's. */
@@ -160,6 +164,19 @@ export class SessionSyncService {
       });
     });
 
+    effect(() => {
+      if (this.sse.connectionId()) untracked(() => this.players.forEach((p) => p.report?.()));
+    });
+
+    // One surface per account: a device that does not own the session holds no paused copy of its item.
+    effect(() => {
+      const s = this._session();
+      this.registered();
+      if (!s || this.role() !== 'observer' || s.state === 'parked') return;
+      const stale = [...this.players].filter((p) => !p.active() && p.itemId?.() === s.item.id);
+      untracked(() => stale.forEach((p) => void this.drop(p)));
+    });
+
     effect((onCleanup) => {
       if (this._session()?.state !== 'playing' || this.role() !== 'observer') return;
       const timer = setInterval(() => this.tick.update((n) => n + 1), 1000);
@@ -250,6 +267,18 @@ export class SessionSyncService {
     if (!h || !sid || Date.now() > h.until) return undefined;
     if (h.sid === null && !h.skip.has(sid)) h.sid = sid;
     return h.sid === sid ? true : undefined;
+  }
+
+  private readonly dropping = new Set<SessionPlayer>();
+
+  private async drop(player: SessionPlayer): Promise<void> {
+    if (this.dropping.has(player)) return;
+    this.dropping.add(player);
+    try {
+      await player.yield();
+    } finally {
+      this.dropping.delete(player);
+    }
   }
 
   /** The player has stopped on a takeover (event or beat flag): hand back the device, then, unless the takeover was a hand-over, offer to take it again. */

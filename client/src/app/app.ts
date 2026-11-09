@@ -108,12 +108,13 @@ export class App implements OnInit, OnDestroy {
 
     this.initInputModalityTracking();
 
-    // Un-gated on purpose: the Capacitor resume hook below covers mobile, but a
-    // TV app is frozen while backgrounded and has no equivalent.
-    this.visibilityListener = () => {
-      if (document.visibilityState === 'visible') this.sse.resume();
-    };
-    document.addEventListener('visibilitychange', this.visibilityListener);
+    // Native shells reconnect from the Capacitor resume hook below: a second reconnect would detach this device again.
+    if (!Capacitor.isNativePlatform()) {
+      this.visibilityListener = () => {
+        if (document.visibilityState === 'visible') this.sse.resume();
+      };
+      document.addEventListener('visibilitychange', this.visibilityListener);
+    }
 
     if (Capacitor.isNativePlatform()) {
       // On <html> too: overlays are reparented under <html>, out of reach of body-scoped selectors.

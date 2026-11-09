@@ -3136,6 +3136,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly unregisterSession = this.sessionSync.registerPlayer({
     sessionId: () => this.activeSessionId(),
     active: () => true,
+    report: () => void this.savePosition(),
     yield: async () => {
       const { mediaId, mediaFileId: fileId, episodeId } = this;
       if (!mediaId || !fileId) return null;

@@ -171,6 +171,60 @@ describe('SessionSyncService observation', () => {
   });
 });
 
+describe('SessionSyncService one surface', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const held = (itemId: number, active = false) => {
+    const yielded = vi.fn().mockResolvedValue(null);
+    const p: SessionPlayer = { sessionId: () => 'sid-old', active: () => active, itemId: () => itemId, yield: yielded };
+    return { p, yielded };
+  };
+
+  it('closes a paused local copy of the item another device plays, without a modal', async () => {
+    const { service, flush, confirm } = setup({ confirm: true });
+    const { p, yielded } = held(5);
+    service.registerPlayer(p);
+    await flush(session());
+    TestBed.tick();
+    expect(yielded).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps a local player of another item, a playing one, and one of a parked session', async () => {
+    const { service, flush } = setup();
+    const other = held(6);
+    const playing = held(5, true);
+    service.registerPlayer(other.p);
+    service.registerPlayer(playing.p);
+    await flush(session({ state: 'parked', playing: false }));
+    TestBed.tick();
+    expect(other.yielded).not.toHaveBeenCalled();
+    expect(playing.yielded).not.toHaveBeenCalled();
+  });
+
+  it('keeps the paused player of the session this device owns', async () => {
+    const { service, flush } = setup();
+    const { p, yielded } = held(5);
+    service.registerPlayer(p);
+    await flush(session({ state: 'paused', playing: false, owner: { targetId: 'phone#1', deviceName: null, formFactor: 'phone' } }));
+    TestBed.tick();
+    expect(yielded).not.toHaveBeenCalled();
+  });
+
+  it('has every player beat once the stream connects again', async () => {
+    const { service, flush, sse } = setup();
+    const report = vi.fn();
+    service.registerPlayer({ sessionId: () => 'sid-1', active: () => true, yield: async () => null, report });
+    await flush(null);
+    report.mockClear();
+    sse.connectionId.set(null);
+    TestBed.tick();
+    sse.connectionId.set('conn-2');
+    TestBed.tick();
+    expect(report).toHaveBeenCalledOnce();
+  });
+});
+
 describe('SessionSyncService takeover', () => {
   afterEach(() => TestBed.resetTestingModule());
 
