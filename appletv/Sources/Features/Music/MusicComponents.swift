@@ -91,6 +91,8 @@ struct TrackActions {
     var onPlaylist: () -> Void
     var onPlayNext: () -> Void
     var onQueue: () -> Void
+    /// Puts the track forward as a song to sing; set while a party is joined.
+    var onSing: (() -> Void)? = nil
 }
 
 /// One line of a track list: number or cover, title, artists, duration; a white pill when focused.
@@ -130,6 +132,9 @@ struct TrackLine: View {
     @ViewBuilder private func menu(_ a: TrackActions) -> some View {
         Button(action: a.onFavourite) {
             Label(tr(a.favourite ? "music.unfavourite" : "music.favourite"), systemImage: a.favourite ? "heart.slash" : "heart")
+        }
+        if let sing = a.onSing {
+            Button(action: sing) { Label(tr("karaoke.sing"), systemImage: "music.mic") }
         }
         ForEach(1...5, id: \.self) { n in
             Button { a.onRate(a.rating == n ? nil : n) } label: {

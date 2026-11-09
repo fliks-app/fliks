@@ -9,6 +9,7 @@ import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.ser
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
+import type { StemKind } from './api/karaoke.models';
 import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
@@ -32,6 +33,8 @@ import type { Media } from './api/media.service';
 import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { ToastService } from './toast.service';
+
+export type CastTrack = { itemId: number; mediaId: number; title: string; artists: string; coverUrl: string | null };
 
 export interface CastSubtitleOption {
   id: string;
@@ -238,10 +241,36 @@ export class CastPlayerService {
     };
   }
 
+  /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
+  async castStem(t: CastTrack, fileId: number, kind: StemKind, position: number, autoplay: boolean): Promise<boolean> {
+    const [token, castInfo] = await Promise.all([this.authService.ensureStreamToken(fileId), this.authService.getCastInfo()]);
+    if (!token) return false;
+    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
+    const url = `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
+    try {
+      await this.cast.loadMedia({
+        url,
+        contentType: 'audio/ogg',
+        title: t.title,
+        subtitle: t.artists,
+        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
+        mediaId: t.mediaId,
+        mediaFileId: fileId,
+        userId: this.authService.user()?.id,
+        currentTime: position,
+        autoplay,
+      });
+      return true;
+    } catch (err) {
+      console.error('[cast] stem LOAD failed', err);
+      return false;
+    }
+  }
+
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
-  async castTrack(t: { itemId: number; mediaId: number; title: string; artists: string; coverUrl: string | null }, autoplay = true) {
+  async castTrack(t: CastTrack, autoplay = true, startAt = 0) {
     const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastAudioProfile(), { startAt: 0 }),
+      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastAudioProfile(), { startAt }),
       this.authService.getCastInfo(),
     ]);
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
@@ -257,6 +286,7 @@ export class CastPlayerService {
         mediaFileId: pi.mediaFileId,
         sid: pi.sessionId,
         userId: this.authService.user()?.id,
+        currentTime: startAt,
         autoplay,
       });
       return pi;

@@ -362,7 +362,11 @@ async fn add_proposals(
             None => {
                 if track {
                     let queued: bool = sqlx::query_scalar(
-                        r#"SELECT EXISTS (SELECT 1 FROM watch_party_items WHERE "partyId" = $1 AND "itemId" = $2)"#,
+                        r#"SELECT EXISTS (SELECT 1 FROM watch_party_items i JOIN watch_parties p ON p.id = i."partyId"
+                           WHERE i."partyId" = $1 AND i."itemId" = $2
+                             AND (p.status = 'scheduled' OR i."itemId" IS NOT DISTINCT FROM p."itemId"
+                                  OR i.position > COALESCE((SELECT c.position FROM watch_party_items c
+                                                            WHERE c."partyId" = $1 AND c."itemId" = p."itemId"), -1)))"#,
                     )
                     .bind(id)
                     .bind(target)
@@ -396,14 +400,6 @@ async fn add_proposals(
                     return Err(fail(StatusCode::CONFLICT, "party.error_proposals_full"));
                 }
                 added += 1;
-                sqlx::query(
-                    r#"DELETE FROM watch_party_proposals
-                       WHERE "partyId" = $1 AND "itemId" = $2 AND "chosenAt" IS NOT NULL"#,
-                )
-                .bind(id)
-                .bind(target)
-                .execute(&mut *tx)
-                .await?;
                 sqlx::query_scalar(
                     r#"INSERT INTO watch_party_proposals ("partyId", "itemId", "proposedBy")
                        VALUES ($1, $2, $3) RETURNING id"#,
@@ -607,8 +603,14 @@ pub async fn next_singer(
 /// its singer's turn.
 async fn take(st: &AppState, a: &Authed, row: &mut db::Row, pid: i32) -> R<()> {
     let (_, item) = proposal(st, row.id, pid).await?;
-    edit_programme(st, a, row, Edit::Append(item.clone())).await?;
-    if item.item_id.is_some() {
+    let track = item.item_id.is_some();
+    let edit = if track {
+        Edit::Requeue(item.clone())
+    } else {
+        Edit::Append(item.clone())
+    };
+    edit_programme(st, a, row, edit).await?;
+    if track {
         sqlx::query(r#"UPDATE watch_party_proposals SET "chosenAt" = now() WHERE id = $1"#)
             .bind(pid)
             .execute(&st.db)

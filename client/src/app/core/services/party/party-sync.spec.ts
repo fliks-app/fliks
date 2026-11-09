@@ -31,6 +31,8 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
+    singerQueue: signal<unknown[]>([]),
+    playSinger: vi.fn().mockResolvedValue(undefined),
     closed,
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
@@ -229,6 +231,20 @@ describe('PartySync queue', () => {
     TestBed.tick();
     await Promise.resolve();
     expect(party.sendIntent.mock.calls).toEqual([['ended', { item: { mediaId: 1 } }]]);
+  });
+
+  it('plays the next singer once the party idles on the ended item, not when it moved on', async () => {
+    const { party, state } = setup({ joined: 3 });
+    party.isHost.set(true);
+    party.singerQueue.set([{ id: 1 }]);
+    state.ended.set(true);
+    TestBed.tick();
+    party.live.set({ state: 'idle', item: { mediaId: 1 } });
+    TestBed.tick();
+    expect(party.playSinger).toHaveBeenCalledTimes(1);
+    party.live.set({ state: 'idle', item: { mediaId: 1 } });
+    TestBed.tick();
+    expect(party.playSinger).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the answer on a film to the server', async () => {

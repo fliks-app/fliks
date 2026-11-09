@@ -2858,6 +2858,83 @@ async fn a_live_party_queues_tracks_round_robin_with_a_cap_and_a_cancel(pool: Pg
     );
 }
 
+#[sqlx::test(migrations = false)]
+async fn a_played_track_can_be_proposed_again_and_moves_to_the_end_of_the_programme(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (_alice, a) = c.user("alice", true).await;
+    let url = bare_party(&c, &a, &[]).await;
+    let id: i32 = url.rsplit('/').next().unwrap().parse().unwrap();
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 1})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        c.call("POST", &format!("{url}/start"), &a, None).await.0,
+        200
+    );
+    let _stream = c.stream(&a, "da").await;
+    assert_eq!(join(&c, &url, &a, "da").await.0, 200);
+    let next = || async {
+        let (_, now) = c.call("GET", &url, &a, None).await;
+        let rev = now["live"]["rev"].as_u64().unwrap();
+        c.call(
+            "POST",
+            &format!("{url}/intent"),
+            &a,
+            Some(json!({"deviceId": "da", "action": "next", "baseRev": rev})),
+        )
+        .await
+        .0
+    };
+    let order = || async {
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT "itemId" FROM watch_party_items WHERE "partyId" = $1 ORDER BY position"#,
+        )
+        .bind(id)
+        .fetch_all(&c.pool)
+        .await
+        .unwrap()
+    };
+    for n in [1, 2] {
+        assert_eq!(track(&c, &url, &a, n).await.0, 201);
+        let (s, _) = c
+            .call("POST", &format!("{url}/proposals/next"), &a, None)
+            .await;
+        assert_eq!(s, 200);
+        assert_eq!(next().await, 202);
+    }
+    let (s, e) = track(&c, &url, &a, 2).await;
+    assert_eq!(
+        (s, msg(&e)),
+        (409, Some("party.error_in_programme")),
+        "playing"
+    );
+    assert_eq!(track(&c, &url, &a, 1).await.0, 201, "played");
+    let (s, _) = c
+        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .await;
+    assert_eq!(s, 200);
+    let o = order().await;
+    assert_eq!((o.len(), o[1], o[2]), (3, 5002, 5001));
+    let chosen: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM watch_party_proposals WHERE "partyId" = $1 AND "itemId" = 5001 AND "chosenAt" IS NOT NULL"#,
+    )
+    .bind(id)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(chosen, 2, "both turns are kept");
+    assert_eq!(next().await, 202);
+    let (_, now) = c.call("GET", &url, &a, None).await;
+    assert_eq!(now["item"]["itemId"], 5001);
+}
+
 /// A second library with a film in it, which alice opens and nobody else does.
 async fn hidden_film(c: &Ctx, alice: i32) {
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

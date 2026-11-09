@@ -314,7 +314,25 @@ export class PartySync {
     if (!out?.ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
+      this.advanceFrom = out.item();
       void this.party.sendIntent('ended', { item: itemIn(out.item()) });
+    });
+  });
+
+  /** The item the host's end was sent for, until the party moves on or idles on it. */
+  private advanceFrom: ReturnType<PartyPlayable['item']> | null = null;
+
+  /** An idle party with songs waiting in the singer queue goes on to the next singer. */
+  private readonly singerEffect = effect(() => {
+    const live = this.party.live();
+    const from = this.advanceFrom;
+    if (!from || !live) return;
+    untracked(() => {
+      if (!sameItem(live.item, from)) this.advanceFrom = null;
+      else if (live.state === 'idle') {
+        this.advanceFrom = null;
+        if (this.party.isHost() && this.party.singerQueue().length > 0) void this.party.playSinger();
+      }
     });
   });
 

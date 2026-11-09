@@ -63,6 +63,8 @@ struct PartyProposal: Codable, Equatable, Identifiable {
     let proposedBy: Int
     let upvoterIds: [Int]
     let downvoterIds: [Int]
+    /// A pending song of the karaoke queue: 1 is the next singer. Absent for a film.
+    var queuePosition: Int? = nil
     var score: Int { upvoterIds.count - downvoterIds.count }
 
     /// Most upvotes first, then fewest downvotes, then the oldest (lowest id): how the server picks the start.

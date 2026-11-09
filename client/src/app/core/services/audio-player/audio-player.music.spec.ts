@@ -6,6 +6,7 @@ import { MediaService } from '../api/media.service';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
+import { KaraokeApiService } from '../api/karaoke-api.service';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
@@ -31,6 +32,8 @@ describe('AudioPlayerService music mode', () => {
   const updatePlaybackState = vi.fn();
   const stopSession = vi.fn();
   const castTrack = vi.fn();
+  const castStem = vi.fn();
+  const itemState = vi.fn();
   const cast = {
     isConnected: signal(false),
     currentTime: signal(0),
@@ -75,7 +78,8 @@ describe('AudioPlayerService music mode', () => {
           },
         },
         { provide: CastService, useValue: cast },
-        { provide: CastPlayerService, useValue: { castTrack } },
+        { provide: CastPlayerService, useValue: { castTrack, castStem } },
+        { provide: KaraokeApiService, useValue: { itemState } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
@@ -194,6 +198,22 @@ describe('AudioPlayerService music mode', () => {
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 77, sessionId: 'cs', positionSeconds: 30 }));
     await audio.close();
     expect(cast.stop).toHaveBeenCalled();
+  });
+
+  it('loads the stem on the receiver in a stem mode and the track again on original', async () => {
+    cast.isConnected.set(true);
+    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
+    castStem.mockResolvedValue(true);
+    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: {} } });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
+    (audio as unknown as { _position: { set(n: number): void } })._position.set(30);
+    audio.setStemMode('guide');
+    await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 30, true));
+    audio.setStemMode('original');
+    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30));
+    expect(stopSession).toHaveBeenCalledWith('cs');
   });
 
   describe('driven by a party', () => {
