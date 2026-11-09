@@ -52,7 +52,7 @@ pub async fn item_of(
     .await
 }
 
-async fn has_target(db: &PgPool, media: i32) -> sqlx::Result<bool> {
+pub(crate) async fn has_target(db: &PgPool, media: i32) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT COALESCE((SELECT "targetEditionId" IS NOT NULL FROM album_details WHERE "mediaId" = $1), false)"#,
     )

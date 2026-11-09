@@ -21,6 +21,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -205,6 +206,9 @@ pub async fn album_tracks(
     let group = known
         .normalize(ns, &external)
         .ok_or_else(|| bad("externalId is not a provider id"))?;
+    if ns != Namespace::MUSICBRAINZ {
+        return Ok(Json(Value::Array(vec![])));
+    }
     if !accessible_library_ids(&st.db, &a).await?.contains(&library) {
         return Err(AppError::not_found(format!("Library #{library} not found")));
     }

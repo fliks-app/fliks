@@ -418,7 +418,7 @@ pub async fn write_edition(
     edition: i32,
     ed: &Edition,
     create_missing: bool,
-) -> Result<(), AppError> {
+) -> Result<usize, AppError> {
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
     let alive: Option<i32> = sqlx::query_scalar(
@@ -429,7 +429,7 @@ pub async fn write_edition(
     .fetch_optional(&mut *tx)
     .await?;
     if alive.is_none() {
-        return Ok(());
+        return Ok(0);
     }
     let known = st.namespaces();
     external_ids::link_edition(
@@ -537,6 +537,7 @@ pub async fn write_edition(
             }
         }
     }
+    let mut created = 0;
     if create_missing {
         for t in ed
             .tracks
@@ -546,8 +547,13 @@ pub async fn write_edition(
             .map(|(_, t)| t)
         {
             let item: i32 = sqlx::query_scalar(
+                // Monitored as the album is, unless a track was left out on purpose (one owned elsewhere aside).
                 r#"INSERT INTO items ("mediaId", "editionId", monitored, title)
-                   VALUES ($1, $2, (SELECT monitored FROM media WHERE id = $1), $3) RETURNING id"#,
+                   VALUES ($1, $2, (SELECT monitored FROM media WHERE id = $1) AND NOT EXISTS (
+                     SELECT 1 FROM items x LEFT JOIN track_details xd ON xd."itemId" = x.id
+                      WHERE x."editionId" = $2 AND NOT x.monitored AND NOT EXISTS (
+                        SELECT 1 FROM track_details o JOIN item_parts op ON op."itemId" = o."itemId"
+                         WHERE o."recordingMbid" = xd."recordingMbid" AND o."mediaId" <> $1)), $3) RETURNING id"#,
             )
             .bind(media)
             .bind(edition)
@@ -563,10 +569,11 @@ pub async fn write_edition(
             .execute(&mut *tx)
             .await?;
             write_track(&mut tx, item, t).await?;
+            created += 1;
         }
     }
     tx.commit().await?;
-    Ok(())
+    Ok(created)
 }
 
 /// The id the album is linked to, if any.
@@ -648,9 +655,20 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
             .fetch_optional(&st.db)
             .await?
             .flatten();
+    // An album with files never gets tracks made for it: they would double the ones its files did not pair with.
+    let filed: bool =
+        sqlx::query_scalar(r#"SELECT EXISTS (SELECT 1 FROM item_parts WHERE "mediaId" = $1)"#)
+            .bind(media)
+            .fetch_one(&st.db)
+            .await?;
+    let mut created = 0;
     for (edition, ed) in read {
         match ed {
-            Some(ed) => write_edition(st, media, edition, &ed, target == Some(edition)).await?,
+            Some(ed) => {
+                created +=
+                    write_edition(st, media, edition, &ed, target == Some(edition) && !filed)
+                        .await?;
+            }
             None => {
                 sqlx::query(
                     r#"UPDATE editions SET "orphanedAt" = COALESCE("orphanedAt", now()) WHERE id = $1"#,
@@ -662,8 +680,15 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
         }
     }
     match target {
-        Some(edition) => super::target::leave_owned(&st.db, media, edition).await?,
-        None => drop(super::target::ensure_any(st, media, prio).await?),
+        Some(edition) if created > 0 => {
+            super::target::leave_owned(&st.db, media, edition).await?;
+        }
+        Some(_) => {}
+        None => {
+            if let Err(e) = super::target::ensure_any(st, media, prio).await {
+                tracing::warn!("album #{media}: no target edition yet: {}", e.text());
+            }
+        }
     }
     Ok(true)
 }

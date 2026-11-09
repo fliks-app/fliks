@@ -112,6 +112,13 @@ pub(super) async fn import_album(
     )
     .await?;
     if let Some(r) = recordings {
+        if !want::has_target(&st.db, media).await? {
+            discard(st, media, MediaKind::Album).await;
+            return Err(AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "The track list is unavailable, try again later",
+            ));
+        }
         target::select_recordings(&st.db, media, &r).await?;
     }
     let acl = accessible_library_ids(&st.db, a).await?;

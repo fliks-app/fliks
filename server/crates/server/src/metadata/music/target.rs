@@ -164,6 +164,26 @@ pub async fn preview(
         .tracks)
 }
 
+/// An album that was just monitored wants every track of its target edition, unless its files stand for it.
+pub async fn monitor_unfiled(db: &PgPool, media: i32) -> sqlx::Result<()> {
+    let edition: Option<i32> = sqlx::query_scalar(
+        r#"SELECT "targetEditionId" FROM album_details ad WHERE ad."mediaId" = $1
+             AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."mediaId" = $1)"#,
+    )
+    .bind(media)
+    .fetch_optional(db)
+    .await?
+    .flatten();
+    let Some(edition) = edition else {
+        return Ok(());
+    };
+    sqlx::query(r#"UPDATE items SET monitored = true WHERE "editionId" = $1 AND NOT monitored"#)
+        .bind(edition)
+        .execute(db)
+        .await?;
+    leave_owned(db, media, edition).await
+}
+
 /// Keeps monitored only the tracks of the target edition whose recording is in `recordings`.
 pub async fn select_recordings(db: &PgPool, media: i32, recordings: &[String]) -> sqlx::Result<()> {
     sqlx::query(
@@ -345,5 +365,33 @@ mod tests {
         .unwrap();
         // the recording outside the selection is dropped, the track with no recording id stays
         assert_eq!(monitored, [false, true]);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn monitoring_an_album_wants_its_tracks_unless_its_files_stand_for_it(db: PgPool) {
+        two_albums(&db).await;
+        for media in [1, 2] {
+            let edition: i32 =
+                sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = $1"#)
+                    .bind(media)
+                    .fetch_one(&db)
+                    .await
+                    .unwrap();
+            set_target(&db, media, edition).await.unwrap();
+        }
+        sqlx::query("UPDATE items SET monitored = false")
+            .execute(&db)
+            .await
+            .unwrap();
+        monitor_unfiled(&db, 1).await.unwrap();
+        monitor_unfiled(&db, 2).await.unwrap();
+        let wanted: Vec<(i32, bool)> = sqlx::query_as(
+            r#"SELECT i."mediaId", i.monitored FROM items i ORDER BY i."mediaId", i.id"#,
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        // album 1 holds a file: untouched; album 2: the track owned through album 1 stays out
+        assert_eq!(wanted, [(1, false), (1, false), (2, false), (2, true)]);
     }
 }

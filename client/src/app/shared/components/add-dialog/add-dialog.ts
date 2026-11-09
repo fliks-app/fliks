@@ -76,6 +76,7 @@ export class AddDialogComponent {
   protected readonly selectedTracks = signal<Set<string>>(new Set());
   protected readonly tracksLoading = signal(false);
   protected readonly tracksFailed = signal(false);
+  private tracksSeq = 0;
   protected readonly formatDuration = formatDuration;
 
   /** An album added whole lets the tracks to monitor be picked; a single wanted track or a request does not. */
@@ -96,7 +97,7 @@ export class AddDialogComponent {
     if (this.isVideo()) return this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
     if (this.picksTracks() && (this.tracksLoading() || (this.selectedTracks().size === 0 && this.tracks().length > 0))) return false;
-    return this.audioQualityId() != null;
+    return this.mode() === 'import' || this.audioQualityId() != null;
   });
   protected readonly titleKey = computed(() => {
     const r = this.req();
@@ -116,7 +117,7 @@ export class AddDialogComponent {
       this.show();
       return;
     }
-    if (askNothing(req, this.choices())) {
+    if (askNothing(req, mode, this.choices())) {
       this.pick(this.libraries()[0] ?? null);
       await this.submit();
       return;
@@ -132,8 +133,10 @@ export class AddDialogComponent {
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
+    this.tracksSeq++;
     this.tracks.set([]);
     this.selectedTracks.set(new Set());
+    this.tracksLoading.set(false);
     this.tracksFailed.set(false);
     this.wants.set([{ family: 'text', language: null }]);
   }
@@ -195,17 +198,21 @@ export class AddDialogComponent {
   private async loadTracks(r: AddRequest) {
     const library = this.libraryId();
     if (library == null) return;
+    const seq = ++this.tracksSeq;
+    this.tracks.set([]);
+    this.selectedTracks.set(new Set());
     this.tracksLoading.set(true);
     this.tracksFailed.set(false);
     try {
-      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library)).filter((t) => t.recordingId != null);
-      if (this.libraryId() !== library) return;
+      const seen = new Set<string>();
+      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
+      if (seq !== this.tracksSeq) return;
       this.tracks.set(tracks);
       this.selectedTracks.set(new Set(tracks.map((t) => t.recordingId!)));
     } catch {
-      this.tracksFailed.set(true);
+      if (seq === this.tracksSeq) this.tracksFailed.set(true);
     } finally {
-      this.tracksLoading.set(false);
+      if (seq === this.tracksSeq) this.tracksLoading.set(false);
     }
   }
 
@@ -314,8 +321,9 @@ export class AddDialogComponent {
     }
   }
 
-  private audioWants(): WantSpec[] {
-    return [{ family: 'audio', language: null, qualityProfileId: this.audioQualityId() }];
+  private audioWants(): WantSpec[] | undefined {
+    const q = this.audioQualityId();
+    return q == null ? undefined : [{ family: 'audio', language: null, qualityProfileId: q }];
   }
 
   private readyWants(): (WantSpec & { qualityProfileId: number })[] {
@@ -332,7 +340,7 @@ export class AddDialogComponent {
     if (r.kind === 'book') {
       body = { mediaType: 'book', externalId: r.externalId, title: r.title, wants: this.readyWants(), ...place };
     } else if (r.kind === 'album') {
-      body = { mediaType: 'album', externalId: r.externalId, title: r.title, wants: this.audioWants(), ...place };
+      body = { mediaType: 'album', externalId: r.externalId, title: r.title, wants: [{ family: 'audio', language: null, qualityProfileId: this.audioQualityId() }], ...place };
     } else {
       body = {
         mediaType: r.kind as 'movie' | 'series',
