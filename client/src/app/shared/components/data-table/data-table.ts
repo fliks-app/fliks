@@ -15,7 +15,8 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { LucideArrowLeft, LucideChevronRight, LucideEllipsisVertical } from '@lucide/angular';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom, type Observable } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
@@ -131,6 +132,8 @@ export class DataTableComponent implements OnInit {
   readonly refreshMs = input(0);
   /** SSE event types that reload the list as they arrive. */
   readonly refreshOn = input<readonly string[]>([]);
+  /** Rows pushed by the server replace the rows of the same `id` in place; `null` asks for a reload. */
+  readonly rowPatches = input<Observable<readonly TableRow[] | null> | null>(null);
 
   readonly rows = signal<TableRow[]>([]);
   readonly loading = signal(true);
@@ -171,6 +174,8 @@ export class DataTableComponent implements OnInit {
     this.requestRefresh();
   };
 
+  private readonly destroyRef = inject(DestroyRef);
+
   constructor() {
     const sse = inject(SseService);
     effect(() => {
@@ -181,7 +186,7 @@ export class DataTableComponent implements OnInit {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisible);
     }
-    inject(DestroyRef).onDestroy(() => {
+    this.destroyRef.onDestroy(() => {
       if (this.searchDebounce) clearTimeout(this.searchDebounce);
       if (this.refreshTimer) clearInterval(this.refreshTimer);
       if (this.trailingRefresh) clearTimeout(this.trailingRefresh);
@@ -193,6 +198,9 @@ export class DataTableComponent implements OnInit {
 
   ngOnInit(): void {
     void this.loadRows();
+    this.rowPatches()
+      ?.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((patch) => (patch ? this.patchRows(patch) : this.requestRefresh()));
     const declared = this.refreshMs();
     if (declared > 0) {
       this.refreshTimer = setInterval(
@@ -200,6 +208,11 @@ export class DataTableComponent implements OnInit {
         Math.max(declared, REFRESH_MIN_MS),
       );
     }
+  }
+
+  private patchRows(patch: readonly TableRow[]): void {
+    const byId = new Map(patch.map((r) => [r.id, r]));
+    this.rows.update((rows) => rows.map((r) => byId.get(r.id) ?? r));
   }
 
   /** The button: the user asked, so the reload shows itself. */

@@ -1,6 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { TranslateService } from '@ngx-translate/core';
+import { filter, firstValueFrom, timeout } from 'rxjs';
+import { SseService } from '../../core/services/sse.service';
+import { ToastService } from '../../core/services/toast.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { ReleasePickerPair } from '@fliks/plugin-ui';
 import type { AcquisitionProvider } from '../../core/plugin-ui/plugin-ui-response';
@@ -45,6 +48,9 @@ export interface GrabBody {
   infoUrl?: string;
 }
 
+/** A search across providers can take minutes behind a busy lane. */
+const GRAB_BEST_WAIT_MS = 10 * 60_000;
+
 /** Substitutes `:id`/`:groupId`/`:itemId` and prefixes the plugin's proxy path.
  *  Null (never a request) when a placeholder the target doesn't cover survives. */
 export function resolveReleasePickerUrl(pluginId: string, route: string, t: AcquisitionTarget): string | null {
@@ -59,6 +65,9 @@ export function resolveReleasePickerUrl(pluginId: string, route: string, t: Acqu
 export class MediaDetailReleasePickerService {
   private readonly http = inject(HttpClient);
   private readonly registry = inject(PluginUiRegistryService);
+  private readonly sse = inject(SseService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
 
   /** Providers able to search this target, in the admin order. */
   providersFor(target: Pick<AcquisitionTarget, 'kind' | 'level'>): AcquisitionProvider[] {
@@ -80,11 +89,24 @@ export class MediaDetailReleasePickerService {
     return firstValueFrom(this.http.post<void>(url, { family: target.family, language: target.language ?? null, ...body }));
   }
 
-  /** The core's search across every provider and grab of the best release (`POST /api/media/:id/grab-best`). */
+  /** The core's search across every provider and grab of the best release (`POST /api/media/:id/grab-best`): the
+   *  server answers 202 and reports the outcome as an SSE event, awaited here; anything but a grab is toasted and thrown. */
   async grabBest(target: AcquisitionTarget): Promise<void> {
     const { groupId, itemId, family, language } = target;
+    const mine = (e: Record<string, unknown>): boolean => {
+      const s = (e['scope'] ?? {}) as Record<string, unknown>;
+      return s['mediaId'] === target.mediaId && s['family'] === family && (s['groupId'] ?? null) === (groupId ?? null) && (s['itemId'] ?? null) === (itemId ?? null);
+    };
+    // Subscribed before the request: the outcome can land before the 202 does.
+    const outcome = firstValueFrom(
+      this.sse.grabBestEvents.pipe(filter(mine), timeout(GRAB_BEST_WAIT_MS)),
+    ).catch(() => null);
     const body = { groupId, itemId, family, language: language ?? null };
-    return firstValueFrom(this.http.post<void>(`/api/media/${target.mediaId}/grab-best`, body));
+    await firstValueFrom(this.http.post<unknown>(`/api/media/${target.mediaId}/grab-best`, body));
+    const result = ((await outcome)?.['outcome'] as string | undefined) ?? 'timeout';
+    if (result === 'grabbed') return;
+    this.toast.error(this.translate.instant(`media_detail.grab_best_${result}`));
+    throw new Error(`grab-best: ${result}`);
   }
 
   /** Throws rather than firing a malformed request: every caller picked the provider from `providersFor`. */

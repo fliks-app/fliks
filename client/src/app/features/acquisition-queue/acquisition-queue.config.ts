@@ -11,8 +11,8 @@ const k = (key: string) => `acquisition_queue.${key}`;
 export const QUEUE_URL = '/api/acquisition/queue';
 export const HISTORY_URL = '/api/acquisition/history';
 
-/** Both lists reload on these: a state change, and any report of a provider. */
-export const REFRESH_ON = ['queue.updated', 'acquisition.queue'];
+/** Both lists reload when a row joins or leaves; a provider's progress reports patch the queue rows in place. */
+export const REFRESH_ON = ['queue.updated'];
 
 export const STATE_LABELS: Record<string, string> = {
   queued: k('state_queued'),

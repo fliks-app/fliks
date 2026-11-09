@@ -5,7 +5,7 @@ export const PERMISSION_INCLUDES: Readonly<Record<string, readonly string[]>> = 
 
 /** Core permissions grouped by domain, in display order. */
 export const PERMISSION_GROUPS: readonly { id: string; permissions: readonly string[] }[] = [
-  { id: 'media', permissions: ['media.read', 'media.create', 'media.edit', 'media.delete', 'media.grab'] },
+  { id: 'media', permissions: ['media.read', 'media.create', 'media.edit', 'media.delete', 'media.grab', 'queue.manage'] },
   { id: 'livetv', permissions: ['livetv.read'] },
   { id: 'requests', permissions: ['requests.create', 'requests.manage'] },
   { id: 'subtitles', permissions: ['subtitles.manage'] },

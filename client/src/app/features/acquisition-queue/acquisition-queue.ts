@@ -1,4 +1,6 @@
 import { Component, inject } from '@angular/core';
+import { map } from 'rxjs';
+import { SseService } from '../../core/services/sse.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
@@ -35,6 +37,13 @@ export class AcquisitionQueueComponent {
   protected readonly historyActions = HISTORY_ACTIONS;
   protected readonly historyListActions = HISTORY_LIST_ACTIONS;
   protected readonly refreshOn = REFRESH_ON;
+  /** `rows` of a provider's report patch the queue; a report without them (many changes) reloads it. */
+  protected readonly rowPatches = inject(SseService).queueEvents.pipe(
+    map((e) => {
+      const rows = (e['payload'] as { rows?: unknown } | undefined)?.rows;
+      return Array.isArray(rows) ? (rows as TableRow[]) : null;
+    }),
+  );
 
   /** The title cell opens the row's media page; no media type, no link. */
   protected readonly resolveAction = (

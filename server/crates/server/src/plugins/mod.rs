@@ -165,6 +165,7 @@ pub struct Plugins {
     pub namespaces: Arc<namespaces::Known>,
     pub counts: counts::Counts,
     pub pickers: picker::Pickers,
+    pub sweeps: sweep::Sweeps,
     pub staging: staging::Staging,
     pub logs: Arc<logs::Logs>,
     host: OnceLock<Arc<Host>>,
@@ -214,6 +215,7 @@ impl Plugins {
             namespaces: Arc::default(),
             counts: counts::Counts::default(),
             pickers: picker::Pickers::default(),
+            sweeps: sweep::Sweeps::default(),
             logs: Arc::default(),
             host: OnceLock::new(),
             locks: KeyedLocks::default(),
@@ -353,14 +355,48 @@ impl Plugins {
         self.counts.forget(id);
         if let Some(app) = self.app() {
             app.images.forget_hosts(id);
-            if self.pickers.forget(id) {
-                app.hub
-                    .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
-            }
-            events::progress_gates().forget(app, id).await;
-            queue::close_plugin(app, id).await;
+            self.drop_acquisition(app, id).await;
         }
         self.registry.withdraw(id, true);
+    }
+
+    /// What a plugin that stopped working leaves behind: its sources, placeholders and open rows (rule 71).
+    async fn drop_acquisition(&self, app: &AppState, id: &str) {
+        if self.pickers.forget(id) {
+            app.hub
+                .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
+        }
+        events::progress_gates().forget(app, id).await;
+        queue::close_plugin(app, id).await;
+    }
+
+    /// Follows a runtime's state: the circuit breaker drops its acquisition state (rule 71), and a provider
+    /// turning ready or not changes what the buttons offer (rule 63).
+    pub(super) fn watch_acquisition(&self, rt: Arc<PluginRt>) {
+        let Some(st) = self.app().cloned() else {
+            return;
+        };
+        tokio::spawn(async move {
+            let id = rt.sh.id.to_string();
+            let mut w = rt.watch();
+            let mut ready = *w.borrow_and_update() == State::Ready;
+            while w.changed().await.is_ok() {
+                let s = *w.borrow_and_update();
+                let plugins = &st.plugins;
+                if s == State::Failed && plugins.rt(&id).is_none_or(|r| Arc::ptr_eq(&r, &rt)) {
+                    plugins.drop_acquisition(&st, &id).await;
+                } else if (s == State::Ready) != ready
+                    && plugins.registry.release_picker_of(&id).is_some()
+                {
+                    st.hub
+                        .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
+                }
+                ready = s == State::Ready;
+                if matches!(s, State::Failed | State::Stopped) {
+                    return;
+                }
+            }
+        });
     }
 
     /// Uninstall: nothing the plugin declared is true any more.
@@ -500,14 +536,13 @@ impl Plugins {
         let name = payload["type"].as_str().unwrap_or_default().to_owned();
         self.push_to_plugins(&name, &payload);
         if name == picker::REQUESTED {
-            let (me, st) = (self.clone(), st.clone());
             let ids: Vec<u32> = payload["mediaIds"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter_map(|v| u32::try_from(v.as_i64()?).ok())
                 .collect();
-            tokio::spawn(async move { me.request_sweep(&st, ids).await });
+            self.request_sweep(st, ids);
         }
         webhooks::dispatch(st, &name, payload);
     }

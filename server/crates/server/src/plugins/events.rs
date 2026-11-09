@@ -9,6 +9,7 @@ use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// Enabled users who can open the media's page (`viewersForMedia`); admins-equivalent when none.
 pub async fn viewers(st: &AppState, media_id: Option<i32>) -> Vec<i32> {
@@ -73,10 +74,31 @@ pub async fn push_progress(st: &AppState, media_id: i32, mut downloads: Vec<Down
     );
 }
 
+/// A placeholder outlives its grab by at most this long when no `queue.set` entry covers it.
+const PLACEHOLDER_TTL: Duration = Duration::from_secs(600);
+
+struct Held {
+    d: Download,
+    at: Instant,
+}
+
+impl Held {
+    fn live(&self, now: Instant) -> bool {
+        now.duration_since(self.at) < PLACEHOLDER_TTL
+    }
+}
+
+/// A placeholder's unit overlaps an entry's when neither names a different season or episode.
+fn overlaps(d: &Download, season: Option<i32>, episode: Option<i32>) -> bool {
+    let same =
+        |a: Option<i64>, b: Option<i32>| a.is_none_or(|a| b.is_none_or(|b| a == i64::from(b)));
+    same(d.season_number, season) && same(d.episode_number, episode)
+}
+
 /// The `acquisition.grabbed` placeholders (`plugins.md` rule 72): a transfer is in flight from the grab until
-/// its plugin's next `queue.set`.
+/// a `queue.set` entry of its plugin covers it, or its time is up.
 #[derive(Default)]
-pub struct Progress(Mutex<HashMap<i32, BTreeMap<String, Vec<Download>>>>);
+pub struct Progress(Mutex<HashMap<i32, BTreeMap<String, Vec<Held>>>>);
 
 impl Progress {
     /// The plugins other than `caller` holding a placeholder that covers `(season, episode)` of the media.
@@ -96,54 +118,104 @@ impl Progress {
                     && d.episode_number.is_none_or(|n| n == i64::from(e))
             }
         };
+        let now = Instant::now();
         self.0
             .lock_clean()
             .get(&media)
             .into_iter()
             .flatten()
-            .filter(|(plugin, set)| plugin.as_str() != caller && set.iter().any(covers))
+            .filter(|(plugin, set)| {
+                plugin.as_str() != caller && set.iter().any(|h| h.live(now) && covers(&h.d))
+            })
             .map(|(plugin, _)| plugin.clone())
             .collect()
     }
 
+    /// The media holding a placeholder.
+    pub fn media_ids(&self) -> Vec<i32> {
+        self.0.lock_clean().keys().copied().collect()
+    }
+
     /// The media's placeholders.
     pub fn union(&self, media: i32) -> Vec<Download> {
+        let now = Instant::now();
         self.0
             .lock_clean()
             .get(&media)
-            .map(|m| m.values().flatten().cloned().collect())
+            .map(|m| {
+                m.values()
+                    .flatten()
+                    .filter(|h| h.live(now))
+                    .map(|h| h.d.clone())
+                    .collect()
+            })
             .unwrap_or_default()
+    }
+
+    /// Drops the placeholders `keep` refuses; the media they were held on.
+    fn drop_where(&self, mut keep: impl FnMut(&str, i32, &Held) -> bool) -> Vec<i32> {
+        let mut g = self.0.lock_clean();
+        let mut touched = BTreeSet::new();
+        g.retain(|media, plugins| {
+            plugins.retain(|plugin, set| {
+                let before = set.len();
+                set.retain(|h| keep(plugin, *media, h));
+                if set.len() != before {
+                    touched.insert(*media);
+                }
+                !set.is_empty()
+            });
+            !plugins.is_empty()
+        });
+        touched.into_iter().collect()
     }
 
     /// Drops the plugin's placeholders; the media they held.
     pub fn retire(&self, plugin: &str) -> Vec<i32> {
-        let mut g = self.0.lock_clean();
-        let held: Vec<i32> = g
-            .iter()
-            .filter(|(_, m)| m.contains_key(plugin))
-            .map(|(id, _)| *id)
-            .collect();
-        for id in &held {
-            if let Some(m) = g.get_mut(id) {
-                m.remove(plugin);
-                if m.is_empty() {
-                    g.remove(id);
-                }
-            }
-        }
-        held
+        self.drop_where(|p, _, _| p != plugin)
     }
 
-    /// The plugin's placeholders plus one, pushed at once (`acquisition.grabbed`).
-    async fn placeholder(&self, st: &AppState, plugin: &str, media_id: i32, d: Download) {
+    /// Drops the plugin's placeholders that an entry of its snapshot covers; the media they held.
+    pub fn retire_covered(
+        &self,
+        plugin: &str,
+        covered: &[(i32, Option<i32>, Option<i32>)],
+    ) -> Vec<i32> {
+        self.drop_where(|p, media, h| {
+            p != plugin
+                || !covered
+                    .iter()
+                    .any(|(m, s, e)| *m == media && overlaps(&h.d, *s, *e))
+        })
+    }
+
+    /// Drops the placeholders whose time is up as of `now`; the media they held.
+    fn expire(&self, now: Instant) -> Vec<i32> {
+        self.drop_where(|_, _, h| h.live(now))
+    }
+
+    fn hold(&self, plugin: &str, media: i32, d: Download, at: Instant) {
         self.0
             .lock_clean()
-            .entry(media_id)
+            .entry(media)
             .or_default()
             .entry(plugin.to_owned())
             .or_default()
-            .push(d);
+            .push(Held { d, at });
+    }
+
+    /// The plugin's placeholders plus one, pushed at once (`acquisition.grabbed`); the push after its time is up.
+    async fn placeholder(&self, st: &AppState, plugin: &str, media_id: i32, d: Download) {
+        self.hold(plugin, media_id, d, Instant::now());
         push_progress(st, media_id, self.union(media_id)).await;
+        let st = st.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(PLACEHOLDER_TTL).await;
+            let gates = progress_gates();
+            for id in gates.expire(Instant::now()) {
+                push_progress(&st, id, gates.union(id)).await;
+            }
+        });
     }
 
     /// The plugin stopped: its placeholders go and every media it held gets the set that remains.
@@ -336,10 +408,9 @@ mod tests {
     }
 
     fn put(p: &Progress, plugin: &str, media: i32, set: Vec<Download>) {
-        p.0.lock_clean()
-            .entry(media)
-            .or_default()
-            .insert(plugin.to_owned(), set);
+        for d in set {
+            p.hold(plugin, media, d, Instant::now());
+        }
     }
 
     fn dl_at(season: Option<i64>, episode: Option<i64>) -> Download {
@@ -399,5 +470,39 @@ mod tests {
             ["d"],
             "a whole-media download covers all"
         );
+    }
+
+    #[test]
+    fn a_snapshot_retires_only_the_placeholders_its_entries_cover() {
+        let p = Progress::default();
+        put(&p, "a", 1, vec![dl_at(Some(1), Some(2))]);
+        put(&p, "a", 2, vec![dl_at(None, None)]);
+        // A snapshot taken before the grab names neither media: nothing goes.
+        assert!(p.retire_covered("a", &[(3, None, None)]).is_empty());
+        assert!(p.retire_covered("a", &[(1, Some(2), Some(2))]).is_empty());
+        // Another plugin's entry never retires it.
+        assert!(p.retire_covered("b", &[(1, Some(1), Some(2))]).is_empty());
+        assert_eq!(
+            p.retire_covered("a", &[(1, Some(1), None)]),
+            [1],
+            "a pack covers its episode"
+        );
+        assert_eq!(p.union(1).len() + p.union(2).len(), 1);
+        assert_eq!(
+            p.retire_covered("a", &[(2, Some(4), Some(5))]),
+            [2],
+            "a whole-media hold meets any unit"
+        );
+        assert!(p.0.lock_clean().is_empty());
+    }
+
+    #[test]
+    fn a_placeholder_nothing_covers_expires() {
+        let p = Progress::default();
+        put(&p, "a", 1, vec![dl("a1")]);
+        let later = Instant::now() + PLACEHOLDER_TTL;
+        assert!(p.expire(Instant::now()).is_empty());
+        assert_eq!(p.expire(later), [1]);
+        assert!(p.union(1).is_empty() && p.in_flight(1, "z", None, None).is_empty());
     }
 }

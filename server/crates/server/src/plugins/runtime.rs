@@ -431,6 +431,14 @@ pub enum CallError {
     Guest(String),
 }
 
+impl CallError {
+    /// The lane had no room for the call: it can be asked again later.
+    pub fn is_saturated(&self) -> bool {
+        matches!(self, Self::Busy)
+            || matches!(self, Self::Unavailable(m) if m == QUEUE_FULL || m == QUEUE_WAIT)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LaneKind {
     Core,

@@ -1,4 +1,6 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
@@ -34,8 +36,6 @@ export interface MediaDownloadProgress {
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
-  /** When the snapshot behind this entry arrived, for the staleness sweep. */
-  updatedAt?: number;
 }
 
 /** One download inside a `download.progress` snapshot. */
@@ -63,11 +63,6 @@ interface GrabbingScope {
   seasonNumber?: number;
   episodeNumber?: number;
 }
-
-/** How long a media may go unreported before the sweep drops it: three missed ticks of the ~1/min publisher, matching the backend's replay cache.
- *  A backstop for a dead publisher; a stopped download is simply absent from the next snapshot. */
-const STALE_AFTER_MS = 3 * 60_000;
-const SWEEP_INTERVAL_MS = 30_000;
 
 function pendingKey(scope: GrabbingScope): LeafKey {
   return `pending:${scope.seasonNumber ?? ''}:${scope.episodeNumber ?? ''}`;
@@ -109,7 +104,7 @@ function toLeaf(d: DownloadProgressItem): DownloadLeaf {
 }
 
 /** Build a media entry from one snapshot. A series groups by season; a movie folds flat. */
-function toEntry(e: DownloadProgressEvent, at: number): MediaDownloadProgress | null {
+function toEntry(e: DownloadProgressEvent): MediaDownloadProgress | null {
   if (!e.downloads.length) return null;
 
   if (!kindOf(e.mediaType).hasSeasons) {
@@ -121,7 +116,6 @@ function toEntry(e: DownloadProgressEvent, at: number): MediaDownloadProgress | 
       state: f.state || 'active',
       dlspeed: e.downloads.reduce((a, d) => a + d.dlspeed, 0),
       eta: e.downloads.reduce((a, d) => Math.max(a, d.eta), 0),
-      updatedAt: at,
     };
   }
 
@@ -138,7 +132,6 @@ function toEntry(e: DownloadProgressEvent, at: number): MediaDownloadProgress | 
     mediaId: e.mediaId,
     mediaType: e.mediaType,
     seasons,
-    updatedAt: at,
     ...rollupSeasons(seasons),
   };
 }
@@ -155,7 +148,9 @@ export class DownloadProgressService {
 
   readonly progress = computed(() => this.merged());
 
-  private sweepHandle: ReturnType<typeof setInterval> | null = null;
+  private readonly http = inject(HttpClient);
+  /** Media a snapshot arrived for since the stream connected: a later read of the server's state must not replace them. */
+  private readonly touched = new Set<number>();
 
   private merged(): Map<number, MediaDownloadProgress> {
     const reported = this.reported();
@@ -200,46 +195,37 @@ export class DownloadProgressService {
         mediaId,
         mediaType,
         seasons,
-        updatedAt: cur?.updatedAt,
         ...rollupSeasons(seasons),
       });
     }
     return out;
   }
 
-  /** Drops a media whose snapshots stopped arriving, so a dead publisher doesn't leave its last one on screen. */
-  private sweepStale(): void {
-    const cutoff = Date.now() - STALE_AFTER_MS;
-    const prev = this.reported();
-    const next = new Map([...prev].filter(([, entry]) => (entry.updatedAt ?? 0) >= cutoff));
-    if (next.size !== prev.size) this.reported.set(next);
-    if (!next.size) this.stopSweep();
-  }
-
-  /** Runs only while something is in flight — an idle app keeps no timer. */
-  private startSweep(): void {
-    if (this.sweepHandle != null || typeof setInterval === 'undefined') return;
-    this.sweepHandle = setInterval(() => this.sweepStale(), SWEEP_INTERVAL_MS);
-  }
-
-  private stopSweep(): void {
-    if (this.sweepHandle == null) return;
-    clearInterval(this.sweepHandle);
-    this.sweepHandle = null;
-  }
-
-  /** Drop everything, for the SSE connect snapshot: the replay that follows re-states whatever
-   *  is still in flight, and anything that ended while the stream was down never will. */
+  /** Drop everything, for the SSE connect snapshot: `hydrate` re-states whatever is still in flight,
+   *  and anything that ended while the stream was down never will. */
   reset(): void {
     if (this.reported().size) this.reported.set(new Map());
     if (this.grabbing().size) this.grabbing.set(new Map());
-    this.stopSweep();
+    this.touched.clear();
+  }
+
+  /** Reads what is in flight now: snapshots are pushed on change only, so a client that connects late learns the rest here. */
+  async hydrate(): Promise<void> {
+    let snapshots: DownloadProgressEvent[];
+    try {
+      snapshots = await firstValueFrom(this.http.get<DownloadProgressEvent[]>('/api/acquisition/progress'));
+    } catch {
+      return;
+    }
+    for (const e of snapshots) {
+      if (!this.touched.has(e.mediaId)) this.applyProgress(e);
+    }
   }
 
   /** Apply one media's snapshot, replacing whatever was held for it. */
   applyProgress(e: DownloadProgressEvent): void {
-    const entry = toEntry(e, Date.now());
-    if (entry) this.startSweep();
+    this.touched.add(e.mediaId);
+    const entry = toEntry(e);
 
     this.reported.update((prev) => {
       if (!entry) {

@@ -16,6 +16,14 @@ import { TvService } from '../../../core/services/tv.service';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { listOf, ranked } from '../lyrics/lyrics-settings';
 
+/** `visible` in its new order, placed in the slots `stored` gives the visible ids; an id that is not shown (a provider that is down) keeps its place. */
+export function placeVisible(stored: string[], visible: string[]): string[] {
+  const shown = new Set(visible);
+  const queue = [...visible];
+  const out = stored.map((id) => (shown.has(id) ? queue.shift()! : id));
+  return [...out, ...queue];
+}
+
 const KEYS = { order: 'acquisition.providerOrder', interval: 'acquisition.sweepInterval' };
 
 @Component({
@@ -69,14 +77,14 @@ export class AcquisitionSettingsComponent implements OnInit {
     const ids = this.rows().map((r) => r.id);
     if (from === to || to < 0 || to >= ids.length) return;
     moveItemInArray(ids, from, to);
-    this.order.set(ids);
+    this.order.set(placeVisible(this.order(), ids));
   }
 
   async save() {
     this.saving.set(true);
     try {
       await this.api.setBulk({
-        [KEYS.order]: JSON.stringify(this.rows().map((r) => r.id)),
+        [KEYS.order]: JSON.stringify(placeVisible(this.order(), this.rows().map((r) => r.id))),
         [KEYS.interval]: String(this.interval()),
       });
       this.toast.success(this.translate.instant('settings.acquisition.saved'));

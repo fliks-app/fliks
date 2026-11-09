@@ -1,6 +1,10 @@
 //! One lane of a plugin's instances: a bounded pool of calls with its own budget and waiting count.
 use super::*;
 
+/// A call that found its lane full, or waited too long for a free instance.
+pub const QUEUE_FULL: &str = "queue full";
+pub const QUEUE_WAIT: &str = "queue wait";
+
 pub struct Lane {
     pub kind: LaneKind,
     pub(super) max: usize,
@@ -103,7 +107,7 @@ impl Lane {
             return Err(if self.queue == 0 {
                 CallError::Busy
             } else {
-                CallError::Unavailable("queue full".into())
+                CallError::Unavailable(QUEUE_FULL.into())
             });
         }
         let _w = Waiting(&self.waiting);
@@ -116,7 +120,7 @@ impl Lane {
                 budget.queue_wait
             };
             let at = entered + wait;
-            let waited = || CallError::Unavailable("queue wait".into());
+            let waited = || CallError::Unavailable(QUEUE_WAIT.into());
             let bg = if budget.background {
                 match tokio::time::timeout_at(at, self.bg.acquire()).await {
                     Ok(p) => Some(p.expect("never closed")),

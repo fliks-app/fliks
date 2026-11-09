@@ -169,6 +169,16 @@ fn grab(req: &Request) -> Result<Response, String> {
     let body = String::from_utf8_lossy(&req.body).into_owned();
     let key = format!("grabbed.{}", req.param("id").unwrap_or_default());
     host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
+    // Like a real provider, a grab puts the media in flight.
+    if let Some(media_id) = req.param("id").and_then(|v| v.parse().ok()) {
+        host_result(host::events_publish(&[t::AcquisitionEvent::Grabbed(
+            t::Grabbed {
+                media_id,
+                family: t::Family::Video,
+                unit: None,
+            },
+        )]))?;
+    }
     ok(json!({}))
 }
 

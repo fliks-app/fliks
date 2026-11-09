@@ -52,7 +52,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 
 25. One entry per `mediaId`: `{event, recipients, recordedAt}`. `record(recipients, event)`: empty `downloads` deletes the entry (an empty snapshot retires the media); otherwise replaces the entry (a snapshot states the whole set; no merge).
 26. `clear(mediaId, seasonNumber?, episodeNumber?)`: no entry: no-op; `seasonNumber == null`: delete the media; else keep a download if its season differs, or if an episode is given and the download's episode differs (a download with no `episodeNumber` is a pack and survives a single-episode clear); no downloads left deletes the entry.
-27. `snapshot_for(userId)`: walks all entries; any entry older than 3 min (against an injectable clock) is deleted regardless of which user connects; returns the events whose recipients include the user. Not persisted; restart empties it. The first `download.progress` after a grab states the cached set plus a placeholder `ref: "pending:<season>:<episode>"` (producer rule).
+27. `snapshot_for(userId)`: walks all entries; any entry older than 3 min (against an injectable clock) is deleted regardless of which user connects; returns the events whose recipients include the user. Not persisted; restart empties it. The first `download.progress` after a grab states the cached set plus a placeholder `ref: "pending:<season>:<episode>"` (producer rule). A client that connects later reads `GET /api/acquisition/progress` (`plugins.md` rule 65) for the media in flight, then follows the events; a placeholder that expires (`plugins.md` rule 72) is followed by a new emission.
 
 ### Connection drops (security)
 
@@ -155,8 +155,9 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
-| 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed (`plugins.md` rule 63) |
-| 40b | `acquisition.queue` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue (`plugins.md` rule 75) |
+| 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed, or a provider with a release picker turned ready or stopped being ready (`plugins.md` rules 63, 71) |
+| 40b | `acquisition.queue` (raw, outside the union, no `plugin.` prefix) | Us(enabled users holding `media.grab`, admins and `manage:all` included) | `{payload: {pluginId: string, rows: AcquisitionRow[]|null}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue; `rows` the changed wire rows (`plugins.md` rule 73) when nothing joined or left the open list and at most 100 changed, else null (`plugins.md` rule 75) |
+| 40c | `acquisition.grab-best` (raw, outside the union, no `plugin.` prefix) | Us(the caller) | `{payload: {scope: {mediaId: number, family: string, groupId: number|null, itemId: number|null}, outcome: 'grabbed'|'none'|'skipped'|'busy'|'error'|'timeout', detail: string}}` (plus `type`): the outcome of `POST /api/media/:id/grab-best` (`plugins.md` rule 68) |
 | 41 | `party.state` | C (each member of the party) | `{partyId: number, rev: number, state: 'idle'|'waiting'|'paused'|'playing', item: PartyItem, anchor: {position: number, serverTimeMs: number}, whenMs: number|null, by: {userId, username}|null, action: string|null}` (`watch-party.md`) |
 | 42 | `party.members` | C (members) | `{partyId, rev, members: PartyMember[]}` |
 | 43 | `party.settings` | C (members) | `{partyId, rev, name: string, policy: 'everyone'|'host_only'}` |
