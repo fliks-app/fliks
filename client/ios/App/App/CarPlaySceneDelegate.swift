@@ -18,16 +18,9 @@ enum CarPlayHost {
     }
 }
 
-/// Audio-only CarPlay: browse tabs, search and the Now Playing template, over the account's music.
+/// Audio-only CarPlay: browse tabs and the Now Playing template, over the account's music.
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
-    /// What a search result or row stands for.
-    private final class Pick {
-        let row: CarRow
-        let listing: CarListing
-        init(_ row: CarRow, _ listing: CarListing) { self.row = row; self.listing = listing }
-    }
-
     private var controller: CPInterfaceController?
     private var images: [String: UIImage] = [:]
 
@@ -67,9 +60,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func list(_ id: String, title: String) -> CPListTemplate {
         let template = CPListTemplate(title: title, sections: [])
-        template.trailingNavigationBarButtons = [CPBarButton(image: UIImage(systemName: "magnifyingglass") ?? UIImage()) { [weak self] _ in
-            self?.showSearch()
-        }]
         template.emptyViewSubtitleVariants = [String(localized: "carplay.loading", defaultValue: "Loading")]
         Task {
             guard let catalog = self.catalog else { return }
@@ -95,7 +85,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func item(_ row: CarRow, _ listing: CarListing) -> CPListItem {
         let item = CPListItem(text: row.title, detailText: row.subtitle)
-        item.userInfo = Pick(row, listing)
         item.accessoryType = row.folder != nil ? .disclosureIndicator : .none
         item.handler = { [weak self] _, done in
             self?.open(row, listing)
@@ -116,12 +105,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
-    private func showSearch() {
-        let search = CPSearchTemplate()
-        search.delegate = self
-        controller?.pushTemplate(search, animated: true, completion: nil)
-    }
-
     // MARK: - Artwork
 
     private func loadImage(_ path: String, into item: CPListItem) {
@@ -133,22 +116,5 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             self.images[path] = image
             item.setImage(image)
         }
-    }
-}
-
-extension CarPlaySceneDelegate: CPSearchTemplateDelegate {
-    func searchTemplate(_ searchTemplate: CPSearchTemplate, updatedSearchText searchText: String,
-                        completionHandler: @escaping ([CPListItem]) -> Void) {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        guard query.count > 1, let catalog = catalog else { return completionHandler([]) }
-        Task {
-            let found = await catalog.search(query) ?? CarListing()
-            completionHandler(found.rows.map { self.item($0, found) })
-        }
-    }
-
-    func searchTemplate(_ searchTemplate: CPSearchTemplate, selectedResult item: CPListItem, completionHandler: @escaping () -> Void) {
-        if let pick = item.userInfo as? Pick { open(pick.row, pick.listing) }
-        completionHandler()
     }
 }
