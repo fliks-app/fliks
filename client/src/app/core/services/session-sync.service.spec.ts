@@ -175,13 +175,27 @@ describe('SessionSyncService one surface', () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  it('closes a paused local player of another item too, while another device plays', async () => {
+  it('keeps a paused local player of another item, which is not the observed session', async () => {
     const { service, flush } = setup();
     const { p, yielded } = held(6);
     service.registerPlayer(p);
     await flush(session());
     TestBed.tick();
-    expect(yielded).toHaveBeenCalledOnce();
+    expect(yielded).not.toHaveBeenCalled();
+  });
+
+  it('keeps the paused copy of the item while this device is taking the session over', async () => {
+    const { service, flush } = setup();
+    const { p, yielded } = held(5);
+    service.registerPlayer(p);
+    let done!: () => void;
+    service.registerResumer('video', () => new Promise<void>((r) => (done = r)));
+    await flush(session());
+    const taking = service.playHere();
+    TestBed.tick();
+    expect(yielded).not.toHaveBeenCalled();
+    done();
+    await taking;
   });
 
   it('keeps a playing local player, one with no account item, and every player of a parked session', async () => {
@@ -376,6 +390,7 @@ describe('SessionSyncService play here', () => {
   it('holds the claim of a resume until this device owns the session', async () => {
     const { service, flush } = setup();
     await flush(session());
+    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(null) });
     service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
     expect(service.claimPending()).toBe(false);
     await service.playHere();
@@ -386,6 +401,33 @@ describe('SessionSyncService play here', () => {
     await Promise.resolve();
     TestBed.tick();
     expect(service.claimPending()).toBe(false);
+  });
+
+  it('releases the claim of a resume that started no player', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
+    await service.playHere();
+    TestBed.tick();
+    expect(service.claimPending()).toBe(false);
+    expect(service.handoffFor('sid-x')).toBeUndefined();
+  });
+
+  it('releases the claim when the resumer fails', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    service.registerResumer('video', vi.fn().mockRejectedValue(new Error('no')));
+    await expect(service.playHere()).rejects.toThrow();
+    TestBed.tick();
+    expect(service.claimPending()).toBe(false);
+  });
+
+  it('does not count a registered idle player as holding one', () => {
+    const { service } = setup();
+    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(null) });
+    expect(service.holdsPlayer()).toBe(false);
+    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => 4, yield: vi.fn().mockResolvedValue(null) });
+    expect(service.holdsPlayer()).toBe(true);
   });
 
   it('dates the owner report from the row, for the owner only', async () => {

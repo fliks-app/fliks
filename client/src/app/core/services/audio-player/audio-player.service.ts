@@ -92,6 +92,7 @@ interface Prefs {
 type BeatBody = Parameters<StreamingApiService['updatePlaybackState']>[1];
 
 const BEAT_MS = 15_000;
+const STARTING_MAX_MS = 5000;
 const PRELOAD_S = 20;
 const RESTART_S = 3;
 /** Ids a wire queue carries at most (the server and `/api/tracks?ids` cap). */
@@ -123,6 +124,9 @@ export class AudioPlayerService {
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
   private readonly _loading = signal(false);
+  /** Autoplay asked, playback not reported yet: the gap after `_loading` ends where the player is neither loading nor playing. */
+  private readonly _starting = signal(false);
+  private startingTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly _position = signal(0);
   private readonly _duration = signal(0);
   private readonly _chapters = signal<TimelineChapter[]>([]);
@@ -226,7 +230,7 @@ export class AudioPlayerService {
     this.sessionSync.registerResumer('audio', (s, positionSeconds) => this.resumeSession(s, positionSeconds));
     this.sessionSync.registerPlayer({
       sessionId: () => this.sessionId,
-      active: () => this._track() !== null && (this._playing() || this._loading()),
+      active: () => this._track() !== null && (this._playing() || this._loading() || this._starting()),
       yield: () => this.yieldToTakeover(),
       itemId: () => (this.routed({ type: 'drives' }) ? null : (this._track()?.itemId ?? null)),
       report: () => this.beat(),
@@ -316,8 +320,19 @@ export class AudioPlayerService {
     } catch {
       if (generation === this.generation) await this.close();
     } finally {
-      if (generation === this.generation) this._loading.set(false);
+      if (generation === this.generation) {
+        this.markStarting(opts.paused !== true);
+        this._loading.set(false);
+      }
     }
+  }
+
+  private markStarting(autoplay: boolean): void {
+    clearTimeout(this.startingTimer);
+    const on = autoplay && this._track() !== null && !this._playing();
+    this._starting.set(on);
+    // A blocked autoplay never reports a play state.
+    if (on) this.startingTimer = setTimeout(() => this._starting.set(false), STARTING_MAX_MS);
   }
 
   /** Plays a track queue from `startIndex`, always from 0:00. */
@@ -553,7 +568,10 @@ export class AudioPlayerService {
     } catch {
       if (generation === this.generation) await this.close();
     } finally {
-      if (generation === this.generation) this._loading.set(false);
+      if (generation === this.generation) {
+        this.markStarting(autoplay);
+        this._loading.set(false);
+      }
     }
   }
 
@@ -1057,6 +1075,7 @@ export class AudioPlayerService {
     this._track.set(null);
     this._expanded.set(false);
     this._loading.set(false);
+    this.markStarting(false);
     this._position.set(0);
     this._duration.set(0);
     this._chapters.set([]);
@@ -1200,6 +1219,7 @@ export class AudioPlayerService {
 
   private onPlayState(playing: boolean): void {
     this._playing.set(playing);
+    if (playing) this.markStarting(false);
     // Paused too while online: a silent owner is parked, and a parked owner is never told of a takeover.
     clearInterval(this.beatTimer);
     this.beatTimer = setInterval(() => {
@@ -1390,6 +1410,7 @@ export class AudioPlayerService {
   private onError(): void {
     this._playing.set(false);
     this._loading.set(false);
+    this.markStarting(false);
     if (this.info?.playMethod === 'DirectPlay' && this._musicMode()) void this.reopenTranscoded();
   }
 

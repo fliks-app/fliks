@@ -125,10 +125,10 @@ export class SessionSyncService {
     return [...this.players].some((p) => p.active());
   });
 
-  /** A local player is registered, playing or not. */
+  /** A local player plays, loads or keeps an item paused: registration alone says nothing. */
   readonly holdsPlayer = computed(() => {
     this.registered();
-    return this.players.size > 0;
+    return [...this.players].some((p) => p.active() || p.itemId?.() != null);
   });
 
   /** The owner is gone: position kept, resumable anywhere. */
@@ -176,17 +176,22 @@ export class SessionSyncService {
       if (this.sse.connectionId()) untracked(() => this.players.forEach((p) => p.report?.()));
     });
 
-    // One surface per account: while another device owns the session, this one keeps no idle player of an account item.
+    // One surface per account: while another device owns the session, this one keeps no idle player of that item.
     effect(() => {
       const s = this._session();
       this.registered();
-      if (!s || this.role() !== 'observer' || s.state === 'parked') return;
-      const idle = [...this.players].filter((p) => !p.active() && p.itemId?.() != null);
+      if (!s || this.role() !== 'observer' || s.state === 'parked' || this.claiming()) return;
+      const idle = [...this.players].filter((p) => !p.active() && p.itemId?.() === s.item.id);
       untracked(() => idle.forEach((p) => void this.drop(p)));
     });
 
     effect(() => {
-      if (this.role() === 'owner') untracked(() => this.claiming.set(false));
+      if (this.role() === 'owner') untracked(() => this.releaseClaim());
+    });
+
+    // A claim whose player is gone (start failed, closed before its first beat) must not outlive it.
+    effect(() => {
+      if (this.claiming() && !this.starting() && !this.holdsPlayer()) untracked(() => this.releaseClaim());
     });
 
     effect((onCleanup) => {
@@ -268,12 +273,25 @@ export class SessionSyncService {
   }
 
   /** The next session this device starts takes the account session over on purpose: its beats say so, and the old owner stops silently. */
-  private armHandoff(): void {
+  private async handOver(start: () => Promise<void> | void): Promise<void> {
     const skip = new Set([...this.players].map((p) => p.sessionId()));
     this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
     this.claiming.set(true);
     if (this.claimTimer) clearTimeout(this.claimTimer);
-    this.claimTimer = setTimeout(() => this.claiming.set(false), HANDOFF_TTL_MS);
+    this.claimTimer = setTimeout(() => this.releaseClaim(), HANDOFF_TTL_MS);
+    this.starting.set(true);
+    try {
+      await start();
+    } finally {
+      this.starting.set(false);
+    }
+  }
+
+  private releaseClaim(): void {
+    this.handoff = null;
+    this.claiming.set(false);
+    if (this.claimTimer) clearTimeout(this.claimTimer);
+    this.claimTimer = null;
   }
 
   /** What a beat of `sid` sends as `handoff`: true for the session an armed hand-over bound to. */
@@ -285,6 +303,8 @@ export class SessionSyncService {
   }
 
   private readonly claiming = signal(false);
+  /** The player of a hand-over is being started: it is not registered yet, so its absence is no abandon. */
+  private readonly starting = signal(false);
   private claimTimer: ReturnType<typeof setTimeout> | null = null;
   /** This device started the session and its first beat has yet to make it the owner. */
   readonly claimPending = this.claiming.asReadonly();
@@ -329,10 +349,7 @@ export class SessionSyncService {
       cancelLabel: this.translate.instant('session.close'),
       variant: 'info',
     });
-    if (resume) {
-      this.armHandoff();
-      await stopped.resume();
-    }
+    if (resume) await this.handOver(() => stopped.resume());
   }
 
   /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */
@@ -390,8 +407,7 @@ export class SessionSyncService {
     const s = this._session();
     const resumer = s && this.resumerFor(s);
     if (!s || !resumer || this.role() === 'owner') return;
-    this.armHandoff();
-    await resumer(s, this.positionNow(s));
+    await this.handOver(() => resumer(s, this.positionNow(s)));
   }
 
   /** Moves the session to another device of the account, which loads it where it stands; its first beat claims and this one is superseded. */

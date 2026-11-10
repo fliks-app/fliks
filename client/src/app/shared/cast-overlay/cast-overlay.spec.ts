@@ -66,6 +66,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     enabled: signal(true),
     localPlaying: signal(false),
     claimPending: signal(false),
+    holdsPlayer: signal(false),
     liveReport: computed(() => (over.live ?? true ? { mediaFileId: 9, durationSeconds: 3600 } : null)),
     positionNow: (a: AccountSession) => (over.live ?? true ? 125 : a.positionSeconds),
     durationNow: (a: AccountSession) => a.durationSeconds ?? 0,
@@ -92,6 +93,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     playing: signal(over.fileId === 0 ? null : { fileId: 7, mediaId: 3 }),
     openPlayer: vi.fn(),
     command: vi.fn(),
+    partyActive: signal(false),
   };
   const audioView = { expand: vi.fn() };
   const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) };
@@ -279,10 +281,22 @@ describe('CastOverlayComponent', () => {
       expect(el.textContent).not.toContain('2:05');
     });
 
-    it('never shows with the audio mini-player, which holds the same slot', () => {
-      const { el, audio } = setup({ local: true, account: accountSession() });
-      expect(el.querySelector('button')).not.toBeNull();
-      audio.active.set(true);
+    it('replaces a paused local track while another device plays, but never covers one for a parked session', () => {
+      const live = setup({ local: true, account: accountSession() });
+      live.audio.active.set(true);
+      TestBed.tick();
+      expect(live.el.querySelector('button')).not.toBeNull();
+      TestBed.resetTestingModule();
+      const parked = setup({ local: true, account: accountSession({ state: 'parked', playing: false }) });
+      expect(parked.el.querySelector('button')).not.toBeNull();
+      parked.audio.active.set(true);
+      TestBed.tick();
+      expect(parked.el.querySelector('button')).toBeNull();
+    });
+
+    it('stays away from a party', () => {
+      const { el, session } = setup({ local: true, account: accountSession() });
+      session.partyActive.set(true);
       TestBed.tick();
       expect(el.querySelector('button')).toBeNull();
     });

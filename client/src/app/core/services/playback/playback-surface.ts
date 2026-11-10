@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
@@ -22,9 +22,15 @@ export class PlaybackSurface {
   private readonly remote = inject(RemoteService);
   private readonly sse = inject(SseService);
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
+  private streamDropped = false;
 
-  /** Owner whose bar was hidden here: another owner, or no session in between, shows it again. */
-  private readonly hiddenOwner = signal<string | null>(null);
+  /** The playback whose bar was hidden here: another owner, item or epoch, or no session in between, shows it again. */
+  private readonly hiddenKey = signal<string | null>(null);
+
+  private static keyOf(s: AccountSession): string {
+    return `${s.owner.targetId}|${s.epoch}|${s.item.id}|${s.state === 'parked'}`;
+  }
 
   /** The session already sits on this device: a reader's position it saved, or the track its own player holds. */
   readonly here = computed(() => {
@@ -46,26 +52,37 @@ export class PlaybackSurface {
   readonly bar = computed<AccountSession | null>(() => {
     const s = this.sync.session();
     const state = this.state();
-    if (!s || (state !== 'remote' && state !== 'parked') || this.device.isTv() || !this.session.isLocal() || this.audio.active()) return null;
-    return this.hiddenOwner() === s.owner.targetId ? null : s;
+    if (!s || this.device.isTv() || !this.session.isLocal() || this.session.partyActive()) return null;
+    // Another device plays: its bar replaces a paused local track. A parked session never covers one.
+    if (state !== 'remote' && !(state === 'parked' && !this.audio.active())) return null;
+    return this.hiddenKey() === PlaybackSurface.keyOf(s) ? null : s;
   });
 
   /** Whether the audio mini-player gives way to the bar of another device's playback. */
-  readonly miniHidden = computed(() => this.state() === 'remote');
+  readonly miniHidden = computed(() => this.state() === 'remote' && this.bar() !== null);
 
   /** Another bar (cast, remote output) rises above the audio mini-player at the same place. */
-  readonly aboveAudio = computed(() => this.audio.active());
+  readonly aboveAudio = computed(() => this.audio.active() && !this.miniHidden());
 
   constructor() {
     effect(() => {
-      if (!this.sync.session()) this.hiddenOwner.set(null);
+      if (!this.sync.session()) this.hiddenKey.set(null);
+    });
+
+    // A player that starts while the stream is dropped (lock screen, background audio) lists the device again.
+    effect(() => {
+      const holds = this.sync.holdsPlayer();
+      if (this.streamDropped && holds) {
+        this.streamDropped = false;
+        untracked(() => void this.sse.connect());
+      }
     });
   }
 
   /** Hides the bar on this device only; the session stays for the account. */
   hide(): void {
     const s = this.bar();
-    if (s) this.hiddenOwner.set(s.owner.targetId);
+    if (s) this.hiddenKey.set(PlaybackSurface.keyOf(s));
   }
 
   /** Nothing here plays, is followed or controlled: a suspended WebView would only time out on a command sent to it. */
@@ -86,7 +103,9 @@ export class PlaybackSurface {
     this.cancelIdleDrop();
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      if (this.idle()) this.sse.close();
+      if (!this.idle()) return;
+      this.streamDropped = true;
+      this.sse.close();
     }, IDLE_BACKGROUND_MS);
   }
 
@@ -98,6 +117,7 @@ export class PlaybackSurface {
   /** Back in the foreground: the last surface stays, stale, while the session and the targets are read again and the report is replaced. */
   async resync(): Promise<void> {
     this.cancelIdleDrop();
+    this.streamDropped = false;
     if (!this.sync.enabled()) return;
     this.syncing.set(true);
     try {
