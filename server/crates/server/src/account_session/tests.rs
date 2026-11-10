@@ -77,6 +77,7 @@ fn alive(st: &AppState, sid: &str) {
         system_name: None,
         app_version: None,
         sse_connection_id: None,
+        owner: None,
         started_at: now_ms(),
         last_beat: now_ms(),
         position: 0.0,
@@ -591,4 +592,34 @@ async fn an_expected_transfer_lapses_with_the_next_record(pool: PgPool) {
         g.handoffs.keys().collect::<Vec<_>>(),
         [&(1, "tB".to_owned())]
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reload_of_the_owning_device_keeps_the_epoch_and_supersedes_nothing(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "dev#old", i)).await;
+    s.beat(&st, beat(u, "s2", "dev#new", i)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.epoch, r.session_id.as_str()), (1, "s2"));
+    assert_eq!(
+        s.beat(&st, beat(u, "s1", "dev#old", i)).await,
+        Verdict::Ignored
+    );
+    s.beat(&st, beat(u, "s3", "other#tab", i)).await;
+    assert_eq!(row(&st, u).await.unwrap().epoch, 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_lapsed_transfer_record_goes_with_the_sweep(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.expect_handoff(u, "tB", i).await;
+    s.sweep(&st).await;
+    assert_eq!(s.0.lock().await.handoffs.len(), 1, "still inside the TTL");
+    s.0.lock().await.handoffs.values_mut().for_each(|h| h.1 = 0);
+    s.sweep(&st).await;
+    assert!(s.0.lock().await.handoffs.is_empty());
 }

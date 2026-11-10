@@ -7,7 +7,11 @@ pub use feed::spawn;
 pub use session::{Beat, Facts, LiveSession, Tags, kind_of, parse_source_fps, to_tags};
 
 use crate::sync::MutexExt;
-use crate::{engine::Engine, events::event::Num, state::AppState};
+use crate::{
+    engine::Engine,
+    events::{SseEvent, event::Num},
+    state::AppState,
+};
 use fliks_engine_core::api::{SessionKind, SessionSnapshot};
 use serde::Serialize;
 use std::{
@@ -109,6 +113,28 @@ impl Presence {
         });
         dropped
     }
+}
+
+/// Tells the owner's account and household that `live` stopped (`remote.stopped`, then the target list).
+pub fn announce_stopped(st: &AppState, live: &LiveSession) {
+    let Some(user) = live.user_id else { return };
+    let target = st
+        .hub
+        .target_id_for(live.sse_connection_id.as_deref())
+        .or_else(|| live.target_id().map(str::to_owned));
+    match target {
+        Some(target_id) => st.hub.emit_to_user(
+            user,
+            SseEvent::RemoteStopped {
+                target_id,
+                session_id: live.session_id.clone(),
+            },
+        ),
+        None => {
+            tracing::debug!(session = %live.session_id, "stopped with no live target, no stop announced")
+        }
+    }
+    st.hub.emit_to_user(user, SseEvent::RemoteTargetsChanged {});
 }
 
 /// A presence session bound to an SSE connection, for `/api/remote/targets` (`remote.md` rule 5).

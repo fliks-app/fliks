@@ -4,5 +4,5 @@ pub(crate) mod dto;
 mod fanout;
 mod routes;
 
-pub use fanout::init;
+pub use fanout::{device_id_of, init};
 pub use routes::*;

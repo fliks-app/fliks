@@ -7,7 +7,7 @@ use crate::{
     },
     engine::EngineError,
     events::{
-        SseEvent,
+        Identity, SseEvent,
         event::{Num, PlayState, QualityRung},
     },
     http::{
@@ -131,7 +131,12 @@ fn play_state(b: &Value) -> Option<PlayState> {
     truthy.then(|| serde_json::from_value(v.clone()).ok())?
 }
 
-fn presence_beat(b: &Value, sse: Option<String>, item_id: Option<i32>) -> Beat {
+fn presence_beat(
+    b: &Value,
+    sse: Option<String>,
+    owner: Option<Identity>,
+    item_id: Option<i32>,
+) -> Beat {
     Beat {
         position: num(b, "positionSeconds"),
         state: play_state(b),
@@ -148,6 +153,7 @@ fn presence_beat(b: &Value, sse: Option<String>, item_id: Option<i32>) -> Beat {
         audio_track_index: index(b, "audioTrackIndex"),
         subtitle_track_index: index(b, "subtitleTrackIndex"),
         sse_connection_id: sse,
+        owner,
         volume: nullable(b, "volume", Value::as_f64),
         muted: nullable(b, "muted", Value::as_bool),
     }
@@ -248,7 +254,7 @@ fn record_qoe(st: &AppState, user: i32, s: &LiveSession, qoe: &Value) {
 }
 
 /// Rule 11: the stored presence plus the body fields echoed as received.
-fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> SseEvent {
+pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> SseEvent {
     SseEvent::RemoteState {
         target_id,
         session_id: s.session_id.clone(),
@@ -281,12 +287,53 @@ fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> Ss
 }
 
 fn emit_state(st: &AppState, user: i32, s: &LiveSession, media: i32, b: &Value) {
-    let Some(target_id) = st.hub.target_id_for(s.sse_connection_id.as_deref()) else {
+    let Some(target_id) = s.target_id() else {
         tracing::debug!(session = %s.session_id, "remote.state without a target");
         return;
     };
     st.hub
-        .emit_to_user(user, remote_state(target_id, s, media, b));
+        .emit_to_user(user, remote_state(target_id.to_owned(), s, media, b));
+}
+
+/// Who beats: the live connection or polled target the beat names, else the device it names, else
+/// the one remembered from an earlier beat (rule 22: a reconnecting stream must not drop the owner).
+fn beat_identity(
+    st: &AppState,
+    user: i32,
+    conn: Option<&str>,
+    body: &Value,
+    before: Option<&LiveSession>,
+) -> Option<Identity> {
+    let device = body
+        .get("targetId")
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty());
+    st.hub
+        .identity_for(conn)
+        .or_else(|| {
+            let device = device?;
+            st.hub
+                .list_for_user(user)
+                .into_iter()
+                .find(|t| t.identity.target_id.as_deref() == Some(device))
+                .map(|t| t.identity)
+        })
+        .or_else(|| {
+            let known = before?.owner.clone()?;
+            Some(Identity {
+                target_id: known
+                    .target_id
+                    .clone()
+                    .or_else(|| device.map(str::to_owned)),
+                ..known
+            })
+        })
+        .or_else(|| {
+            device.map(|t| Identity {
+                target_id: Some(t.to_owned()),
+                ..Identity::default()
+            })
+        })
 }
 
 /// Rule 17: the bodies; `sessionLost` and `superseded` are only ever `true` in one.
@@ -324,7 +371,7 @@ fn account_beat(
     };
     let hub_user = s.user_id.unwrap_or(user);
     let conn = s.sse_connection_id.as_deref();
-    let id = st.hub.identity_for(conn)?;
+    let id = s.owner.clone()?;
     if st
         .parties
         .has_member(hub_user, conn, id.target_id.as_deref())
@@ -477,12 +524,18 @@ pub async fn heartbeat(
         };
         resolved = Some(item);
         let before = st.presence.peek(sid);
+        // A `polled:` key the hub does not hold names no connection: it must not rebind the session.
+        let conn = sse_connection_id(&body, &headers)
+            .filter(|c| !c.starts_with("polled:") || st.hub.identity_for(Some(c)).is_some());
+        let asked = conn
+            .as_deref()
+            .or_else(|| before.as_ref()?.sse_connection_id.as_deref());
+        let owner = beat_identity(&st, user, asked, &body, before.as_ref());
         let updated = match engine_lost {
             Some(true) => None,
-            _ => st.presence.heartbeat(
-                sid,
-                &presence_beat(&body, sse_connection_id(&body, &headers), item),
-            ),
+            _ => st
+                .presence
+                .heartbeat(sid, &presence_beat(&body, conn, owner, item)),
         };
         attributed = updated.as_ref().and_then(|u| u.attributed_user_id);
         state_changed = updated.is_some()
@@ -627,6 +680,7 @@ mod tests {
             system_name: None,
             app_version: None,
             sse_connection_id: None,
+            owner: None,
             started_at: 0.0,
             last_beat: 0.0,
             position: 0.0,
@@ -847,8 +901,11 @@ mod tests {
             play_state(&json!({"state": "paused"})),
             Some(PlayState::Paused)
         );
-        let b = presence_beat(&json!({"supportsVolume": null}), None, None);
+        let b = presence_beat(&json!({"supportsVolume": null}), None, None, None);
         assert_eq!(b.supports_volume, Some(None));
-        assert_eq!(presence_beat(&json!({}), None, None).supports_volume, None);
+        assert_eq!(
+            presence_beat(&json!({}), None, None, None).supports_volume,
+            None
+        );
     }
 }

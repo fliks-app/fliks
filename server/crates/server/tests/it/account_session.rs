@@ -153,6 +153,7 @@ impl Ctx {
             system_name: None,
             app_version: None,
             sse_connection_id: Some(conn.into()),
+            owner: None,
             started_at: 0.0,
             last_beat: fliks_server::presence::now_ms(),
             position: 0.0,

@@ -516,6 +516,8 @@ final class MusicHost {
         double position = exo.getCurrentPosition() / 1000.0;
         try {
             JSONObject body = new JSONObject().put("state", playing ? "playing" : "paused");
+            String device = api.deviceId();
+            if (device != null && !device.isEmpty()) body.put("targetId", device);
             long media;
             if (b != null) {
                 int i = exo.getCurrentMediaItemIndex();

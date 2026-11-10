@@ -173,6 +173,7 @@ impl Ctx {
             system_name: None,
             app_version: None,
             sse_connection_id: conn.map(Into::into),
+            owner: None,
             started_at: 0.0,
             last_beat: 0.0,
             position: 0.0,

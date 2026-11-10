@@ -81,7 +81,13 @@ pub async fn events(
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned),
     };
+    let me = identity.target_id.clone().filter(|t| !t.is_empty());
     let conn = st.hub.connect_session(user_id, sid, identity);
+    if let Some(me) = me
+        && let Some(ev) = crate::account_session::observed_state(&st, user_id, &me).await
+    {
+        st.hub.emit_to_connection(user_id, &conn.id, ev);
+    }
     Ok((
         StatusCode::OK,
         [

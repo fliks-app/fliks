@@ -1,7 +1,7 @@
 //! `GET`/`DELETE /api/session` (`docs/spec/session.md`).
-use super::{QueueState, Row, State, store};
+use super::{QueueState, Row, State, same_device, store};
 use crate::{
-    events::{Num, event::Queue},
+    events::{Num, SseEvent, event::Queue},
     http::{AppError, auth::SessionAuthed, json::iso_ms, validate::ValidJson},
     remote::{authorize_target, dto::Command, send},
     state::AppState,
@@ -15,7 +15,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -107,6 +107,32 @@ async fn current(st: &AppState, user: i32) -> Result<Option<(Row, store::Shown)>
             .await;
     }
     Ok(Some((row, shown)))
+}
+
+/// `session.md` rule 20: the live owner's last `remote.state`, for a device that connects (or
+/// reconnects) to observe it; `None` when the session is parked, absent or this device's own.
+pub async fn observed_state(st: &AppState, user: i32, me: &str) -> Option<SseEvent> {
+    let (row, shown) = current(st, user).await.ok()??;
+    if row.state == State::Parked || same_device(&row.owner.target_id, &Some(me.to_owned())) {
+        return None;
+    }
+    if !store::in_scope(&st.db, user, row.kind).await.ok()? {
+        return None;
+    }
+    let live = st.presence.peek(&row.session_id)?;
+    let body = json!({
+        "mediaFileId": row.media_file_id,
+        "episodeId": shown.episode_id,
+        "itemId": row.item_id,
+        "durationSeconds": row.duration,
+    });
+    let target = live.target_id()?.to_owned();
+    Some(crate::playback::remote_state(
+        target,
+        &live,
+        shown.media_id,
+        &body,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/session", responses((status = 200)))]
