@@ -141,8 +141,8 @@ final class MusicHost {
     private volatile boolean webForeground;
     private final NativeFace face;
     private long playedAt;
-    /** The last remote command applied, which the next beat acknowledges. */
-    @Nullable private volatile String lastCmdId;
+    /** The last remote command applied, which the next beat acknowledges, whichever layer is live then. */
+    private final CommandAck ack = new CommandAck();
     /** Server and user the queue started under; a different signed-in session never reaches it. */
     @Nullable private volatile String sessionKey;
     @Nullable private volatile Book book;
@@ -530,7 +530,8 @@ final class MusicHost {
             if (exo.getMediaItemCount() == 0) return;
             long now = System.currentTimeMillis();
             if (exo.isPlaying()) playedAt = now;
-            if (webLive() || now - playedAt > FACE_LINGER_MS) face.leave(sessionKey);
+            boolean web = webLive() && !ack.owed(now);
+            if (web || now - playedAt > FACE_LINGER_MS) face.leave(sessionKey);
             else if (sessionKey != null) face.poll(sessionKey);
             main.postDelayed(this, WATCH_MS);
         }
@@ -545,7 +546,7 @@ final class MusicHost {
         if (!"remote.command".equals(type) || event.optLong("expiresAt") < System.currentTimeMillis()) return;
         String action = event.optString("action");
         if (!handles(action, event)) return;
-        lastCmdId = event.optString("cmdId", null);
+        ack.applied(event.optString("cmdId", null), System.currentTimeMillis());
         switch (action) {
             case "play": exo.play(); break;
             case "pause": exo.pause(); break;
@@ -602,10 +603,12 @@ final class MusicHost {
 
     /** Progress to the server for what the web layer does not take care of. */
     private void beat(boolean playing) {
-        lastBeat = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        lastBeat = now;
         MediaItem current = exo.getCurrentMediaItem();
-        if (webLive() || current == null) return;
-        face.want();
+        // An owed ack beats even when the web layer is back: the command was applied here, so only this beat knows it.
+        if ((webLive() && !ack.owed(now)) || current == null) return;
+        if (!webLive()) face.want();
         Book b = book;
         Long item = itemOf(current);
         Resolved r = item == null ? null : resolved.get(item);
@@ -634,8 +637,8 @@ final class MusicHost {
                         .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
                         .put("mediaFileId", r.mediaFileId).put("itemId", item).put("sessionId", r.sessionId);
             }
-            String ack = lastCmdId;
-            if (ack != null) body.put("lastCmdId", ack);
+            String cmd = ack.id();
+            if (cmd != null) body.put("lastCmdId", cmd);
             String payload = body.toString();
             io.execute(() -> {
                 try {
@@ -645,6 +648,10 @@ final class MusicHost {
                 }
                 try {
                     api.send("PUT", "/api/playback/media/" + media + "/state", payload, key);
+                    if (cmd != null) {
+                        ack.sent(cmd);
+                        main.post(watch);
+                    }
                 } catch (IOException ignored) {
                     // The next beat carries the position.
                 }
