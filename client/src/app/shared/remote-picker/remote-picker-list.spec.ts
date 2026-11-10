@@ -32,7 +32,7 @@ function setup(
       provideZonelessChangeDetection(),
       provideRouter([]),
       { provide: PlaybackDevice, useValue: playing },
-      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), refreshTargets: vi.fn(), ...over.remote } },
+      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), refreshTargets: vi.fn(), canLoad: vi.fn(() => true), ...over.remote } },
       { provide: CastService, useValue: { enumerates: false, isAvailable: signal(false), isConnected: signal(false), castDevices: signal([]), getCastDevices: vi.fn() } },
       { provide: AirPlayService, useValue: { available: signal(false) } },
       { provide: CastPlaybackTarget, useValue: {} },
