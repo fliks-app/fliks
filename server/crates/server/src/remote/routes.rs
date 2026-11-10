@@ -38,7 +38,7 @@ const OFFLINE: &str = "remote.error_device_offline";
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/remote/targets", get(targets))
-        .route("/api/remote/register", post(register))
+        .route("/api/remote/register", post(register).delete(unregister))
         .route("/api/remote/commands", get(commands))
         .route("/api/remote/grants/code", post(grant_code))
         .route("/api/remote/grants/claim", post(grant_claim))
@@ -188,6 +188,20 @@ pub async fn register(
         },
     );
     Ok((StatusCode::CREATED, Json(json!({ "targetId": target_id }))))
+}
+
+#[utoipa::path(delete, path = "/api/remote/register", responses((status = 204)))]
+pub async fn unregister(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    Query(q): Query<Vec<(String, String)>>,
+) -> Result<StatusCode, AppError> {
+    let device = param(&q, "deviceId")
+        .filter(|d| !d.is_empty())
+        .ok_or_else(|| AppError::bad_request(vec!["deviceId must be a string"]))?;
+    st.hub
+        .drop_connections_for_target(a.user.id, &format!("{device}#native"));
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `canControl` (spec rule 7): `Ok(reason)` allows, `Err(reason)` denies.

@@ -1,13 +1,19 @@
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { deviceIdOf } from '../remote-target-id';
 import { SseService } from '../sse.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { PlaybackSession } from './playback-session';
 
 /** `local`: only this device's player shows. `remote`: another device plays, one bar. `parked`: the same bar, to resume here. */
 export type SurfaceState = 'idle' | 'local' | 'remote' | 'parked';
+
+/** The server stops listing a stream whose client has not said it is reading it for 120 s. */
+const KEEPALIVE_MS = 30_000;
 
 /** How long an idle phone stays listed as a target once in the background. */
 const IDLE_BACKGROUND_MS = 120_000;
@@ -21,6 +27,7 @@ export class PlaybackSurface {
   private readonly audio = inject(AudioPlayerService);
   private readonly remote = inject(RemoteService);
   private readonly sse = inject(SseService);
+  private readonly http = inject(HttpClient);
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
   private streamDropped = false;
@@ -29,7 +36,7 @@ export class PlaybackSurface {
   private readonly hiddenKey = signal<string | null>(null);
 
   private static keyOf(s: AccountSession): string {
-    return `${s.owner.targetId}|${s.epoch}|${s.state === 'parked'}`;
+    return `${deviceIdOf(s.owner.targetId ?? '')}|${s.epoch}|${s.state === 'parked'}`;
   }
 
   /** The session already sits on this device: a reader's position it saved, or the track its own player holds. */
@@ -41,8 +48,11 @@ export class PlaybackSurface {
   readonly state = computed<SurfaceState>(() => {
     const s = this.sync.session();
     if (!s) return 'idle';
-    if (this.sync.role() === 'owner' || this.sync.localPlaying() || this.sync.claimPending() || this.here()) return 'local';
-    return s.state === 'parked' ? 'parked' : 'remote';
+    if (this.sync.localPlaying() || this.sync.claimPending() || this.here()) return 'local';
+    const owner = this.sync.role() === 'owner';
+    // The owner after a reload holds no player yet: it shows the session as parked until one mounts.
+    if (owner && this.sync.holdsPlayer()) return 'local';
+    return owner || s.state === 'parked' ? 'parked' : 'remote';
   });
 
   /** Re-reading the session and the targets after a resume: the surface stays up, marked stale. */
@@ -65,8 +75,23 @@ export class PlaybackSurface {
   readonly aboveAudio = computed(() => this.audio.active() && !this.miniHidden());
 
   constructor() {
+    // A hidden bar stays hidden for the same playback only: any other state of the session shows it again.
     effect(() => {
-      if (!this.sync.session()) this.hiddenKey.set(null);
+      const s = this.sync.session();
+      const hidden = untracked(this.hiddenKey);
+      if (!s || (hidden !== null && hidden !== PlaybackSurface.keyOf(s))) this.hiddenKey.set(null);
+    });
+
+    // A frozen WebView runs no timer, so its silence is what unlists it.
+    effect((onCleanup) => {
+      const connectionId = this.sse.connectionId();
+      if (!connectionId) return;
+      const ping = () => this.http
+        .post('/api/system/events/keepalive', { connectionId }, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
+        .subscribe({ error: () => undefined });
+      ping();
+      const timer = setInterval(ping, KEEPALIVE_MS);
+      onCleanup(() => clearInterval(timer));
     });
 
     // A player that starts while the stream is dropped (lock screen, background audio) lists the device again.

@@ -4934,6 +4934,15 @@
         "responses": {
           "201": {}
         }
+      },
+      "delete": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "unregister",
+        "responses": {
+          "204": {}
+        }
       }
     },
     "/api/remote/targets": {
@@ -5833,6 +5842,18 @@
         "operationId": "events",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/system/events/keepalive": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "A client's proof that it still reads its stream; a silent one stops being listed as a target.",
+        "operationId": "keepalive",
+        "responses": {
+          "204": {}
         }
       }
     },

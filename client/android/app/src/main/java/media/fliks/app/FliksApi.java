@@ -164,8 +164,8 @@ final class FliksApi {
         return new JSONObject(request("POST", path, body, boundKey));
     }
 
-    void send(String method, String path, @Nullable String body, String boundKey) throws IOException {
-        request(method, path, body, boundKey);
+    String send(String method, String path, @Nullable String body, String boundKey) throws IOException {
+        return request(method, path, body, boundKey);
     }
 
     private String request(String method, String path, @Nullable String body, @Nullable String boundKey)

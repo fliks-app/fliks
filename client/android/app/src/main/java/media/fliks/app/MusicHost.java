@@ -64,6 +64,9 @@ import java.util.concurrent.Executors;
 final class MusicHost {
     private static final long TICK_MS = 500;
     private static final long BEAT_MS = 15_000;
+    private static final long WATCH_MS = 2_000;
+    /** A paused queue stays a remote target this long, so another device can resume it. */
+    private static final long FACE_LINGER_MS = 5 * 60_000;
     private static final String PREFS = "fliks_audio";
 
     interface Emitter {
@@ -134,6 +137,12 @@ final class MusicHost {
     @Nullable private Emitter emitter;
     @Nullable private MediaLibraryService.MediaLibrarySession session;
     private volatile boolean observed;
+    /** The activity is resumed: only then is the web layer sure to run its timers. */
+    private volatile boolean webForeground;
+    private final NativeFace face;
+    private long playedAt;
+    /** The last remote command applied, which the next beat acknowledges. */
+    @Nullable private volatile String lastCmdId;
     /** Server and user the queue started under; a different signed-in session never reaches it. */
     @Nullable private volatile String sessionKey;
     @Nullable private volatile Book book;
@@ -179,6 +188,7 @@ final class MusicHost {
                 .setLooper(Looper.getMainLooper())
                 .build();
         player = new RoutedPlayer(exo);
+        face = new NativeFace(context, api, io, main, this::onRemote);
         exo.addListener(new Listener());
         stems = new StemCompanions(context, source, exo, this::applyGain, () -> emit("stems", new JSObject().put("state", "failed")));
     }
@@ -192,6 +202,16 @@ final class MusicHost {
     void setObserved(boolean observed) {
         this.observed = observed;
         if (!observed) player.routed = false;
+    }
+
+    void setWebForeground(boolean foreground) {
+        webForeground = foreground;
+        if (foreground) main.post(watch);
+    }
+
+    /** The web layer beats and takes remote commands itself. */
+    private boolean webLive() {
+        return observed && webForeground;
     }
 
     /** A WebView exists: it refreshes tokens when native asks, so native never rotates them. */
@@ -253,6 +273,8 @@ final class MusicHost {
         exo.prepare();
         exo.setPlayWhenReady(autoplay);
         PlaybackService.start(context);
+        main.removeCallbacks(watch);
+        main.post(watch);
     }
 
     /** Replaces the order around the current entry, which the web layer keeps at `index`. */
@@ -278,6 +300,7 @@ final class MusicHost {
 
     void stop() {
         beat(false);
+        face.leave(sessionKey);
         stems.clear();
         edit(() -> {
             exo.stop();
@@ -498,11 +521,82 @@ final class MusicHost {
         }
     };
 
-    /** Progress to the server for what the web layer does not observe. */
+    /** Beats and remote commands for as long as the web layer cannot: backgrounded (its renderer may be
+     *  frozen) or gone. The device is then a remote target of its own (`remote.md` rule 21a). */
+    private final Runnable watch = new Runnable() {
+        @Override
+        public void run() {
+            main.removeCallbacks(this);
+            if (exo.getMediaItemCount() == 0) return;
+            long now = System.currentTimeMillis();
+            if (exo.isPlaying()) playedAt = now;
+            if (webLive() || now - playedAt > FACE_LINGER_MS) face.leave(sessionKey);
+            else if (sessionKey != null) face.poll(sessionKey);
+            main.postDelayed(this, WATCH_MS);
+        }
+    };
+
+    private void onRemote(JSONObject event) {
+        String type = event.optString("type");
+        if ("session.superseded".equals(type)) {
+            stop();
+            return;
+        }
+        if (!"remote.command".equals(type) || event.optLong("expiresAt") < System.currentTimeMillis()) return;
+        String action = event.optString("action");
+        if (!handles(action, event)) return;
+        lastCmdId = event.optString("cmdId", null);
+        switch (action) {
+            case "play": exo.play(); break;
+            case "pause": exo.pause(); break;
+            case "playpause": if (exo.isPlaying()) exo.pause(); else exo.play(); break;
+            case "stop": stop(); break;
+            case "seek": seekTo(event.optDouble("positionSeconds", 0)); break;
+            case "next": if (itemOf(exo.getCurrentMediaItem()) == null) exo.seekForward(); else exo.seekToNextMediaItem(); break;
+            case "prev": if (itemOf(exo.getCurrentMediaItem()) == null) exo.seekBack(); else exo.seekToPreviousMediaItem(); break;
+            case "load":
+                if (event.has("positionSeconds")) seekTo(event.optDouble("positionSeconds", 0));
+                if (event.optBoolean("paused", false)) exo.pause(); else exo.play();
+                break;
+            default: break;
+        }
+        // After the player settled: the beat carries the state the command led to, and acknowledges it.
+        if (!"stop".equals(action)) main.postDelayed(() -> beat(exo.isPlaying()), 300);
+    }
+
+    /** What the service can do alone; the rest needs the web layer, and an unacknowledged command says so. */
+    private boolean handles(String action, JSONObject event) {
+        switch (action) {
+            case "play": case "pause": case "playpause": case "stop": case "seek": case "next": case "prev":
+                return true;
+            case "load": {
+                // Resuming the queued item, as a hand-over to a device holding it paused does.
+                Long item = itemOf(exo.getCurrentMediaItem());
+                return item != null && event.optLong("itemId", -1) == item && !event.has("queue");
+            }
+            default:
+                return false;
+        }
+    }
+
+    /** `position` is in the track, or in the whole book for parts. */
+    private void seekTo(double position) {
+        Book b = book;
+        int part = 0;
+        if (b != null) {
+            while (part + 1 < b.offsets.length && b.offsets[part + 1] <= position) part++;
+            exo.seekTo(part, (long) ((position - b.offsets[part]) * 1000));
+        } else {
+            exo.seekTo(exo.getCurrentMediaItemIndex(), (long) (position * 1000));
+        }
+    }
+
+    /** Progress to the server for what the web layer does not take care of. */
     private void beat(boolean playing) {
         lastBeat = System.currentTimeMillis();
         MediaItem current = exo.getCurrentMediaItem();
-        if (observed || current == null) return;
+        if (webLive() || current == null) return;
+        face.want();
         Book b = book;
         Long item = itemOf(current);
         Resolved r = item == null ? null : resolved.get(item);
@@ -516,8 +610,8 @@ final class MusicHost {
         double position = exo.getCurrentPosition() / 1000.0;
         try {
             JSONObject body = new JSONObject().put("state", playing ? "playing" : "paused");
-            String device = api.deviceId();
-            if (device != null && !device.isEmpty()) body.put("targetId", device);
+            String target = face.targetId();
+            if (target != null) body.put("targetId", target);
             long media;
             if (b != null) {
                 int i = exo.getCurrentMediaItemIndex();
@@ -531,9 +625,12 @@ final class MusicHost {
                         .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
                         .put("mediaFileId", r.mediaFileId).put("itemId", item).put("sessionId", r.sessionId);
             }
+            String ack = lastCmdId;
+            if (ack != null) body.put("lastCmdId", ack);
             String payload = body.toString();
             io.execute(() -> {
                 try {
+                    face.ensure(key);
                     api.send("PUT", "/api/playback/media/" + media + "/state", payload, key);
                 } catch (IOException ignored) {
                     // The next beat carries the position.
@@ -605,9 +702,12 @@ final class MusicHost {
         @Override
         public void onIsPlayingChanged(boolean playing) {
             main.removeCallbacks(tick);
+            playedAt = System.currentTimeMillis();
             if (playing) {
                 recoveredAt = -1;
                 main.post(tick);
+                main.post(watch);
+                beat(true);
             } else beat(false);
             emitState();
         }

@@ -1,3 +1,4 @@
+import { provideHttpClient } from '@angular/common/http';
 import { Component, computed, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
@@ -101,6 +102,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     providers: [
       provideTranslateService(),
       provideZonelessChangeDetection(),
+      provideHttpClient(),
       { provide: PlaybackSession, useValue: session },
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
@@ -108,7 +110,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
-      { provide: SseService, useValue: { targetId: signal('phone#1') } },
+      { provide: SseService, useValue: { targetId: signal('phone#1'), connectionId: signal(null) } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
     ],

@@ -1,0 +1,22 @@
+{
+  "name": "events-keepalive-unknown-connection",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "connectionId": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "events.error_unknown_connection",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/system/events/keepalive"
+    }
+  ]
+}

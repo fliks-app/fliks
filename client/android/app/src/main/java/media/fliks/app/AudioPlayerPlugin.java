@@ -40,9 +40,20 @@ public class AudioPlayerPlugin extends Plugin {
     }
 
     @Override
+    protected void handleOnResume() {
+        host.setWebForeground(true);
+    }
+
+    @Override
+    protected void handleOnPause() {
+        host.setWebForeground(false);
+    }
+
+    @Override
     protected void handleOnDestroy() {
         host.setEmitter(null);
         host.setObserved(false);
+        host.setWebForeground(false);
         host.setWebLoaded(false);
     }
 

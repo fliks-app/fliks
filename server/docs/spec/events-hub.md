@@ -8,6 +8,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 |---|---|---|---|---|---|
 | `GET /api/system/events` | `SessionAuthed`; policy: any authenticated user | `device?`, `ff?`, `tvPlatform?`, `name?` (raw strings, no validation) | `text/event-stream`, status 200, stays open | 401 no/invalid credential or disabled user (rule 1); 403 `session_token_required` (rule 2) | registers the connection, evicts superseded same-`targetId` connections, sends `remote.targets_changed` to the user when `device` is given, then `sse.connected` (rule 9) |
 | `POST /api/system/events/ticket` | `SessionAuthed` | none | 201 `{ticket: string, expiresIn: 30}` | 401; 403 `session_token_required` | stores the ticket in memory (rule 1a) |
+| `POST /api/system/events/keepalive` | `SessionAuthed` | body `{ connectionId: string }`, no unknown property | 204, no body | 401; 403 `session_token_required`; 404 `events.error_unknown_connection` (unknown connection or another account's) | refreshes the connection's keepalive (rule 31a) |
 | `GET /api/system/activity` | `Authed`; policy `ability.can(Action.Read, 'Settings')` | `page?`, `limit?` (raw strings) | `{ data: ActivityRow[]; total: number; dropped: number }` | 401; 403 without `read:Settings` | none |
 
 ## Rules
@@ -57,10 +58,11 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 
 ### Target registry (hub half of remote control)
 
-31. `list_for_user(userId)` / `list_all`: every SSE connection with a non-null `targetId` plus every non-expired polled target, each as `{connectionId,...identity}`, sorted by `since` descending (newest first). The scan itself expires polled targets whose last poll is older than 30 000 ms (`POLLED_TARGET_TTL_MS`): deleted, log `Polled target T stopped polling`, and `remote.targets_changed` emitted to the target's owner. Expiry is lazy (only when a list runs).
+31. `list_for_user(userId)` / `list_all`: every SSE connection with a non-null `targetId` that is not silent (rule 31a) plus every non-expired polled target, except the web SSE connections (not `#party` streams) of a device that has a polled `<deviceId>#native` target of the same account (its native face speaks for it), each as `{connectionId,...identity}`, sorted by `since` descending (newest first). The scan itself expires polled targets whose last poll is older than 30 000 ms (`POLLED_TARGET_TTL_MS`): deleted, log `Polled target T stopped polling`, and `remote.targets_changed` emitted to the target's owner. Expiry is lazy (only when a list runs).
+31a. Keepalive. `POST /api/system/events/keepalive` records the time on the connection it names (the id from `sse.connected`), which must belong to the caller. A connection that has sent at least one keepalive and has not sent one for `SSE_SILENCE` (120 000 ms) is silent: not listed, so not resolved or commanded either (a frozen WebView still holds a healthy socket that acknowledges pings, so only the client can say it is reading). A connection that never sent one is never silent (older clients). The connection stays open; the first listing that finds it silent emits `remote.targets_changed` to its owner once, and a keepalive from a silent one lists it again and emits it again. Clients send one every 30 s while their stream is connected.
 32. `register_polled_target(userId, identity)`: refuses a missing `targetId` (warning, no-op). Key `polled:<targetId>`. Re-registration keeps `since` and `queue`, refreshes `lastPoll` and identity; first registration emits `remote.targets_changed` to the user. The key doubles as the connection id. The route derives `targetId = <deviceId>#native` server-side.
 33. `drain_commands(userId, targetId)`: unknown target or other owner: `null` (route answers 404 `remote.error_device_offline`); else refresh `lastPoll` (no TTL check), return and clear the queue (each command at most once).
-34. `resolve_target(userId, targetId)`: among `list_for_user(userId)`, the newest matching row's `connectionId`, or `null`; more than one match logs a warning. Scoping to the user is the authorization.
+34. `resolve_target(userId, targetId)`: among `list_for_user(userId)`, the newest matching row's `connectionId`; with no match, the polled `#native` target of the same device (`deviceIdOf`); else `null`; more than one match logs a warning. Scoping to the user is the authorization.
 35. `target_id_for(connectionId)`: SSE connection's `targetId`, else polled target's, else `null` (also `null` for null/undefined input). `has_connection(id)` is `true` only for SSE connections (not polled).
 36. Attribution: `claim_attribution(targetId, userId, mediaFileId)` stores one claim per target (overwrites). `take_attribution(targetId, mediaFileId)`: null target or no claim: `null`; the claim is deleted on any read; older than 60 000 ms (`ATTRIBUTION_TTL_MS`): `null`; file mismatch: `null`; else the claimant's user id. Claimed by `remote.command` `load` with a `mediaFileId` (after delivery); taken by playback-info, which re-claims it (fresh timestamp) when the engine open fails.
 
@@ -222,7 +224,7 @@ none (the hub reads no setting; `engine_*`/`streaming_*` keys are in `engine-glu
 
 No fixture set. The Rust unit tests in `server/crates/server/src/events/` (hub, activity registry) cover the remote target registry, the activity registry, the audience filter, the wire format (rule 7 byte-exact incl. the `id:` counter and the leading blank line) and the 30 s ping with a paused clock.
 
-Parity scenarios: `server/parity/scenarios/events/` (14 files: SSE handshake and auth variants, `remote.targets_changed` and `pairing.requested` delivery, superseded-connection close, activity list, pagination and 403).
+Parity scenarios: `server/parity/scenarios/events/` (16 files: keepalive unknown connection and unauthenticated, SSE handshake and auth variants, `remote.targets_changed` and `pairing.requested` delivery, superseded-connection close, activity list, pagination and 403).
 
 ## Open questions
 

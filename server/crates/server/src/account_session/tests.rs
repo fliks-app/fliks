@@ -643,3 +643,31 @@ async fn a_second_tab_of_the_owning_device_supersedes_the_first(pool: PgPool) {
         Verdict::Superseded
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_devices_native_face_and_its_web_layer_are_one_owner(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let identity = |t: &str| crate::events::Identity {
+        target_id: Some(t.into()),
+        ..Default::default()
+    };
+    let _tab = st.hub.connect_session(u, None, identity("dev#tab"));
+    st.hub.register_polled_target(u, identity("dev#native"));
+    s.beat(&st, beat(u, "s1", "dev#tab", i)).await;
+    s.beat(&st, beat(u, "s2", "dev#native", i)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.epoch, r.session_id.as_str()), (1, "s2"));
+    assert_eq!(
+        s.beat(&st, beat(u, "s1", "dev#tab", i)).await,
+        Verdict::Ignored
+    );
+    s.beat(&st, beat(u, "s3", "dev#tab", i)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.epoch, r.session_id.as_str()), (1, "s3"));
+    assert_eq!(
+        s.beat(&st, beat(u, "s2", "dev#native", i)).await,
+        Verdict::Ignored
+    );
+}

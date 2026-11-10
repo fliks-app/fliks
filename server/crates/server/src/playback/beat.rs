@@ -296,6 +296,21 @@ fn emit_state(st: &AppState, user: i32, s: &LiveSession, media: i32, b: &Value) 
         .emit_to_user(user, remote_state(target_id.to_owned(), s, media, b));
 }
 
+/// A device with a registered native face beats through it, whichever layer sent the beat.
+fn native_face(st: &AppState, user: i32, conn: Option<&str>, body: &Value) -> Option<String> {
+    let target = body
+        .get("targetId")
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty())
+        .map(str::to_owned)
+        .or_else(|| st.hub.target_id_for(conn))?;
+    Some(
+        st.hub
+            .native_face(user, device_id_of(&target))?
+            .connection_id,
+    )
+}
+
 /// Who beats: the live connection or polled target the beat names, else the device it names, else
 /// the one remembered from an earlier beat (rule 22: a reconnecting stream must not drop the owner).
 fn beat_identity(
@@ -541,6 +556,7 @@ pub async fn heartbeat(
         // A `polled:` key the hub does not hold names no connection: it must not rebind the session.
         let conn = sse_connection_id(&body, &headers)
             .filter(|c| !c.starts_with("polled:") || st.hub.identity_for(Some(c)).is_some());
+        let conn = native_face(&st, user, conn.as_deref(), &body).or(conn);
         let asked = conn
             .as_deref()
             .or_else(|| before.as_ref()?.sse_connection_id.as_deref());
