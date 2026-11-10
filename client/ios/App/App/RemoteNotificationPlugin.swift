@@ -28,6 +28,11 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private var restoreVolume: Float?
     private var pinning = false
     private var pausedTimer: Timer?
+    /// The paused title whose lock screen was released: its reports stay ignored until it plays or changes.
+    private var releasedTitle: String?
+    /// Set when another app took the session, cleared when iOS says to resume: the loop never cuts that app off.
+    private var interrupted = false
+    private var seekedAt = Date.distantPast
     private var canSetVolume = false
     private var volume = 1.0
     private var artworkUrl: String?
@@ -52,7 +57,13 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         let seekButtons = call.getBool("seekButtons") ?? false
         let canSetVolume = call.getBool("canSetVolume") ?? false
         let volume = call.getDouble("volume") ?? 1
+        let sentAt = Date(timeIntervalSince1970: (call.getDouble("sentAt") ?? 0) / 1000)
         DispatchQueue.main.async {
+            if !playing && title == self.releasedTitle {
+                call.resolve()
+                return
+            }
+            self.releasedTitle = nil
             self.canSetVolume = canSetVolume
             self.volume = volume
             self.title = title
@@ -60,8 +71,11 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             self.duration = duration
             self.playing = playing
             self.advancing = playing && !buffering
-            self.reportedPosition = max(position, 0)
-            self.reportedAt = Date()
+            // A report sent before the last local seek still carries the old position.
+            if sentAt >= self.seekedAt {
+                self.reportedPosition = max(position, 0)
+                self.reportedAt = Date()
+            }
             self.start()
             if url != self.artworkUrl {
                 self.artworkUrl = url
@@ -78,6 +92,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func clear(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            self.releasedTitle = nil
             self.stop()
             call.resolve()
         }
@@ -103,7 +118,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Session
 
     private func start() {
-        guard silence?.isPlaying != true else { return }
+        guard silence?.isPlaying != true, !interrupted else { return }
         startLoop()
         guard silence?.isPlaying == true else { return }
         if targets.isEmpty { installCommands() }
@@ -130,16 +145,25 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private func interruption(_ note: Notification) {
         guard silence != nil,
               let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
-        let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
-        guard AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) else { return }
-        startLoop()
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        switch type {
+        case .began:
+            interrupted = true
+        case .ended:
+            let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            guard AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) else { return }
+            interrupted = false
+            start()
+        @unknown default:
+            break
+        }
     }
 
     private func stop() {
         pausedTimer?.invalidate()
         pausedTimer = nil
         guard silence != nil || !targets.isEmpty else { return }
+        interrupted = false
         silence?.stop()
         silence = nil
         volumeObservation = nil
@@ -168,8 +192,9 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         guard pausedTimer == nil else { return }
         pausedTimer = Timer.scheduledTimer(withTimeInterval: Self.pausedLimit, repeats: false) { [weak self] _ in
-            self?.stop()
-            self?.emit("released", 0)
+            guard let self else { return }
+            self.releasedTitle = self.title
+            self.stop()
         }
     }
 
@@ -198,8 +223,8 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func setSystemVolume(_ level: Float) {
         let slider = volumeView?.subviews.compactMap { $0 as? UISlider }.first
-        // The slider only accepts a value once laid out.
-        DispatchQueue.main.async { slider?.value = level }
+        // The slider only accepts a value once laid out; a release since then has restored the level.
+        DispatchQueue.main.async { if self.pinning { slider?.value = level } }
     }
 
     private func systemVolumeChanged(_ level: Float) {
@@ -218,10 +243,11 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         return duration > 0 ? min(value, duration) : value
     }
 
-    /// A seek moves the base of the next skip: the target's report lags, so a second quick skip must start from here.
+    /// A seek moves the base of the next skip, and reports sent before it no longer move that base.
     private func noteSeek(_ position: Double) {
         reportedPosition = position
         reportedAt = Date()
+        seekedAt = reportedAt
     }
 
     private func publish() {
@@ -304,8 +330,13 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func holdForStop() {
         var task = UIBackgroundTaskIdentifier.invalid
-        task = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(task) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopGrace) { UIApplication.shared.endBackgroundTask(task) }
+        let end = {
+            guard task != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(task)
+            task = .invalid
+        }
+        task = UIApplication.shared.beginBackgroundTask(expirationHandler: end)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopGrace, execute: end)
     }
 
     private func applyCommands(hasNext: Bool, seekButtons: Bool) {

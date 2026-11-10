@@ -11,6 +11,8 @@ export interface RemoteNotificationPlugin {
     buffering: boolean;
     /** Seconds. */
     position: number;
+    /** Epoch ms of the report, so native can tell a report older than its last local seek. */
+    sentAt: number;
     duration: number;
     canSetVolume: boolean;
     /** 0..1 */
@@ -26,8 +28,5 @@ export interface RemoteNotificationPlugin {
 }
 
 export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'stop' | 'like';
-
-/** Sent by iOS alone, when it let go of the lock screen after a long pause. */
-export type RemoteNotificationEvent = RemoteNotificationAction | 'released';
 
 export const RemoteNotification = registerPlugin<RemoteNotificationPlugin>('RemoteNotification');
