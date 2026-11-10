@@ -13,6 +13,7 @@ import { RemoteService } from '../../core/services/remote.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import { deviceIdOf } from '../../core/services/remote-target-id';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { SseService } from '../../core/services/sse.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
@@ -110,6 +111,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
+      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
       { provide: SseService, useValue: { targetId: signal('phone#1'), connectionId: signal(null) } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },

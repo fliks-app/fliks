@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
+import { ServerVersionService } from './server-version.service';
 import { SseService } from './sse.service';
 import { DownloadProgressService } from './download-progress.service';
 import { ToastService } from './toast.service';
@@ -27,6 +28,7 @@ function handle(event: Record<string, unknown>): DownloadProgressService {
       }),
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false } },
     ],
   });
@@ -86,6 +88,7 @@ function setupUnreachable(authenticated: boolean): SseService {
       }),
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => authenticated, sessionEpoch: () => 0 } },
       { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
     ],
@@ -142,6 +145,7 @@ describe('SseService: session change', () => {
         }),
         { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
         { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
         { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => true, sessionEpoch: epoch } },
         { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
       ],
@@ -187,6 +191,7 @@ describe('SseService: native dial credential', () => {
         }),
         { provide: ToastService, useValue: {} },
         { provide: ServerConfigService, useValue: { isNative: true, resolveUrl: (p: string) => `https://srv${p}` } },
+        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
         {
           provide: AuthService,
           useValue: {
@@ -254,6 +259,7 @@ describe('SseService: tab nonce', () => {
         }),
         { provide: ToastService, useValue: {} },
         { provide: ServerConfigService, useValue: { apiUrl: () => '', isNative: false } },
+        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
         { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false } },
       ],
     });

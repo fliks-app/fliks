@@ -237,6 +237,7 @@ describe('DownloadProgressService hydrate', () => {
   it('states what is in flight for a client that connects late', async () => {
     const { svc, http } = makeHttp();
     const done = svc.hydrate();
+    await Promise.resolve();
     http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
     await done;
     expect([...svc.progress().keys()]).toEqual([1, 2]);
@@ -246,6 +247,7 @@ describe('DownloadProgressService hydrate', () => {
     const { svc, http } = makeHttp();
     const done = svc.hydrate();
     movie(svc, [download({ progress: 0.9 })], 1);
+    await Promise.resolve();
     http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
     await done;
     expect(svc.progress().get(1)?.percent).toBe(90);
