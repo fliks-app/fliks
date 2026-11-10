@@ -282,8 +282,6 @@ export class SessionSyncService {
     this.starting.set(true);
     try {
       await start();
-    } catch (err) {
-      console.warn('[session] hand-over failed to start', err);
     } finally {
       this.starting.set(false);
     }
@@ -351,7 +349,12 @@ export class SessionSyncService {
       cancelLabel: this.translate.instant('session.close'),
       variant: 'info',
     });
-    if (resume) await this.handOver(() => stopped.resume());
+    if (!resume) return;
+    try {
+      await this.handOver(() => stopped.resume());
+    } catch (err) {
+      console.warn('[session] could not resume the superseded playback', err);
+    }
   }
 
   /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */

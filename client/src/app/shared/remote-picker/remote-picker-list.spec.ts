@@ -140,7 +140,7 @@ describe('RemotePickerListComponent twin tabs', () => {
 
   it('keeps the tab suffix apart from the label', () => {
     const twin = (targetId: string) => ({ targetId, userAgent: null, deviceName: 'Desk', systemName: null, formFactor: 'desktop', tvPlatform: null, nowPlaying: null });
-    const { component } = setup({ remote: { targets: signal([twin('pc#abcd1234'), twin('pc#wxyz5678'), { ...twin('tv#1'), deviceName: 'TV' }]) } });
+    const { component } = setup({ remote: { targets: signal([twin('pc#abcd1234'), twin('pc#wxyz5678'), { ...twin('tv#1'), deviceName: null, systemName: 'tvOS 18' }]) } });
     const rows = component['pickerRows']().filter((r: { kind: string }) => r.kind === 'remote');
     expect(rows.map((r: { tab?: string }) => r.tab)).toEqual(['abcd', 'wxyz', undefined]);
   });

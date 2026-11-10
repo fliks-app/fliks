@@ -261,6 +261,16 @@ describe('SessionSyncService takeover', () => {
     expect(confirm.mock.calls[0][0].message).toBe('A film. session.superseded_message');
   });
 
+  it('does not reject when "resume here" fails to start', async () => {
+    const { service } = setup({ confirm: true });
+    const { p, resume } = player('sid-1');
+    resume.mockRejectedValue(new Error('chunk failed'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    service.registerPlayer(p);
+    await expect(service.handleSuperseded('sid-1', 'Pixel')).resolves.toBeUndefined();
+    expect(resume).toHaveBeenCalled();
+  });
+
   it('flags the session started by "resume here" as a hand-over', async () => {
     const { service, sse } = setup({ confirm: true });
     const { p } = player('sid-1');
@@ -375,14 +385,6 @@ describe('SessionSyncService play here', () => {
     await service.playHere();
     expect(resumer.mock.calls[0][0].item).toMatchObject({ mediaId: 3, episodeId: 7, mediaFileId: 9 });
     expect(resumer.mock.calls[0][1]).toBeGreaterThanOrEqual(100);
-  });
-
-  it('survives an adapter that fails to start the item', async () => {
-    const { service, flush } = setup();
-    await flush(session());
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    service.registerResumer('video', vi.fn().mockRejectedValue(new Error('chunk failed')));
-    await expect(service.playHere()).resolves.toBeUndefined();
   });
 
   it('ignores a report of another file than the session item', async () => {
