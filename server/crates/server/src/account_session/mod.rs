@@ -11,6 +11,7 @@ use crate::{
         event::{Queue, Repeat},
     },
     presence::{now_ms, ttl_ms},
+    remote::device_id_of,
     state::AppState,
 };
 use chrono::{DateTime, Utc};
@@ -95,6 +96,14 @@ impl From<&Queue> for QueueState {
     }
 }
 
+/// Two targets of one device (a reload changes the tab nonce, not the device) are one owner.
+fn same_device(a: &Option<String>, b: &Option<String>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => device_id_of(a) == device_id_of(b),
+        _ => a == b,
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Owner {
     pub target_id: Option<String>,
@@ -169,16 +178,18 @@ impl Inner {
         let entry = self.rows.get(&claim.account);
         let owner = match entry {
             Some(e) if e.row.session_id.starts_with(READER_PREFIX) => match &e.replaced {
-                Some((rsid, target)) if rsid != sid && target != &claim.target => target,
+                Some((rsid, target)) if rsid != sid && !same_device(target, &claim.target) => {
+                    target
+                }
                 _ => return None,
             },
             Some(e) => &e.row.owner.target_id,
             None => return Some(Verdict::Ignored),
         };
-        Some(if owner != &claim.target {
-            Verdict::Superseded
-        } else {
+        Some(if same_device(owner, &claim.target) {
             Verdict::Ignored
+        } else {
+            Verdict::Superseded
         })
     }
 }
@@ -274,9 +285,10 @@ async fn park_or_drop(st: &AppState, g: &mut Inner, user: i32) {
     }
 }
 
-/// Ends the presence and the engine session of `sid`, announcing nothing: its owner already knows.
+/// Ends the presence and the engine session of `sid`; its owner already knows, the household is told.
 async fn stop_session(st: &AppState, sid: &str) {
     if let Some(stopped) = st.presence.stop(sid) {
+        crate::presence::announce_stopped(st, &stopped);
         st.qoe.end_session(&stopped.session_id).await;
     }
     if st.engine.runtime()
@@ -323,33 +335,41 @@ impl AccountSessions {
 
     /// Claims, updates or supersedes (`session.md` rules 4-10). A database failure never fails the beat.
     pub async fn beat(&self, st: &AppState, b: BeatIn) -> Verdict {
-        let mut g = self.0.lock().await;
-        let current = g
-            .rows
-            .get(&b.account)
-            .is_some_and(|e| e.row.session_id == b.sid);
-        if current {
-            return Self::update(st, &mut g, b).await;
-        }
-        if let Some(v) = g.claimed_verdict(&b.sid) {
-            return v;
-        }
-        if b.owner.target_id.is_none() || g.unscoped.contains(&b.sid) {
-            return Verdict::Ignored;
-        }
-        match store::in_scope(&st.db, b.account, b.kind).await {
-            Ok(true) => {}
-            Ok(false) => {
-                g.unscoped.insert(b.sid);
+        let mut scope = None;
+        loop {
+            let mut g = self.0.lock().await;
+            if g.rows
+                .get(&b.account)
+                .is_some_and(|e| e.row.session_id == b.sid)
+            {
+                return Self::update(st, &mut g, b).await;
+            }
+            if let Some(v) = g.claimed_verdict(&b.sid) {
+                return v;
+            }
+            if b.owner.target_id.is_none() || g.unscoped.contains(&b.sid) {
                 return Verdict::Ignored;
             }
-            Err(e) => {
-                tracing::warn!(account = b.account, "account session scope not read: {e}");
-                return Verdict::Ignored;
+            let Some(scope) = scope.take() else {
+                // The preference read stays out of the lock; the decision is taken again after it.
+                drop(g);
+                scope = Some(store::in_scope(&st.db, b.account, b.kind).await);
+                continue;
+            };
+            match scope {
+                Ok(true) => {}
+                Ok(false) => {
+                    g.unscoped.insert(b.sid);
+                    return Verdict::Ignored;
+                }
+                Err(e) => {
+                    tracing::warn!(account = b.account, "account session scope not read: {e}");
+                    return Verdict::Ignored;
+                }
             }
+            Self::claim(st, &mut g, b).await;
+            return Verdict::Current;
         }
-        Self::claim(st, &mut g, b).await;
-        Verdict::Current
     }
 
     /// A transfer of the account's session to `target` was sent: its first beat of `item` claims silently.
@@ -429,7 +449,7 @@ impl AccountSessions {
         let prior = g.rows.remove(&b.account);
         let same_owner = prior
             .as_ref()
-            .is_some_and(|p| p.row.owner.target_id == b.owner.target_id);
+            .is_some_and(|p| same_device(&p.row.owner.target_id, &b.owner.target_id));
         let epoch = match &prior {
             Some(p) if same_owner => p.row.epoch,
             Some(p) => p.row.epoch + 1,
@@ -480,7 +500,7 @@ impl AccountSessions {
             .filter(|(user, other)| {
                 **user != b.account
                     && other.row.state != State::Parked
-                    && other.row.owner.target_id == target
+                    && same_device(&other.row.owner.target_id, &target)
             })
             .map(|(user, _)| *user)
             .collect();
@@ -636,6 +656,16 @@ impl AccountSessions {
         g.claimed.retain(|sid, c| {
             c.ended_at.is_none_or(|t| now - t < revive) || st.presence.peek(sid).is_some()
         });
+        let mut lapsed: Vec<i32> = g
+            .handoffs
+            .extract_if(|_, (_, until)| *until <= now)
+            .map(|((account, _), _)| account)
+            .collect();
+        lapsed.sort_unstable();
+        lapsed.dedup();
+        for account in lapsed {
+            announce(st, account, g.rows.get(&account).map(|e| &e.row));
+        }
         let cutoff = Utc::now() - PARKED_TTL;
         let old: Vec<i32> = g
             .rows

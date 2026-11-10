@@ -1,5 +1,8 @@
 //! The `LiveSession` shape, its defaults and the engine-side mappings (`presence.md` rules 2-9).
-use crate::events::event::{PlayState, QualityRung};
+use crate::events::{
+    Identity,
+    event::{PlayState, QualityRung},
+};
 use fliks_engine_core::api::{
     AudioPlan, BitrateHint, ClientInfo, Decision, PlayMethod, SessionKind, SessionSnapshot,
     TranscodeReason,
@@ -29,6 +32,8 @@ pub struct LiveSession {
     pub system_name: Option<String>,
     pub app_version: Option<String>,
     pub sse_connection_id: Option<String>,
+    /// The device last seen beating this session; outlives the SSE connection it came from.
+    pub owner: Option<Identity>,
     pub started_at: f64,
     pub last_beat: f64,
     pub position: f64,
@@ -120,11 +125,22 @@ pub struct Beat {
     pub subtitle_track_index: Option<Option<i32>>,
     /// A present value rebinds the session to that SSE connection (a reconnect re-attaches).
     pub sse_connection_id: Option<String>,
+    /// A resolved identity replaces the remembered one; `None` keeps it.
+    pub owner: Option<Identity>,
     pub volume: Option<Option<f64>>,
     pub muted: Option<Option<bool>>,
 }
 
 impl LiveSession {
+    /// The target of the device last seen beating this session.
+    pub fn target_id(&self) -> Option<&str> {
+        self.owner
+            .as_ref()?
+            .target_id
+            .as_deref()
+            .filter(|t| !t.is_empty())
+    }
+
     /// Defaults of rule 3 for everything the facts do not give.
     pub fn from_facts(f: &Facts, now: f64) -> Self {
         let r = &f.decision.response;
@@ -149,6 +165,7 @@ impl LiveSession {
             system_name: f.client.system_name.clone(),
             app_version: f.client.app_version.clone(),
             sse_connection_id: tag("sseConnectionId"),
+            owner: None,
             started_at: now,
             last_beat: now,
             position: f.position_s,
@@ -226,6 +243,9 @@ impl LiveSession {
         }
         if let Some(c) = b.sse_connection_id.as_ref().filter(|c| !c.is_empty()) {
             self.sse_connection_id = Some(c.clone());
+        }
+        if b.owner.is_some() {
+            self.owner.clone_from(&b.owner);
         }
     }
 }

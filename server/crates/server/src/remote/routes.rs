@@ -124,7 +124,7 @@ pub async fn targets(
 ) -> Result<Json<Vec<TargetDto>>, AppError> {
     let me = a.user.id;
     let slf = param(&q, "self");
-    let keep = |t: &crate::events::Target| t.identity.target_id != slf;
+    let keep = |t: &crate::events::Target| t.is_remote() && t.identity.target_id != slf;
     let mut live = live_sessions(&st);
     let mut rows: Vec<TargetDto> = st
         .hub
@@ -253,7 +253,7 @@ async fn find_target_owner(
             .hub
             .list_all()
             .into_iter()
-            .find(|t| t.identity.target_id.as_deref() == Some(target_id))
+            .find(|t| t.is_remote() && t.identity.target_id.as_deref() == Some(target_id))
             .map(|t| (t.user_id, t.connection_id)));
     }
     Ok(None)

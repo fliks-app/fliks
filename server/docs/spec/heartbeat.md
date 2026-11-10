@@ -19,7 +19,7 @@ The body also takes `queue` (an audio playback's queue, rule 25), `itemId` (name
 ### Inputs
 
 1. The handler holds one in-memory map of `{at:number, pos:number}` (`lastDbWriteAt`), per process, never persisted; a restart forgets it.
-2. `sseConnectionId` = `body.sseConnectionId ?? header x-fliks-sse-connection ?? (body.targetId ? "polled:" + body.targetId: undefined)`. `??` keeps `''` from the body (then the registry ignores it, rule 8).
+2. `sseConnectionId` = `body.sseConnectionId ?? header x-fliks-sse-connection ?? (body.targetId ? "polled:" + body.targetId: undefined)`. `??` keeps `''` from the body (then the registry ignores it, rule 8). A `polled:` key the hub does not hold names no connection and is not bound to the session. The owner is resolved as in `session.md` rule 5b; a native service that has no stream sends `targetId` (its device id) alone.
 3. Without `body.sessionId` the whole presence block (rules 5-11) is skipped: no engine call, no QoE, no `remote.state`; only the history write (rules 12-16) runs, and the response never has `sessionLost`.
 
 ### Order of side effects (with `body.sessionId`)
@@ -44,7 +44,7 @@ The body also takes `queue` (an audio playback's queue, rule 25), `itemId` (name
 
 ### Account session (`session.md`)
 
-22. Between the engine beat and the QoE sample (after rule 9), a beat whose presence is known, that is not an offline replay and whose item resolved calls the account session hub with the credited account (`historyUserId`, rule 12), the live session, the connection's target and identity, the item, `mediaFileId`, state, position, duration, completion-free (rule 26) and `queue`. The hub claims, updates or supersedes (`session.md` rules 4-10); nothing here awaits anything but its own lock and one small write.
+22. Between the engine beat and the QoE sample (after rule 9), a beat whose presence is known, that is not an offline replay and whose item resolved calls the account session hub with the credited account (`historyUserId`, rule 12), the live session (its remembered owner identity, `session.md` rule 5b), the item, `mediaFileId`, state, position, duration, completion-free (rule 26) and `queue`. The hub claims, updates or supersedes (`session.md` rules 4-10); nothing here awaits anything but its own lock and one small write.
 23. When the hub says the session is superseded (`session.md` rule 8), the beat is answered at once: the QoE sample and the `remote.state` emit are skipped, and the history write (rules 12-17) is skipped too unless the beat's item differs from the item of the account's row, in which case it runs and writes `playback_states` only. The body carries `"superseded":true` (with `"sessionLost":true` first when the engine also lost the session: the sid is then checked on its own, unless the beat is an offline replay). `superseded` is never `false` in a body. A beat of a replaced session of the same target, or of a session with no row, is not superseded.
 24. Out of scope beats (option off, kind not selected, no target, no presence) skip the call and are unchanged by it.
 25. `queue` is optional and sent only when the queue changes and on the first beat: `{ itemIds: int[] (at most 500), index: int >= 0, shuffle?: boolean, repeat?: 'off'|'all'|'one' }`. A malformed or oversized value is ignored (the stored queue is kept), never an error: the body stays unvalidated (inputs). An absent `queue` keeps the stored one.

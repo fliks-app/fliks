@@ -47,6 +47,14 @@ pub struct Target {
     pub since: i64,
 }
 
+impl Target {
+    /// A TV app's party stream (`<device>#party`) carries a party, never a remote command.
+    pub fn is_remote(&self) -> bool {
+        let tab = self.identity.target().and_then(|t| t.split_once('#'));
+        tab.is_none_or(|(_, tab)| tab != "party")
+    }
+}
+
 pub(super) enum Msg {
     Event(Arc<str>),
     Close,
@@ -531,7 +539,7 @@ impl Hub {
         let matches: Vec<_> = self
             .list_for_user(user)
             .into_iter()
-            .filter(|t| t.identity.target_id.as_deref() == Some(target_id))
+            .filter(|t| t.is_remote() && t.identity.target_id.as_deref() == Some(target_id))
             .collect();
         if matches.len() > 1 {
             tracing::warn!(
@@ -746,6 +754,21 @@ mod tests {
         assert_eq!(got(&mut other), [CHANGED]);
         hub.emit(SseEvent::QueueUpdated {});
         assert_eq!(got(&mut c), ["queue.updated"]);
+    }
+
+    #[test]
+    fn a_party_stream_is_never_a_remote_target() {
+        let hub = Hub::new();
+        let _tv = hub.connect(1, at("tv#party"));
+        let _web = hub.connect(1, at("tv#ab12cd34"));
+        let remote: Vec<_> = hub
+            .list_for_user(1)
+            .into_iter()
+            .filter(Target::is_remote)
+            .map(|t| t.identity.target_id.unwrap())
+            .collect();
+        assert_eq!(remote, ["tv#ab12cd34"]);
+        assert!(hub.resolve_target(1, "tv#party").is_none());
     }
 
     #[test]

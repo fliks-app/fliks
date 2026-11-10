@@ -28,6 +28,7 @@ final class FliksApi {
     private static final String CAPACITOR_PREFS = "CapacitorStorage";
     private static final String SESSIONS_KEY = "fliks_sessions";
     private static final String ACTIVE_KEY = "fliks_active_session";
+    private static final String DEVICE_ID_KEY = "fliks_device_id";
 
     static final class HttpError extends IOException {
         final int status;
@@ -103,6 +104,12 @@ final class FliksApi {
     String activeKey() {
         JSONObject s = active();
         return s == null || s.optString("accessToken").isEmpty() ? null : key(s);
+    }
+
+    /** The installation id the web layer stores; on this shell it is the remote target id. */
+    @Nullable
+    String deviceId() {
+        return prefs.getString(DEVICE_ID_KEY, null);
     }
 
     boolean signedIn() {
