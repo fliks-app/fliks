@@ -25,6 +25,8 @@ export interface RemoteNotificationPlugin {
     seekButtons: boolean;
   }): Promise<void>;
   clear(): Promise<void>;
+  /** iOS: this phone started the target, so the audio session may be taken back from the app that interrupted it. */
+  resume(): Promise<void>;
 }
 
 export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'stop' | 'like';

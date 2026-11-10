@@ -19,6 +19,12 @@ describe('holdTabNonce', () => {
       expect(await holdTabNonce('aaaa0002')).toBe(false);
       expect(await holdTabNonce('aaaa0003')).toBe(true);
     });
+
+    it('gives a nonce asked by two tabs at once to exactly one of them', async () => {
+      noLocks();
+      const results = await Promise.all([holdTabNonce('aaaa0004'), holdTabNonce('aaaa0004')]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+    });
   });
 
   describe('with Web Locks', () => {

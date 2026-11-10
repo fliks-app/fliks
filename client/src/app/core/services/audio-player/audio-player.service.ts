@@ -1286,11 +1286,13 @@ export class AudioPlayerService {
     return { supportsVolume, ...(supportsVolume && { volume: this.level, muted: this.muted }) };
   }
 
-  /** `exact` is false when the queue's current track is unavailable and `index` lands on a later one. */
+  /** `exact` is false when the queue's current track is unavailable and `index` lands on a later one; `tracks` is empty when none follows. */
   private async queueOf(q: WireQueue): Promise<{ tracks: MusicTrackRequest[]; index: number; exact: boolean }> {
     const aligned = alignTrackRows(q.itemIds, await this.music.trackRequests(q.itemIds));
-    const index = Math.max(0, aligned.findIndex((a) => a.wireIndex >= q.index));
-    return { tracks: aligned.map((a) => a.row), index, exact: aligned[index]?.wireIndex === q.index };
+    const found = aligned.findIndex((a) => a.wireIndex >= q.index);
+    // Nothing at or after the sender's current track: no queue, rather than a restart from the first.
+    if (found < 0) return { tracks: [], index: 0, exact: false };
+    return { tracks: aligned.map((a) => a.row), index: found, exact: aligned[found].wireIndex === q.index };
   }
 
   /** Opens a remote queue where the sender left it, from the start of the next track when the current one is unavailable;

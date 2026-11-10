@@ -23,11 +23,19 @@ function holdByLock(locks: LockManager, nonce: string): Promise<boolean> {
   });
 }
 
-/** Web Locks only exist in secure contexts: elsewhere (http over the LAN) the holder of a nonce answers a broadcast. */
+/** Web Locks only exist in secure contexts: elsewhere (http over the LAN) the holder of a nonce answers a broadcast.
+ * Tabs asking at once settle on the lowest random id, so two simultaneous restores end with distinct nonces. */
 function holdByChannel(nonce: string): Promise<boolean> {
   if (typeof BroadcastChannel === 'undefined') return Promise.resolve(true);
   return new Promise((resolve) => {
     const channel = new BroadcastChannel(CHANNEL);
+    const id = Math.random();
+    let claimed = false;
+    const lose = () => {
+      clearTimeout(timer);
+      channel.close();
+      resolve(false);
+    };
     const timer = setTimeout(() => {
       channel.onmessage = (e) => {
         if (e.data?.ask === nonce) channel.postMessage({ held: nonce });
@@ -35,11 +43,14 @@ function holdByChannel(nonce: string): Promise<boolean> {
       resolve(true);
     }, WAIT_MS / 3);
     channel.onmessage = (e) => {
-      if (e.data?.held !== nonce) return;
-      clearTimeout(timer);
-      channel.close();
-      resolve(false);
+      if (e.data?.held === nonce) return lose();
+      if (e.data?.ask !== nonce) return;
+      if (e.data.id < id) return lose();
+      if (!claimed) {
+        claimed = true;
+        channel.postMessage({ ask: nonce, id });
+      }
     };
-    channel.postMessage({ ask: nonce });
+    channel.postMessage({ ask: nonce, id });
   });
 }
