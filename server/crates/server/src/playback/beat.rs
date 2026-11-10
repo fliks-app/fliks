@@ -186,15 +186,15 @@ async fn engine_beat(
     sid: &str,
     b: &Value,
 ) -> Result<Option<bool>, AppError> {
-    if !st.engine.runtime() {
-        return Ok(None);
-    }
     let known = st.presence.peek(sid);
     if known
         .as_ref()
         .is_some_and(|k| k.user_id.is_some_and(|u| u != user) && k.attributed_user_id != Some(user))
     {
         return Err(not_yours());
+    }
+    if !st.engine.runtime() {
+        return Ok(None);
     }
     let owner = known.as_ref().and_then(|k| k.user_id).unwrap_or(user);
     let req = HeartbeatRequest {

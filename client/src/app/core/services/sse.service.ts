@@ -232,6 +232,7 @@ export class SseService implements OnDestroy {
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
   private deviceIdPromise: Promise<string> | null = null;
+  private tabNoncePromise: Promise<string> | null = null;
   /** Bumped by `close()`. `connect()` awaits the device id, so a logout during
    *  that await would otherwise open a stream for the previous session. */
   private generation = 0;
@@ -487,19 +488,41 @@ export class SseService implements OnDestroy {
     this.deviceIdPromise ??= getOrCreateDeviceId();
     const deviceId = await this.deviceIdPromise;
     if (this.serverConfig.isNative) return deviceId;
+    this.tabNoncePromise ??= this.mintTabNonce();
+    return `${deviceId}#${await this.tabNoncePromise}`;
+  }
+
+  /** The stored nonce unless another live tab holds it (a duplicated tab copies `sessionStorage`), else a fresh one. */
+  private async mintTabNonce(): Promise<string> {
     let nonce: string | null = null;
     try {
       nonce = sessionStorage.getItem(TAB_NONCE_KEY);
-      if (!nonce) {
-        nonce = crypto.randomUUID().slice(0, 8);
-        sessionStorage.setItem(TAB_NONCE_KEY, nonce);
-      }
     } catch {
-      // Private mode / blocked storage: a per-load nonce still separates two
-      // tabs, it just doesn't survive a reload.
-      nonce ??= crypto.randomUUID().slice(0, 8);
+      // Blocked storage: a per-load nonce still separates two tabs, it just doesn't survive a reload.
     }
-    return `${deviceId}#${nonce}`;
+    if (nonce && (await this.lockNonce(nonce))) return nonce;
+    nonce = crypto.randomUUID().slice(0, 8);
+    await this.lockNonce(nonce);
+    try {
+      sessionStorage.setItem(TAB_NONCE_KEY, nonce);
+    } catch {
+      // see above
+    }
+    return nonce;
+  }
+
+  /** Holds the nonce's lock for the page's life; false when a live tab already holds it. Without Web Locks every nonce is free. */
+  private lockNonce(nonce: string): Promise<boolean> {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!locks) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      locks
+        .request(`fliks.tab.${nonce}`, { ifAvailable: true }, (lock) => {
+          resolve(lock !== null);
+          return lock ? new Promise<never>(() => {}) : undefined;
+        })
+        .catch(() => resolve(true));
+    });
   }
 
   private handleEvent(event: SseEvent) {

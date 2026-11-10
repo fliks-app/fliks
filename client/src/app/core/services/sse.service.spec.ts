@@ -230,3 +230,45 @@ describe('SseService: native dial credential', () => {
     expect(url).not.toContain('ticket=');
   });
 });
+
+describe('SseService: tab nonce', () => {
+  const KEY = 'fliks.remote.tabNonce';
+
+  async function resolve(held: boolean, stored: string | null): Promise<string[]> {
+    sessionStorage.clear();
+    if (stored) sessionStorage.setItem(KEY, stored);
+    vi.stubGlobal('navigator', {
+      userAgent: '',
+      locks: { request: (_: string, __: unknown, cb: (l: unknown) => unknown) => Promise.resolve(cb(held ? null : {})) },
+    });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ToastService, useValue: {} },
+        { provide: ServerConfigService, useValue: { apiUrl: () => '', isNative: false } },
+        { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false } },
+      ],
+    });
+    const sse = TestBed.inject(SseService) as unknown as { deviceIdPromise: Promise<string>; resolveTargetId(): Promise<string> };
+    sse.deviceIdPromise = Promise.resolve('dev');
+    return [await sse.resolveTargetId(), await sse.resolveTargetId()];
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the stored nonce of a tab that nobody else holds, for the whole page load', async () => {
+    expect(await resolve(false, 'abc12345')).toEqual(['dev#abc12345', 'dev#abc12345']);
+  });
+
+  it('mints and stores a new nonce when a live tab holds the stored one', async () => {
+    const [first, second] = await resolve(true, 'abc12345');
+    expect(first).not.toBe('dev#abc12345');
+    expect(second).toBe(first);
+    expect(sessionStorage.getItem(KEY)).toBe(first.split('#')[1]);
+  });
+});
