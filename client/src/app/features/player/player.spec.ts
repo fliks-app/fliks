@@ -196,9 +196,10 @@ function createHarness(opts: {
     getEmbeddedSubtitleUrl: vi.fn(() => ''),
   };
 
+  const registered: any[] = [];
   TestBed.configureTestingModule({
     providers: [
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => (registered.push(p), () => {}), registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
       provideZonelessChangeDetection(),
       // Never render: tests drive the class, and some wait in real time.
       { provide: ComponentFixtureAutoDetect, useValue: false },
@@ -367,11 +368,30 @@ function createHarness(opts: {
     engine,
     router,
     remoteService,
+    registered,
     get navigated(): boolean {
       return router.navigate.mock.calls.length > 0;
     },
   };
 }
+
+describe('PlayerComponent session takeover', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('resumes only once the navigation to the player has settled', async () => {
+    const h = createHarness();
+    h.component.mediaId = 1;
+    const stopped = await h.registered[0].yield();
+    let done!: (ok: boolean) => void;
+    h.router.navigate.mockReturnValueOnce(new Promise<boolean>((r) => (done = r)));
+    const settled = vi.fn();
+    void stopped.resume().then(settled);
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+    done(true);
+    await vi.waitFor(() => expect(settled).toHaveBeenCalled());
+  });
+});
 
 describe('PlayerComponent pre-roll', () => {
   afterEach(() => {

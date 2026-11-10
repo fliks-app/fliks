@@ -403,6 +403,22 @@ describe('SessionSyncService play here', () => {
     expect(service.claimPending()).toBe(false);
   });
 
+  it('keeps the claim while the resumed player is still being navigated to', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    let done!: () => void;
+    service.registerResumer('video', () => new Promise<void>((r) => (done = r)));
+    const taking = service.playHere();
+    TestBed.tick();
+    expect(service.claimPending()).toBe(true);
+    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(null) });
+    done();
+    await taking;
+    TestBed.tick();
+    expect(service.claimPending()).toBe(true);
+    expect(service.handoffFor('sid-new')).toBe(true);
+  });
+
   it('releases the claim of a resume that started no player', async () => {
     const { service, flush } = setup();
     await flush(session());

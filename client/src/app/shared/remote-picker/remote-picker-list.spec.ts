@@ -109,4 +109,28 @@ describe('RemotePickerListComponent while controlling a device', () => {
     expect(transferTo).toHaveBeenCalledWith('pc#1');
     expect(selectTarget).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['another device owns it', { owner: { targetId: 'tv#2' }, state: 'playing' }],
+    ['it is parked', { owner: { targetId: 'tv#1' }, state: 'parked' }],
+  ])('selects the device when the controlled one does not own the session (%s)', (_, owned) => {
+    const transferTo = vi.fn().mockResolvedValue(undefined);
+    const selectTarget = vi.fn();
+    const { component } = setup({
+      sync: {
+        session: signal({ ...owned, item: { title: 'Film', subtitle: null } }),
+        role: signal('observer'),
+        canTransfer: signal(true),
+        isReading: () => false,
+        positionNow: () => 0,
+        line: () => '',
+        parked: () => owned.state === 'parked',
+        transferTo,
+      },
+      remote: { selectedTargetId: signal('tv#1'), selectTarget },
+    });
+    component.selectRow({ kind: 'remote', id: 'pc#1', icon: 'monitor', label: 'Desk', subtitle: null, connected: false });
+    expect(selectTarget).toHaveBeenCalledWith('pc#1');
+    expect(transferTo).not.toHaveBeenCalled();
+  });
 });

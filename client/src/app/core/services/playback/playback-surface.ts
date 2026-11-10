@@ -25,11 +25,11 @@ export class PlaybackSurface {
   /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
   private streamDropped = false;
 
-  /** The playback whose bar was hidden here: another owner, item or epoch, or no session in between, shows it again. */
+  /** The playback whose bar was hidden here: another owner or epoch, or no session in between, shows it again. */
   private readonly hiddenKey = signal<string | null>(null);
 
   private static keyOf(s: AccountSession): string {
-    return `${s.owner.targetId}|${s.epoch}|${s.item.id}|${s.state === 'parked'}`;
+    return `${s.owner.targetId}|${s.epoch}|${s.state === 'parked'}`;
   }
 
   /** The session already sits on this device: a reader's position it saved, or the track its own player holds. */

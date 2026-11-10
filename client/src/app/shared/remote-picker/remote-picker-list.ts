@@ -198,6 +198,12 @@ export class RemotePickerListComponent {
     return row.kind === 'remote' && !!s && this.sync.canTransfer() && (this.sync.parked() || s.owner.targetId !== row.id);
   }
 
+  /** This device observes the session itself, or controls the device that owns it. */
+  private observesSession(): boolean {
+    const s = this.sync.session();
+    return this.session.isLocal() || (!!s && s.state !== 'parked' && s.owner.targetId === this.remote.selectedTargetId());
+  }
+
   protected pressable(row: PickerRow): boolean {
     if (row.disabled) return false;
     return !(this.transferOnly() && row.kind === 'remote' && !this.canTransfer(row));
@@ -241,7 +247,7 @@ export class RemotePickerListComponent {
       return;
     }
     // Another device plays the account session (the one controlled here included): a press moves it there instead of selecting a second one.
-    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.canTransfer(row)) {
+    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.observesSession() && this.canTransfer(row)) {
       void this.transfer(row);
       return;
     }

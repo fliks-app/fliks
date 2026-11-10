@@ -3146,10 +3146,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return {
         title,
         positionSeconds: at,
-        resume: () =>
-          void this.router.navigate(['/watch', fileId], {
+        resume: async () => {
+          await this.router.navigate(['/watch', fileId], {
             queryParams: { mediaId, ...(episodeId ? { episodeId } : {}), t: at },
-          }),
+          });
+        },
       };
     },
   });
