@@ -51,6 +51,7 @@ describe('AudioPlayerService music mode', () => {
   };
   type Loader = (cmd: RemoteCommand) => Promise<void>;
   const loaders: Record<string, Loader> = {};
+  const resumers: Record<string, (s: unknown, at: number) => Promise<void>> = {};
   let validated = new Subject<RemoteCommand>();
   const markApplied = vi.fn();
   const trackRequests = vi.fn(async (ids: readonly number[]) => ids.map((i) => track(i)));
@@ -84,7 +85,7 @@ describe('AudioPlayerService music mode', () => {
       providers: [
       { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,
@@ -118,6 +119,14 @@ describe('AudioPlayerService music mode', () => {
     expect(audio.queue().length).toBe(2);
     els(audio)[0].dispatchEvent(new Event('play'));
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 'sid1' }));
+  });
+
+  it('beats at once when "play here" loads a paused session, which reports no play state', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const item = { id: 1, mediaId: 1, kind: 'album' };
+    await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1], index: 0, shuffle: false, repeat: 'off' } }, 30);
+    expect(audio.playing()).toBe(false);
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, state: 'paused', sessionId: 'sid1' }));
   });
 
   it('re-opens the track in another key at the same position, and back to the original', async () => {
