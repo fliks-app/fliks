@@ -136,6 +136,23 @@ describe('AudioPlayerService music mode', () => {
     await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' } }, 30);
     expect(audio.playing()).toBe(false);
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, state: 'paused' }));
+    expect(getItemPlaybackInfo).toHaveBeenCalledWith(2, {}, { startAt: 0 });
+  });
+
+  it('claims nothing when another start overtakes a paused "play here"', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    let release!: () => void;
+    trackRequests.mockImplementationOnce(async (ids) => {
+      await new Promise<void>((r) => (release = r));
+      return ids.map((i) => track(i));
+    });
+    const item = { id: 1, mediaId: 1, kind: 'album' };
+    const pending = resumers['audio']({ item, state: 'paused', queue: { itemIds: [1], index: 0, shuffle: false, repeat: 'off' } }, 30);
+    await audio.playTracks([track(1)]);
+    updatePlaybackState.mockClear();
+    release();
+    await pending;
+    expect(updatePlaybackState).not.toHaveBeenCalled();
   });
 
   it('re-opens the track in another key at the same position, and back to the original', async () => {

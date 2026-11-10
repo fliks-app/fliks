@@ -7,7 +7,7 @@ import type { MediaType } from '../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { formatTime } from '../utils/player.utils';
 import { projectPosition } from '../utils/position-anchor';
-import { deviceIdOf } from './remote-target-id';
+import { deviceIdOf, sameTarget } from './remote-target-id';
 import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
 import { ClockService } from './party/clock.service';
@@ -101,17 +101,18 @@ export class SessionSyncService {
   readonly role = computed<SessionRole>(() => {
     const s = this._session();
     if (!s) return 'none';
-    const mine = s.state !== 'parked' && !!s.owner.targetId && s.owner.targetId === this.sse.targetId();
-    return mine ? 'owner' : 'observer';
+    const owner = s.owner.targetId;
+    const me = this.sse.targetId();
+    return s.state !== 'parked' && !!owner && !!me && sameTarget(owner, me) ? 'owner' : 'observer';
   });
 
-  /** The session's owner is this tab, or, once parked, this device in an earlier page load (the tab part of the target id changes). */
+  /** The session's owner is this tab (or its device's native face), or, once parked, this device in an earlier page load (the tab part of the target id changes). */
   readonly ownedHere = computed(() => {
     const s = this._session();
     const owner = s?.owner.targetId;
     const me = this.sse.targetId();
     if (!owner || !me) return false;
-    return s.state === 'parked' ? deviceIdOf(owner) === deviceIdOf(me) : owner === me;
+    return s.state === 'parked' ? deviceIdOf(owner) === deviceIdOf(me) : sameTarget(owner, me);
   });
 
   /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */

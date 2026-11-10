@@ -14,6 +14,7 @@ import { parseDeviceLabel } from '../utils/format-device-label';
 import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
+import { holdTabNonce } from './tab-nonce';
 import type {
   PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyProposal, PartySignalKind, PartySwitches, PartyUser,
 } from './api/party-api.service';
@@ -500,29 +501,15 @@ export class SseService implements OnDestroy {
     } catch {
       // Blocked storage: a per-load nonce still separates two tabs, it just doesn't survive a reload.
     }
-    if (nonce && (await this.lockNonce(nonce))) return nonce;
+    if (nonce && (await holdTabNonce(nonce))) return nonce;
     nonce = crypto.randomUUID().slice(0, 8);
-    await this.lockNonce(nonce);
+    await holdTabNonce(nonce);
     try {
       sessionStorage.setItem(TAB_NONCE_KEY, nonce);
     } catch {
       // see above
     }
     return nonce;
-  }
-
-  /** Holds the nonce's lock for the page's life; false when a live tab already holds it. Without Web Locks every nonce is free. */
-  private lockNonce(nonce: string): Promise<boolean> {
-    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-    if (!locks) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      locks
-        .request(`fliks.tab.${nonce}`, { ifAvailable: true }, (lock) => {
-          resolve(lock !== null);
-          return lock ? new Promise<never>(() => {}) : undefined;
-        })
-        .catch(() => resolve(true));
-    });
   }
 
   private handleEvent(event: SseEvent) {

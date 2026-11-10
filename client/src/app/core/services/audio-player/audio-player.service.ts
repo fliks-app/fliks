@@ -250,11 +250,11 @@ export class AudioPlayerService {
     const positionSeconds = this._position();
     const queue = this._musicMode() ? this.wireQueue() : null;
     await this.close();
-    if (!queue) return { title: req.title, positionSeconds, resume: () => this.play(req, { startAt: positionSeconds }) };
+    if (!queue) return { title: req.title, positionSeconds, resume: async () => void (await this.play(req, { startAt: positionSeconds })) };
     return {
       title: req.title,
       positionSeconds,
-      resume: () => this.startQueue(queue, queue.shuffle, queue.repeat, positionSeconds, true),
+      resume: async () => void (await this.startQueue(queue, queue.shuffle, queue.repeat, positionSeconds, true)),
     };
   }
 
@@ -264,12 +264,12 @@ export class AudioPlayerService {
     void this.close();
   }
 
-  /** Starts the item, or resumes it when it is the one loaded. */
-  async play(req: AudioRequest, opts: { startAt?: number; paused?: boolean } = {}): Promise<void> {
-    if (this.blockedByParty()) return;
+  /** Starts the item, or resumes it when it is the one loaded; false when nothing was loaded (party, overtaken, failed). */
+  async play(req: AudioRequest, opts: { startAt?: number; paused?: boolean } = {}): Promise<boolean> {
+    if (this.blockedByParty()) return false;
     if (this._track()?.itemId === req.itemId && this.info) {
       if (this.nativeOn ? !this._playing() : this.el()?.paused) this.toggle();
-      return;
+      return true;
     }
     const generation = ++this.generation;
     await this.release();
@@ -294,7 +294,7 @@ export class AudioPlayerService {
             return null;
           });
       }
-      if (generation !== this.generation) return;
+      if (generation !== this.generation) return false;
       // A downloaded item plays from the device, with the server's session and resume point when it answers; a position still queued after the replay is the newest.
       const queued = this.sync.queuedPositionFor(req.mediaId, undefined, req.itemId);
       const info = local
@@ -317,8 +317,10 @@ export class AudioPlayerService {
       this.setupMediaSession(req);
       const start = info.startAtSeconds ?? 0;
       await this.load(start, opts.paused !== true);
+      return true;
     } catch {
       if (generation === this.generation) await this.close();
+      return false;
     } finally {
       if (generation === this.generation) {
         this.markStarting(opts.paused !== true);
@@ -529,7 +531,8 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
-  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0): Promise<void> {
+  /** False when the start was overtaken by another one or failed. */
+  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0): Promise<boolean> {
     const generation = ++this.generation;
     await this.release();
     this._pitch.set(0);
@@ -542,8 +545,14 @@ export class AudioPlayerService {
     this._bookmarks.set([]);
     try {
       if (this.network.isOnline()) await this.sync.flush();
-      if (autoplay && this.bindCast().isConnected()) return await this.startCast(req, generation);
-      if (this.nativeAudio) return await this.startNative(autoplay, startAt);
+      if (autoplay && this.bindCast().isConnected()) {
+        await this.startCast(req, generation);
+        return generation === this.generation && this._track() !== null;
+      }
+      if (this.nativeAudio) {
+        await this.startNative(autoplay, startAt);
+        return generation === this.generation && this._track() !== null;
+      }
       const local = await this.localParts(req.itemId);
       const opened = !local || this.network.isOnline()
         ? await this.streaming.getItemPlaybackInfo(req.itemId, this.deviceProfile.getProfile(), { startAt }).catch((e) => {
@@ -553,7 +562,7 @@ export class AudioPlayerService {
         : null;
       if (generation !== this.generation) {
         if (opened?.sessionId) void this.streaming.stopSession(opened.sessionId).catch(() => undefined);
-        return;
+        return false;
       }
       const info = local
         ? ({ ...opened, mediaFileId: local.mediaFileId, playMethod: 'DirectPlay', durationSeconds: local.book.durationSeconds || opened?.durationSeconds } as PlaybackInfoResponse)
@@ -565,8 +574,10 @@ export class AudioPlayerService {
       this.setupMediaSession(this._track()!);
       await this.load(startAt, autoplay);
       void this.refreshStems();
+      return true;
     } catch {
       if (generation === this.generation) await this.close();
+      return false;
     } finally {
       if (generation === this.generation) {
         this.markStarting(autoplay);
@@ -1275,21 +1286,24 @@ export class AudioPlayerService {
     return { supportsVolume, ...(supportsVolume && { volume: this.level, muted: this.muted }) };
   }
 
-  private async queueOf(q: WireQueue): Promise<{ tracks: MusicTrackRequest[]; index: number }> {
+  /** `exact` is false when the queue's current track is unavailable and `index` lands on a later one. */
+  private async queueOf(q: WireQueue): Promise<{ tracks: MusicTrackRequest[]; index: number; exact: boolean }> {
     const aligned = alignTrackRows(q.itemIds, await this.music.trackRequests(q.itemIds));
-    return { tracks: aligned.map((a) => a.row), index: Math.max(0, aligned.findIndex((a) => a.wireIndex >= q.index)) };
+    const index = Math.max(0, aligned.findIndex((a) => a.wireIndex >= q.index));
+    return { tracks: aligned.map((a) => a.row), index, exact: aligned[index]?.wireIndex === q.index };
   }
 
-  /** Opens a remote queue where the sender left it; the order is the sender's, never reshuffled. */
-  private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<void> {
-    if (this.blockedByParty()) return;
+  /** Opens a remote queue where the sender left it, from the start of the next track when the current one is unavailable;
+   * the order is the sender's, never reshuffled. False when nothing was loaded. */
+  private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<boolean> {
+    if (this.blockedByParty()) return false;
     const generation = ++this.generation;
-    const { tracks, index } = await this.queueOf(q);
-    if (generation !== this.generation || !tracks.length || this.blockedByParty()) return;
+    const { tracks, index, exact } = await this.queueOf(q);
+    if (generation !== this.generation || !tracks.length || this.blockedByParty()) return false;
     this.mq.adopt(tracks, index, shuffle);
     this.mq.repeat = repeat;
     this.syncQueue();
-    await this.startMusic(this.mq.current!, autoplay, startAt);
+    return this.startMusic(this.mq.current!, autoplay, exact ? startAt : 0);
   }
 
   /** `load` of an audio family: an album queue, or the audio edition of a book. */
@@ -1297,30 +1311,31 @@ export class AudioPlayerService {
     const startAt = cmd.positionSeconds ?? 0;
     const autoplay = cmd.paused !== true;
     if (cmd.kind === 'album' && cmd.queue?.itemIds.length) {
-      return this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
+      await this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
+      return;
     }
     if (!cmd.itemId || this.blockedByParty()) return;
     const generation = ++this.generation;
     const req = cmd.kind === 'album' ? null : cmd.mediaId ? await this.audiobookRequest(cmd.mediaId, cmd.itemId) : null;
     if (generation !== this.generation) return;
-    if (req) return this.play(req, { startAt, paused: !autoplay });
-    return this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
+    if (req) await this.play(req, { startAt, paused: !autoplay });
+    else await this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
   }
 
   /** "Play here" on a session of another device: its queue and its position now. */
   private async resumeSession(s: AccountSession, positionSeconds: number): Promise<void> {
     const paused = s.state === 'paused' || s.state === 'parked';
     const itemIds = s.queue?.itemIds ?? [s.item.id];
+    let loaded: boolean;
     if (s.item.kind === 'album') {
       const q = s.queue ?? { itemIds, index: 0, shuffle: false, repeat: 'off' as const };
-      await this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused);
+      loaded = await this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused);
     } else {
       const req = await this.audiobookRequest(s.item.mediaId, s.item.id);
-      if (req) await this.play(req, { startAt: positionSeconds, paused });
+      loaded = !!req && (await this.play(req, { startAt: positionSeconds, paused }));
     }
     // A paused load reports no play state: its first beat is what claims the session.
-    const loaded = this._track()?.itemId;
-    if (paused && loaded != null && itemIds.includes(loaded)) this.onPlayState(false);
+    if (paused && loaded) this.onPlayState(false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */
@@ -1389,7 +1404,8 @@ export class AudioPlayerService {
     if (tracks[index].itemId !== this.mq.current?.itemId) {
       this.mq.adopt(tracks, index, shuffle);
       this.syncQueue();
-      return this.startMusic(this.mq.current!);
+      await this.startMusic(this.mq.current!);
+      return;
     }
     this.mq.adopt(tracks, index, shuffle);
     this.dropPreload();
