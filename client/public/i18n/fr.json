@@ -4014,6 +4014,7 @@
     "error_device_offline": "Cet appareil est injoignable.",
     "error_self_target": "C’est l’appareil que vous utilisez.",
     "error_unknown_action": "Commande non prise en charge.",
+    "error_unsupported_action": "Cet appareil ne peut pas faire cela tant que l'app est en arrière-plan.",
     "error_device_not_granted": "Cet appareil n’a pas autorisé votre compte.",
     "error_target_disabled": "Ce compte est désactivé.",
     "error_no_device_id": "Cet appareil ne peut pas être identifié.",

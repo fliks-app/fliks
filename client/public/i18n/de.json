@@ -4014,6 +4014,7 @@
     "error_device_offline": "Dieses Gerät ist nicht erreichbar.",
     "error_self_target": "Das ist das Gerät, das Sie gerade verwenden.",
     "error_unknown_action": "Nicht unterstützter Befehl.",
+    "error_unsupported_action": "Dieses Gerät kann das nicht, solange die App im Hintergrund läuft.",
     "error_device_not_granted": "Dieses Gerät hat Ihr Konto nicht autorisiert.",
     "error_target_disabled": "Dieses Konto ist deaktiviert.",
     "error_no_device_id": "Dieses Gerät kann nicht identifiziert werden.",

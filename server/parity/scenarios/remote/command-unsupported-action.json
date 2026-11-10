@@ -1,0 +1,98 @@
+{
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-command-unsupported-action",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "actions": [
+          "seek"
+        ],
+        "deviceId": "dev-1",
+        "formFactor": "phone",
+        "name": "Phone"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "actions": [
+              "seek"
+            ],
+            "deviceName": "Phone",
+            "formFactor": "phone",
+            "nowPlaying": null,
+            "ownerUsername": null,
+            "systemName": null,
+            "targetId": "dev-1#native",
+            "tvPlatform": null,
+            "userAgent": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/targets"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "volume",
+        "level": 0.5
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "remote.error_unsupported_action",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "seek",
+        "positionSeconds": 12
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "action": "seek",
+            "byTargetId": null,
+            "positionSeconds": 12,
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
+    }
+  ]
+}

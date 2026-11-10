@@ -47,6 +47,8 @@ pub struct Target {
     pub identity: Identity,
     /// Epoch ms the target appeared.
     pub since: i64,
+    /// What a polled target declared it applies (`remote.md` rule 21d); `None` means everything.
+    pub actions: Option<Vec<String>>,
 }
 
 impl Target {
@@ -86,6 +88,7 @@ struct Conn {
 
 struct Polled {
     identity: Identity,
+    actions: Option<Vec<String>>,
     since: i64,
     seq: u64,
     queue: Vec<SseEvent>,
@@ -410,10 +413,12 @@ impl Hub {
         }
     }
 
-    /// Only the caller's own device (a plain logout); a miss is logged, not an error.
-    pub fn drop_connections_for_target(&self, user: i32, target_id: &str) {
+    /// Only the caller's own device (a plain logout); a miss is logged, not an error. Returns what a
+    /// polled target had not drained yet.
+    pub fn drop_connections_for_target(&self, user: i32, target_id: &str) -> Vec<SseEvent> {
         let mut announces = 0;
         let (mut sse, mut polled) = (0, 0);
+        let mut pending = vec![];
         {
             let mut g = self.lock();
             let ids: Vec<String> = g
@@ -428,11 +433,9 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
-            if g.polled
-                .remove(&(user, format!("polled:{target_id}")))
-                .is_some()
-            {
+            if let Some(p) = g.polled.remove(&(user, format!("polled:{target_id}"))) {
                 polled += 1;
+                pending = p.queue;
                 self.dispatch(
                     &mut g,
                     Aud::Users(&[user]),
@@ -443,13 +446,33 @@ impl Hub {
         }
         if sse + polled == 0 {
             tracing::warn!("Logout target scope: no connection for user {user} target {target_id}");
-            return;
+            return pending;
         }
         tracing::info!(
             "Dropped {} connection(s) for user {user} target {target_id}",
             sse + polled
         );
         self.announce_n(user, announces);
+        pending
+    }
+
+    /// A native face handing its device back to the web layer: what it had not drained goes to the
+    /// device's newest web stream, which is listed again.
+    pub fn release_polled_target(&self, user: i32, target_id: &str) {
+        let pending = self.drop_connections_for_target(user, target_id);
+        if pending.is_empty() {
+            return;
+        }
+        let Some(conn) = self.resolve_target(user, target_id) else {
+            tracing::warn!(
+                "Dropped {} pending event(s) of {target_id}: no web stream took over",
+                pending.len()
+            );
+            return;
+        };
+        for ev in pending {
+            self.emit_to_connection(user, &conn, ev);
+        }
     }
 
     pub fn has_connection(&self, connection_id: &str) -> bool {
@@ -540,6 +563,7 @@ impl Hub {
                         user_id,
                         identity,
                         since,
+                        actions: None,
                     }),
             );
             let mut keys: Vec<_> = g.polled.iter().map(|(k, p)| (p.seq, k.clone())).collect();
@@ -567,6 +591,7 @@ impl Hub {
                         user_id: user,
                         identity: p.identity.clone(),
                         since: p.since,
+                        actions: p.actions.clone(),
                     });
                 }
             }
@@ -596,8 +621,9 @@ impl Hub {
             .find(|t| t.is_polled() && t.device_id() == device)
     }
 
-    /// The newest connection of `user` with this target, else the device's native face; scoping to the
-    /// user is the authorization.
+    /// The newest connection of `user` with this target, else the other half of the device (a native
+    /// face and its web layer are one owner, `session.md` rule 6); scoping to the user is the
+    /// authorization.
     pub fn resolve_target(&self, user: i32, target_id: &str) -> Option<String> {
         let rows = self.list_for_user(user);
         let mut matches: Vec<_> = rows
@@ -606,9 +632,10 @@ impl Hub {
             .collect();
         if matches.is_empty() {
             let device = target_id.split('#').next().unwrap_or_default();
+            let face = target_id.ends_with("#native");
             matches = rows
                 .iter()
-                .filter(|t| t.is_polled() && t.device_id() == device)
+                .filter(|t| t.device_id() == device && t.is_remote() && t.is_polled() != face)
                 .collect();
         }
         if matches.len() > 1 {
@@ -639,7 +666,12 @@ impl Hub {
     }
 
     /// For a client that cannot hold an SSE stream (the native TV app); the key doubles as its connection id.
-    pub fn register_polled_target(&self, user: i32, identity: Identity) {
+    pub fn register_polled_target(
+        &self,
+        user: i32,
+        identity: Identity,
+        actions: Option<Vec<String>>,
+    ) {
         let Some(target) = identity.target_id.clone().filter(|t| !t.is_empty()) else {
             tracing::warn!("Refused a polled-target registration with no target id (user {user})");
             return;
@@ -660,6 +692,7 @@ impl Hub {
                 key,
                 Polled {
                     identity,
+                    actions,
                     since,
                     seq,
                     queue,
@@ -965,7 +998,7 @@ mod tests {
         let hub = Hub::new();
         let (mut a, mut b) = (hub.connect(1, at("d1#a")), hub.connect(2, at("d2#a")));
         let mut plain = hub.connect(1, Identity::default());
-        hub.register_polled_target(1, at("tv#native"));
+        hub.register_polled_target(1, at("tv#native"), None);
         let _ = (got(&mut a), got(&mut b), got(&mut plain));
         hub.drop_connections_for_user(1);
         assert_eq!(got(&mut a), ["<close>"]);
@@ -1007,9 +1040,9 @@ mod tests {
         let hub = Hub::new();
         let mut watcher = hub.connect(1, Identity::default());
         let _ = got(&mut watcher);
-        hub.register_polled_target(1, at("tv#native"));
-        hub.register_polled_target(1, at("tv#native"));
-        hub.register_polled_target(1, Identity::default());
+        hub.register_polled_target(1, at("tv#native"), None);
+        hub.register_polled_target(1, at("tv#native"), None);
+        hub.register_polled_target(1, Identity::default(), None);
         assert_eq!(got(&mut watcher), [CHANGED]);
         let key = "polled:tv#native";
         assert_eq!(hub.resolve_target(1, "tv#native").as_deref(), Some(key));
@@ -1034,8 +1067,8 @@ mod tests {
     #[test]
     fn a_polled_device_is_per_account() {
         let hub = Hub::new();
-        hub.register_polled_target(1, at("dev#native"));
-        hub.register_polled_target(2, at("dev#native"));
+        hub.register_polled_target(1, at("dev#native"), None);
+        hub.register_polled_target(2, at("dev#native"), None);
         let key = hub.resolve_target(1, "dev#native").unwrap();
         assert!(hub.emit_to_connection(1, &key, SseEvent::QueueUpdated {}));
         assert!(hub.drain_commands(2, "dev#native").unwrap().is_empty());
@@ -1072,7 +1105,7 @@ mod tests {
         let _tab = hub.connect(1, at("dev"));
         let _other = hub.connect(1, at("other"));
         let _party = hub.connect(1, at("dev#party"));
-        hub.register_polled_target(1, at("dev#native"));
+        hub.register_polled_target(1, at("dev#native"), None);
         let listed = |hub: &Hub| -> Vec<String> {
             let mut ids: Vec<String> = hub
                 .list_for_user(1)
@@ -1097,6 +1130,27 @@ mod tests {
         assert!(hub.native_face(2, "dev").is_none());
         hub.drop_connections_for_target(1, "dev#native");
         assert_eq!(listed(&hub), vec!["dev", "other"]);
+    }
+
+    #[test]
+    fn leaving_the_face_hands_its_pending_commands_to_the_web_stream() {
+        let hub = Hub::new();
+        let mut tab = hub.connect(1, at("dev#tab"));
+        hub.register_polled_target(1, at("dev#native"), Some(vec!["play".into()]));
+        assert_eq!(
+            hub.list_for_user(1)[0].actions.as_deref(),
+            Some(&["play".to_owned()][..])
+        );
+        let face = hub.resolve_target(1, "dev#tab").unwrap();
+        assert!(hub.emit_to_connection(1, &face, SseEvent::QueueUpdated {}));
+        got(&mut tab);
+        hub.release_polled_target(1, "dev#native");
+        assert_eq!(
+            got(&mut tab),
+            vec!["remote.targets_changed", "queue.updated"]
+        );
+        assert_eq!(hub.resolve_target(1, "dev#native"), Some(tab.id.clone()));
+        assert!(hub.resolve_target(1, "other#native").is_none());
     }
 
     #[test]

@@ -564,15 +564,15 @@ final class MusicHost {
         if (!"stop".equals(action)) main.postDelayed(() -> beat(exo.isPlaying()), 300);
     }
 
-    /** What the service can do alone; the rest needs the web layer, and an unacknowledged command says so. */
+    /** What the service can do alone, as declared to the server (`NativeFace.ACTIONS`). */
     private boolean handles(String action, JSONObject event) {
         switch (action) {
             case "play": case "pause": case "playpause": case "stop": case "seek": case "next": case "prev":
                 return true;
             case "load": {
-                // Resuming the queued item, as a hand-over to a device holding it paused does.
+                // Resuming the item it holds, as a hand-over of a queue it already has does.
                 Long item = itemOf(exo.getCurrentMediaItem());
-                return item != null && event.optLong("itemId", -1) == item && !event.has("queue");
+                return item != null && event.optLong("itemId", -1) == item;
             }
             default:
                 return false;

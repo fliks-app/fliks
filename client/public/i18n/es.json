@@ -4014,6 +4014,7 @@
     "error_device_offline": "No se puede acceder a ese dispositivo.",
     "error_self_target": "Ese es el dispositivo que estás usando.",
     "error_unknown_action": "Comando no admitido.",
+    "error_unsupported_action": "Ese dispositivo no puede hacerlo mientras la app está en segundo plano.",
     "error_device_not_granted": "Este dispositivo no ha autorizado tu cuenta.",
     "error_target_disabled": "Esa cuenta está desactivada.",
     "error_no_device_id": "No se puede identificar ese dispositivo.",

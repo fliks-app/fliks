@@ -31,6 +31,9 @@ final class NativeFace {
     private volatile boolean wanted;
     private volatile boolean polling;
 
+    /** What the service applies alone; `resume` is a `load` of the item it holds (`remote.md` rule 21d). */
+    private static final String[] ACTIONS = {"play", "pause", "playpause", "stop", "seek", "next", "prev", "resume"};
+
     NativeFace(Context context, FliksApi api, ExecutorService io, Handler main, Consumer<JSONObject> sink) {
         this.context = context;
         this.api = api;
@@ -57,7 +60,7 @@ final class NativeFace {
         if (registered || !wanted || device == null || device.isEmpty()) return;
         try {
             String body = new JSONObject().put("deviceId", device).put("name", name())
-                    .put("formFactor", formFactor()).toString();
+                    .put("formFactor", formFactor()).put("actions", new JSONArray(java.util.Arrays.asList(ACTIONS))).toString();
             api.send("POST", "/api/remote/register", body, key);
             registered = true;
         } catch (JSONException e) {
