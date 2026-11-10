@@ -26,6 +26,9 @@ export class RemoteNotificationService {
 
   init(): void {
     if (!this.device.isAndroidNative() && !this.device.isIosNative()) return;
+    // A reloaded WebView forgets what native still shows.
+    void RemoteNotification.clear().catch(() => {});
+    const ios = this.device.isIosNative();
     window.addEventListener('remoteNotificationCommand', (e) => {
       const { action, value } = (e as CustomEvent<{ action: RemoteNotificationAction; value: number }>).detail;
       this.apply(action, value);
@@ -34,7 +37,9 @@ export class RemoteNotificationService {
       const t = this.target;
       // Each remote report re-syncs the extrapolated position.
       this.remote.targetState();
-      if (!this.remote.isObserving() || t.isIdle() || t.isStarting()) {
+      // iOS holds the audio session while shown, so only a target this phone selected qualifies.
+      const watched = ios ? this.remote.isRemoting() : this.remote.isObserving();
+      if (!watched || t.isIdle() || t.isStarting()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
         return;

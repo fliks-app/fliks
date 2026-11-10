@@ -3,7 +3,8 @@ import Capacitor
 import MediaPlayer
 
 /// Lock screen / Control Center for the device this phone remote-controls, and its hardware volume keys.
-/// A silent loop holds the audio session: iOS lists an app in Now Playing only while it plays audio.
+/// A silent loop holds the audio session: iOS lists an app in Now Playing only while it plays audio,
+/// which needs a non-mixable session. The loop is released after `pausedLimit` of a paused target.
 /// Controls go back as `remoteNotificationCommand` window events: {action, value}.
 @objc(RemoteNotificationPlugin)
 public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -15,16 +16,28 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private static let volumeStep = 0.05
+    private static let pinnedLevel: Float = 0.5
+    private static let pausedLimit: TimeInterval = 600
 
     private var silence: AVAudioPlayer?
     private var targets: [(command: MPRemoteCommand, token: Any)] = []
+    private var observers: [NSObjectProtocol] = []
     private var volumeObservation: NSKeyValueObservation?
-    private var lastSystemVolume: Float = 0
+    private var volumeView: MPVolumeView?
+    private var restoreVolume: Float?
+    private var pinning = false
+    private var pausedTimer: Timer?
     private var canSetVolume = false
     private var volume = 1.0
     private var artworkUrl: String?
     private var artwork: MPMediaItemArtwork?
-    private var info: [String: Any] = [:]
+    private var title = ""
+    private var artist: String?
+    private var duration = 0.0
+    private var playing = false
+    private var advancing = false
+    private var reportedPosition = 0.0
+    private var reportedAt = Date()
 
     @objc func update(_ call: CAPPluginCall) {
         let title = call.getString("title") ?? ""
@@ -41,24 +54,23 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             self.canSetVolume = canSetVolume
             self.volume = volume
+            self.title = title
+            self.artist = artist
+            self.duration = duration
+            self.playing = playing
+            self.advancing = playing && !buffering
+            self.reportedPosition = max(position, 0)
+            self.reportedAt = Date()
             self.start()
-            var info: [String: Any] = [
-                MPMediaItemPropertyTitle: title,
-                MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
-                MPNowPlayingInfoPropertyPlaybackRate: playing && !buffering ? 1.0 : 0.0,
-                MPNowPlayingInfoPropertyElapsedPlaybackTime: max(position, 0),
-            ]
-            if let artist { info[MPMediaItemPropertyArtist] = artist }
-            if duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
             if url != self.artworkUrl {
                 self.artworkUrl = url
                 self.artwork = nil
                 self.loadArtwork(url)
             }
-            if let artwork = self.artwork { info[MPMediaItemPropertyArtwork] = artwork }
-            self.info = info
-            self.publish(playing: playing)
+            self.publish()
             self.applyCommands(hasNext: hasNext, seekButtons: seekButtons)
+            self.pinVolume(canSetVolume)
+            self.schedulePausedLimit()
             call.resolve()
         }
     }
@@ -71,15 +83,37 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     override public func load() {
-        NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.stop()
-        }
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.stop()
+            },
+            center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+                self?.interruption(note)
+            },
+            center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+                guard let self, self.silence != nil else { return }
+                self.silence = nil
+                self.startLoop()
+            },
+        ]
     }
 
     // MARK: - Session
 
     private func start() {
         guard silence == nil else { return }
+        startLoop()
+        guard silence != nil else { return }
+        installCommands()
+        let session = AVAudioSession.sharedInstance()
+        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
+            guard let level = change.newValue else { return }
+            DispatchQueue.main.async { self?.systemVolumeChanged(level) }
+        }
+    }
+
+    private func startLoop() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback)
         try? session.setActive(true)
@@ -87,44 +121,101 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         player.numberOfLoops = -1
         player.play()
         silence = player
-        installCommands()
-        lastSystemVolume = session.outputVolume
-        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
-            guard let level = change.newValue else { return }
-            DispatchQueue.main.async { self?.systemVolumeChanged(level) }
-        }
+    }
+
+    private func interruption(_ note: Notification) {
+        guard silence != nil,
+              let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+        try? AVAudioSession.sharedInstance().setActive(true)
+        silence?.play()
     }
 
     private func stop() {
+        pausedTimer?.invalidate()
+        pausedTimer = nil
         guard let player = silence else { return }
         player.stop()
         silence = nil
         volumeObservation = nil
+        pinVolume(false)
         for entry in targets { entry.command.removeTarget(entry.token) }
         targets.removeAll()
-        let center = MPRemoteCommandCenter.shared()
-        for command in managed(center) { command.isEnabled = false }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        // Another player may have taken the lock screen since: leave what is not ours.
+        let center = MPNowPlayingInfoCenter.default()
+        if center.nowPlayingInfo?[MPMediaItemPropertyTitle] as? String == title {
+            for command in managed(MPRemoteCommandCenter.shared()) { command.isEnabled = false }
+            center.nowPlayingInfo = nil
+            center.playbackState = .stopped
+        }
         artworkUrl = nil
         artwork = nil
         // Fails while another player holds the session, which is the wanted outcome.
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    /// The system level is not the remote's: each key press becomes a step on the remote volume.
+    private func schedulePausedLimit() {
+        pausedTimer?.invalidate()
+        pausedTimer = nil
+        guard !playing else { return }
+        pausedTimer = Timer.scheduledTimer(withTimeInterval: Self.pausedLimit, repeats: false) { [weak self] _ in
+            self?.stop()
+        }
+    }
+
+    // MARK: - Volume
+
+    /// The system level is pinned mid-range while a target takes the keys: each press moves it off the pin,
+    /// becomes one step on the target and is put back, so the keys never hit a bound. The old level returns after.
+    private func pinVolume(_ on: Bool) {
+        guard on != pinning else { return }
+        pinning = on
+        if on {
+            restoreVolume = AVAudioSession.sharedInstance().outputVolume
+            let view = MPVolumeView(frame: CGRect(x: -2000, y: -2000, width: 1, height: 1))
+            (bridge?.viewController?.view).map { $0.addSubview(view) }
+            volumeView = view
+            setSystemVolume(Self.pinnedLevel)
+        } else {
+            if let level = restoreVolume { setSystemVolume(level) }
+            restoreVolume = nil
+            volumeView?.removeFromSuperview()
+            volumeView = nil
+        }
+    }
+
+    private func setSystemVolume(_ level: Float) {
+        let slider = volumeView?.subviews.compactMap { $0 as? UISlider }.first
+        // The slider only accepts a value once laid out.
+        DispatchQueue.main.async { slider?.value = level }
+    }
+
     private func systemVolumeChanged(_ level: Float) {
-        defer { lastSystemVolume = level }
-        guard canSetVolume, level != lastSystemVolume else { return }
-        let up = level > lastSystemVolume || level >= 1
-        let next = min(max(volume + (up ? Self.volumeStep : -Self.volumeStep), 0), 1)
+        guard pinning, canSetVolume, abs(level - Self.pinnedLevel) > 0.01 else { return }
+        let next = min(max(volume + (level > Self.pinnedLevel ? Self.volumeStep : -Self.volumeStep), 0), 1)
         volume = next
         emit("volume", next)
+        setSystemVolume(Self.pinnedLevel)
     }
 
     // MARK: - Now playing
 
-    private func publish(playing: Bool) {
+    /// The report's position moved on by the time since it, while the target plays.
+    private func elapsed() -> Double {
+        let value = reportedPosition + (advancing ? Date().timeIntervalSince(reportedAt) : 0)
+        return duration > 0 ? min(value, duration) : value
+    }
+
+    private func publish() {
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyPlaybackRate: advancing ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed(),
+        ]
+        if let artist { info[MPMediaItemPropertyArtist] = artist }
+        if duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
+        if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
         center.playbackState = playing ? .playing : .paused
@@ -138,8 +229,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             DispatchQueue.main.async {
                 guard let self, self.artworkUrl == urlString, self.silence != nil else { return }
                 self.artwork = artwork
-                self.info[MPMediaItemPropertyArtwork] = artwork
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = self.info
+                self.publish()
             }
         }.resume()
     }
@@ -166,11 +256,12 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         add(center.playCommand) { _ in send("play", 0) }
         add(center.pauseCommand) { _ in send("pause", 0) }
-        add(center.togglePlayPauseCommand) { [weak self] _ in
-            let rate = self?.info[MPNowPlayingInfoPropertyPlaybackRate] as? Double ?? 0
-            return send(rate > 0 ? "pause" : "play", 0)
+        add(center.togglePlayPauseCommand) { [weak self] _ in send(self?.playing == true ? "pause" : "play", 0) }
+        add(center.stopCommand) { [weak self] _ in
+            let status = send("stop", 0)
+            self?.stop()
+            return status
         }
-        add(center.stopCommand) { _ in send("stop", 0) }
         add(center.nextTrackCommand) { _ in send("next", 0) }
         add(center.previousTrackCommand) { _ in send("seek", 0) }
         add(center.changePlaybackPositionCommand) { event in
@@ -180,8 +271,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         for (command, sign) in [(center.skipBackwardCommand, -1.0), (center.skipForwardCommand, 1.0)] {
             add(command) { [weak self] event in
                 guard let self, let event = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
-                let elapsed = self.info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? Double ?? 0
-                return send("seek", max(elapsed + sign * event.interval, 0))
+                return send("seek", max(self.elapsed() + sign * event.interval, 0))
             }
         }
     }
