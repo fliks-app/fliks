@@ -16,6 +16,8 @@ const POLLED_TARGET_TTL: Duration = Duration::from_secs(30);
 const SSE_SILENCE: Duration = Duration::from_secs(120);
 /// A remote launch is claimed here and taken by the playback that starts a moment later.
 const ATTRIBUTION_TTL: Duration = Duration::from_secs(60);
+/// How long a released native face's commands wait for the device's web stream to reconnect.
+const HANDOVER_TTL: Duration = Duration::from_secs(15);
 /// Bounds a device that registers and never polls.
 const POLLED_QUEUE_MAX: usize = 20;
 const BUS_CAPACITY: usize = 4096;
@@ -58,8 +60,7 @@ impl Target {
     }
 
     pub fn device_id(&self) -> &str {
-        let id = self.identity.target().unwrap_or_default();
-        id.split('#').next().unwrap_or_default()
+        device_of(self.identity.target().unwrap_or_default())
     }
 
     pub fn is_remote(&self) -> bool {
@@ -102,6 +103,12 @@ struct Polled {
     last_poll: Instant,
 }
 
+/// Commands a released native face had not drained, waiting for its device's next web stream.
+struct Parked {
+    events: Vec<SseEvent>,
+    at: Instant,
+}
+
 struct Claim {
     user: i32,
     media_file_id: i64,
@@ -113,6 +120,7 @@ struct Inner {
     conns: HashMap<String, Conn>,
     /// Keyed by owner and `polled:<targetId>`: another account cannot take a device over.
     polled: HashMap<(i32, String), Polled>,
+    parked: HashMap<(i32, String), Parked>,
     claims: HashMap<String, Claim>,
     seq: u64,
     /// Owners of targets evicted for a full queue, announced to their household once unlocked.
@@ -333,6 +341,10 @@ impl Hub {
                 connection_id: id.clone(),
             });
             let _ = tx.try_send(Msg::Event(connected.json));
+            let handover = identity
+                .target()
+                .filter(|t| !t.ends_with("#party"))
+                .map(|t| (user, device_of(t).to_owned()));
             // A request accepted while shutting down would otherwise hold the graceful shutdown open.
             if *self.0.down.borrow() {
                 let _ = tx.try_send(Msg::Close);
@@ -350,8 +362,12 @@ impl Hub {
                         silence_announced: false,
                     },
                 );
+                for ev in handover.map_or_else(Vec::new, |k| take_parked(&mut g, &k)) {
+                    self.dispatch(&mut g, Aud::Conn(&id), Out::sse(ev));
+                }
             }
         }
+        self.announce_evicted();
         if has_target {
             self.fan_out(&SseEvent::RemoteTargetsChanged {}, user);
         }
@@ -380,6 +396,7 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
+            g.parked.retain(|(owner, _), _| *owner != user);
             let before = g.polled.len();
             g.polled.retain(|(owner, _), _| *owner != user);
             polled = before - g.polled.len();
@@ -440,6 +457,7 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
+            g.parked.remove(&(user, device_of(target_id).to_owned()));
             if let Some(p) = g.polled.remove(&(user, format!("polled:{target_id}"))) {
                 polled += 1;
                 pending = p.queue;
@@ -464,16 +482,23 @@ impl Hub {
     }
 
     /// A native face handing its device back to the web layer: what it had not drained goes to the
-    /// device's newest web stream, which is listed again.
+    /// device's newest web stream, else waits `HANDOVER_TTL` for the next one.
     pub fn release_polled_target(&self, user: i32, target_id: &str) {
         let pending = self.drop_connections_for_target(user, target_id);
         if pending.is_empty() {
             return;
         }
         let Some(conn) = self.newest_web_stream(user, target_id) else {
-            tracing::warn!(
-                "Dropped {} pending event(s) of {target_id}: no web stream took over",
-                pending.len()
+            let mut g = self.lock();
+            let now = Instant::now();
+            g.parked
+                .retain(|_, p| now.saturating_duration_since(p.at) <= HANDOVER_TTL);
+            g.parked.insert(
+                (user, device_of(target_id).to_owned()),
+                Parked {
+                    events: pending,
+                    at: now,
+                },
             );
             return;
         };
@@ -485,16 +510,16 @@ impl Hub {
     /// The newest live web stream of the device of `target_id`, else the newest silent one: a frozen
     /// WebView resumes its keepalive once foregrounded, and what it is sent waits in its queue.
     fn newest_web_stream(&self, user: i32, target_id: &str) -> Option<String> {
-        let device = target_id.split('#').next().unwrap_or_default();
+        let device = device_of(target_id);
         let now = Instant::now();
         let g = self.lock();
         g.conns
             .iter()
             .filter(|(_, c)| {
                 c.user == user
-                    && c.identity.target().is_some_and(|t| {
-                        t.split('#').next() == Some(device) && !t.ends_with("#party")
-                    })
+                    && c.identity
+                        .target()
+                        .is_some_and(|t| device_of(t) == device && !t.ends_with("#party"))
             })
             .max_by_key(|(_, c)| (!c.silent(now), c.seq))
             .map(|(id, _)| id.clone())
@@ -652,7 +677,7 @@ impl Hub {
             .filter(|t| t.is_remote() && t.identity.target_id.as_deref() == Some(target_id))
             .collect();
         if matches.is_empty() {
-            let device = target_id.split('#').next().unwrap_or_default();
+            let device = device_of(target_id);
             let face = target_id.ends_with("#native");
             matches = rows
                 .iter()
@@ -848,6 +873,26 @@ impl Hub {
             self.fan_out(&SseEvent::RemoteTargetsChanged {}, user);
         }
     }
+}
+
+fn device_of(target_id: &str) -> &str {
+    target_id.split('#').next().unwrap_or_default()
+}
+
+/// What a released face left for this device, unless it waited past `HANDOVER_TTL`.
+fn take_parked(inner: &mut Inner, key: &(i32, String)) -> Vec<SseEvent> {
+    let Some(p) = inner.parked.remove(key) else {
+        return vec![];
+    };
+    if p.at.elapsed() > HANDOVER_TTL {
+        tracing::warn!(
+            "Dropped {} pending event(s) of {}: no web stream took over in time",
+            p.events.len(),
+            key.1
+        );
+        return vec![];
+    }
+    p.events
 }
 
 fn name(ev: &SseEvent) -> String {
@@ -1203,6 +1248,57 @@ mod tests {
         hub.release_polled_target(1, "dev#native");
         assert!(got(&mut live).contains(&"queue.updated".to_owned()));
         assert!(!got(&mut frozen).contains(&"queue.updated".to_owned()));
+    }
+
+    fn queued_face(hub: &Hub) {
+        hub.register_polled_target(1, at("dev#native"), None);
+        let face = hub.resolve_target(1, "dev#native").unwrap();
+        assert!(hub.emit_to_connection(1, &face, SseEvent::QueueUpdated {}));
+    }
+
+    #[test]
+    fn a_release_with_no_web_stream_keeps_the_commands_for_the_one_that_follows() {
+        let hub = Hub::new();
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        let mut party = hub.connect(1, at("dev#party"));
+        let mut other = hub.connect(2, at("dev#tab"));
+        assert_eq!(got(&mut party), ["sse.connected"]);
+        assert_eq!(got(&mut other), ["sse.connected"]);
+        let mut tab = hub.connect(1, at("dev#tab"));
+        assert_eq!(got(&mut tab), ["sse.connected", "queue.updated"]);
+        let mut again = hub.connect(1, at("dev#tab2"));
+        assert_eq!(got(&mut again), ["sse.connected"]);
+        assert!(hub.lock().parked.is_empty());
+    }
+
+    #[test]
+    fn parked_commands_older_than_the_ttl_are_dropped() {
+        let hub = Hub::new();
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        let late = Instant::now().checked_sub(HANDOVER_TTL + Duration::from_secs(1));
+        hub.lock()
+            .parked
+            .get_mut(&(1, "dev".to_owned()))
+            .unwrap()
+            .at = late.unwrap();
+        let mut tab = hub.connect(1, at("dev#tab"));
+        assert_eq!(got(&mut tab), ["sse.connected"]);
+        assert!(hub.lock().parked.is_empty());
+    }
+
+    #[test]
+    fn a_logout_or_a_drop_clears_the_parked_commands() {
+        let hub = Hub::new();
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        hub.drop_connections_for_target(1, "dev#tab");
+        assert!(hub.lock().parked.is_empty());
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        hub.drop_connections_for_user(1);
+        assert!(hub.lock().parked.is_empty());
     }
 
     #[test]
