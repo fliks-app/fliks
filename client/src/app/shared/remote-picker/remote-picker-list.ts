@@ -240,8 +240,8 @@ export class RemotePickerListComponent {
       this.picked.emit(row);
       return;
     }
-    // Another device plays the account session: one device at a time, so a press moves it there instead of selecting a second one.
-    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.session.isLocal() && this.canTransfer(row)) {
+    // Another device plays the account session (the one controlled here included): a press moves it there instead of selecting a second one.
+    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.canTransfer(row)) {
       void this.transfer(row);
       return;
     }
