@@ -137,6 +137,8 @@ export class RemoteService {
 
   /** Commands that passed validation, for the player to apply. */
   readonly validated = new Subject<RemoteCommand>();
+  /** This phone just asked the target to start: a new selection, a load or a play. */
+  readonly startedHere = new Subject<void>();
   /** Last command this device actually applied: rides the heartbeat as the ack. */
   readonly lastAppliedCmdId = signal<string | null>(null);
 
@@ -559,6 +561,7 @@ export class RemoteService {
 
   selectTarget(targetId: string | null): void {
     this.lastOwner = this.sessionSync.observedOwnerTargetId();
+    if (targetId) this.startedHere.next();
     // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
@@ -619,6 +622,7 @@ export class RemoteService {
   async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
+    if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
     if (input.action === 'load' || input.action === 'next') {
@@ -652,7 +656,7 @@ export class RemoteService {
         console.warn('[remote] command refused', input.action, targetId);
         return;
       }
-      this.markOffline(targetId);
+      if (err instanceof HttpErrorResponse && err.status === 404) this.markOffline(targetId);
       console.warn('[remote] command failed', input.action, targetId, err);
       // The interceptor already toasts HTTP failures with the server's reason; stay silent on statuses it skips.
       const status = err instanceof HttpErrorResponse ? err.status : 0;

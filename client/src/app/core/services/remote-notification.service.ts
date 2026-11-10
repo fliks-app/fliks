@@ -33,6 +33,7 @@ export class RemoteNotificationService {
       const { action, value } = (e as CustomEvent<{ action: RemoteNotificationAction; value: number }>).detail;
       this.apply(action, value);
     });
+    if (ios) this.remote.startedHere.subscribe(() => void RemoteNotification.resume().catch(() => {}));
     effect(() => {
       const t = this.target;
       // Each remote report re-syncs the extrapolated position.

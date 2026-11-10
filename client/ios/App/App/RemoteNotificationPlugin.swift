@@ -13,6 +13,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "resume", returnType: CAPPluginReturnPromise),
     ]
 
     private static let volumeStep = 0.05
@@ -30,7 +31,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private var pausedTimer: Timer?
     /// The paused title whose lock screen was released: its reports stay ignored until it plays or changes.
     private var releasedTitle: String?
-    /// Set when another app took the session, cleared when iOS says to resume or the target is started again:
+    /// Set when another app took the session, cleared when iOS says to resume or this phone starts the target (`resume`):
     /// meanwhile the loop never cuts that app off and the volume keys stay its own.
     private var interrupted = false
     private var seekedAt = Date.distantPast
@@ -70,8 +71,6 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             self.title = title
             self.artist = artist
             self.duration = duration
-            // The user restarting a paused target takes the session back from the app that interrupted it.
-            if playing && !self.playing { self.interrupted = false }
             self.playing = playing
             self.advancing = playing && !buffering
             // A report sent before the last local seek still carries the old position.
@@ -97,6 +96,13 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             self.releasedTitle = nil
             self.stop()
+            call.resolve()
+        }
+    }
+
+    @objc func resume(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.interrupted = false
             call.resolve()
         }
     }
@@ -228,7 +234,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func syncVolumePin() {
-        pinVolume(canSetVolume && !interrupted)
+        pinVolume(canSetVolume && !interrupted && silence?.isPlaying == true)
     }
 
     private func setSystemVolume(_ level: Float) {
