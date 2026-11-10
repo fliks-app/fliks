@@ -18,6 +18,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private static let volumeStep = 0.05
     private static let pinnedLevel: Float = 0.5
     private static let pausedLimit: TimeInterval = 600
+    private static let stopGrace: TimeInterval = 8
 
     private var silence: AVAudioPlayer?
     private var targets: [(command: MPRemoteCommand, token: Any)] = []
@@ -94,7 +95,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self, self.silence != nil else { return }
                 self.silence = nil
-                self.startLoop()
+                self.start()
             },
         ]
     }
@@ -102,40 +103,44 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Session
 
     private func start() {
-        guard silence == nil else { return }
+        guard silence?.isPlaying != true else { return }
         startLoop()
-        guard silence != nil else { return }
-        installCommands()
-        let session = AVAudioSession.sharedInstance()
-        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
-            guard let level = change.newValue else { return }
-            DispatchQueue.main.async { self?.systemVolumeChanged(level) }
+        guard silence?.isPlaying == true else { return }
+        if targets.isEmpty { installCommands() }
+        if volumeObservation == nil {
+            volumeObservation = AVAudioSession.sharedInstance().observe(\.outputVolume, options: [.new]) { [weak self] _, change in
+                guard let level = change.newValue else { return }
+                DispatchQueue.main.async { self?.systemVolumeChanged(level) }
+            }
         }
     }
 
+    /// Keeps the player across a failed restart: the next report retries, so a player that is not playing is never taken for a running loop.
     private func startLoop() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .moviePlayback)
         try? session.setActive(true)
-        guard let player = try? AVAudioPlayer(data: Self.silentWav) else { return }
-        player.numberOfLoops = -1
-        player.play()
-        silence = player
+        if silence == nil, let player = try? AVAudioPlayer(data: Self.silentWav) {
+            player.numberOfLoops = -1
+            silence = player
+        }
+        silence?.play()
     }
 
     private func interruption(_ note: Notification) {
         guard silence != nil,
               let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
               AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
-        try? AVAudioSession.sharedInstance().setActive(true)
-        silence?.play()
+        let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+        guard AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) else { return }
+        startLoop()
     }
 
     private func stop() {
         pausedTimer?.invalidate()
         pausedTimer = nil
-        guard let player = silence else { return }
-        player.stop()
+        guard silence != nil || !targets.isEmpty else { return }
+        silence?.stop()
         silence = nil
         volumeObservation = nil
         pinVolume(false)
@@ -154,12 +159,17 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
+    /// Armed once per pause: a paused target keeps reporting, and a report must not push the release back.
     private func schedulePausedLimit() {
-        pausedTimer?.invalidate()
-        pausedTimer = nil
-        guard !playing else { return }
+        guard !playing else {
+            pausedTimer?.invalidate()
+            pausedTimer = nil
+            return
+        }
+        guard pausedTimer == nil else { return }
         pausedTimer = Timer.scheduledTimer(withTimeInterval: Self.pausedLimit, repeats: false) { [weak self] _ in
             self?.stop()
+            self?.emit("released", 0)
         }
     }
 
@@ -177,10 +187,12 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             volumeView = view
             setSystemVolume(Self.pinnedLevel)
         } else {
-            if let level = restoreVolume { setSystemVolume(level) }
+            // Synchronous: the main queue may never run again once the app is terminating.
+            if let level = restoreVolume { volumeView?.subviews.compactMap { $0 as? UISlider }.first?.value = level }
             restoreVolume = nil
-            volumeView?.removeFromSuperview()
+            let view = volumeView
             volumeView = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { view?.removeFromSuperview() }
         }
     }
 
@@ -204,6 +216,12 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private func elapsed() -> Double {
         let value = reportedPosition + (advancing ? Date().timeIntervalSince(reportedAt) : 0)
         return duration > 0 ? min(value, duration) : value
+    }
+
+    /// A seek moves the base of the next skip: the target's report lags, so a second quick skip must start from here.
+    private func noteSeek(_ position: Double) {
+        reportedPosition = position
+        reportedAt = Date()
     }
 
     private func publish() {
@@ -258,22 +276,36 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         add(center.pauseCommand) { _ in send("pause", 0) }
         add(center.togglePlayPauseCommand) { [weak self] _ in send(self?.playing == true ? "pause" : "play", 0) }
         add(center.stopCommand) { [weak self] _ in
+            // Keeps the app running long enough for the stop to reach the target once the audio is gone.
+            self?.holdForStop()
             let status = send("stop", 0)
             self?.stop()
             return status
         }
         add(center.nextTrackCommand) { _ in send("next", 0) }
-        add(center.previousTrackCommand) { _ in send("seek", 0) }
-        add(center.changePlaybackPositionCommand) { event in
+        add(center.previousTrackCommand) { [weak self] _ in
+            self?.noteSeek(0)
+            return send("seek", 0)
+        }
+        add(center.changePlaybackPositionCommand) { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            self?.noteSeek(event.positionTime)
             return send("seek", event.positionTime)
         }
         for (command, sign) in [(center.skipBackwardCommand, -1.0), (center.skipForwardCommand, 1.0)] {
             add(command) { [weak self] event in
                 guard let self, let event = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
-                return send("seek", max(self.elapsed() + sign * event.interval, 0))
+                let target = max(self.elapsed() + sign * event.interval, 0)
+                self.noteSeek(target)
+                return send("seek", target)
             }
         }
+    }
+
+    private func holdForStop() {
+        var task = UIBackgroundTaskIdentifier.invalid
+        task = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(task) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stopGrace) { UIApplication.shared.endBackgroundTask(task) }
     }
 
     private func applyCommands(hasNext: Bool, seekButtons: Bool) {

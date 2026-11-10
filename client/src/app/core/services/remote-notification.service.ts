@@ -1,5 +1,5 @@
 import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
-import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
+import { RemoteNotification, type RemoteNotificationAction, type RemoteNotificationEvent } from '../plugins/remote-notification.plugin';
 import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
 import { DeviceService } from './device.service';
 import { LikesApiService } from './api/likes-api.service';
@@ -23,6 +23,8 @@ export class RemoteNotificationService {
   private readonly like = new NotificationLike(inject(LikesApiService));
 
   private shown = false;
+  /** The media native let go of while it was paused: it stays released until the target plays or changes. */
+  private released: string | null = null;
 
   init(): void {
     if (!this.device.isAndroidNative() && !this.device.isIosNative()) return;
@@ -30,7 +32,13 @@ export class RemoteNotificationService {
     void RemoteNotification.clear().catch(() => {});
     const ios = this.device.isIosNative();
     window.addEventListener('remoteNotificationCommand', (e) => {
-      const { action, value } = (e as CustomEvent<{ action: RemoteNotificationAction; value: number }>).detail;
+      const { action, value } = (e as CustomEvent<{ action: RemoteNotificationEvent; value: number }>).detail;
+      if (action === 'released') {
+        const s = untracked(() => this.remote.targetState());
+        this.released = `${s?.mediaId}/${s?.episodeId}`;
+        this.shown = false;
+        return;
+      }
       this.apply(action, value);
     });
     effect(() => {
@@ -42,10 +50,13 @@ export class RemoteNotificationService {
       if (!watched || t.isIdle() || t.isStarting()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
+        this.released = null;
         return;
       }
-      this.shown = true;
       const s = this.remote.targetState();
+      if (t.uiPaused() && this.released === `${s?.mediaId}/${s?.episodeId}`) return;
+      this.released = null;
+      this.shown = true;
       untracked(() => void this.like.track(s?.mediaId, s?.episodeId));
       const meta = this.session.nowPlaying();
       if (!meta) return;
