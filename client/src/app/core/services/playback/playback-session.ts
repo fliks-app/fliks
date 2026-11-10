@@ -188,9 +188,16 @@ export class PlaybackSession {
     }
   }
 
-  /** The only handoff between outputs. False when refused (TV, nothing to hand over) or failed. */
+  /** Whether the playing item can be loaded on `deviceId`; only a remote target can refuse it. */
+  canMoveTo(kind: OutputKind, deviceId?: string): boolean {
+    if (kind !== 'remote' || !deviceId) return true;
+    const fileId = this.output()?.snapshot()?.item.fileId;
+    return !fileId || this.remoteSvc().canLoad(deviceId, fileId);
+  }
+
+  /** The only handoff between outputs. False when refused (TV, nothing to hand over, a target that takes no load) or failed. */
   moveTo(kind: OutputKind, deviceId?: string): Promise<boolean> {
-    if (this.injector.get(DeviceService).isTv()) return Promise.resolve(false);
+    if (this.injector.get(DeviceService).isTv() || !this.canMoveTo(kind, deviceId)) return Promise.resolve(false);
     if (this.moving) return this.moving;
     const from = this.kind();
     // Another remote device is a switch too, not only another kind of output.

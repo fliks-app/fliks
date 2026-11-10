@@ -5,7 +5,7 @@ import { LucideArrowRightLeft, LucidePlus } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
-import { RemoteService, RemoteTarget, targetSupports } from '../../core/services/remote.service';
+import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SessionSyncService } from '../../core/services/session-sync.service';
@@ -201,12 +201,7 @@ export class RemotePickerListComponent {
   /** Another device of the account can take the session over, unless it already plays it. */
   protected canTransfer(row: PickerRow): boolean {
     const s = this.sync.session();
-    return row.kind === 'remote' && !!s && this.sync.canTransfer() && this.takesLoad(row.id) && (this.sync.parked() || s.owner.targetId !== row.id);
-  }
-
-  /** A transfer is a `load` of an item the target may not hold. */
-  private takesLoad(id: string): boolean {
-    return targetSupports(this.remote.targets().find((t) => t.targetId === id), 'load');
+    return row.kind === 'remote' && !!s && this.sync.canTransfer() && this.remote.canLoad(row.id, s.item.mediaFileId) && (this.sync.parked() || s.owner.targetId !== row.id);
   }
 
   /** This device observes the session itself, or controls the device that owns it. */
@@ -217,6 +212,7 @@ export class RemotePickerListComponent {
 
   protected pressable(row: PickerRow): boolean {
     if (row.disabled) return false;
+    if (this.delegate() && row.kind === 'remote' && !row.connected && !this.session.canMoveTo('remote', row.id)) return false;
     return !(this.transferOnly() && row.kind === 'remote' && !this.canTransfer(row));
   }
 
