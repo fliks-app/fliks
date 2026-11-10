@@ -987,6 +987,7 @@ import UIKit
             print("remote: unknown action \(cmd.action) (\(cmd.cmdId)), ignoring")
             return
         }
+        RemoteControlService.shared.lastAppliedCmdId = cmd.cmdId
         let position = player.currentTime().seconds
         let duration = item.duration.seconds
         playback.notifyStateChange(
@@ -995,8 +996,7 @@ import UIKit
             paused: heldPaused,
             audioTrackIndex: currentAudioTrackIndex(),
             subtitleTrackIndex: currentSubtitleTrackIndex(),
-            subtitleId: currentSubtitleId(),
-            lastCmdId: cmd.cmdId
+            subtitleId: currentSubtitleId()
         )
     }
 

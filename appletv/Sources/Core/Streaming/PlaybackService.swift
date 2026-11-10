@@ -230,10 +230,6 @@ import Foundation
 
     // MARK: - Heartbeat (~10s, driven by the coordinator's periodic time observer)
 
-    /// Set by `PlayerCoordinator.applyRemoteCommand`: reported on the next
-    /// heartbeat as `lastCmdId`, the semantic ack a remote controller waits on.
-    private var lastCmdId: String?
-
     /// Called ~1x/sec with the live AVPlayer state. Drives the 10s heartbeat
     /// cadence and the stall watchdog off a single tick.
     func tick(position: Double, duration: Double, paused: Bool,
@@ -247,14 +243,11 @@ import Foundation
     }
 
     /// Force an immediate heartbeat on a play/pause transition (or an applied
-    /// remote command, via `lastCmdId`) so the backend's LiveSession state
-    /// doesn't wait for the next 10s tick.
+    /// remote command) so the backend's LiveSession state doesn't wait for the next 10s tick.
     @discardableResult
     func notifyStateChange(position: Double, duration: Double, paused: Bool,
-                           audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil,
-                           lastCmdId: String? = nil) -> Task<Void, Never>? {
+                           audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil) -> Task<Void, Never>? {
         guard !destroyed else { return nil }
-        if let lastCmdId { self.lastCmdId = lastCmdId }
         if let audioTrackIndex { audioStreamIndex = audioTrackIndex }
         return sendHeartbeat(position: position, duration: duration, paused: paused, audioTrackIndex: audioTrackIndex,
                              subtitleTrackIndex: subtitleTrackIndex, subtitleId: subtitleId)
@@ -315,7 +308,7 @@ import Foundation
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
             audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex,
-            subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
+            subtitleId: Nullable(value: subtitleId), lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
             volume: level?.volume, muted: level?.muted, supportsVolume: true,
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
