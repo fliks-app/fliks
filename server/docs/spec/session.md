@@ -80,7 +80,7 @@ Claim
 10. `session.changed` is emitted on a change of owner, item, file, state or queue, on park, completion and dismissal. Never on a plain position tick. Payload: rule 15.
 
 Completion and expiry
-11. When the history write of a beat marks the item completed (the existing completion rule of its family, `heartbeat.md` rule 15), the row of that sid is deleted and `session.changed` is emitted with null fields.
+11. When the history write of a beat marks the item completed (the existing completion rule of its family, `heartbeat.md` rule 15), the stored row of that sid is deleted at once, so a completed item is never offered again after a restart. A row still playing stays in memory until the playback stops: its beats keep updating it (rule 8), it is served and superseded as before but never stored again, and where it would be parked (rule 14) it leaves memory instead, with `session.changed` with null fields. A parked row of that sid leaves memory at once, with the same event.
 12. A `parked` row is deleted 24 h (`PARKED_TTL`) after it was parked, when the sweep or boot finds it.
 13. A row also leaves by `DELETE /api/session` (rule 16), by the media being deleted (`ON DELETE CASCADE`), and with its user.
 
@@ -111,6 +111,6 @@ Sweep every 15 s (rule 14a), `SUPERSEDED_STOP_DELAY` 3 s, `HANDOFF_TTL_MS` 60 s,
 
 ## Vectors/parity
 
-Rust unit tests (`crates/server/src/account_session/tests.rs`): concurrent claims leave one owner, a preloaded session without a beat claims nothing, an offline replay claims nothing, the sweep parks a silent owner and drops an old parked row, boot parks everything, an out-of-scope kind or the option off leave the row untouched, a same-target replacement keeps the epoch, a shared device parks the other account's row, a reader save parks a row without bumping the epoch, never replaces a live row and its completion removes it.
+Rust unit tests (`crates/server/src/account_session/tests.rs`): concurrent claims leave one owner, a preloaded session without a beat claims nothing, an offline replay claims nothing, the sweep parks a silent owner and drops an old parked row, boot parks everything, an out-of-scope kind or the option off leave the row untouched, a same-target replacement keeps the epoch, a completion keeps a playing row in memory, unstored, until it stops, a shared device parks the other account's row, a reader save parks a row without bumping the epoch, never replaces a live row and its completion removes it.
 Integration (`tests/it/account_session.rs`): two SSE streams of one account, claim from the second target, `session.superseded` on the first stream only (`silent: false`; `silent: true` for a `handoff` beat and for the first claim after a transfer, once), `session.changed` on both, the first's next beat answered `superseded`.
 Parity (`server/parity/scenarios/session/`): `get-empty`, `get-after-beat`, `beat-superseded`, `dismiss-parked`, `dismiss-live-409`, `stream-token-forbidden`, `unauthenticated`, `transfer-ok`, `transfer-no-session`, `transfer-offline`, `transfer-own-target`, `transfer-other-user-denied`, `transfer-grantee-allowed`, `transfer-stream-token-forbidden`, `reader-save-parked`, `reader-out-of-scope`, `reader-option-off`, `transfer-reader-refused`.

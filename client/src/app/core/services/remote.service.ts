@@ -218,8 +218,11 @@ export class RemoteService {
 
   /** The selected target left its player. Same treatment as a stop we sent: the
    *  reading goes, and the farewell heartbeat behind it is ignored. */
-  noteTargetStopped(targetId: string): void {
+  noteTargetStopped(targetId: string, sessionId: string | null = null): void {
     if (!targetId || targetId !== this.observedTargetId()) return;
+    // A target also stops sessions it does not report (a preload, a download): only the one read ends the reading.
+    const read = this.reportedState()?.sessionId;
+    if (sessionId && read && read !== sessionId) return;
     const pending = this.pendingAction();
     if (pending === 'quality') {
       // Same title and position: the stream is being rebuilt, so keep the reading and show it loading.
@@ -231,13 +234,13 @@ export class RemoteService {
       this.noteLoadSent(null);
       return;
     }
-    this.noteStopSent();
+    this.noteStopSent(sessionId);
   }
 
   /** Names the exact stopped session (not a time window) so its farewell heartbeat isn't mistaken for live playback; read before clearing state. */
-  noteStopSent(): void {
+  noteStopSent(sessionId: string | null = null): void {
     // Kept when the state is already gone: a stop cleared up front is noted twice.
-    this.stoppedSessionId = this.reportedState()?.sessionId ?? this.stoppedSessionId;
+    this.stoppedSessionId = sessionId ?? this.reportedState()?.sessionId ?? this.stoppedSessionId;
     this.stoppedUntilReport = true;
     this.expectedMediaFileId = null;
     this.pinnedPosition.set(null);
@@ -289,7 +292,7 @@ export class RemoteService {
 
     // The server says which target stopped, so there is nothing to infer from
     // silence and nothing a trailing heartbeat can put back.
-    this.sse.stopped.subscribe((targetId) => this.noteTargetStopped(targetId));
+    this.sse.stopped.subscribe((e) => this.noteTargetStopped(e.targetId, e.sessionId));
 
     effect(() => {
       this.sse.remoteState();

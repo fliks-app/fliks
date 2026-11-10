@@ -215,14 +215,35 @@ async fn a_restart_parks_every_stored_row(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn completion_removes_the_row_and_the_sid_never_claims_again(pool: PgPool) {
+async fn completion_keeps_the_playing_row_until_it_stops_and_the_sid_never_claims_again(
+    pool: PgPool,
+) {
     let st = state(&pool).await;
     let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
     let s = &st.account_sessions;
     s.beat(&st, beat(u, "s1", "tA", i)).await;
+    alive(&st, "s1");
     s.complete(&st, u, "s1").await;
+    assert!(store::all(&st.db).await.unwrap().is_empty());
+    let mut later = beat(u, "s1", "tA", i);
+    later.position = 80.0;
+    assert_eq!(s.beat(&st, later).await, Verdict::Current);
+    assert_eq!(row(&st, u).await.map(|r| r.position), Some(80.0));
+    assert!(store::all(&st.db).await.unwrap().is_empty());
+    s.ended(&st, "s1").await;
     assert!(row(&st, u).await.is_none());
     assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Ignored);
+    assert!(row(&st, u).await.is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn completion_removes_a_parked_row_at_once(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.ended(&st, "s1").await;
+    s.complete(&st, u, "s1").await;
     assert!(row(&st, u).await.is_none());
 }
 

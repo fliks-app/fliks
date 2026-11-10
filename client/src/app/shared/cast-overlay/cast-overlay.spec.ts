@@ -71,7 +71,8 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     uiPaused: signal(false),
     position: signal(125),
     duration: signal(3600),
-    togglePlayPause: vi.fn(),
+    play: vi.fn(),
+    pause: vi.fn(),
   };
   const output = {
     isIdle: signal(false),
@@ -159,8 +160,14 @@ describe('CastOverlayComponent', () => {
       const buttons = Array.from(el.querySelectorAll('button'));
       buttons[0].click();
       buttons[1].click();
-      expect(target.togglePlayPause).toHaveBeenCalled();
+      expect(target.pause).toHaveBeenCalled();
       expect(sync.playHere).toHaveBeenCalled();
+    });
+
+    it('plays a paused owner that has not reported since this device started following it', () => {
+      const { el, target } = setup({ local: true, account: accountSession({ state: 'paused', playing: false }), live: false });
+      el.querySelector<HTMLButtonElement>('[aria-label="player.play"]')!.click();
+      expect(target.play).toHaveBeenCalled();
     });
 
     it('keeps pause and a progress bar for a playing session whose owner has not reported yet', () => {

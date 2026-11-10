@@ -984,6 +984,7 @@ mod tests {
             1,
             SseEvent::RemoteStopped {
                 target_id: "t".into(),
+                session_id: "s".into(),
             },
         );
         let c = hub.connect(1, at("d#a"));

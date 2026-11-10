@@ -228,6 +228,8 @@ export class AudioPlayerService {
       sessionId: () => this.sessionId,
       active: () => this._track() !== null && (this._playing() || this._loading()),
       yield: () => this.yieldToTakeover(),
+      itemId: () => (this.routed({ type: 'drives' }) ? null : (this._track()?.itemId ?? null)),
+      report: () => this.beat(),
     });
     let signedIn = !!this.auth.user();
     effect(() => {
@@ -1198,8 +1200,11 @@ export class AudioPlayerService {
 
   private onPlayState(playing: boolean): void {
     this._playing.set(playing);
+    // Paused too while online: a silent owner is parked, and a parked owner is never told of a takeover.
     clearInterval(this.beatTimer);
-    if (playing) this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
+    this.beatTimer = setInterval(() => {
+      if (playing || this.network.isOnline()) this.beat();
+    }, BEAT_MS);
     this.beat();
     if (!this.nativeAudio && 'mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   }

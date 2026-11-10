@@ -132,6 +132,8 @@ struct Entry {
     persisted_pos: f64,
     /// For a reader's row: the sid and target of the playback row it replaced.
     replaced: Option<(String, Option<String>)>,
+    /// The history completed its item: the row lives on in memory while it plays, never stored again.
+    done: bool,
 }
 
 /// A sid that claimed: the account it claimed for, its target, and when its engine session ended (ms).
@@ -244,6 +246,9 @@ fn announce(st: &AppState, user: i32, row: Option<&Row>) {
 }
 
 async fn persist(st: &AppState, e: &mut Entry) {
+    if e.done {
+        return;
+    }
     if let Err(err) = store::upsert(&st.db, &e.row).await {
         tracing::warn!(user = e.row.user_id, "account session not stored: {err}");
     }
@@ -255,6 +260,18 @@ fn park(e: &mut Entry) {
     e.row.state = State::Parked;
     e.row.updated_at = Utc::now();
     e.held = None;
+}
+
+/// Parks the live row of `user`; a completed one has nothing left to resume and goes instead.
+async fn park_or_drop(st: &AppState, g: &mut Inner, user: i32) {
+    if g.rows.get(&user).is_some_and(|e| e.done) {
+        g.rows.remove(&user);
+        announce(st, user, None);
+    } else if let Some(e) = g.rows.get_mut(&user) {
+        park(e);
+        persist(st, e).await;
+        announce(st, user, Some(&e.row));
+    }
 }
 
 /// Ends the presence and the engine session of `sid`, announcing nothing: its owner already knows.
@@ -296,6 +313,7 @@ impl AccountSessions {
                     persisted_at: now,
                     persisted_pos: pos,
                     replaced: None,
+                    done: false,
                 };
                 (entry.row.user_id, entry)
             })
@@ -450,20 +468,24 @@ impl AccountSessions {
             persisted_at: 0,
             persisted_pos: 0.0,
             replaced: None,
+            done: false,
         };
         persist(st, &mut entry).await;
         announce(st, b.account, Some(&entry.row));
         let target = entry.row.owner.target_id.clone();
         g.rows.insert(b.account, entry);
-        for (user, other) in g.rows.iter_mut() {
-            if *user != b.account
-                && other.row.state != State::Parked
-                && other.row.owner.target_id == target
-            {
-                park(other);
-                persist(st, other).await;
-                announce(st, *user, Some(&other.row));
-            }
+        let taken: Vec<i32> = g
+            .rows
+            .iter()
+            .filter(|(user, other)| {
+                **user != b.account
+                    && other.row.state != State::Parked
+                    && other.row.owner.target_id == target
+            })
+            .map(|(user, _)| *user)
+            .collect();
+        for user in taken {
+            park_or_drop(st, g, user).await;
         }
     }
 
@@ -546,6 +568,7 @@ impl AccountSessions {
             persisted_at: 0,
             persisted_pos: 0.0,
             replaced,
+            done: false,
         };
         persist(st, &mut entry).await;
         announce(st, r.account, Some(&entry.row));
@@ -557,19 +580,27 @@ impl AccountSessions {
         self.complete(st, account, &reader_sid(item)).await;
     }
 
-    /// The history write completed the item of `sid`: the row goes (rule 11).
+    /// The history write completed the item of `sid`: the stored row goes at once, the live one
+    /// when it stops playing (rule 11).
     pub async fn complete(&self, st: &AppState, account: i32, sid: &str) {
         let mut g = self.0.lock().await;
-        if g.rows
+        let Some(e) = g
+            .rows
             .get(&account)
-            .is_some_and(|e| e.row.session_id == sid)
-        {
-            if let Err(e) = store::delete(&st.db, account).await {
-                tracing::warn!(account, "account session not deleted: {e}");
-                return;
-            }
+            .filter(|e| e.row.session_id == sid && !e.done)
+        else {
+            return;
+        };
+        let parked = e.row.state == State::Parked;
+        if let Err(e) = store::delete(&st.db, account).await {
+            tracing::warn!(account, "account session not deleted: {e}");
+            return;
+        }
+        if parked {
             g.rows.remove(&account);
             announce(st, account, None);
+        } else if let Some(e) = g.rows.get_mut(&account) {
+            e.done = true;
         }
     }
 
@@ -580,16 +611,14 @@ impl AccountSessions {
         if let Some(c) = g.claimed.get_mut(sid) {
             c.ended_at = Some(now_ms() as i64);
         }
-        let Some(e) = g
+        let live = g
             .rows
-            .values_mut()
+            .values()
             .find(|e| e.row.session_id == sid && e.row.state != State::Parked)
-        else {
-            return;
-        };
-        park(e);
-        persist(st, e).await;
-        announce(st, e.row.user_id, Some(&e.row));
+            .map(|e| e.row.user_id);
+        if let Some(user) = live {
+            park_or_drop(st, &mut g, user).await;
+        }
     }
 
     /// Parks every live row whose owner stopped beating, drops the parked rows past their day (rule 14a, 12).
@@ -626,17 +655,21 @@ impl AccountSessions {
 
     async fn park_silent(st: &AppState, g: &mut Inner, only: Option<i32>) {
         let (now, ttl) = (now_ms(), ttl_ms());
-        for (user, e) in g.rows.iter_mut() {
-            let live = e.row.state != State::Parked && only.is_none_or(|u| u == *user);
-            let silent = st
-                .presence
-                .peek(&e.row.session_id)
-                .is_none_or(|p| now - p.last_beat > ttl);
-            if live && silent {
-                park(e);
-                persist(st, e).await;
-                announce(st, *user, Some(&e.row));
-            }
+        let silent: Vec<i32> = g
+            .rows
+            .iter()
+            .filter(|(user, e)| {
+                e.row.state != State::Parked
+                    && only.is_none_or(|u| u == **user)
+                    && st
+                        .presence
+                        .peek(&e.row.session_id)
+                        .is_none_or(|p| now - p.last_beat > ttl)
+            })
+            .map(|(user, _)| *user)
+            .collect();
+        for user in silent {
+            park_or_drop(st, g, user).await;
         }
     }
 

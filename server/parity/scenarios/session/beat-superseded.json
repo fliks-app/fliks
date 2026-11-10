@@ -424,6 +424,7 @@
           {
             "byDeviceName": "Bedroom",
             "epoch": 2,
+            "silent": false,
             "type": "session.superseded"
           }
         ],

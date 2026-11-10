@@ -75,7 +75,7 @@ impl FanOut {
 
     async fn audience(&self, ev: &SseEvent, owner: i32) -> sqlx::Result<Vec<i32>> {
         let viewers = match ev {
-            SseEvent::RemoteState { target_id, .. } | SseEvent::RemoteStopped { target_id } => {
+            SseEvent::RemoteState { target_id, .. } | SseEvent::RemoteStopped { target_id, .. } => {
                 let device = device_id_of(target_id);
                 self.cached(
                     format!("device:{owner}:{device}"),
@@ -146,6 +146,7 @@ mod tests {
         };
         let ev = SseEvent::RemoteStopped {
             target_id: "tv#tab".into(),
+            session_id: "s".into(),
         };
         assert_eq!(fan.audience(&ev, owner).await.unwrap(), vec![guest]);
     }

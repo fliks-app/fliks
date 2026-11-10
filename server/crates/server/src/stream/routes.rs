@@ -130,9 +130,13 @@ pub async fn delete_session(
     if let Some(uid) = live.as_ref().and_then(|l| l.user_id) {
         let live = live.as_ref().expect("checked");
         match st.hub.target_id_for(live.sse_connection_id.as_deref()) {
-            Some(target_id) => st
-                .hub
-                .emit_to_user(uid, SseEvent::RemoteStopped { target_id }),
+            Some(target_id) => st.hub.emit_to_user(
+                uid,
+                SseEvent::RemoteStopped {
+                    target_id,
+                    session_id: sid.clone(),
+                },
+            ),
             None => tracing::debug!("stop {sid}: no live target, no stop announced"),
         }
         st.hub.emit_to_user(uid, SseEvent::RemoteTargetsChanged {});

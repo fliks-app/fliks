@@ -478,8 +478,12 @@ pub enum SseEvent {
     },
     #[serde(rename = "remote.targets_changed")]
     RemoteTargetsChanged {},
+    /// `session_id` names the stopped session: a target can hold others (a preload, a download).
     #[serde(rename = "remote.stopped")]
-    RemoteStopped { target_id: String },
+    RemoteStopped {
+        target_id: String,
+        session_id: String,
+    },
     /// Identity and ownership of the account session; observers refetch it (`session.md` rule 15).
     #[serde(rename = "session.changed")]
     SessionChanged {
@@ -761,7 +765,7 @@ mod tests {
                 "qualities":[{"id":"i","label":"l","lowBandwidth":true}],"autoplayBlocked":false,"hasNext":false,
                 "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null}),
             json!({"type":"remote.targets_changed"}),
-            json!({"type":"remote.stopped","targetId":"t"}),
+            json!({"type":"remote.stopped","targetId":"t","sessionId":"s"}),
             json!({"type":"social.followed","userId":1,"username":"u","avatar":null}),
             json!({"type":"social.follow_request","userId":1,"username":"u","avatar":"a"}),
             json!({"type":"social.follow_accepted","userId":1,"username":"u","avatar":null}),

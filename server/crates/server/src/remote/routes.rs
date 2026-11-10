@@ -97,7 +97,12 @@ fn to_dto(
     live: &mut Vec<Live>,
     owner_username: Option<String>,
 ) -> TargetDto {
-    let i = live.iter().position(|l| l.connection_id == t.connection_id);
+    // A connection can also hold a stale session (a pinned download): the newest fresh one plays.
+    let mine = |l: &Live| l.connection_id == t.connection_id;
+    let i = live
+        .iter()
+        .rposition(|l| mine(l) && l.now_playing.is_some())
+        .or_else(|| live.iter().position(mine));
     let live = i.map(|i| live.swap_remove(i));
     TargetDto {
         target_id: t.identity.target_id.unwrap_or_default(),
@@ -491,4 +496,38 @@ pub async fn revoke(
     db::delete(&st.db, id).await?;
     announce(&st, &[g.grantee_user_id, Some(g.owner_user_id)]);
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::{Identity, Target, event::PlayState};
+
+    fn live(conn: &str, fresh: bool, id: i64) -> Live {
+        Live {
+            connection_id: conn.into(),
+            system_name: None,
+            now_playing: fresh.then_some(NowPlaying {
+                media_file_id: id,
+                media_title: None,
+                media_type: None,
+                poster_url: None,
+                position_seconds: crate::events::event::Num(0.0),
+                state: PlayState::Playing,
+            }),
+        }
+    }
+
+    #[test]
+    fn a_stale_older_session_of_the_connection_does_not_hide_the_one_playing() {
+        let target = Target {
+            connection_id: "c".into(),
+            user_id: 1,
+            identity: Identity::default(),
+            since: 0,
+        };
+        let mut all = vec![live("c", false, 1), live("c", true, 2), live("d", true, 3)];
+        let dto = to_dto(target, &mut all, None);
+        assert_eq!(dto.now_playing.map(|n| n.media_file_id), Some(2));
+    }
 }
