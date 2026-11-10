@@ -66,6 +66,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     enabled: signal(true),
     localPlaying: signal(false),
     claimPending: signal(false),
+    holdsPlayer: signal(false),
     liveReport: computed(() => (over.live ?? true ? { mediaFileId: 9, durationSeconds: 3600 } : null)),
     positionNow: (a: AccountSession) => (over.live ?? true ? 125 : a.positionSeconds),
     durationNow: (a: AccountSession) => a.durationSeconds ?? 0,

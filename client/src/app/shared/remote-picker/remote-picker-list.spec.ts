@@ -98,6 +98,8 @@ describe('RemotePickerListComponent while controlling a device', () => {
         role: signal('observer'),
         canTransfer: signal(true),
         isReading: () => false,
+        positionNow: () => 0,
+        line: () => '',
         parked: () => false,
         transferTo,
       },
