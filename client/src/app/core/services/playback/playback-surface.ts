@@ -46,8 +46,11 @@ export class PlaybackSurface {
   readonly state = computed<SurfaceState>(() => {
     const s = this.sync.session();
     if (!s) return 'idle';
-    if (this.sync.role() === 'owner' || this.sync.localPlaying() || this.sync.claimPending() || this.here()) return 'local';
-    return s.state === 'parked' ? 'parked' : 'remote';
+    if (this.sync.localPlaying() || this.sync.claimPending() || this.here()) return 'local';
+    const owner = this.sync.role() === 'owner';
+    // The owner after a reload holds no player yet: it shows the session as parked until one mounts.
+    if (owner && this.sync.holdsPlayer()) return 'local';
+    return owner || s.state === 'parked' ? 'parked' : 'remote';
   });
 
   /** Re-reading the session and the targets after a resume: the surface stays up, marked stale. */
@@ -70,8 +73,11 @@ export class PlaybackSurface {
   readonly aboveAudio = computed(() => this.audio.active() && !this.miniHidden());
 
   constructor() {
+    // A hidden bar stays hidden for the same playback only: any other state of the session shows it again.
     effect(() => {
-      if (!this.sync.session()) this.hiddenKey.set(null);
+      const s = this.sync.session();
+      const hidden = untracked(this.hiddenKey);
+      if (!s || (hidden !== null && hidden !== PlaybackSurface.keyOf(s))) this.hiddenKey.set(null);
     });
 
     // A frozen WebView runs no timer, so its silence is what unlists it.

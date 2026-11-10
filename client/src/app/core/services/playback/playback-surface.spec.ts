@@ -6,28 +6,49 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
-import { SessionSyncService } from '../session-sync.service';
+import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { SseService } from '../sse.service';
 import { PlaybackSession } from './playback-session';
 import { PlaybackSurface } from './playback-surface';
 
-function setup() {
+const playing = (o: Partial<AccountSession> = {}) =>
+  ({
+    epoch: 1,
+    item: { id: 5 },
+    owner: { targetId: 'tv', deviceName: 'TV', formFactor: 'tv' },
+    state: 'playing',
+    ...o,
+  }) as unknown as AccountSession;
+
+function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false) {
   const connectionId = signal<string | null>(null);
+  const session = signal<AccountSession | null>(null);
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
-      { provide: SessionSyncService, useValue: { session: signal(null), holdsPlayer: signal(false) } },
-      { provide: PlaybackSession, useValue: {} },
-      { provide: DeviceService, useValue: {} },
-      { provide: AudioPlayerService, useValue: {} },
+      {
+        provide: SessionSyncService,
+        useValue: {
+          session,
+          holdsPlayer: signal(holdsPlayer),
+          role: () => (session() ? role : 'none'),
+          localPlaying: () => false,
+          claimPending: () => false,
+          ownedHere: () => role === 'owner',
+          isReading: () => false,
+        },
+      },
+      { provide: PlaybackSession, useValue: { isLocal: () => true, partyActive: () => false } },
+      { provide: DeviceService, useValue: { isTv: () => false } },
+      { provide: AudioPlayerService, useValue: { track: () => null, active: () => false } },
       { provide: RemoteService, useValue: {} },
       { provide: SseService, useValue: { connectionId } },
     ],
   });
   TestBed.inject(PlaybackSurface);
-  return { connectionId, http: TestBed.inject(HttpTestingController) };
+  return { connectionId, session, surface: TestBed.inject(PlaybackSurface), http: TestBed.inject(HttpTestingController) };
 }
 
 describe('PlaybackSurface keepalive', () => {
@@ -52,5 +73,50 @@ describe('PlaybackSurface keepalive', () => {
     TestBed.tick();
     vi.advanceTimersByTime(60_000);
     http.expectNone('/api/system/events/keepalive');
+  });
+});
+
+describe('PlaybackSurface bar', () => {
+  it('shows the session an owner without a player holds as parked, local once a player mounts', () => {
+    const { session, surface } = setup('owner', false);
+    session.set(playing());
+    TestBed.tick();
+    expect(surface.state()).toBe('parked');
+    expect(surface.bar()).not.toBeNull();
+  });
+
+  it('keeps an owner with a player local, with no bar', () => {
+    const { session, surface } = setup('owner', true);
+    session.set(playing());
+    TestBed.tick();
+    expect(surface.state()).toBe('local');
+    expect(surface.bar()).toBeNull();
+  });
+
+  it('shows the bar of the next playback of an owner whose earlier bar was hidden', () => {
+    const { session, surface } = setup();
+    session.set(playing({ item: { id: 1 } as AccountSession['item'] }));
+    TestBed.tick();
+    surface.hide();
+    TestBed.tick();
+    expect(surface.bar()).toBeNull();
+
+    session.set(playing({ state: 'parked' }));
+    TestBed.tick();
+    expect(surface.bar()).not.toBeNull();
+
+    session.set(playing({ item: { id: 2 } as AccountSession['item'] }));
+    TestBed.tick();
+    expect(surface.bar()).not.toBeNull();
+  });
+
+  it('keeps the bar hidden while the same playback moves to its next track', () => {
+    const { session, surface } = setup();
+    session.set(playing());
+    TestBed.tick();
+    surface.hide();
+    session.set(playing({ item: { id: 6 } as AccountSession['item'] }));
+    TestBed.tick();
+    expect(surface.bar()).toBeNull();
   });
 });
