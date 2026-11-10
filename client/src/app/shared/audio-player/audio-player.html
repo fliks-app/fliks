@@ -1,4 +1,4 @@
-@if (audio.expanded() ? null : local.track(); as t) {
+@if (audio.expanded() || surface.miniHidden() ? null : local.track(); as t) {
   <div
     appTvRow
     animate.enter="mini-player-in"

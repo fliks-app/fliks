@@ -59,6 +59,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
+import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { formatTime } from '../../core/utils/player.utils';
 import { BottomSheetComponent } from '../components/bottom-sheet';
 import { MarqueeComponent } from '../components/marquee';
@@ -137,6 +138,7 @@ export class AudioPlayerComponent {
   protected readonly local = inject(AudioPlayerService);
   private readonly remoteOut = inject(RemoteAudioOutput);
   protected readonly sync = inject(SessionSyncService);
+  protected readonly surface = inject(PlaybackSurface);
   /** The full player drives another device's session. */
   protected readonly remoteView = this.remoteOut.expanded;
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */

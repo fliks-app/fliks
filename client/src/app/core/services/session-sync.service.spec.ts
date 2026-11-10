@@ -154,21 +154,6 @@ describe('SessionSyncService observation', () => {
     await flush(session());
     expect(service.observedOwnerTargetId()).toBeNull();
   });
-
-  it('masks only a parked session', async () => {
-    const { service, http, flush } = setup();
-    await flush(session());
-    await service.dismiss();
-    http.expectNone('/api/session');
-
-    service.refresh();
-    http.expectOne('/api/session').flush(session({ state: 'parked', playing: false }));
-    await Promise.resolve();
-    const done = service.dismiss();
-    http.expectOne({ method: 'DELETE', url: '/api/session' }).flush(null);
-    await done;
-    expect(service.session()).toBeNull();
-  });
 });
 
 describe('SessionSyncService one surface', () => {
@@ -190,16 +175,33 @@ describe('SessionSyncService one surface', () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  it('keeps a local player of another item, a playing one, and one of a parked session', async () => {
+  it('closes a paused local player of another item too, while another device plays', async () => {
     const { service, flush } = setup();
-    const other = held(6);
-    const playing = held(5, true);
-    service.registerPlayer(other.p);
-    service.registerPlayer(playing.p);
-    await flush(session({ state: 'parked', playing: false }));
+    const { p, yielded } = held(6);
+    service.registerPlayer(p);
+    await flush(session());
     TestBed.tick();
-    expect(other.yielded).not.toHaveBeenCalled();
+    expect(yielded).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a playing local player, one with no account item, and every player of a parked session', async () => {
+    const { service, flush } = setup();
+    const playing = held(5, true);
+    const parked = held(6);
+    const noItem = { sessionId: () => 'sid-live', active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(null) };
+    service.registerPlayer(playing.p);
+    service.registerPlayer(noItem);
+    await flush(session());
+    TestBed.tick();
     expect(playing.yielded).not.toHaveBeenCalled();
+    expect(noItem.yield).not.toHaveBeenCalled();
+    service.registerPlayer(parked.p);
+    service.refresh();
+    TestBed.inject(HttpTestingController).expectOne('/api/session').flush(session({ state: 'parked', playing: false }));
+    await Promise.resolve();
+    await Promise.resolve();
+    TestBed.tick();
+    expect(parked.yielded).not.toHaveBeenCalled();
   });
 
   it('keeps the paused player of the session this device owns', async () => {
@@ -361,12 +363,44 @@ describe('SessionSyncService play here', () => {
     expect(resumer.mock.calls[0][1]).toBeGreaterThanOrEqual(100);
   });
 
+  it('ignores a report of another file than the session item', async () => {
+    const { service, flush } = setup();
+    await flush(session({ positionSeconds: 100, playing: false }));
+    service.setLiveSource(() => ({ mediaFileId: 4, durationSeconds: 90 }), () => 812.5);
+    TestBed.tick();
+    expect(service.liveReport()).toBeNull();
+    expect(service.positionNow(service.session()!)).toBe(100);
+    expect(service.durationNow(service.session()!)).toBe(3600);
+  });
+
+  it('holds the claim of a resume until this device owns the session', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
+    expect(service.claimPending()).toBe(false);
+    await service.playHere();
+    expect(service.claimPending()).toBe(true);
+    service.refresh();
+    TestBed.inject(HttpTestingController).expectOne('/api/session').flush(session({ owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }));
+    await Promise.resolve();
+    await Promise.resolve();
+    TestBed.tick();
+    expect(service.claimPending()).toBe(false);
+  });
+
+  it('dates the owner report from the row, for the owner only', async () => {
+    const { service, flush } = setup();
+    await flush(session({ positionAt: new Date(Date.now() - 4000).toISOString() }));
+    expect(Date.now() - service.ownerReportAt('pc#1')).toBeGreaterThanOrEqual(3900);
+    expect(service.ownerReportAt('tv#1')).toBe(0);
+  });
+
   it('prefers the owner live position while it is observed', async () => {
     const { service, flush } = setup();
     await flush(session());
     const resumer = vi.fn().mockResolvedValue(undefined);
     service.registerResumer('video', resumer);
-    service.setLiveSource(() => ({ mediaFileId: 9 }), () => 812.5);
+    service.setLiveSource(() => ({ mediaFileId: 9, durationSeconds: 3600 }), () => 812.5);
     TestBed.tick();
     await service.playHere();
     expect(resumer.mock.calls[0][1]).toBe(812.5);

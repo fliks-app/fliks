@@ -63,8 +63,12 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     canPlayHere: signal(over.canPlayHere ?? false),
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     playHere: vi.fn(),
-    dismiss: vi.fn(),
-    positionNow: (a: AccountSession) => a.positionSeconds,
+    enabled: signal(true),
+    localPlaying: signal(false),
+    claimPending: signal(false),
+    liveReport: computed(() => (over.live ?? true ? { mediaFileId: 9, durationSeconds: 3600 } : null)),
+    positionNow: (a: AccountSession) => (over.live ?? true ? 125 : a.positionSeconds),
+    durationNow: (a: AccountSession) => a.durationSeconds ?? 0,
   };
   const target = {
     isIdle: signal(!(over.live ?? true)),
@@ -90,6 +94,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     command: vi.fn(),
   };
   const audioView = { expand: vi.fn() };
+  const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) };
   TestBed.configureTestingModule({
     providers: [
       provideTranslateService(),
@@ -98,7 +103,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
-      { provide: AudioPlayerService, useValue: { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) } },
+      { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
       { provide: SseService, useValue: { targetId: signal('phone#1') } },
@@ -112,7 +117,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
   });
   const fixture = TestBed.createComponent(CastOverlayComponent);
   fixture.detectChanges();
-  return { el: fixture.nativeElement as HTMLElement, fixture, session, output, sync, target, audioView };
+  return { el: fixture.nativeElement as HTMLElement, fixture, session, output, sync, target, audioView, audio };
 }
 
 describe('CastOverlayComponent', () => {
@@ -221,10 +226,9 @@ describe('CastOverlayComponent', () => {
 
     it('hides a parked reader strip here without deleting the session', () => {
       const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
-      const { el, fixture, sync } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false }) });
+      const { el, fixture } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false }) });
       Array.from(el.querySelectorAll('button')).at(-1)!.click();
       fixture.detectChanges();
-      expect(sync.dismiss).not.toHaveBeenCalled();
       expect(el.querySelector('button')).toBeNull();
     });
 
@@ -239,14 +243,15 @@ describe('CastOverlayComponent', () => {
       expect(setup({ local: true }).el.querySelector('button')).toBeNull();
     });
 
-    it('reads parked as offline with the stored position and masks it through the server', () => {
+    it('reads parked as offline with the stored position and hides it on this device only', () => {
       const parked = accountSession({ state: 'parked', playing: false, positionSeconds: 640 });
-      const { el, sync } = setup({ local: true, account: parked, live: false, canPlayHere: true });
+      const { el, fixture } = setup({ local: true, account: parked, live: false, canPlayHere: true });
       expect(el.textContent).toContain('session.parked_device');
       const buttons = Array.from(el.querySelectorAll('button'));
       expect(buttons).toHaveLength(3);
       buttons[2].click();
-      expect(sync.dismiss).toHaveBeenCalled();
+      fixture.detectChanges();
+      expect(el.querySelector('button')).toBeNull();
     });
 
     it('hides a live session here until its owner changes', () => {
@@ -266,6 +271,20 @@ describe('CastOverlayComponent', () => {
       sync.session.set(accountSession());
       fixture.detectChanges();
       expect(el.textContent).toContain('Observed title');
+    });
+
+    it('keeps the stored position when the report names another file than the session', () => {
+      const { el } = setup({ local: true, account: accountSession({ positionSeconds: 65 }), live: false });
+      expect(el.textContent).toContain('1:05');
+      expect(el.textContent).not.toContain('2:05');
+    });
+
+    it('never shows with the audio mini-player, which holds the same slot', () => {
+      const { el, audio } = setup({ local: true, account: accountSession() });
+      expect(el.querySelector('button')).not.toBeNull();
+      audio.active.set(true);
+      TestBed.tick();
+      expect(el.querySelector('button')).toBeNull();
     });
 
     it('leaves the output strip to a selected target', () => {

@@ -8,7 +8,7 @@ import { DeviceService } from '../../core/services/device.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
-import { SessionStripService } from './session-strip.service';
+import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { KIND_REGISTRY } from '../../core/media-kinds';
 import { formatTime } from '../../core/utils/player.utils';
@@ -28,7 +28,7 @@ export class CastOverlayComponent {
   protected readonly sync = inject(SessionSyncService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly device = inject(DeviceService);
-  protected readonly strip = inject(SessionStripService);
+  protected readonly surface = inject(PlaybackSurface);
   protected readonly playing = inject(PlaybackDevice);
   private readonly transferList = viewChild(RemotePickerListComponent);
 
@@ -41,7 +41,7 @@ export class CastOverlayComponent {
   protected readonly output = computed(() => (this.device.isTv() || this.session.isLocal() ? null : this.session.output()));
 
   /** The account session played elsewhere that this device follows without having selected it. */
-  protected readonly observed = this.strip.observed;
+  protected readonly observed = this.surface.bar;
 
   /** A reader's position: read elsewhere, opened here, with a percentage instead of a clock. */
   protected readonly reading = computed(() => {
@@ -54,7 +54,8 @@ export class CastOverlayComponent {
     return s ? Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100) : 0;
   });
 
-  protected readonly live = computed(() => this.observed() !== null && !this.sync.parked() && !this.target.isIdle());
+  /** The owner reports the file the session names: another file's report never drives this card. */
+  protected readonly live = computed(() => this.observed() !== null && this.sync.liveReport() !== null);
   /** The owner answers commands while it plays, whether or not its report has arrived. */
   protected readonly controllable = computed(() => this.observed() !== null && !this.sync.parked());
   protected readonly paused = computed(() => (this.live() ? this.target.uiPaused() : !this.observed()?.playing));
@@ -62,17 +63,16 @@ export class CastOverlayComponent {
   protected readonly time = computed(() => {
     const s = this.observed();
     if (!s) return '';
-    const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
-    const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
+    const pos = this.sync.positionNow(s);
+    const dur = this.sync.durationNow(s);
     return dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
   });
 
   protected readonly percent = computed(() => {
     const s = this.observed();
     if (!s) return 0;
-    const dur = this.live() ? this.target.duration() : (s.durationSeconds ?? 0);
-    const pos = this.live() ? this.target.position() : this.sync.positionNow(s);
-    return dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
+    const dur = this.sync.durationNow(s);
+    return dur > 0 ? Math.min(100, (this.sync.positionNow(s) / dur) * 100) : 0;
   });
 
   private readonly audioView = inject(RemoteAudioOutput);
@@ -105,7 +105,7 @@ export class CastOverlayComponent {
   }
 
   protected hide(): void {
-    this.strip.hide();
+    this.surface.hide();
   }
 
   /** The projected list is refreshed on every press of the trigger, as the top-bar picker does. */

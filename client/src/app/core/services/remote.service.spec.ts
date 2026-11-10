@@ -58,7 +58,7 @@ function setup(opts: { selected?: string | null } = {}) {
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, setLiveSource: vi.fn() } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
@@ -81,13 +81,22 @@ describe('RemoteService observation', () => {
     expect(service.targetState()?.mediaTitle).toBe('A series');
   });
 
-  it('lets a selection win over the session owner', () => {
+  it('replaces a selection by the session owner: one device per account', () => {
     const { service, remoteState, owner } = setup({ selected: 'tv#1' });
     owner.set('pc#1');
+    TestBed.tick();
     remoteState.set(frame({ targetId: 'pc#1' }));
     service.ingestState();
-    expect(service.observedTargetId()).toBe('tv#1');
-    expect(service.targetState()).toBeNull();
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.observedTargetId()).toBe('pc#1');
+    expect(service.targetState()?.mediaTitle).toBe('A series');
+  });
+
+  it('keeps a selection that is the session owner', () => {
+    const { service, owner } = setup({ selected: 'tv#1' });
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBe('tv#1');
   });
 
   it('follows a new owner and drops the previous reading', async () => {
@@ -533,7 +542,7 @@ describe('RemoteService mirrors navigation to a target', () => {
           { path: 'settings', children: [] },
         ]),
         { provide: SseService, useValue: sse },
-        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), setLiveSource: vi.fn() } },
+        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
         { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],

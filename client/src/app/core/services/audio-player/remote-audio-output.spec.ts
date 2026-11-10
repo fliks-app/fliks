@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { computed, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MusicApiService } from '../api/music-api.service';
@@ -25,7 +25,7 @@ const track = (itemId: number): MusicTrackRequest => ({
 function session(over: Partial<AccountSession> = {}): AccountSession {
   return {
     epoch: 1,
-    item: { id: 12, mediaId: 3, episodeId: null, mediaFileId: null, kind: 'album', family: 'audio', title: 'Track 12', subtitle: null, posterUrl: '/p.jpg' },
+    item: { id: 12, mediaId: 3, episodeId: null, mediaFileId: 9, kind: 'album', family: 'audio', title: 'Track 12', subtitle: null, posterUrl: '/p.jpg' },
     owner: { targetId: 'pc#1', deviceName: 'Desk', formFactor: 'desktop' },
     state: 'playing',
     positionSeconds: 64,
@@ -42,7 +42,9 @@ async function setup(account: AccountSession | null, live = true) {
     session: signal(account),
     parked: signal(account?.state === 'parked'),
     role: signal(account ? 'observer' : 'none'),
-    positionNow: (s: AccountSession) => s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0),
+    liveReport: computed(() => (live ? { mediaFileId: 9, durationSeconds: 200 } : null)),
+    positionNow: (s: AccountSession) => (live ? 70 : s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0)),
+    durationNow: (s: AccountSession) => (live ? 200 : (s.durationSeconds ?? 0)),
   };
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
   const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn() };

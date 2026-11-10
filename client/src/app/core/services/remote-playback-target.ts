@@ -59,6 +59,8 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     () => this.remote.targetState()?.state === 'buffering' || this.remote.restarting(),
   );
   readonly volume = computed(() => this.remote.targetState()?.volume ?? 1);
+  /** False until the target reports a level: `volume` then holds a placeholder, not a reading. */
+  readonly volumeKnown = computed(() => this.remote.targetState()?.volume != null);
   readonly muted = computed(() => this.remote.targetState()?.muted ?? false);
   readonly activeQualityId = computed(() => this.remote.targetState()?.quality ?? 'auto');
   readonly activeAudioTrackId = computed(() => {
