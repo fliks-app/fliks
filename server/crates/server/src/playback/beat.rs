@@ -186,15 +186,15 @@ async fn engine_beat(
     sid: &str,
     b: &Value,
 ) -> Result<Option<bool>, AppError> {
-    if !st.engine.runtime() {
-        return Ok(None);
-    }
     let known = st.presence.peek(sid);
     if known
         .as_ref()
         .is_some_and(|k| k.user_id.is_some_and(|u| u != user) && k.attributed_user_id != Some(user))
     {
         return Err(not_yours());
+    }
+    if !st.engine.runtime() {
+        return Ok(None);
     }
     let owner = known.as_ref().and_then(|k| k.user_id).unwrap_or(user);
     let req = HeartbeatRequest {
@@ -325,7 +325,7 @@ fn beat_identity(
         .and_then(Value::as_str)
         .filter(|t| !t.is_empty());
     st.hub
-        .identity_for(conn)
+        .identity_for(user, conn)
         .or_else(|| {
             let device = device?;
             st.hub
@@ -433,17 +433,14 @@ fn account_beat(
 /// `session.md` rule 19: a reader's save leaves a parked row of the item; none without an owner.
 async fn account_reading(
     st: &AppState,
-    headers: &HeaderMap,
-    body: &Value,
+    conn: Option<&str>,
+    user: i32,
     account: i32,
     item: i32,
     file: i32,
     progression: f64,
 ) {
-    let Some(id) = st
-        .hub
-        .identity_for(sse_connection_id(body, headers).as_deref())
-    else {
+    let Some(id) = st.hub.identity_for(user, conn) else {
         return;
     };
     let Some(target_id) = id.target_id.filter(|t| !t.is_empty()) else {
@@ -555,7 +552,7 @@ pub async fn heartbeat(
         let before = st.presence.peek(sid);
         // A `polled:` key the hub does not hold names no connection: it must not rebind the session.
         let conn = sse_connection_id(&body, &headers)
-            .filter(|c| !c.starts_with("polled:") || st.hub.identity_for(Some(c)).is_some());
+            .filter(|c| !c.starts_with("polled:") || st.hub.identity_for(user, Some(c)).is_some());
         let conn = native_face(&st, user, conn.as_deref(), &body).or(conn);
         let asked = conn
             .as_deref()
@@ -680,7 +677,16 @@ pub async fn heartbeat(
             .complete_reading(&st, history_user, item)
             .await;
     } else if let Some(progression) = reading {
-        account_reading(&st, &headers, &body, history_user, item, file, progression).await;
+        account_reading(
+            &st,
+            sse_connection_id(&body, &headers).as_deref(),
+            user,
+            history_user,
+            item,
+            file,
+            progression,
+        )
+        .await;
     }
     Ok(reply(lost, superseded, Some(saved)))
 }

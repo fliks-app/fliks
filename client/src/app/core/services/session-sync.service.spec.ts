@@ -90,7 +90,7 @@ describe('SessionSyncService role', () => {
   it('keeps another tab of this device an observer of a live session', async () => {
     const { service, flush } = setup();
     await flush(session({ owner: { targetId: 'phone#other', deviceName: null, formFactor: 'phone' } }));
-    expect(service.ownedHere()).toBe(true);
+    expect(service.ownedHere()).toBe(false);
     expect(service.role()).toBe('observer');
   });
 

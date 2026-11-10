@@ -471,16 +471,20 @@ impl Hub {
             })
     }
 
-    /// What the SSE connection or polled target `connection_id` knows about itself.
-    pub fn identity_for(&self, connection_id: Option<&str>) -> Option<Identity> {
+    /// What the SSE connection or polled target `connection_id` of `user` knows about itself.
+    pub fn identity_for(&self, user: i32, connection_id: Option<&str>) -> Option<Identity> {
         let id = connection_id?;
         let g = self.lock();
-        g.conns.get(id).map(|c| c.identity.clone()).or_else(|| {
-            g.polled
-                .iter()
-                .find(|((_, key), _)| key == id)
-                .map(|(_, p)| p.identity.clone())
-        })
+        g.conns
+            .get(id)
+            .filter(|c| c.user == user)
+            .map(|c| c.identity.clone())
+            .or_else(|| {
+                g.polled
+                    .iter()
+                    .find(|((u, key), _)| *u == user && key == id)
+                    .map(|(_, p)| p.identity.clone())
+            })
     }
 
     /// Targets owned by `user`, newest first.

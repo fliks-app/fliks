@@ -1,5 +1,5 @@
 //! `GET`/`DELETE /api/session` (`docs/spec/session.md`).
-use super::{QueueState, Row, State, same_device, store};
+use super::{QueueState, Row, State, continues, store};
 use crate::{
     events::{Num, SseEvent, event::Queue},
     http::{AppError, auth::SessionAuthed, json::iso_ms, validate::ValidJson},
@@ -109,51 +109,48 @@ async fn current(st: &AppState, user: i32) -> Result<Option<(Row, store::Shown)>
     Ok(Some((row, shown)))
 }
 
-/// What a device that connects its stream observes (`session.md` rule 20): the row and what its item
-/// shows, read before the connection registers so that no await sits between registration and snapshot.
-pub struct Observed {
-    row: Row,
-    media_id: i32,
-    episode_id: Option<i32>,
-}
-
-/// `None` when the session is parked, absent, out of scope or this device's own.
-pub async fn observe(st: &AppState, user: i32, me: &str) -> Option<Observed> {
+/// `session.md` rule 20: a device whose stream just registered as `connection` is sent the live
+/// owner's last `remote.state`, unless the owner is this device itself (rule 6) or out of scope.
+pub async fn observe(st: &AppState, user: i32, connection: &str, me: &str) -> Option<()> {
+    let me = Some(me.to_owned());
     let (row, shown) = current(st, user).await.ok()??;
-    if row.state == State::Parked || same_device(&row.owner.target_id, &Some(me.to_owned())) {
+    if row.state == State::Parked || continues(st, &row, &me) {
         return None;
     }
     if !store::in_scope(&st.db, user, row.kind).await.ok()? {
         return None;
     }
-    Some(Observed {
-        row,
-        media_id: shown.media_id,
-        episode_id: shown.episode_id,
-    })
+    st.account_sessions
+        .while_current(user, &row.session_id, row.item_id, |row| {
+            if !continues(st, row, &me)
+                && let Some(ev) = snapshot(st, user, row, &shown)
+            {
+                st.hub.emit_to_connection(user, connection, ev);
+            }
+        })
+        .await;
+    Some(())
 }
 
-impl Observed {
-    /// The live owner's last `remote.state`; `None` when its presence is gone or another login's.
-    pub fn state(&self, st: &AppState, user: i32) -> Option<SseEvent> {
-        let live = st.presence.peek(&self.row.session_id)?;
-        if live.user_id != Some(user) {
-            return None;
-        }
-        let body = json!({
-            "mediaFileId": self.row.media_file_id,
-            "episodeId": self.episode_id,
-            "itemId": self.row.item_id,
-            "durationSeconds": self.row.duration,
-        });
-        let target = live.target_id()?.to_owned();
-        Some(crate::playback::remote_state(
-            target,
-            &live,
-            self.media_id,
-            &body,
-        ))
+/// The owner's presence as a `remote.state`; `None` once it is gone or another login's.
+fn snapshot(st: &AppState, user: i32, row: &Row, shown: &store::Shown) -> Option<SseEvent> {
+    let live = st.presence.peek(&row.session_id)?;
+    if live.user_id != Some(user) {
+        return None;
     }
+    let body = json!({
+        "mediaFileId": row.media_file_id,
+        "episodeId": shown.episode_id,
+        "itemId": row.item_id,
+        "durationSeconds": row.duration,
+    });
+    let target = live.target_id()?.to_owned();
+    Some(crate::playback::remote_state(
+        target,
+        &live,
+        shown.media_id,
+        &body,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/session", responses((status = 200)))]

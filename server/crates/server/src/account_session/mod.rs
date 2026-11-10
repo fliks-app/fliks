@@ -96,12 +96,32 @@ impl From<&Queue> for QueueState {
     }
 }
 
-/// Two targets of one device (a reload changes the tab nonce, not the device) are one owner.
+/// Two targets of one device.
 fn same_device(a: &Option<String>, b: &Option<String>) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => device_id_of(a) == device_id_of(b),
         _ => a == b,
     }
+}
+
+/// Whether a claim of `target` continues the owner of `row`: the same target, or another target of
+/// its device once its beats stopped (a reload with a new tab nonce); a tab still beating is another owner.
+/// A device's `#native` face and its web layer are one owner.
+fn continues(st: &AppState, row: &Row, target: &Option<String>) -> bool {
+    let owner = &row.owner.target_id;
+    if owner == target {
+        return true;
+    }
+    let native = [owner, target]
+        .iter()
+        .any(|t| t.as_deref().is_some_and(|t| t.ends_with("#native")));
+    same_device(owner, target)
+        && (native
+            || row.state == State::Parked
+            || st
+                .presence
+                .peek(&row.session_id)
+                .is_none_or(|p| now_ms() - p.last_beat > ttl_ms()))
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -387,6 +407,17 @@ impl AccountSessions {
             .insert((account, target.to_owned()), (item, now + HANDOFF_TTL_MS));
     }
 
+    /// Runs `f` on the row of `user` while it is still `sid` playing `item`, under the lock the claims
+    /// take: whatever `f` emits is ordered with their `session.changed`.
+    pub async fn while_current(&self, user: i32, sid: &str, item: i32, f: impl FnOnce(&Row)) {
+        let g = self.0.lock().await;
+        if let Some(e) = g.rows.get(&user).filter(|e| {
+            e.row.session_id == sid && e.row.item_id == item && e.row.state != State::Parked
+        }) {
+            f(&e.row);
+        }
+    }
+
     /// Whether a beat of `sid` is superseded, whatever else is known of its sender.
     pub async fn is_superseded(&self, sid: &str) -> bool {
         self.0.lock().await.claimed_verdict(sid) == Some(Verdict::Superseded)
@@ -456,7 +487,10 @@ impl AccountSessions {
         let prior = g.rows.remove(&b.account);
         let same_owner = prior
             .as_ref()
-            .is_some_and(|p| Self::continues(st, p, &b.owner.target_id));
+            .is_some_and(|p| continues(st, &p.row, &b.owner.target_id));
+        let same_device_queue = prior
+            .as_ref()
+            .is_some_and(|p| same_device(&p.row.owner.target_id, &b.owner.target_id));
         let epoch = match &prior {
             Some(p) if same_owner => p.row.epoch,
             Some(p) => p.row.epoch + 1,
@@ -488,7 +522,7 @@ impl AccountSessions {
                 owner: b.owner,
                 queue: b.queue.or(prior
                     .and_then(|p| p.row.queue)
-                    .filter(|q| same_owner && q.item_ids.contains(&i64::from(b.item)))),
+                    .filter(|q| same_device_queue && q.item_ids.contains(&i64::from(b.item)))),
                 updated_at: Utc::now(),
             },
             held: Some(Held {
@@ -516,29 +550,6 @@ impl AccountSessions {
             .collect();
         for user in taken {
             park_or_drop(st, g, user).await;
-        }
-    }
-
-    /// Whether the claim of `target` continues the owner of `prior`: the same target, or a reload of
-    /// its device (new tab nonce) once the previous tab's connection is gone; a second tab is another owner.
-    fn continues(st: &AppState, prior: &Entry, target: &Option<String>) -> bool {
-        let owner = &prior.row.owner.target_id;
-        if owner == target {
-            return true;
-        }
-        if !same_device(owner, target) {
-            return false;
-        }
-        // A device's native face and its web layer are one owner.
-        if [owner, target]
-            .iter()
-            .any(|t| t.as_deref().is_some_and(|t| t.ends_with("#native")))
-        {
-            return true;
-        }
-        match (owner, &prior.held) {
-            (Some(t), Some(h)) => st.hub.resolve_target(h.hub_user, t).is_none(),
-            _ => true,
         }
     }
 
