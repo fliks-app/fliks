@@ -1310,15 +1310,17 @@ export class AudioPlayerService {
   /** "Play here" on a session of another device: its queue and its position now. */
   private async resumeSession(s: AccountSession, positionSeconds: number): Promise<void> {
     const paused = s.state === 'paused' || s.state === 'parked';
+    const itemIds = s.queue?.itemIds ?? [s.item.id];
     if (s.item.kind === 'album') {
-      const q = s.queue ?? { itemIds: [s.item.id], index: 0, shuffle: false, repeat: 'off' as const };
+      const q = s.queue ?? { itemIds, index: 0, shuffle: false, repeat: 'off' as const };
       await this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused);
     } else {
       const req = await this.audiobookRequest(s.item.mediaId, s.item.id);
       if (req) await this.play(req, { startAt: positionSeconds, paused });
     }
     // A paused load reports no play state: its first beat is what claims the session.
-    if (paused && this._track()?.itemId === s.item.id) this.onPlayState(false);
+    const loaded = this._track()?.itemId;
+    if (paused && loaded != null && itemIds.includes(loaded)) this.onPlayState(false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */

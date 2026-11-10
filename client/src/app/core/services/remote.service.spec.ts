@@ -112,6 +112,23 @@ describe('RemoteService observation', () => {
     expect(service.selectedTargetId()).toBeNull();
   });
 
+  it('keeps a restored selection while another device owns the session', async () => {
+    localStorage.setItem('fliks.remote.target', 'tv#1');
+    try {
+      const { service, owner } = setup({ selected: null });
+      owner.set('pc#1');
+      TestBed.tick();
+      const http = TestBed.inject(HttpTestingController);
+      const refreshing = service.refreshTargets();
+      http.match((r) => r.url === '/api/remote/targets').forEach((r) => r.flush([{ targetId: 'tv#1', nowPlaying: null }]));
+      await refreshing;
+      TestBed.tick();
+      expect(service.selectedTargetId()).toBe('tv#1');
+    } finally {
+      localStorage.removeItem('fliks.remote.target');
+    }
+  });
+
   it('keeps a selection made while another device owned the session', () => {
     const { service, owner } = setup({ selected: null });
     owner.set('pc#1');

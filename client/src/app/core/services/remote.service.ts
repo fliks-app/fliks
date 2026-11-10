@@ -509,7 +509,7 @@ export class RemoteService {
       const restored = this.restoredTargetId;
       if (restored !== null) {
         this.restoredTargetId = null;
-        this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null, true);
+        this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null);
       }
       // Only a household row carries an owner name; the selected target survives the filter, or it would read as offline.
       const selected = this.selectedTargetId();
@@ -546,9 +546,8 @@ export class RemoteService {
     }
   }
 
-  /** A restored selection may have owned the session before the reload: the next other owner replaces it. */
-  selectTarget(targetId: string | null, restored = false): void {
-    this.lastOwner = restored ? targetId : this.sessionSync.observedOwnerTargetId();
+  selectTarget(targetId: string | null): void {
+    this.lastOwner = this.sessionSync.observedOwnerTargetId();
     // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
