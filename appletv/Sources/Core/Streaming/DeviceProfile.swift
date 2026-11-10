@@ -85,7 +85,7 @@ enum DeviceProfileBuilder {
             // AVPlayer seeks straight to the resume segment; it never probes seg-0.
             probesSegZero: false,
             deviceType: "desktop",
-            deviceName: UIDevice.current.name,
+            deviceName: DeviceName.current,
             systemName: "tvOS \(UIDevice.current.systemVersion)",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
             useTs: false

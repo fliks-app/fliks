@@ -92,7 +92,7 @@ struct QuickConnectView: View {
         do {
             let res = try await auth.requestPairing(
                 userId: userId,
-                deviceName: UIDevice.current.name,
+                deviceName: DeviceName.current,
                 systemName: "tvOS \(UIDevice.current.systemVersion)"
             )
             pairingId = res.pairingId

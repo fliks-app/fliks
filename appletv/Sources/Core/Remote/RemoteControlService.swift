@@ -14,6 +14,8 @@ import UIKit
     /// be linked to its live session.
     private(set) var targetId: String?
     private var pollTask: Task<Void, Never>?
+    /// Echoed by every beat as `lastCmdId`, the ack a controller waits on; a `load` is acked by the player it starts.
+    @ObservationIgnored var lastAppliedCmdId: String?
 
     /// Wired by `RootView` to push a fresh player route: the app's existing
     /// "start playing this" entry point: for a `load` command.
@@ -69,7 +71,7 @@ import UIKit
         do {
             let res: RemoteRegisterResponse = try await api.post(
                 "/api/remote/register",
-                body: Body(deviceId: DeviceId.current, name: UIDevice.current.name, formFactor: "tv")
+                body: Body(deviceId: DeviceId.current, name: DeviceName.current, formFactor: "tv")
             )
             targetId = res.targetId
         } catch {
@@ -179,6 +181,7 @@ import UIKit
                 print("remote: load command \(cmd.cmdId) missing mediaFileId/mediaId, ignoring")
                 return
             }
+            lastAppliedCmdId = cmd.cmdId
             onLoadRequested?(mediaFileId, mediaId, cmd.episodeId, cmd.positionSeconds ?? 0, cmd.paused ?? false,
                              cmd.launchTracks)
             return

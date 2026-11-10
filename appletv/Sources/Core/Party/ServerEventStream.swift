@@ -57,7 +57,7 @@ final class ServerEventStream {
                 URLQueryItem(name: "ticket", value: ticket.ticket),
                 URLQueryItem(name: "device", value: deviceId),
                 URLQueryItem(name: "ff", value: "tv"),
-                URLQueryItem(name: "name", value: UIDevice.current.name),
+                URLQueryItem(name: "name", value: DeviceName.current),
             ]
             guard let url = comps.url else { return false }
             var req = URLRequest(url: url)
