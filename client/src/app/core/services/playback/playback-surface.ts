@@ -1,8 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { deviceIdOf } from '../remote-target-id';
 import { SseService } from '../sse.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { PlaybackSession } from './playback-session';
@@ -34,7 +36,7 @@ export class PlaybackSurface {
   private readonly hiddenKey = signal<string | null>(null);
 
   private static keyOf(s: AccountSession): string {
-    return `${s.owner.targetId}|${s.epoch}|${s.state === 'parked'}`;
+    return `${deviceIdOf(s.owner.targetId ?? '')}|${s.epoch}|${s.state === 'parked'}`;
   }
 
   /** The session already sits on this device: a reader's position it saved, or the track its own player holds. */
@@ -84,7 +86,9 @@ export class PlaybackSurface {
     effect((onCleanup) => {
       const connectionId = this.sse.connectionId();
       if (!connectionId) return;
-      const ping = () => this.http.post('/api/system/events/keepalive', { connectionId }).subscribe({ error: () => undefined });
+      const ping = () => this.http
+        .post('/api/system/events/keepalive', { connectionId }, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
+        .subscribe({ error: () => undefined });
       ping();
       const timer = setInterval(ping, KEEPALIVE_MS);
       onCleanup(() => clearInterval(timer));

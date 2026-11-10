@@ -80,6 +80,8 @@ struct Conn {
     tx: mpsc::Sender<Msg>,
     /// `None` until the client sends its first keepalive: one that never does is never silent.
     keepalive: Option<Instant>,
+    /// The silence was announced to the owner's lists; cleared by the next keepalive.
+    silence_announced: bool,
 }
 
 struct Polled {
@@ -335,6 +337,7 @@ impl Hub {
                         seq,
                         tx,
                         keepalive: None,
+                        silence_announced: false,
                     },
                 );
             }
@@ -495,6 +498,24 @@ impl Hub {
         let mut rows = vec![];
         {
             let mut g = self.lock();
+            let mut newly_silent = vec![];
+            for c in g.conns.values_mut() {
+                let silent = c
+                    .keepalive
+                    .is_some_and(|at| now.saturating_duration_since(at) > SSE_SILENCE);
+                if silent && !c.silence_announced {
+                    c.silence_announced = true;
+                    newly_silent.push(c.user);
+                }
+            }
+            for user in newly_silent {
+                self.dispatch(
+                    &mut g,
+                    Aud::Users(&[user]),
+                    Out::sse(SseEvent::RemoteTargetsChanged {}),
+                );
+                expired.push(user);
+            }
             let mut conns: Vec<_> = g
                 .conns
                 .iter()
@@ -555,7 +576,11 @@ impl Hub {
             .filter(|t| t.is_polled())
             .map(|t| (t.user_id, t.device_id().to_owned()))
             .collect();
-        rows.retain(|t| t.is_polled() || !faces.contains(&(t.user_id, t.device_id().to_owned())));
+        rows.retain(|t| {
+            t.is_polled()
+                || !t.is_remote()
+                || !faces.contains(&(t.user_id, t.device_id().to_owned()))
+        });
         rows.sort_by_key(|t| std::cmp::Reverse(t.since));
         rows
     }
@@ -600,6 +625,7 @@ impl Hub {
             };
             let was_silent = c.keepalive.is_some_and(|at| at.elapsed() > SSE_SILENCE);
             c.keepalive = Some(Instant::now());
+            c.silence_announced = false;
             was_silent
         };
         if back {
@@ -1021,6 +1047,8 @@ mod tests {
         let _never = hub.connect(1, at("old#a"));
         assert!(hub.keepalive(1, &quiet.id));
         assert!(!hub.keepalive(2, &quiet.id) && !hub.keepalive(1, "gone"));
+        let mut watcher = hub.connect(1, Identity::default());
+        got(&mut watcher);
         let later = Instant::now() + SSE_SILENCE + Duration::from_secs(1);
         let ids = |rows: Vec<Target>| -> Vec<String> {
             rows.into_iter()
@@ -1028,6 +1056,8 @@ mod tests {
                 .collect()
         };
         assert_eq!(ids(hub.collect(Some(1), later)), vec!["old#a"]);
+        hub.collect(Some(1), later);
+        assert_eq!(got(&mut watcher), vec!["remote.targets_changed"]);
         assert!(hub.keepalive(1, &quiet.id));
         assert_eq!(ids(hub.collect(Some(1), Instant::now())).len(), 2);
     }
@@ -1037,13 +1067,24 @@ mod tests {
         let hub = Hub::new();
         let _tab = hub.connect(1, at("dev"));
         let _other = hub.connect(1, at("other"));
+        let _party = hub.connect(1, at("dev#party"));
         hub.register_polled_target(1, at("dev#native"));
-        let listed: Vec<_> = hub
-            .list_for_user(1)
-            .into_iter()
-            .filter_map(|t| t.identity.target_id)
-            .collect();
-        assert_eq!(listed, vec!["other", "dev#native"]);
+        let listed = |hub: &Hub| -> Vec<String> {
+            let mut ids: Vec<String> = hub
+                .list_for_user(1)
+                .into_iter()
+                .filter(Target::is_remote)
+                .filter_map(|t| t.identity.target_id)
+                .collect();
+            ids.sort();
+            ids
+        };
+        assert_eq!(listed(&hub), vec!["dev#native", "other"]);
+        assert!(
+            hub.list_for_user(1)
+                .iter()
+                .any(|t| t.identity.target_id.as_deref() == Some("dev#party"))
+        );
         assert_eq!(hub.resolve_target(1, "dev").unwrap(), "polled:dev#native");
         assert_eq!(
             hub.native_face(1, "dev").unwrap().connection_id,
@@ -1051,7 +1092,7 @@ mod tests {
         );
         assert!(hub.native_face(2, "dev").is_none());
         hub.drop_connections_for_target(1, "dev#native");
-        assert_eq!(hub.list_for_user(1).len(), 2);
+        assert_eq!(listed(&hub), vec!["dev", "other"]);
     }
 
     #[test]

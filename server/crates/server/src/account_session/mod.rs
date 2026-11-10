@@ -796,6 +796,8 @@ pub async fn spawn(st: &AppState) {
         loop {
             tick.tick().await;
             st.account_sessions.sweep(&st).await;
+            // A listing expires polled targets and announces silent streams.
+            st.hub.list_all();
         }
     });
 }

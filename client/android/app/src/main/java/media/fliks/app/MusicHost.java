@@ -141,6 +141,8 @@ final class MusicHost {
     private volatile boolean webForeground;
     private final NativeFace face;
     private long playedAt;
+    /** The last remote command applied, which the next beat acknowledges. */
+    @Nullable private volatile String lastCmdId;
     /** Server and user the queue started under; a different signed-in session never reaches it. */
     @Nullable private volatile String sessionKey;
     @Nullable private volatile Book book;
@@ -541,7 +543,10 @@ final class MusicHost {
             return;
         }
         if (!"remote.command".equals(type) || event.optLong("expiresAt") < System.currentTimeMillis()) return;
-        switch (event.optString("action")) {
+        String action = event.optString("action");
+        if (!handles(action, event)) return;
+        lastCmdId = event.optString("cmdId", null);
+        switch (action) {
             case "play": exo.play(); break;
             case "pause": exo.pause(); break;
             case "playpause": if (exo.isPlaying()) exo.pause(); else exo.play(); break;
@@ -549,7 +554,28 @@ final class MusicHost {
             case "seek": seekTo(event.optDouble("positionSeconds", 0)); break;
             case "next": if (itemOf(exo.getCurrentMediaItem()) == null) exo.seekForward(); else exo.seekToNextMediaItem(); break;
             case "prev": if (itemOf(exo.getCurrentMediaItem()) == null) exo.seekBack(); else exo.seekToPreviousMediaItem(); break;
+            case "load":
+                if (event.has("positionSeconds")) seekTo(event.optDouble("positionSeconds", 0));
+                if (event.optBoolean("paused", false)) exo.pause(); else exo.play();
+                break;
             default: break;
+        }
+        // After the player settled: the beat carries the state the command led to, and acknowledges it.
+        if (!"stop".equals(action)) main.postDelayed(() -> beat(exo.isPlaying()), 300);
+    }
+
+    /** What the service can do alone; the rest needs the web layer, and an unacknowledged command says so. */
+    private boolean handles(String action, JSONObject event) {
+        switch (action) {
+            case "play": case "pause": case "playpause": case "stop": case "seek": case "next": case "prev":
+                return true;
+            case "load": {
+                // Resuming the queued item, as a hand-over to a device holding it paused does.
+                Long item = itemOf(exo.getCurrentMediaItem());
+                return item != null && event.optLong("itemId", -1) == item && !event.has("queue");
+            }
+            default:
+                return false;
         }
     }
 
@@ -563,7 +589,6 @@ final class MusicHost {
         } else {
             exo.seekTo(exo.getCurrentMediaItemIndex(), (long) (position * 1000));
         }
-        beat(exo.isPlaying());
     }
 
     /** Progress to the server for what the web layer does not take care of. */
@@ -571,6 +596,7 @@ final class MusicHost {
         lastBeat = System.currentTimeMillis();
         MediaItem current = exo.getCurrentMediaItem();
         if (webLive() || current == null) return;
+        face.want();
         Book b = book;
         Long item = itemOf(current);
         Resolved r = item == null ? null : resolved.get(item);
@@ -599,6 +625,8 @@ final class MusicHost {
                         .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
                         .put("mediaFileId", r.mediaFileId).put("itemId", item).put("sessionId", r.sessionId);
             }
+            String ack = lastCmdId;
+            if (ack != null) body.put("lastCmdId", ack);
             String payload = body.toString();
             io.execute(() -> {
                 try {

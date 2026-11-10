@@ -110,6 +110,16 @@ describe('PlaybackSurface bar', () => {
     expect(surface.bar()).not.toBeNull();
   });
 
+  it('keeps a hidden bar hidden when the owner passes from its web layer to its native service', () => {
+    const { session, surface } = setup();
+    session.set(playing({ owner: { targetId: 'dev#ab12', deviceName: null, formFactor: null } }));
+    TestBed.tick();
+    surface.hide();
+    session.set(playing({ owner: { targetId: 'dev#native', deviceName: 'Phone', formFactor: 'phone' } }));
+    TestBed.tick();
+    expect(surface.bar()).toBeNull();
+  });
+
   it('keeps the bar hidden while the same playback moves to its next track', () => {
     const { session, surface } = setup();
     session.set(playing());

@@ -26,7 +26,9 @@ final class NativeFace {
     private final ExecutorService io;
     private final Handler main;
     private final Consumer<JSONObject> sink;
+    /** Guarded by `this`: a registration and a departure never interleave. */
     private volatile boolean registered;
+    private volatile boolean wanted;
     private volatile boolean polling;
 
     NativeFace(Context context, FliksApi api, ExecutorService io, Handler main, Consumer<JSONObject> sink) {
@@ -44,10 +46,15 @@ final class NativeFace {
         return device == null || device.isEmpty() ? null : device + "#native";
     }
 
-    /** Registers the target unless it is; blocks, so it runs on the io pool. */
-    void ensure(String key) throws IOException {
+    /** The device is the face again: registrations are allowed until the next `leave`. */
+    void want() {
+        wanted = true;
+    }
+
+    /** Registers the target unless it is or the face was left; blocks, so it runs on the io pool. */
+    synchronized void ensure(String key) throws IOException {
         String device = api.deviceId();
-        if (registered || device == null || device.isEmpty()) return;
+        if (registered || !wanted || device == null || device.isEmpty()) return;
         try {
             String body = new JSONObject().put("deviceId", device).put("name", name())
                     .put("formFactor", formFactor()).toString();
@@ -62,6 +69,7 @@ final class NativeFace {
     void poll(String key) {
         String target = targetId();
         if (target == null || polling) return;
+        wanted = true;
         polling = true;
         io.execute(() -> {
             try {
@@ -84,13 +92,18 @@ final class NativeFace {
     /** The web layer can take commands again: the device is listed through it. */
     void leave(@Nullable String key) {
         String device = api.deviceId();
-        if (!registered || key == null || device == null) return;
-        registered = false;
+        if (!wanted && !registered) return;
+        wanted = false;
+        if (key == null || device == null) return;
         io.execute(() -> {
-            try {
-                api.send("DELETE", "/api/remote/register?deviceId=" + Uri.encode(device), null, key);
-            } catch (IOException ignored) {
-                // The server drops the target 30 s after its last poll.
+            synchronized (this) {
+                if (!registered) return;
+                registered = false;
+                try {
+                    api.send("DELETE", "/api/remote/register?deviceId=" + Uri.encode(device), null, key);
+                } catch (IOException ignored) {
+                    // The server drops the target 30 s after its last poll.
+                }
             }
         });
     }
