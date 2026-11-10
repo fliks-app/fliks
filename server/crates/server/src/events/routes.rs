@@ -82,10 +82,12 @@ pub async fn events(
             .map(str::to_owned),
     };
     let me = identity.target_id.clone().filter(|t| !t.is_empty());
+    let observed = match &me {
+        Some(me) => crate::account_session::observe(&st, user_id, me).await,
+        None => None,
+    };
     let conn = st.hub.connect_session(user_id, sid, identity);
-    if let Some(me) = me
-        && let Some(ev) = crate::account_session::observed_state(&st, user_id, &me).await
-    {
+    if let Some(ev) = observed.and_then(|o| o.state(&st, user_id)) {
         st.hub.emit_to_connection(user_id, &conn.id, ev);
     }
     Ok((

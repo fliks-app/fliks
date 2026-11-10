@@ -586,7 +586,7 @@ async fn an_expected_transfer_lapses_with_the_next_record(pool: PgPool) {
     let st = state(&pool).await;
     let s = &st.account_sessions;
     s.0.lock().await.handoffs.insert((1, "old".into()), (7, 0));
-    s.expect_handoff(1, "tB", 7).await;
+    s.expect_handoff(&st, 1, "tB", 7).await;
     let g = s.0.lock().await;
     assert_eq!(
         g.handoffs.keys().collect::<Vec<_>>(),
@@ -616,10 +616,30 @@ async fn a_lapsed_transfer_record_goes_with_the_sweep(pool: PgPool) {
     let st = state(&pool).await;
     let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
     let s = &st.account_sessions;
-    s.expect_handoff(u, "tB", i).await;
+    s.expect_handoff(&st, u, "tB", i).await;
     s.sweep(&st).await;
     assert_eq!(s.0.lock().await.handoffs.len(), 1, "still inside the TTL");
     s.0.lock().await.handoffs.values_mut().for_each(|h| h.1 = 0);
     s.sweep(&st).await;
     assert!(s.0.lock().await.handoffs.is_empty());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_second_tab_of_the_owning_device_supersedes_the_first(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let identity = |t: &str| crate::events::Identity {
+        target_id: Some(t.into()),
+        ..Default::default()
+    };
+    let _tab_a = st.hub.connect_session(u, None, identity("dev#a"));
+    s.beat(&st, beat(u, "s1", "dev#a", i)).await;
+    s.beat(&st, beat(u, "s2", "dev#b", i)).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!((r.epoch, r.session_id.as_str()), (2, "s2"));
+    assert_eq!(
+        s.beat(&st, beat(u, "s1", "dev#a", i)).await,
+        Verdict::Superseded
+    );
 }

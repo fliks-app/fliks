@@ -145,11 +145,13 @@ struct Entry {
     done: bool,
 }
 
-/// A sid that claimed: the account it claimed for, its target, and when its engine session ended (ms).
+/// A sid that claimed: the account and target it claimed for, when its engine session ended (ms), and whether it was superseded.
 struct Claim {
     account: i32,
     target: Option<String>,
     ended_at: Option<i64>,
+    /// Another owner took the row over from this sid, whichever device it was on.
+    superseded: bool,
 }
 
 #[derive(Default)]
@@ -175,6 +177,9 @@ impl Inner {
     /// `None` when it is free to claim again: never claimed, or a reader's row replaced its own.
     fn claimed_verdict(&self, sid: &str) -> Option<Verdict> {
         let claim = self.claimed.get(sid)?;
+        if claim.superseded {
+            return Some(Verdict::Superseded);
+        }
         let entry = self.rows.get(&claim.account);
         let owner = match entry {
             Some(e) if e.row.session_id.starts_with(READER_PREFIX) => match &e.replaced {
@@ -312,6 +317,7 @@ impl AccountSessions {
                 account: row.user_id,
                 target: row.owner.target_id.clone(),
                 ended_at: Some(now),
+                superseded: false,
             };
             g.claimed.insert(row.session_id.clone(), claim);
         }
@@ -373,10 +379,10 @@ impl AccountSessions {
     }
 
     /// A transfer of the account's session to `target` was sent: its first beat of `item` claims silently.
-    pub async fn expect_handoff(&self, account: i32, target: &str, item: i32) {
+    pub async fn expect_handoff(&self, st: &AppState, account: i32, target: &str, item: i32) {
         let mut g = self.0.lock().await;
         let now = now_ms() as i64;
-        g.handoffs.retain(|_, (_, until)| *until > now);
+        Self::announce_lapsed_handoffs(st, &mut g, now);
         g.handoffs
             .insert((account, target.to_owned()), (item, now + HANDOFF_TTL_MS));
     }
@@ -444,12 +450,13 @@ impl AccountSessions {
             account: b.account,
             target: b.owner.target_id.clone(),
             ended_at: None,
+            superseded: false,
         };
         g.claimed.insert(b.sid.clone(), claim);
         let prior = g.rows.remove(&b.account);
         let same_owner = prior
             .as_ref()
-            .is_some_and(|p| same_device(&p.row.owner.target_id, &b.owner.target_id));
+            .is_some_and(|p| Self::continues(st, p, &b.owner.target_id));
         let epoch = match &prior {
             Some(p) if same_owner => p.row.epoch,
             Some(p) => p.row.epoch + 1,
@@ -462,6 +469,9 @@ impl AccountSessions {
             now_ms() as i64,
         );
         if let Some(p) = prior.as_ref().filter(|_| !same_owner) {
+            if let Some(c) = g.claimed.get_mut(&p.row.session_id) {
+                c.superseded = true;
+            }
             Self::supersede(st, p, &b, epoch, b.handoff || expected);
         }
         let mut entry = Entry {
@@ -506,6 +516,22 @@ impl AccountSessions {
             .collect();
         for user in taken {
             park_or_drop(st, g, user).await;
+        }
+    }
+
+    /// Whether the claim of `target` continues the owner of `prior`: the same target, or a reload of
+    /// its device (new tab nonce) once the previous tab's connection is gone; a second tab is another owner.
+    fn continues(st: &AppState, prior: &Entry, target: &Option<String>) -> bool {
+        let owner = &prior.row.owner.target_id;
+        if owner == target {
+            return true;
+        }
+        if !same_device(owner, target) {
+            return false;
+        }
+        match (owner, &prior.held) {
+            (Some(t), Some(h)) => st.hub.resolve_target(h.hub_user, t).is_none(),
+            _ => true,
         }
     }
 
@@ -656,16 +682,7 @@ impl AccountSessions {
         g.claimed.retain(|sid, c| {
             c.ended_at.is_none_or(|t| now - t < revive) || st.presence.peek(sid).is_some()
         });
-        let mut lapsed: Vec<i32> = g
-            .handoffs
-            .extract_if(|_, (_, until)| *until <= now)
-            .map(|((account, _), _)| account)
-            .collect();
-        lapsed.sort_unstable();
-        lapsed.dedup();
-        for account in lapsed {
-            announce(st, account, g.rows.get(&account).map(|e| &e.row));
-        }
+        Self::announce_lapsed_handoffs(st, &mut g, now);
         let cutoff = Utc::now() - PARKED_TTL;
         let old: Vec<i32> = g
             .rows
@@ -680,6 +697,20 @@ impl AccountSessions {
             }
             g.rows.remove(&user);
             announce(st, user, None);
+        }
+    }
+
+    /// Drops the transfer records past their TTL and tells each account, so a waiting originator stops.
+    fn announce_lapsed_handoffs(st: &AppState, g: &mut Inner, now: i64) {
+        let mut lapsed: Vec<i32> = g
+            .handoffs
+            .extract_if(|_, (_, until)| *until <= now)
+            .map(|((account, _), _)| account)
+            .collect();
+        lapsed.sort_unstable();
+        lapsed.dedup();
+        for account in lapsed {
+            announce(st, account, g.rows.get(&account).map(|e| &e.row));
         }
     }
 

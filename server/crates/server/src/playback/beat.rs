@@ -16,6 +16,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     presence::{Beat, LiveSession, now_ms},
+    remote::device_id_of,
     state::AppState,
 };
 use axum::{
@@ -315,7 +316,11 @@ fn beat_identity(
             st.hub
                 .list_for_user(user)
                 .into_iter()
-                .find(|t| t.identity.target_id.as_deref() == Some(device))
+                .find(|t| {
+                    let live = t.identity.target_id.as_deref();
+                    live == Some(device)
+                        || (!device.contains('#') && live.map(device_id_of) == Some(device))
+                })
                 .map(|t| t.identity)
         })
         .or_else(|| {
@@ -329,11 +334,20 @@ fn beat_identity(
             })
         })
         .or_else(|| {
-            device.map(|t| Identity {
-                target_id: Some(t.to_owned()),
+            let device = device.filter(|t| !device_taken(st, user, t))?;
+            Some(Identity {
+                target_id: Some(device.to_owned()),
                 ..Identity::default()
             })
         })
+}
+
+/// A device another login has live: a beat cannot name it as its own (rule 7 would park that row).
+fn device_taken(st: &AppState, user: i32, target: &str) -> bool {
+    st.hub.list_all().iter().any(|t| {
+        t.user_id != user
+            && t.identity.target_id.as_deref().map(device_id_of) == Some(device_id_of(target))
+    })
 }
 
 /// Rule 17: the bodies; `sessionLost` and `superseded` are only ever `true` in one.
