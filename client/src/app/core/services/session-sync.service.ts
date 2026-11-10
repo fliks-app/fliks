@@ -105,11 +105,13 @@ export class SessionSyncService {
     return mine ? 'owner' : 'observer';
   });
 
-  /** The session's owner is this device, in this page load or an earlier one (a reload changes the tab part of the target id). */
+  /** The session's owner is this tab, or, once parked, this device in an earlier page load (the tab part of the target id changes). */
   readonly ownedHere = computed(() => {
-    const owner = this._session()?.owner.targetId;
+    const s = this._session();
+    const owner = s?.owner.targetId;
     const me = this.sse.targetId();
-    return !!owner && !!me && deviceIdOf(owner) === deviceIdOf(me);
+    if (!owner || !me) return false;
+    return s.state === 'parked' ? deviceIdOf(owner) === deviceIdOf(me) : owner === me;
   });
 
   /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */

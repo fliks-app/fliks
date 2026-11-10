@@ -625,16 +625,12 @@ async fn a_lapsed_transfer_record_goes_with_the_sweep(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_second_tab_of_the_owning_device_supersedes_the_first(pool: PgPool) {
+async fn a_second_tab_of_the_owning_device_supersedes_the_first_while_it_beats(pool: PgPool) {
     let st = state(&pool).await;
     let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
     let s = &st.account_sessions;
-    let identity = |t: &str| crate::events::Identity {
-        target_id: Some(t.into()),
-        ..Default::default()
-    };
-    let _tab_a = st.hub.connect_session(u, None, identity("dev#a"));
     s.beat(&st, beat(u, "s1", "dev#a", i)).await;
+    alive(&st, "s1");
     s.beat(&st, beat(u, "s2", "dev#b", i)).await;
     let r = row(&st, u).await.unwrap();
     assert_eq!((r.epoch, r.session_id.as_str()), (2, "s2"));
@@ -670,4 +666,22 @@ async fn a_devices_native_face_and_its_web_layer_are_one_owner(pool: PgPool) {
         s.beat(&st, beat(u, "s2", "dev#native", i)).await,
         Verdict::Ignored
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_claim_of_the_same_device_keeps_the_queue_that_holds_the_item(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut first = beat(u, "s1", "dev#a", i);
+    first.queue = Some(QueueState {
+        item_ids: vec![i64::from(i)],
+        index: 0,
+        shuffle: false,
+        repeat: Repeat::Off,
+    });
+    s.beat(&st, first).await;
+    alive(&st, "s1");
+    s.beat(&st, beat(u, "s2", "dev#b", i)).await;
+    assert!(row(&st, u).await.unwrap().queue.is_some());
 }
