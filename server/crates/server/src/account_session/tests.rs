@@ -670,7 +670,7 @@ async fn a_devices_native_face_and_its_web_layer_are_one_owner(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_claim_of_the_same_device_keeps_the_queue_that_holds_the_item(pool: PgPool) {
+async fn a_claim_keeps_the_queue_only_for_the_same_owner(pool: PgPool) {
     let st = state(&pool).await;
     let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
     let s = &st.account_sessions;
@@ -683,6 +683,23 @@ async fn a_claim_of_the_same_device_keeps_the_queue_that_holds_the_item(pool: Pg
     });
     s.beat(&st, first).await;
     alive(&st, "s1");
-    s.beat(&st, beat(u, "s2", "dev#b", i)).await;
+    s.beat(&st, beat(u, "s2", "dev#a", i)).await;
+    alive(&st, "s2");
     assert!(row(&st, u).await.unwrap().queue.is_some());
+    s.beat(&st, beat(u, "s3", "dev#b", i)).await;
+    assert!(row(&st, u).await.unwrap().queue.is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_row_is_held_by_its_device_until_another_replaces_it(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "dev#native", i);
+    b.file = Some(7);
+    s.beat(&st, b).await;
+    assert!(s.holds(&st, u, "dev#native", 7).await);
+    assert!(s.holds(&st, u, "dev#tab", 7).await);
+    assert!(!s.holds(&st, u, "dev#native", 8).await);
+    assert!(!s.holds(&st, u, "other#native", 7).await);
 }

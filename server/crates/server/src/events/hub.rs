@@ -463,7 +463,7 @@ impl Hub {
         if pending.is_empty() {
             return;
         }
-        let Some(conn) = self.resolve_target(user, target_id) else {
+        let Some(conn) = self.newest_web_stream(user, target_id) else {
             tracing::warn!(
                 "Dropped {} pending event(s) of {target_id}: no web stream took over",
                 pending.len()
@@ -473,6 +473,23 @@ impl Hub {
         for ev in pending {
             self.emit_to_connection(user, &conn, ev);
         }
+    }
+
+    /// The newest web stream of the device of `target_id`, even one silent right now: a frozen
+    /// WebView resumes its keepalive once foregrounded, and what it is sent waits in its queue.
+    fn newest_web_stream(&self, user: i32, target_id: &str) -> Option<String> {
+        let device = target_id.split('#').next().unwrap_or_default();
+        let g = self.lock();
+        g.conns
+            .iter()
+            .filter(|(_, c)| {
+                c.user == user
+                    && c.identity.target().is_some_and(|t| {
+                        t.split('#').next() == Some(device) && !t.ends_with("#party")
+                    })
+            })
+            .max_by_key(|(_, c)| c.seq)
+            .map(|(id, _)| id.clone())
     }
 
     pub fn has_connection(&self, connection_id: &str) -> bool {
@@ -1151,6 +1168,20 @@ mod tests {
         );
         assert_eq!(hub.resolve_target(1, "dev#native"), Some(tab.id.clone()));
         assert!(hub.resolve_target(1, "other#native").is_none());
+    }
+
+    #[test]
+    fn leaving_the_face_reaches_a_web_stream_that_is_silent_right_now() {
+        let hub = Hub::new();
+        let mut tab = hub.connect(1, at("dev#tab"));
+        hub.register_polled_target(1, at("dev#native"), None);
+        let face = hub.resolve_target(1, "dev#native").unwrap();
+        assert!(hub.emit_to_connection(1, &face, SseEvent::QueueUpdated {}));
+        hub.lock().conns.get_mut(&tab.id).unwrap().keepalive =
+            Instant::now().checked_sub(SSE_SILENCE + Duration::from_secs(1));
+        got(&mut tab);
+        hub.release_polled_target(1, "dev#native");
+        assert!(got(&mut tab).contains(&"queue.updated".to_owned()));
     }
 
     #[test]

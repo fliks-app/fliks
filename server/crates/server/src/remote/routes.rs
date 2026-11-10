@@ -328,36 +328,37 @@ pub async fn command(
     if dto.by_target_id.as_deref() == Some(&target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
-    ensure_supported(&st, owner, &conn, &dto)?;
+    ensure_supported(&st, owner, &conn, &dto).await?;
     send(&st, &a, &target_id, owner, &conn, dto)
 }
 
 /// A polled target that declared its `actions` is sent nothing else (`remote.md` rule 21d); `resume`
-/// stands for a `load` of the file it already holds.
-pub(crate) fn ensure_supported(
+/// stands for a `load` of the file the device's account session holds, whatever its last beat.
+pub(crate) async fn ensure_supported(
     st: &AppState,
     owner: i32,
     conn: &str,
     dto: &Command,
 ) -> Result<(), AppError> {
-    let Some(actions) = st
+    let Some(target) = st
         .hub
         .list_for_user(owner)
         .into_iter()
         .find(|t| t.connection_id == conn)
-        .and_then(|t| t.actions)
     else {
+        return Ok(());
+    };
+    let Some(actions) = target.actions else {
         return Ok(());
     };
     let has = |name: &str| actions.iter().any(|a| a == name);
     let name = serde_json::to_value(dto.action).unwrap_or_default();
-    let resume = dto.action == RemoteAction::Load
-        && has("resume")
-        && dto.media_file_id.is_some_and(|f| {
-            live_sessions(st).into_iter().any(|l| {
-                l.connection_id == conn && l.now_playing.is_some_and(|n| n.media_file_id == f)
-            })
-        });
+    let resume = match (dto.action, dto.media_file_id, &target.identity.target_id) {
+        (RemoteAction::Load, Some(file), Some(id)) if has("resume") => {
+            st.account_sessions.holds(st, owner, id, file).await
+        }
+        _ => false,
+    };
     if resume || name.as_str().is_some_and(has) {
         return Ok(());
     }
@@ -406,7 +407,13 @@ pub(crate) fn send(
         kind: dto.kind,
     };
     // Never `emit_to_user`: a broadcast would let one phone drive every device of the account.
-    if !st.hub.emit_to_connection(owner, conn, ev) {
+    // A polled target released between the resolution and now: its device's web stream takes over.
+    let sent = st.hub.emit_to_connection(owner, conn, ev.clone())
+        || st
+            .hub
+            .resolve_target(owner, target_id)
+            .is_some_and(|c| c != conn && st.hub.emit_to_connection(owner, &c, ev));
+    if !sent {
         return Err(offline());
     }
     if let Some(file) = claim {

@@ -570,13 +570,22 @@ final class MusicHost {
             case "play": case "pause": case "playpause": case "stop": case "seek": case "next": case "prev":
                 return true;
             case "load": {
-                // Resuming the item it holds, as a hand-over of a queue it already has does.
-                Long item = itemOf(exo.getCurrentMediaItem());
-                return item != null && event.optLong("itemId", -1) == item;
+                // Resuming the file it holds (the server compares files too), a book's parts included.
+                long file = event.optLong("mediaFileId", -1);
+                return file >= 0 && file == heldFile();
             }
             default:
                 return false;
         }
+    }
+
+    /** The media file of what the player holds; -1 with nothing loaded. */
+    private long heldFile() {
+        Book b = book;
+        if (b != null) return b.mediaFileId;
+        Long item = itemOf(exo.getCurrentMediaItem());
+        Resolved r = item == null ? null : resolved.get(item);
+        return r == null ? -1 : r.mediaFileId;
     }
 
     /** `position` is in the track, or in the whole book for parts. */
@@ -631,6 +640,10 @@ final class MusicHost {
             io.execute(() -> {
                 try {
                     face.ensure(key);
+                } catch (IOException ignored) {
+                    // The beat does not depend on the registration: an older server refuses `actions`.
+                }
+                try {
                     api.send("PUT", "/api/playback/media/" + media + "/state", payload, key);
                 } catch (IOException ignored) {
                     // The next beat carries the position.
