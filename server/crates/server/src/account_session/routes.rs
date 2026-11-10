@@ -3,7 +3,7 @@ use super::{QueueState, Row, State, continues, store};
 use crate::{
     events::{Num, SseEvent, event::Queue},
     http::{AppError, auth::SessionAuthed, json::iso_ms, validate::ValidJson},
-    remote::{authorize_target, dto::Command, send},
+    remote::{authorize_target, dto::Command, ensure_supported, send},
     state::AppState,
 };
 use axum::{
@@ -230,6 +230,7 @@ pub async fn transfer(
         repeat: queue.map(|q| q.repeat),
         kind: Some(row.kind),
     };
+    ensure_supported(&st, owner, &conn, &cmd)?;
     st.account_sessions
         .expect_handoff(&st, row.user_id, &body.to_target_id, row.item_id)
         .await;

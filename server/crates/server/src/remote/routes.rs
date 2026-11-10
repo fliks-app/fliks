@@ -58,6 +58,9 @@ pub struct TargetDto {
     tv_platform: Option<String>,
     owner_username: Option<String>,
     now_playing: Option<NowPlaying>,
+    /// What a polled target applies; absent means everything.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actions: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -113,6 +116,7 @@ fn to_dto(
         tv_platform: t.identity.tv_platform,
         owner_username,
         now_playing: live.and_then(|l| l.now_playing),
+        actions: t.actions,
     }
 }
 
@@ -186,6 +190,7 @@ pub async fn register(
             device_name: dto.name,
             user_agent: None,
         },
+        dto.actions,
     );
     Ok((StatusCode::CREATED, Json(json!({ "targetId": target_id }))))
 }
@@ -200,7 +205,7 @@ pub async fn unregister(
         .filter(|d| !d.is_empty())
         .ok_or_else(|| AppError::bad_request(vec!["deviceId must be a string"]))?;
     st.hub
-        .drop_connections_for_target(a.user.id, &format!("{device}#native"));
+        .release_polled_target(a.user.id, &format!("{device}#native"));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -323,7 +328,45 @@ pub async fn command(
     if dto.by_target_id.as_deref() == Some(&target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
+    ensure_supported(&st, owner, &conn, &dto)?;
     send(&st, &a, &target_id, owner, &conn, dto)
+}
+
+/// A polled target that declared its `actions` is sent nothing else (`remote.md` rule 21d); `resume`
+/// stands for a `load` of the file it already holds.
+pub(crate) fn ensure_supported(
+    st: &AppState,
+    owner: i32,
+    conn: &str,
+    dto: &Command,
+) -> Result<(), AppError> {
+    let Some(actions) = st
+        .hub
+        .list_for_user(owner)
+        .into_iter()
+        .find(|t| t.connection_id == conn)
+        .and_then(|t| t.actions)
+    else {
+        return Ok(());
+    };
+    let has = |name: &str| actions.iter().any(|a| a == name);
+    let name = serde_json::to_value(dto.action).unwrap_or_default();
+    let resume = dto.action == RemoteAction::Load
+        && has("resume")
+        && dto.media_file_id.is_some_and(|f| {
+            live_sessions(st).into_iter().any(|l| {
+                l.connection_id == conn && l.now_playing.is_some_and(|n| n.media_file_id == f)
+            })
+        });
+    if resume || name.as_str().is_some_and(has) {
+        return Ok(());
+    }
+    tracing::warn!(
+        ?name,
+        conn,
+        "remote command refused: the target does not apply it"
+    );
+    Err(AppError::conflict("remote.error_unsupported_action"))
 }
 
 /// Queues `dto` to one connection of an already authorized target.
@@ -539,6 +582,7 @@ mod tests {
             user_id: 1,
             identity: Identity::default(),
             since: 0,
+            actions: None,
         };
         let mut all = vec![live("c", false, 1), live("c", true, 2), live("d", true, 3)];
         let dto = to_dto(target, &mut all, None);

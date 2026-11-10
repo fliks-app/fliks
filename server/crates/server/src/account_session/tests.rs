@@ -650,7 +650,8 @@ async fn a_devices_native_face_and_its_web_layer_are_one_owner(pool: PgPool) {
         ..Default::default()
     };
     let _tab = st.hub.connect_session(u, None, identity("dev#tab"));
-    st.hub.register_polled_target(u, identity("dev#native"));
+    st.hub
+        .register_polled_target(u, identity("dev#native"), None);
     s.beat(&st, beat(u, "s1", "dev#tab", i)).await;
     s.beat(&st, beat(u, "s2", "dev#native", i)).await;
     let r = row(&st, u).await.unwrap();

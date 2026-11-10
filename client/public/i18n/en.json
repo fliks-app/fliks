@@ -4014,6 +4014,7 @@
     "error_device_offline": "That device is not reachable.",
     "error_self_target": "That is the device you are using.",
     "error_unknown_action": "Unsupported command.",
+    "error_unsupported_action": "That device cannot do this while the app is in the background.",
     "error_device_not_granted": "This device has not authorized your account.",
     "error_target_disabled": "That account is disabled.",
     "error_no_device_id": "That device cannot be identified.",

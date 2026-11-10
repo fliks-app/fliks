@@ -93,8 +93,8 @@ export function snapshotFromWire(cmd: RemoteCommand): PlaybackSnapshot | null {
   };
 }
 
-/** Semantic-ack budget. A cold transcode start is the only slow case. */
-const ACK_TIMEOUT_MS = 3_000;
+/** Semantic-ack budget: a backgrounded phone acks through its 2 s command poll and its next beat. */
+const ACK_TIMEOUT_MS = 6_000;
 const LOAD_ACK_TIMEOUT_MS = 20_000;
 /** Answered by restarting the stream, so the first report is a cold transcode away: `next` remounts on another file, `quality` reloads. */
 const SLOW_ACK_ACTIONS: ReadonlySet<RemoteAction> = new Set<RemoteAction>([

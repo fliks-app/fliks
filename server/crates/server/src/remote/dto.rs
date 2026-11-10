@@ -9,6 +9,9 @@ use crate::{
 use fliks_domain::media::kind::MediaKind;
 use serde::{Deserialize, Deserializer};
 
+/// Most names a polled target declares in `actions`.
+const ACTIONS_MAX: usize = 32;
+
 /// Most items a remote queue carries.
 const QUEUE_MAX: usize = 500;
 
@@ -38,6 +41,7 @@ pub struct Register {
     pub device_id: String,
     pub name: Option<String>,
     pub form_factor: Option<String>,
+    pub actions: Option<Vec<String>>,
 }
 
 impl Register {
@@ -48,6 +52,10 @@ impl Register {
                 too_long("deviceId", &self.device_id, 128),
                 opt("name", &self.name, 128),
                 opt("formFactor", &self.form_factor, 32),
+                self.actions
+                    .as_ref()
+                    .filter(|a| a.len() > ACTIONS_MAX || a.iter().any(|a| a.len() > 16))
+                    .map(|_| "actions must be a short list of short names".to_owned()),
             ]
             .into_iter()
             .flatten()
