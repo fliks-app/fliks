@@ -81,6 +81,7 @@ function setup() {
     selectedTargetId: signal<string | null>(null),
     targetState: signal<{ mediaFileId: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
+    canLoad: vi.fn(() => true),
     send: vi.fn(async () => {}),
   };
   const castPlayer = {
@@ -119,6 +120,7 @@ function setup() {
     id: 'local',
     item: vi.fn(() => ({ mediaId: 3, episodeId: 9 })),
     release: vi.fn(async () => handoff()),
+    snapshot: vi.fn(() => null),
     stepAside: vi.fn(),
     resume: vi.fn(async () => {}),
     disconnect: vi.fn(),

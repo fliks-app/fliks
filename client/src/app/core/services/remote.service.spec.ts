@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteService, snapshotFromWire, snapshotToWire, targetSupports, type RemoteTarget } from './remote.service';
+import { RemoteService, snapshotFromWire, snapshotToWire, targetCanLoad, targetSupports, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
 import { SessionSyncService } from './session-sync.service';
@@ -845,6 +845,14 @@ describe('RemoteService target actions', () => {
     expect(targetSupports(row(), 'volume')).toBe(true);
     expect(targetSupports(row(['play', 'resume']), 'volume')).toBe(false);
     expect(targetSupports(row(['play', 'resume']), 'play')).toBe(true);
+  });
+
+  it('takes a load of the file it holds when it declares resume, as the server does', () => {
+    const held = { ...row(['play', 'resume']), nowPlaying: { mediaFileId: 5 } } as RemoteTarget;
+    expect(targetCanLoad(held, 5)).toBe(true);
+    expect(targetCanLoad(held, 6)).toBe(false);
+    expect(targetCanLoad(row(['play']), 5)).toBe(false);
+    expect(targetCanLoad(row(['load']), 6)).toBe(true);
   });
 
   it('keeps the target online when a command is refused as unsupported', async () => {

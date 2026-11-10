@@ -40,6 +40,12 @@ export function targetSupports(target: RemoteTarget | null | undefined, action: 
   return !target?.actions || target.actions.includes(action);
 }
 
+/** Whether `target` takes a `load` of `fileId`, as the server decides: `resume` stands for the file it already holds. */
+export function targetCanLoad(target: RemoteTarget | null | undefined, fileId: number | null | undefined): boolean {
+  if (targetSupports(target, 'load')) return true;
+  return !!fileId && targetSupports(target, 'resume') && target?.nowPlaying?.mediaFileId === fileId;
+}
+
 /** Payload of a command, minus what the server stamps. */
 export type RemoteCommandInput = {
   action: RemoteAction;
@@ -175,6 +181,10 @@ export class RemoteService {
   observedCan(action: RemoteAction): boolean {
     return targetSupports(this.observedTarget(), action);
   }
+  /** Whether `targetId` takes a `load` of `fileId`; the one check before any load is sent. */
+  canLoad(targetId: string, fileId: number | null | undefined): boolean {
+    return targetCanLoad(this.targets().find((t) => t.targetId === targetId), fileId);
+  }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
   /** Following a device, selected or not; only a selection sends this device's next plays there. */
@@ -228,6 +238,19 @@ export class RemoteService {
     this.pinnedPosition.set(null);
     this.reportedState.set(null);
     this.observingSince = Date.now();
+  }
+
+  /** What a refused load must give back: the target kept playing what it was. */
+  private snapshotReading(): () => void {
+    const { expectedMediaFileId, observingSince } = this;
+    const reported = this.reportedState();
+    const pinned = this.pinnedPosition();
+    return () => {
+      this.expectedMediaFileId = expectedMediaFileId;
+      this.observingSince = observingSince;
+      this.reportedState.set(reported);
+      this.pinnedPosition.set(pinned);
+    };
   }
 
   /** The selected target left its player. Same treatment as a stop we sent: the
@@ -620,11 +643,16 @@ export class RemoteService {
   }
 
   async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
+    if (input.action === 'load' && !this.canLoad(targetId, input.mediaFileId)) {
+      this.toast.error(this.translate.instant('remote.error_unsupported_action'));
+      return;
+    }
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
     if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
+    const restore = this.snapshotReading();
     if (input.action === 'load' || input.action === 'next') {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
@@ -652,7 +680,7 @@ export class RemoteService {
       this.pendingAction.set(null);
       // Refused, not unreachable: the interceptor toasts the reason and the target stays online.
       if (err instanceof HttpErrorResponse && err.status === 409) {
-        this.expectedMediaFileId = null;
+        restore();
         console.warn('[remote] command refused', input.action, targetId);
         return;
       }
