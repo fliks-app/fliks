@@ -488,9 +488,6 @@ impl AccountSessions {
         let same_owner = prior
             .as_ref()
             .is_some_and(|p| continues(st, &p.row, &b.owner.target_id));
-        let same_device_queue = prior
-            .as_ref()
-            .is_some_and(|p| same_device(&p.row.owner.target_id, &b.owner.target_id));
         let epoch = match &prior {
             Some(p) if same_owner => p.row.epoch,
             Some(p) => p.row.epoch + 1,
@@ -522,7 +519,7 @@ impl AccountSessions {
                 owner: b.owner,
                 queue: b.queue.or(prior
                     .and_then(|p| p.row.queue)
-                    .filter(|q| same_device_queue && q.item_ids.contains(&i64::from(b.item)))),
+                    .filter(|q| same_owner && q.item_ids.contains(&i64::from(b.item)))),
                 updated_at: Utc::now(),
             },
             held: Some(Held {
@@ -750,6 +747,14 @@ impl AccountSessions {
         for user in silent {
             park_or_drop(st, g, user).await;
         }
+    }
+
+    /// Whether `user`'s row is `file` held by the device of `target`, however long ago it last beat.
+    pub async fn holds(&self, st: &AppState, user: i32, target: &str, file: i64) -> bool {
+        self.get(st, user).await.is_some_and(|r| {
+            r.media_file_id.is_some_and(|f| i64::from(f) == file)
+                && same_device(&r.owner.target_id, &Some(target.to_owned()))
+        })
     }
 
     /// The row of `user` after the staleness check; `None` when there is none.

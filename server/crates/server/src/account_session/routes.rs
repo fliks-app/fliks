@@ -230,7 +230,7 @@ pub async fn transfer(
         repeat: queue.map(|q| q.repeat),
         kind: Some(row.kind),
     };
-    ensure_supported(&st, owner, &conn, &cmd)?;
+    ensure_supported(&st, owner, &conn, &cmd).await?;
     st.account_sessions
         .expect_handoff(&st, row.user_id, &body.to_target_id, row.item_id)
         .await;
