@@ -219,13 +219,14 @@ describe('CastOverlayComponent', () => {
       expect(setup({ local: true, canPlayHere: true, live: false, account: parked, localTrack: 5 }).el.querySelector('button')).toBeNull();
     });
 
-    it('words a session parked by this device as this device, and still offers to resume it', () => {
+    it('words a session parked by this device as this device, without a resume or transfer button on an audio strip', () => {
       const track = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const };
       const parked = accountSession({ item: track, state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } });
       const { el } = setup({ local: true, canPlayHere: true, live: false, account: parked });
       expect(el.textContent).toContain('session.parked_here');
       expect(el.textContent).not.toContain('session.another_device');
-      expect(el.textContent).toContain('session.resume');
+      expect(el.textContent).not.toContain('session.resume');
+      expect(el.querySelector('[aria-label="session.transfer"]')).toBeNull();
     });
 
     it('hides a parked reader strip here without deleting the session', () => {
