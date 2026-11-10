@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
-import { RemoteService, type RemoteCommandInput } from '../remote.service';
+import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
 import type { AudioRequest } from './audio-player.service';
 import type { AudioOutput } from './audio-output';
@@ -27,6 +27,11 @@ export class RemoteAudioOutput implements AudioOutput {
   /** Commands reach a playing owner whether or not its report has arrived; a parked session has no owner to send to. */
   readonly controllable = computed(() => !this.sync.parked());
   private readonly _expanded = signal(false);
+
+  /** Whether the observed device applies `action`; a control for one it refuses stays disabled. */
+  supports(action: RemoteAction): boolean {
+    return this.remote.observedCan(action);
+  }
 
   readonly expanded = this._expanded.asReadonly();
   readonly musicMode = signal(true).asReadonly();

@@ -96,7 +96,7 @@
             class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left"
             [attr.aria-current]="i === audio.queueIndex() ? 'true' : null"
             [attr.aria-pressed]="queueEditing() && i !== audio.queueIndex() ? selected().has(q) : null"
-            [disabled]="!controllable()"
+            [disabled]="!canPickRow()"
             (click)="onQueueRowClick(q, i)"
           >
             @if (queueEditing() && i !== audio.queueIndex()) {
@@ -390,7 +390,7 @@
           class="btn btn-ghost btn-circle [--size:2.5rem]"
           [class.text-primary]="audio.shuffle()"
           [attr.aria-pressed]="audio.shuffle()"
-          [disabled]="!queueControls()"
+          [disabled]="!canShuffle()"
           (click)="audio.setShuffle(!audio.shuffle())"
           [attr.aria-label]="'music_player.shuffle' | translate"
         >
@@ -413,7 +413,7 @@
           type="button"
           class="btn btn-ghost btn-circle [--size:2.5rem]"
           [class.text-primary]="audio.repeat() !== 'off'"
-          [disabled]="!queueControls()"
+          [disabled]="!canRepeat()"
           (click)="audio.cycleRepeat()"
           [attr.aria-label]="('music_player.repeat_' + audio.repeat()) | translate"
         >
@@ -545,11 +545,11 @@
             <span class="max-w-full truncate">{{ 'music_player.queue_remove_selected' | translate }}</span>
           </button>
         } @else {
-          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.shuffle()" [attr.aria-pressed]="audio.shuffle()" [disabled]="!queueControls()" (click)="audio.setShuffle(!audio.shuffle())">
+          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.shuffle()" [attr.aria-pressed]="audio.shuffle()" [disabled]="!canShuffle()" (click)="audio.setShuffle(!audio.shuffle())">
             <svg lucideShuffle class="h-5 w-5"></svg>
             <span class="max-w-full truncate">{{ 'music_player.shuffle' | translate }}</span>
           </button>
-          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.repeat() !== 'off'" [disabled]="!queueControls()" (click)="audio.cycleRepeat()">
+          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.repeat() !== 'off'" [disabled]="!canRepeat()" (click)="audio.cycleRepeat()">
             @if (audio.repeat() === 'one') {
               <svg lucideRepeat1 class="h-5 w-5"></svg>
             } @else {
