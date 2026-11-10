@@ -94,7 +94,7 @@ describe('RemotePickerListComponent while controlling a device', () => {
     const selectTarget = vi.fn();
     const { component } = setup({
       sync: {
-        session: signal({ owner: { targetId: 'tv#1' } }),
+        session: signal({ owner: { targetId: 'tv#1' }, item: { title: 'Film', subtitle: null } }),
         role: signal('observer'),
         canTransfer: signal(true),
         isReading: () => false,
