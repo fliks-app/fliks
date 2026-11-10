@@ -84,12 +84,12 @@
         }
       </button>
     }
-    @if (sync.canPlayHere()) {
+    @if (sync.canPlayHere() && !audio()) {
       <button type="button" class="btn btn-primary btn-sm px-2 sm:px-3" (click)="sync.playHere()">
         {{ (reading() ? 'session.open_here' : sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
       </button>
     }
-    @if (!reading()) {
+    @if (!reading() && !audio()) {
       <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
         <button trigger type="button" class="btn btn-ghost btn-circle btn-sm" [attr.aria-label]="'session.transfer' | translate"
                 [title]="'session.transfer' | translate" (click)="refreshTransfer()">
