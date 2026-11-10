@@ -282,6 +282,8 @@ export class SessionSyncService {
     this.starting.set(true);
     try {
       await start();
+    } catch (err) {
+      console.warn('[session] hand-over failed to start', err);
     } finally {
       this.starting.set(false);
     }

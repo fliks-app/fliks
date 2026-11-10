@@ -24,6 +24,8 @@ export interface PickerRow {
   id: string;
   icon: DeviceIcon;
   label: string;
+  /** Tells two tabs of one device apart; shown after the label so a long label never hides it. */
+  tab?: string;
   subtitle: string | null;
   /** Casting to this row already: pressing it leaves the device instead. */
   connected?: boolean;
@@ -165,7 +167,8 @@ export class RemotePickerListComponent {
         kind: 'remote',
         id: t.targetId,
         icon: deviceIconFor(t.formFactor),
-        label: tab ? `${labels[i]} · ${tab.slice(0, 4)}` : labels[i],
+        label: labels[i],
+        tab: tab?.slice(0, 4),
         subtitle: connected
           ? this.translate.instant('remote.stop_controlling')
           : t.ownerUsername

@@ -40,16 +40,16 @@
        [attr.aria-busy]="surface.syncing()"
        style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))">
     @if (audio()) {
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left" (click)="openAudio()">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-box p-1 text-left sm:gap-3" (click)="openAudio()">
         <ng-container *ngTemplateOutlet="info" />
       </button>
     } @else {
-      <div class="flex min-w-0 flex-1 items-center gap-3 p-1">
+      <div class="flex min-w-0 flex-1 items-center gap-2 p-1 sm:gap-3">
         <ng-container *ngTemplateOutlet="info" />
       </div>
     }
     <ng-template #info>
-      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300" [class.grayscale]="sync.parked()">
+      <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12" [class.grayscale]="sync.parked()">
         @if (artwork(); as art) {
           <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
         }
@@ -63,7 +63,7 @@
             {{ sync.line(s) }}
           } @else {
             <span class="flex items-center gap-1 text-info">
-              <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
+              <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
               <span class="truncate">{{ sync.ownerName(s) }}</span>
               <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ time() }}</span>
             </span>
@@ -85,7 +85,7 @@
       </button>
     }
     @if (sync.canPlayHere()) {
-      <button type="button" class="btn btn-primary btn-sm" (click)="sync.playHere()">
+      <button type="button" class="btn btn-primary btn-sm px-2 sm:px-3" (click)="sync.playHere()">
         {{ (reading() ? 'session.open_here' : sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
       </button>
     }

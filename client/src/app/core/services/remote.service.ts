@@ -139,6 +139,8 @@ export class RemoteService {
   readonly selectedTargetId = signal<string | null>(null);
   /** Read back from storage; becomes the selection only once a listing confirms the device is online. */
   private restoredTargetId: string | null = this.readSelectedTarget();
+  /** The last session owner seen, through any parked gap; a selection that was it yields to the next owner. */
+  private lastOwner: string | null = null;
   readonly pendingAction = signal<RemoteAction | null>(null);
   /** Target is rebuilding its stream at the same place; derived from the command in flight so it closes with the ack. */
   readonly restarting = computed(() => this.pendingAction() === 'quality');
@@ -325,13 +327,13 @@ export class RemoteService {
     });
 
     // One device per account: the selection goes when a session it owned moves to another device.
-    let previousOwner: string | null = null;
     effect(() => {
       const owner = this.sessionSync.observedOwnerTargetId();
       const selected = this.selectedTargetId();
       untracked(() => {
-        if (owner && selected && owner !== selected && previousOwner === selected) this.selectTarget(null);
-        previousOwner = owner;
+        if (!owner) return;
+        if (selected && owner !== selected && this.lastOwner === selected) this.selectTarget(null);
+        else this.lastOwner = owner;
       });
     });
 
@@ -507,7 +509,7 @@ export class RemoteService {
       const restored = this.restoredTargetId;
       if (restored !== null) {
         this.restoredTargetId = null;
-        this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null);
+        this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null, true);
       }
       // Only a household row carries an owner name; the selected target survives the filter, or it would read as offline.
       const selected = this.selectedTargetId();
@@ -544,7 +546,9 @@ export class RemoteService {
     }
   }
 
-  selectTarget(targetId: string | null): void {
+  /** A restored selection may have owned the session before the reload: the next other owner replaces it. */
+  selectTarget(targetId: string | null, restored = false): void {
+    this.lastOwner = restored ? targetId : this.sessionSync.observedOwnerTargetId();
     // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);

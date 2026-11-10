@@ -377,6 +377,14 @@ describe('SessionSyncService play here', () => {
     expect(resumer.mock.calls[0][1]).toBeGreaterThanOrEqual(100);
   });
 
+  it('survives an adapter that fails to start the item', async () => {
+    const { service, flush } = setup();
+    await flush(session());
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    service.registerResumer('video', vi.fn().mockRejectedValue(new Error('chunk failed')));
+    await expect(service.playHere()).resolves.toBeUndefined();
+  });
+
   it('ignores a report of another file than the session item', async () => {
     const { service, flush } = setup();
     await flush(session({ positionSeconds: 100, playing: false }));

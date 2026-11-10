@@ -1318,7 +1318,7 @@ export class AudioPlayerService {
       if (req) await this.play(req, { startAt: positionSeconds, paused });
     }
     // A paused load reports no play state: its first beat is what claims the session.
-    if (paused && this._track()) this.onPlayState(false);
+    if (paused && this._track()?.itemId === s.item.id) this.onPlayState(false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */
