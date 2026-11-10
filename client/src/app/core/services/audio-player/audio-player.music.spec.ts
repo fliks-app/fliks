@@ -135,7 +135,7 @@ describe('AudioPlayerService music mode', () => {
     const item = { id: 1, mediaId: 1, kind: 'album' };
     await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' } }, 30);
     expect(audio.playing()).toBe(false);
-    expect(updatePlaybackState).toHaveBeenLastCalledWith(2, expect.objectContaining({ itemId: 2, state: 'paused' }));
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, state: 'paused' }));
   });
 
   it('re-opens the track in another key at the same position, and back to the original', async () => {

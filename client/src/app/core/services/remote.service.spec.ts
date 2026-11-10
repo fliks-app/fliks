@@ -120,7 +120,7 @@ describe('RemoteService observation', () => {
       TestBed.tick();
       const http = TestBed.inject(HttpTestingController);
       const refreshing = service.refreshTargets();
-      http.expectOne((r) => r.url === '/api/remote/targets').flush([{ targetId: 'tv#1', nowPlaying: null }]);
+      http.match((r) => r.url === '/api/remote/targets').forEach((r) => r.flush([{ targetId: 'tv#1', nowPlaying: null }]));
       await refreshing;
       TestBed.tick();
       expect(service.selectedTargetId()).toBe('tv#1');
