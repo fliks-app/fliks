@@ -65,11 +65,12 @@
             <span class="flex items-center gap-1 text-info">
               <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
               <span class="truncate">{{ sync.ownerName(s) }}</span>
+              <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ time() }}</span>
             </span>
           }
         </span>
         @if (!reading() && !sync.parked() && percent() > 0) {
-          <progress class="progress progress-primary mt-1 block h-1 w-full" [value]="percent()" max="100" [attr.title]="time()"></progress>
+          <progress class="progress progress-primary mt-1 block h-1 w-full" [value]="percent()" max="100"></progress>
         }
       </span>
     </ng-template>
@@ -90,14 +91,14 @@
     }
     @if (!reading()) {
       <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
-        <button trigger type="button" class="btn btn-ghost btn-circle btn-sm sm:btn-md" [attr.aria-label]="'session.transfer' | translate"
+        <button trigger type="button" class="btn btn-ghost btn-circle btn-sm" [attr.aria-label]="'session.transfer' | translate"
                 [title]="'session.transfer' | translate" (click)="refreshTransfer()">
           <svg lucideArrowRightLeft class="h-5 w-5"></svg>
         </button>
         <app-remote-picker-list [transferOnly]="true" [card]="true" />
       </app-dropdown-menu>
     }
-    <button type="button" class="btn btn-ghost btn-circle btn-sm sm:btn-md" (click)="hide()" [attr.aria-label]="'session.hide' | translate">
+    <button type="button" class="btn btn-ghost btn-circle btn-sm" (click)="hide()" [attr.aria-label]="'session.hide' | translate">
       <svg lucideX class="h-5 w-5"></svg>
     </button>
   </div>
