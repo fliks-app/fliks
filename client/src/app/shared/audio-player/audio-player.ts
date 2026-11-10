@@ -47,6 +47,7 @@ import {
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
 import type { AudioOutput } from '../../core/services/audio-player/audio-output';
+import type { RemoteAction } from '../../core/services/remote.service';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
@@ -144,6 +145,11 @@ export class AudioPlayerComponent {
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
   protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.controllable());
   protected readonly queueControls = computed(() => this.controllable() && (!this.remoteView() || this.audio.queue().length > 0));
+
+  private readonly remoteCan = (action: RemoteAction) => !this.remoteView() || this.remoteOut.supports(action);
+  protected readonly canPickRow = computed(() => this.controllable() && this.remoteCan('queue'));
+  protected readonly canShuffle = computed(() => this.queueControls() && this.remoteCan('shuffle'));
+  protected readonly canRepeat = computed(() => this.queueControls() && this.remoteCan('repeat'));
 
   protected get audio(): AudioOutput {
     return this.remoteView() ? this.remoteOut : this.local;

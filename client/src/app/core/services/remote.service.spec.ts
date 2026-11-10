@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteService, snapshotFromWire, snapshotToWire, type RemoteTarget } from './remote.service';
+import { RemoteService, snapshotFromWire, snapshotToWire, targetSupports, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
 import { SessionSyncService } from './session-sync.service';
@@ -833,5 +833,29 @@ describe('RemoteService offline target', () => {
     expect(req.request.context.get(SKIP_ERROR_TOAST)).toBe(true);
     req.flush({ message: 'remote.error_device_offline' }, { status: 404, statusText: 'Not Found' });
     await done;
+  });
+});
+
+describe('RemoteService target actions', () => {
+  const row = (actions?: string[]): RemoteTarget => ({
+    targetId: 'tv#1', userAgent: null, deviceName: null, systemName: null, formFactor: null, tvPlatform: null, nowPlaying: null, actions,
+  });
+
+  it('takes everything without a declaration and only what is declared otherwise', () => {
+    expect(targetSupports(row(), 'volume')).toBe(true);
+    expect(targetSupports(row(['play', 'resume']), 'volume')).toBe(false);
+    expect(targetSupports(row(['play', 'resume']), 'play')).toBe(true);
+  });
+
+  it('keeps the target online when a command is refused as unsupported', async () => {
+    const { service } = setup();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const done = service.send('tv#1', { action: 'volume', level: 0.5 });
+    httpMock
+      .expectOne((r) => r.url === '/api/remote/tv%231/command')
+      .flush({ message: 'remote.error_unsupported_action' }, { status: 409, statusText: 'Conflict' });
+    await done;
+    expect(service.targetOffline()).toBe(false);
+    expect(service.pendingAction()).toBeNull();
   });
 });

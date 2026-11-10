@@ -204,7 +204,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   /** Same range tests the local player applies, against the interpolated
    *  position, so the offer appears and retracts at the same instants. */
-  readonly canSetVolume = computed(() => this.remote.targetState()?.supportsVolume ?? true);
+  readonly canSetVolume = computed(() => (this.remote.targetState()?.supportsVolume ?? true) && this.remote.observedCan('volume'));
 
   /** A remote report carries no markers, so the seekbar shows none. */
   readonly timeline = computed(() => NO_TIMELINE);

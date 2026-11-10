@@ -31,6 +31,13 @@ export interface RemoteTarget {
   /** Set when the target belongs to a household member rather than the caller. */
   ownerUsername?: string | null;
   nowPlaying: RemoteNowPlaying | null;
+  /** What a polled target applies; absent means everything. `resume` is a `load` of the file it already plays. */
+  actions?: string[];
+}
+
+/** Whether a target takes `action`: one that declared no `actions` takes everything. */
+export function targetSupports(target: RemoteTarget | null | undefined, action: RemoteAction | 'resume'): boolean {
+  return !target?.actions || target.actions.includes(action);
 }
 
 /** Payload of a command, minus what the server stamps. */
@@ -162,6 +169,10 @@ export class RemoteService {
     if (!id) return null;
     return this.targets().find((t) => t.targetId === id) ?? (id === this.selectedTargetId() ? this.selectedRow() : null);
   });
+  /** Whether the observed target takes `action`; reads the listing, so a computed over it follows. */
+  observedCan(action: RemoteAction): boolean {
+    return targetSupports(this.observedTarget(), action);
+  }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
   /** Following a device, selected or not; only a selection sends this device's next plays there. */
@@ -635,6 +646,12 @@ export class RemoteService {
         }
       }
       this.pendingAction.set(null);
+      // Refused, not unreachable: the interceptor toasts the reason and the target stays online.
+      if (err instanceof HttpErrorResponse && err.status === 409) {
+        this.expectedMediaFileId = null;
+        console.warn('[remote] command refused', input.action, targetId);
+        return;
+      }
       this.markOffline(targetId);
       console.warn('[remote] command failed', input.action, targetId, err);
       // The interceptor already toasts HTTP failures with the server's reason; stay silent on statuses it skips.
