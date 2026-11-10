@@ -12,15 +12,16 @@ import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemoteService } from '../../core/services/remote.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { ToastService } from '../../core/services/toast.service';
-import { SessionStripService } from '../cast-overlay/session-strip.service';
+import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { RemotePickerListComponent } from './remote-picker-list';
 
-function setup(over: { name?: string | null; canSetVolume?: boolean; card?: boolean } = {}) {
+function setup(over: { name?: string | null; canSetVolume?: boolean; card?: boolean; volumeKnown?: boolean } = {}) {
   const playing = {
     name: signal(over.name === undefined ? 'Living room' : over.name),
     icon: signal('tv'),
     canSetVolume: signal(over.canSetVolume ?? true),
     volume: signal(0.8),
+    volumeKnown: signal(over.volumeKnown ?? true),
     setVolume: vi.fn(),
   };
   TestBed.configureTestingModule({
@@ -36,7 +37,7 @@ function setup(over: { name?: string | null; canSetVolume?: boolean; card?: bool
       { provide: PlaybackSession, useValue: { isLocal: signal(false), nowPlaying: signal({ title: 'Film' }) } },
       { provide: SessionSyncService, useValue: { session: signal(null), role: signal('none'), canPlayHere: signal(false) } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
-      { provide: SessionStripService, useValue: { here: signal(false) } },
+      { provide: PlaybackSurface, useValue: { here: signal(false) } },
       { provide: ToastService, useValue: {} },
     ],
   });
@@ -68,6 +69,13 @@ describe('RemotePickerListComponent device card', () => {
     slider.value = '40';
     slider.dispatchEvent(new Event('input'));
     expect(playing.setVolume).toHaveBeenCalledWith(0.4);
+  });
+
+  it('shows no level, not a full one, until the device has reported its volume', () => {
+    const { el } = setup({ volumeKnown: false });
+    const slider = el.querySelector<HTMLInputElement>('[data-testid="device-volume"]')!;
+    expect(slider.disabled).toBe(true);
+    expect(slider.value).toBe('0');
   });
 
   it('hides the slider when the device cannot set its volume', () => {

@@ -9,7 +9,7 @@ import { RemoteService, RemoteTarget } from '../../core/services/remote.service'
 import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SessionSyncService } from '../../core/services/session-sync.service';
-import { SessionStripService } from '../cast-overlay/session-strip.service';
+import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { formatTime } from '../../core/utils/player.utils';
 import { DeviceService } from '../../core/services/device.service';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
@@ -59,7 +59,7 @@ export class RemotePickerListComponent {
   private readonly session = inject(PlaybackSession);
   protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
-  private readonly strip = inject(SessionStripService);
+  private readonly surface = inject(PlaybackSurface);
   protected readonly playing = inject(PlaybackDevice);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -78,7 +78,7 @@ export class RemotePickerListComponent {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
     const reading = this.sync.isReading(s);
-    if (this.strip.here()) return null;
+    if (this.surface.here()) return null;
     const position = reading ? `${this.readPercent(s)}%` : formatTime(this.sync.positionNow(s));
     return {
       title: s.item.title,
@@ -103,7 +103,7 @@ export class RemotePickerListComponent {
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
     const session = this.sync.session();
-    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.strip.here();
+    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.surface.here();
     rows.push({
       kind: 'local',
       id: 'local',
@@ -116,7 +116,7 @@ export class RemotePickerListComponent {
             : this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
           : null,
       connected: this.session.isLocal() && !resumable,
-      disabled: this.strip.here() && this.session.isLocal(),
+      disabled: this.surface.here() && this.session.isLocal(),
     });
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
@@ -238,6 +238,11 @@ export class RemotePickerListComponent {
     this.setLastUsed(row.id);
     if (this.delegate()) {
       this.picked.emit(row);
+      return;
+    }
+    // Another device plays the account session: one device at a time, so a press moves it there instead of selecting a second one.
+    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.session.isLocal() && this.canTransfer(row)) {
+      void this.transfer(row);
       return;
     }
     if (row.kind === 'cast' || row.kind === 'cast-web') {

@@ -34,6 +34,11 @@ export class PlaybackDevice {
 
   readonly canSetVolume = computed(() => this.volumeOutput()?.canSetVolume() ?? false);
   readonly volume = computed(() => this.volumeOutput()?.volume() ?? 1);
+  /** A remote device that has yet to report its level has no volume to show. */
+  readonly volumeKnown = computed(() => {
+    const out = this.volumeOutput();
+    return out === this.remoteTarget ? this.remoteTarget.volumeKnown() : true;
+  });
 
   setVolume(level: number): void {
     this.volumeOutput()?.setVolume(level);

@@ -11,6 +11,7 @@ import { PartySync } from './core/services/party/party-sync';
 import { CastPartyRelayService } from './core/services/party/cast-party-relay.service';
 import { CastLyricsRelayService } from './core/services/cast-lyrics-relay.service';
 import { SseService } from './core/services/sse.service';
+import { PlaybackSurface } from './core/services/playback/playback-surface';
 import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
 import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
@@ -46,6 +47,7 @@ export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly tvKeyboard = inject(TvKeyboardDeferralService);
   private readonly sse = inject(SseService);
+  private readonly surface = inject(PlaybackSurface);
   private readonly remoteNotification = inject(RemoteNotificationService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
   private readonly dlManager = inject(DownloadManagerService);
@@ -111,7 +113,10 @@ export class App implements OnInit, OnDestroy {
     // Native shells reconnect from the Capacitor resume hook below: a second reconnect would detach this device again.
     if (!Capacitor.isNativePlatform()) {
       this.visibilityListener = () => {
-        if (document.visibilityState === 'visible') this.sse.resume();
+        if (document.visibilityState === 'visible') {
+          this.sse.resume();
+          void this.surface.resync();
+        }
       };
       document.addEventListener('visibilitychange', this.visibilityListener);
     }
@@ -156,6 +161,7 @@ export class App implements OnInit, OnDestroy {
       // away-spell from a momentary interruption (see AppResumeService).
       CapApp.addListener('pause', () => {
         this.appResume.markBackgrounded();
+        this.surface.backgrounded();
       }).then((handle) => {
         this.pauseListener = handle;
       });
@@ -164,6 +170,7 @@ export class App implements OnInit, OnDestroy {
       // themselves if we were away long enough for the backend to have moved on.
       CapApp.addListener('resume', () => {
         this.sse.resume();
+        void this.surface.resync();
         this.appResume.markResumed();
       }).then((handle) => {
         this.resumeListener = handle;

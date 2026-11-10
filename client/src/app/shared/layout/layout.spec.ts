@@ -29,7 +29,7 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
-import { SessionStripService } from '../cast-overlay/session-strip.service';
+import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -207,7 +207,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
       { provide: PlaybackSession, useValue: { isLocal: () => !f.away, openPlayer: () => {} } },
-      { provide: SessionStripService, useValue: { observed: () => null } },
+      { provide: PlaybackSurface, useValue: { bar: () => null } },
       { provide: AudioPlayerService, useValue: { active: () => !!f.audio } },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {

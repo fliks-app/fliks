@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import type { MediaType } from '../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { formatTime } from '../utils/player.utils';
+import { projectPosition } from '../utils/position-anchor';
 import { deviceIdOf } from './remote-target-id';
 import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
@@ -68,6 +69,7 @@ export interface SessionPlayer {
 /** What the owner's own report names: the file it plays, to tell its live reading from another item's. */
 export interface LiveReport {
   mediaFileId: number;
+  durationSeconds: number;
 }
 
 /** Starts `session` on this device at `positionSeconds`, one per family of kind; the video one is registered by the player module. */
@@ -123,6 +125,12 @@ export class SessionSyncService {
     return [...this.players].some((p) => p.active());
   });
 
+  /** A local player is registered, playing or not. */
+  readonly holdsPlayer = computed(() => {
+    this.registered();
+    return this.players.size > 0;
+  });
+
   /** The owner is gone: position kept, resumable anywhere. */
   readonly parked = computed(() => this._session()?.state === 'parked');
 
@@ -168,13 +176,17 @@ export class SessionSyncService {
       if (this.sse.connectionId()) untracked(() => this.players.forEach((p) => p.report?.()));
     });
 
-    // One surface per account: a device that does not own the session holds no paused copy of its item.
+    // One surface per account: while another device owns the session, this one keeps no idle player of an account item.
     effect(() => {
       const s = this._session();
       this.registered();
       if (!s || this.role() !== 'observer' || s.state === 'parked') return;
-      const stale = [...this.players].filter((p) => !p.active() && p.itemId?.() === s.item.id);
-      untracked(() => stale.forEach((p) => void this.drop(p)));
+      const idle = [...this.players].filter((p) => !p.active() && p.itemId?.() != null);
+      untracked(() => idle.forEach((p) => void this.drop(p)));
+    });
+
+    effect(() => {
+      if (this.role() === 'owner') untracked(() => this.claiming.set(false));
     });
 
     effect((onCleanup) => {
@@ -259,6 +271,9 @@ export class SessionSyncService {
   private armHandoff(): void {
     const skip = new Set([...this.players].map((p) => p.sessionId()));
     this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
+    this.claiming.set(true);
+    if (this.claimTimer) clearTimeout(this.claimTimer);
+    this.claimTimer = setTimeout(() => this.claiming.set(false), HANDOFF_TTL_MS);
   }
 
   /** What a beat of `sid` sends as `handoff`: true for the session an armed hand-over bound to. */
@@ -268,6 +283,11 @@ export class SessionSyncService {
     if (h.sid === null && !h.skip.has(sid)) h.sid = sid;
     return h.sid === sid ? true : undefined;
   }
+
+  private readonly claiming = signal(false);
+  private claimTimer: ReturnType<typeof setTimeout> | null = null;
+  /** This device started the session and its first beat has yet to make it the owner. */
+  readonly claimPending = this.claiming.asReadonly();
 
   private readonly dropping = new Set<SessionPlayer>();
 
@@ -315,20 +335,31 @@ export class SessionSyncService {
     }
   }
 
-  /** The owner's own report of this very file, while it is being observed. */
-  private readonly live = computed(() => {
+  /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */
+  readonly liveReport = computed(() => {
     const s = this._session();
-    const r = s && this.liveSource();
+    const r = s && s.state !== 'parked' && this.liveSource();
     return r && r.mediaFileId === s.item.mediaFileId ? r : null;
   });
 
-  /** The session's position now: the owner's report when observed, else the stored anchor. */
+  /** The session's position now: the owner's report when it reports this file, else the row's own anchor (`positionAt`). */
   positionNow(s: AccountSession): number {
     this.tick();
-    if (this.live()) return this.livePosition();
-    if (!s.playing) return s.positionSeconds;
-    const elapsed = (this.clock.serverNow() - Date.parse(s.positionAt)) / 1000;
-    return s.positionSeconds + Math.max(0, elapsed);
+    if (this.liveReport()) return this.livePosition();
+    const at = Date.parse(s.positionAt);
+    return projectPosition({ position: s.positionSeconds, at, playing: s.playing, duration: s.durationSeconds }, this.clock.serverNow());
+  }
+
+  /** Same source as `positionNow`: the report's length while it reports this file, else the row's. */
+  durationNow(s: AccountSession): number {
+    return (this.liveReport()?.durationSeconds || s.durationSeconds) ?? 0;
+  }
+
+  /** When the observed owner last reported, on this device's clock; 0 when the session is not that device's. */
+  ownerReportAt(targetId: string): number {
+    const s = this._session();
+    if (!s || s.owner.targetId !== targetId) return 0;
+    return Date.now() - (this.clock.serverNow() - Date.parse(s.positionAt));
   }
 
   private resumerFor(s: AccountSession): SessionResumer | undefined {
@@ -366,16 +397,5 @@ export class SessionSyncService {
   /** Moves the session to another device of the account, which loads it where it stands; its first beat claims and this one is superseded. */
   async transferTo(targetId: string): Promise<void> {
     await firstValueFrom(this.http.post<void>('/api/session/transfer', { toTargetId: targetId }));
-  }
-
-  /** Masks a parked session; a live one is stopped through its owner instead. */
-  async dismiss(): Promise<void> {
-    if (!this.parked()) return;
-    try {
-      await firstValueFrom(this.http.delete<void>('/api/session'));
-      this._session.set(null);
-    } catch (err) {
-      console.warn('[session] failed to dismiss the session', err);
-    }
   }
 }

@@ -12,6 +12,7 @@ import { CastService } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
+import { projectPosition } from '../utils/position-anchor';
 import type { PlaybackSnapshot } from './playback/playback-output';
 import { DETAIL_SEGMENTS_PATTERN, KIND_REGISTRY, isMediaKind, kindFromSegment, kindOf, type MediaFamily } from '../media-kinds';
 
@@ -192,12 +193,10 @@ export class RemoteService {
   readonly interpolatedPosition = computed(() => {
     const s = this.reportedState();
     const pinned = this.pinnedPosition();
-    const from = pinned ?? s?.positionSeconds ?? 0;
-    const since = pinned !== null ? this.positionPinAt : this.stateAt;
-    if (!s) return from;
-    if (s.state !== 'playing') return from;
-    const elapsed = (this.wallClock() - since) / 1000;
-    return Math.min(from + Math.max(0, elapsed), s.durationSeconds || Infinity);
+    const position = pinned ?? s?.positionSeconds ?? 0;
+    if (!s) return position;
+    const at = pinned !== null ? this.positionPinAt : this.stateAt;
+    return projectPosition({ position, at, playing: s.state === 'playing', duration: s.durationSeconds || null }, this.wallClock());
   });
   readonly targetState = computed(() => {
     const s = this.reportedState();
@@ -325,10 +324,17 @@ export class RemoteService {
       untracked(() => this.syncTicker());
     });
 
+    // One device per account: a session owner other than the selection replaces it.
+    effect(() => {
+      const owner = this.sessionSync.observedOwnerTargetId();
+      const selected = this.selectedTargetId();
+      if (owner && selected && owner !== selected) untracked(() => this.selectTarget(null));
+    });
+
     this.sessionSync.setLiveSource(
       () => {
         const s = this.targetState();
-        return s ? { mediaFileId: s.mediaFileId } : null;
+        return s ? { mediaFileId: s.mediaFileId, durationSeconds: s.durationSeconds } : null;
       },
       () => this.interpolatedPosition(),
     );
@@ -485,7 +491,8 @@ export class RemoteService {
 
   // ── Controller half ──
 
-  async refreshTargets(): Promise<void> {
+  /** `replaceReport` takes the listing as the truth over the held report, as after a resume. */
+  async refreshTargets(replaceReport = false): Promise<void> {
     const self = this.sse.targetId();
     try {
       const rows = await firstValueFrom(
@@ -515,11 +522,13 @@ export class RemoteService {
         // The target's farewell heartbeat lands after any local clear; a silent target the listing shows empty has stopped (live playback reports every 10s).
         // The listing is the only state a client that just picked an already-playing target has.
         if (!listed.nowPlaying) this.stoppedUntilReport = false;
-        if (listed.nowPlaying && !this.reportedState() && !this.stoppedUntilReport) {
+        if (replaceReport && !listed.nowPlaying) this.reportedState.set(null);
+        if (listed.nowPlaying && (!this.reportedState() || replaceReport) && !this.stoppedUntilReport) {
           this.reportedState.set(listed.nowPlaying);
           this.stateAt = Date.now();
         }
-        const silentFor = Date.now() - this.stateAt;
+        const reportedAt = Math.max(this.stateAt, this.sessionSync.ownerReportAt(listed.targetId));
+        const silentFor = Date.now() - reportedAt;
         if (!listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
           this.reportedState.set(null);
         }
