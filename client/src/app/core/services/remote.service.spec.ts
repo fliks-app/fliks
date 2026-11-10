@@ -58,7 +58,7 @@ function setup(opts: { selected?: string | null } = {}) {
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
@@ -589,7 +589,7 @@ describe('RemoteService mirrors navigation to a target', () => {
           { path: 'settings', children: [] },
         ]),
         { provide: SseService, useValue: sse },
-        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
+        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
         { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],
@@ -848,11 +848,10 @@ describe('RemoteService target actions', () => {
   });
 
   it('takes a load of the file it holds when it declares resume, as the server does', () => {
-    const held = { ...row(['play', 'resume']), nowPlaying: { mediaFileId: 5 } } as RemoteTarget;
-    expect(targetCanLoad(held, 5)).toBe(true);
-    expect(targetCanLoad(held, 6)).toBe(false);
-    expect(targetCanLoad(row(['play']), 5)).toBe(false);
-    expect(targetCanLoad(row(['load']), 6)).toBe(true);
+    expect(targetCanLoad(row(['play', 'resume']), true)).toBe(true);
+    expect(targetCanLoad(row(['play', 'resume']), false)).toBe(false);
+    expect(targetCanLoad(row(['play']), true)).toBe(false);
+    expect(targetCanLoad(row(['load']), false)).toBe(true);
   });
 
   it('keeps the target online when a command is refused as unsupported', async () => {
