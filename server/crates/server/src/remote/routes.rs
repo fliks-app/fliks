@@ -355,7 +355,7 @@ pub(crate) async fn ensure_supported(
     let name = serde_json::to_value(dto.action).unwrap_or_default();
     let resume = match (dto.action, dto.media_file_id, &target.identity.target_id) {
         (RemoteAction::Load, Some(file), Some(id)) if has("resume") => {
-            st.account_sessions.holds(st, owner, id, file).await
+            st.account_sessions.holds(id, file).await
         }
         _ => false,
     };

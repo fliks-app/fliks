@@ -698,8 +698,23 @@ async fn a_row_is_held_by_its_device_until_another_replaces_it(pool: PgPool) {
     let mut b = beat(u, "s1", "dev#native", i);
     b.file = Some(7);
     s.beat(&st, b).await;
-    assert!(s.holds(&st, u, "dev#native", 7).await);
-    assert!(s.holds(&st, u, "dev#tab", 7).await);
-    assert!(!s.holds(&st, u, "dev#native", 8).await);
-    assert!(!s.holds(&st, u, "other#native", 7).await);
+    assert!(s.holds("dev#native", 7).await);
+    assert!(s.holds("dev#tab", 7).await);
+    assert!(!s.holds("dev#native", 8).await);
+    assert!(!s.holds("other#native", 7).await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_household_device_is_held_by_the_row_of_the_account_playing_on_it(pool: PgPool) {
+    let st = state(&pool).await;
+    let (a, b) = (
+        user(&pool, "a", true, None).await,
+        user(&pool, "b", true, None).await,
+    );
+    let i = item(&pool).await;
+    let mut beat_b = beat(b, "s1", "dev#native", i);
+    beat_b.file = Some(7);
+    st.account_sessions.beat(&st, beat_b).await;
+    assert!(row(&st, a).await.is_none());
+    assert!(st.account_sessions.holds("dev#tab", 7).await);
 }

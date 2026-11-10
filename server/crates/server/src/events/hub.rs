@@ -86,6 +86,13 @@ struct Conn {
     silence_announced: bool,
 }
 
+impl Conn {
+    fn silent(&self, now: Instant) -> bool {
+        self.keepalive
+            .is_some_and(|at| now.saturating_duration_since(at) > SSE_SILENCE)
+    }
+}
+
 struct Polled {
     identity: Identity,
     actions: Option<Vec<String>>,
@@ -475,10 +482,11 @@ impl Hub {
         }
     }
 
-    /// The newest web stream of the device of `target_id`, even one silent right now: a frozen
+    /// The newest live web stream of the device of `target_id`, else the newest silent one: a frozen
     /// WebView resumes its keepalive once foregrounded, and what it is sent waits in its queue.
     fn newest_web_stream(&self, user: i32, target_id: &str) -> Option<String> {
         let device = target_id.split('#').next().unwrap_or_default();
+        let now = Instant::now();
         let g = self.lock();
         g.conns
             .iter()
@@ -488,7 +496,7 @@ impl Hub {
                         t.split('#').next() == Some(device) && !t.ends_with("#party")
                     })
             })
-            .max_by_key(|(_, c)| c.seq)
+            .max_by_key(|(_, c)| (!c.silent(now), c.seq))
             .map(|(id, _)| id.clone())
     }
 
@@ -544,10 +552,7 @@ impl Hub {
             let mut g = self.lock();
             let mut newly_silent = vec![];
             for c in g.conns.values_mut() {
-                let silent = c
-                    .keepalive
-                    .is_some_and(|at| now.saturating_duration_since(at) > SSE_SILENCE);
-                if silent && !c.silence_announced {
+                if c.silent(now) && !c.silence_announced {
                     c.silence_announced = true;
                     newly_silent.push(c.user);
                 }
@@ -566,8 +571,7 @@ impl Hub {
                 .filter(|(_, c)| {
                     owner.is_none_or(|u| c.user == u)
                         && c.identity.target().is_some()
-                        && c.keepalive
-                            .is_none_or(|at| now.saturating_duration_since(at) <= SSE_SILENCE)
+                        && !c.silent(now)
                 })
                 .map(|(id, c)| (c.seq, id.clone(), c.user, c.identity.clone(), c.since))
                 .collect();
@@ -694,10 +698,10 @@ impl Hub {
             return;
         };
         let key = (user, format!("polled:{target}"));
-        let first = {
+        let changed = {
             let mut g = self.lock();
             let existing = g.polled.remove(&key);
-            let first = existing.is_none();
+            let changed = existing.as_ref().is_none_or(|p| p.actions != actions);
             let (since, seq, queue) = match existing {
                 Some(p) => (p.since, p.seq, p.queue),
                 None => {
@@ -716,9 +720,9 @@ impl Hub {
                     last_poll: Instant::now(),
                 },
             );
-            first
+            changed
         };
-        if first {
+        if changed {
             self.emit_to_user(user, SseEvent::RemoteTargetsChanged {});
         }
     }
@@ -1111,7 +1115,7 @@ mod tests {
         };
         assert_eq!(ids(hub.collect(Some(1), later)), vec!["old#a"]);
         hub.collect(Some(1), later);
-        assert_eq!(got(&mut watcher), vec!["remote.targets_changed"]);
+        assert_eq!(got(&mut watcher), [CHANGED]);
         assert!(hub.keepalive(1, &quiet.id));
         assert_eq!(ids(hub.collect(Some(1), Instant::now())).len(), 2);
     }
@@ -1182,6 +1186,36 @@ mod tests {
         got(&mut tab);
         hub.release_polled_target(1, "dev#native");
         assert!(got(&mut tab).contains(&"queue.updated".to_owned()));
+    }
+
+    #[test]
+    fn leaving_the_face_prefers_a_live_stream_to_a_newer_silent_one() {
+        let hub = Hub::new();
+        let mut live = hub.connect(1, at("dev#a"));
+        let mut frozen = hub.connect(1, at("dev#b"));
+        hub.register_polled_target(1, at("dev#native"), None);
+        let face = hub.resolve_target(1, "dev#native").unwrap();
+        assert!(hub.emit_to_connection(1, &face, SseEvent::QueueUpdated {}));
+        hub.lock().conns.get_mut(&frozen.id).unwrap().keepalive =
+            Instant::now().checked_sub(SSE_SILENCE + Duration::from_secs(1));
+        got(&mut live);
+        got(&mut frozen);
+        hub.release_polled_target(1, "dev#native");
+        assert!(got(&mut live).contains(&"queue.updated".to_owned()));
+        assert!(!got(&mut frozen).contains(&"queue.updated".to_owned()));
+    }
+
+    #[test]
+    fn changed_actions_announce_the_targets_again() {
+        let hub = Hub::new();
+        let mut watcher = hub.connect(1, Identity::default());
+        let acts = |a: &[&str]| Some(a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>());
+        hub.register_polled_target(1, at("dev#native"), acts(&["play"]));
+        got(&mut watcher);
+        hub.register_polled_target(1, at("dev#native"), acts(&["play"]));
+        assert!(got(&mut watcher).is_empty());
+        hub.register_polled_target(1, at("dev#native"), acts(&["play", "seek"]));
+        assert_eq!(got(&mut watcher), [CHANGED]);
     }
 
     #[test]
