@@ -43,6 +43,8 @@ export class HeroBaseComponent {
   readonly subtitle = input<string | null>(null);
   readonly mediaType = input.required<MediaType>();
   readonly posterUrl = input<string | null>(null);
+  /** Posters of a playlist: drawn as a mosaic cover in place of `posterUrl`. */
+  readonly posters = input<string[] | null>(null);
   /** Landscape art for the mobile hero; without it the mobile hero is the blurred cover with the poster over it. */
   readonly fanartUrl = input<string | null>(null);
   readonly posterMode = input<'poster' | 'still'>('poster');

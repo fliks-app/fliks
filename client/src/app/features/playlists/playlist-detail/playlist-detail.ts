@@ -33,7 +33,6 @@ import {
   LucideEllipsisVertical,
   LucideGripVertical,
   LucideInfo,
-  LucideListVideo,
   LucidePencil,
   LucidePlay,
   LucideShuffle,
@@ -68,7 +67,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
-import { PosterMosaicComponent } from '../../../shared/components/poster-mosaic/poster-mosaic';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -77,6 +75,7 @@ import type { MusicTrackRequest } from '../../../core/services/audio-player/musi
 import { safeFileName, saveFile } from '../../../core/plugins/save-file.plugin';
 import type { SmartRules } from '../../../core/services/api/smart-rules';
 import { formatDuration } from '../../music/music-utils';
+import { HeroBaseComponent, heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { SmartPlaylistEditorComponent } from '../smart-playlist-editor/smart-playlist-editor';
 
 interface PlaylistSeriesGroup {
@@ -110,7 +109,6 @@ type PlaylistGroupedEntry =
     LucideEllipsisVertical,
     LucideGripVertical,
     LucideInfo,
-    LucideListVideo,
     LucidePencil,
     LucidePlay,
     LucideShuffle,
@@ -124,7 +122,7 @@ type PlaylistGroupedEntry =
     DropdownMenuComponent,
     ModalHeaderComponent,
     ResolveUrlPipe,
-    PosterMosaicComponent,
+    HeroBaseComponent,
     SmartPlaylistEditorComponent,
   ],
   templateUrl: './playlist-detail.html',
@@ -194,6 +192,8 @@ export class PlaylistDetailComponent {
     const r = this.playlist()?.role;
     return r === 'owner' || r === 'administrator';
   });
+  protected readonly desktop = heroDesktopLayout();
+  protected readonly actionClass = computed(() => (this.desktop() ? 'btn btn-outline' : 'btn btn-outline btn-square'));
   readonly isOwner = computed(() => this.playlist()?.role === 'owner');
 
   /** One line naming the match mode, rule count, sort and limit. */
