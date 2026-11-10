@@ -749,11 +749,13 @@ impl AccountSessions {
         }
     }
 
-    /// Whether `user`'s row is `file` held by the device of `target`, however long ago it last beat.
-    pub async fn holds(&self, st: &AppState, user: i32, target: &str, file: i64) -> bool {
-        self.get(st, user).await.is_some_and(|r| {
-            r.media_file_id.is_some_and(|f| i64::from(f) == file)
-                && same_device(&r.owner.target_id, &Some(target.to_owned()))
+    /// Whether an account's row is `file` held by the device of `target`, however long ago it last
+    /// beat: a household device is held by the row of whichever account plays on it.
+    pub async fn holds(&self, target: &str, file: i64) -> bool {
+        let target = Some(target.to_owned());
+        self.0.lock().await.rows.values().any(|e| {
+            e.row.media_file_id.is_some_and(|f| i64::from(f) == file)
+                && same_device(&e.row.owner.target_id, &target)
         })
     }
 
