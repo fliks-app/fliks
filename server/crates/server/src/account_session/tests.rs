@@ -684,8 +684,8 @@ async fn a_claim_keeps_the_queue_only_for_the_same_owner(pool: PgPool) {
     s.beat(&st, first).await;
     alive(&st, "s1");
     s.beat(&st, beat(u, "s2", "dev#a", i)).await;
-    assert!(row(&st, u).await.unwrap().queue.is_some());
     alive(&st, "s2");
+    assert!(row(&st, u).await.unwrap().queue.is_some());
     s.beat(&st, beat(u, "s3", "dev#b", i)).await;
     assert!(row(&st, u).await.unwrap().queue.is_none());
 }
