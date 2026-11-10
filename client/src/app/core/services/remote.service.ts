@@ -40,10 +40,9 @@ export function targetSupports(target: RemoteTarget | null | undefined, action: 
   return !target?.actions || target.actions.includes(action);
 }
 
-/** Whether `target` takes a `load` of `fileId`, as the server decides: `resume` stands for the file it already holds. */
-export function targetCanLoad(target: RemoteTarget | null | undefined, fileId: number | null | undefined): boolean {
-  if (targetSupports(target, 'load')) return true;
-  return !!fileId && targetSupports(target, 'resume') && target?.nowPlaying?.mediaFileId === fileId;
+/** Whether `target` takes a `load`, as the server decides: `resume` stands for the file the account row says it holds. */
+export function targetCanLoad(target: RemoteTarget | null | undefined, holdsFile: boolean): boolean {
+  return targetSupports(target, 'load') || (holdsFile && targetSupports(target, 'resume'));
 }
 
 /** Payload of a command, minus what the server stamps. */
@@ -183,7 +182,9 @@ export class RemoteService {
   }
   /** Whether `targetId` takes a `load` of `fileId`; the one check before any load is sent. */
   canLoad(targetId: string, fileId: number | null | undefined): boolean {
-    return targetCanLoad(this.targets().find((t) => t.targetId === targetId), fileId);
+    const held = this.sessionSync.session();
+    const holds = !!fileId && held?.owner.targetId === targetId && held.item.mediaFileId === fileId;
+    return targetCanLoad(this.targets().find((t) => t.targetId === targetId), holds);
   }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
@@ -211,6 +212,10 @@ export class RemoteService {
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCmdId: string | null = null;
   private coalesceTimers = new Map<RemoteAction, ReturnType<typeof setTimeout>>();
+  /** The reading as it was before a coalesced gesture's first intent, per action. */
+  private coalesceRestores = new Map<RemoteAction, () => void>();
+  /** Counts sends, so a refusal restores only while no newer send has changed the reading. */
+  private sendSeq = 0;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
   /** The target's own report is authoritative; between reports the position is
@@ -630,6 +635,8 @@ export class RemoteService {
   sendCoalesced(targetId: string, input: RemoteCommandInput): void {
     // Hold the position at the gesture, not when the coalesced POST finally
     // goes out, so a drag tracks the thumb instead of trailing it.
+    const restore = this.coalesceRestores.get(input.action) ?? this.snapshotReading();
+    this.coalesceRestores.set(input.action, restore);
     this.notePositionIntent(input);
     const existing = this.coalesceTimers.get(input.action);
     if (existing) clearTimeout(existing);
@@ -637,22 +644,30 @@ export class RemoteService {
       input.action,
       setTimeout(() => {
         this.coalesceTimers.delete(input.action);
-        void this.send(targetId, input);
+        this.coalesceRestores.delete(input.action);
+        void this.send(targetId, input, restore);
       }, DISPATCH_COALESCE_MS),
     );
   }
 
-  async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
+  /** `before` is the reading to give back on a refusal, taken ahead of any intent the caller already noted. */
+  async send(targetId: string, input: RemoteCommandInput, before: () => void = this.snapshotReading()): Promise<void> {
     if (input.action === 'load' && !this.canLoad(targetId, input.mediaFileId)) {
       this.toast.error(this.translate.instant('remote.error_unsupported_action'));
       return;
     }
+    const seq = ++this.sendSeq;
+    return this.dispatch(targetId, input, true, () => {
+      if (seq === this.sendSeq) before();
+    });
+  }
+
+  private async dispatch(targetId: string, input: RemoteCommandInput, retry: boolean, restore: () => void): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
     if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
-    const restore = this.snapshotReading();
     if (input.action === 'load' || input.action === 'next') {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
@@ -674,7 +689,7 @@ export class RemoteService {
         // connection id is new: re-resolve once before declaring it gone.
         await this.refreshTargets();
         if (this.targets().some((t) => t.targetId === targetId)) {
-          return this.send(targetId, input, false);
+          return this.dispatch(targetId, input, false, restore);
         }
       }
       this.pendingAction.set(null);
