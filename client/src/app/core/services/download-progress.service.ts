@@ -5,6 +5,7 @@ import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
 import { kindOf } from '../media-kinds';
+import { SERVER_SINCE, ServerVersionService } from './server-version.service';
 
 /** Identifies one download within a season: `ref:<r>` is the reporter's identity (two releases of one episode stay two leaves),
  *  `pending:<scope>` is the placeholder a grab puts up before any download exists. */
@@ -149,6 +150,7 @@ export class DownloadProgressService {
   readonly progress = computed(() => this.merged());
 
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
   /** Media a snapshot arrived for since the stream connected: a later read of the server's state must not replace them. */
   private readonly touched = new Set<number>();
 
@@ -211,6 +213,7 @@ export class DownloadProgressService {
 
   /** Reads what is in flight now: snapshots are pushed on change only, so a client that connects late learns the rest here. */
   async hydrate(): Promise<void> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.downloadProgress))) return;
     let snapshots: DownloadProgressEvent[];
     try {
       snapshots = await firstValueFrom(this.http.get<DownloadProgressEvent[]>('/api/acquisition/progress'));

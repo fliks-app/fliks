@@ -7,6 +7,7 @@ import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
+import { ServerVersionService } from '../server-version.service';
 import { SseService } from '../sse.service';
 import { PlaybackSession } from './playback-session';
 import { PlaybackSurface } from './playback-surface';
@@ -20,7 +21,7 @@ const playing = (o: Partial<AccountSession> = {}) =>
     ...o,
   }) as unknown as AccountSession;
 
-function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false) {
+function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false, serverSupports = true) {
   const connectionId = signal<string | null>(null);
   const session = signal<AccountSession | null>(null);
   TestBed.configureTestingModule({
@@ -45,6 +46,7 @@ function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false) {
       { provide: AudioPlayerService, useValue: { track: () => null, active: () => false } },
       { provide: RemoteService, useValue: {} },
       { provide: SseService, useValue: { connectionId } },
+      { provide: ServerVersionService, useValue: { supports: () => serverSupports } },
     ],
   });
   TestBed.inject(PlaybackSurface);
@@ -73,6 +75,18 @@ describe('PlaybackSurface keepalive', () => {
     TestBed.tick();
     vi.advanceTimersByTime(60_000);
     http.expectNone('/api/system/events/keepalive');
+  });
+});
+
+describe('PlaybackSurface keepalive on an older server', () => {
+  it('sends nothing: the route does not exist there', () => {
+    vi.useFakeTimers();
+    const { connectionId, http } = setup('observer', false, false);
+    connectionId.set('c1');
+    TestBed.tick();
+    vi.advanceTimersByTime(60_000);
+    http.expectNone('/api/system/events/keepalive');
+    vi.useRealTimers();
   });
 });
 

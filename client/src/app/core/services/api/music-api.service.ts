@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { abortable } from '../../utils/abortable';
 import type { Media } from './media.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { trackRowRequest } from '../../../features/music/music-utils';
 import type { WantSpec } from './wants-api.service';
@@ -20,6 +21,7 @@ import type {
 @Injectable({ providedIn: 'root' })
 export class MusicApiService {
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
 
   tracks(q: TracksQuery = {}, signal?: AbortSignal): Promise<TrackRow[]> {
     let params = new HttpParams();
@@ -62,7 +64,8 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<WorkRecording[]>(`/api/works/${workId}/recordings`));
   }
 
-  recentlyPlayed(limit = 20): Promise<Media[]> {
+  async recentlyPlayed(limit = 20): Promise<Media[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.recentlyPlayed))) return [];
     return firstValueFrom(this.http.get<Media[]>('/api/playback/recently-played', { params: { limit } }));
   }
 

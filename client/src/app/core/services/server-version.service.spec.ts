@@ -1,4 +1,4 @@
-import { serverSupports } from './server-version.service';
+import { SERVER_SINCE, serverSupports } from './server-version.service';
 
 describe('serverSupports', () => {
   it('gates a feature newer than the server', () => {
@@ -17,5 +17,14 @@ describe('serverSupports', () => {
 
   it('supports nothing new while the server version is unknown', () => {
     expect(serverSupports(null, '5.1.0')).toBe(false);
+  });
+});
+
+describe('SERVER_SINCE', () => {
+  it('hides every unreleased route from the last release and opens it from the next', () => {
+    for (const since of Object.values(SERVER_SINCE)) {
+      expect(serverSupports('6.0.2', since)).toBe(false);
+      expect(serverSupports('6.1.0', since)).toBe(true);
+    }
   });
 });

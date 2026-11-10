@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LivePlayerComponent } from './live-player';
 import { LiveTvApiService, PlaySession } from '../../../core/services/api/livetv-api.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { ServerVersionService } from '../../../core/services/server-version.service';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { SessionSyncService } from '../../../core/services/session-sync.service';
@@ -67,6 +68,7 @@ function createComponent() {
         },
       },
       { provide: Router, useValue: router },
+      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
       { provide: LiveTvApiService, useValue: api },
       {
         provide: DeviceService,

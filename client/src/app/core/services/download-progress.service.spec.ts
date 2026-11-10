@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { DownloadProgressItem, DownloadProgressService } from './download-progress.service';
+import { ServerVersionService } from './server-version.service';
 
 function make(): DownloadProgressService {
   TestBed.resetTestingModule();
@@ -22,6 +23,37 @@ const movie = (svc: DownloadProgressService, downloads: DownloadProgressItem[], 
 
 const leafKeys = (svc: DownloadProgressService, mediaId = 1, seasonNumber = 1) =>
   [...(svc.progress().get(mediaId)?.seasons?.get(seasonNumber)?.leaves.keys() ?? [])];
+
+describe('DownloadProgressService hydrate', () => {
+  function withServer(supports: boolean): { svc: DownloadProgressService; http: HttpTestingController } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ServerVersionService, useValue: { supportsWhenKnown: async () => supports } },
+      ],
+    });
+    return { svc: TestBed.inject(DownloadProgressService), http: TestBed.inject(HttpTestingController) };
+  }
+
+  it('reads the downloads in flight from a server that serves them', async () => {
+    const { svc, http } = withServer(true);
+    const done = svc.hydrate();
+    await Promise.resolve();
+    http.expectOne('/api/acquisition/progress').flush([{ mediaId: 1, mediaType: 'movie', downloads: [download()] }]);
+    await done;
+    expect(svc.progress().get(1)?.percent).toBe(50);
+  });
+
+  it('asks an older server nothing and leaves the list empty', async () => {
+    const { svc, http } = withServer(false);
+    await svc.hydrate();
+    http.expectNone('/api/acquisition/progress');
+    expect(svc.progress().size).toBe(0);
+  });
+});
 
 describe('DownloadProgressService', () => {
   // Core is bundled with no acquisition plugin installed, so this store must expose no way at
@@ -205,6 +237,7 @@ describe('DownloadProgressService hydrate', () => {
   it('states what is in flight for a client that connects late', async () => {
     const { svc, http } = makeHttp();
     const done = svc.hydrate();
+    await Promise.resolve();
     http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
     await done;
     expect([...svc.progress().keys()]).toEqual([1, 2]);
@@ -214,6 +247,7 @@ describe('DownloadProgressService hydrate', () => {
     const { svc, http } = makeHttp();
     const done = svc.hydrate();
     movie(svc, [download({ progress: 0.9 })], 1);
+    await Promise.resolve();
     http.expectOne('/api/acquisition/progress').flush([snapshot(1, 'a'), snapshot(2, 'b')]);
     await done;
     expect(svc.progress().get(1)?.percent).toBe(90);

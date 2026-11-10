@@ -12,6 +12,7 @@ import { LibrariesApiService, LibrarySummary } from '../../../../core/services/a
 import { AuthService } from '../../../../core/services/auth.service';
 import { NavbarService } from '../../../../core/services/navbar.service';
 import { DeviceService } from '../../../../core/services/device.service';
+import { ServerVersionService } from '../../../../core/services/server-version.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { PREVIEW_HOST } from '../../preview-host';
 
@@ -32,6 +33,7 @@ function setup(libraries: LibrarySummary[], canImport = true, allowed: string[] 
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: NavbarService, useValue: { heroPaddingTop: () => null } },
       { provide: DeviceService, useValue: { isTv: () => false } },
+      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
       { provide: PREVIEW_HOST, useValue: { setTitle: vi.fn(), setBackground: vi.fn() } },
     ],
   });

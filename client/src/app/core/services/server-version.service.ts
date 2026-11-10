@@ -23,6 +23,13 @@ export function serverSupports(server: string | null, since: string): boolean {
   return !!server && (server.endsWith('-dev') || !isNewer(since, server));
 }
 
+/** First release serving each route the client reads by itself (SSE connect, home, playback); 404 on an older server. */
+export const SERVER_SINCE = {
+  downloadProgress: '6.1.0',
+  keepalive: '6.1.0',
+  recentlyPlayed: '6.1.0',
+} as const;
+
 /** Version of the connected server: an installed app can update before its server, so a feature added
  *  after the oldest supported server is gated with `supports('<release that added it>')`. */
 @Injectable({ providedIn: 'root' })

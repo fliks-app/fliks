@@ -7,6 +7,7 @@ import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { deviceIdOf } from '../remote-target-id';
 import { SseService } from '../sse.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { PlaybackSession } from './playback-session';
 
 /** `local`: only this device's player shows. `remote`: another device plays, one bar. `parked`: the same bar, to resume here. */
@@ -28,6 +29,7 @@ export class PlaybackSurface {
   private readonly remote = inject(RemoteService);
   private readonly sse = inject(SseService);
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
   private streamDropped = false;
@@ -85,7 +87,7 @@ export class PlaybackSurface {
     // A frozen WebView runs no timer, so its silence is what unlists it.
     effect((onCleanup) => {
       const connectionId = this.sse.connectionId();
-      if (!connectionId) return;
+      if (!connectionId || !this.serverVersion.supports(SERVER_SINCE.keepalive)) return;
       const ping = () => this.http
         .post('/api/system/events/keepalive', { connectionId }, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
         .subscribe({ error: () => undefined });
