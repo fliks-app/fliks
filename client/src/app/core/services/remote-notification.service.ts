@@ -39,11 +39,13 @@ export class RemoteNotificationService {
       this.remote.targetState();
       // iOS holds the audio session while shown, so only a target this phone selected qualifies.
       const watched = ios ? this.remote.isRemoting() : this.remote.isObserving();
-      if (!watched || t.isIdle() || t.isStarting()) {
+      if (!watched || t.isIdle()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
         return;
       }
+      // Between two episodes the lock screen stays: clearing it would release the audio session and suspend the app.
+      if (t.isStarting()) return;
       const s = this.remote.targetState();
       this.shown = true;
       untracked(() => void this.like.track(s?.mediaId, s?.episodeId));

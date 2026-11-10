@@ -30,7 +30,8 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private var pausedTimer: Timer?
     /// The paused title whose lock screen was released: its reports stay ignored until it plays or changes.
     private var releasedTitle: String?
-    /// Set when another app took the session, cleared when iOS says to resume: the loop never cuts that app off.
+    /// Set when another app took the session, cleared when iOS says to resume or the target is started again:
+    /// meanwhile the loop never cuts that app off and the volume keys stay its own.
     private var interrupted = false
     private var seekedAt = Date.distantPast
     private var canSetVolume = false
@@ -69,6 +70,8 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             self.title = title
             self.artist = artist
             self.duration = duration
+            // The user restarting a paused target takes the session back from the app that interrupted it.
+            if playing && !self.playing { self.interrupted = false }
             self.playing = playing
             self.advancing = playing && !buffering
             // A report sent before the last local seek still carries the old position.
@@ -84,7 +87,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             self.publish()
             self.applyCommands(hasNext: hasNext, seekButtons: seekButtons)
-            self.pinVolume(canSetVolume)
+            self.syncVolumePin()
             self.schedulePausedLimit()
             call.resolve()
         }
@@ -149,11 +152,14 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         switch type {
         case .began:
             interrupted = true
+            volumeObservation = nil
+            syncVolumePin()
         case .ended:
             let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
             guard AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) else { return }
             interrupted = false
             start()
+            syncVolumePin()
         @unknown default:
             break
         }
@@ -219,6 +225,10 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
             volumeView = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { view?.removeFromSuperview() }
         }
+    }
+
+    private func syncVolumePin() {
+        pinVolume(canSetVolume && !interrupted)
     }
 
     private func setSystemVolume(_ level: Float) {
