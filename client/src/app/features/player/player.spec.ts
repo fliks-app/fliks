@@ -380,8 +380,7 @@ describe('PlayerComponent session takeover', () => {
 
   it('resumes only once the navigation to the player has settled', async () => {
     const h = createHarness();
-    h.component.mediaId = 1;
-    const stopped = await h.registered[0].yield();
+    const stopped = await h.registered.find((p) => !p.itemId).yield();
     let done!: (ok: boolean) => void;
     h.router.navigate.mockReturnValueOnce(new Promise<boolean>((r) => (done = r)));
     const settled = vi.fn();
