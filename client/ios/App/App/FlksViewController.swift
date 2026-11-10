@@ -43,6 +43,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(SaveFilePlugin())
         bridge?.registerPluginInstance(WebAuthPlugin())
         bridge?.registerPluginInstance(CalendarPlugin())
+        bridge?.registerPluginInstance(RemoteNotificationPlugin())
     }
 
     func updateStatusBar(hidden: Bool) {

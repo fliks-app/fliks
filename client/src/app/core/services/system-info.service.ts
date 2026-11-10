@@ -36,7 +36,7 @@ export class SystemInfoService {
   }
 
   /** User-assigned device/computer name, or '' when unavailable (web, or iOS
-   *  without the device-name entitlement). */
+   *  without the device-name entitlement, which reports the generic model name). */
   deviceName(): string {
     return this._deviceName();
   }
@@ -64,7 +64,7 @@ export class SystemInfoService {
         const os = MOBILE_OS[info.operatingSystem] ?? info.operatingSystem;
         return {
           systemName: info.osVersion ? `${os} ${info.osVersion}` : os,
-          deviceName: info.name ?? '',
+          deviceName: info.name && info.name !== info.model ? info.name : '',
         };
       } catch {
         /* fall through */
