@@ -27,4 +27,7 @@ export interface RemoteNotificationPlugin {
 
 export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'stop' | 'like';
 
+/** Sent by iOS alone, when it let go of the lock screen after a long pause. */
+export type RemoteNotificationEvent = RemoteNotificationAction | 'released';
+
 export const RemoteNotification = registerPlugin<RemoteNotificationPlugin>('RemoteNotification');
