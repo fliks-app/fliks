@@ -97,6 +97,7 @@ describe('RemotePickerListComponent while controlling a device', () => {
         session: signal({ owner: { targetId: 'tv#1' } }),
         role: signal('observer'),
         canTransfer: signal(true),
+        isReading: () => false,
         parked: () => false,
         transferTo,
       },
