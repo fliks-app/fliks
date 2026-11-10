@@ -1,0 +1,21 @@
+{
+  "name": "remote-unregister-missing-device",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "deviceId must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/remote/register"
+    }
+  ]
+}

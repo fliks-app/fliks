@@ -1,3 +1,4 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
@@ -8,6 +9,9 @@ import { PlaybackSession } from './playback-session';
 
 /** `local`: only this device's player shows. `remote`: another device plays, one bar. `parked`: the same bar, to resume here. */
 export type SurfaceState = 'idle' | 'local' | 'remote' | 'parked';
+
+/** The server stops listing a stream whose client has not said it is reading it for 120 s. */
+const KEEPALIVE_MS = 30_000;
 
 /** How long an idle phone stays listed as a target once in the background. */
 const IDLE_BACKGROUND_MS = 120_000;
@@ -21,6 +25,7 @@ export class PlaybackSurface {
   private readonly audio = inject(AudioPlayerService);
   private readonly remote = inject(RemoteService);
   private readonly sse = inject(SseService);
+  private readonly http = inject(HttpClient);
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
   private streamDropped = false;
@@ -67,6 +72,16 @@ export class PlaybackSurface {
   constructor() {
     effect(() => {
       if (!this.sync.session()) this.hiddenKey.set(null);
+    });
+
+    // A frozen WebView runs no timer, so its silence is what unlists it.
+    effect((onCleanup) => {
+      const connectionId = this.sse.connectionId();
+      if (!connectionId) return;
+      const ping = () => this.http.post('/api/system/events/keepalive', { connectionId }).subscribe({ error: () => undefined });
+      ping();
+      const timer = setInterval(ping, KEEPALIVE_MS);
+      onCleanup(() => clearInterval(timer));
     });
 
     // A player that starts while the stream is dropped (lock screen, background audio) lists the device again.

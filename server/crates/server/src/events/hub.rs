@@ -12,6 +12,8 @@ use tokio::sync::{broadcast, mpsc, watch};
 
 /// A polled target is present only while it keeps polling.
 const POLLED_TARGET_TTL: Duration = Duration::from_secs(30);
+/// An SSE target that sends keepalives is listed only while its last one is this fresh.
+const SSE_SILENCE: Duration = Duration::from_secs(120);
 /// A remote launch is claimed here and taken by the playback that starts a moment later.
 const ATTRIBUTION_TTL: Duration = Duration::from_secs(60);
 /// Bounds a device that registers and never polls.
@@ -49,6 +51,15 @@ pub struct Target {
 
 impl Target {
     /// A TV app's party stream (`<device>#party`) carries a party, never a remote command.
+    pub fn is_polled(&self) -> bool {
+        self.connection_id.starts_with("polled:")
+    }
+
+    pub fn device_id(&self) -> &str {
+        let id = self.identity.target().unwrap_or_default();
+        id.split('#').next().unwrap_or_default()
+    }
+
     pub fn is_remote(&self) -> bool {
         let tab = self.identity.target().and_then(|t| t.split_once('#'));
         tab.is_none_or(|(_, tab)| tab != "party")
@@ -67,6 +78,8 @@ struct Conn {
     since: i64,
     seq: u64,
     tx: mpsc::Sender<Msg>,
+    /// `None` until the client sends its first keepalive: one that never does is never silent.
+    keepalive: Option<Instant>,
 }
 
 struct Polled {
@@ -321,6 +334,7 @@ impl Hub {
                         since: now_ms(),
                         seq,
                         tx,
+                        keepalive: None,
                     },
                 );
             }
@@ -484,7 +498,12 @@ impl Hub {
             let mut conns: Vec<_> = g
                 .conns
                 .iter()
-                .filter(|(_, c)| owner.is_none_or(|u| c.user == u) && c.identity.target().is_some())
+                .filter(|(_, c)| {
+                    owner.is_none_or(|u| c.user == u)
+                        && c.identity.target().is_some()
+                        && c.keepalive
+                            .is_none_or(|at| now.saturating_duration_since(at) <= SSE_SILENCE)
+                })
                 .map(|(id, c)| (c.seq, id.clone(), c.user, c.identity.clone(), c.since))
                 .collect();
             conns.sort_by_key(|r| r.0);
@@ -530,24 +549,63 @@ impl Hub {
         for user in expired {
             self.fan_out(&SseEvent::RemoteTargetsChanged {}, user);
         }
+        // A registered native face speaks for its device: the device's SSE streams are hidden.
+        let faces: Vec<(i32, String)> = rows
+            .iter()
+            .filter(|t| t.is_polled())
+            .map(|t| (t.user_id, t.device_id().to_owned()))
+            .collect();
+        rows.retain(|t| t.is_polled() || !faces.contains(&(t.user_id, t.device_id().to_owned())));
         rows.sort_by_key(|t| std::cmp::Reverse(t.since));
         rows
     }
 
-    /// The newest connection of `user` with this target; scoping to the user is the authorization.
-    pub fn resolve_target(&self, user: i32, target_id: &str) -> Option<String> {
-        let matches: Vec<_> = self
-            .list_for_user(user)
+    /// The registered native face of `user`'s device, if any.
+    pub fn native_face(&self, user: i32, device: &str) -> Option<Target> {
+        self.list_for_user(user)
             .into_iter()
+            .find(|t| t.is_polled() && t.device_id() == device)
+    }
+
+    /// The newest connection of `user` with this target, else the device's native face; scoping to the
+    /// user is the authorization.
+    pub fn resolve_target(&self, user: i32, target_id: &str) -> Option<String> {
+        let rows = self.list_for_user(user);
+        let mut matches: Vec<_> = rows
+            .iter()
             .filter(|t| t.is_remote() && t.identity.target_id.as_deref() == Some(target_id))
             .collect();
+        if matches.is_empty() {
+            let device = target_id.split('#').next().unwrap_or_default();
+            matches = rows
+                .iter()
+                .filter(|t| t.is_polled() && t.device_id() == device)
+                .collect();
+        }
         if matches.len() > 1 {
             tracing::warn!(
                 "Target {target_id} maps to {} live connections for user {user}: using the newest",
                 matches.len()
             );
         }
-        matches.into_iter().next().map(|t| t.connection_id)
+        matches.into_iter().next().map(|t| t.connection_id.clone())
+    }
+
+    /// A client's proof of life for its SSE stream; false for another account's or an unknown connection.
+    pub fn keepalive(&self, user: i32, connection_id: &str) -> bool {
+        let back = {
+            let mut g = self.lock();
+            let Some(c) = g.conns.get_mut(connection_id).filter(|c| c.user == user) else {
+                return false;
+            };
+            let was_silent = c.keepalive.is_some_and(|at| at.elapsed() > SSE_SILENCE);
+            c.keepalive = Some(Instant::now());
+            was_silent
+        };
+        if back {
+            self.emit_to_user(user, SseEvent::RemoteTargetsChanged {});
+        }
+        true
     }
 
     /// For a client that cannot hold an SSE stream (the native TV app); the key doubles as its connection id.
@@ -954,6 +1012,46 @@ mod tests {
         assert_eq!(hub.drain_commands(1, "dev#native").unwrap().len(), 1);
         hub.drop_connections_for_target(2, "dev#native");
         assert!(hub.list_for_user(2).is_empty() && hub.list_for_user(1).len() == 1);
+    }
+
+    #[test]
+    fn a_silent_stream_is_unlisted_until_its_next_keepalive() {
+        let hub = Hub::new();
+        let quiet = hub.connect(1, at("quiet#a"));
+        let _never = hub.connect(1, at("old#a"));
+        assert!(hub.keepalive(1, &quiet.id));
+        assert!(!hub.keepalive(2, &quiet.id) && !hub.keepalive(1, "gone"));
+        let later = Instant::now() + SSE_SILENCE + Duration::from_secs(1);
+        let ids = |rows: Vec<Target>| -> Vec<String> {
+            rows.into_iter()
+                .filter_map(|t| t.identity.target_id)
+                .collect()
+        };
+        assert_eq!(ids(hub.collect(Some(1), later)), vec!["old#a"]);
+        assert!(hub.keepalive(1, &quiet.id));
+        assert_eq!(ids(hub.collect(Some(1), Instant::now())).len(), 2);
+    }
+
+    #[test]
+    fn a_native_face_speaks_for_its_device() {
+        let hub = Hub::new();
+        let _tab = hub.connect(1, at("dev"));
+        let _other = hub.connect(1, at("other"));
+        hub.register_polled_target(1, at("dev#native"));
+        let listed: Vec<_> = hub
+            .list_for_user(1)
+            .into_iter()
+            .filter_map(|t| t.identity.target_id)
+            .collect();
+        assert_eq!(listed, vec!["other", "dev#native"]);
+        assert_eq!(hub.resolve_target(1, "dev").unwrap(), "polled:dev#native");
+        assert_eq!(
+            hub.native_face(1, "dev").unwrap().connection_id,
+            "polled:dev#native"
+        );
+        assert!(hub.native_face(2, "dev").is_none());
+        hub.drop_connections_for_target(1, "dev#native");
+        assert_eq!(hub.list_for_user(1).len(), 2);
     }
 
     #[test]

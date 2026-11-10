@@ -529,6 +529,13 @@ impl AccountSessions {
         if !same_device(owner, target) {
             return false;
         }
+        // A device's native face and its web layer are one owner.
+        if [owner, target]
+            .iter()
+            .any(|t| t.as_deref().is_some_and(|t| t.ends_with("#native")))
+        {
+            return true;
+        }
         match (owner, &prior.held) {
             (Some(t), Some(h)) => st.hub.resolve_target(h.hub_user, t).is_none(),
             _ => true,

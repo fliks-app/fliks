@@ -3,6 +3,7 @@ use crate::{
     http::{
         AppError,
         auth::{Authed, SessionAuthed, load_enabled, load_session_user},
+        validate::ValidJson,
     },
     state::AppState,
 };
@@ -15,12 +16,14 @@ use axum::{
     routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject as Resource};
+use serde::Deserialize;
 use serde_json::json;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/system/events", get(events))
         .route("/api/system/events/ticket", post(event_ticket))
+        .route("/api/system/events/keepalive", post(keepalive))
         .route("/api/system/activity", get(activity))
 }
 
@@ -59,6 +62,26 @@ pub async fn event_ticket(State(st): State<AppState>, SessionAuthed(a): SessionA
         Json(json!({"ticket": st.sse_tickets.mint(a.user.id, a.session), "expiresIn": TICKET_TTL.as_secs()})),
     )
         .into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct Keepalive {
+    connection_id: String,
+}
+
+/// A client's proof that it still reads its stream; a silent one stops being listed as a target.
+#[utoipa::path(post, path = "/api/system/events/keepalive", responses((status = 204)))]
+pub async fn keepalive(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    ValidJson(dto): ValidJson<Keepalive>,
+) -> Result<StatusCode, AppError> {
+    if st.hub.keepalive(a.user.id, &dto.connection_id) {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::not_found("events.error_unknown_connection"))
+    }
 }
 
 // Auth runs once at connect: a later token expiry or disable does not close the stream. `?ticket=` is the
