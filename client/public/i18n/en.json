@@ -4034,7 +4034,7 @@
     "transfer": "Transfer",
     "resume": "Resume",
     "hide": "Hide",
-    "parked_device": "{{device}} is offline",
+    "parked_device": "Last played on {{device}}",
     "parked_here": "Stopped on this device",
     "read_on": "Read on {{device}}",
     "open_here": "Open here",

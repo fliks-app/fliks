@@ -324,11 +324,15 @@ export class RemoteService {
       untracked(() => this.syncTicker());
     });
 
-    // One device per account: a session owner other than the selection replaces it.
+    // One device per account: the selection goes when a session it owned moves to another device.
+    let previousOwner: string | null = null;
     effect(() => {
       const owner = this.sessionSync.observedOwnerTargetId();
       const selected = this.selectedTargetId();
-      if (owner && selected && owner !== selected) untracked(() => this.selectTarget(null));
+      untracked(() => {
+        if (owner && selected && owner !== selected && previousOwner === selected) this.selectTarget(null);
+        previousOwner = owner;
+      });
     });
 
     this.sessionSync.setLiveSource(

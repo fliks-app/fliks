@@ -160,6 +160,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly session = inject(PlaybackSession);
   private readonly audio = inject(AudioPlayerService);
   private readonly surface = inject(PlaybackSurface);
+  /** The controlled device plays something to open; an idle one only offers the picker. */
+  protected readonly hasRemotePlayer = computed(() => !!this.session.playing());
   protected readonly nowPlayingTitle = computed(() => this.session.nowPlaying()?.title ?? '');
   readonly appUpdate = inject(AppUpdateService);
   private readonly updateModal = viewChild(AppUpdateModalComponent);

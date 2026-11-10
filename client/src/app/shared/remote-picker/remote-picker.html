@@ -2,7 +2,7 @@
   <button
     trigger
     type="button"
-    class="btn btn-ghost btn-circle"
+    [class]="label() ? 'btn btn-ghost btn-sm gap-1 md:gap-2' : 'btn btn-ghost btn-circle'"
     [disabled]="castService.connecting()"
     [attr.aria-label]="'remote.picker_title' | translate"
     (click)="onTriggerPress()"
@@ -10,7 +10,10 @@
     @if (castService.connecting()) {
       <span class="loading loading-spinner loading-sm"></span>
     } @else {
-      <svg lucideCast [class]="castService.isConnected() || airPlay.routeActive() || airPlay.videoActive() ? 'h-5 w-5 md:h-6 md:w-6 text-info' : 'h-5 w-5 md:h-6 md:w-6'"></svg>
+      <svg lucideCast [class]="label() || castService.isConnected() || airPlay.routeActive() || airPlay.videoActive() ? 'h-5 w-5 md:h-6 md:w-6 text-info' : 'h-5 w-5 md:h-6 md:w-6'"></svg>
+    }
+    @if (label()) {
+      <span class="max-w-24 truncate text-sm font-medium md:max-w-32">{{ label() }}</span>
     }
   </button>
 

@@ -81,8 +81,17 @@ describe('RemoteService observation', () => {
     expect(service.targetState()?.mediaTitle).toBe('A series');
   });
 
-  it('replaces a selection by the session owner: one device per account', () => {
+  it('keeps a selection that plays outside the session when another device starts one', () => {
+    const { service, owner } = setup({ selected: 'tv#1' });
+    owner.set('pc#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBe('tv#1');
+  });
+
+  it('replaces a selection whose session another device took over: one device per account', () => {
     const { service, remoteState, owner } = setup({ selected: 'tv#1' });
+    owner.set('tv#1');
+    TestBed.tick();
     owner.set('pc#1');
     TestBed.tick();
     remoteState.set(frame({ targetId: 'pc#1' }));

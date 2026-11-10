@@ -107,10 +107,14 @@
             <span class="text-xs font-medium truncate max-w-24">{{ nowPlayingTitle() }}</span>
           </button>
         } @else if (remote.selectedTarget(); as target) {
-          <button class="btn btn-ghost btn-sm gap-1" (click)="openCastPlayer()">
-            <svg lucideCast class="h-5 w-5 text-info"></svg>
-            <span class="text-xs font-medium truncate max-w-24">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
-          </button>
+          @if (hasRemotePlayer()) {
+            <button class="btn btn-ghost btn-sm gap-1" (click)="openCastPlayer()">
+              <svg lucideCast class="h-5 w-5 text-info"></svg>
+              <span class="text-sm font-medium truncate max-w-24">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
+            </button>
+          } @else {
+            <app-remote-picker [label]="formatDevice(target.userAgent, target.systemName, target.deviceName)" />
+          }
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }
@@ -163,10 +167,14 @@
             <span class="text-xs font-medium truncate max-w-32">{{ nowPlayingTitle() }}</span>
           </button>
         } @else if (remote.selectedTarget(); as target) {
-          <button class="btn btn-ghost btn-sm gap-2" (click)="openCastPlayer()">
-            <svg lucideCast class="h-5 w-5 text-info"></svg>
-            <span class="text-xs font-medium truncate max-w-32">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
-          </button>
+          @if (hasRemotePlayer()) {
+            <button class="btn btn-ghost btn-sm gap-2" (click)="openCastPlayer()">
+              <svg lucideCast class="h-5 w-5 text-info"></svg>
+              <span class="text-sm font-medium truncate max-w-32">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
+            </button>
+          } @else {
+            <app-remote-picker [label]="formatDevice(target.userAgent, target.systemName, target.deviceName)" />
+          }
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }

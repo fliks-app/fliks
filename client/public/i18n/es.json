@@ -4034,7 +4034,7 @@
     "transfer": "Transferir",
     "resume": "Reanudar",
     "hide": "Ocultar",
-    "parked_device": "{{device}} está sin conexión",
+    "parked_device": "Última reproducción en {{device}}",
     "parked_here": "Detenido en este dispositivo",
     "read_on": "Leído en {{device}}",
     "open_here": "Abrir aquí",
