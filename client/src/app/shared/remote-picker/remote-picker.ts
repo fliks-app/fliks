@@ -1,4 +1,4 @@
-import { Component, inject, viewChild } from '@angular/core';
+import { Component, inject, input, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCast } from '@lucide/angular';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
@@ -15,6 +15,8 @@ import { RemotePickerListComponent } from './remote-picker-list';
 export class RemotePickerComponent {
   protected readonly castService = inject(CastService);
   protected readonly airPlay = inject(AirPlayService);
+  /** The controlled device's name: the trigger then reads as a chip. */
+  readonly label = input('');
   private readonly list = viewChild(RemotePickerListComponent);
 
   /** The dropdown exposes no "just opened" signal, so refresh on every press; a redundant GET on close is harmless. */

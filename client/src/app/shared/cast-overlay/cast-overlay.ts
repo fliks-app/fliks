@@ -63,9 +63,7 @@ export class CastOverlayComponent {
   protected readonly time = computed(() => {
     const s = this.observed();
     if (!s) return '';
-    const pos = this.sync.positionNow(s);
-    const dur = this.sync.durationNow(s);
-    return dur > 0 ? `${formatTime(pos)} / ${formatTime(dur)}` : formatTime(pos);
+    return formatTime(this.sync.positionNow(s));
   });
 
   protected readonly percent = computed(() => {

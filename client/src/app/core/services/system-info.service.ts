@@ -10,6 +10,9 @@ const MOBILE_OS: Record<string, string> = {
   windows: 'Windows',
 };
 
+/** What iOS reports as the name without the device-name entitlement: the product class, not a name. */
+const GENERIC_NAMES = new Set(['iphone', 'ipad', 'apple tv']);
+
 /** Resolves the host's real OS version (`systemName`) and user-assigned `deviceName` from the best native source (Electron bridge → Capacitor → UA), since the UA can't expose them.
  *  Resolved once at construction; callers needing the value first (pairing) should `await ready()`. */
 @Injectable({ providedIn: 'root' })
@@ -64,7 +67,7 @@ export class SystemInfoService {
         const os = MOBILE_OS[info.operatingSystem] ?? info.operatingSystem;
         return {
           systemName: info.osVersion ? `${os} ${info.osVersion}` : os,
-          deviceName: info.name && info.name !== info.model ? info.name : '',
+          deviceName: info.name && info.name !== info.model && !GENERIC_NAMES.has(info.name.toLowerCase()) ? info.name : '',
         };
       } catch {
         /* fall through */

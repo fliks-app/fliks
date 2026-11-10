@@ -156,13 +156,16 @@ export class RemotePickerListComponent {
       });
     }
     const selected = this.remote.selectedTargetId();
-    for (const t of this.remote.targets()) {
+    const labels = this.remote.targets().map((t) => this.deviceLabel(t));
+    this.remote.targets().forEach((t, i) => {
       const connected = t.targetId === selected;
+      // Two tabs of one device read alike: the tab part of the id tells them apart.
+      const tab = labels.filter((l) => l === labels[i]).length > 1 ? t.targetId.split('#')[1] : undefined;
       rows.push({
         kind: 'remote',
         id: t.targetId,
         icon: deviceIconFor(t.formFactor),
-        label: this.deviceLabel(t),
+        label: tab ? `${labels[i]} · ${tab.slice(0, 4)}` : labels[i],
         subtitle: connected
           ? this.translate.instant('remote.stop_controlling')
           : t.ownerUsername
@@ -170,7 +173,7 @@ export class RemotePickerListComponent {
             : null,
         connected,
       });
-    }
+    });
     // AirPlay, then Cast devices, then remote targets, last-used first inside
     // each group. The sort is stable, so rows that tie keep discovery order.
     const last = this.lastUsedId();

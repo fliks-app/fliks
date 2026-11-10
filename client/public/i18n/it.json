@@ -4034,7 +4034,7 @@
     "transfer": "Trasferisci",
     "resume": "Riprendi",
     "hide": "Nascondi",
-    "parked_device": "{{device}} è offline",
+    "parked_device": "Ultima riproduzione su {{device}}",
     "parked_here": "Fermato su questo dispositivo",
     "read_on": "Letto su {{device}}",
     "open_here": "Apri qui",
