@@ -8,3 +8,8 @@ export const currentTargetId = signal<string | null>(null);
 export function deviceIdOf(targetId: string): string {
   return targetId.split('#')[0];
 }
+
+/** Whether `owner` is `me`: the same target, or the same device's `#native` face and its web layer (the server's `continues` rule). */
+export function sameTarget(owner: string, me: string): boolean {
+  return owner === me || (deviceIdOf(owner) === deviceIdOf(me) && (owner.endsWith('#native') || me.endsWith('#native')));
+}

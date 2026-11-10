@@ -87,6 +87,17 @@ describe('SessionSyncService role', () => {
     expect(service.ownedHere()).toBe(false);
   });
 
+  it('owns a live session held by its device native face, which the bare web target continues', async () => {
+    const { service, flush, sse } = setup();
+    sse.targetId.set('phone');
+    await flush(session({ owner: { targetId: 'phone#native', deviceName: 'Phone', formFactor: 'phone' } }));
+    expect(service.role()).toBe('owner');
+    expect(service.ownedHere()).toBe(true);
+    sse.targetId.set('tablet');
+    expect(service.role()).toBe('observer');
+    expect(service.ownedHere()).toBe(false);
+  });
+
   it('keeps another tab of this device an observer of a live session', async () => {
     const { service, flush } = setup();
     await flush(session({ owner: { targetId: 'phone#other', deviceName: null, formFactor: 'phone' } }));

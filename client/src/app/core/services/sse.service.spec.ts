@@ -239,7 +239,10 @@ describe('SseService: tab nonce', () => {
     if (stored) sessionStorage.setItem(KEY, stored);
     vi.stubGlobal('navigator', {
       userAgent: '',
-      locks: { request: (_: string, __: unknown, cb: (l: unknown) => unknown) => Promise.resolve(cb(held ? null : {})) },
+      locks: {
+        request: (_: string, __: unknown, cb: () => unknown) =>
+          held ? Promise.reject(new DOMException('', 'AbortError')) : Promise.resolve(cb()),
+      },
     });
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
