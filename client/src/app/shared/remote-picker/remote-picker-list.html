@@ -69,7 +69,12 @@
     <button type="button" class="dropdown-item min-w-0 flex-1 text-white disabled:opacity-50 disabled:cursor-default" [disabled]="!pressable(row)" (click)="selectRow(row)">
       <app-device-icon [icon]="row.icon" [iconClass]="iconClass" />
       <span class="flex flex-col items-start min-w-0 flex-1">
-        <span class="truncate w-full text-left">{{ row.label }}</span>
+        <span class="flex w-full min-w-0 gap-1 text-left">
+          <span class="truncate">{{ row.label }}</span>
+          @if (row.tab) {
+            <span class="shrink-0 opacity-60">· {{ row.tab }}</span>
+          }
+        </span>
         @if (row.subtitle) {
           <span class="text-sm opacity-60 truncate w-full text-left">{{ row.subtitle }}</span>
         }
@@ -77,7 +82,7 @@
     </button>
     @if (!transferOnly() && canTransfer(row)) {
       <button type="button" class="btn btn-ghost btn-sm shrink-0 text-white" (click)="transfer(row)"
-              [attr.aria-label]="('session.transfer' | translate) + ': ' + row.label">
+              [attr.aria-label]="('session.transfer' | translate) + ': ' + row.label + (row.tab ? ' · ' + row.tab : '')">
         <svg lucideArrowRightLeft class="h-4 w-4"></svg>
         {{ 'session.transfer' | translate }}
       </button>

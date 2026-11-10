@@ -261,6 +261,16 @@ describe('SessionSyncService takeover', () => {
     expect(confirm.mock.calls[0][0].message).toBe('A film. session.superseded_message');
   });
 
+  it('does not reject when "resume here" fails to start', async () => {
+    const { service } = setup({ confirm: true });
+    const { p, resume } = player('sid-1');
+    resume.mockRejectedValue(new Error('chunk failed'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    service.registerPlayer(p);
+    await expect(service.handleSuperseded('sid-1', 'Pixel')).resolves.toBeUndefined();
+    expect(resume).toHaveBeenCalled();
+  });
+
   it('flags the session started by "resume here" as a hand-over', async () => {
     const { service, sse } = setup({ confirm: true });
     const { p } = player('sid-1');

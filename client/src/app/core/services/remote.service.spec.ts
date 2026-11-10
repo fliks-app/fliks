@@ -101,6 +101,27 @@ describe('RemoteService observation', () => {
     expect(service.targetState()?.mediaTitle).toBe('A series');
   });
 
+  it('replaces a selection that owned the session across a parked gap', () => {
+    const { service, owner } = setup({ selected: 'tv#1' });
+    owner.set('tv#1');
+    TestBed.tick();
+    owner.set(null);
+    TestBed.tick();
+    owner.set('pc#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBeNull();
+  });
+
+  it('keeps a selection made while another device owned the session', () => {
+    const { service, owner } = setup({ selected: null });
+    owner.set('pc#1');
+    TestBed.tick();
+    service.selectTarget('tv#1');
+    owner.set('pc#2');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBe('tv#1');
+  });
+
   it('keeps a selection that is the session owner', () => {
     const { service, owner } = setup({ selected: 'tv#1' });
     owner.set('tv#1');
