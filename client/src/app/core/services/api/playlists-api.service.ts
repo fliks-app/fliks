@@ -1,8 +1,9 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { Media } from './media.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import type { SmartRules } from './smart-rules';
 
 export type PlaylistRole = 'owner' | 'administrator' | 'editor' | 'viewer';
@@ -111,6 +112,10 @@ export interface AddToPlaylistBody {
 @Injectable({ providedIn: 'root' })
 export class PlaylistsApiService {
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
+  /** M3U import and export are newer than the oldest supported server; the entries that call them hide on an older one. */
+  readonly m3uSupported = computed(() => this.serverVersion.supports(SERVER_SINCE.playlistM3u));
+  readonly previewSupported = computed(() => this.serverVersion.supports(SERVER_SINCE.playlistPreview));
 
   list(opts: CacheRead = {}) {
     const headers = cacheHeaders(opts);

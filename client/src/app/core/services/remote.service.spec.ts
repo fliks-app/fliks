@@ -40,7 +40,7 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
   };
 }
 
-function setup(opts: { selected?: string | null } = {}) {
+function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number } } = {}) {
   const owner = signal<string | null>(null);
   const remoteState = signal<RemoteState | null>(null);
   const sse = {
@@ -58,7 +58,7 @@ function setup(opts: { selected?: string | null } = {}) {
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, session: () => (opts.held ? { owner: { targetId: opts.held.targetId }, item: { mediaFileId: opts.held.mediaFileId } } : null), setLiveSource: vi.fn(), ownerReportAt: () => 0 } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
@@ -864,5 +864,48 @@ describe('RemoteService target actions', () => {
     await done;
     expect(service.targetOffline()).toBe(false);
     expect(service.pendingAction()).toBeNull();
+  });
+
+  const sent = (http: HttpTestingController, action: string) =>
+    http.expectOne((r) => r.url === '/api/remote/tv%231/command' && r.body.action === action);
+
+  it('gives back a refused load even when a later command was sent before the refusal', async () => {
+    const { service, remoteState } = setup();
+    const http = TestBed.inject(HttpTestingController);
+    const load = service.send('tv#1', { action: 'load', mediaFileId: 9 });
+    const pause = service.send('tv#1', { action: 'pause' });
+    sent(http, 'pause').flush({ cmdId: 'c2' });
+    sent(http, 'load').flush({ message: 'x' }, { status: 409, statusText: 'Conflict' });
+    await Promise.all([load, pause]);
+    http.match('/api/remote/targets').forEach((r) => r.flush([]));
+
+    remoteState.set(frame({ mediaFileId: 2 }));
+    service.ingestState();
+    expect(service.targetState()?.mediaFileId).toBe(2);
+  });
+
+  it('leaves the reading to a later load when an earlier one is refused', async () => {
+    const { service, remoteState } = setup();
+    const http = TestBed.inject(HttpTestingController);
+    const first = service.send('tv#1', { action: 'load', mediaFileId: 8 });
+    const second = service.send('tv#1', { action: 'load', mediaFileId: 9 });
+    const [a, b] = http.match((r) => r.url === '/api/remote/tv%231/command');
+    a.flush({ message: 'x' }, { status: 409, statusText: 'Conflict' });
+    b.flush({ cmdId: 'c2' });
+    await Promise.all([first, second]);
+
+    remoteState.set(frame({ mediaFileId: 2 }));
+    service.ingestState();
+    expect(service.targetState()).toBeNull();
+    remoteState.set(frame({ mediaFileId: 9 }));
+    service.ingestState();
+    expect(service.targetState()?.mediaFileId).toBe(9);
+  });
+
+  it('takes a load of the file the account row holds on another target of the same device', () => {
+    const { service } = setup({ held: { targetId: 'tv#tab', mediaFileId: 5 } });
+    service.targets.set([{ ...row(['play', 'resume']), targetId: 'tv#native' }]);
+    expect(service.canLoad('tv#native', 5)).toBe(true);
+    expect(service.canLoad('tv#native', 6)).toBe(false);
   });
 });

@@ -38,6 +38,7 @@ export class SmartPlaylistEditorComponent {
   protected readonly fields = CRITERION_FIELDS;
   protected readonly name = signal('');
   protected readonly rules = signal<SmartRules>(defaultRules());
+  protected readonly previewSupported = this.api.previewSupported;
   protected readonly preview = signal<PreviewState>({ status: 'idle', count: null });
   protected readonly libraries = signal<LibrarySummary[]>([]);
   protected readonly busy = signal(false);
@@ -77,7 +78,7 @@ export class SmartPlaylistEditorComponent {
 
   private setRules(r: SmartRules): void {
     this.rules.set(r);
-    this.previewer.request(r);
+    if (this.api.previewSupported()) this.previewer.request(r);
   }
 
   protected patch(p: Partial<SmartRules>): void {

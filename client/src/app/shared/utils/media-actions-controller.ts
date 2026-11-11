@@ -18,6 +18,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import type { TrackingScope } from '../components/tracking-status-modal/tracking-status-modal';
 
 /** The acquisition actionIds of a level: `media.*` for the work, `group.*`, `item.*` below it. */
@@ -50,6 +51,7 @@ export class MediaActionsController {
   private readonly auth = inject(AuthService);
   private readonly device = inject(DeviceService);
   private readonly tv = inject(TvService);
+  private readonly serverVersion = inject(ServerVersionService);
   private readonly wantsStore = inject(WantsStore);
   private readonly grabs = inject(ReleaseGrabController);
   private readonly tracking = inject(TrackingModalService);
@@ -71,6 +73,7 @@ export class MediaActionsController {
       isTv: this.tv.isTv(),
       isTouch: this.device.isTouch(),
       surface: 'detail',
+      serverSupports: (v) => this.serverVersion.supports(v),
       ...acquisitionWhen(this.acquisition(), this.cfg.base().kind),
       hasAcquisitionProvider: this.pluginUi.providersFor(this.cfg.base().kind, this.cfg.base().level).length > 0,
     };

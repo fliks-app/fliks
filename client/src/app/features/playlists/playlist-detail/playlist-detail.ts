@@ -131,6 +131,7 @@ export class PlaylistDetailComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PlaylistsApiService);
+  protected readonly m3uSupported = this.api.m3uSupported;
   private readonly toast = inject(ToastService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);

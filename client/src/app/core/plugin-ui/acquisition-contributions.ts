@@ -1,11 +1,13 @@
 import type { UiContribution } from '@fliks/plugin-ui';
+import type { WhenPredicate } from './ui-contribution';
 import type { AcquisitionLevel } from '../media-kinds';
+import { SERVER_SINCE } from '../services/server-version.service';
 import { evaluateWhen, type WhenContext } from './when-evaluator';
 
 const PREFIX = { work: 'media', group: 'group', item: 'item' } as const;
 const SLOT = { work: 'media.actions', group: 'media.group.actions', item: 'media.item.actions' } as const;
 
-const ACQUIRE: UiContribution['when'] = ['hasPermission:media.grab', 'hasQualityProfile', 'hasAcquisitionProvider'];
+const ACQUIRE: WhenPredicate[] = ['hasPermission:media.grab', 'hasQualityProfile', 'hasAcquisitionProvider'];
 
 /** Core's "Files" submenu of a level, just above "Advanced": the release search and grab once a provider has a source serving the
  *  kind at that level, and the tracking status of a monitored target. */
@@ -28,7 +30,7 @@ function groupOf(level: AcquisitionLevel): UiContribution {
     action: { kind: 'submenu' },
     children: [
       row('core.search_releases', 10, 'media_detail.search_releases', 'search', 'search-releases', ACQUIRE),
-      row('core.grab_best', 20, 'media_detail.grab_best', 'zap', 'grab-best', ACQUIRE),
+      row('core.grab_best', 20, 'media_detail.grab_best', 'zap', 'grab-best', [...ACQUIRE, `server:${SERVER_SINCE.grabBest}`]),
       // The server tracks the video kinds only (`media/tracking.rs`).
       row('core.tracking', 30, 'tracking.menu_item', 'list-checks', 'open-tracking', ['isMonitored', '!mediaType:book', '!mediaType:comic', '!mediaType:album']),
     ],

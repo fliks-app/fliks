@@ -23,6 +23,7 @@ import { CardAction, CardActionsService } from '../../../core/services/card-acti
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
 import { TvService } from '../../../core/services/tv.service';
+import { ServerVersionService } from '../../../core/services/server-version.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { MediaStartService } from '../../../core/services/media-start.service';
@@ -79,6 +80,7 @@ export class MediaCardComponent {
   private readonly localeDate = new LocaleDatePipe();
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
+  private readonly serverVersion = inject(ServerVersionService);
   private readonly cardActionsService = inject(CardActionsService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly mediaApi = inject(MediaService);
@@ -523,6 +525,7 @@ export class MediaCardComponent {
     isTv: this.tv.isTv(),
     isTouch: this.device.isTouch(),
     surface: 'card',
+    serverSupports: (v) => this.serverVersion.supports(v),
   }));
 
   /** Visibility rules the closed `when` vocabulary can't express (no link/playable/dismissable predicate). */

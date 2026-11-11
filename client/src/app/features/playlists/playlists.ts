@@ -34,6 +34,7 @@ import { SmartPlaylistEditorComponent } from './smart-playlist-editor/smart-play
 })
 export class PlaylistsComponent implements OnInit {
   private readonly api = inject(PlaylistsApiService);
+  protected readonly m3uSupported = this.api.m3uSupported;
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

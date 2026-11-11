@@ -194,6 +194,15 @@ export interface HeartbeatResponse {
   state?: PlaybackState;
 }
 
+/** A `sessionLost` answer concerns the session its beat carried: it resets that session only, never one adopted while the beat was in flight. */
+export function lostCurrentSession(
+  response: HeartbeatResponse | null | undefined,
+  beatSessionId: string | null | undefined,
+  currentSessionId: string | null | undefined,
+): boolean {
+  return !!response?.sessionLost && (beatSessionId ?? null) === (currentSessionId ?? null);
+}
+
 export interface WatchHistoryItem {
   id: number;
   mediaId: number;
