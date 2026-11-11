@@ -5,7 +5,7 @@ use super::{
 };
 use crate::presence::{Live, NowPlaying, live_sessions};
 use crate::{
-    events::{Identity, SseEvent, event::RemoteAction, uuid_v4},
+    events::{COMMAND_TTL_MS, Identity, SseEvent, event::RemoteAction, uuid_v4},
     http::{
         AppError,
         auth::{Authed, SessionAuthed},
@@ -26,7 +26,6 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-const COMMAND_TTL_MS: i64 = 10_000;
 const CODE_TTL_SECS: i64 = 600;
 const MAX_CODES_PER_DEVICE: i64 = 3;
 const CODE_LEN: usize = 6;
@@ -328,7 +327,7 @@ pub async fn command(
     if dto.by_target_id.as_deref() == Some(&target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
-    ensure_supported(&st, owner, &conn, &dto).await?;
+    ensure_supported(&st, a.user.id, owner, &conn, &dto).await?;
     send(&st, &a, &target_id, owner, &conn, dto)
 }
 
@@ -336,6 +335,7 @@ pub async fn command(
 /// stands for a `load` of the file the device's account session holds, whatever its last beat.
 pub(crate) async fn ensure_supported(
     st: &AppState,
+    sender: i32,
     owner: i32,
     conn: &str,
     dto: &Command,
@@ -355,7 +355,7 @@ pub(crate) async fn ensure_supported(
     let name = serde_json::to_value(dto.action).unwrap_or_default();
     let resume = match (dto.action, dto.media_file_id, &target.identity.target_id) {
         (RemoteAction::Load, Some(file), Some(id)) if has("resume") => {
-            st.account_sessions.holds(id, file).await
+            st.account_sessions.holds(&[sender, owner], id, file).await
         }
         _ => false,
     };

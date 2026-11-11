@@ -749,14 +749,21 @@ impl AccountSessions {
         }
     }
 
-    /// Whether an account's row is `file` held by the device of `target`, however long ago it last
-    /// beat: a household device is held by the row of whichever account plays on it.
-    pub async fn holds(&self, target: &str, file: i64) -> bool {
+    /// Whether the device of `target` holds `file`, however long ago it last beat: its newest row
+    /// among `accounts` (the sender and the target's owner, never another account's state) names it;
+    /// a live row outranks a parked one, as parking restamps `updated_at`.
+    pub async fn holds(&self, accounts: &[i32], target: &str, file: i64) -> bool {
         let target = Some(target.to_owned());
-        self.0.lock().await.rows.values().any(|e| {
-            e.row.media_file_id.is_some_and(|f| i64::from(f) == file)
-                && same_device(&e.row.owner.target_id, &target)
-        })
+        self.0
+            .lock()
+            .await
+            .rows
+            .iter()
+            .filter(|(user, e)| {
+                accounts.contains(user) && same_device(&e.row.owner.target_id, &target)
+            })
+            .max_by_key(|(_, e)| (e.row.state != State::Parked, e.row.updated_at))
+            .is_some_and(|(_, e)| e.row.media_file_id.is_some_and(|f| i64::from(f) == file))
     }
 
     /// The row of `user` after the staleness check; `None` when there is none.
