@@ -30,6 +30,7 @@ test('maps properties: summed drops, bits per second, hls bitrate over video-bit
     'hwdec-current': 'vaapi',
     'video-format': 'hevc',
     'cache-speed': '125000',
+    'demuxer-cache-duration': 0.4,
     'current-tracks/video/hls-bitrate': 6_000_000,
     'video-bitrate': 5_000_000,
     'video-params/w': 3840,
@@ -44,11 +45,19 @@ test('maps properties: summed drops, bits per second, hls bitrate over video-bit
   assert.equal(q?.height, null);
 });
 
-test('falls back to video-bitrate, maps a full cache (speed 0) to null', async () => {
+test('falls back to video-bitrate, maps an idle cache (speed 0) to null', async () => {
   const { read } = harness();
-  const q = await read({ 'video-bitrate': 4_000_000, 'cache-speed': 0 });
+  const q = await read({ 'video-bitrate': 4_000_000, 'cache-speed': 0, 'demuxer-cache-duration': 0.2 });
   assert.equal(q?.variantBitrate, 4_000_000);
   assert.equal(q?.bandwidthBps, null);
+});
+
+test('read speed is a bandwidth only while the buffer is starved', async () => {
+  const { read } = harness();
+  const speed = { 'video-bitrate': 4_000_000, 'cache-speed': 125000 };
+  assert.equal((await read({ ...speed, 'demuxer-cache-duration': 30 }))?.bandwidthBps, null);
+  assert.equal((await read(speed))?.bandwidthBps, null);
+  assert.equal((await read({ ...speed, 'demuxer-cache-duration': 0.3 }))?.bandwidthBps, 1_000_000);
 });
 
 test('decoded frames count decoding only: resume, forward seek and backward seek', async () => {

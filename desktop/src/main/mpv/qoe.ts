@@ -31,6 +31,9 @@ class Counter {
   }
 }
 
+/** Below this much buffered media mpv downloads flat out, so its read speed is a throughput. */
+const STARVED_S = 1;
+
 const STATIC_PROPS = ['container-fps', 'hwdec-current', 'video-format', 'video-params/w', 'video-params/h'];
 
 /** Turns mpv's seek-sensitive properties into counters cumulative since the last reset(). */
@@ -92,12 +95,14 @@ export class QoeReader {
     this.dropDec.add(decN);
     this.decoded.add(estN, elapsedS * maxFps);
     const hw = toStr(hwdec);
-    const speedBytes = toNum(speed);
+    const aheadS = toNum(ahead);
+    // With a buffer mpv reads only what playback consumes, which says nothing about the link.
+    const speedBytes = aheadS != null && aheadS < STARVED_S ? toNum(speed) : null;
     const out: DesktopQoe = {
       droppedFrames: voN == null && decN == null ? null : this.dropVo.total + this.dropDec.total,
       decodedFrames: estN == null ? null : this.decoded.total,
       bandwidthBps: speedBytes ? speedBytes * 8 : null,
-      bufferAheadS: toNum(ahead),
+      bufferAheadS: aheadS,
       variantBitrate: toNum(hls) || toNum(bitrate),
       width: toNum(w),
       height: toNum(h),
