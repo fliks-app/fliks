@@ -39,8 +39,10 @@ pub fn spawn(st: &AppState) {
             match rx.recv().await {
                 Ok(Feed::Resync(snaps, _)) => resync(&jobs, &snaps),
                 Ok(Feed::Event(ev)) => {
-                    if matches!(*ev, EngineEvent::SegmentServed { .. })
-                        && segment.0.elapsed() >= SEGMENT_TTL
+                    if matches!(
+                        *ev,
+                        EngineEvent::SegmentServed { .. } | EngineEvent::SegmentAbandoned { .. }
+                    ) && segment.0.elapsed() >= SEGMENT_TTL
                     {
                         segment = (Instant::now(), segment_duration(&st).await);
                     }
@@ -151,6 +153,11 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
                 Some(*waited_ms),
             );
         }
+        EngineEvent::SegmentAbandoned {
+            session_id,
+            waited_ms,
+            ..
+        } => st.qoe.observe_abandoned(session_id, segment_s, *waited_ms),
         _ => {}
     }
 }

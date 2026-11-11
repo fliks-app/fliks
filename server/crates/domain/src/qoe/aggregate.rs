@@ -150,8 +150,9 @@ impl QoeAggregator {
             self.decoder_name.clone_from(&s.decoder_name);
         }
         self.hw_decoder = s.hw_decoder.or(self.hw_decoder);
+        // A reading is stale as soon as a later sample has none: mpv reports it only while starved.
+        self.bandwidth = s.bandwidth_bps;
         if let Some(b) = s.bandwidth_bps {
-            self.bandwidth = Some(b);
             push(&mut self.bandwidths, b, MAX_KEPT);
             self.min_bandwidth = Some(self.min_bandwidth.map_or(b, |m| m.min(b)));
         }
@@ -258,6 +259,16 @@ impl QoeAggregator {
         {
             push(&mut self.speeds, duration_s * 1000.0 / w.max(1.0), MAX_KEPT);
         }
+    }
+
+    /// A segment wait the client cut short: evidence for `server_hit`, not a speed sample.
+    pub fn add_abandoned_wait(&mut self, duration_s: f64, waited_ms: f64, now: f64) {
+        let seg = StallSegment {
+            at: now,
+            segment_duration_s: duration_s,
+            waited_ms: Some(waited_ms),
+        };
+        push(&mut self.segments, seg, MAX_SEGMENTS);
     }
 
     pub fn add_cmcd(&mut self, c: &CmcdSnapshot, now: f64) {
