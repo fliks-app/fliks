@@ -260,6 +260,13 @@ async fn load_without_kind_gets_the_media_kind(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("a", false).await;
     c.register(&a, "d1").await;
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (name) VALUES ('fixture');
+           INSERT INTO library_folders ("libraryId", path) SELECT id, '/fixture' FROM libraries"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
     let media: i32 = sqlx::query_scalar(
         r#"INSERT INTO media (title, type, "libraryId") VALUES ('a', 'album', (SELECT min(id) FROM libraries)) RETURNING id"#,
     )
