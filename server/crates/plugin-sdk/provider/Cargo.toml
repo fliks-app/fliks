@@ -7,6 +7,6 @@ description = "Guest SDK for Fliks provider plugins (the `provider` world of plu
 
 [dependencies]
 fliks-plugin-sdk = { path = ".." }
-wit-bindgen = "=0.62.0"
+wit-bindgen = "=0.63.0"
 # Pinned with the SDK: the world's WASI minor must stay 0.2.12.
 wasip2 = "=1.0.4"
