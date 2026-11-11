@@ -340,10 +340,27 @@ export class AudioPlayerService {
   /** Plays a track queue from `startIndex`, always from 0:00. */
   async playTracks(tracks: readonly MusicTrackRequest[], startIndex = 0, opts?: { shuffle?: boolean }): Promise<void> {
     if (!tracks.length || this.blockedByParty()) return;
+    if (this.remote.isRemoting()) return this.playOnRemote(tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.set(tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.repeat = this._repeat();
     this.syncQueue();
     await this.startMusic(this.mq.current!);
+  }
+
+  /** The selected device plays the queue, in the order this one drew; nothing starts here. */
+  private async playOnRemote(tracks: readonly MusicTrackRequest[], startIndex: number, shuffle: boolean): Promise<void> {
+    const q = new MusicQueue();
+    q.set(tracks, startIndex, shuffle);
+    const first = q.current!;
+    await this.remote.send(this.remote.selectedTargetId()!, {
+      action: 'load',
+      kind: 'album',
+      mediaId: first.mediaId,
+      itemId: first.itemId,
+      queue: { itemIds: q.tracks.map((t) => t.itemId), index: q.index },
+      shuffle,
+      repeat: this._repeat(),
+    });
   }
 
   /** Adds tracks after the current one or at the end; starts them when nothing plays. */
@@ -1344,6 +1361,7 @@ export class AudioPlayerService {
   private async applyRemote(cmd: RemoteCommand): Promise<void> {
     if (!this._track() || this.blockedByParty()) return;
     const music = this._musicMode();
+    const wasPlaying = this._playing();
     switch (cmd.action) {
       case 'play':
         this.resume();
@@ -1386,7 +1404,9 @@ export class AudioPlayerService {
         return;
     }
     this.remote.markApplied(cmd.cmdId);
-    this.beat();
+    // A real play or pause beats on the element's event, carrying this ack; a beat now reports the old state.
+    const flips = cmd.action === 'playpause' || (cmd.action === 'play' && !wasPlaying) || (cmd.action === 'pause' && wasPlaying);
+    if (!flips) this.beat();
   }
 
   private setLevel(level: number, muted: boolean): void {

@@ -400,6 +400,18 @@ describe('RemoteService applyLoad', () => {
     expect(bounceSpy).not.toHaveBeenCalled();
   });
 
+  it('stops controlling another device once it plays the load itself', async () => {
+    const { service } = setup({ selected: 'tv#1' });
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    TestBed.inject(SseService).commands.next(loadCmd());
+
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    expect(service.selectedTargetId()).toBeNull();
+  });
+
   it('remounts a player already on screen', async () => {
     setup();
     const router = TestBed.inject(Router);
