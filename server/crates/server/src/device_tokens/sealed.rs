@@ -14,7 +14,7 @@ pub fn seal(key: &[u8], owner: i32, secret: &str) -> Vec<u8> {
     let aad = owner.to_be_bytes();
     let sealed = ChaCha20Poly1305::new_from_slice(key)
         .expect("32-byte key")
-        .encrypt(Nonce::from_slice(&nonce), Payload { msg, aad: &aad })
+        .encrypt(&Nonce::from(nonce), Payload { msg, aad: &aad })
         .expect("encryption of a short message");
     [nonce.as_slice(), &sealed].concat()
 }
@@ -26,7 +26,7 @@ pub fn open(key: &[u8], owner: i32, blob: &[u8]) -> Option<String> {
     let plain = ChaCha20Poly1305::new_from_slice(key)
         .ok()?
         .decrypt(
-            Nonce::from_slice(nonce),
+            <&Nonce>::try_from(nonce).ok()?,
             Payload {
                 msg: body,
                 aad: &aad,
