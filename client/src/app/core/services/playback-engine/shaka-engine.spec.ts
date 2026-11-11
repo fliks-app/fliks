@@ -205,6 +205,13 @@ describe('ShakaEngine.getQoeSample', () => {
       expect.objectContaining({ cmcd: { enabled: true, useHeaders: false } }),
     );
   });
+
+  it('keeps the segment timestamps instead of realigning them on the playlist', async () => {
+    await initEngine();
+    expect(player.configure).toHaveBeenCalledWith(
+      expect.objectContaining({ manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: true } } }),
+    );
+  });
 });
 
 describe('ShakaEngine.getQoeSample unknowns', () => {

@@ -858,9 +858,11 @@ options.customNamespaces = {
 };
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
-if (CAST_CMCD) {
-  options.playbackConfig.shakaConfig = { cmcd: { enabled: true, useHeaders: false } };
-}
+options.playbackConfig.shakaConfig = {
+  // The engine anchors every tfdt; a playlist-grid realignment opens audio gaps that drift A/V.
+  manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: true } },
+  ...(CAST_CMCD && { cmcd: { enabled: true, useHeaders: false } }),
+};
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 context.start(options);
 console.log('[fliks-cast] context.start called');
