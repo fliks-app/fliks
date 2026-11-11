@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlus, LucideTrash2 } from '@lucide/angular';
@@ -48,14 +48,22 @@ export class SmartPlaylistEditorComponent {
     (s) => this.preview.set(s),
   );
 
+  private readonly isOpen = signal(false);
+
   constructor() {
     inject(DestroyRef).onDestroy(() => this.previewer.cancel());
+    // Follows `previewSupported` too: the server version can resolve after the dialog opened.
+    effect(() => {
+      const r = this.rules();
+      if (this.isOpen() && this.api.previewSupported()) untracked(() => this.previewer.request(r));
+    });
   }
 
   open(): void {
     const p = this.playlist();
     this.name.set('');
-    this.setRules(p?.rules ? structuredClone(p.rules) : defaultRules());
+    this.rules.set(p?.rules ? structuredClone(p.rules) : defaultRules());
+    this.isOpen.set(true);
     this.dialog().nativeElement.showModal();
     void this.librariesApi
       .listMine()
@@ -64,8 +72,12 @@ export class SmartPlaylistEditorComponent {
   }
 
   protected close(): void {
-    this.previewer.cancel();
     this.dialog().nativeElement.close();
+  }
+
+  protected onClosed(): void {
+    this.isOpen.set(false);
+    this.previewer.cancel();
   }
 
   protected valid(): boolean {
@@ -76,13 +88,8 @@ export class SmartPlaylistEditorComponent {
     return criterionValid(c);
   }
 
-  private setRules(r: SmartRules): void {
-    this.rules.set(r);
-    if (this.api.previewSupported()) this.previewer.request(r);
-  }
-
   protected patch(p: Partial<SmartRules>): void {
-    this.setRules({ ...this.rules(), ...p });
+    this.rules.update((r) => ({ ...r, ...p }));
   }
 
   protected setSort(by: SortBy, descending: boolean): void {

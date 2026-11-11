@@ -51,6 +51,15 @@ export function targetCanLoad(target: RemoteTarget | null | undefined, holdsFile
   return targetSupports(target, 'load') || (holdsFile && targetSupports(target, 'resume'));
 }
 
+/** The reading a load or next clears, kept to give back when the target refuses it. */
+interface ReadingSnapshot {
+  reported: RemoteNowPlaying | null;
+  pinned: number | null;
+  stoppedSessionId: string | null;
+  stoppedUntilReport: boolean;
+  observingSince: number;
+}
+
 /** Payload of a command, minus what the server stamps. */
 export type RemoteCommandInput = {
   action: RemoteAction;
@@ -255,13 +264,28 @@ export class RemoteService {
 
   /** A refused command left the target as it was: a load drops its expectation and the listing reseeds the reading; a seek lets go of its pin.
    *  Each acts only while no later command owns that part, and only on the target it was sent to. */
-  private revertRefused(targetId: string, input: RemoteCommandInput, loadSeq: number, pinSeq: number): void {
+  private revertRefused(targetId: string, input: RemoteCommandInput, loadSeq: number, pinSeq: number, before: ReadingSnapshot | null): void {
     if (targetId !== this.observedTargetId()) return;
     if (input.action === 'seek' && pinSeq === this.pinSeq) this.pinnedPosition.set(null);
-    if ((input.action === 'load' || input.action === 'next') && loadSeq === this.loadSeq) {
+    if (before && loadSeq === this.loadSeq) {
       this.expectedMediaFileId = null;
+      this.reportedState.set(before.reported);
+      this.pinnedPosition.set(before.pinned);
+      this.stoppedSessionId = before.stoppedSessionId;
+      this.stoppedUntilReport = before.stoppedUntilReport;
+      this.observingSince = before.observingSince;
       void this.refreshTargets(true);
     }
+  }
+
+  private readingSnapshot(): ReadingSnapshot {
+    return {
+      reported: this.reportedState(),
+      pinned: this.pinnedPosition(),
+      stoppedSessionId: this.stoppedSessionId,
+      stoppedUntilReport: this.stoppedUntilReport,
+      observingSince: this.observingSince,
+    };
   }
 
   /** The selected target left its player. Same treatment as a stop we sent: the
@@ -668,7 +692,9 @@ export class RemoteService {
     if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
-    if (input.action === 'load' || input.action === 'next') {
+    const moves = input.action === 'load' || input.action === 'next';
+    const before = moves ? this.readingSnapshot() : null;
+    if (moves) {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
     const { loadSeq, pinSeq } = this;
@@ -696,7 +722,7 @@ export class RemoteService {
       this.pendingAction.set(null);
       // Refused, not unreachable: the interceptor toasts the reason and the target stays online.
       if (err instanceof HttpErrorResponse && err.status === 409) {
-        this.revertRefused(targetId, input, loadSeq, pinSeq);
+        this.revertRefused(targetId, input, loadSeq, pinSeq, before);
         console.warn('[remote] command refused', input.action, targetId);
         return;
       }
