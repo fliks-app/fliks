@@ -73,7 +73,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   /** The target's own rungs, so a pick names an id it accepts. There is one eco
    *  rung per height, so without the second line the list repeats a label. */
   readonly availableQualities = computed<PlaybackOption[]>(() =>
-    (this.remote.targetState()?.qualities ?? []).map((q) => ({
+    (this.remote.observedCan('quality') ? (this.remote.targetState()?.qualities ?? []) : []).map((q) => ({
       id: q.id,
       label: q.label,
       sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
@@ -82,8 +82,9 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   private readonly audioOptions = signal<CastAudioOption[]>([]);
   private readonly subtitleOptions = signal<PlaybackOption[]>([]);
-  readonly availableAudioTracks = this.audioOptions.asReadonly();
-  readonly availableSubtitles = this.subtitleOptions.asReadonly();
+  /** An undeclared action empties its list: the menu hides rather than offering a pick the server refuses. */
+  readonly availableAudioTracks = computed(() => (this.remote.observedCan('audio') ? this.audioOptions() : []));
+  readonly availableSubtitles = computed(() => (this.remote.observedCan('subtitle') ? this.subtitleOptions() : []));
 
   private tracksLoadedForKey: string | null = null;
 
@@ -189,7 +190,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   selectSubtitleById(id: string | null): Promise<void> {
-    this.selectSubtitle(id === null ? null : (this.availableSubtitles().find((s) => s.id === id) ?? null));
+    this.selectSubtitle(id === null ? null : (this.subtitleOptions().find((s) => s.id === id) ?? null));
     return Promise.resolve();
   }
 
@@ -204,7 +205,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   /** Same range tests the local player applies, against the interpolated
    *  position, so the offer appears and retracts at the same instants. */
-  readonly canSetVolume = computed(() => (this.remote.targetState()?.supportsVolume ?? true) && this.remote.observedCan('volume'));
+  readonly canSetVolume = computed(() => (this.remote.targetState()?.supportsVolume ?? true) && this.remote.observedCan('volume') && this.remote.observedCan('mute'));
 
   /** A remote report carries no markers, so the seekbar shows none. */
   readonly timeline = computed(() => NO_TIMELINE);

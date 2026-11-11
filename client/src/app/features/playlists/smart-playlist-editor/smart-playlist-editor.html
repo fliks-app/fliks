@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" (close)="onClosed()">
   <div class="modal-box max-w-3xl">
     <app-modal-header [title]="(playlist() ? 'playlists.smart_edit' : 'playlists.smart_new') | translate" />
     <div class="flex flex-col gap-4">

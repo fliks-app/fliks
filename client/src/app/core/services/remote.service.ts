@@ -10,7 +10,7 @@ import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
-import { deviceIdOf } from './remote-target-id';
+import { deviceIdOf, sameTarget } from './remote-target-id';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { projectPosition } from '../utils/position-anchor';
@@ -41,9 +41,23 @@ export function targetSupports(target: RemoteTarget | null | undefined, action: 
   return !target?.actions || target.actions.includes(action);
 }
 
+/** The listed face of `id`: the exact row, else the same device's `#native` face or web tab (the server's `continues` rule). */
+export function faceOf(rows: readonly RemoteTarget[], id: string): RemoteTarget | undefined {
+  return rows.find((t) => t.targetId === id) ?? rows.find((t) => sameTarget(t.targetId, id));
+}
+
 /** Whether `target` takes a `load`, as the server decides: `resume` stands for the file the account row says it holds. */
 export function targetCanLoad(target: RemoteTarget | null | undefined, holdsFile: boolean): boolean {
   return targetSupports(target, 'load') || (holdsFile && targetSupports(target, 'resume'));
+}
+
+/** The reading a load or next clears, kept to give back when the target refuses it. */
+interface ReadingSnapshot {
+  reported: RemoteNowPlaying | null;
+  pinned: number | null;
+  stoppedSessionId: string | null;
+  stoppedUntilReport: boolean;
+  observingSince: number;
 }
 
 /** Payload of a command, minus what the server stamps. */
@@ -175,7 +189,7 @@ export class RemoteService {
   readonly observedTarget = computed(() => {
     const id = this.observedTargetId();
     if (!id) return null;
-    return this.targets().find((t) => t.targetId === id) ?? (id === this.selectedTargetId() ? this.selectedRow() : null);
+    return faceOf(this.targets(), id) ?? (id === this.selectedTargetId() ? this.selectedRow() : null);
   });
   /** Whether the observed target takes `action`; reads the listing, so a computed over it follows. */
   observedCan(action: RemoteAction): boolean {
@@ -186,7 +200,7 @@ export class RemoteService {
   canLoad(targetId: string, fileId: number | null | undefined): boolean {
     const held = this.sessionSync.session();
     const holds = !!fileId && !!held?.owner.targetId && deviceIdOf(held.owner.targetId) === deviceIdOf(targetId) && held.item.mediaFileId === fileId;
-    return targetCanLoad(this.targets().find((t) => t.targetId === targetId), holds);
+    return targetCanLoad(faceOf(this.targets(), targetId), holds);
   }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
@@ -250,13 +264,28 @@ export class RemoteService {
 
   /** A refused command left the target as it was: a load drops its expectation and the listing reseeds the reading; a seek lets go of its pin.
    *  Each acts only while no later command owns that part, and only on the target it was sent to. */
-  private revertRefused(targetId: string, input: RemoteCommandInput, loadSeq: number, pinSeq: number): void {
+  private revertRefused(targetId: string, input: RemoteCommandInput, loadSeq: number, pinSeq: number, before: ReadingSnapshot | null): void {
     if (targetId !== this.observedTargetId()) return;
     if (input.action === 'seek' && pinSeq === this.pinSeq) this.pinnedPosition.set(null);
-    if ((input.action === 'load' || input.action === 'next') && loadSeq === this.loadSeq) {
+    if (before && loadSeq === this.loadSeq) {
       this.expectedMediaFileId = null;
+      this.reportedState.set(before.reported);
+      this.pinnedPosition.set(before.pinned);
+      this.stoppedSessionId = before.stoppedSessionId;
+      this.stoppedUntilReport = before.stoppedUntilReport;
+      this.observingSince = before.observingSince;
       void this.refreshTargets(true);
     }
+  }
+
+  private readingSnapshot(): ReadingSnapshot {
+    return {
+      reported: this.reportedState(),
+      pinned: this.pinnedPosition(),
+      stoppedSessionId: this.stoppedSessionId,
+      stoppedUntilReport: this.stoppedUntilReport,
+      observingSince: this.observingSince,
+    };
   }
 
   /** The selected target left its player. Same treatment as a stop we sent: the
@@ -562,7 +591,7 @@ export class RemoteService {
           : rows.filter((r) => !r.ownerUsername || r.targetId === selected),
       );
       const observed = this.observedTargetId();
-      const listed = observed ? rows.find((r) => r.targetId === observed) : undefined;
+      const listed = observed ? faceOf(rows, observed) : undefined;
       if (selected && !listed) {
         this.markOffline(selected);
       } else if (listed) {
@@ -663,7 +692,9 @@ export class RemoteService {
     if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
-    if (input.action === 'load' || input.action === 'next') {
+    const moves = input.action === 'load' || input.action === 'next';
+    const before = moves ? this.readingSnapshot() : null;
+    if (moves) {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
     const { loadSeq, pinSeq } = this;
@@ -691,7 +722,7 @@ export class RemoteService {
       this.pendingAction.set(null);
       // Refused, not unreachable: the interceptor toasts the reason and the target stays online.
       if (err instanceof HttpErrorResponse && err.status === 409) {
-        this.revertRefused(targetId, input, loadSeq, pinSeq);
+        this.revertRefused(targetId, input, loadSeq, pinSeq, before);
         console.warn('[remote] command refused', input.action, targetId);
         return;
       }
