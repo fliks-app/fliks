@@ -1,6 +1,7 @@
 //! Queries on `remote_control_grants` and the `users` columns remote needs (`docs/spec/remote.md` SQL).
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Permissions, Subject};
+use fliks_domain::media::kind::MediaKind;
 use sqlx::PgPool;
 
 pub struct Grant {
@@ -239,4 +240,21 @@ pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<()> {
         .execute(db)
         .await
         .map(drop)
+}
+
+/// The kind of the media a `load` names: its file's media, else `media` itself; `None` when neither exists.
+pub async fn load_kind(
+    db: &PgPool,
+    file: Option<i64>,
+    media: Option<i64>,
+) -> Result<Option<MediaKind>, sqlx::Error> {
+    let row: Option<String> = sqlx::query_scalar(
+        r#"SELECT m."type" FROM media m
+           WHERE m.id = COALESCE((SELECT "mediaId" FROM media_files WHERE id = $1), $2)"#,
+    )
+    .bind(file)
+    .bind(media)
+    .fetch_optional(db)
+    .await?;
+    row.as_deref().map(crate::db::kind).transpose()
 }

@@ -320,10 +320,13 @@ pub async fn command(
     State(st): State<AppState>,
     SessionAuthed(a): SessionAuthed,
     PathParams(target_id): PathParams<String>,
-    ValidJson(dto): ValidJson<Command>,
+    ValidJson(mut dto): ValidJson<Command>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     dto.validate()?;
     let (owner, conn) = authorize_target(&st, &a, &target_id).await?;
+    if dto.action == RemoteAction::Load && dto.kind.is_none() {
+        dto.kind = db::load_kind(&st.db, dto.media_file_id, dto.media_id).await?;
+    }
     if dto.by_target_id.as_deref() == Some(&target_id) {
         return Err(AppError::bad_request("remote.error_self_target"));
     }
