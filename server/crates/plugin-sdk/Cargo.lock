@@ -1324,7 +1324,7 @@ dependencies = [
  "tower",
  "wasip2",
  "wit-bindgen 0.63.0",
- "wit-parser 0.261.0",
+ "wit-parser 0.262.0",
  "wstd",
 ]
 
