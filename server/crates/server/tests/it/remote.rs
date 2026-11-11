@@ -254,3 +254,34 @@ async fn load_command_relays_paused(pool: PgPool) {
         .await;
     assert_eq!(cmds[0]["paused"], true);
 }
+
+#[sqlx::test(migrations = false)]
+async fn load_without_kind_gets_the_media_kind(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("a", false).await;
+    c.register(&a, "d1").await;
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('a', 'album', (SELECT min(id) FROM libraries)) RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let file: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId", "folderId") VALUES ('x', 1, 'q', $1, (SELECT min(id) FROM library_folders)) RETURNING id"#,
+    )
+    .bind(media)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let url = "/api/remote/d1%23native/command";
+    let sent = |body| c.call("POST", url, &a, Some(body));
+    let (s, _) = sent(json!({"action": "load", "mediaFileId": file, "mediaId": media})).await;
+    assert_eq!(s, 202);
+    let (s, _) = sent(json!({"action": "load", "mediaFileId": file, "kind": "movie"})).await;
+    assert_eq!(s, 202);
+    let (_, cmds) = c
+        .call("GET", "/api/remote/commands?targetId=d1%23native", &a, None)
+        .await;
+    assert_eq!(cmds[0]["kind"], "album");
+    assert_eq!(cmds[1]["kind"], "movie");
+}
