@@ -6,7 +6,7 @@ import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.service';
-import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
+import { StreamingApiService, lostCurrentSession, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import type { StemKind } from './api/karaoke.models';
@@ -1033,7 +1033,7 @@ export class CastPlayerService {
       });
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
-      if (response?.sessionLost && !this.reloading()) {
+      if (lostCurrentSession(response, sid, this.liveSessionId()) && !this.reloading()) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
         this.recordRecovery(pos, 'session_lost');
       }

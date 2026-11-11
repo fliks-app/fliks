@@ -10,6 +10,7 @@ import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
+import { deviceIdOf } from './remote-target-id';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { projectPosition } from '../utils/position-anchor';
@@ -180,10 +181,11 @@ export class RemoteService {
   observedCan(action: RemoteAction): boolean {
     return targetSupports(this.observedTarget(), action);
   }
-  /** Whether `targetId` takes a `load` of `fileId`; the one check before any load is sent. */
+  /** Whether `targetId` takes a `load` of `fileId`; the one check before any load is sent.
+   *  The server's `holds` is by device and over every account's row; this reads the own account's only, so a household device's resume is left to the server. */
   canLoad(targetId: string, fileId: number | null | undefined): boolean {
     const held = this.sessionSync.session();
-    const holds = !!fileId && held?.owner.targetId === targetId && held.item.mediaFileId === fileId;
+    const holds = !!fileId && !!held?.owner.targetId && deviceIdOf(held.owner.targetId) === deviceIdOf(targetId) && held.item.mediaFileId === fileId;
     return targetCanLoad(this.targets().find((t) => t.targetId === targetId), holds);
   }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
@@ -212,10 +214,10 @@ export class RemoteService {
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCmdId: string | null = null;
   private coalesceTimers = new Map<RemoteAction, ReturnType<typeof setTimeout>>();
-  /** The reading as it was before a coalesced gesture's first intent, per action. */
-  private coalesceRestores = new Map<RemoteAction, () => void>();
-  /** Counts sends, so a refusal restores only while no newer send has changed the reading. */
-  private sendSeq = 0;
+  /** Bumped when the reading is cleared for a load; a refusal gives back only the reading its own load cleared. */
+  private loadSeq = 0;
+  /** Bumped by every position pin; a refusal unpins only a pin nothing newer replaced. */
+  private pinSeq = 0;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
   /** The target's own report is authoritative; between reports the position is
@@ -237,6 +239,7 @@ export class RemoteService {
 
   /** Drops the target's old state and names the expected file, so neither the previous title nor the old session's farewell heartbeat stands in. */
   noteLoadSent(mediaFileId: number | null): void {
+    this.loadSeq++;
     this.expectedMediaFileId = mediaFileId;
     this.stoppedSessionId = null;
     this.stoppedUntilReport = false;
@@ -245,17 +248,15 @@ export class RemoteService {
     this.observingSince = Date.now();
   }
 
-  /** What a refused load must give back: the target kept playing what it was. */
-  private snapshotReading(): () => void {
-    const { expectedMediaFileId, observingSince } = this;
-    const reported = this.reportedState();
-    const pinned = this.pinnedPosition();
-    return () => {
-      this.expectedMediaFileId = expectedMediaFileId;
-      this.observingSince = observingSince;
-      this.reportedState.set(reported);
-      this.pinnedPosition.set(pinned);
-    };
+  /** A refused command left the target as it was: a load drops its expectation and the listing reseeds the reading; a seek lets go of its pin.
+   *  Each acts only while no later command owns that part, and only on the target it was sent to. */
+  private revertRefused(targetId: string, input: RemoteCommandInput, loadSeq: number, pinSeq: number): void {
+    if (targetId !== this.observedTargetId()) return;
+    if (input.action === 'seek' && pinSeq === this.pinSeq) this.pinnedPosition.set(null);
+    if ((input.action === 'load' || input.action === 'next') && loadSeq === this.loadSeq) {
+      this.expectedMediaFileId = null;
+      void this.refreshTargets(true);
+    }
   }
 
   /** The selected target left its player. Same treatment as a stop we sent: the
@@ -303,6 +304,7 @@ export class RemoteService {
    *  slider stops fighting the reports it triggers. */
   /** Hold a requested position until the target reports one that matches it. */
   private pinPosition(seconds: number): void {
+    this.pinSeq++;
     this.pinnedPosition.set(seconds);
     this.positionPinAt = Date.now();
   }
@@ -635,8 +637,6 @@ export class RemoteService {
   sendCoalesced(targetId: string, input: RemoteCommandInput): void {
     // Hold the position at the gesture, not when the coalesced POST finally
     // goes out, so a drag tracks the thumb instead of trailing it.
-    const restore = this.coalesceRestores.get(input.action) ?? this.snapshotReading();
-    this.coalesceRestores.set(input.action, restore);
     this.notePositionIntent(input);
     const existing = this.coalesceTimers.get(input.action);
     if (existing) clearTimeout(existing);
@@ -644,25 +644,20 @@ export class RemoteService {
       input.action,
       setTimeout(() => {
         this.coalesceTimers.delete(input.action);
-        this.coalesceRestores.delete(input.action);
-        void this.send(targetId, input, restore);
+        void this.send(targetId, input);
       }, DISPATCH_COALESCE_MS),
     );
   }
 
-  /** `before` is the reading to give back on a refusal, taken ahead of any intent the caller already noted. */
-  async send(targetId: string, input: RemoteCommandInput, before: () => void = this.snapshotReading()): Promise<void> {
+  async send(targetId: string, input: RemoteCommandInput): Promise<void> {
     if (input.action === 'load' && !this.canLoad(targetId, input.mediaFileId)) {
       this.toast.error(this.translate.instant('remote.error_unsupported_action'));
       return;
     }
-    const seq = ++this.sendSeq;
-    return this.dispatch(targetId, input, true, () => {
-      if (seq === this.sendSeq) before();
-    });
+    return this.dispatch(targetId, input, true);
   }
 
-  private async dispatch(targetId: string, input: RemoteCommandInput, retry: boolean, restore: () => void): Promise<void> {
+  private async dispatch(targetId: string, input: RemoteCommandInput, retry: boolean): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
     if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
@@ -671,6 +666,7 @@ export class RemoteService {
     if (input.action === 'load' || input.action === 'next') {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
+    const { loadSeq, pinSeq } = this;
     try {
       const res = await firstValueFrom(
         this.http.post<{ cmdId: string }>(`/api/remote/${encodeURIComponent(targetId)}/command`, {
@@ -689,13 +685,13 @@ export class RemoteService {
         // connection id is new: re-resolve once before declaring it gone.
         await this.refreshTargets();
         if (this.targets().some((t) => t.targetId === targetId)) {
-          return this.dispatch(targetId, input, false, restore);
+          return this.dispatch(targetId, input, false);
         }
       }
       this.pendingAction.set(null);
       // Refused, not unreachable: the interceptor toasts the reason and the target stays online.
       if (err instanceof HttpErrorResponse && err.status === 409) {
-        restore();
+        this.revertRefused(targetId, input, loadSeq, pinSeq);
         console.warn('[remote] command refused', input.action, targetId);
         return;
       }

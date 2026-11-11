@@ -9,6 +9,7 @@ const ctx = (over: Partial<WhenContext> = {}): WhenContext => ({
   hasAcquisitionProvider: true,
   isTv: false,
   isTouch: false,
+  serverSupports: () => true,
   ...over,
 });
 
@@ -56,5 +57,10 @@ describe('withCoreAcquisition', () => {
   it('shows no tracking child for an album, which the server does not track', () => {
     const rows = withCoreAcquisition('work', ctx({ isMonitored: true, mediaType: 'album' }), []);
     expect(ids(rows[0].children!)).toEqual(['core.search_releases_work', 'core.grab_best_work']);
+  });
+
+  it('hides grab-best on a server older than the release that added it', () => {
+    const rows = withCoreAcquisition('work', ctx({ serverSupports: () => false }), []);
+    expect(ids(rows[0].children!)).toEqual(['core.search_releases_work']);
   });
 });

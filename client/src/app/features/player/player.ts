@@ -16,7 +16,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
+import { StreamingApiService, PlaybackInfoResponse, lostCurrentSession } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
 import type { PreRollItem } from '@fliks/plugin-ui';
@@ -3905,7 +3905,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.qoe.flush(sessionId);
         // The backend lost our LiveSession (restart, long idle): re-issue playback-info and reload with the
         // fresh sid at the current position before the buffer drains.
-        if (response?.sessionLost) {
+        if (lostCurrentSession(response, sessionId, this.activeSessionId())) {
           void this.recovery.recoverFromLostSession('session_lost');
         }
         if (response?.superseded && sessionId) void this.sessionSync.handleSuperseded(sessionId);

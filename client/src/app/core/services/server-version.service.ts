@@ -28,7 +28,13 @@ export const SERVER_SINCE = {
   downloadProgress: '6.1.0',
   keepalive: '6.1.0',
   recentlyPlayed: '6.1.0',
+  grabBest: '6.1.0',
+  playlistM3u: '6.1.0',
+  playlistPreview: '6.1.0',
 } as const;
+
+/** A failed version read is retried this many times, each after twice the previous delay. */
+const RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 24_000, 48_000];
 
 /** Version of the connected server: an installed app can update before its server, so a feature added
  *  after the oldest supported server is gated with `supports('<release that added it>')`. */
@@ -41,10 +47,15 @@ export class ServerVersionService {
   private readonly web = !Capacitor.isNativePlatform() && !this.device.isTv() && !this.device.isDesktopNative();
   readonly version = signal<string | null>(null);
   private inflight: Promise<void> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private attempt = 0;
 
   private readonly onUser = effect(() => {
     if (this.auth.user()) untracked(() => void this.refresh());
-    else this.version.set(null);
+    else {
+      this.version.set(null);
+      this.stopRetrying();
+    }
   });
 
   refresh(): Promise<void> {
@@ -53,9 +64,31 @@ export class ServerVersionService {
         context: new HttpContext().set(SKIP_ERROR_TOAST, true),
       }),
     ).then(
-      ({ version }) => this.version.set(version),
-      () => this.version.set(null),
+      ({ version }) => {
+        this.version.set(version);
+        this.stopRetrying();
+      },
+      () => {
+        this.version.set(null);
+        this.retryLater();
+      },
     ).finally(() => (this.inflight = null)));
+  }
+
+  /** A server that was unreachable at login would otherwise leave every gate shut until the next login. */
+  private retryLater(): void {
+    const delay = RETRY_DELAYS_MS[this.attempt++];
+    if (delay === undefined || this.retryTimer || !this.auth.user()) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.refresh();
+    }, delay);
+  }
+
+  private stopRetrying(): void {
+    this.attempt = 0;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   supports(since: string): boolean {

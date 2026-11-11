@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { StreamingApiService, PlaybackInfoResponse } from './streaming-api.service';
+import { StreamingApiService, lostCurrentSession, PlaybackInfoResponse } from './streaming-api.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
@@ -239,5 +239,14 @@ describe('StreamingApiService item-named calls', () => {
     const removed = service.deletePlaybackState(5, undefined, 77);
     http.expectOne('/api/playback/media/5/state?itemId=77').flush(null);
     await removed;
+  });
+});
+
+describe('lostCurrentSession', () => {
+  it('resets the session the lost beat carried and no other', () => {
+    expect(lostCurrentSession({ sessionLost: true }, 'a', 'a')).toBe(true);
+    expect(lostCurrentSession({ sessionLost: true }, 'a', 'b')).toBe(false);
+    expect(lostCurrentSession({}, 'a', 'a')).toBe(false);
+    expect(lostCurrentSession(null, undefined, undefined)).toBe(false);
   });
 });

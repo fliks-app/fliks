@@ -30,12 +30,14 @@
           </button>
           <app-music-download-button [tracks]="tracksSource" [itemIds]="trackIds()" [showLabel]="desktop()" [buttonClass]="actionClass()" iconClass="size-4" />
         }
-        <button type="button" [class]="actionClass()" [attr.aria-label]="'playlists.export_m3u' | translate" [title]="'playlists.export_m3u' | translate" (click)="exportM3u()">
-          <svg lucideDownload class="size-4"></svg>
-          @if (desktop()) {
-            {{ 'playlists.export_m3u' | translate }}
-          }
-        </button>
+        @if (m3uSupported()) {
+          <button type="button" [class]="actionClass()" [attr.aria-label]="'playlists.export_m3u' | translate" [title]="'playlists.export_m3u' | translate" (click)="exportM3u()">
+            <svg lucideDownload class="size-4"></svg>
+            @if (desktop()) {
+              {{ 'playlists.export_m3u' | translate }}
+            }
+          </button>
+        }
         @if (partyApi.canCreate()) {
           <button type="button" [class]="actionClass()" [attr.aria-label]="'party.watch_together' | translate" (click)="watchTogether()">
             <svg lucideUserPlus class="size-4"></svg>

@@ -193,25 +193,27 @@
         </label>
       </div>
 
-      <p class="text-sm text-base-content/60 min-h-5" aria-live="polite">
-        @switch (preview().status) {
-          @case ('loading') {
-            <span class="loading loading-spinner loading-xs"></span>
+      @if (previewSupported()) {
+        <p class="text-sm text-base-content/60 min-h-5" aria-live="polite">
+          @switch (preview().status) {
+            @case ('loading') {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            @case ('ready') {
+              {{
+                (preview().count === 1 ? 'playlists.preview_one' : 'playlists.preview_other')
+                  | translate: { count: preview().count }
+              }}
+            }
+            @case ('error') {
+              {{ 'playlists.preview_error' | translate }}
+            }
+            @default {
+              {{ 'playlists.preview_incomplete' | translate }}
+            }
           }
-          @case ('ready') {
-            {{
-              (preview().count === 1 ? 'playlists.preview_one' : 'playlists.preview_other')
-                | translate: { count: preview().count }
-            }}
-          }
-          @case ('error') {
-            {{ 'playlists.preview_error' | translate }}
-          }
-          @default {
-            {{ 'playlists.preview_incomplete' | translate }}
-          }
-        }
-      </p>
+        </p>
+      }
     </div>
     <app-modal-footer>
       <button type="button" class="btn" (click)="close()">{{ 'common.cancel' | translate }}</button>

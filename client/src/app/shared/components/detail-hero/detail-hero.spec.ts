@@ -19,6 +19,7 @@ import { RecommendService } from '../../../core/services/recommend.service';
 import { PartyApiService } from '../../../core/services/api/party-api.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import { TvService } from '../../../core/services/tv.service';
+import { ServerVersionService } from '../../../core/services/server-version.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -146,6 +147,7 @@ async function createFixture(
           user: () => null,
         },
       },
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       { provide: TvService, useValue: { isTv: () => !!media.isTv } },
       { provide: AutoDownloadService, useValue: { enabled: false, seriesKeep: () => null, setSeriesKeep: () => {} } },
       {
