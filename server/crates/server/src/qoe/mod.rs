@@ -432,6 +432,17 @@ impl Qoe {
         });
     }
 
+    /// A segment wait the client cut short, noted on a session that may already have ended.
+    pub fn observe_abandoned(&self, sid: &str, segment_duration_s: f64, waited_ms: f64) {
+        if !self.enabled() {
+            return;
+        }
+        if let Some(t) = self.map().get_mut(sid) {
+            t.agg
+                .add_abandoned_wait(segment_duration_s, waited_ms, now_ms());
+        }
+    }
+
     pub fn live_summary(&self, sid: &str) -> Option<LiveSummary> {
         let map = self.map();
         let t = map.get(sid)?;

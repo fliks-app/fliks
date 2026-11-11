@@ -93,6 +93,25 @@ async fn events_are_stored_with_their_cause_and_capped_at_200(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_stall_over_a_dropped_segment_wait_is_the_servers(pool: PgPool) {
+    let q = qoe(&pool).await;
+    let s = sref("a", Some(1));
+    q.register(&s);
+    q.observe_abandoned("a", 3.0, 15_000.0);
+    let now = super::now_ms();
+    let evs = json!([{"type": "stall", "at": now, "durationMs": 15_000, "bufferAheadS": 0.2,
+                      "bandwidthBps": 3e6, "variantBitrate": 5e6}]);
+    q.record_events(&s, &parse_events(&evs, now, None), Some("p".into()));
+    q.flush("a").await;
+    let data = sqlx::query_scalar!("SELECT data FROM playback_qoe_events LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(data["cause"], "server");
+    assert_eq!(data["causeReason"], "qoe.stall.server_wait");
+}
+
+#[sqlx::test(migrations = false)]
 async fn sessions_of_one_playback_share_a_restated_verdict(pool: PgPool) {
     let q = qoe(&pool).await;
     let (a, b) = (sref("a", Some(1)), sref("b", Some(1)));
