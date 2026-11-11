@@ -2,8 +2,14 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="file" path="fliks-offline" />
+        <exclude domain="file" path="fliks-images" />
+        <exclude domain="file" path="fliks-downloads" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+        <exclude domain="file" path="fliks-offline" />
+        <exclude domain="file" path="fliks-images" />
+        <exclude domain="file" path="fliks-downloads" />
     </device-transfer>
 </data-extraction-rules>

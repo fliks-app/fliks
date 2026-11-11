@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    <exclude domain="file" path="fliks-offline" />
+    <exclude domain="file" path="fliks-images" />
+    <exclude domain="file" path="fliks-downloads" />
 </full-backup-content>
