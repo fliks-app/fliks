@@ -750,7 +750,8 @@ impl AccountSessions {
     }
 
     /// Whether the device of `target` holds `file`, however long ago it last beat: its newest row
-    /// among `accounts` (the sender and the target's owner, never another account's state) names it.
+    /// among `accounts` (the sender and the target's owner, never another account's state) names it;
+    /// a live row outranks a parked one, as parking restamps `updated_at`.
     pub async fn holds(&self, accounts: &[i32], target: &str, file: i64) -> bool {
         let target = Some(target.to_owned());
         self.0
@@ -761,7 +762,7 @@ impl AccountSessions {
             .filter(|(user, e)| {
                 accounts.contains(user) && same_device(&e.row.owner.target_id, &target)
             })
-            .max_by_key(|(_, e)| e.row.updated_at)
+            .max_by_key(|(_, e)| (e.row.state != State::Parked, e.row.updated_at))
             .is_some_and(|(_, e)| e.row.media_file_id.is_some_and(|f| i64::from(f) == file))
     }
 

@@ -440,6 +440,11 @@ impl Hub {
     /// Only the caller's own device (a plain logout); a miss is logged, not an error. Returns what a
     /// polled target had not drained yet.
     pub fn drop_connections_for_target(&self, user: i32, target_id: &str) -> Vec<SseEvent> {
+        self.drop_target(user, target_id, true)
+    }
+
+    /// `drop_connections_for_target`; a release keeps what an earlier one parked for the device.
+    fn drop_target(&self, user: i32, target_id: &str, clear_parked: bool) -> Vec<SseEvent> {
         let mut announces = 0;
         let (mut sse, mut polled) = (0, 0);
         let mut pending = vec![];
@@ -457,7 +462,9 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
-            g.parked.remove(&(user, device_of(target_id).to_owned()));
+            if clear_parked {
+                g.parked.remove(&(user, device_of(target_id).to_owned()));
+            }
             if let Some(p) = g.polled.remove(&(user, format!("polled:{target_id}"))) {
                 polled += 1;
                 pending = p.queue;
@@ -484,7 +491,7 @@ impl Hub {
     /// A native face handing its device back to the web layer: what it had not drained goes to the
     /// device's newest web stream, else waits for the next one until each event's own expiry.
     pub fn release_polled_target(&self, user: i32, target_id: &str) {
-        let pending = self.drop_connections_for_target(user, target_id);
+        let pending = self.drop_target(user, target_id, false);
         if pending.is_empty() {
             return;
         }
