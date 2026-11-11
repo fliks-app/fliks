@@ -655,7 +655,9 @@ final class MusicHost {
                     }
                 } catch (IOException ignored) {
                     // A paused player has no tick: an owed ack retries by itself within its grace.
-                    if (cmd != null && ack.owed(System.currentTimeMillis())) main.postDelayed(() -> beat(exo.isPlaying()), ACK_RETRY_MS);
+                    if (cmd != null && ack.owed(System.currentTimeMillis())) {
+                        main.postDelayed(() -> beat(exo.isPlaying()), ACK_RETRY_MS);
+                    }
                 }
             });
         } catch (JSONException ignored) {
