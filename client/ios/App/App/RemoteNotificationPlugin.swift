@@ -20,6 +20,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private static let pinnedLevel: Float = 0.5
     private static let pausedLimit: TimeInterval = 600
     private static let stopGrace: TimeInterval = 8
+    private static let chainGrace: TimeInterval = 6
 
     private var silence: AVAudioPlayer?
     private var targets: [(command: MPRemoteCommand, token: Any)] = []
@@ -29,6 +30,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     private var restoreVolume: Float?
     private var pinning = false
     private var pausedTimer: Timer?
+    private var clearWork: DispatchWorkItem?
     /// The paused title whose lock screen was released: its reports stay ignored until it plays or changes.
     private var releasedTitle: String?
     /// Set when another app took the session, cleared when iOS says to resume or this phone starts the target (`resume`):
@@ -65,6 +67,8 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve()
                 return
             }
+            self.clearWork?.cancel()
+            self.clearWork = nil
             self.releasedTitle = nil
             self.canSetVolume = canSetVolume
             self.volume = volume
@@ -93,9 +97,16 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func clear(_ call: CAPPluginCall) {
+        // The target drops its session between two episodes: a report within `chainGrace` keeps the lock screen.
         DispatchQueue.main.async {
             self.releasedTitle = nil
-            self.stop()
+            self.clearWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.clearWork = nil
+                self?.stop()
+            }
+            self.clearWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.chainGrace, execute: work)
             call.resolve()
         }
     }
