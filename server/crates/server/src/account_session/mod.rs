@@ -749,9 +749,8 @@ impl AccountSessions {
         }
     }
 
-    /// Whether the device of `target` holds `file`, however long ago it last beat: its newest row
-    /// among `accounts` (the sender and the target's owner, never another account's state) names it;
-    /// a live row outranks a parked one, as parking restamps `updated_at`.
+    /// Whether the device of `target` holds `file`: its newest row among `accounts` (the sender and
+    /// the target's owner) names it; a live row outranks a parked one, parking restamps `updated_at`.
     pub async fn holds(&self, accounts: &[i32], target: &str, file: i64) -> bool {
         let target = Some(target.to_owned());
         self.0

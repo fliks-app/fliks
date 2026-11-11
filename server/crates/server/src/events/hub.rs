@@ -1,6 +1,10 @@
 //! The SSE hub (`docs/spec/events-hub.md`): connection registry, audiences, polled
 //! targets and attribution. Every method locks briefly and never awaits; the household hook runs unlocked.
-use super::{Bus, SseEvent, activity::Activity, event::RawEvent};
+use super::{
+    Bus, SseEvent,
+    activity::Activity,
+    event::{RawEvent, RemoteAction},
+};
 use crate::sync::MutexExt;
 use fliks_domain::js::now_ms;
 use std::{
@@ -16,9 +20,11 @@ const POLLED_TARGET_TTL: Duration = Duration::from_secs(30);
 const SSE_SILENCE: Duration = Duration::from_secs(120);
 /// A remote launch is claimed here and taken by the playback that starts a moment later.
 const ATTRIBUTION_TTL: Duration = Duration::from_secs(60);
-/// How long a `remote.command` lives from its send (its `expiresAt`); other events parked for a
-/// device's next web stream live as long.
+/// How long a `remote.command` lives from its send (its `expiresAt`).
 pub const COMMAND_TTL_MS: i64 = 10_000;
+/// How long a released face's event waits for the device's next web stream: the sender's ack budget,
+/// past which it reports no response and may send again. A `load` waits for its own expiry.
+const PARK_TTL_MS: i64 = 6_000;
 /// Bounds a device that registers and never polls.
 const POLLED_QUEUE_MAX: usize = 20;
 const BUS_CAPACITY: usize = 4096;
@@ -104,8 +110,11 @@ struct Polled {
     last_poll: Instant,
 }
 
-/// An event a released native face had not drained, with the epoch ms it stops being worth sending.
-type Parked = (i64, SseEvent);
+/// An event a released native face had not drained, and the epoch ms it stops being worth sending.
+struct Parked {
+    deadline: i64,
+    event: SseEvent,
+}
 
 struct Claim {
     user: i32,
@@ -440,11 +449,15 @@ impl Hub {
     /// Only the caller's own device (a plain logout); a miss is logged, not an error. Returns what a
     /// polled target had not drained yet.
     pub fn drop_connections_for_target(&self, user: i32, target_id: &str) -> Vec<SseEvent> {
-        self.drop_target(user, target_id, true)
+        let pending = self.drop_target(user, target_id);
+        self.lock()
+            .parked
+            .remove(&(user, device_of(target_id).to_owned()));
+        pending
     }
 
-    /// `drop_connections_for_target`; a release keeps what an earlier one parked for the device.
-    fn drop_target(&self, user: i32, target_id: &str, clear_parked: bool) -> Vec<SseEvent> {
+    /// Closes the target's connections and returns what its polled queue had not drained.
+    fn drop_target(&self, user: i32, target_id: &str) -> Vec<SseEvent> {
         let mut announces = 0;
         let (mut sse, mut polled) = (0, 0);
         let mut pending = vec![];
@@ -461,9 +474,6 @@ impl Hub {
             for id in ids {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
-            }
-            if clear_parked {
-                g.parked.remove(&(user, device_of(target_id).to_owned()));
             }
             if let Some(p) = g.polled.remove(&(user, format!("polled:{target_id}"))) {
                 polled += 1;
@@ -491,7 +501,7 @@ impl Hub {
     /// A native face handing its device back to the web layer: what it had not drained goes to the
     /// device's newest web stream, else waits for the next one until each event's own expiry.
     pub fn release_polled_target(&self, user: i32, target_id: &str) {
-        let pending = self.drop_target(user, target_id, false);
+        let pending = self.drop_target(user, target_id);
         if pending.is_empty() {
             return;
         }
@@ -507,7 +517,10 @@ impl Hub {
                 g.parked
                     .entry((user, device_of(target_id).to_owned()))
                     .or_default()
-                    .extend(pending.into_iter().map(|ev| (event_deadline(&ev, now), ev)));
+                    .extend(pending.into_iter().map(|event| Parked {
+                        deadline: park_deadline(&event, now),
+                        event,
+                    }));
             }
         }
         self.announce_evicted();
@@ -875,7 +888,7 @@ fn take_parked(inner: &mut Inner, key: &(i32, String)) -> Vec<SseEvent> {
         .remove(key)
         .unwrap_or_default()
         .into_iter()
-        .partition(|(deadline, _)| *deadline > now);
+        .partition(|p| p.deadline > now);
     if !late.is_empty() {
         tracing::warn!(
             "Dropped {} pending event(s) of {}: no web stream took over in time",
@@ -883,14 +896,20 @@ fn take_parked(inner: &mut Inner, key: &(i32, String)) -> Vec<SseEvent> {
             key.1
         );
     }
-    live.into_iter().map(|(_, ev)| ev).collect()
+    live.into_iter().map(|p| p.event).collect()
 }
 
-/// A command is worth sending until its own `expiresAt`; anything else lives as long as a command.
-fn event_deadline(ev: &SseEvent, now: i64) -> i64 {
+/// A `load` is worth sending until its own `expiresAt`; any other command or event only until the
+/// sender's ack budget has run out, counted from the send for a command.
+fn park_deadline(ev: &SseEvent, now: i64) -> i64 {
     match ev {
-        SseEvent::RemoteCommand { expires_at, .. } => *expires_at,
-        _ => now + COMMAND_TTL_MS,
+        SseEvent::RemoteCommand {
+            action: RemoteAction::Load,
+            expires_at,
+            ..
+        } => *expires_at,
+        SseEvent::RemoteCommand { expires_at, .. } => *expires_at - COMMAND_TTL_MS + PARK_TTL_MS,
+        _ => now + PARK_TTL_MS,
     }
 }
 
@@ -898,7 +917,7 @@ fn event_deadline(ev: &SseEvent, now: i64) -> i64 {
 fn sweep_parked(inner: &mut Inner) {
     let now = now_ms();
     inner.parked.retain(|_, events| {
-        events.retain(|(deadline, _)| *deadline > now);
+        events.retain(|p| p.deadline > now);
         !events.is_empty()
     });
 }
@@ -1303,8 +1322,8 @@ mod tests {
         let hub = Hub::new();
         queued_face(&hub);
         hub.release_polled_target(1, "dev#native");
-        for (deadline, _) in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
-            *deadline = now_ms() - 1;
+        for p in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
+            p.deadline = now_ms() - 1;
         }
         let mut tab = hub.connect(1, at("dev#tab"));
         assert_eq!(got(&mut tab), ["sse.connected"]);
@@ -1320,7 +1339,7 @@ mod tests {
             cmd_id: "c".into(),
             expires_at,
             by_target_id: None,
-            action: crate::events::event::RemoteAction::Play,
+            action: RemoteAction::Play,
             media_id: None,
             media_type: None,
             media_file_id: None,
@@ -1346,6 +1365,41 @@ mod tests {
     }
 
     #[test]
+    fn only_a_parked_load_outlives_the_ack_budget() {
+        let at = now_ms();
+        let cmd = |action| SseEvent::RemoteCommand {
+            cmd_id: "c".into(),
+            expires_at: at + COMMAND_TTL_MS,
+            by_target_id: None,
+            action,
+            media_id: None,
+            media_type: None,
+            media_file_id: None,
+            episode_id: None,
+            item_id: None,
+            position_seconds: None,
+            level: None,
+            muted: None,
+            track_id: None,
+            subtitle_id: None,
+            quality_id: None,
+            paused: None,
+            queue: None,
+            shuffle: None,
+            repeat: None,
+            kind: None,
+        };
+        assert_eq!(
+            park_deadline(&cmd(RemoteAction::Load), at),
+            at + COMMAND_TTL_MS
+        );
+        assert_eq!(
+            park_deadline(&cmd(RemoteAction::Next), at),
+            at + PARK_TTL_MS
+        );
+    }
+
+    #[test]
     fn a_second_release_adds_to_the_parked_events() {
         let hub = Hub::new();
         queued_face(&hub);
@@ -1364,8 +1418,8 @@ mod tests {
         let hub = Hub::new();
         queued_face(&hub);
         hub.release_polled_target(1, "dev#native");
-        for (deadline, _) in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
-            *deadline = now_ms() - 1;
+        for p in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
+            p.deadline = now_ms() - 1;
         }
         let _other = hub.connect(2, at("elsewhere#tab"));
         assert!(hub.lock().parked.is_empty());
