@@ -133,6 +133,33 @@ describe('AudioPlayerService on the native player', () => {
     expect(audio.position()).toBe(0);
   });
 
+  it('keeps the session of the native track it adopted when a beat of the previous one is answered lost', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    let answer!: (r: { sessionLost: boolean }) => void;
+    updatePlaybackState.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    emit('track', { index: 1, itemId: 2, mediaFileId: 20, sessionId: 's2' });
+    answer({ sessionLost: true });
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalled());
+    await Promise.resolve();
+    emit('state', { playing: false, playWhenReady: false, buffering: false, ready: true, ended: false });
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, sessionId: 's2' }));
+  });
+
+  it('drops the session of a beat the server answers lost', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    updatePlaybackState.mockResolvedValueOnce({ sessionLost: true });
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalled());
+    await Promise.resolve();
+    emit('state', { playing: false, playWhenReady: false, buffering: false, ready: true, ended: false });
+    expect(updatePlaybackState.mock.lastCall?.[1].sessionId).toBeUndefined();
+  });
+
   it('skips and seeks through the native player', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);

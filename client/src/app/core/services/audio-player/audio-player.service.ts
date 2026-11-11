@@ -1485,7 +1485,7 @@ export class AudioPlayerService {
     this.streaming
       .updatePlaybackState(b.mediaId, b.payload)
       .then((r) => {
-        if (r?.sessionLost) this.sessionId = undefined;
+        if (r?.sessionLost && this.sessionId === b.payload.sessionId) this.sessionId = undefined;
         if (r?.superseded && b.payload.sessionId) void this.sessionSync.handleSuperseded(b.payload.sessionId);
         if (!music) this.sync.record(saved);
       })
