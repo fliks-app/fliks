@@ -13,6 +13,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -1249,7 +1250,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // The server's resume point (another device may have advanced it) wins when it answers; else this device's last.
       if (startTime == null && this.isOfflinePlayback && this.mediaId && this.network.isOnline()) {
-        const st = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null);
+        // A refusal (4xx) fails the launch onto the error card; an unreachable server just skips the server resume point.
+        const st = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId, undefined, { silent: true }).catch((e) => {
+          if (e instanceof HttpErrorResponse && e.status >= 400 && e.status < 500) throw e;
+          return null;
+        });
         if (st && !st.completed && st.positionSeconds > 10) startTime = st.positionSeconds;
       }
       if (startTime == null && this.isOfflinePlayback && this.mediaId) {

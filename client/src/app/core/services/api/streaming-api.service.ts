@@ -630,14 +630,16 @@ export class StreamingApiService {
     );
   }
 
-  getPlaybackState(mediaId: number, episodeId?: number, itemId?: number) {
+  getPlaybackState(mediaId: number, episodeId?: number, itemId?: number, opts?: { silent?: boolean }) {
     const params = new URLSearchParams();
     if (episodeId) params.set('episodeId', String(episodeId));
     if (itemId) params.set('itemId', String(itemId));
     const q = params.toString();
     const query = q ? `?${q}` : '';
     return firstValueFrom(
-      this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${query}`),
+      this.http.get<PlaybackState | null>(`/api/playback/media/${mediaId}/state${query}`, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts?.silent),
+      }),
     );
   }
 
