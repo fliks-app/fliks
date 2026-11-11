@@ -1150,7 +1150,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1322,7 +1322,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower",
- "wasip2",
+ "wasip2 2.0.1+wasi-0.2.12",
  "wit-bindgen 0.63.0",
  "wit-parser 0.262.0",
  "wstd",
@@ -1333,7 +1333,7 @@ name = "fliks-plugin-sdk-provider"
 version = "0.1.0"
 dependencies = [
  "fliks-plugin-sdk",
- "wasip2",
+ "wasip2 2.0.1+wasi-0.2.12",
  "wit-bindgen 0.63.0",
 ]
 
@@ -1601,7 +1601,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 5.3.0",
- "wasip2",
+ "wasip2 1.0.4+wasi-0.2.12",
 ]
 
 [[package]]
@@ -2957,7 +2957,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3267,7 +3267,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4307,7 +4307,7 @@ version = "0.14.7+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "883478de20367e224c0090af9cf5f9fa85bed63a95c1abf3afc5c083ebc06e8c"
 dependencies = [
- "wasip2",
+ "wasip2 1.0.4+wasi-0.2.12",
 ]
 
 [[package]]
@@ -4317,6 +4317,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
 dependencies = [
  "wit-bindgen 0.57.1",
+]
+
+[[package]]
+name = "wasip2"
+version = "2.0.1+wasi-0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89aafd4b69fb41a64cfd5d7f214cde92ab422ec4d9bcd55fcc816d3f5f49bbf3"
+dependencies = [
+ "wit-bindgen 0.62.0",
 ]
 
 [[package]]
@@ -4778,7 +4787,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4943,6 +4952,15 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen"
+version = "0.62.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53cb4b5556c3a791e86838ea287782bdafa704d55b0e68b5b81a3a16b9ea5f4b"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
+name = "wit-bindgen"
 version = "0.63.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b85a987ab61d365382d25c7d47e26edd48941b3bf6e3fbf76eff918bc71dab06"
@@ -5092,7 +5110,7 @@ dependencies = [
  "itoa",
  "pin-project-lite",
  "slab",
- "wasip2",
+ "wasip2 1.0.4+wasi-0.2.12",
  "wstd-macro",
 ]
 

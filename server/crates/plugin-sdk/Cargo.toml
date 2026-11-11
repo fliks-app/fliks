@@ -19,7 +19,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fliks-plugin-route = { path = "../plugin-route" }
 # Pinned: wasip2's WASI minor must stay the world's (0.2.12), or the component imports drift.
-wasip2 = "=1.0.4"
+wasip2 = "=2.0.1"
 wstd = { version = "=0.6.8", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 
