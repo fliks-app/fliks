@@ -500,6 +500,7 @@ export class RemoteService {
     if (loader) {
       this.lastAppliedCmdId.set(cmd.cmdId);
       if (overPlayer) await this.router.navigateByUrl('/', { replaceUrl: true });
+      this.releaseSelection();
       return loader(cmd);
     }
     if (!cmd.mediaFileId) {
@@ -512,11 +513,17 @@ export class RemoteService {
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
     if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
+    this.releaseSelection();
     await this.router.navigate(['/watch', cmd.mediaFileId], {
       queryParams,
       replaceUrl: overPlayer,
       state: { snapshot: snapshotFromWire(cmd) },
     });
+  }
+
+  /** The device plays the load itself, so it stops controlling another: a player over a selection forwards the load back. */
+  private releaseSelection(): void {
+    if (this.selectedTargetId()) this.selectTarget(null);
   }
 
   /** Never over a player: a controller browsing while the target plays must

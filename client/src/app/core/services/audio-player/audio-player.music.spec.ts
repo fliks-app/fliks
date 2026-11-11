@@ -12,7 +12,7 @@ import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
-import { RemoteService } from '../remote.service';
+import { RemoteService, type RemoteCommandInput } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
 import { Subject } from 'rxjs';
@@ -54,6 +54,8 @@ describe('AudioPlayerService music mode', () => {
   const resumers: Record<string, (s: unknown, at: number) => Promise<void>> = {};
   let validated = new Subject<RemoteCommand>();
   const markApplied = vi.fn();
+  const send = vi.fn(async (_id: string, _input: RemoteCommandInput) => undefined);
+  let remoting = false;
   const trackRequests = vi.fn(async (ids: readonly number[]) => ids.map((i) => track(i)));
   const cmd = (action: RemoteCommand['action'], extra: Partial<RemoteCommand> = {}): RemoteCommand => ({
     type: 'remote.command', cmdId: 'c1', expiresAt: Date.now() + 10_000, byTargetId: null, action, ...extra,
@@ -64,6 +66,8 @@ describe('AudioPlayerService music mode', () => {
     localStorage.clear();
     validated = new Subject<RemoteCommand>();
     markApplied.mockClear();
+    send.mockClear();
+    remoting = false;
     trackRequests.mockClear();
     cast.isConnected.set(false);
     castTrack.mockReset();
@@ -83,7 +87,7 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), isRemoting: () => remoting, selectedTargetId: () => 'tv#1', send, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
@@ -400,6 +404,39 @@ describe('AudioPlayerService music mode', () => {
       validated.next(cmd('shuffle', { shuffle: true }));
       await vi.waitFor(() => expect([audio.repeat(), audio.shuffle()]).toEqual(['one', true]));
       expect(markApplied).toHaveBeenCalledWith('c2');
+    });
+
+    it('beats once on a pause, from the element event that carries the new state', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      els(audio)[0].dispatchEvent(new Event('play'));
+      updatePlaybackState.mockClear();
+      validated.next(cmd('pause'));
+      await vi.waitFor(() => expect(markApplied).toHaveBeenCalledWith('c1'));
+      expect(updatePlaybackState).not.toHaveBeenCalled();
+      els(audio)[0].dispatchEvent(new Event('pause'));
+      expect(updatePlaybackState).toHaveBeenCalledTimes(1);
+      expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ state: 'paused' }));
+    });
+
+    it('beats at once on a pause that changes nothing, so the controller still gets its ack', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      updatePlaybackState.mockClear();
+      validated.next(cmd('pause'));
+      await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalledTimes(1));
+    });
+
+    it('sends a play to the selected device, in the shuffled order, and starts nothing here', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      remoting = true;
+      await audio.playTracks([track(1), track(2), track(3)], 1, { shuffle: true });
+      expect(send).toHaveBeenCalledWith('tv#1', expect.objectContaining({
+        action: 'load', kind: 'album', itemId: 2, shuffle: true, queue: expect.objectContaining({ index: 0 }),
+      }));
+      expect(send.mock.calls[0][1].queue?.itemIds.slice().sort()).toEqual([1, 2, 3]);
+      expect(getItemPlaybackInfo).not.toHaveBeenCalled();
+      expect(audio.active()).toBe(false);
     });
 
     it('ignores commands while nothing plays', async () => {
