@@ -698,10 +698,11 @@ async fn a_row_is_held_by_its_device_until_another_replaces_it(pool: PgPool) {
     let mut b = beat(u, "s1", "dev#native", i);
     b.file = Some(7);
     s.beat(&st, b).await;
-    assert!(s.holds("dev#native", 7).await);
-    assert!(s.holds("dev#tab", 7).await);
-    assert!(!s.holds("dev#native", 8).await);
-    assert!(!s.holds("other#native", 7).await);
+    assert!(s.holds(&[u], "dev#native", 7).await);
+    assert!(s.holds(&[u], "dev#tab", 7).await);
+    assert!(!s.holds(&[u], "dev#native", 8).await);
+    assert!(!s.holds(&[u], "other#native", 7).await);
+    assert!(!s.holds(&[u + 1], "dev#native", 7).await);
 }
 
 #[sqlx::test(migrations = false)]
@@ -716,5 +717,24 @@ async fn a_household_device_is_held_by_the_row_of_the_account_playing_on_it(pool
     beat_b.file = Some(7);
     st.account_sessions.beat(&st, beat_b).await;
     assert!(row(&st, a).await.is_none());
-    assert!(st.account_sessions.holds("dev#tab", 7).await);
+    assert!(st.account_sessions.holds(&[a, b], "dev#tab", 7).await);
+    assert!(!st.account_sessions.holds(&[a], "dev#tab", 7).await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_device_is_held_by_its_newest_row_only(pool: PgPool) {
+    let st = state(&pool).await;
+    let (a, b) = (
+        user(&pool, "a", true, None).await,
+        user(&pool, "b", true, None).await,
+    );
+    let i = item(&pool).await;
+    let mut old = beat(b, "s1", "dev#native", i);
+    old.file = Some(7);
+    st.account_sessions.beat(&st, old).await;
+    let mut new = beat(a, "s2", "dev#native", i);
+    new.file = Some(8);
+    st.account_sessions.beat(&st, new).await;
+    assert!(st.account_sessions.holds(&[a, b], "dev#native", 8).await);
+    assert!(!st.account_sessions.holds(&[a, b], "dev#native", 7).await);
 }

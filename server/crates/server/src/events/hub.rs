@@ -16,8 +16,9 @@ const POLLED_TARGET_TTL: Duration = Duration::from_secs(30);
 const SSE_SILENCE: Duration = Duration::from_secs(120);
 /// A remote launch is claimed here and taken by the playback that starts a moment later.
 const ATTRIBUTION_TTL: Duration = Duration::from_secs(60);
-/// How long a released native face's commands wait for the device's web stream to reconnect.
-const HANDOVER_TTL: Duration = Duration::from_secs(15);
+/// How long a `remote.command` lives from its send (its `expiresAt`); other events parked for a
+/// device's next web stream live as long.
+pub const COMMAND_TTL_MS: i64 = 10_000;
 /// Bounds a device that registers and never polls.
 const POLLED_QUEUE_MAX: usize = 20;
 const BUS_CAPACITY: usize = 4096;
@@ -103,11 +104,8 @@ struct Polled {
     last_poll: Instant,
 }
 
-/// Commands a released native face had not drained, waiting for its device's next web stream.
-struct Parked {
-    events: Vec<SseEvent>,
-    at: Instant,
-}
+/// An event a released native face had not drained, with the epoch ms it stops being worth sending.
+type Parked = (i64, SseEvent);
 
 struct Claim {
     user: i32,
@@ -120,7 +118,8 @@ struct Inner {
     conns: HashMap<String, Conn>,
     /// Keyed by owner and `polled:<targetId>`: another account cannot take a device over.
     polled: HashMap<(i32, String), Polled>,
-    parked: HashMap<(i32, String), Parked>,
+    /// What released native faces left, per owner and device, for the device's next web stream.
+    parked: HashMap<(i32, String), Vec<Parked>>,
     claims: HashMap<String, Claim>,
     seq: u64,
     /// Owners of targets evicted for a full queue, announced to their household once unlocked.
@@ -362,6 +361,7 @@ impl Hub {
                         silence_announced: false,
                     },
                 );
+                sweep_parked(&mut g);
                 for ev in handover.map_or_else(Vec::new, |k| take_parked(&mut g, &k)) {
                     self.dispatch(&mut g, Aud::Conn(&id), Out::sse(ev));
                 }
@@ -482,47 +482,28 @@ impl Hub {
     }
 
     /// A native face handing its device back to the web layer: what it had not drained goes to the
-    /// device's newest web stream, else waits `HANDOVER_TTL` for the next one.
+    /// device's newest web stream, else waits for the next one until each event's own expiry.
     pub fn release_polled_target(&self, user: i32, target_id: &str) {
         let pending = self.drop_connections_for_target(user, target_id);
         if pending.is_empty() {
             return;
         }
-        let Some(conn) = self.newest_web_stream(user, target_id) else {
+        {
             let mut g = self.lock();
-            let now = Instant::now();
-            g.parked
-                .retain(|_, p| now.saturating_duration_since(p.at) <= HANDOVER_TTL);
-            g.parked.insert(
-                (user, device_of(target_id).to_owned()),
-                Parked {
-                    events: pending,
-                    at: now,
-                },
-            );
-            return;
-        };
-        for ev in pending {
-            self.emit_to_connection(user, &conn, ev);
+            if let Some(conn) = newest_web_stream(&g, user, target_id) {
+                for ev in pending {
+                    self.dispatch(&mut g, Aud::Conn(&conn), Out::sse(ev));
+                }
+            } else {
+                sweep_parked(&mut g);
+                let now = now_ms();
+                g.parked
+                    .entry((user, device_of(target_id).to_owned()))
+                    .or_default()
+                    .extend(pending.into_iter().map(|ev| (event_deadline(&ev, now), ev)));
+            }
         }
-    }
-
-    /// The newest live web stream of the device of `target_id`, else the newest silent one: a frozen
-    /// WebView resumes its keepalive once foregrounded, and what it is sent waits in its queue.
-    fn newest_web_stream(&self, user: i32, target_id: &str) -> Option<String> {
-        let device = device_of(target_id);
-        let now = Instant::now();
-        let g = self.lock();
-        g.conns
-            .iter()
-            .filter(|(_, c)| {
-                c.user == user
-                    && c.identity
-                        .target()
-                        .is_some_and(|t| device_of(t) == device && !t.ends_with("#party"))
-            })
-            .max_by_key(|(_, c)| (!c.silent(now), c.seq))
-            .map(|(id, _)| id.clone())
+        self.announce_evicted();
     }
 
     pub fn has_connection(&self, connection_id: &str) -> bool {
@@ -879,20 +860,58 @@ fn device_of(target_id: &str) -> &str {
     target_id.split('#').next().unwrap_or_default()
 }
 
-/// What a released face left for this device, unless it waited past `HANDOVER_TTL`.
+/// What a released face left for this device that has not expired yet.
 fn take_parked(inner: &mut Inner, key: &(i32, String)) -> Vec<SseEvent> {
-    let Some(p) = inner.parked.remove(key) else {
-        return vec![];
-    };
-    if p.at.elapsed() > HANDOVER_TTL {
+    let now = now_ms();
+    let (live, late): (Vec<_>, Vec<_>) = inner
+        .parked
+        .remove(key)
+        .unwrap_or_default()
+        .into_iter()
+        .partition(|(deadline, _)| *deadline > now);
+    if !late.is_empty() {
         tracing::warn!(
             "Dropped {} pending event(s) of {}: no web stream took over in time",
-            p.events.len(),
+            late.len(),
             key.1
         );
-        return vec![];
     }
-    p.events
+    live.into_iter().map(|(_, ev)| ev).collect()
+}
+
+/// A command is worth sending until its own `expiresAt`; anything else lives as long as a command.
+fn event_deadline(ev: &SseEvent, now: i64) -> i64 {
+    match ev {
+        SseEvent::RemoteCommand { expires_at, .. } => *expires_at,
+        _ => now + COMMAND_TTL_MS,
+    }
+}
+
+/// Parked events past their deadline are dropped, so a device that never reconnects leaves nothing.
+fn sweep_parked(inner: &mut Inner) {
+    let now = now_ms();
+    inner.parked.retain(|_, events| {
+        events.retain(|(deadline, _)| *deadline > now);
+        !events.is_empty()
+    });
+}
+
+/// The newest live web stream of the device of `target_id`, else the newest silent one: a frozen
+/// WebView resumes its keepalive once foregrounded, and what it is sent waits in its queue.
+fn newest_web_stream(inner: &Inner, user: i32, target_id: &str) -> Option<String> {
+    let device = device_of(target_id);
+    let now = Instant::now();
+    inner
+        .conns
+        .iter()
+        .filter(|(_, c)| {
+            c.user == user
+                && c.identity
+                    .target()
+                    .is_some_and(|t| device_of(t) == device && !t.ends_with("#party"))
+        })
+        .max_by_key(|(_, c)| (!c.silent(now), c.seq))
+        .map(|(id, _)| id.clone())
 }
 
 fn name(ev: &SseEvent) -> String {
@@ -1273,18 +1292,75 @@ mod tests {
     }
 
     #[test]
-    fn parked_commands_older_than_the_ttl_are_dropped() {
+    fn a_parked_event_is_dropped_once_its_own_deadline_passed() {
         let hub = Hub::new();
         queued_face(&hub);
         hub.release_polled_target(1, "dev#native");
-        let late = Instant::now().checked_sub(HANDOVER_TTL + Duration::from_secs(1));
-        hub.lock()
-            .parked
-            .get_mut(&(1, "dev".to_owned()))
-            .unwrap()
-            .at = late.unwrap();
+        for (deadline, _) in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
+            *deadline = now_ms() - 1;
+        }
         let mut tab = hub.connect(1, at("dev#tab"));
         assert_eq!(got(&mut tab), ["sse.connected"]);
+        assert!(hub.lock().parked.is_empty());
+    }
+
+    #[test]
+    fn a_parked_command_lives_until_its_own_expiry() {
+        let hub = Hub::new();
+        hub.register_polled_target(1, at("dev#native"), None);
+        let face = hub.resolve_target(1, "dev#native").unwrap();
+        let cmd = |expires_at| SseEvent::RemoteCommand {
+            cmd_id: "c".into(),
+            expires_at,
+            by_target_id: None,
+            action: crate::events::event::RemoteAction::Play,
+            media_id: None,
+            media_type: None,
+            media_file_id: None,
+            episode_id: None,
+            item_id: None,
+            position_seconds: None,
+            level: None,
+            muted: None,
+            track_id: None,
+            subtitle_id: None,
+            quality_id: None,
+            paused: None,
+            queue: None,
+            shuffle: None,
+            repeat: None,
+            kind: None,
+        };
+        assert!(hub.emit_to_connection(1, &face, cmd(now_ms() + 60_000)));
+        assert!(hub.emit_to_connection(1, &face, cmd(now_ms() - 1)));
+        hub.release_polled_target(1, "dev#native");
+        let mut tab = hub.connect(1, at("dev#tab"));
+        assert_eq!(got(&mut tab), ["sse.connected", "remote.command"]);
+    }
+
+    #[test]
+    fn a_second_release_adds_to_the_parked_events() {
+        let hub = Hub::new();
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        let mut tab = hub.connect(1, at("dev#tab"));
+        assert_eq!(
+            got(&mut tab),
+            ["sse.connected", "queue.updated", "queue.updated"]
+        );
+    }
+
+    #[test]
+    fn a_device_that_never_reconnects_leaves_nothing_parked() {
+        let hub = Hub::new();
+        queued_face(&hub);
+        hub.release_polled_target(1, "dev#native");
+        for (deadline, _) in hub.lock().parked.get_mut(&(1, "dev".to_owned())).unwrap() {
+            *deadline = now_ms() - 1;
+        }
+        let _other = hub.connect(2, at("elsewhere#tab"));
         assert!(hub.lock().parked.is_empty());
     }
 
