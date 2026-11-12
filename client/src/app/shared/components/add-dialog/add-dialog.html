@@ -97,7 +97,7 @@
           </label>
         }
         <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-        @if (isVideo() && choices().quality.length && !qualityLocked()) {
+        @if (isVideo() && choices().quality.length > 1 && !qualityLocked()) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="qualityId()" (ngModelChange)="qualityId.set(+$event)">
@@ -107,7 +107,7 @@
             </select>
           </label>
         }
-        @if (isVideo() && choices().language.length && !locked()) {
+        @if (isVideo() && choices().language.length > 1 && !locked()) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="languageId()" (ngModelChange)="languageId.set(+$event)">
@@ -117,7 +117,7 @@
             </select>
           </label>
         }
-        @if (kind() === 'album' && choices().wantQuality.length) {
+        @if (kind() === 'album' && choices().wantQuality.length > 1) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="audioQualityId()" (ngModelChange)="audioQualityId.set(+$event)">
