@@ -83,6 +83,8 @@ const POSTER_ROUTES = new Set<string | undefined>([
   'add/movie/:tmdbId',
   'add/tv/:tmdbId',
   'parties/:id',
+  'artists/:id',
+  'composers/:id',
   'plugins/:pluginId',
 ]);
 

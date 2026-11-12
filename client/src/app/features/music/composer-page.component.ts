@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal, untracked } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucidePlay } from '@lucide/angular';
+import { LucideChevronLeft, LucidePlay } from '@lucide/angular';
+import { NavbarService } from '../../core/services/navbar.service';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
@@ -11,11 +12,12 @@ import { PersonsApiService, type Person } from '../../core/services/api/persons-
 import type { ComposerWork, WorkRecording } from '../../core/services/api/music.models';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { TrackLineComponent } from './track-line.component';
+import type { HandedPerson } from './artist-page.component';
 
 /** A composer: the works, and per work the recordings in the library (fetched when the work opens). */
 @Component({
   selector: 'app-composer-page',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucidePlay],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucidePlay, LucideChevronLeft],
   templateUrl: './composer-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -23,11 +25,20 @@ export class ComposerPageComponent {
   private readonly api = inject(MusicApiService);
   private readonly persons = inject(PersonsApiService);
   private readonly player = inject(AudioPlayerService);
+  private readonly navbar = inject(NavbarService);
+  protected readonly skeletonRows = Array.from({ length: 6 }, (_, i) => i);
   protected readonly id = toSignal(inject(ActivatedRoute).paramMap.pipe(map((p) => Number(p.get('id')))), { initialValue: 0 });
   protected readonly works = signal<ComposerWork[]>([]);
   protected readonly loading = signal(true);
   protected readonly recordings = signal<Record<number, WorkRecording[]>>({});
   protected readonly person = signal<Person | null>(null);
+  private readonly handed: HandedPerson | null =
+    (inject(Router).getCurrentNavigation()?.extras.state ?? history.state)?.person ?? null;
+  /** The loaded person, else what the card handed over so the header is there when the transition captures. */
+  protected readonly head = computed(() => {
+    const h = this.handed;
+    return this.person() ?? (h?.id === this.id() ? { name: h.name, avatarUrl: h.avatarUrl, biography: null } : null);
+  });
 
   constructor() {
     effect(() => {
@@ -49,6 +60,10 @@ export class ComposerPageComponent {
     } finally {
       if (id === this.id()) this.loading.set(false);
     }
+  }
+
+  protected goBack(): void {
+    this.navbar.goBack(['/']);
   }
 
   protected async open(workId: number, opened: boolean): Promise<void> {

@@ -1,6 +1,6 @@
-<a [routerLink]="link()" [queryParams]="queryParams()" class="flex flex-col items-center gap-2 group cursor-pointer">
+<a [routerLink]="link()" [queryParams]="queryParams()" [state]="state()" (pointerdown)="stamp()" (keydown.enter)="stamp()" class="flex flex-col items-center gap-2 group cursor-pointer">
   <div class="avatar">
-    <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
+    <div #avatar class="w-20 h-20 sm:w-24 sm:h-24 rounded-full ring ring-base-200 group-hover:ring-primary transition-colors">
       @if (avatarUrl(); as url) {
         <img [cachedSrc]="url | resolveUrl:'thumb'" [alt]="name()" loading="lazy" />
       } @else {

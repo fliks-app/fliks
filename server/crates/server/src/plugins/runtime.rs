@@ -316,13 +316,18 @@ impl Ctx {
 
     /// The gate of the latest outbound request of the export in progress.
     pub fn last_gate(&self) -> Option<Arc<super::outbound::Gate>> {
-        self.out.last.clone()
+        let own = self
+            .out
+            .last_refused
+            .load(std::sync::atomic::Ordering::SeqCst);
+        self.out.last.clone().filter(|_| !own)
     }
 
     /// Starts a provider export: no request of an earlier one counts.
     pub fn begin_provider_export(&mut self, p: Priority) {
         self.out.priority = p;
         self.out.last = None;
+        self.out.queued = super::outbound::RATE_WAIT.try_with(Arc::clone).ok();
     }
 
     /// When the call in this Store is interrupted; the outbound hook never waits past it.
@@ -709,6 +714,8 @@ impl PluginRt {
                 last: None,
                 priority: Priority::Background,
                 deadline: Instant::now() + env.cfg.deadlines.hello,
+                last_refused: Arc::default(),
+                queued: None,
                 over: env.cfg.upstream_override.clone(),
             },
             sh: self.sh.clone(),
