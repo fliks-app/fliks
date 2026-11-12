@@ -8,15 +8,20 @@
     </app-select-field>
   }
   @if (isNew()) {
-    <input
-      type="text"
-      class="input w-full"
-      maxlength="255"
-      data-testid="series-name"
-      [attr.aria-label]="'books_work.series_name' | translate"
-      [value]="name()"
-      (input)="name.set($any($event.target).value)"
-    />
+    <label class="flex flex-col gap-1 text-sm">
+      @if (!options().length) {
+        {{ 'books_work.series_name' | translate }}
+      }
+      <input
+        type="text"
+        class="input w-full"
+        maxlength="255"
+        data-testid="series-name"
+        [attr.aria-label]="'books_work.series_name' | translate"
+        [value]="name()"
+        (input)="name.set($any($event.target).value)"
+      />
+    </label>
   }
   <label class="flex flex-col gap-1 text-sm">
     {{ 'books_work.series_position' | translate }}
