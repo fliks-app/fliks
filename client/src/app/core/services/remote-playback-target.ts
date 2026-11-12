@@ -266,6 +266,11 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     void this.remote.send(targetId, { action: 'next' });
   }
 
+  playPrevious(): void {
+    const targetId = this.remote.observedTargetId();
+    if (targetId) void this.remote.send(targetId, { action: 'prev' });
+  }
+
   stopPlayback(): void {
     const targetId = this.remote.observedTargetId();
     if (!targetId) {

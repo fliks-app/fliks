@@ -49,7 +49,7 @@ async function setup(account: AccountSession | null, live = true) {
   };
   const primeTracks = vi.fn();
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
-  const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn() };
+  const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn(), targetState: signal<{ playbackRate?: number } | null>(null) };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -155,18 +155,22 @@ describe('RemoteAudioOutput', () => {
     expect(remote.send).toHaveBeenCalledWith('pc#1', { action: 'queue', queue: { itemIds: [11, 99, 13], index: 2 } });
   });
 
-  it('closes its view when the session ends or this device takes it over', async () => {
+  it('closes its view when the session ends', async () => {
     const { out, sync } = await setup(session());
     out.expand();
     TestBed.tick();
     expect(out.expanded()).toBe(true);
-    sync.role.set('owner');
-    TestBed.tick();
-    expect(out.expanded()).toBe(false);
     out.expand();
     sync.role.set('observer');
     sync.session.set(null);
     TestBed.tick();
     expect(out.expanded()).toBe(false);
+  });
+
+  it('reads the playback rate of the owner while it reports', async () => {
+    const { out, remote } = await setup(session());
+    expect(out.rate()).toBe(1);
+    remote.targetState.set({ playbackRate: 1.5 });
+    expect(out.rate()).toBe(1.5);
   });
 });

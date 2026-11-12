@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import { SseService } from '../sse.service';
 
 /** Identifies liked content: movie (mediaId), season (+seasonId), episode (+episodeId), track (+itemId). */
 export interface LikeTarget {
@@ -10,6 +11,14 @@ export interface LikeTarget {
   seasonId?: number;
   episodeId?: number;
   itemId?: number;
+}
+
+/** A like added or removed on this device or another one; the ids repeat the like's granularity. */
+export interface LikeChange {
+  mediaId: number;
+  seasonId?: number;
+  itemId?: number;
+  liked: boolean;
 }
 
 /** The caller's likes on one media. */
@@ -35,9 +44,13 @@ export interface LikedItem {
 @Injectable({ providedIn: 'root' })
 export class LikesApiService {
   private readonly http = inject(HttpClient);
-  /** Bumped after every like/unlike, so a view kept alive elsewhere (a cached
-   *  detail page under a notification's heart) can refetch its state. */
-  readonly changed = signal<{ mediaId: number } | null>(null);
+  /** The last like change, local or from another device: the one source a view kept alive elsewhere
+   *  (a cached detail page, a notification's heart) follows to refetch its state. */
+  readonly changed = signal<LikeChange | null>(null);
+
+  constructor() {
+    inject(SseService).likeEvents.subscribe(({ type: _type, ...change }) => this.changed.set(change));
+  }
 
   private headers(opts: CacheRead) {
     const headers = cacheHeaders(opts);
@@ -64,11 +77,16 @@ export class LikesApiService {
 
   async like(target: LikeTarget) {
     await firstValueFrom(this.http.post<void>('/api/likes', target));
-    this.changed.set({ mediaId: target.mediaId });
+    this.changed.set(changeOf(target, true));
   }
 
   async unlike(target: LikeTarget) {
     await firstValueFrom(this.http.delete<void>('/api/likes', { body: target }));
-    this.changed.set({ mediaId: target.mediaId });
+    this.changed.set(changeOf(target, false));
   }
+}
+
+function changeOf(t: LikeTarget, liked: boolean): LikeChange {
+  const itemId = t.episodeId ?? t.itemId;
+  return { mediaId: t.mediaId, ...(t.seasonId && { seasonId: t.seasonId }), ...(itemId && { itemId }), liked };
 }

@@ -242,7 +242,7 @@ export class RemoteService {
     const position = pinned ?? s?.positionSeconds ?? 0;
     if (!s) return position;
     const at = pinned !== null ? this.positionPinAt : this.stateAt;
-    return projectPosition({ position, at, playing: s.state === 'playing', duration: s.durationSeconds || null }, this.wallClock());
+    return projectPosition({ position, at, playing: s.state === 'playing', duration: s.durationSeconds || null, rate: s.playbackRate }, this.wallClock());
   });
   readonly targetState = computed(() => {
     const s = this.reportedState();
@@ -797,6 +797,7 @@ export class RemoteService {
       state: s.state,
       volume: s.volume,
       muted: s.muted,
+      playbackRate: s.playbackRate,
       supportsVolume: s.supportsVolume,
       subtitleId: s.subtitleId,
       quality: s.quality,

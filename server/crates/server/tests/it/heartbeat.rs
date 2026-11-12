@@ -186,6 +186,7 @@ impl Ctx {
             subtitle_track_index: None,
             volume: None,
             muted: None,
+            playback_rate: 1.0,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,

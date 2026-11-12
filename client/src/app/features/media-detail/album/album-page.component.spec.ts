@@ -6,6 +6,8 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import type { Media } from '../../../core/services/api/media.service';
 import type { AlbumDetail, Track } from '../../../core/services/api/music.models';
 import { AuthService } from '../../../core/services/auth.service';
+import { SseService } from '../../../core/services/sse.service';
+import { Subject } from 'rxjs';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { bookSpecProviders } from '../book/book-test-setup';
@@ -39,6 +41,7 @@ function setup(tracks: Track[]) {
       { provide: PartyService, useValue: { active: () => false } },
       { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
       { provide: AuthService, useValue: { hasPermission: () => false, user: () => null, sessionEpoch: () => 0 } },
+      { provide: SseService, useValue: { likeEvents: new Subject() } },
     ),
   });
   const fixture = TestBed.createComponent(AlbumPageComponent);
@@ -102,6 +105,7 @@ describe('AlbumPageComponent', () => {
           { provide: PartyService, useValue: { active: () => false } },
           { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
           { provide: AuthService, useValue: { hasPermission: () => canEdit, user: () => null, sessionEpoch: () => 0 } },
+          { provide: SseService, useValue: { likeEvents: new Subject() } },
         ),
       });
       const fixture = TestBed.createComponent(AlbumPageComponent);

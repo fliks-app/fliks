@@ -43,7 +43,7 @@ public class RemoteNotificationPlugin extends Plugin {
             if (session == null) {
                 player = new RemoteStatePlayer(Looper.getMainLooper(), (action, value) -> emit(action, value));
                 session = QueueSession.build(getContext(), player, "remote", new QueueSession.Handlers() {
-                    @Override public void previous() { emit("seek", 0); }
+                    @Override public void previous() { emit("prev", 0); }
                     @Override public void next() { emit("next", 0); }
                     // Released here: in the background the WebView may not clear it for a while.
                     @Override public void stop() {

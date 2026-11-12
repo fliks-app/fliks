@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
+import { SseService } from '../../../core/services/sse.service';
+import { Subject } from 'rxjs';
 import { TvService } from '../../../core/services/tv.service';
 import type { ComicIssue } from '../../../core/services/api/comics.models';
 import type { Media } from '../../../core/services/api/media.service';
@@ -14,6 +16,7 @@ function setup(media: Partial<Media>, isTv = false) {
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
       { provide: AuthService, useValue: { user: () => null, hasPermission: () => true } },
+      { provide: SseService, useValue: { likeEvents: new Subject() } },
       { provide: TvService, useValue: { isTv: () => isTv } },
     ),
   });

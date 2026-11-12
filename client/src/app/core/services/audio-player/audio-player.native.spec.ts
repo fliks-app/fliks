@@ -137,14 +137,17 @@ describe('AudioPlayerService on the native player', () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    TestBed.tick();
     let answer!: (r: { sessionLost: boolean }) => void;
     updatePlaybackState.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    TestBed.tick();
     emit('track', { index: 1, itemId: 2, mediaFileId: 20, sessionId: 's2' });
     answer({ sessionLost: true });
     await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalled());
     await Promise.resolve();
     emit('state', { playing: false, playWhenReady: false, buffering: false, ready: true, ended: false });
+    TestBed.tick();
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, sessionId: 's2' }));
   });
 
@@ -152,11 +155,14 @@ describe('AudioPlayerService on the native player', () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    TestBed.tick();
     updatePlaybackState.mockResolvedValueOnce({ sessionLost: true });
     emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    TestBed.tick();
     await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalled());
     await Promise.resolve();
     emit('state', { playing: false, playWhenReady: false, buffering: false, ready: true, ended: false });
+    TestBed.tick();
     expect(updatePlaybackState.mock.lastCall?.[1].sessionId).toBeUndefined();
   });
 
@@ -245,6 +251,7 @@ describe('AudioPlayerService on the native player', () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    TestBed.tick();
     updatePlaybackState.mockClear();
     user.set(null);
     TestBed.tick();

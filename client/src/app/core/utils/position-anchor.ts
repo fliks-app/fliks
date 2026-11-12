@@ -4,11 +4,13 @@ export interface PositionAnchor {
   at: number;
   playing: boolean;
   duration: number | null;
+  /** Playback speed, 1 when absent. */
+  rate?: number;
 }
 
 /** The one extrapolation of a remote playback's position, whatever the anchor came from. */
 export function projectPosition(a: PositionAnchor, nowMs: number): number {
   if (!a.playing) return a.position;
-  const projected = a.position + Math.max(0, nowMs - a.at) / 1000;
+  const projected = a.position + (Math.max(0, nowMs - a.at) / 1000) * (a.rate ?? 1);
   return a.duration ? Math.min(projected, a.duration) : projected;
 }

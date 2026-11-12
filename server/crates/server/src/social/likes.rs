@@ -1,6 +1,7 @@
 //! `/api/likes/*` (`docs/spec/social.md` rules 1-7).
 use super::{assert_targets, fk_missing};
 use crate::{
+    events::SseEvent,
     http::{
         AppError,
         auth::Authed,
@@ -241,6 +242,7 @@ pub async fn like_add(
     .execute(&st.db)
     .await
     .map_err(fk_missing)?;
+    announce(&st, a.user.id, dto.media_id, season, episode, true);
     Ok(StatusCode::CREATED)
 }
 
@@ -262,7 +264,28 @@ pub async fn like_remove(
     )
     .execute(&st.db)
     .await?;
+    announce(&st, a.user.id, dto.media_id, season, episode, false);
     Ok(())
+}
+
+/// Tells the user's other devices; a `likes.changed` follows every call, matched or not.
+pub fn announce(
+    st: &AppState,
+    user: i32,
+    media_id: i32,
+    season_id: Option<i32>,
+    item_id: Option<i32>,
+    liked: bool,
+) {
+    st.hub.emit_to_user(
+        user,
+        SseEvent::LikesChanged {
+            media_id,
+            season_id,
+            item_id,
+            liked,
+        },
+    );
 }
 
 #[cfg(test)]

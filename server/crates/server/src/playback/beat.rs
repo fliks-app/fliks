@@ -157,6 +157,7 @@ fn presence_beat(
         owner,
         volume: nullable(b, "volume", Value::as_f64),
         muted: nullable(b, "muted", Value::as_bool),
+        playback_rate: num(b, "playbackRate").filter(|r| *r > 0.0),
     }
 }
 
@@ -272,6 +273,7 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         state: s.state.clone(),
         volume: s.volume.map(Num),
         muted: s.muted,
+        playback_rate: Some(Num(s.playback_rate)),
         supports_volume: s.supports_volume,
         subtitle_id: s.subtitle_id.clone(),
         quality: s.quality.clone(),
@@ -729,6 +731,7 @@ mod tests {
             subtitle_track_index: None,
             volume: None,
             muted: None,
+            playback_rate: 1.0,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,

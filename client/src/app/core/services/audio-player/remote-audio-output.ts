@@ -5,6 +5,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
 import type { AudioRequest } from './audio-player.service';
+import { FullPlayerState } from './full-player-state';
 import type { AudioOutput } from './audio-output';
 import type { MusicTrackRequest, Repeat } from './music-queue';
 
@@ -18,6 +19,7 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly target = inject(RemotePlaybackTarget);
   private readonly music = inject(MusicApiService);
   private readonly metadata = inject(NowPlayingMetadataService);
+  private readonly fullPlayer = inject(FullPlayerState);
 
   private readonly session = this.sync.session;
   private readonly wire = computed(() => this.session()?.queue ?? null);
@@ -28,16 +30,15 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly live = computed(() => this.sync.liveReport() !== null);
   /** Commands reach a playing owner whether or not its report has arrived; a parked session has no owner to send to. */
   readonly controllable = computed(() => !this.sync.parked());
-  private readonly _expanded = signal(false);
 
   /** Whether the observed device applies `action`; a control for one it refuses stays disabled. */
   supports(action: RemoteAction): boolean {
     return this.remote.observedCan(action);
   }
 
-  readonly expanded = this._expanded.asReadonly();
+  readonly expanded = computed(() => this.fullPlayer.open() && this.fullPlayer.remote());
   readonly musicMode = signal(true).asReadonly();
-  readonly rate = signal(1).asReadonly();
+  readonly rate = computed(() => (this.live() ? (this.remote.targetState()?.playbackRate ?? 1) : 1));
   readonly queue = computed(() => this.rows().map((r) => r.row));
   readonly queueIndex = computed(() => {
     const index = this.wire()?.index;
@@ -85,18 +86,18 @@ export class RemoteAudioOutput implements AudioOutput {
         () => !stale && this.rows.set([]),
       );
     });
-    // The view ends with the observation: the session is gone or this device took it over.
+    // The view ends with the observation; a takeover by this device is handed over by the player component.
     effect(() => {
-      if (this._expanded() && (!this.session() || this.sync.role() === 'owner')) this._expanded.set(false);
+      if (this.expanded() && !this.session()) this.fullPlayer.hide();
     });
   }
 
   expand(): void {
-    this._expanded.set(true);
+    this.fullPlayer.show(true);
   }
 
   collapse(): void {
-    this._expanded.set(false);
+    this.fullPlayer.hide();
   }
 
   /** Stopping the other device is not offered here: closing leaves the view. */

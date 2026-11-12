@@ -79,6 +79,12 @@ pub async fn star(st: &AppState, c: &Caller, p: &Params, on: bool) -> Answer {
             .await?;
     }
     tx.commit().await?;
+    for (item, media) in &tracks {
+        crate::social::likes::announce(st, user, *media, None, Some(*item), on);
+    }
+    for media in &albums {
+        crate::social::likes::announce(st, user, *media, None, None, on);
+    }
     Ok(Default::default())
 }
 

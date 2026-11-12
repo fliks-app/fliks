@@ -338,7 +338,7 @@ public class RemoteNotificationPlugin: CAPPlugin, CAPBridgedPlugin {
         add(center.nextTrackCommand) { _ in send("next", 0) }
         add(center.previousTrackCommand) { [weak self] _ in
             self?.noteSeek(0)
-            return send("seek", 0)
+            return send("prev", 0)
         }
         add(center.changePlaybackPositionCommand) { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }

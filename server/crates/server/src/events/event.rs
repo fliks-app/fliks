@@ -466,6 +466,8 @@ pub enum SseEvent {
         state: PlayState,
         volume: Option<Num>,
         muted: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        playback_rate: Option<Num>,
         supports_volume: Option<bool>,
         subtitle_id: Option<String>,
         quality: Option<String>,
@@ -491,6 +493,16 @@ pub enum SseEvent {
         item_id: Option<i64>,
         state: Option<String>,
         owner_target_id: Option<String>,
+    },
+    /// One like of the user was added or removed; the id fields repeat the granularity of the like row.
+    #[serde(rename = "likes.changed")]
+    LikesChanged {
+        media_id: i32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        season_id: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_id: Option<i32>,
+        liked: bool,
     },
     #[serde(rename = "session.superseded")]
     SessionSuperseded {
@@ -761,9 +773,10 @@ mod tests {
             json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q","paused":true}),
             json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,
                 "mediaTitle":null,"episodeLabel":null,"posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
-                "state":"playing","volume":null,"muted":null,"supportsVolume":true,"subtitleId":null,"quality":null,
+                "state":"playing","volume":null,"muted":null,"playbackRate":1.5,"supportsVolume":true,"subtitleId":null,"quality":null,
                 "qualities":[{"id":"i","label":"l","lowBandwidth":true}],"autoplayBlocked":false,"hasNext":false,
                 "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null}),
+            json!({"type":"likes.changed","mediaId":1,"seasonId":2,"itemId":3,"liked":true}),
             json!({"type":"remote.targets_changed"}),
             json!({"type":"remote.stopped","targetId":"t","sessionId":"s"}),
             json!({"type":"social.followed","userId":1,"username":"u","avatar":null}),
@@ -789,7 +802,7 @@ mod tests {
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 54);
+        assert_eq!(all.len(), 55);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

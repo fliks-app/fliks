@@ -29,6 +29,6 @@ export interface RemoteNotificationPlugin {
   resume(): Promise<void>;
 }
 
-export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'stop' | 'like';
+export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'prev' | 'stop' | 'like';
 
 export const RemoteNotification = registerPlugin<RemoteNotificationPlugin>('RemoteNotification');

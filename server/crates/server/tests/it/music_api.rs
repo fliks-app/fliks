@@ -9,6 +9,11 @@ use tower::ServiceExt;
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 async fn ctx(pool: &PgPool) -> (Router, String) {
+    let (app, t, _) = ctx_with_state(pool).await;
+    (app, t)
+}
+
+async fn ctx_with_state(pool: &PgPool) -> (Router, String, AppState) {
     fliks_server::db::migrate(pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     sqlx::raw_sql(
@@ -41,8 +46,8 @@ async fn ctx(pool: &PgPool) -> (Router, String) {
         .merge(fliks_server::playlists::router())
         .merge(fliks_server::persons::router())
         .merge(fliks_server::music::router())
-        .with_state(st);
-    (app, t)
+        .with_state(st.clone());
+    (app, t, st)
 }
 
 async fn call(app: &Router, t: &str, method: &str, uri: &str, body: Option<Value>) -> (u16, Value) {
@@ -223,5 +228,36 @@ async fn album_reads_tracks_favourites_and_works(pool: PgPool) {
             &disco["albums"][0]["ownedTrackCount"]
         ),
         (&json!(true), &json!(1))
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_like_change_is_announced_to_its_user(pool: PgPool) {
+    use fliks_server::events::Bus;
+    let (app, t, st) = ctx_with_state(&pool).await;
+    let mut rx = st.hub.subscribe();
+    let body = json!({"mediaId": 10, "itemId": 1});
+    assert_eq!(
+        call(&app, &t, "POST", "/api/likes", Some(body.clone()))
+            .await
+            .0,
+        201
+    );
+    assert_eq!(
+        call(&app, &t, "DELETE", "/api/likes", Some(body)).await.0,
+        200
+    );
+    let mut seen = vec![];
+    while let Ok(b) = rx.try_recv() {
+        if let Bus::Sse(e) = &*b {
+            seen.push(serde_json::to_value(e).unwrap());
+        }
+    }
+    assert_eq!(
+        seen,
+        [
+            json!({"type": "likes.changed", "mediaId": 10, "itemId": 1, "liked": true}),
+            json!({"type": "likes.changed", "mediaId": 10, "itemId": 1, "liked": false}),
+        ]
     );
 }
