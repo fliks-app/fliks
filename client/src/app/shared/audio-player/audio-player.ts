@@ -145,8 +145,8 @@ export class AudioPlayerComponent {
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
   protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.controllable());
   protected readonly canToggle = computed(() => this.controllable() || this.parkedView());
-  /** The video player's rule: a touch device sets its own level with its buttons, not another device's; a TV uses its remote. */
-  protected readonly showVolume = computed(() => !this.isTv() && this.audio.canSetVolume() && (!this.isTouch() || this.remoteView()));
+  /** A touch device uses its buttons and sets a remote's level in the device picker; a TV uses its remote. */
+  protected readonly showVolume = computed(() => !this.isTv() && !this.isTouch() && this.audio.canSetVolume());
   protected readonly queueControls = computed(() => this.controllable() && (!this.remoteView() || this.audio.queue().length > 0));
 
   private readonly remoteCan = (action: RemoteAction) => !this.remoteView() || this.remoteOut.supports(action);
