@@ -132,6 +132,12 @@ impl WasiHttpHooks for Outbound {
                 return Ok((res.map(BodyExt::boxed_unsync), Box::new(io) as IoFuture));
             };
             let (parts, body) = request.into_parts();
+            // hyper sends these without a body when no length is set, so the guest's stream is never read to its end.
+            let bodiless = matches!(
+                parts.method,
+                http::Method::GET | http::Method::HEAD | http::Method::CONNECT
+            ) && !parts.headers.contains_key(http::header::CONTENT_LENGTH)
+                && !parts.headers.contains_key(http::header::TRANSFER_ENCODING);
             let rec = Arc::new(Mutex::new(Recorded::default()));
             let mut first = Some(Tee::new(body, rec.clone()).boxed_unsync());
             let attempt = || {
@@ -164,7 +170,7 @@ impl WasiHttpHooks for Outbound {
                     })
                 }
             };
-            let replayable = || rec.lock_clean().replayable();
+            let replayable = || bodiless || rec.lock_clean().replayable();
             match gate
                 .run(priority, left, queued.as_ref(), attempt, replayable)
                 .await
@@ -1608,6 +1614,26 @@ mod tests {
         let (port, seen) = serve(&[(429, "1")]).await;
         assert_eq!(post(&mut h, port, MAX_REPLAY + 1).await, 429);
         assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_hook_replays_a_get_whose_body_stream_never_ends() {
+        let (g, _) = gate(fast());
+        let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
+        let (port, seen) = serve(&[(503, "0")]).await;
+        let pending = futures_util::stream::pending::<
+            Result<http_body::Frame<Bytes>, std::convert::Infallible>,
+        >();
+        let mut req = http::Request::new(
+            http_body_util::StreamBody::new(pending)
+                .map_err(|e| match e {})
+                .boxed_unsync(),
+        );
+        *req.uri_mut() = format!("http://127.0.0.1:{port}/x").parse().unwrap();
+        let io: IoFuture = Box::new(std::future::ready(Ok(())));
+        let sent = Box::into_pin(h.send_request(req, None, io)).await;
+        assert_eq!(sent.unwrap().0.status().as_u16(), 200);
+        assert_eq!(seen.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]
