@@ -411,11 +411,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** The trends the music scope lists: one kind for a kind tab, all three for the music tab. */
   private readonly trendingWant = computed(() => SOURCES[this.state.scope()].provider);
-  protected readonly trendAlbums = computed(() => (this.trendingWant().includes('album') ? this.state.musicTrending()?.albums ?? [] : []));
-  protected readonly trendArtists = computed(() => (this.trendingWant().includes('artist') ? this.state.musicTrending()?.artists ?? [] : []));
-  protected readonly trendTracks = computed(() =>
+  private readonly trendAlbums = computed(() => (this.trendingWant().includes('album') ? this.state.musicTrending()?.albums ?? [] : []));
+  private readonly trendArtists = computed(() => (this.trendingWant().includes('artist') ? this.state.musicTrending()?.artists ?? [] : []));
+  private readonly trendTracks = computed(() =>
     this.trendingWant().includes('recording') ? (this.state.musicTrending()?.recordings ?? []).filter((r) => r.trackId == null) : [],
   );
+  /** The music rows: the provider hits of a query, else the trends. */
+  protected readonly musicTracks = computed(() => (this.state.hasQuery() ? this.recordingsToAdd() : this.trendTracks()));
+  protected readonly musicArtists = computed(() => (this.state.hasQuery() ? this.artistsToAdd() : this.trendArtists()));
+  protected readonly musicAlbums = computed(() => (this.state.hasQuery() ? this.albumsToAdd() : this.trendAlbums()));
 
   /** Map the viewer's most-recurring recommendation genres to TMDB genre ids. */
   private deriveTasteGenreIds(
