@@ -76,6 +76,7 @@ export interface ReceivedRecommendation extends RecommendationCard {
 export interface SentRecommendation extends RecommendationCard {
   recipient: { id: number; username: string; avatar: string | null };
 }
+import { abortable } from '../../utils/abortable';
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -86,12 +87,13 @@ export class SocialApiService {
     return headers ? { headers } : {};
   }
 
-  searchUsers(q: string) {
-    return firstValueFrom(
+  searchUsers(q: string, signal?: AbortSignal) {
+    return abortable(
       this.http.get<SocialUser[]>('/api/social/search', {
         params: { q },
         ...this.headers({ force: true }),
       }),
+      signal,
     );
   }
 

@@ -257,7 +257,7 @@ export interface CollectionSummary {
 
 export interface SearchParams {
   q?: string;
-  type?: MediaType;
+  type?: MediaType | MediaType[];
   status?: string;
   monitored?: boolean;
   year?: number;
@@ -385,6 +385,7 @@ export class MediaService {
 
   async getAll(params: SearchParams = {}, opts: CacheRead = {}, signal?: AbortSignal): Promise<MediaPage> {
     if (params.view && !(await this.serverVersion.supportsWhenKnown('5.2.0'))) params = { ...params, view: undefined };
+    if (Array.isArray(params.type) && params.type.length > 1 && !(await this.serverVersion.supportsWhenKnown('6.1.0'))) params = { ...params, type: undefined };
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === null || value === '') continue;

@@ -6,13 +6,15 @@ import type { CollectionSummary, PersonListItem } from './api/books.models';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
-import type { MediaType } from '../enums/media-type.enum';
 
 const EXTERNAL_KEY = 'fliks-search-external';
 
+/** The type selector: `video` is movies and series, `movie` and `series` its two halves. */
+export type SearchScope = 'all' | 'video' | 'movie' | 'series' | 'book' | 'album' | 'people';
+
 /** What one search asks: the library and the providers, each of its own kinds. */
 export type SearchSource =
-  | 'media' | 'tracks' | 'artists' | 'authors' | 'series'
+  | 'media' | 'tracks' | 'artists' | 'authors' | 'series' | 'people'
   | 'movie' | 'tv' | 'book' | 'album' | 'artist' | 'recording';
 
 export const LOCAL_SOURCES: SearchSource[] = ['media', 'tracks', 'artists', 'authors', 'series'];
@@ -21,11 +23,7 @@ export const PROVIDER_SOURCES: SearchSource[] = ['movie', 'tv', 'book', 'album',
 @Injectable({ providedIn: 'root' })
 export class SearchStateService {
   readonly query = signal('');
-  /** Top-level surface: media (videos) vs members (people). */
-  readonly tab = signal<'videos' | 'people'>('videos');
-  /** Media type filter within the videos tab — drives search + discover
-   *  (genre list, trending/popular). */
-  readonly contentType = signal<'all' | MediaType>('all');
+  readonly scope = signal<SearchScope>('all');
   readonly externalEnabled = signal(localStorage.getItem(EXTERNAL_KEY) !== 'false');
 
   private readonly persistExternal = effect(() => {
@@ -51,7 +49,6 @@ export class SearchStateService {
   readonly externalLoading = computed(() => PROVIDER_SOURCES.some((k) => this.pending().has(k)));
   readonly externalFailed = computed(() => PROVIDER_SOURCES.some((k) => this.failed().has(k)));
   readonly peopleResults = signal<SocialUser[]>([]);
-  readonly peopleLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
 
   // ── Discovery rows (shown when no query is typed, external search on) ──
@@ -178,13 +175,11 @@ export class SearchStateService {
   clear() {
     this.query.set('');
     this.clearResults();
-    this.peopleResults.set([]);
-    this.peopleLoading.set(false);
   }
 
   /** Empties every zone and its pending marks. */
   clearResults() {
-    for (const l of [this.localResults, this.localTracks, this.localArtists, this.localAuthors, this.localSeries]) (l as WritableSignal<unknown[]>).set([]);
+    for (const l of [this.localResults, this.localTracks, this.localArtists, this.localAuthors, this.localSeries, this.peopleResults]) (l as WritableSignal<unknown[]>).set([]);
     for (const l of [this.movieHits, this.seriesHits, this.bookHits, this.albumHits, this.artistHits, this.recordingHits]) (l as WritableSignal<unknown[]>).set([]);
     this.pending.set(new Set());
     this.failed.set(new Set());

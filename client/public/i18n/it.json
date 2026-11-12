@@ -466,7 +466,6 @@
     "section_recommendations": "Consigli",
     "section_recently_watched": "Visti di recente",
     "section_likes": "Preferiti",
-    "search_tab_people": "Utenti",
     "no_people_results": "Nessun utente trovato.",
     "edit_privacy": "Privacy",
     "privacy_title": "Privacy del profilo",
@@ -897,7 +896,6 @@
     "placeholder": "Cerca film, serie, libri e musica...",
     "hint": "Digita per cercare nella tua libreria e nei fornitori esterni.",
     "hint_local": "Digita per cercare nella tua libreria.",
-    "tab_videos": "Video",
     "filter_all": "Tutto",
     "filter_movies": "Film",
     "filter_series": "Serie",
@@ -905,7 +903,6 @@
     "section_discover": "Aggiungi alla libreria",
     "no_results": "Nessun risultato trovato.",
     "external_search": "Cerca fuori dalla libreria",
-    "enable_external": "Cerca fuori dalla libreria",
     "discover_trending": "Tendenze",
     "discover_popular": "Popolare",
     "discover_suggestions": "Suggerimenti per te",
@@ -931,7 +928,10 @@
     "add_album": "Aggiungi album",
     "request_album": "Richiedi album",
     "want_track": "Desidera questo brano",
-    "partial": "Alcuni fornitori non hanno risposto in tempo."
+    "partial": "Alcuni fornitori non hanno risposto in tempo.",
+    "scope_video": "Video",
+    "scope_movies_series": "Film + Serie",
+    "scope_people": "Membri"
   },
   "discover": {
     "seasons_failed": "Impossibile caricare le stagioni",
