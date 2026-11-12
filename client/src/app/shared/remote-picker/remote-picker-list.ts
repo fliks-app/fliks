@@ -275,6 +275,12 @@ export class RemotePickerListComponent {
       this.picked.emit(row);
       return;
     }
+    // The device that owns the account session is watched, not selected: the full player opens on it.
+    const owned = this.sync.session();
+    if (row.kind === 'remote' && owned && row.id === this.sync.observedOwnerTargetId() && this.surface.canOpen(owned)) {
+      this.surface.open(owned);
+      return;
+    }
     // Another device plays the account session (the one controlled here included): a press moves it there instead of selecting a second one.
     if (row.kind === 'remote' && this.sync.role() === 'observer' && this.observesSession() && this.canTransfer(row)) {
       void this.transfer(row);

@@ -38,9 +38,9 @@ function setup(
       { provide: AirPlayService, useValue: { available: signal(false) } },
       { provide: CastPlaybackTarget, useValue: {} },
       { provide: PlaybackSession, useValue: { isLocal: signal(false), kind: () => 'remote', observing: () => false, nowPlaying: signal({ title: 'Film' }) } },
-      { provide: SessionSyncService, useValue: { session: signal(null), role: signal('none'), canPlayHere: signal(false), ...over.sync } },
+      { provide: SessionSyncService, useValue: { session: signal(null), role: signal('none'), canPlayHere: signal(false), observedOwnerTargetId: () => null, ...over.sync } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
-      { provide: PlaybackSurface, useValue: { here: signal(false) } },
+      { provide: PlaybackSurface, useValue: { here: signal(false), open: vi.fn(), canOpen: () => true } },
       { provide: ToastService, useValue: {} },
       { provide: NowPlayingMetadataService, useValue: { track: () => signal(null) } },
     ],
@@ -138,6 +138,20 @@ describe('RemotePickerListComponent while controlling a device', () => {
     });
     component.selectRow({ kind: 'remote', id: 'pc#1', icon: 'monitor', label: 'Desk', subtitle: null, connected: false });
     expect(transferTo).toHaveBeenCalledWith('pc#1');
+    expect(selectTarget).not.toHaveBeenCalled();
+  });
+
+  it('opens the player on the device that owns the session instead of selecting it', () => {
+    const selectTarget = vi.fn();
+    const open = vi.fn();
+    const owned = { owner: { targetId: 'tv#1' }, state: 'playing', item: { title: 'Film', subtitle: null } };
+    const { component } = setup({
+      sync: { session: signal(owned), role: signal('observer'), observedOwnerTargetId: () => 'tv#1', isReading: () => false, positionNow: () => 0, line: () => '', parked: () => false },
+      remote: { selectTarget },
+    });
+    (TestBed.inject(PlaybackSurface) as unknown as { open: typeof open }).open = open;
+    component.selectRow({ kind: 'remote', id: 'tv#1', icon: 'tv', label: 'TV', subtitle: null, connected: false });
+    expect(open).toHaveBeenCalledWith(owned);
     expect(selectTarget).not.toHaveBeenCalled();
   });
 

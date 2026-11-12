@@ -31,7 +31,7 @@ describe('PlayableMediaService.play', () => {
           useValue: { getOne: () => Promise.resolve({}), getCast: () => Promise.resolve([]), getCrew: () => Promise.resolve([]) },
         },
         { provide: PlaybackQueueService, useValue: { clear: vi.fn() } },
-        { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, send } },
+        { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, observedTargetId: () => over.target ?? null, send } },
         { provide: PartyService, useValue: { party: () => null, active: () => false, drives: () => false } },
         { provide: CastPlaybackTarget, useValue: { isConnected: () => !!over.cast } },
         { provide: RemotePlaybackTarget, useValue: { isConnected: () => !!over.target, isObserving: () => false } },

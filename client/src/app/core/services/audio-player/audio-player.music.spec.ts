@@ -12,7 +12,7 @@ import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
-import { FullPlayerState } from './full-player-state';
+import { FullPlayerState } from '../playback/full-player-state';
 import { RemoteService, type RemoteCommandInput } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
@@ -107,6 +107,7 @@ describe('AudioPlayerService music mode', () => {
             stopSession,
             buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl,
             positionRequest: () => ({ url: '/x', init: {} }),
+            stopSessionRequest: () => ({ url: '/x', init: {} }),
           },
         },
         { provide: CastService, useValue: cast },
@@ -137,10 +138,10 @@ describe('AudioPlayerService music mode', () => {
   it('moves the open remote view to the local player once "play here" has loaded the session', async () => {
     TestBed.inject(AudioPlayerService);
     const full = TestBed.inject(FullPlayerState);
-    full.show(true);
+    full.show('audio', true);
     const item = { id: 1, mediaId: 1, kind: 'album' };
     await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1], index: 0, shuffle: false, repeat: 'off' } }, 30);
-    expect([full.open(), full.remote()]).toEqual([true, false]);
+    expect([full.open(), full.remote()]).toEqual(['audio', false]);
   });
 
   it('beats at once when "play here" loads a paused session, which reports no play state', async () => {
@@ -318,7 +319,7 @@ describe('AudioPlayerService music mode', () => {
     audio.expand();
     await player!.yield();
     expect(audio.track()).toBeNull();
-    expect([full.open(), full.remote()]).toEqual([true, true]);
+    expect([full.open(), full.remote()]).toEqual(['audio', true]);
   });
 
   it('closes the full player when this device stops on its own', async () => {
@@ -327,7 +328,7 @@ describe('AudioPlayerService music mode', () => {
     await audio.playTracks([track(1)]);
     audio.expand();
     await audio.close();
-    expect(full.open()).toBe(false);
+    expect(full.open()).toBeNull();
   });
 
   it('enqueues after the current track and at the end', async () => {

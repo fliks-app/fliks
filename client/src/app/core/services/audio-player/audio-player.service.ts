@@ -32,7 +32,7 @@ import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
-import { FullPlayerState } from './full-player-state';
+import { FullPlayerState } from '../playback/full-player-state';
 import { PlayerStateService } from '../player-state.service';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
@@ -171,7 +171,7 @@ export class AudioPlayerService {
   /** Seconds left on a duration timer. */
   readonly sleepLeft = this._sleepLeft.asReadonly();
   readonly bookmarks = this._bookmarks.asReadonly();
-  readonly expanded = computed(() => this.fullPlayer.open() && !this.fullPlayer.remote());
+  readonly expanded = computed(() => this.fullPlayer.open() === 'audio' && !this.fullPlayer.remote());
   /** True while a track queue plays instead of an audiobook. */
   readonly musicMode = this._musicMode.asReadonly();
   readonly queue = this._queue.asReadonly();
@@ -295,7 +295,7 @@ export class AudioPlayerService {
     if (!req) return null;
     const positionSeconds = this._position();
     const queue = this._musicMode() ? this.wireQueue() : null;
-    this.fullPlayer.handTo(true);
+    this.fullPlayer.handTo('audio', true);
     await this.close();
     if (!queue) return { title: req.title, positionSeconds, resume: async () => void (await this.play(req, { startAt: positionSeconds })) };
     return {
@@ -1146,7 +1146,7 @@ export class AudioPlayerService {
   }
 
   expand(): void {
-    if (this._track() !== null) this.fullPlayer.show(false);
+    if (this._track() !== null) this.fullPlayer.show('audio', false);
   }
 
   collapse(): void {
@@ -1416,7 +1416,7 @@ export class AudioPlayerService {
     }
     // A paused load reports no play state: its first beat is what claims the session.
     if (paused && loaded) this.onPlayState(false);
-    if (loaded) this.fullPlayer.handTo(false);
+    if (loaded) this.fullPlayer.handTo('audio', false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */

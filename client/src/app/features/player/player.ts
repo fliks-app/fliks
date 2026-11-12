@@ -1450,6 +1450,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       window.removeEventListener('pipAction', this.onPipAction as EventListener);
       void this.appPauseListener?.remove();
     }
+    this.session.endView();
   }
 
   // ── Pre-roll ──
@@ -3140,7 +3141,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Another device took the account session: close like a back, and hand over what it takes to start again. */
   private readonly unregisterSession = this.sessionSync.registerPlayer({
     sessionId: () => this.activeSessionId(),
-    active: () => true,
+    // Watching another device's session is not playing: observing it must not stop.
+    active: () => !this.session.viewing(),
     report: () => void this.savePosition(),
     yield: async () => {
       const { mediaId, mediaFileId: fileId, episodeId } = this;
@@ -3158,6 +3160,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         },
       };
     },
+  });
+
+  // The view ends like a back when the observed session goes away.
+  private readonly viewLostEffect = effect(() => {
+    if (this.session.viewing() && !this.sessionSync.observedOwnerTargetId()) untracked(() => this.onBack());
   });
 
   onBack() {

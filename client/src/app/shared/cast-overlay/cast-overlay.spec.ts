@@ -59,6 +59,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     playHere: vi.fn(),
     enabled: signal(true),
+    observedOwnerTargetId: () => (over.account?.state === 'parked' ? null : (over.account?.owner.targetId ?? null)),
     localPlaying: signal(false),
     claimPending: signal(false),
     holdsPlayer: signal(false),
@@ -87,6 +88,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     nowPlaying: signal<{ title: string; fanartUrl: string | null; posterUrl: string | null } | null>({ title: 'Title', fanartUrl: '/f.jpg', posterUrl: null }),
     playing: signal(over.fileId === 0 ? null : { fileId: 7, mediaId: 3 }),
     openPlayer: vi.fn(),
+    viewObserved: vi.fn(),
     command: vi.fn(),
     partyActive: signal(false),
   };
@@ -170,11 +172,11 @@ describe('CastOverlayComponent', () => {
       expect(el.textContent).toContain('2:05');
     });
 
-    it('pauses the owner without selecting it, with no other button', () => {
+    it('pauses the owner without selecting it, next to the button that opens its player', () => {
       const { el, target } = setup({ local: true, account: accountSession(), canPlayHere: true });
       const buttons = Array.from(el.querySelectorAll('button'));
-      expect(buttons).toHaveLength(1);
-      buttons[0].click();
+      expect(buttons).toHaveLength(2);
+      buttons[1].click();
       expect(target.pause).toHaveBeenCalled();
     });
 
@@ -217,6 +219,18 @@ describe('CastOverlayComponent', () => {
       expect(strip).toBeNull();
       TestBed.resetTestingModule();
       expect(setup({ local: true, account: accountSession({ item: book }) }).strip).toBeNull();
+    });
+
+    it('opens nothing from the strip of a video session without a file', () => {
+      const bare = setup({ local: true, account: accountSession({ item: { ...accountSession().item, mediaFileId: null } }) });
+      bare.el.querySelector<HTMLButtonElement>('button.text-left')!.click();
+      expect(bare.session.viewObserved).not.toHaveBeenCalled();
+    });
+
+    it('opens the video player on the observed session from the strip, selecting no device', () => {
+      const { el, session } = setup({ local: true, account: accountSession() });
+      el.querySelector('button')!.click();
+      expect(session.viewObserved).toHaveBeenCalledWith({ fileId: 9, mediaId: 3, episodeId: undefined });
     });
 
     it('hides the strip of a session parked by an earlier page load of this device while its player holds the track', () => {

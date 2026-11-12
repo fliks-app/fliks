@@ -7,6 +7,7 @@ import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
 import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
+import { FullPlayerState } from './full-player-state';
 import { NowPlayingMetadataService } from './now-playing-metadata.service';
 import type { Media } from '../api/media.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
@@ -87,8 +88,12 @@ export class PlaybackSession {
     return kind === 'cast' ? this.injector.get(CastPlaybackTarget) : this.local();
   });
 
+  private readonly fullPlayer = inject(FullPlayerState);
+  /** The video player is open on the account session's owner, with no device selected. */
+  readonly viewing = computed(() => this.fullPlayer.open() === 'video' && this.fullPlayer.remote());
+
   readonly kind = computed<OutputKind>(() =>
-    this.injector.get(RemotePlaybackTarget).isConnected()
+    this.injector.get(RemotePlaybackTarget).isConnected() || this.viewing()
       ? 'remote'
       : this.injector.get(CastPlaybackTarget).isConnected()
         ? 'cast'
@@ -235,7 +240,9 @@ export class PlaybackSession {
     const startAt = opts.fromStart ? 0 : undefined;
     if (kind === 'remote') {
       const remote = this.remoteSvc();
-      void remote.send(remote.selectedTargetId()!, {
+      const targetId = remote.observedTargetId();
+      if (!targetId) return kind;
+      void remote.send(targetId, {
         action: 'load',
         mediaId: item.mediaId,
         mediaFileId: item.fileId,
@@ -266,6 +273,17 @@ export class PlaybackSession {
     }
     if (kind !== 'local' && (opts.expand ?? true)) this.openPlayer(item);
     return kind;
+  }
+
+  /** Opens the video player on the account session's owner, without selecting its device. */
+  viewObserved(item: { fileId: number; mediaId: number; episodeId?: number }): void {
+    this.fullPlayer.show('video', true);
+    this.openPlayer(item);
+  }
+
+  /** The player route is gone: a view of another device's playback ends with it. */
+  endView(): void {
+    if (this.fullPlayer.open() === 'video') this.fullPlayer.hide();
   }
 
   /** Opens the player route on what the active output plays, without reloading it; nothing to open while the output is idle. */

@@ -4,6 +4,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
@@ -20,6 +21,10 @@ const playing = (o: Partial<AccountSession> = {}) =>
     state: 'playing',
     ...o,
   }) as unknown as AccountSession;
+
+let observed = true;
+const viewObserved = vi.fn();
+const audioExpand = vi.fn();
 
 function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false, serverSupports = true) {
   const connectionId = signal<string | null>(null);
@@ -39,9 +44,11 @@ function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false, ser
           claimPending: () => false,
           ownedHere: () => role === 'owner',
           isReading: () => false,
+          observedOwnerTargetId: () => (observed ? 'tv' : null),
         },
       },
-      { provide: PlaybackSession, useValue: { isLocal: () => true, partyActive: () => false } },
+      { provide: PlaybackSession, useValue: { isLocal: () => true, partyActive: () => false, viewObserved } },
+      { provide: RemoteAudioOutput, useValue: { expand: audioExpand } },
       { provide: DeviceService, useValue: { isTv: () => false } },
       { provide: AudioPlayerService, useValue: { track: () => null, active: () => false } },
       { provide: RemoteService, useValue: {} },
@@ -118,5 +125,33 @@ describe('PlaybackSurface bar', () => {
     TestBed.tick();
     expect(surface.state()).toBe('local');
     expect(surface.bar()).toBeNull();
+  });
+});
+
+describe('PlaybackSurface open', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.clearAllMocks();
+    observed = true;
+  });
+
+  it('opens no video view for a parked session or an item without a file', () => {
+    const video = { id: 5, mediaId: 3, mediaFileId: 9, kind: 'movie', family: 'video' } as AccountSession['item'];
+    const { surface } = setup();
+    observed = false;
+    surface.open(playing({ item: video }));
+    observed = true;
+    surface.open(playing({ item: { ...video, mediaFileId: null } }));
+    expect(viewObserved).not.toHaveBeenCalled();
+    expect(surface.canOpen(playing({ item: video }))).toBe(true);
+  });
+
+  it('opens the audio player for an audio session and the video player for any other family', () => {
+    const { surface } = setup();
+    surface.open(playing({ item: { id: 5, kind: 'album', family: 'audio' } as AccountSession['item'] }));
+    expect(audioExpand).toHaveBeenCalledOnce();
+    expect(viewObserved).not.toHaveBeenCalled();
+    surface.open(playing({ item: { id: 5, mediaId: 3, mediaFileId: 9, episodeId: 2, kind: 'movie', family: 'video' } as AccountSession['item'] }));
+    expect(viewObserved).toHaveBeenCalledWith({ fileId: 9, mediaId: 3, episodeId: 2 });
   });
 });
