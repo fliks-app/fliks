@@ -1,11 +1,101 @@
 //! Album hits as a search card (`docs/spec/music.md`).
-use crate::metadata::hit_core;
+use super::target::main_release;
+use crate::{
+    http::{AppError, auth::Authed},
+    metadata::{
+        hit_core, mark_existing,
+        routes::{Ids, Res, lang},
+    },
+    state::AppState,
+};
+use axum::{Json, Router, extract::State, routing::get};
 use fliks_domain::{
     external_id::{Namespace, Namespaces},
     media::kind::MediaKind,
-    music::provider::{self, Album},
+    metadata::limiter::Priority,
+    music::{
+        profile::MetadataProfile,
+        provider::{self, Album, Credit},
+    },
 };
 use serde_json::{Value, json};
+
+pub fn routes(r: Router<AppState>) -> Router<AppState> {
+    r.route(
+        "/api/metadata/{provider}/album/{externalId}",
+        get(preview_album),
+    )
+}
+
+fn credit_json(c: &Credit) -> Value {
+    json!({"name": c.name, "creditedName": c.credited_name, "joinPhrase": c.join_phrase, "externalId": c.id})
+}
+
+/// `GET /api/metadata/{provider}/album/{externalId}` (`docs/spec/music.md` rule 75).
+#[utoipa::path(get, path = "/api/metadata/{provider}/album/{externalId}", responses((status = 200)))]
+pub async fn preview_album(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(
+        fliks_domain::acl::Action::Read,
+        fliks_domain::acl::Subject::Media,
+    )?;
+    let crate::http::validate::PathParams((name, id)) = ids?;
+    let known = st.namespaces();
+    let ns = known
+        .parse(&name)
+        .filter(|n| st.metadata.serves(*n, MediaKind::Album))
+        .ok_or_else(|| crate::metadata::books::routes::unknown_provider(&name))?;
+    let group = known
+        .normalize(ns, &id)
+        .ok_or_else(|| AppError::bad_request("externalId is not a provider id"))?;
+    let lang = lang(&st).await?;
+    let (fetched, edition) = if ns == Namespace::MUSICBRAINZ {
+        main_release(
+            &st,
+            &group,
+            &lang,
+            &MetadataProfile::default(),
+            Priority::Interactive,
+        )
+        .await?
+    } else {
+        (
+            super::fetch(&st, ns, &group, &lang, Priority::Interactive).await?,
+            None,
+        )
+    };
+    let mut album = fetched.album;
+    album.external_id = group;
+    let mut out = card(ns, &album);
+    out["artists"] = album.artists.iter().map(credit_json).collect();
+    let (release, tracks) = match &edition {
+        Some(e) => (
+            json!({"externalId": e.release.external_id, "title": e.release.title, "country": e.release.country,
+                   "releaseDate": e.release.release_date.map(|d| d.to_string())}),
+            e.tracks
+                .iter()
+                .map(|t| {
+                    json!({"recordingId": t.recording_id, "discNumber": t.disc_number, "position": t.position,
+                           "number": t.number, "title": t.title, "durationMs": t.duration_ms})
+                })
+                .collect(),
+        ),
+        None => (Value::Null, vec![]),
+    };
+    out["trackCount"] = tracks.len().into();
+    out["durationMs"] = edition
+        .iter()
+        .flat_map(|e| &e.tracks)
+        .filter_map(|t| t.duration_ms)
+        .map(i64::from)
+        .sum::<i64>()
+        .into();
+    out["release"] = release;
+    out["tracks"] = tracks.into();
+    let mut one = [out];
+    mark_existing(&st.db, &a, MediaKind::Album, &mut one).await?;
+    let [out] = one;
+    Ok(Json(out))
+}
 
 fn card(p: Namespace, a: &Album) -> Value {
     let mut h = hit_core(

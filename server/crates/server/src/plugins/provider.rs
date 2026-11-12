@@ -12,7 +12,7 @@ use crate::metadata::{
 };
 use fliks_domain::{
     comics::provider as comics,
-    external_id::Namespace,
+    external_id::{ExternalProvider, Namespace},
     media::kind::MediaKind,
     metadata::{
         language::Resolved,
@@ -665,6 +665,7 @@ impl MetadataProvider for PluginProvider {
                             .filter(|r| music::album(r).is_ok())
                             .cloned()
                             .collect(),
+                        top_recordings: top_recordings(&v["topRecordings"]),
                         ..Credits::default()
                     }),
                 );
@@ -1013,4 +1014,20 @@ impl Plugins {
             }
         });
     }
+}
+
+/// The entries of `topRecordings` with a MusicBrainz `recordingId` (normalized) and a title, at most 10.
+fn top_recordings(v: &Value) -> Vec<Value> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["title"].as_str().is_some_and(|t| !t.trim().is_empty()))
+        .filter_map(|r| {
+            let id = ExternalProvider::MusicBrainz.normalize(r["recordingId"].as_str()?.trim())?;
+            let mut r = r.clone();
+            r["recordingId"] = id.into();
+            Some(r)
+        })
+        .take(10)
+        .collect()
 }

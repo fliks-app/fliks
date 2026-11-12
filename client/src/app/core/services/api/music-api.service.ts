@@ -9,6 +9,7 @@ import { trackRowRequest } from '../../../features/music/music-utils';
 import type { WantSpec } from './wants-api.service';
 import type {
   AlbumCandidate,
+  AlbumPreview,
   AlbumPreviewTrack,
   ComposerWork,
   Discography,
@@ -67,6 +68,11 @@ export class MusicApiService {
   async recentlyPlayed(limit = 20): Promise<Media[]> {
     if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.recentlyPlayed))) return [];
     return firstValueFrom(this.http.get<Media[]>('/api/playback/recently-played', { params: { limit } }));
+  }
+
+  /** The add preview of an album: its hit, artists and the tracklist of its main release. */
+  albumPreview(provider: string, externalId: string): Promise<AlbumPreview> {
+    return firstValueFrom(this.http.get<AlbumPreview>(`/api/metadata/${encodeURIComponent(provider)}/album/${encodeURIComponent(externalId)}`));
   }
 
   /** The tracklist an album added to the library would get. */

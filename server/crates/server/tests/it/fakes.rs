@@ -238,6 +238,7 @@ impl MetadataProvider for Scripted {
             cast: items(v["cast"].clone()),
             crew: items(v["crew"].clone()),
             albums: items(v["albums"].clone()),
+            top_recordings: items(v["topRecordings"].clone()),
         })
     }
     fn list<'a>(

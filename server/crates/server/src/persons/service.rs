@@ -655,6 +655,7 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
     .await?;
     let mut albums = owned;
     let mut partial = false;
+    let mut top: Vec<Value> = vec![];
     if let Some(mbid) = &p.musicbrainz {
         let md = &st.metadata;
         let mut credits = None;
@@ -676,6 +677,10 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
         }
         // A fallback that knows nothing of the artist does not stand for the one that failed.
         partial &= credits.as_ref().is_none_or(|c| c.albums.is_empty());
+        top = credits
+            .as_ref()
+            .map(|c| c.top_recordings.clone())
+            .unwrap_or_default();
         let held: HashSet<String> = albums
             .iter()
             .filter_map(|v| v["externalId"].as_str().map(str::to_owned))
@@ -707,5 +712,85 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
             )
         });
     }
-    Ok(json!({"artist": artist, "albums": albums, "partial": partial}))
+    let popular = popular(st, a, id, &acl, &top).await?;
+    Ok(json!({"artist": artist, "albums": albums, "partial": partial, "popular": popular}))
+}
+
+/// The provider's top recordings of the artist, each with the caller's owned track of that recording; with
+/// none from the provider, the artist's owned tracks by stored popularity.
+async fn popular(
+    st: &AppState,
+    a: &Authed,
+    person: i32,
+    acl: &[i32],
+    top: &[Value],
+) -> Result<Vec<Value>, AppError> {
+    let owned: Vec<(String, i32)> = if top.is_empty() {
+        sqlx::query_as(
+            r#"SELECT td."recordingMbid"::text, i.id FROM track_details td
+               JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = i."mediaId"
+               JOIN editions e ON e.id = i."editionId"
+               WHERE td.popularity IS NOT NULL AND td."recordingMbid" IS NOT NULL
+                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+                 AND (EXISTS (SELECT 1 FROM item_credits c WHERE c."itemId" = i.id AND c.role = 'artist'
+                               AND c."personId" = $1)
+                      OR EXISTS (SELECT 1 FROM media_credits c WHERE c."mediaId" = m.id AND c.role = 'artist'
+                                  AND c."editionId" IS NULL AND c."personId" = $1))
+               ORDER BY td.popularity DESC, i.id LIMIT 10"#,
+        )
+        .bind(person)
+        .bind(acl)
+        .fetch_all(&st.db)
+        .await?
+    } else {
+        let ids: Vec<&str> = top
+            .iter()
+            .filter_map(|t| t["recordingId"].as_str())
+            .collect();
+        sqlx::query_as(
+            r#"SELECT DISTINCT ON (td."recordingMbid") td."recordingMbid"::text, i.id FROM track_details td
+               JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = i."mediaId"
+               JOIN editions e ON e.id = i."editionId"
+               WHERE td."recordingMbid"::text = ANY($1)
+                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+               ORDER BY td."recordingMbid", i.id"#,
+        )
+        .bind(&ids)
+        .bind(acl)
+        .fetch_all(&st.db)
+        .await?
+    };
+    let items: Vec<i32> = owned.iter().map(|(_, i)| *i).collect();
+    let rows = crate::media::music::track_rows(&st.db, a.user.id, acl, &items).await?;
+    let track_of = |recording: &str| {
+        let item = owned.iter().find(|(r, _)| r == recording)?.1;
+        rows.iter().find(|r| r["itemId"] == item).cloned()
+    };
+    if top.is_empty() {
+        return Ok(owned
+            .iter()
+            .filter_map(|(recording, _)| {
+                let t = track_of(recording)?;
+                Some(json!({
+                    "recordingId": recording, "title": t["title"],
+                    "durationMs": t["durationSeconds"].as_f64().map(|s| (s * 1000.0).round() as i64),
+                    "listenCount": null, "albumExternalId": null, "albumTitle": t["albumTitle"],
+                    "coverUrl": t["posterUrl"], "track": t,
+                }))
+            })
+            .collect());
+    }
+    Ok(top
+        .iter()
+        .map(|t| {
+            let recording = t["recordingId"].as_str().unwrap_or_default();
+            json!({
+                "recordingId": recording, "title": t["title"], "durationMs": t["durationMs"],
+                "listenCount": t["listenCount"], "albumExternalId": t["albumExternalId"],
+                "albumTitle": t["albumTitle"], "coverUrl": t["coverUrl"], "track": track_of(recording),
+            })
+        })
+        .collect())
 }

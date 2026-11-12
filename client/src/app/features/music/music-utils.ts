@@ -94,31 +94,20 @@ export function trackRowRequest(t: TrackRow): MusicTrackRequest {
   };
 }
 
-export type ReleaseGroup = 'album' | 'ep' | 'single' | 'compilation' | 'live' | 'other';
-export const RELEASE_GROUPS: readonly ReleaseGroup[] = ['album', 'ep', 'single', 'compilation', 'live', 'other'];
+export type DiscographyTab = 'albums' | 'singles' | 'compilations';
+export const DISCOGRAPHY_TABS: readonly DiscographyTab[] = ['albums', 'singles', 'compilations'];
 
-export function releaseGroup(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTypes'>): ReleaseGroup {
-  const sec = a.secondaryTypes.map((s) => s.toLowerCase());
-  if (sec.includes('compilation')) return 'compilation';
-  if (sec.includes('live')) return 'live';
+export function discographyTab(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTypes'>): DiscographyTab {
+  if (a.secondaryTypes.some((s) => s.toLowerCase() === 'compilation')) return 'compilations';
   const p = a.primaryType?.toLowerCase();
-  return p === 'album' || p === 'ep' || p === 'single' ? p : 'other';
+  return p === 'ep' || p === 'single' ? 'singles' : 'albums';
 }
 
-export interface DiscographyGroups {
-  groups: { key: ReleaseGroup; albums: ArtistAlbum[] }[];
-  missing: ArtistAlbum[];
-}
-
-const byYear = (a: ArtistAlbum, b: ArtistAlbum) => (a.year ?? 9999) - (b.year ?? 9999) || a.title.localeCompare(b.title);
-
-/** Owned albums by release type, oldest first; the albums not in the library are one Missing group. */
-export function groupDiscography(albums: ArtistAlbum[]): DiscographyGroups {
-  const owned = albums.filter((a) => a.owned);
-  return {
-    groups: RELEASE_GROUPS.map((key) => ({ key, albums: owned.filter((a) => releaseGroup(a) === key).sort(byYear) })).filter(
-      (g) => g.albums.length,
-    ),
-    missing: albums.filter((a) => !a.owned).sort(byYear),
-  };
+/** The albums by tab, owned and missing together, newest first. */
+export function discographyTabs(albums: ArtistAlbum[]): Record<DiscographyTab, ArtistAlbum[]> {
+  const out: Record<DiscographyTab, ArtistAlbum[]> = { albums: [], singles: [], compilations: [] };
+  for (const a of albums) out[discographyTab(a)].push(a);
+  const newest = (a: ArtistAlbum, b: ArtistAlbum) => (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
+  for (const k of DISCOGRAPHY_TABS) out[k].sort(newest);
+  return out;
 }

@@ -26,6 +26,8 @@ pub(crate) struct MusicFake {
     pub found: Mutex<Vec<Value>>,
     /// The discography `person_credits` answers.
     pub albums: Mutex<Vec<Value>>,
+    /// The `topRecordings` `person_credits` answers.
+    pub top: Mutex<Vec<Value>>,
     pub calls: Mutex<Vec<String>>,
     /// What `fetch_lyrics` answers; none means the provider declares no lyrics.
     pub lyrics: Mutex<Option<Option<LyricsHit>>>,
@@ -146,9 +148,11 @@ impl MetadataProvider for MusicFake {
     }
     fn person_credits<'a>(&'a self, _: &'a str, _: &'a Resolved, _: Priority) -> Call<'a, Credits> {
         let albums = self.albums.lock().unwrap().clone();
+        let top_recordings = self.top.lock().unwrap().clone();
         Box::pin(async move {
             Ok(Credits {
                 albums,
+                top_recordings,
                 ..Credits::default()
             })
         })

@@ -3,6 +3,8 @@
 pub mod aliases;
 mod apply;
 pub mod people;
+#[cfg(test)]
+mod route_tests;
 pub mod routes;
 pub mod target;
 #[cfg(test)]

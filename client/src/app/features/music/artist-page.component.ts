@@ -1,11 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideChevronLeft, LucideMusic } from '@lucide/angular';
+import { NgTemplateOutlet } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
-import type { Discography } from '../../core/services/api/music.models';
+import type { Discography, PopularTrack } from '../../core/services/api/music.models';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MediaGridComponent } from '../../shared/components/media-grid/media-grid';
@@ -14,7 +20,8 @@ import { MusicDownloadsService } from '../../core/services/music-downloads.servi
 import { NavbarService } from '../../core/services/navbar.service';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
-import { groupDiscography } from './music-utils';
+import { TrackLineComponent } from './track-line.component';
+import { DISCOGRAPHY_TABS, type DiscographyTab, discographyTabs, trackRowRequest } from './music-utils';
 
 /** What a person card hands its page (`person-avatar-card`'s `state`). */
 export interface HandedPerson {
@@ -23,10 +30,10 @@ export interface HandedPerson {
   avatarUrl: string | null;
 }
 
-/** An artist: biography, follow, and the discography by release type with the albums not in the library apart. */
+/** An artist: biography, follow, the most listened tracks, and the discography by release type, owned and missing albums together. */
 @Component({
   selector: 'app-artist-page',
-  imports: [TranslatePipe, LucideChevronLeft, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
+  imports: [NgTemplateOutlet, TranslatePipe, LucideChevronLeft, LucideMusic, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
   templateUrl: './artist-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -35,6 +42,9 @@ export class ArtistPageComponent {
   private readonly downloads = inject(MusicDownloadsService);
   private readonly navbar = inject(NavbarService);
   private readonly router = inject(Router);
+  private readonly player = inject(AudioPlayerService);
+  private readonly auth = inject(AuthService);
+  private readonly addDialog = viewChild(AddDialogComponent);
   protected readonly id = toSignal(inject(ActivatedRoute).paramMap.pipe(map((p) => Number(p.get('id')))), { initialValue: 0 });
   protected readonly data = signal<Discography | null>(null);
   protected readonly loading = signal(true);
@@ -49,7 +59,18 @@ export class ArtistPageComponent {
     return h?.id === this.id() ? { name: h.name, avatarUrl: h.avatarUrl, biography: null } : null;
   });
   protected readonly skeletonCards = Array.from({ length: 12 }, (_, i) => i);
-  protected readonly groups = computed(() => groupDiscography(this.data()?.albums ?? []));
+  protected readonly tabs = computed(() => discographyTabs(this.data()?.albums ?? []));
+  protected readonly filled = computed(() => DISCOGRAPHY_TABS.filter((t) => this.tabs()[t].length));
+  private readonly picked = signal<DiscographyTab | null>(null);
+  protected readonly tab = computed(() => {
+    const p = this.picked();
+    return p && this.filled().includes(p) ? p : (this.filled()[0] ?? null);
+  });
+  protected readonly albums = computed(() => (this.tab() ? this.tabs()[this.tab()!] : []));
+  protected readonly popularShown = signal(5);
+  protected readonly popular = computed(() => (this.data()?.popular ?? []).slice(0, this.popularShown()));
+  protected readonly popularSkeleton = [0, 1, 2, 3, 4];
+  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create'));
   protected readonly subtitle = computed(() => {
     const a = this.data()?.artist;
     return [a?.artistType, a?.disambiguation].filter(Boolean).join(' · ');
@@ -63,6 +84,29 @@ export class ArtistPageComponent {
     effect(() => {
       const id = this.id();
       untracked(() => void this.load(id));
+    });
+  }
+
+  protected pick(t: DiscographyTab): void {
+    this.picked.set(t);
+  }
+
+  /** Plays the owned popular tracks from the tapped one. */
+  protected play(row: PopularTrack): void {
+    const owned = (this.data()?.popular ?? []).flatMap((p) => (p.track?.hasFile ? [p.track] : []));
+    const start = Math.max(0, owned.findIndex((t) => t.itemId === row.track?.itemId));
+    void this.player.playTracks(owned.map(trackRowRequest), start);
+  }
+
+  protected want(row: PopularTrack): void {
+    if (!row.albumExternalId) return;
+    void this.addDialog()?.add({
+      kind: 'album',
+      provider: 'musicbrainz',
+      externalId: row.albumExternalId,
+      title: row.albumTitle ?? row.title,
+      recording: { externalId: row.recordingId, albumExternalId: row.albumExternalId },
+      mode: this.canAdd() ? 'import' : 'request',
     });
   }
 

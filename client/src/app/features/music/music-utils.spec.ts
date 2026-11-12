@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtistAlbum, Track } from '../../core/services/api/music.models';
-import { artistLine, formatDuration, groupByWork, groupDiscography, groupDiscs, releaseGroup, toTrackRequest } from './music-utils';
+import { artistLine, formatDuration, groupByWork, discographyTab, discographyTabs, groupDiscs, toTrackRequest } from './music-utils';
 
 const track = (o: Partial<Track>): Track => ({
   itemId: 1, editionId: 1, mediaFileId: 1, hasFile: true, orphaned: false, discNumber: 1, discTitle: null, position: 1,
@@ -40,21 +40,21 @@ describe('music utils', () => {
     expect(r).toMatchObject({ itemId: 7, mediaId: 3, artists: 'Band', albumTitle: 'Alb', gain: -3, albumGain: -5 });
   });
 
-  it('classifies release types', () => {
-    expect(releaseGroup(album({}))).toBe('album');
-    expect(releaseGroup(album({ primaryType: 'Album', secondaryTypes: ['Live'] }))).toBe('live');
-    expect(releaseGroup(album({ primaryType: 'Album', secondaryTypes: ['Compilation', 'Live'] }))).toBe('compilation');
-    expect(releaseGroup(album({ primaryType: 'EP' }))).toBe('ep');
-    expect(releaseGroup(album({ primaryType: null }))).toBe('other');
+  it('classifies release types into tabs', () => {
+    expect(discographyTab(album({}))).toBe('albums');
+    expect(discographyTab(album({ secondaryTypes: ['Live'] }))).toBe('albums');
+    expect(discographyTab(album({ secondaryTypes: ['Compilation', 'Live'] }))).toBe('compilations');
+    expect(discographyTab(album({ primaryType: 'EP' }))).toBe('singles');
+    expect(discographyTab(album({ primaryType: null }))).toBe('albums');
   });
 
-  it('groups a discography with a missing group', () => {
-    const g = groupDiscography([
-      album({ title: 'b', year: 2005 }), album({ title: 'a', year: 1999 }), album({ primaryType: 'Single' }),
-      album({ owned: false, mediaId: null, title: 'm' }),
+  it('puts owned and missing albums together, newest first', () => {
+    const t = discographyTabs([
+      album({ title: 'a', year: 1999 }), album({ title: 'b', year: 2005 }), album({ primaryType: 'Single' }),
+      album({ owned: false, mediaId: null, title: 'm', year: 2010 }),
     ]);
-    expect(g.groups.map((x) => x.key)).toEqual(['album', 'single']);
-    expect(g.groups[0]!.albums.map((x) => x.title)).toEqual(['a', 'b']);
-    expect(g.missing.map((x) => x.title)).toEqual(['m']);
+    expect(t.albums.map((x) => x.title)).toEqual(['m', 'b', 'a']);
+    expect(t.singles.length).toBe(1);
+    expect(t.compilations).toEqual([]);
   });
 });

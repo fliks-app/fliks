@@ -5,7 +5,7 @@
   </button>
 
   @if (head(); as h) {
-    <app-person-header [name]="h.name" [avatarUrl]="h.avatarUrl" [biography]="h.biography" [viewTransitionName]="'person-avatar-' + id()">
+    <app-person-header [name]="h.name" [avatarUrl]="h.avatarUrl" [biography]="h.biography" size="hero" [viewTransitionName]="'person-avatar-' + id()">
       @if (subtitle()) {
         <p class="text-sm text-base-content/60">{{ subtitle() }}</p>
       }
@@ -24,6 +24,14 @@
   }
 
   @if (loading()) {
+    <section class="animate-pulse" data-testid="popular-skeleton">
+      <div class="h-7 w-32 mb-3 rounded bg-base-300/40"></div>
+      <ul class="flex flex-col gap-1 max-w-3xl">
+        @for (i of popularSkeleton; track i) {
+          <li class="h-12 rounded-lg bg-base-300/40"></li>
+        }
+      </ul>
+    </section>
     <section class="animate-pulse" data-testid="discography-skeleton">
       <div class="h-7 w-32 mb-3 rounded bg-base-300/40"></div>
       <app-media-grid>
@@ -33,31 +41,60 @@
       </app-media-grid>
     </section>
   } @else if (data(); as d) {
-    @for (g of groups().groups; track g.key) {
-      <section data-testid="release-group">
-        <h2 class="text-lg font-semibold mb-3">{{ 'music.group_' + g.key | translate }}</h2>
-        <app-media-grid>
-          @for (a of g.albums; track a.mediaId) {
-            <app-media-card [square]="true" [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="a.year ? '' + a.year : undefined" [link]="['/albums', '' + a.mediaId]" />
+    @if (popular().length) {
+      <section data-testid="popular">
+        <h2 class="text-lg font-semibold mb-3">{{ 'music.popular' | translate }}</h2>
+        <ol class="flex flex-col gap-1 max-w-3xl scroll-ring-safe">
+          @for (p of popular(); track p.recordingId) {
+            <li class="flex items-center gap-1 rounded-lg pe-1 hover:bg-base-200" data-testid="popular-track">
+              @if (p.track; as t) {
+                <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: p.title }" (click)="play(p)">
+                  <ng-container *ngTemplateOutlet="line; context: { $implicit: p }" />
+                </button>
+              } @else {
+                <div class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                  <ng-container *ngTemplateOutlet="line; context: { $implicit: p }" />
+                </div>
+                @if (p.albumExternalId && canAdd()) {
+                  <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="want(p)" data-testid="want-track">{{ 'search.want_track' | translate }}</button>
+                }
+              }
+            </li>
           }
-        </app-media-grid>
+        </ol>
+        @if (popular().length < d.popular.length) {
+          <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="popularShown.set(10)">{{ 'common.show_more' | translate }}</button>
+        }
       </section>
     }
 
-    @if (groups().missing.length) {
-      <section data-testid="missing-group">
-        <h2 class="text-lg font-semibold mb-3">{{ 'music.group_missing' | translate }}</h2>
+    @if (filled().length) {
+      <section data-testid="discography">
+        <h2 class="text-lg font-semibold mb-3">{{ 'music.discography' | translate }}</h2>
+        @if (filled().length > 1) {
+          <div class="flex flex-wrap gap-2 mb-4 scroll-ring-safe" data-testid="discography-tabs">
+            @for (t of filled(); track t) {
+              <button type="button" class="btn btn-sm" [class.btn-primary]="t === tab()" [attr.aria-pressed]="t === tab()" (click)="pick(t)">
+                {{ 'music.tab_' + (t === 'singles' ? 'singles_eps' : t) | translate }}
+              </button>
+            }
+          </div>
+        }
         <app-media-grid>
-          @for (a of groups().missing; track a.externalId ?? a.title) {
-            <app-media-card
-              [square]="true"
-              [imageUrl]="a.posterUrl"
-              [title]="a.title"
-              [subtitle]="a.year ? '' + a.year : undefined"
-              badge="missing"
-              [hideStatusBar]="true"
-              [link]="a.externalId ? ['/add/album', 'musicbrainz', a.externalId] : null"
-            />
+          @for (a of albums(); track a.mediaId ?? a.externalId ?? a.title) {
+            @if (a.owned) {
+              <app-media-card [square]="true" [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="a.year ? '' + a.year : undefined" [link]="['/albums', '' + a.mediaId]" />
+            } @else {
+              <app-media-card
+                [square]="true"
+                [imageUrl]="a.posterUrl"
+                [title]="a.title"
+                [subtitle]="a.year ? '' + a.year : undefined"
+                badge="missing"
+                [hideStatusBar]="true"
+                [link]="a.externalId ? ['/add/album', 'musicbrainz', a.externalId] : null"
+              />
+            }
           }
         </app-media-grid>
       </section>
@@ -68,7 +105,7 @@
         <span>{{ 'music.discography_partial' | translate }}</span>
         <button type="button" class="btn btn-sm" (click)="retry()">{{ 'common.retry' | translate }}</button>
       </div>
-    } @else if (!groups().groups.length && !groups().missing.length) {
+    } @else if (!filled().length) {
       <p class="text-center py-12 text-base-content/50">{{ 'music.no_albums' | translate }}</p>
     }
   } @else if (failed()) {
@@ -78,3 +115,16 @@
     </div>
   }
 </div>
+
+<ng-template #line let-p>
+  <app-track-line [title]="p.title" [subtitle]="p.albumTitle" [durationSeconds]="p.durationMs ? p.durationMs / 1000 : null">
+    <span lead class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-base-300">
+      <svg lucideMusic class="size-4 text-base-content/40"></svg>
+      @if (p.coverUrl) {
+        <img [cachedSrc]="p.coverUrl | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+      }
+    </span>
+  </app-track-line>
+</ng-template>
+
+<app-add-dialog />

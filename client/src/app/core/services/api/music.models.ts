@@ -161,6 +161,19 @@ export interface Discography {
   albums: ArtistAlbum[];
   /** The provider's discography failed: `albums` holds the owned ones only. */
   partial: boolean;
+  popular: PopularTrack[];
+}
+
+/** One of the artist's most listened recordings; `track` is the owned copy, null when the library has none. */
+export interface PopularTrack {
+  recordingId: string;
+  title: string;
+  durationMs: number | null;
+  listenCount: number | null;
+  albumExternalId: string | null;
+  albumTitle: string | null;
+  coverUrl: string | null;
+  track: TrackRow | null;
 }
 
 // GET /api/persons?role=artist|composer
@@ -188,6 +201,21 @@ export interface WorkRecording {
   year: number | null;
   durationSeconds: number | null;
   mediaFileId: number | null;
+}
+
+// GET /api/metadata/:provider/album/:externalId
+export interface AlbumPreview {
+  provider: string;
+  externalId: string;
+  title: string;
+  year: number | null;
+  posterUrl: string | null;
+  artists: { name: string; creditedName: string | null; joinPhrase: string | null; externalId: string | null }[];
+  release: { externalId: string; title: string; country: string | null; releaseDate: string | null } | null;
+  tracks: AlbumPreviewTrack[];
+  trackCount: number;
+  durationMs: number;
+  existingMediaId: number | null;
 }
 
 // GET /api/music/albums/tracks

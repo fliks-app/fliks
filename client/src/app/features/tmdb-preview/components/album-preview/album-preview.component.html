@@ -1,13 +1,29 @@
 <app-hero-base
-  [title]="seed()?.title ?? null"
-  [loading]="!seed()"
+  [title]="hero()?.title ?? null"
+  [loading]="!hero()"
   mediaType="album"
-  [posterUrl]="seed()?.posterUrl ?? null"
+  [posterUrl]="hero()?.posterUrl ?? null"
   [viewTransitionName]="posterTransitionName()"
+  [metaParts]="metaParts()"
   [chips]="chips"
 >
+  @if (album()?.artists?.length) {
+    <p heroMeta class="mt-1 flex flex-wrap items-center font-medium">
+      @for (a of album()!.artists; track $index) {
+        @if (a.externalId) {
+          <button type="button" class="link no-underline hover:underline" (click)="openArtist(a.externalId)">{{ a.creditedName ?? a.name }}</button>
+        } @else {
+          <span>{{ a.creditedName ?? a.name }}</span>
+        }
+        <span class="whitespace-pre">{{ $last ? '' : (a.joinPhrase ?? ', ') }}</span>
+      }
+    </p>
+  }
+
   <ng-container ngProjectAs="[heroActions]">
-    @if (canImport()) {
+    @if (inLibraryLink(); as link) {
+      <a class="btn btn-primary" [routerLink]="link" data-hero-actions>{{ 'music.open_in_library' | translate }}</a>
+    } @else if (canImport()) {
       <button type="button" class="btn btn-primary gap-2" (click)="open()" data-hero-actions>
         <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
       </button>
@@ -18,5 +34,36 @@
     }
   </ng-container>
 </app-hero-base>
+
+@if (failed()) {
+  <div role="alert" class="alert alert-error mt-6" data-testid="preview-failed">
+    <span>{{ 'music.preview_failed' | translate }}</span>
+    <button type="button" class="btn btn-sm" (click)="load()">{{ 'common.retry' | translate }}</button>
+  </div>
+} @else if (!album()) {
+  <ul class="mt-6 flex flex-col gap-1 animate-pulse" aria-hidden="true" data-testid="tracklist-skeleton">
+    @for (i of placeholders; track i) {
+      <li class="h-12 rounded-lg bg-base-300/40"></li>
+    }
+  </ul>
+} @else if (album()!.tracks.length) {
+  <section class="mt-6" data-testid="tracklist">
+    <h2 class="mb-3 text-lg font-semibold">{{ 'music.tracklist' | translate }}</h2>
+    @for (d of discs(); track d.discNumber) {
+      @if (discs().length > 1) {
+        <h3 class="mt-3 mb-1 text-sm font-semibold text-base-content/60">{{ 'music.disc' | translate: { n: d.discNumber } }}</h3>
+      }
+      <ol class="flex flex-col gap-1">
+        @for (t of d.tracks; track t.position) {
+          <li class="flex items-center gap-3 rounded-lg px-3 py-2" data-testid="preview-track">
+            <app-track-line [title]="t.title" [subtitle]="null" [durationSeconds]="t.durationMs == null ? null : t.durationMs / 1000">
+              <span lead class="w-6 shrink-0 text-right text-sm tabular-nums text-base-content/50">{{ t.number ?? t.position }}</span>
+            </app-track-line>
+          </li>
+        }
+      </ol>
+    }
+  </section>
+}
 
 <app-add-dialog (done)="onAdded($event)" />
