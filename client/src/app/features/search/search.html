@@ -495,18 +495,21 @@
   }
 </ng-template>
 
+<!-- The placeholder stays under the image: it shows while the image loads and when it fails. -->
 <ng-template #cover let-url>
-  @if (url) {
-    <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="size-10 shrink-0 rounded object-cover bg-base-300" />
-  } @else {
-    <span class="flex size-10 shrink-0 items-center justify-center rounded bg-base-300"><svg lucideMusic class="size-4 text-base-content/40"></svg></span>
-  }
+  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-base-300">
+    <svg lucideMusic class="size-4 text-base-content/40"></svg>
+    @if (url) {
+      <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+    }
+  </span>
 </ng-template>
 
 <ng-template #artistThumb let-url let-name="name">
-  @if (url) {
-    <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="size-10 shrink-0 rounded-full object-cover bg-base-300" />
-  } @else {
-    <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-base-300 font-bold text-base-content/40">{{ name.charAt(0) }}</span>
-  }
+  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-300 font-bold text-base-content/40">
+    {{ name.charAt(0) }}
+    @if (url) {
+      <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+    }
+  </span>
 </ng-template>
