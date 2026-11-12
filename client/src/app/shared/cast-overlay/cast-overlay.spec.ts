@@ -1,5 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import { Component, computed, input, provideZonelessChangeDetection, signal } from '@angular/core';
+import { computed, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,8 +16,6 @@ import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio
 import { deviceIdOf } from '../../core/services/remote-target-id';
 import { ServerVersionService } from '../../core/services/server-version.service';
 import { SseService } from '../../core/services/sse.service';
-import { DropdownMenuComponent } from '../components/dropdown-menu';
-import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { CastOverlayComponent } from './cast-overlay';
 
 // jsdom has no ResizeObserver (the title marquee).
@@ -25,18 +23,6 @@ import { CastOverlayComponent } from './cast-overlay';
   observe() {}
   disconnect() {}
 };
-
-@Component({ selector: 'app-dropdown-menu', template: '<ng-content select="[trigger]" />' })
-class DropdownStub {
-  readonly placement = input('');
-  readonly heading = input('');
-}
-
-@Component({ selector: 'app-remote-picker-list', template: '' })
-class PickerListStub {
-  readonly transferOnly = input(false);
-  readonly card = input(false);
-}
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   return {
@@ -104,7 +90,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     command: vi.fn(),
     partyActive: signal(false),
   };
-  const audioView = { expand: vi.fn() };
+  const audioView = { expand: vi.fn(), track: signal(null), position: () => sync.positionNow(account()!), duration: () => sync.durationNow(account()!), queue: signal([]), neighbour: () => null, next: vi.fn(), previous: vi.fn() };
   const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) };
   TestBed.configureTestingModule({
     providers: [
@@ -125,13 +111,9 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },
     ],
   });
-  TestBed.overrideComponent(CastOverlayComponent, {
-    remove: { imports: [DropdownMenuComponent, RemotePickerListComponent] },
-    add: { imports: [DropdownStub, PickerListStub] },
-  });
   const fixture = TestBed.createComponent(CastOverlayComponent);
   fixture.detectChanges();
-  return { el: fixture.nativeElement as HTMLElement, fixture, session, output, sync, target, audioView, audio };
+  return { el: fixture.nativeElement as HTMLElement, strip: (fixture.nativeElement as HTMLElement).querySelector('.fixed'), fixture, session, output, sync, target, audioView, audio };
 }
 
 describe('CastOverlayComponent', () => {
@@ -161,6 +143,20 @@ describe('CastOverlayComponent', () => {
     expect(output.disconnect).toHaveBeenCalled();
   });
 
+  it('is absent while the selected output is idle', () => {
+    const { el, output, fixture } = setup();
+    output.isIdle.set(true);
+    fixture.detectChanges();
+    expect(el.querySelector('.fixed')).toBeNull();
+  });
+
+  it('shows no poster from the account session when the output reports none', () => {
+    const { el, session, fixture } = setup({ account: accountSession() });
+    session.nowPlaying.set(null);
+    fixture.detectChanges();
+    expect(el.querySelector('img')).toBeNull();
+  });
+
   it('cannot open the player while nothing plays', () => {
     const { el } = setup({ fileId: 0 });
     expect(el.querySelector('button')!.disabled).toBe(true);
@@ -174,13 +170,12 @@ describe('CastOverlayComponent', () => {
       expect(el.textContent).toContain('2:05');
     });
 
-    it('pauses the owner without selecting it, and offers to play here', () => {
-      const { el, target, sync } = setup({ local: true, account: accountSession(), canPlayHere: true });
+    it('pauses the owner without selecting it, with no other button', () => {
+      const { el, target } = setup({ local: true, account: accountSession(), canPlayHere: true });
       const buttons = Array.from(el.querySelectorAll('button'));
+      expect(buttons).toHaveLength(1);
       buttons[0].click();
-      buttons[1].click();
       expect(target.pause).toHaveBeenCalled();
-      expect(sync.playHere).toHaveBeenCalled();
     });
 
     it('shows an observed album session as track and artist, and as the track title while it loads', () => {
@@ -203,7 +198,7 @@ describe('CastOverlayComponent', () => {
       const { el, sync } = setup({ local: true, account: accountSession(), live: false });
       sync.session.set(accountSession({ positionSeconds: 1800 }));
       expect(el.querySelector('[aria-label="player.pause"]')).not.toBeNull();
-      expect(el.querySelector('progress')).not.toBeNull();
+      expect(el.querySelector('[data-testid="observed-progress"]')).not.toBeNull();
     });
 
     it('opens the full audio player on the session from the strip of an audio session only', () => {
@@ -216,50 +211,26 @@ describe('CastOverlayComponent', () => {
       expect(video.audioView.expand).not.toHaveBeenCalled();
     });
 
-    it('shows a reader as read on its device with the percentage, opens here and has no transport', () => {
+    it('shows no strip for a reader, read here or elsewhere', () => {
       const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
-      const { el, sync } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false, positionSeconds: 0.4, durationSeconds: 1 }) });
-      expect(el.textContent).toContain('session.read_on');
-      expect(el.textContent).toContain('40%');
-      expect(el.textContent).toContain('session.open_here');
-      expect(el.querySelector('[aria-label="session.transfer"]')).toBeNull();
-      (Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('session.open_here')) as HTMLButtonElement).click();
-      expect(sync.playHere).toHaveBeenCalled();
-    });
-
-    it('hides the strip of a book read on this very device', () => {
-      const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
-      const { el } = setup({ local: true, account: accountSession({ item: book, state: 'parked', playing: false, owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }) });
-      expect(el.querySelector('button')).toBeNull();
+      const { strip } = setup({ local: true, account: accountSession({ item: book, state: 'parked', playing: false, owner: { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' } }) });
+      expect(strip).toBeNull();
+      TestBed.resetTestingModule();
+      expect(setup({ local: true, account: accountSession({ item: book }) }).strip).toBeNull();
     });
 
     it('hides the strip of a session parked by an earlier page load of this device while its player holds the track', () => {
       const track = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const };
       const parked = accountSession({ item: track, state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } });
-      expect(setup({ local: true, canPlayHere: true, live: false, account: parked, localTrack: 5 }).el.querySelector('button')).toBeNull();
+      expect(setup({ local: true, canPlayHere: true, live: false, account: parked, localTrack: 5 }).strip).toBeNull();
     });
 
-    it('words a session parked by this device as this device, without a resume or transfer button on an audio strip', () => {
+    it('shows no strip for a parked session: music is left to the mini-player', () => {
       const track = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const };
       const parked = accountSession({ item: track, state: 'parked', playing: false, owner: { targetId: 'phone#old', deviceName: null, formFactor: 'phone' } });
-      const { el } = setup({ local: true, canPlayHere: true, live: false, account: parked });
-      expect(el.textContent).toContain('session.parked_here');
-      expect(el.textContent).not.toContain('session.another_device');
-      expect(el.textContent).not.toContain('session.resume');
-      expect(el.querySelector('[aria-label="session.transfer"]')).toBeNull();
-    });
-
-    it('hides a parked reader strip here without deleting the session', () => {
-      const book = { ...accountSession().item, kind: 'book' as const, family: 'text' as const };
-      const { el, fixture } = setup({ local: true, canPlayHere: true, live: false, account: accountSession({ item: book, state: 'parked', playing: false }) });
-      Array.from(el.querySelectorAll('button')).at(-1)!.click();
-      fixture.detectChanges();
-      expect(el.querySelector('button')).toBeNull();
-    });
-
-    it('offers the device list to transfer the session to', () => {
-      const { el } = setup({ local: true, account: accountSession() });
-      expect(el.querySelector('[aria-label="session.transfer"]')).not.toBeNull();
+      expect(setup({ local: true, canPlayHere: true, live: false, account: parked }).strip).toBeNull();
+      TestBed.resetTestingModule();
+      expect(setup({ local: true, live: false, account: accountSession({ state: 'parked', playing: false }) }).strip).toBeNull();
     });
 
     it('is hidden on a TV, and for the owner', () => {
@@ -268,53 +239,17 @@ describe('CastOverlayComponent', () => {
       expect(setup({ local: true }).el.querySelector('button')).toBeNull();
     });
 
-    it('reads parked as offline with the stored position and hides it on this device only', () => {
-      const parked = accountSession({ state: 'parked', playing: false, positionSeconds: 640 });
-      const { el, fixture } = setup({ local: true, account: parked, live: false, canPlayHere: true });
-      expect(el.textContent).toContain('session.parked_device');
-      const buttons = Array.from(el.querySelectorAll('button'));
-      expect(buttons).toHaveLength(3);
-      buttons[2].click();
-      fixture.detectChanges();
-      expect(el.querySelector('button')).toBeNull();
-    });
-
-    it('hides a live session here until its owner changes', () => {
-      const { el, fixture } = setup({ local: true, account: accountSession() });
-      Array.from(el.querySelectorAll('button')).at(-1)!.click();
-      fixture.detectChanges();
-      expect(el.querySelector('button')).toBeNull();
-    });
-
-    it('shows a new session of the same owner again, even at the same epoch', () => {
-      const { el, fixture, sync } = setup({ local: true, account: accountSession() });
-      Array.from(el.querySelectorAll('button')).at(-1)!.click();
-      fixture.detectChanges();
-      expect(el.querySelector('button')).toBeNull();
-      sync.session.set(null);
-      fixture.detectChanges();
-      sync.session.set(accountSession());
-      fixture.detectChanges();
-      expect(el.textContent).toContain('Observed title');
-    });
-
     it('keeps the stored position when the report names another file than the session', () => {
       const { el } = setup({ local: true, account: accountSession({ positionSeconds: 65 }), live: false });
       expect(el.textContent).toContain('1:05');
       expect(el.textContent).not.toContain('2:05');
     });
 
-    it('replaces a paused local track while another device plays, but never covers one for a parked session', () => {
+    it('replaces a paused local track while another device plays', () => {
       const live = setup({ local: true, account: accountSession() });
       live.audio.active.set(true);
       TestBed.tick();
       expect(live.el.querySelector('button')).not.toBeNull();
-      TestBed.resetTestingModule();
-      const parked = setup({ local: true, account: accountSession({ state: 'parked', playing: false }) });
-      expect(parked.el.querySelector('button')).not.toBeNull();
-      parked.audio.active.set(true);
-      TestBed.tick();
-      expect(parked.el.querySelector('button')).toBeNull();
     });
 
     it('stays away from a party', () => {

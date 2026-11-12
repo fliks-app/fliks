@@ -163,6 +163,7 @@ export class SessionSyncService {
   /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
   private readonly tick = signal(0);
   private fetching = false;
+  private dismissItem: number | null = null;
   private refetch = false;
 
   constructor() {
@@ -190,6 +191,17 @@ export class SessionSyncService {
 
     effect(() => {
       if (this.role() === 'owner') untracked(() => this.releaseClaim());
+    });
+
+    effect(() => {
+      const s = this._session();
+      const owned = this.ownedHere();
+      if (this.dismissItem === null) return;
+      if (!s || s.item.id !== this.dismissItem || !owned) this.dismissItem = null;
+      else if (s.state === 'parked') {
+        this.dismissItem = null;
+        untracked(() => void this.dismiss());
+      }
     });
 
     // A claim whose player is gone (start failed, closed before its first beat) must not outlive it.
@@ -409,6 +421,19 @@ export class SessionSyncService {
     const s = this._session();
     return !!s && this.role() !== 'owner' && !!this.resumerFor(s);
   });
+
+  /** Deletes a parked session for every device of the account; a live one is refused and stays. */
+  async dismiss(): Promise<void> {
+    await firstValueFrom(this.http.delete('/api/session', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })).catch(() => undefined);
+  }
+
+  /** This device stops `itemId` for good: its session is deleted once parked, unless another item or owner took it first. */
+  dismissOnPark(itemId: number | undefined): void {
+    const s = this._session();
+    if (!s || s.item.id !== itemId || !this.ownedHere()) return;
+    if (s.state === 'parked') void this.dismiss();
+    else this.dismissItem = itemId;
+  }
 
   /** Takes the session over on this device, at its position now; the first beat claims it and the old owner is superseded. */
   async playHere(): Promise<void> {

@@ -6,6 +6,7 @@ import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
+import { sameTarget } from '../../core/services/remote-target-id';
 import { ToastService } from '../../core/services/toast.service';
 import { NowPlayingMetadataService, nowPlayingLine } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
@@ -59,7 +60,7 @@ export class RemotePickerListComponent {
   protected readonly castService = inject(CastService);
   private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
-  private readonly session = inject(PlaybackSession);
+  protected readonly session = inject(PlaybackSession);
   protected readonly sync = inject(SessionSyncService);
   private readonly device = inject(DeviceService);
   private readonly surface = inject(PlaybackSurface);
@@ -80,8 +81,10 @@ export class RemotePickerListComponent {
   protected readonly followed = computed(() => {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
-    // The device card already shows this session.
-    if (this.surface.here() || (this.card() && this.playing.name())) return null;
+    // The card shows a live session of its own device; a parked one is never a device's playback.
+    const owner = this.remote.observedTargetId();
+    const onCard = this.card() && !!this.playing.name() && this.session.kind() !== 'cast' && s.state !== 'parked' && !!owner && !!s.owner.targetId && sameTarget(s.owner.targetId, owner);
+    if (this.surface.here() || onCard) return null;
     const reading = this.sync.isReading(s);
     const position = reading ? `${this.readPercent(s)}%` : formatTime(this.sync.positionNow(s));
     const track = this.sessionTrack();
@@ -100,12 +103,8 @@ export class RemotePickerListComponent {
     return item?.kind === 'album' ? { mediaId: item.mediaId, episodeId: item.episodeId ?? undefined, itemId: item.id } : null;
   });
 
-  /** What the current device plays: the account session's item (a track with its artists for an album), else the cast or remote output's. */
-  protected readonly cardTrack = computed(() => {
-    const item = this.sync.session()?.item;
-    if (!item) return nowPlayingLine(this.session.nowPlaying()) || null;
-    return nowPlayingLine(this.sessionTrack()) || (item.kind === 'album' ? (item.subtitle ?? item.title) : item.title);
-  });
+  /** What the selected output plays; a parked account session is never shown as it. */
+  protected readonly cardTrack = computed(() => nowPlayingLine(this.session.nowPlaying()) || null);
 
   protected onVolume(event: Event): void {
     this.playing.setVolume(+(event.target as HTMLInputElement).value / 100);
@@ -130,7 +129,7 @@ export class RemotePickerListComponent {
             ? this.translate.instant('session.open_here')
             : this.translate.instant('session.resume_here')
           : null,
-      connected: this.session.isLocal() && !resumable,
+      connected: this.session.isLocal() && !this.session.observing() && !resumable,
       disabled: this.surface.here() && this.session.isLocal(),
     });
     if (!this.enumerates) {
@@ -197,8 +196,18 @@ export class RemotePickerListComponent {
     const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
     rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
     // A transfer list has nothing to do with a device it cannot transfer to, the session's owner included.
-    return this.transferOnly() ? rows.filter((r) => r.kind !== 'remote' || r.connected || this.canTransfer(r)) : rows;
+    const listed = this.transferOnly() ? rows.filter((r) => r.kind !== 'remote' || r.connected || this.canTransfer(r)) : rows;
+    // The device card already names the connected device and carries the way out.
+    if (!this.card() || !this.playing.name()) return listed;
+    const casting = this.session.kind() === 'cast';
+    return listed.filter((r) => (r.kind === 'remote' ? this.session.kind() === 'cast' || r.id !== this.remote.observedTarget()?.targetId : !(casting && r.connected && (r.kind === 'cast' || r.kind === 'cast-web'))));
   });
+
+  /** Leaves the device the card shows: a remote device plays on alone, a Cast session ends. */
+  protected leave(): void {
+    if (this.session.kind() === 'cast') this.castTarget.disconnect();
+    else this.session.stopControlling();
+  }
 
   /** The sheet branch mounts the list only while it is open, so this covers
    *  every open there; a host that keeps it mounted calls `refresh()` itself. */
@@ -258,8 +267,7 @@ export class RemotePickerListComponent {
     }
     // Pressing the device in use is the way out of it: a Cast session ends, a remote device plays on alone.
     if (row.connected) {
-      if (row.kind === 'remote') this.session.stopControlling();
-      else this.castTarget.disconnect();
+      this.leave();
       return;
     }
     this.setLastUsed(row.id);

@@ -3,8 +3,8 @@ import { Directive, ElementRef, inject, input, output } from '@angular/core';
 /** Fraction of the host width past which a release skips. */
 const THRESHOLD = 0.4;
 
-/** Touch-only horizontal swipe: the host follows the finger, and past the threshold `skipped` fires with the direction.
- *  Vertical scrolling stays with the browser. */
+/** Touch-only horizontal swipe: reports the drag as a fraction of the host width, then whether the release skips.
+ *  Vertical scrolling stays with the browser; the host paints the motion. */
 @Directive({
   selector: '[appSwipeSkip]',
   host: {
@@ -12,13 +12,13 @@ const THRESHOLD = 0.4;
     '(pointerdown)': 'down($event)',
     '(pointermove)': 'move($event)',
     '(pointerup)': 'up()',
-    '(pointercancel)': 'reset()',
+    '(pointercancel)': 'cancel()',
   },
 })
 export class SwipeSkipDirective {
-  readonly skipped = output<'next' | 'previous'>();
-  /** The live horizontal offset as a fraction of the host width, 0 once released. */
   readonly dragged = output<number>();
+  /** The direction to skip to, or null when the release falls back. */
+  readonly released = output<'next' | 'previous' | null>();
   /** The directions with a track to skip to; the host doesn't move the other way. */
   readonly allow = input({ next: true, previous: true });
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
@@ -45,23 +45,18 @@ export class SwipeSkipDirective {
       this.el.setPointerCapture(e.pointerId);
     }
     this.dx = dx;
-    this.paint(dx, false);
+    this.dragged.emit(dx / (this.el.offsetWidth || 1));
   }
 
   protected up(): void {
-    const skip = this.active && Math.abs(this.dx) >= THRESHOLD * this.el.offsetWidth;
-    if (skip) this.skipped.emit(this.dx < 0 ? 'next' : 'previous');
-    this.reset(!skip);
-  }
-
-  protected reset(animate = true): void {
+    if (!this.active) return void (this.tracking = false);
+    const skip = Math.abs(this.dx) >= THRESHOLD * this.el.offsetWidth;
     this.tracking = this.active = false;
-    this.paint(0, animate);
+    this.released.emit(skip ? (this.dx < 0 ? 'next' : 'previous') : null);
   }
 
-  private paint(dx: number, animate: boolean): void {
-    this.el.style.transition = animate ? 'transform 0.15s ease-out, opacity 0.15s ease-out' : 'none';
-    this.el.style.transform = dx ? `translateX(${dx}px)` : '';
-    this.dragged.emit(dx / (this.el.offsetWidth || 1));
+  protected cancel(): void {
+    if (this.active) this.released.emit(null);
+    this.tracking = this.active = false;
   }
 }

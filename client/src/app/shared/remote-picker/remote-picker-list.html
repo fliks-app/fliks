@@ -23,6 +23,9 @@
           <p class="truncate text-sm opacity-60">{{ track }}</p>
         }
       </div>
+      @if (!session.isLocal()) {
+        <button type="button" class="btn btn-ghost btn-sm shrink-0 text-white" (click)="leave()">{{ (session.kind() === 'cast' ? 'remote.disconnect_row' : 'remote.stop_controlling') | translate }}</button>
+      }
     </div>
     @if (playing.canSetVolume()) {
       <input

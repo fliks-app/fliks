@@ -1,0 +1,17 @@
+@if (peek(); as p) {
+  <span class="absolute inset-0" [class.swipe-settle]="settling()" [style.transform]="peekStyle().transform" [style.opacity]="peekStyle().opacity" aria-hidden="true">
+    <ng-container *ngTemplateOutlet="lines(); context: { $implicit: p }" />
+  </span>
+}
+<span
+  class="block"
+  appSwipeSkip
+  [class.swipe-settle]="settling()"
+  [style.transform]="currentStyle().transform"
+  [style.opacity]="currentStyle().opacity"
+  [allow]="allow()"
+  (dragged)="onDragged($event)"
+  (released)="onReleased($event)"
+>
+  <ng-container *ngTemplateOutlet="lines(); context: { $implicit: null }" />
+</span>
