@@ -277,7 +277,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ...(this.showPeople() ? [{ value: 'people' as const, labelKey: 'search.scope_people' }] : []),
   ]);
   protected readonly videoKinds = [
-    { value: 'video' as const, labelKey: 'search.scope_movies_series' },
+    { value: 'video' as const, labelKey: 'search.filter_all' },
     { value: 'movie' as const, labelKey: 'search.filter_movies' },
     { value: 'series' as const, labelKey: 'search.filter_series' },
   ];

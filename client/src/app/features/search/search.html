@@ -31,7 +31,7 @@
     @if (isVideo()) {
       <div class="join w-full lg:w-fit max-w-full overflow-x-auto scroll-ring-safe" role="group">
         @for (k of videoKinds; track k.value) {
-          <button type="button" class="btn btn-sm join-item flex-1 shrink-0 whitespace-nowrap" [class.btn-active]="state.scope() === k.value" [attr.aria-pressed]="state.scope() === k.value" (click)="setScope(k.value)">{{ k.labelKey | translate }}</button>
+          <button type="button" class="btn btn-sm join-item flex-1 shrink-0 whitespace-nowrap" [class.btn-primary]="state.scope() === k.value" [attr.aria-pressed]="state.scope() === k.value" (click)="setScope(k.value)">{{ k.labelKey | translate }}</button>
         }
       </div>
     }
