@@ -10,6 +10,7 @@ import { PartyService } from '../party/party.service';
 import { FullPlayerState } from './full-player-state';
 import { NowPlayingMetadataService } from './now-playing-metadata.service';
 import type { Media } from '../api/media.service';
+import { SessionSyncService } from '../session-sync.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { parseDeviceLabel } from '../../utils/format-device-label';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
@@ -65,6 +66,7 @@ export class PlaybackSession {
   private readonly castPlayer = () => this.injector.get(CastPlayerService);
   private readonly remoteSvc = () => this.injector.get(RemoteService);
   private readonly router = () => this.injector.get(Router);
+  private readonly sync = () => this.injector.get(SessionSyncService);
 
   private readonly local = signal<LocalOutput | null>(null);
   private moving: Promise<boolean> | null = null;
@@ -99,6 +101,15 @@ export class PlaybackSession {
         ? 'cast'
         : 'local',
   );
+  /** What an open video view does once the account session moves on: `audio` hands over to the audio player, `none` closes; null follows the item. */
+  readonly viewEnd = computed<'audio' | 'none' | null>(() => {
+    if (!this.viewing()) return null;
+    const sync = this.sync();
+    const s = sync.session();
+    if (!s || !sync.observedOwnerTargetId() || sync.isReading(s)) return 'none';
+    if (sync.isAudio(s)) return 'audio';
+    return s.item.mediaFileId ? null : 'none';
+  });
   readonly isLocal = computed(() => this.kind() === 'local');
 
   /** Following the account session's owner while this device plays nothing itself or elsewhere. */
@@ -134,6 +145,15 @@ export class PlaybackSession {
         this.wasCasting = casting;
         if (casting) this.onCastConnected();
       });
+    });
+    // An audio view follows an owner that now plays a video into the video player.
+    effect(() => {
+      if (this.fullPlayer.open() !== 'audio' || !this.fullPlayer.remote()) return;
+      const sync = this.sync();
+      const s = sync.session();
+      if (!s?.item.mediaFileId || sync.isAudio(s) || sync.isReading(s) || !sync.observedOwnerTargetId()) return;
+      const item = { fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined };
+      untracked(() => this.viewObserved(item));
     });
   }
 
@@ -280,6 +300,11 @@ export class PlaybackSession {
   viewObserved(item: { fileId: number; mediaId: number; episodeId?: number }): void {
     this.fullPlayer.show('video', true);
     this.openPlayer(item);
+  }
+
+  /** The route of a view that `viewEnd` ended is closing: the audio family's player takes the view over. */
+  handOverView(to: 'audio' | 'none'): void {
+    if (to === 'audio') this.fullPlayer.show('audio', true);
   }
 
   /** The local video route is up: it owns the full player, as a view when it was opened on the observed session. */

@@ -415,6 +415,13 @@ export class SessionSyncService {
     return s.item.family === 'text' || s.item.family === 'image';
   }
 
+  /** Whether the session plays in the audio player, which has its own controller; any other family is watched in the video player. */
+  isAudio(s: AccountSession): boolean {
+    if (s.item.family) return s.item.family === 'audio';
+    const families = KIND_REGISTRY[s.item.kind].families;
+    return families.includes('audio') && !families.includes('video');
+  }
+
   /** Playable sessions only: a reader's position is resumed where it is opened, never moved. */
   readonly canTransfer = computed(() => {
     const s = this._session();

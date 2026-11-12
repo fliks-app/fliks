@@ -13,6 +13,7 @@ import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
+import { SessionSyncService } from '../session-sync.service';
 import { ToastService } from '../toast.service';
 import type { LocalHandoff, LocalOutput, PlaybackSnapshot } from './playback-output';
 import { FullPlayerState } from './full-player-state';
@@ -98,6 +99,12 @@ function setup() {
     clear: vi.fn(),
     quickStart: vi.fn(async () => {}),
   };
+  const syncSvc = {
+    session: signal<any>(null),
+    observedOwnerTargetId: signal<string | null>('tv-1'),
+    isReading: (s: any) => s.item.family === 'text',
+    isAudio: (s: any) => s.item.family === 'audio',
+  };
   const device = { isTv: signal(false) };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
@@ -107,6 +114,7 @@ function setup() {
       { provide: CastPlaybackTarget, useValue: cast },
       { provide: RemotePlaybackTarget, useValue: remote },
       { provide: PartyService, useValue: party },
+      { provide: SessionSyncService, useValue: syncSvc },
       { provide: CastService, useValue: castSvc },
       { provide: RemoteService, useValue: remoteSvc },
       { provide: CastPlayerService, useValue: castPlayer },
@@ -129,7 +137,7 @@ function setup() {
     resume: vi.fn(async () => {}),
     disconnect: vi.fn(),
   } as unknown as LocalOutput;
-  return { session, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming };
+  return { session, syncSvc, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming };
 }
 
 describe('PlaybackSession', () => {
@@ -592,6 +600,60 @@ describe('PlaybackSession', () => {
       expect(TestBed.inject(FullPlayerState).open()).toBe('video');
       expect(router.navigate).toHaveBeenCalled();
       expect(remoteSvc.selectTarget).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a view follows the owner', () => {
+    const item = (family: string, mediaFileId: number | null = 7) => ({ item: { family, mediaFileId, mediaId: 3, episodeId: 9 } });
+
+    it('keeps a video view on another video item and ends it for audio, a reader or no owner', () => {
+      const { session, syncSvc } = setup();
+      TestBed.inject(FullPlayerState).show('video', true);
+      syncSvc.session.set(item('video'));
+      expect(session.viewEnd()).toBeNull();
+      syncSvc.session.set(item('video', 8));
+      expect(session.viewEnd()).toBeNull();
+      syncSvc.session.set(item('audio'));
+      expect(session.viewEnd()).toBe('audio');
+      syncSvc.session.set(item('text'));
+      expect(session.viewEnd()).toBe('none');
+      syncSvc.session.set(item('video'));
+      syncSvc.observedOwnerTargetId.set(null);
+      expect(session.viewEnd()).toBe('none');
+    });
+
+    it('has no verdict outside a video view', () => {
+      const { session, syncSvc } = setup();
+      syncSvc.session.set(item('audio'));
+      expect(session.viewEnd()).toBeNull();
+    });
+
+    it('opens the audio player on an audio hand-over', () => {
+      const { session } = setup();
+      const fp = TestBed.inject(FullPlayerState);
+      fp.show('video', true);
+      session.handOverView('audio');
+      expect(fp.open()).toBe('audio');
+      expect(fp.remote()).toBe(true);
+    });
+
+    it('moves an audio view to the video player when the owner plays a video', () => {
+      const { syncSvc, router } = setup();
+      const fp = TestBed.inject(FullPlayerState);
+      fp.show('audio', true);
+      syncSvc.session.set(item('video'));
+      TestBed.tick();
+      expect(fp.open()).toBe('video');
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+    });
+
+    it('leaves a local audio player alone', () => {
+      const { syncSvc } = setup();
+      const fp = TestBed.inject(FullPlayerState);
+      fp.show('audio', false);
+      syncSvc.session.set(item('video'));
+      TestBed.tick();
+      expect(fp.open()).toBe('audio');
     });
   });
 
