@@ -132,6 +132,15 @@ describe('AudioPlayerService music mode', () => {
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 'sid1' }));
   });
 
+  it('moves the open remote view to the local player once "play here" has loaded the session', async () => {
+    TestBed.inject(AudioPlayerService);
+    const full = TestBed.inject(FullPlayerState);
+    full.show(true);
+    const item = { id: 1, mediaId: 1, kind: 'album' };
+    await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1], index: 0, shuffle: false, repeat: 'off' } }, 30);
+    expect([full.open(), full.remote()]).toEqual([true, false]);
+  });
+
   it('beats at once when "play here" loads a paused session, which reports no play state', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     const item = { id: 1, mediaId: 1, kind: 'album' };

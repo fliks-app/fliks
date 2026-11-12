@@ -1398,6 +1398,7 @@ export class AudioPlayerService {
     }
     // A paused load reports no play state: its first beat is what claims the session.
     if (paused && loaded) this.onPlayState(false);
+    if (loaded) this.fullPlayer.handTo(false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */
