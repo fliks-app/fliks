@@ -589,9 +589,9 @@ pub(crate) async fn walk_with(
             }
         };
         let r = match how.cut {
-            Some(cut) => tokio::time::timeout(cut, call)
+            Some(cut) => crate::plugins::outbound::cut_past_rate_wait(cut, call)
                 .await
-                .unwrap_or_else(|_| Err(Upstream::new(Some(504), "timed out"))),
+                .unwrap_or_else(|| Err(Upstream::new(Some(504), "timed out"))),
             None => call.await,
         };
         match r {

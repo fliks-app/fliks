@@ -323,6 +323,7 @@ impl Ctx {
     pub fn begin_provider_export(&mut self, p: Priority) {
         self.out.priority = p;
         self.out.last = None;
+        self.out.queued = super::outbound::RATE_WAIT.try_with(Arc::clone).ok();
     }
 
     /// When the call in this Store is interrupted; the outbound hook never waits past it.
@@ -709,6 +710,7 @@ impl PluginRt {
                 last: None,
                 priority: Priority::Background,
                 deadline: Instant::now() + env.cfg.deadlines.hello,
+                queued: None,
                 over: env.cfg.upstream_override.clone(),
             },
             sh: self.sh.clone(),

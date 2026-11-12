@@ -18,10 +18,62 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, ready};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 use tokio_rustls::rustls::pki_types::ServerName;
 use wasmtime_wasi_http::io::TokioIo;
 use wasmtime_wasi_http::{Error, RequestOptions, WasiBody, WasiHttpHooks};
+
+tokio::task_local! {
+    /// The rate-limit waits of the provider exports called in this task.
+    pub static RATE_WAIT: Arc<RateWait>;
+}
+
+/// Waits for a rate-limit token or pause in progress, and the time the finished ones took.
+#[derive(Default)]
+pub struct RateWait(watch::Sender<(u32, Duration)>);
+
+impl RateWait {
+    fn enter(self: &Arc<Self>) -> impl Drop {
+        struct Leave(Arc<RateWait>, tokio::time::Instant);
+        impl Drop for Leave {
+            fn drop(&mut self) {
+                let took = self.1.elapsed();
+                self.0
+                    .0
+                    .send_modify(|(n, ms)| (*n, *ms) = (*n - 1, *ms + took));
+            }
+        }
+        self.0.send_modify(|(n, _)| *n += 1);
+        Leave(self.clone(), tokio::time::Instant::now())
+    }
+}
+
+/// `f`, given up `cut` after it started; the time its provider calls spend waiting for a rate-limit
+/// slot does not count, so a queued call is never cut for the provider's own rate.
+pub async fn cut_past_rate_wait<F: Future>(cut: Duration, f: F) -> Option<F::Output> {
+    let waits = Arc::new(RateWait::default());
+    let mut seen = waits.0.subscribe();
+    let start = tokio::time::Instant::now();
+    RATE_WAIT
+        .scope(waits.clone(), async {
+            let mut f = pin!(f);
+            loop {
+                let (n, waited) = *seen.borrow_and_update();
+                let expiry = async {
+                    if n > 0 {
+                        std::future::pending::<()>().await;
+                    }
+                    tokio::time::sleep_until(start + cut + waited).await;
+                };
+                tokio::select! {
+                    r = f.as_mut() => return Some(r),
+                    _ = seen.changed() => {}
+                    () = expiry => return None,
+                }
+            }
+        })
+        .await
+}
 
 /// Most outbound requests one plugin has in flight; the rest queue within the call's deadline.
 pub const MAX_IN_FLIGHT: usize = 32;
@@ -41,6 +93,8 @@ pub struct Outbound {
     pub priority: Priority,
     /// When the export in progress is interrupted.
     pub deadline: Instant,
+    /// The `RATE_WAIT` of the caller of the export in progress.
+    pub queued: Option<Arc<RateWait>>,
     pub over: Arc<Override>,
 }
 
@@ -61,6 +115,7 @@ impl WasiHttpHooks for Outbound {
         let permits = self.permits.clone();
         let gate = self.gate.clone();
         let priority = self.priority;
+        let queued = self.queued.clone();
         let left = self.deadline.saturating_duration_since(Instant::now());
         let internal = self.internal | self.over.rewrite(request.uri_mut());
         let gate = gate.map(|g| g.for_host(request.uri().host().unwrap_or_default()));
@@ -106,7 +161,10 @@ impl WasiHttpHooks for Outbound {
                 }
             };
             let replayable = || rec.lock_clean().replayable();
-            match gate.run(priority, left, attempt, replayable).await {
+            match gate
+                .run(priority, left, queued.as_ref(), attempt, replayable)
+                .await
+            {
                 Done::Reply(r) => {
                     let (res, io): Attempt = r.inner;
                     Ok((res, io))
@@ -210,6 +268,8 @@ pub enum Done<R, E> {
 pub struct Gate {
     id: Arc<str>,
     limiter: Mutex<Limiter>,
+    /// Waiters of each priority take their token in arrival order.
+    turns: [tokio::sync::Mutex<()>; 2],
     breaker: Mutex<Breaker>,
     clock: Arc<dyn Clock>,
     slow_logged: AtomicBool,
@@ -226,6 +286,7 @@ impl Gate {
         Self {
             id: id.into(),
             limiter: Mutex::new(Limiter::new(limits)),
+            turns: Default::default(),
             breaker: Mutex::new(Breaker::new(BREAKER_FAILURES, 30_000)),
             clock: Arc::new(SystemClock {
                 started: Instant::now(),
@@ -347,7 +408,21 @@ impl Gate {
     }
 
     /// A token, waited for and counted against the quota; a call gives up past `budget_ms` of waiting.
-    async fn admit(&self, p: Priority, budget_ms: u64, waited: &mut u64) -> Result<(), Refusal> {
+    async fn admit(
+        &self,
+        p: Priority,
+        budget_ms: u64,
+        waited: &mut u64,
+        queued: Option<&Arc<RateWait>>,
+    ) -> Result<(), Refusal> {
+        let _waiting = queued.map(RateWait::enter);
+        let since = self.clock.now_ms();
+        let line = self.turns[usize::from(p == Priority::Background)].lock();
+        let left = Duration::from_millis(budget_ms.saturating_sub(*waited));
+        let Ok(_turn) = tokio::time::timeout(left, line).await else {
+            return Err(self.refusal(429, Some(1), "rate limit reached, try again shortly"));
+        };
+        *waited += self.clock.now_ms().saturating_sub(since);
         loop {
             let taken = self
                 .limiter
@@ -394,6 +469,7 @@ impl Gate {
         &self,
         p: Priority,
         left: Duration,
+        queued: Option<&Arc<RateWait>>,
         mut attempt: impl FnMut() -> Fut,
         replayable: impl Fn() -> bool,
     ) -> Done<R, E>
@@ -416,7 +492,7 @@ impl Gate {
                     "circuit open, upstream temporarily unreachable",
                 ));
             }
-            if let Err(refused) = self.admit(p, budget, &mut waited).await {
+            if let Err(refused) = self.admit(p, budget, &mut waited, queued).await {
                 return match last {
                     Some(r) => {
                         self.record(Outcome::of_status(r.status));
@@ -924,7 +1000,7 @@ mod tests {
                 })
             }
         };
-        g.run(p, Duration::MAX, attempt, || replay).await
+        g.run(p, Duration::MAX, None, attempt, || replay).await
     }
 
     fn status(d: &Done<(), ()>) -> u16 {
@@ -1028,6 +1104,7 @@ mod tests {
             g.run(
                 Background,
                 Duration::from_secs(left),
+                None,
                 || {
                     h.fetch_add(1, Ordering::Relaxed);
                     async {
@@ -1055,6 +1132,7 @@ mod tests {
             .run(
                 Background,
                 Duration::from_secs(120),
+                None,
                 || async {
                     Ok::<_, ()>(Reply {
                         status: 200,
@@ -1181,6 +1259,7 @@ mod tests {
             g.run(
                 Background,
                 Duration::from_secs(120),
+                None,
                 || {
                     h.fetch_add(1, Ordering::Relaxed);
                     async {
@@ -1212,6 +1291,7 @@ mod tests {
             .run(
                 Background,
                 Duration::from_secs(120),
+                None,
                 || async {
                     Ok::<_, ()>(Reply {
                         status: 200,
@@ -1259,6 +1339,57 @@ mod tests {
         call(&g, Interactive, &[], &h, true).await;
         call(&g, Interactive, &[], &h, true).await;
         assert_eq!(sleeps(&clock), [100]);
+    }
+
+    async fn ok_after(g: &Gate, queued: Option<&Arc<RateWait>>, done: &Mutex<Vec<u8>>, n: u8) {
+        let attempt = || async {
+            done.lock().unwrap().push(n);
+            Ok::<_, ()>(Reply {
+                status: 200,
+                retry_after_ms: None,
+                inner: (),
+            })
+        };
+        g.run(Interactive, Duration::MAX, queued, attempt, || true)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn waiters_take_their_token_in_arrival_order() {
+        let g = Arc::new(Gate::new(
+            "stub",
+            Limits::new(10.0, 1),
+            Duration::from_secs(5),
+        ));
+        let done = Arc::new(Mutex::new(vec![]));
+        ok_after(&g, None, &done, 0).await;
+        let early = tokio::spawn({
+            let (g, done) = (g.clone(), done.clone());
+            async move { ok_after(&g, None, &done, 1).await }
+        });
+        // Late enough that its own token wait would end before the earlier waiter's.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        ok_after(&g, None, &done, 2).await;
+        early.await.unwrap();
+        assert_eq!(*done.lock().unwrap(), [0, 1, 2]);
+    }
+
+    #[tokio::test]
+    async fn the_cut_does_not_count_the_wait_for_a_rate_slot() {
+        let g = Gate::new("stub", Limits::new(4.0, 1), Duration::from_secs(5));
+        let done = Mutex::new(vec![]);
+        let cut = Duration::from_millis(100);
+        let queued = || RATE_WAIT.try_with(Arc::clone).ok();
+        let two = cut_past_rate_wait(cut, async {
+            ok_after(&g, queued().as_ref(), &done, 0).await;
+            ok_after(&g, queued().as_ref(), &done, 1).await;
+        });
+        assert!(
+            two.await.is_some(),
+            "the second call waits 250ms for its token"
+        );
+        let slow = cut_past_rate_wait(cut, tokio::time::sleep(Duration::from_millis(300)));
+        assert!(slow.await.is_none());
     }
 
     #[test]
@@ -1421,6 +1552,7 @@ mod tests {
             last: None,
             priority: Background,
             deadline: Instant::now() + Duration::from_secs(600),
+            queued: None,
             over: Arc::new(Override::default()),
         }
     }
