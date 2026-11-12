@@ -136,8 +136,11 @@
               "mediaFileId": 1,
               "mediaTitle": "Parity Movie 01",
               "mediaType": "movie",
+              "muted": null,
               "posterUrl": null,
-              "state": "playing"
+              "state": "playing",
+              "supportsVolume": true,
+              "volume": null
             },
             "ownerUsername": null,
             "systemName": null,
