@@ -181,9 +181,7 @@ export class RemotePickerListComponent {
         icon: deviceIconFor(t.formFactor),
         label: labels[i],
         tab: tab?.slice(0, 4),
-        subtitle: connected
-          ? this.translate.instant('remote.stop_controlling')
-          : t.ownerUsername
+        subtitle: t.ownerUsername
             ? this.translate.instant('remote.owned_by', { username: t.ownerUsername })
             : null,
         connected,
@@ -203,10 +201,9 @@ export class RemotePickerListComponent {
     return listed.filter((r) => (r.kind === 'remote' ? this.session.kind() === 'cast' || r.id !== this.remote.observedTarget()?.targetId : !(casting && r.connected && (r.kind === 'cast' || r.kind === 'cast-web'))));
   });
 
-  /** Leaves the device the card shows: a remote device plays on alone, a Cast session ends. */
+  /** Ends the Cast session the card shows. */
   protected leave(): void {
-    if (this.session.kind() === 'cast') this.castTarget.disconnect();
-    else this.session.stopControlling();
+    this.castTarget.disconnect();
   }
 
   /** The sheet branch mounts the list only while it is open, so this covers

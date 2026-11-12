@@ -3972,7 +3972,6 @@
     "error_cast_select_failed": "Não foi possível ligar a esse Chromecast.",
     "error_command_failed": "Não foi possível contactar esse dispositivo.",
     "error_no_response": "Esse dispositivo não está a responder.",
-    "stop_controlling": "Parar de controlar",
     "stop_playback": "Parar a reprodução",
     "idle_message": "Nenhum conteúdo em reprodução",
     "connecting_message": "A ligar...",

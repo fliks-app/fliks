@@ -3972,7 +3972,6 @@
     "error_cast_select_failed": "Impossible de se connecter à ce Chromecast.",
     "error_command_failed": "Impossible de joindre cet appareil.",
     "error_no_response": "Cet appareil ne répond pas.",
-    "stop_controlling": "Arrêter de contrôler",
     "stop_playback": "Arrêter la lecture",
     "idle_message": "Aucun média en cours de lecture",
     "connecting_message": "Connexion...",
