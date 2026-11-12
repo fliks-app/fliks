@@ -159,6 +159,8 @@ export interface Discography {
     following: boolean;
   };
   albums: ArtistAlbum[];
+  /** The provider's discography failed: `albums` holds the owned ones only. */
+  partial: boolean;
 }
 
 // GET /api/persons?role=artist|composer

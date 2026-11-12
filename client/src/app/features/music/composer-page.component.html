@@ -1,10 +1,18 @@
 <div class="flex flex-col gap-6">
-  @if (person(); as p) {
-    <app-person-header [name]="p.name" [avatarUrl]="p.avatarUrl" [biography]="p.biography" />
+  <button type="button" (click)="goBack()" class="btn btn-sm btn-ghost gap-1 self-start">
+    <svg lucideChevronLeft class="h-4 w-4"></svg>
+    {{ 'common.back' | translate }}
+  </button>
+  @if (head(); as p) {
+    <app-person-header [name]="p.name" [avatarUrl]="p.avatarUrl" [biography]="p.biography" [viewTransitionName]="'person-avatar-' + id()" />
   }
   <h2 class="text-lg font-semibold">{{ 'music.works' | translate }}</h2>
   @if (loading()) {
-    <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+    <ul class="flex flex-col gap-2 animate-pulse" data-testid="works-skeleton">
+      @for (i of skeletonRows; track i) {
+        <li class="h-10 rounded-lg bg-base-300/40"></li>
+      }
+    </ul>
   } @else if (!works().length) {
     <p class="text-center py-12 text-base-content/50">{{ 'music.no_works' | translate }}</p>
   } @else {

@@ -5360,6 +5360,7 @@
     "group_missing": "Missing from the library",
     "no_albums": "No albums yet",
     "load_failed": "Could not load this page",
+    "discography_partial": "The provider did not answer: the albums outside your library are missing",
     "works": "Works",
     "no_works": "No works yet",
     "recording_count_one": "{{count}} recording",

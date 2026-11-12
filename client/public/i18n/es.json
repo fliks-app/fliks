@@ -5360,6 +5360,7 @@
     "group_missing": "Ausentes de la biblioteca",
     "no_albums": "Aún no hay álbumes",
     "load_failed": "No se pudo cargar esta página",
+    "discography_partial": "El proveedor no respondió: faltan los álbumes que no están en tu biblioteca",
     "works": "Obras",
     "no_works": "Aún no hay obras",
     "recording_count_one": "{{count}} grabación",

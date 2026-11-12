@@ -1,6 +1,6 @@
 <div class="flex flex-col sm:flex-row gap-6 items-start">
   <div class="avatar">
-    <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
+    <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full" [style.view-transition-name]="viewTransitionName()">
       @if (avatarUrl(); as url) {
         <img [cachedSrc]="url | resolveUrl:'medium'" [alt]="name()" />
       } @else {

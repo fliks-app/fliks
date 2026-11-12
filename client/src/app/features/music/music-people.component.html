@@ -9,7 +9,7 @@
   } @else {
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 tv:gap-8 p-1">
       @for (p of list.rows(); track p.id) {
-        <app-person-avatar-card [link]="link(p)" [name]="p.name" [avatarUrl]="p.avatarUrl" [subtitle]="'music.album_count' | translatePlural: p.albumCount" data-testid="person" />
+        <app-person-avatar-card [link]="link(p)" [name]="p.name" [avatarUrl]="p.avatarUrl" [posterName]="'person-avatar-' + p.id" [state]="{ person: { id: p.id, name: p.name, avatarUrl: p.avatarUrl } }" [subtitle]="'music.album_count' | translatePlural: p.albumCount" data-testid="person" />
       }
     </div>
     @if (list.more()) {
