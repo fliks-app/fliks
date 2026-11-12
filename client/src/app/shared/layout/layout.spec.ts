@@ -30,7 +30,6 @@ import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
-import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
@@ -77,6 +76,10 @@ interface Fixture {
   away?: boolean;
   /** An audio item is loaded in the root audio player. */
   audio?: boolean;
+  /** A parked music session fills the audio mini-player slot. */
+  parked?: boolean;
+  /** The selected output holds no session. */
+  idleOutput?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
   /** Defaults to granting only `livetv.read`, so a fixture that denies it still
@@ -206,9 +209,8 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: CastPlayerService,
         useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
-      { provide: PlaybackSession, useValue: { isLocal: () => !f.away, openPlayer: () => {} } },
-      { provide: PlaybackSurface, useValue: { bar: () => null } },
-      { provide: AudioPlayerService, useValue: { active: () => !!f.audio } },
+      { provide: PlaybackSession, useValue: { isLocal: () => !f.away, output: () => (f.idleOutput ? { isIdle: () => true } : null), openPlayer: () => {} } },
+      { provide: PlaybackSurface, useValue: { bar: () => null, aboveAudio: () => !!f.audio || !!f.parked } },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {
         provide: PluginUiRegistryService,
@@ -609,6 +611,16 @@ describe('LayoutComponent — chrome clearance', () => {
     TestBed.resetTestingModule();
     const both = (await createFixture({ ...NATIVE_PHONE, audio: true, away: true })).componentInstance;
     expect(both.chromeBottomTotal()).toBe(`calc(${both.chromeBottom()} + 8.5rem)`);
+  });
+
+  it('takes the audio slot from PlaybackSurface.aboveAudio, which counts a parked music session', async () => {
+    const parked = (await createFixture({ ...NATIVE_PHONE, parked: true })).componentInstance;
+    expect(parked.chromeBottomTotal()).toBe(`calc(${parked.chromeBottom()} + 4.25rem)`);
+  });
+
+  it('adds nothing for an idle output of another device', async () => {
+    const idle = (await createFixture({ ...NATIVE_PHONE, away: true, idleOutput: true })).componentInstance;
+    expect(idle.chromeBottomTotal()).toBe(idle.chromeBottom());
   });
 });
 

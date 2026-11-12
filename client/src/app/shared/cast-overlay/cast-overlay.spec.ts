@@ -161,6 +161,20 @@ describe('CastOverlayComponent', () => {
     expect(output.disconnect).toHaveBeenCalled();
   });
 
+  it('is absent while the selected output is idle', () => {
+    const { el, output, fixture } = setup();
+    output.isIdle.set(true);
+    fixture.detectChanges();
+    expect(el.querySelector('.fixed')).toBeNull();
+  });
+
+  it('shows no poster from the account session when the output reports none', () => {
+    const { el, session, fixture } = setup({ account: accountSession() });
+    session.nowPlaying.set(null);
+    fixture.detectChanges();
+    expect(el.querySelector('img')).toBeNull();
+  });
+
   it('cannot open the player while nothing plays', () => {
     const { el } = setup({ fileId: 0 });
     expect(el.querySelector('button')!.disabled).toBe(true);

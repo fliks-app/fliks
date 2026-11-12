@@ -49,7 +49,6 @@ import { UserMenuComponent } from '../components/user-menu';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { AudioPlayerComponent } from '../audio-player/audio-player';
-import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
@@ -158,7 +157,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
   private readonly session = inject(PlaybackSession);
-  private readonly audio = inject(AudioPlayerService);
   private readonly surface = inject(PlaybackSurface);
   /** The controlled device plays something to open; an idle one only offers the picker. */
   protected readonly hasRemotePlayer = computed(() => !!this.session.playing());
@@ -218,7 +216,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
   readonly chromeBottomTotal = computed(() => {
     // The bar of another device's session and the audio mini-player share one slot.
-    const bars = (!this.device.isTv() && !this.session.isLocal() ? 1 : 0) + (this.surface.bar() || this.audio.active() ? 1 : 0);
+    const bars = (!this.device.isTv() && !this.session.isLocal() && !this.session.output()?.isIdle() ? 1 : 0) + (this.surface.bar() || this.surface.aboveAudio() ? 1 : 0);
     return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
   });
 

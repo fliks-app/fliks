@@ -33,11 +33,11 @@ function setup(
       provideZonelessChangeDetection(),
       provideRouter([]),
       { provide: PlaybackDevice, useValue: playing },
-      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), refreshTargets: vi.fn(), canLoad: vi.fn(() => true), ...over.remote } },
+      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), observedTargetId: signal(null), observedTarget: signal(null), refreshTargets: vi.fn(), canLoad: vi.fn(() => true), ...over.remote } },
       { provide: CastService, useValue: { enumerates: false, isAvailable: signal(false), isConnected: signal(false), castDevices: signal([]), getCastDevices: vi.fn() } },
       { provide: AirPlayService, useValue: { available: signal(false) } },
       { provide: CastPlaybackTarget, useValue: {} },
-      { provide: PlaybackSession, useValue: { isLocal: signal(false), nowPlaying: signal({ title: 'Film' }) } },
+      { provide: PlaybackSession, useValue: { isLocal: signal(false), kind: () => 'remote', observing: () => false, nowPlaying: signal({ title: 'Film' }) } },
       { provide: SessionSyncService, useValue: { session: signal(null), role: signal('none'), canPlayHere: signal(false), ...over.sync } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: PlaybackSurface, useValue: { here: signal(false) } },
@@ -86,6 +86,34 @@ describe('RemotePickerListComponent device card', () => {
   it('hides the slider when the device cannot set its volume', () => {
     const { el } = setup({ canSetVolume: false });
     expect(el.querySelector('[data-testid="device-volume"]')).toBeNull();
+  });
+});
+
+describe('RemotePickerListComponent parked session', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const parked = (state = 'parked') => signal({ owner: { targetId: 'pc#1' }, state, positionSeconds: 0, durationSeconds: 10, item: { id: 7, mediaId: 3, kind: 'movie', title: 'Parked film', subtitle: null, mediaFileId: 9 } });
+  const sync = (role: string, state?: string) => ({ session: parked(state), role: signal(role), isReading: () => false, positionNow: () => 0, line: () => '' });
+
+  it('shows only the output now playing on the card, never the parked session', () => {
+    const { el } = setup({ sync: sync('none'), name: 'Living room' });
+    const card = el.querySelector('[data-testid="device-card"]')!;
+    expect(card.textContent).not.toContain('Parked film');
+  });
+
+  it('keeps the followed row beside the card when another device owns the session', () => {
+    const { el } = setup({ sync: sync('observer'), remote: { observedTargetId: signal('tv#2') } });
+    expect(el.textContent).toContain('Parked film');
+  });
+
+  it('folds the followed row into the card of the owning device', () => {
+    const { el } = setup({ sync: sync('observer', 'playing'), remote: { observedTargetId: signal('pc#1') } });
+    expect(el.textContent).not.toContain('Parked film');
+  });
+
+  it('keeps the followed row for a parked session even on the owning device', () => {
+    const { el } = setup({ sync: sync('observer'), remote: { observedTargetId: signal('pc#1') } });
+    expect(el.textContent).toContain('Parked film');
   });
 });
 
@@ -166,7 +194,7 @@ describe('RemotePickerListComponent transfer sheet', () => {
         line: () => '',
         parked: () => false,
       },
-      remote: { targets: signal([target('pc#1', 'Desk'), target('tv#2', 'Lounge')]) },
+      remote: { targets: signal([target('pc#1', 'Desk'), target('tv#2', 'Lounge')]), observedTargetId: signal('pc#1'), observedTarget: signal({ targetId: 'pc#1' }) },
     });
     expect(el.textContent).not.toContain('session.current');
     const remotes = component['pickerRows']().filter((r: { kind: string }) => r.kind === 'remote');

@@ -1,22 +1,23 @@
 @if (output(); as o) {
+  @if (!o.isIdle()) {
   <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
        [style.bottom]="surface.aboveAudio() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'">
     <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left disabled:cursor-default"
             [disabled]="!session.playing()" [attr.aria-label]="'remote.open_player' | translate" (click)="open()">
-      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300" [class.skeleton]="!o.isIdle() && !session.nowPlaying()">
+      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300" [class.skeleton]="!session.nowPlaying()">
         @if (artwork(); as art) {
           <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
         }
       </div>
       <span class="min-w-0">
-        <app-marquee class="text-sm font-semibold" [text]="o.isIdle() ? ('remote.idle_message' | translate) : (session.nowPlaying()?.title ?? '')" [secondary]="o.isIdle() ? '' : (session.nowPlaying()?.artist ?? '')" />
+        <app-marquee class="text-sm font-semibold" [text]="session.nowPlaying()?.title ?? ''" [secondary]="session.nowPlaying()?.artist ?? ''" />
         <span class="flex items-center gap-1 text-sm text-info">
           <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
           <span class="truncate">{{ session.deviceName() }}</span>
         </span>
       </span>
     </button>
-    @if (!o.isIdle() && !o.targetOffline()) {
+    @if (!o.targetOffline()) {
       <button type="button" class="btn btn-ghost btn-circle" (click)="togglePlay()"
               [attr.aria-label]="(o.uiPaused() ? 'player.play' : 'player.pause') | translate">
         @if (o.uiPaused()) {
@@ -31,6 +32,7 @@
       <svg lucideX class="h-5 w-5"></svg>
     </button>
   </div>
+  }
 } @else if (observed(); as s) {
   <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
        [class.opacity-80]="sync.parked()"
@@ -48,7 +50,7 @@
     }
     <ng-template #info>
       <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12" [class.grayscale]="sync.parked()">
-        @if (artwork(); as art) {
+        @if (observedArtwork(); as art) {
           <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
         }
       </div>
