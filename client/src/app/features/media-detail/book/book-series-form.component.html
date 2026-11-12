@@ -1,21 +1,23 @@
 <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); save()">
-  <label class="flex flex-col gap-1 text-sm">
-    {{ 'books_work.series_name' | translate }}
+  @if (options().length) {
+    <app-select-field [label]="'books_work.series_name' | translate" [value]="choice()" (valueChange)="choice.set($event)" data-testid="series-select">
+      @for (s of options(); track s.id) {
+        <option [value]="s.id">{{ s.name }}</option>
+      }
+      <option [value]="NEW">{{ 'books_work.series_new' | translate }}</option>
+    </app-select-field>
+  }
+  @if (isNew()) {
     <input
       type="text"
       class="input w-full"
-      list="book-series-suggestions"
       maxlength="255"
       data-testid="series-name"
+      [attr.aria-label]="'books_work.series_name' | translate"
       [value]="name()"
-      (input)="typed($any($event.target).value)"
+      (input)="name.set($any($event.target).value)"
     />
-    <datalist id="book-series-suggestions">
-      @for (s of suggestions(); track s) {
-        <option [value]="s"></option>
-      }
-    </datalist>
-  </label>
+  }
   <label class="flex flex-col gap-1 text-sm">
     {{ 'books_work.series_position' | translate }}
     <input

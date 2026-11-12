@@ -6,7 +6,7 @@ import { BookSeriesFormComponent } from './book-series-form.component';
 import { bookSpecProviders } from './book-test-setup';
 
 describe('BookSeriesFormComponent', () => {
-  async function setup(series: (typeof bookDetailFixture.series)[number] | null = bookDetailFixture.series[0]) {
+  async function setup(series: (typeof bookDetailFixture.series)[number] | null = bookDetailFixture.series[0], works = personWorksFixture) {
     TestBed.configureTestingModule({ providers: bookSpecProviders() });
     const fixture = TestBed.createComponent(BookSeriesFormComponent);
     fixture.componentRef.setInput('mediaId', 1);
@@ -16,44 +16,58 @@ describe('BookSeriesFormComponent', () => {
     fixture.componentInstance.done.subscribe(done);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne((r) => r.url === '/api/persons/5/works').flush(personWorksFixture);
+    http.expectOne((r) => r.url === '/api/persons/5/works').flush(works);
     await fixture.whenStable();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    const select = () => el.querySelector('select') as HTMLSelectElement | null;
+    const choose = (value: string) => {
+      select()!.value = value;
+      select()!.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+    };
     const input = (id: string) => el.querySelector(`[data-testid="${id}"]`) as HTMLInputElement;
-    return { fixture, http, el, input, done };
+    return { fixture, http, el, input, select, choose, done };
   }
 
-  it('prefills the current series and suggests the series of the authors', async () => {
-    const { fixture, el, input } = await setup();
-    expect(input('series-name').value).toBe('Series One');
+  it('prefills the current series and lists the series of the authors', async () => {
+    const { el, input, select } = await setup();
+    expect(select()!.value).toBe('10');
+    expect(Array.from(select()!.options).map((o) => o.textContent?.trim())).toEqual(['Series One', 'books_work.series_new']);
+    expect(el.querySelector('[data-testid="series-name"]')).toBeNull();
     expect(input('series-position').value).toBe('1');
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect(Array.from(el.querySelectorAll('datalist option')).map((o) => o.getAttribute('value'))).toEqual(['Series One']);
-    });
   });
 
-  it('saves a typed series and position, then reports done', async () => {
-    const { fixture, http, input, done } = await setup(null);
-    const name = input('series-name');
-    name.value = 'Fresh Saga';
-    vi.useFakeTimers();
-    name.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(250);
-    vi.useRealTimers();
-    const position = input('series-position');
-    position.value = 'Special';
-    position.dispatchEvent(new Event('input'));
-    http.expectOne((r) => r.url === '/api/collections' && r.params.get('q') === 'Fresh Saga').flush([{ id: 42, name: 'Fresh Saga' }]);
-    await fixture.whenStable();
-    fixture.detectChanges();
+  it('saves the chosen existing series by id', async () => {
+    const { fixture, http, input, done } = await setup();
     input('series-save').click();
     const req = http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/1/series');
-    expect(req.request.body).toEqual({ id: 42, name: 'Fresh Saga', position: 'Special' });
+    expect(req.request.body).toEqual({ id: 10, position: '1' });
     req.flush({ series: null });
     await fixture.whenStable();
     expect(done).toHaveBeenCalled();
+  });
+
+  it('reveals the name input for a new series and saves it by name', async () => {
+    const { fixture, http, input, choose } = await setup();
+    choose('new');
+    const name = input('series-name');
+    name.value = 'Fresh Saga';
+    name.dispatchEvent(new Event('input'));
+    const position = input('series-position');
+    position.value = 'Special';
+    position.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    input('series-save').click();
+    const req = http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/1/series');
+    expect(req.request.body).toEqual({ name: 'Fresh Saga', position: 'Special' });
+    req.flush({ series: null });
+  });
+
+  it('shows the name input directly when the authors have no series', async () => {
+    const { el, input } = await setup(null, { ...personWorksFixture, series: [] });
+    expect(el.querySelector('select')).toBeNull();
+    expect(input('series-save').disabled).toBe(true);
   });
 
   it('removes the book from its series', async () => {
