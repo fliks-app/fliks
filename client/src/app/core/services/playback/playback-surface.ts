@@ -2,7 +2,6 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
-import { KIND_REGISTRY } from '../../media-kinds';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -103,11 +102,8 @@ export class PlaybackSurface {
     });
   }
 
-  /** Whether the session plays in the audio player, which has its own controller; any other family is watched in the video player. */
   isAudio(s: AccountSession): boolean {
-    if (s.item.family) return s.item.family === 'audio';
-    const families = KIND_REGISTRY[s.item.kind].families;
-    return families.includes('audio') && !families.includes('video');
+    return this.sync.isAudio(s);
   }
 
   /** Whether the bar can open a player on the session: its audio always, a video once its owner is observed and it has a file. */

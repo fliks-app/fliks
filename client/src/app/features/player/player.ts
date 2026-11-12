@@ -3168,9 +3168,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     },
   });
 
-  // The view ends like a back when the observed session goes away.
-  private readonly viewLostEffect = effect(() => {
-    if (this.session.viewing() && !this.sessionSync.observedOwnerTargetId()) untracked(() => this.onBack());
+  // The view closes like a back once the owner plays no video; another file of it is followed by `followOutputEffect`.
+  private readonly viewEndEffect = effect(() => {
+    const end = this.session.viewEnd();
+    if (!end) return;
+    untracked(() => {
+      this.onBack();
+      this.session.handOverView(end);
+    });
   });
 
   onBack() {
