@@ -11,6 +11,8 @@ const EXTERNAL_KEY = 'fliks-search-external';
 
 /** The type selector: `video` is movies and series, `movie` and `series` its two halves. */
 export type SearchScope = 'all' | 'video' | 'movie' | 'series' | 'book' | 'album' | 'people';
+const SCOPES: SearchScope[] = ['all', 'video', 'movie', 'series', 'book', 'album', 'people'];
+const SCOPE_KEY = 'fliks-search-scope';
 
 /** What one search asks: the library and the providers, each of its own kinds. */
 export type SearchSource =
@@ -23,12 +25,13 @@ export const PROVIDER_SOURCES: SearchSource[] = ['movie', 'tv', 'book', 'album',
 @Injectable({ providedIn: 'root' })
 export class SearchStateService {
   readonly query = signal('');
-  readonly scope = signal<SearchScope>('all');
+  readonly scope = signal<SearchScope>(SCOPES.find((v) => v === localStorage.getItem(SCOPE_KEY)) ?? 'all');
   readonly externalEnabled = signal(localStorage.getItem(EXTERNAL_KEY) !== 'false');
 
   private readonly persistExternal = effect(() => {
     localStorage.setItem(EXTERNAL_KEY, String(this.externalEnabled()));
   });
+  private readonly persistScope = effect(() => localStorage.setItem(SCOPE_KEY, this.scope()));
   /** The library zone: media rows of every kind, tracks, artists, authors and book series. */
   readonly localResults = signal<Media[]>([]);
   readonly localTracks = signal<TrackRow[]>([]);
