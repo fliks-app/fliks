@@ -108,6 +108,7 @@ pub enum RemoteAction {
     Shuffle,
     Repeat,
     Queue,
+    Enqueue,
     Audio,
     Subtitle,
     Quality,
@@ -120,6 +121,14 @@ pub enum Repeat {
     Off,
     All,
     One,
+}
+
+/// Where an `enqueue` puts its tracks.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EnqueueAt {
+    Next,
+    Last,
 }
 
 /// The queue of an audio playback and the position in it (`remote.md` rule 35).
@@ -444,6 +453,10 @@ pub enum SseEvent {
         repeat: Option<Repeat>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         kind: Option<MediaKind>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_ids: Option<Vec<i64>>,
+        #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+        position: Option<EnqueueAt>,
     },
     #[serde(rename = "remote.state")]
     RemoteState {

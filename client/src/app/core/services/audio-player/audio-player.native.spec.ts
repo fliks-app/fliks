@@ -125,12 +125,33 @@ describe('AudioPlayerService on the native player', () => {
     emit('position', { index: 0, position: 12, duration: 98 });
     expect(audio.playing()).toBe(true);
     expect(audio.position()).toBe(12);
+    TestBed.tick();
     expect(audio.duration()).toBe(98);
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 's1' }));
     emit('track', { index: 1, itemId: 2, mediaFileId: 20, sessionId: 's2' });
     expect(audio.track()?.itemId).toBe(2);
     expect(audio.queueIndex()).toBe(1);
     expect(audio.position()).toBe(0);
+  });
+
+  it('counts a position jump only between consecutive position events', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const now = vi.spyOn(Date, 'now');
+    await audio.playTracks([track(1), track(2)]);
+    emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
+    now.mockReturnValue(1_000);
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    emit('position', { index: 0, position: 10, duration: 98 });
+    emit('state', { playing: false, playWhenReady: false, buffering: false, ready: true, ended: false });
+    now.mockReturnValue(60_000);
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    updatePlaybackState.mockClear();
+    now.mockReturnValue(60_100);
+    emit('position', { index: 0, position: 10.1, duration: 98 });
+    expect(updatePlaybackState).not.toHaveBeenCalled();
+    now.mockReturnValue(60_600);
+    emit('position', { index: 0, position: 50, duration: 98 });
+    expect(updatePlaybackState).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the session of the native track it adopted when a beat of the previous one is answered lost', async () => {

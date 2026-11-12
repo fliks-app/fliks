@@ -43,7 +43,7 @@ export interface RemoteCommand {
   byTargetId: string | null;
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
-    | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue'
+    | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue' | 'enqueue'
     | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
   mediaType?: MediaType;
@@ -62,6 +62,9 @@ export interface RemoteCommand {
   repeat?: 'off' | 'all' | 'one';
   /** Family of the item to load; absent means video (an older sender). */
   kind?: MediaType;
+  /** An `enqueue`: the tracks to add and where. */
+  itemIds?: number[];
+  where?: 'next' | 'last';
 }
 
 /** An audio playback's queue on the wire: item ids in play order and the current index. */

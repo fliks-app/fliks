@@ -79,6 +79,8 @@ export type RemoteCommandInput = {
   shuffle?: boolean;
   repeat?: 'off' | 'all' | 'one';
   kind?: MediaType;
+  itemIds?: number[];
+  where?: 'next' | 'last';
 };
 
 /** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
@@ -473,7 +475,7 @@ export class RemoteService {
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'audio', 'subtitle', 'quality', 'browse',
+      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'enqueue', 'audio', 'subtitle', 'quality', 'browse',
     ].includes(action);
   }
 

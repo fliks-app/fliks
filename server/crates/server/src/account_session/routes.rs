@@ -229,6 +229,8 @@ pub async fn transfer(
         shuffle: queue.map(|q| q.shuffle),
         repeat: queue.map(|q| q.repeat),
         kind: Some(row.kind),
+        item_ids: None,
+        position: None,
     };
     ensure_supported(&st, a.user.id, owner, &conn, &cmd).await?;
     st.account_sessions

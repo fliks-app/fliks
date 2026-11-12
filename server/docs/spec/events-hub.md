@@ -146,7 +146,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 35 | `remote.targets_changed` | U(owner) + household hook | `{}` |
 | 36 | `remote.stopped` | U(owner) + household hook (device-scoped) | `{targetId: string, sessionId: string}` |
 | 36a | `session.changed` | U(account), no household hook | `{epoch: number|null, itemId: number|null, state: string|null, ownerTargetId: string|null}` (`session.md` rule 15) |
-| 36c | `likes.changed` | U(account), no household hook | `{mediaId: number, seasonId?: number, itemId?: number, liked: boolean}` (`social.md` rule 57) |
+| 36c | `likes.changed` | U(account), no household hook | `{mediaId: number, seasonId?: number, itemId?: number, liked: boolean}` (`social.md` rule 60) |
 | 36b | `session.superseded` | C (the previous owner's connection, or its polled queue) | `{sessionId: string, byDeviceName: string|null, epoch: number, silent: boolean}` (`session.md` rule 15) |
 | 37 | `social.followed` / `social.follow_request` | U(target user) | `{userId: number, username: string, avatar: string|null}` |
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
@@ -171,7 +171,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 
 Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 52 of the 53 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 53. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
-`RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'prev'|'shuffle'|'repeat'|'queue'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`, `next` and `prev`.
+`RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'prev'|'shuffle'|'repeat'|'queue'|'enqueue'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`, `next` and `prev`.
 
 ### Domain events (`DomainEvent`, 11 types, in-process only)
 

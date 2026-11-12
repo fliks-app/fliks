@@ -6,6 +6,7 @@ import { LikesApiService, type LikeTarget } from './api/likes-api.service';
 export class NotificationLike {
   readonly liked = signal<boolean | null>(null);
   private target: LikeTarget | null = null;
+  private readSeq = 0;
 
   constructor(private readonly api: LikesApiService) {
     effect(() => {
@@ -26,8 +27,9 @@ export class NotificationLike {
   }
 
   private async read(target: LikeTarget): Promise<void> {
+    const seq = ++this.readSeq;
     const state = await this.api.state(target.mediaId, { force: true }).catch(() => null);
-    if (!state || this.target !== target) return;
+    if (!state || this.target !== target || seq !== this.readSeq) return;
     this.liked.set(target.episodeId ? state.episodeIds.includes(target.episodeId) : state.media);
   }
 

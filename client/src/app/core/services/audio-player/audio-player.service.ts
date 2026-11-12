@@ -99,6 +99,7 @@ const PRELOAD_S = 20;
 const RESTART_S = 3;
 /** A native position this far from where the beats' clock expects is a seek made on the device itself. */
 const SEEK_JUMP_S = 3;
+const NATIVE_POSITION_GAP_MS = 2000;
 /** Ids a wire queue carries at most (the server and `/api/tracks?ids` cap). */
 const WIRE_QUEUE_MAX = 500;
 const POSITION_STATE_MS = 1000;
@@ -236,8 +237,10 @@ export class AudioPlayerService {
     const track = this._track();
     const info = this._info();
     if (!track || !info) return null;
+    // A skip syncs the queue before the next track loads: no beat reports the new index against the old track.
+    if (this._musicMode() && this._queue()[this._queueIndex()]?.itemId !== track.itemId) return null;
     const queue = this._musicMode() ? [this._queue().map((t) => t.itemId), this._queueIndex(), this._shuffle(), this._repeat(), this.neighbour(1) !== null] : null;
-    return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.rate(), queue]);
+    return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.effectiveRate(), queue]);
   });
 
   constructor() {
@@ -396,15 +399,11 @@ export class AudioPlayerService {
     this.queueEdited();
   }
 
-  /** Edits the queue of the device this one observes instead of taking its session; false when there is none to edit. */
+  /** Adds to the queue of the device this one observes instead of taking its session; false when it cannot. */
   private enqueueOnOwner(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): boolean {
     const target = this.sessionSync.observedOwnerTargetId();
-    const wire = this.sessionSync.session()?.queue;
-    if (!target || !wire || this._track()) return false;
-    const ids = tracks.map((t) => t.itemId);
-    const at = where === 'next' ? wire.index + 1 : wire.itemIds.length;
-    const itemIds = [...wire.itemIds.slice(0, at), ...ids, ...wire.itemIds.slice(at)];
-    void this.remote.send(target, { action: 'queue', queue: { itemIds, index: wire.index } });
+    if (!target || !this.sessionSync.session()?.queue || this._track() || !this.remote.observedCan('enqueue')) return false;
+    void this.remote.send(target, { action: 'enqueue', itemIds: tracks.map((t) => t.itemId), where });
     return true;
   }
 
@@ -550,6 +549,12 @@ export class AudioPlayerService {
 
   duckLevel(): number {
     return this.duck;
+  }
+
+  /** The speed the track actually plays at: a cast receiver and a party's server clock ignore the preference. */
+  private effectiveRate(): number {
+    if (this.casting) return 1;
+    return this._musicMode() ? this.playRate() : this.rate();
   }
 
   private playRate(): number {
@@ -1428,19 +1433,13 @@ export class AudioPlayerService {
         this.setLevel(this.level, cmd.muted ?? !this.muted);
         break;
       case 'shuffle':
-        if (music) {
-          // The edit beats at once, so the ack goes out with that beat.
-          this.remote.markApplied(cmd.cmdId);
-          this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
-          return;
-        }
+        if (music) this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
         break;
       case 'repeat':
-        if (music) {
-          this.remote.markApplied(cmd.cmdId);
-          this.setRepeat(cmd.repeat ?? this.mq.repeat);
-          return;
-        }
+        if (music) this.setRepeat(cmd.repeat ?? this.mq.repeat);
+        break;
+      case 'enqueue':
+        if (music && cmd.itemIds?.length && cmd.where) this.enqueueTracks(await this.music.trackRequests(cmd.itemIds), cmd.where);
         break;
       case 'queue':
         if (music && cmd.queue) await this.replaceQueue(cmd.queue, cmd.shuffle ?? this.mq.shuffle);
@@ -1530,7 +1529,7 @@ export class AudioPlayerService {
         handoff: this.sessionSync.handoffFor(this.sessionId),
         state: this._playing() ? ('playing' as const) : ('paused' as const),
         hasNext: this._musicMode() && this.neighbour(1) !== null,
-        playbackRate: this.rate(),
+        playbackRate: this.effectiveRate(),
         ...this.volumeReport(),
       } satisfies BeatBody,
     } as { mediaId: number; payload: BeatBody };
@@ -1822,11 +1821,13 @@ export class AudioPlayerService {
       position += part.offset;
     }
     const now = Date.now();
-    const elapsed = this._playing() && this.positionAt ? ((now - this.positionAt) / 1000) * this.rate() : 0;
+    // Native emits positions only while playing: after a pause the gap is not a seek.
+    const continuous = this._playing() && this.positionAt > 0 && now - this.positionAt < NATIVE_POSITION_GAP_MS;
+    const elapsed = continuous ? ((now - this.positionAt) / 1000) * this.rate() : 0;
     const expected = this._position() + elapsed;
     this.positionAt = now;
     this._position.set(position);
-    if (Math.abs(position - expected) > SEEK_JUMP_S && this.info) this.beat();
+    if (continuous && Math.abs(position - expected) > SEEK_JUMP_S && this.info) this.beat();
     const sleep = this._sleep();
     if (sleep?.kind === 'chapter' && position >= sleep.end - 0.3) this.fireSleep();
   }
