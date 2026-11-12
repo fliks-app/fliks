@@ -1890,6 +1890,7 @@
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementi",
     "search": "Cerca…",
+    "no_results": "Nessun risultato",
     "confirm": "Conferma",
     "clear": "Svuota",
     "cancel": "Annulla",
@@ -5112,7 +5113,14 @@
     "offline_audio_unplayable": "Questo audiolibro non può essere riprodotto così com'è su questo dispositivo, quindi non può essere salvato offline",
     "offline_wifi_only": "I download sono limitati al Wi-Fi",
     "row_similar": "Libri simili",
-    "edit_profiles": "Formati e lingue"
+    "edit_profiles": "Formati e lingue",
+    "series_edit": "Modifica serie",
+    "series_name": "Serie",
+    "series_new": "Nuova serie…",
+    "series_position": "Posizione",
+    "series_position_hint": "Numero o etichetta, ad esempio Speciale",
+    "series_reset": "Usa la serie dei fornitori",
+    "series_remove": "Rimuovi dalla serie"
   },
   "wants": {
     "title": "Formati e lingue",

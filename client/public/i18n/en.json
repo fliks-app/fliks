@@ -1890,6 +1890,7 @@
     "item_count_one": "{{count}} item",
     "item_count_other": "{{count}} items",
     "search": "Search…",
+    "no_results": "No results",
     "confirm": "Confirm",
     "clear": "Clear",
     "cancel": "Cancel",
@@ -5112,7 +5113,14 @@
     "offline_audio_unplayable": "This audiobook cannot be played as is on this device, so it cannot be saved offline",
     "offline_wifi_only": "Downloads are set to Wi-Fi only",
     "row_similar": "Similar books",
-    "edit_profiles": "Formats and languages"
+    "edit_profiles": "Formats and languages",
+    "series_edit": "Edit series",
+    "series_name": "Series",
+    "series_new": "New series…",
+    "series_position": "Position",
+    "series_position_hint": "Number or label, e.g. Special",
+    "series_reset": "Use the providers' series",
+    "series_remove": "Remove from series"
   },
   "wants": {
     "title": "Formats and languages",
