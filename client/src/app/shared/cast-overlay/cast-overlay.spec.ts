@@ -58,6 +58,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     canPlayHere: signal(over.canPlayHere ?? false),
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
     isAudio: (s: AccountSession) => s.item.family === 'audio' || s.item.kind === 'album',
+    videoItem: (s: AccountSession) => (s.item.mediaFileId ? { fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined } : null),
     playHere: vi.fn(),
     enabled: signal(true),
     observedOwnerTargetId: () => (over.account?.state === 'parked' ? null : (over.account?.owner.targetId ?? null)),
