@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { DestroyRef, ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LucideChevronLeft, LucideMusic } from '@lucide/angular';
 import { NgTemplateOutlet } from '@angular/common';
@@ -59,7 +59,7 @@ export class ArtistPageComponent {
     return h?.id === this.id() ? { name: h.name, avatarUrl: h.avatarUrl, biography: null } : null;
   });
   protected readonly skeletonCards = Array.from({ length: 12 }, (_, i) => i);
-  protected readonly tabs = computed(() => discographyTabs(this.data()?.albums ?? []));
+  protected readonly tabs = computed(() => discographyTabs(this.data()?.albums ?? [], this.data()?.popular ?? []));
   protected readonly filled = computed(() => DISCOGRAPHY_TABS.filter((t) => this.tabs()[t].length));
   private readonly picked = signal<DiscographyTab | null>(null);
   protected readonly tab = computed(() => {
@@ -85,6 +85,11 @@ export class ArtistPageComponent {
       const id = this.id();
       untracked(() => void this.load(id));
     });
+    effect(() => {
+      const name = this.data()?.artist.name;
+      if (name) this.navbar.setPageTitle(name);
+    });
+    inject(DestroyRef).onDestroy(() => this.navbar.clearPageTitle());
   }
 
   protected pick(t: DiscographyTab): void {

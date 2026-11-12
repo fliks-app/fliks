@@ -75,7 +75,7 @@
           <div class="flex flex-wrap gap-2 mb-4 scroll-ring-safe" data-testid="discography-tabs">
             @for (t of filled(); track t) {
               <button type="button" class="btn btn-sm" [class.btn-primary]="t === tab()" [attr.aria-pressed]="t === tab()" (click)="pick(t)">
-                {{ 'music.tab_' + (t === 'singles' ? 'singles_eps' : t) | translate }}
+                {{ 'music.tab_' + (t === 'singles' ? 'singles_eps' : t === 'other' ? 'live_other' : t) | translate }}
               </button>
             }
           </div>

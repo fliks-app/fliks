@@ -94,20 +94,28 @@ export function trackRowRequest(t: TrackRow): MusicTrackRequest {
   };
 }
 
-export type DiscographyTab = 'albums' | 'singles' | 'compilations';
-export const DISCOGRAPHY_TABS: readonly DiscographyTab[] = ['albums', 'singles', 'compilations'];
+export type DiscographyTab = 'albums' | 'singles' | 'compilations' | 'other';
+export const DISCOGRAPHY_TABS: readonly DiscographyTab[] = ['albums', 'singles', 'compilations', 'other'];
 
+/** Albums holds studio albums only: live, remix, soundtrack and the like go to `other`. */
 export function discographyTab(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTypes'>): DiscographyTab {
-  if (a.secondaryTypes.some((s) => s.toLowerCase() === 'compilation')) return 'compilations';
+  const secondary = a.secondaryTypes.map((s) => s.toLowerCase());
+  if (secondary.includes('compilation')) return 'compilations';
   const p = a.primaryType?.toLowerCase();
-  return p === 'ep' || p === 'single' ? 'singles' : 'albums';
+  if (p === 'ep' || p === 'single') return 'singles';
+  return p === 'album' && !secondary.length ? 'albums' : 'other';
 }
 
-/** The albums by tab, owned and missing together, newest first. */
-export function discographyTabs(albums: ArtistAlbum[]): Record<DiscographyTab, ArtistAlbum[]> {
-  const out: Record<DiscographyTab, ArtistAlbum[]> = { albums: [], singles: [], compilations: [] };
+/** The albums by tab, owned and missing together: those holding a popular track first, in its order, then newest first. */
+export function discographyTabs(albums: ArtistAlbum[], popular: { albumExternalId?: string | null }[] = []): Record<DiscographyTab, ArtistAlbum[]> {
+  const out: Record<DiscographyTab, ArtistAlbum[]> = { albums: [], singles: [], compilations: [], other: [] };
   for (const a of albums) out[discographyTab(a)].push(a);
-  const newest = (a: ArtistAlbum, b: ArtistAlbum) => (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
-  for (const k of DISCOGRAPHY_TABS) out[k].sort(newest);
+  const rank = new Map<string, number>();
+  popular.forEach((p, i) => p.albumExternalId && !rank.has(p.albumExternalId) && rank.set(p.albumExternalId, i));
+  const rankOf = (a: ArtistAlbum) => (a.externalId != null ? (rank.get(a.externalId) ?? Infinity) : Infinity);
+  // Infinity - Infinity is NaN, which falls through to the year like a tie.
+  const order = (a: ArtistAlbum, b: ArtistAlbum) =>
+    rankOf(a) - rankOf(b) || (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
+  for (const k of DISCOGRAPHY_TABS) out[k].sort(order);
   return out;
 }

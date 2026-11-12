@@ -5390,7 +5390,8 @@
     "search_hint": "Rechercher un album ou un artiste",
     "section_albums": "Albums",
     "section_artists": "Artistes",
-    "recently_played": "Écoutés récemment"
+    "recently_played": "Écoutés récemment",
+    "tab_live_other": "Live et autres"
   },
   "lyrics": {
     "edit": "Modifier les paroles",

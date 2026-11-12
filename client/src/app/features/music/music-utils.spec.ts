@@ -42,10 +42,10 @@ describe('music utils', () => {
 
   it('classifies release types into tabs', () => {
     expect(discographyTab(album({}))).toBe('albums');
-    expect(discographyTab(album({ secondaryTypes: ['Live'] }))).toBe('albums');
+    expect(discographyTab(album({ secondaryTypes: ['Live'] }))).toBe('other');
     expect(discographyTab(album({ secondaryTypes: ['Compilation', 'Live'] }))).toBe('compilations');
     expect(discographyTab(album({ primaryType: 'EP' }))).toBe('singles');
-    expect(discographyTab(album({ primaryType: null }))).toBe('albums');
+    expect(discographyTab(album({ primaryType: null }))).toBe('other');
   });
 
   it('puts owned and missing albums together, newest first', () => {
@@ -56,5 +56,13 @@ describe('music utils', () => {
     expect(t.albums.map((x) => x.title)).toEqual(['m', 'b', 'a']);
     expect(t.singles.length).toBe(1);
     expect(t.compilations).toEqual([]);
+  });
+
+  it('puts the albums of popular tracks first, in their order', () => {
+    const t = discographyTabs(
+      [album({ title: 'new', year: 2020, externalId: 'n' }), album({ title: 'bad', year: 1987, externalId: 'b' }), album({ title: 'thriller', year: 1982, externalId: 't' })],
+      [{ albumExternalId: 't' }, { albumExternalId: 'b' }, { albumExternalId: 't' }],
+    );
+    expect(t.albums.map((x) => x.title)).toEqual(['thriller', 'bad', 'new']);
   });
 });
