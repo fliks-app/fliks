@@ -15,6 +15,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { ToastService } from '../toast.service';
 import type { LocalHandoff, LocalOutput, PlaybackSnapshot } from './playback-output';
+import { FullPlayerState } from './full-player-state';
 import { PlaybackSession } from './playback-session';
 
 function target() {
@@ -80,6 +81,7 @@ function setup() {
   const remoteSvc = {
     isRemoting: remote.isConnected,
     selectedTargetId: signal<string | null>(null),
+    observedTargetId: () => remoteSvc.selectedTargetId() ?? 'tv-1',
     targetState: signal<{ mediaFileId: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
     canLoad: vi.fn(() => true),
@@ -97,7 +99,7 @@ function setup() {
     quickStart: vi.fn(async () => {}),
   };
   const device = { isTv: signal(false) };
-  const router = { navigate: vi.fn(async () => true), url: '/' };
+  const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
   TestBed.configureTestingModule({
@@ -553,6 +555,43 @@ describe('PlaybackSession', () => {
       expect(await session.play({ ...item, positionSeconds: 30 })).toBe('remote');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', expect.objectContaining({ action: 'load', mediaFileId: 7, positionSeconds: 30 }));
       expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+    });
+  });
+
+  describe('viewing the observed session', () => {
+    it('resolves the remote output with no device selected, and goes back to local when the view ends', () => {
+      const { session, remote, local, remoteSvc } = setup();
+      session.attachLocal(local);
+      TestBed.inject(FullPlayerState).show('video', true);
+      remote.isObserving.set(true);
+      expect(session.kind()).toBe('remote');
+      expect(session.output()).toBe(remote);
+      expect(remoteSvc.selectTarget).not.toHaveBeenCalled();
+      session.endView();
+      expect(session.kind()).toBe('local');
+      expect(session.output()).toBe(local);
+    });
+
+    it('ignores an open audio player', () => {
+      const { session } = setup();
+      TestBed.inject(FullPlayerState).show('audio', true);
+      expect(session.kind()).toBe('local');
+    });
+
+    it('sends nothing when the observed owner is gone', async () => {
+      const { session, remote, remoteSvc } = setup();
+      remoteSvc.observedTargetId = () => null as unknown as string;
+      remote.isConnected.set(true);
+      await session.play({ fileId: 7, mediaId: 3 });
+      expect(remoteSvc.send).not.toHaveBeenCalled();
+    });
+
+    it('opens the player route without selecting the device', () => {
+      const { session, router, remoteSvc } = setup();
+      session.viewObserved({ fileId: 7, mediaId: 3, episodeId: 9 });
+      expect(TestBed.inject(FullPlayerState).open()).toBe('video');
+      expect(router.navigate).toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).not.toHaveBeenCalled();
     });
   });
 

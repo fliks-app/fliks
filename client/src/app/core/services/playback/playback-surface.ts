@@ -1,6 +1,8 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
+import { KIND_REGISTRY } from '../../media-kinds';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -25,6 +27,7 @@ export class PlaybackSurface {
   private readonly session = inject(PlaybackSession);
   private readonly device = inject(DeviceService);
   private readonly audio = inject(AudioPlayerService);
+  private readonly audioView = inject(RemoteAudioOutput);
   private readonly remote = inject(RemoteService);
   private readonly sse = inject(SseService);
   private readonly http = inject(HttpClient);
@@ -98,6 +101,27 @@ export class PlaybackSurface {
         untracked(() => void this.sse.connect());
       }
     });
+  }
+
+  /** Whether the session plays in the audio player, which has its own controller; any other family is watched in the video player. */
+  isAudio(s: AccountSession): boolean {
+    if (s.item.family) return s.item.family === 'audio';
+    const families = KIND_REGISTRY[s.item.kind].families;
+    return families.includes('audio') && !families.includes('video');
+  }
+
+  /** Whether the bar can open a player on the session: its audio always, a video once its owner is observed and it has a file. */
+  canOpen(s: AccountSession): boolean {
+    if (this.isAudio(s)) return true;
+    return !this.sync.isReading(s) && !!this.sync.observedOwnerTargetId() && !!s.item.mediaFileId;
+  }
+
+  /** Opens the full player of the session's family on its owner's playback, without selecting the device. */
+  open(s: AccountSession): void {
+    if (this.isAudio(s)) this.audioView.expand();
+    else if (this.canOpen(s) && s.item.mediaFileId) {
+      this.session.viewObserved({ fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined });
+    }
   }
 
   /** Nothing here plays, is followed or controlled: a suspended WebView would only time out on a command sent to it. */

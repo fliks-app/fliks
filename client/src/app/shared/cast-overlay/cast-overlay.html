@@ -38,15 +38,9 @@
        [class.opacity-60]="surface.syncing()"
        [attr.aria-busy]="surface.syncing()"
        style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))">
-    @if (audio()) {
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-box p-1 text-left sm:gap-3" (click)="openAudio()">
-        <ng-container *ngTemplateOutlet="info" />
-      </button>
-    } @else {
-      <div class="flex min-w-0 flex-1 items-center gap-2 p-1 sm:gap-3">
-        <ng-container *ngTemplateOutlet="info" />
-      </div>
-    }
+    <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-box p-1 text-left sm:gap-3" (click)="surface.open(s)">
+      <ng-container *ngTemplateOutlet="info" />
+    </button>
     <ng-template #info>
       <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12">
         @if (observedArtwork(); as art) {

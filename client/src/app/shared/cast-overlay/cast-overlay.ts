@@ -11,7 +11,6 @@ import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { SessionSyncService } from '../../core/services/session-sync.service';
-import { KIND_REGISTRY } from '../../core/media-kinds';
 import { formatTime } from '../../core/utils/player.utils';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
@@ -83,16 +82,9 @@ export class CastOverlayComponent {
 
   /** An audio session has a full controller: transport, queue, take over. */
   protected readonly audio = computed(() => {
-    const item = this.observed()?.item;
-    if (!item) return false;
-    if (item.family) return item.family === 'audio';
-    const families = KIND_REGISTRY[item.kind].families;
-    return families.includes('audio') && !families.includes('video');
+    const s = this.observed();
+    return !!s && this.surface.isAudio(s);
   });
-
-  protected openAudio(): void {
-    this.audioView.expand();
-  }
 
   protected open(): void {
     this.session.openPlayer();

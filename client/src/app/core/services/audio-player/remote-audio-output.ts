@@ -5,7 +5,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
 import type { AudioRequest } from './audio-player.service';
-import { FullPlayerState } from './full-player-state';
+import { FullPlayerState } from '../playback/full-player-state';
 import type { AudioOutput } from './audio-output';
 import type { MusicTrackRequest, Repeat } from './music-queue';
 
@@ -41,7 +41,7 @@ export class RemoteAudioOutput implements AudioOutput {
     return this.remote.observedCan(action);
   }
 
-  readonly expanded = computed(() => this.fullPlayer.open() && this.fullPlayer.remote());
+  readonly expanded = computed(() => this.fullPlayer.open() === 'audio' && this.fullPlayer.remote());
   readonly musicMode = signal(true).asReadonly();
   readonly rate = computed(() => (this.live() ? (this.remote.targetState()?.playbackRate ?? 1) : 1));
   readonly queue = computed(() => this.rows().map((r) => r.row));
@@ -130,7 +130,7 @@ export class RemoteAudioOutput implements AudioOutput {
   }
 
   expand(): void {
-    this.fullPlayer.show(true);
+    this.fullPlayer.show('audio', true);
   }
 
   collapse(): void {

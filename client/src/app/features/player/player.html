@@ -198,7 +198,7 @@
     [bufferedEnd]="bufferedEnd()"
     [volume]="view().volume"
     [muted]="view().muted"
-    [canSetVolume]="view().canSetVolume"
+    [canSetVolume]="view().canSetVolume && session.kind() !== 'remote'"
     [local]="!elsewhere()"
     [playbackRate]="playbackRate()"
     [mediaTitle]="view().mediaTitle"
