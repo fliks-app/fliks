@@ -11,15 +11,12 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PopoverMenuComponent } from '../../popover-menu';
+import { FILTER_FROM_OPTIONS } from '../filter-threshold';
 
 export interface MultiSelectOption<T extends string | number = number> {
   value: T;
   label: string;
 }
-
-/** Below this many options the whole list is on screen at once, and a filter is one more control
- *  to skip past (plus a keyboard popping up on mobile). */
-export const FILTER_FROM_OPTIONS = 8;
 
 /** Multi-select with a built-in filter: picked options show as removable chips and the panel stays open while ticking.
  *  The panel is an `app-popover-menu`, which escapes scrolling ancestors (`.modal-box` would clip it) and becomes a bottom sheet on touch. */

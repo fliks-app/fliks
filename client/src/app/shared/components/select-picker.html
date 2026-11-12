@@ -14,8 +14,8 @@
         class="input input-bordered input-sm w-full"
         [attr.autofocus]="menu.useDropdown() ? '' : null"
         [placeholder]="'common.search' | translate"
-        [ngModel]="query()"
-        (ngModelChange)="query.set($event)"
+        [value]="query()"
+        (input)="query.set($any($event.target).value)"
       />
     </div>
   }

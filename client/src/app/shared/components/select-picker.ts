@@ -1,16 +1,15 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SelectPickerService } from '../../core/services/select-picker.service';
 import { TvService } from '../../core/services/tv.service';
-import { FILTER_FROM_OPTIONS } from './forms/multi-select/multi-select';
+import { FILTER_FROM_OPTIONS } from './forms/filter-threshold';
 import { PopoverMenuComponent } from './popover-menu';
 
 /** Singleton renderer for SelectPickerService: mount once at the layout root; shows a sheet (TV/touch) or dropdown (desktop) for `appTvSelect` selects. */
 @Component({
   selector: 'app-select-picker',
   standalone: true,
-  imports: [FormsModule, TranslatePipe, PopoverMenuComponent],
+  imports: [TranslatePipe, PopoverMenuComponent],
   templateUrl: './select-picker.html',
 })
 export class SelectPickerComponent {
