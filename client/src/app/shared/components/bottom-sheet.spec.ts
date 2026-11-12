@@ -106,3 +106,40 @@ describe('BottomSheetComponent: drag from the handle', () => {
     expect(sheet.dragOffset()).toBe(60);
   });
 });
+
+@Component({
+  imports: [BottomSheetComponent],
+  template: `
+    <app-bottom-sheet [open]="outer()">
+      @if (inner()) {
+        <app-bottom-sheet [open]="true" />
+      }
+    </app-bottom-sheet>
+  `,
+})
+class NestedSheetsHost {
+  readonly outer = signal(true);
+  readonly inner = signal(true);
+}
+
+describe('BottomSheetComponent: page scroll lock', () => {
+  it('unlocks the page when a nested sheet is torn down after its parent closed', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(NestedSheetsHost);
+    fixture.detectChanges();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fixture.componentInstance.outer.set(false);
+    fixture.detectChanges();
+    fixture.componentInstance.inner.set(false);
+    fixture.detectChanges();
+
+    expect(document.body.style.overflow).toBe('');
+  });
+});
