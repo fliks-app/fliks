@@ -787,6 +787,32 @@ async fn a_musicbrainz_artist_is_read_from_its_provider_and_filled_from_the_next
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_failed_discography_is_partial_never_an_empty_list(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let mb = Scripted::new(Namespace::MUSICBRAINZ);
+    c.st.metadata.add_plugin(mb.clone());
+    artist(&pool, 1).await;
+    let disco = || call(&c, "/api/persons/1/discography", Some(&c.reader));
+    mb.fail(&format!("credits/{MBID}"), 429);
+    let (s, d) = disco().await;
+    assert_eq!(
+        (s, &d["albums"], &d["partial"]),
+        (200, &json!([]), &json!(true))
+    );
+    mb.fail(&format!("credits/{MBID}"), 404);
+    assert_eq!(disco().await.1["partial"], json!(false));
+    mb.ok(
+        &format!("credits/{MBID}"),
+        json!({"albums": [{"externalId": "rg-1", "title": "One"}]}),
+    );
+    let d = disco().await.1;
+    assert_eq!(
+        (d["albums"][0]["title"].as_str(), &d["partial"]),
+        (Some("One"), &json!(false))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_404_asks_the_other_provider_and_pins_the_row(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     person(&pool, 1, "tmdb", 5, "Stored", "8 days").await;

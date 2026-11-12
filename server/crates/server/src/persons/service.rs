@@ -654,6 +654,7 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
     .fetch_all(&st.db)
     .await?;
     let mut albums = owned;
+    let mut partial = false;
     if let Some(mbid) = &p.musicbrainz {
         let md = &st.metadata;
         let mut credits = None;
@@ -667,9 +668,14 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
                     credits = Some(c);
                     break;
                 }
-                Err(e) => tracing::warn!("discography of person {id} from {}: {e}", pr.as_str()),
+                Err(e) if e.status == Some(404) => credits = Some(Credits::default()),
+                Err(e) => {
+                    tracing::warn!("discography of person {id} from {}: {e}", pr.as_str());
+                    partial = true;
+                }
             }
         }
+        partial &= credits.is_none();
         let held: HashSet<String> = albums
             .iter()
             .filter_map(|v| v["externalId"].as_str().map(str::to_owned))
@@ -701,5 +707,5 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
             )
         });
     }
-    Ok(json!({"artist": artist, "albums": albums}))
+    Ok(json!({"artist": artist, "albums": albums, "partial": partial}))
 }
