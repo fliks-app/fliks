@@ -229,7 +229,8 @@ export class PlaybackSession {
   /** Lets go of the remote device without taking the playback back: it plays on alone and the player closes. */
   stopControlling(): void {
     if (this.kind() !== 'remote') return;
-    this.releasing = true;
+    // A view keeps kind remote, so no return to local follows to consume the flag.
+    this.releasing = !this.viewing();
     this.remoteSvc().selectTarget(null);
     this.local()?.disconnect();
   }
@@ -279,6 +280,11 @@ export class PlaybackSession {
   viewObserved(item: { fileId: number; mediaId: number; episodeId?: number }): void {
     this.fullPlayer.show('video', true);
     this.openPlayer(item);
+  }
+
+  /** The local video route is up: it owns the full player, as a view when it was opened on the observed session. */
+  beginRoute(): void {
+    this.fullPlayer.show('video', this.viewing());
   }
 
   /** The player route is gone: a view of another device's playback ends with it. */
@@ -350,9 +356,10 @@ export class PlaybackSession {
 
   /** Another device took the account session: the local engine unloads in place and the open route becomes the view of the new owner. */
   async yieldToView(): Promise<boolean> {
+    if (!this.isLocal()) return false;
     const handoff = await this.local()?.release();
     if (!handoff) return false;
-    this.fullPlayer.show('video', true);
+    this.fullPlayer.handTo('video', true);
     this.stopStream(handoff.localSessionId);
     return true;
   }
@@ -399,6 +406,7 @@ export class PlaybackSession {
     const snap = from.snapshot() ?? this.awaySnapshot;
     if (!snap) return false;
     this.leave(from);
+    this.fullPlayer.handTo('video', false);
     await local.resume(snap);
     return true;
   }
