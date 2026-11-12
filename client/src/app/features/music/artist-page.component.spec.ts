@@ -76,7 +76,7 @@ describe('ArtistPageComponent', () => {
     rows[0]!.querySelector<HTMLButtonElement>('button')!.click();
     expect(playTracks).toHaveBeenCalledOnce();
     const add = vi.spyOn(fixture.componentInstance['addDialog']()!, 'add').mockResolvedValue(undefined as never);
-    el.querySelector<HTMLButtonElement>('[data-testid="want-track"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="add-track"]')!.click();
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ externalId: 'g2', recording: { externalId: 'r2', albumExternalId: 'g2' } }));
   });
 

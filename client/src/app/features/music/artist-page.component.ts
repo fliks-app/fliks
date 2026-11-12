@@ -71,6 +71,7 @@ export class ArtistPageComponent {
   protected readonly popular = computed(() => (this.data()?.popular ?? []).slice(0, this.popularShown()));
   protected readonly popularSkeleton = [0, 1, 2, 3, 4];
   protected readonly canAdd = computed(() => this.auth.hasPermission('media.create'));
+  protected readonly canRequest = computed(() => !this.canAdd() && this.auth.hasPermission('requests.create'));
   protected readonly subtitle = computed(() => {
     const a = this.data()?.artist;
     return [a?.artistType, a?.disambiguation].filter(Boolean).join(' · ');
