@@ -68,7 +68,7 @@ describe('AudioPlayerService on the native player', () => {
         provideZonelessChangeDetection(),
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
         { provide: NATIVE_AUDIO, useValue: plugin },
-        { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
+        { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }), stopSessionRequest: () => ({ url: '/x', init: {} }) } },
         { provide: AuthService, useValue: { refreshAccessToken, user } },
         { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
         { provide: CastPlayerService, useValue: {} },

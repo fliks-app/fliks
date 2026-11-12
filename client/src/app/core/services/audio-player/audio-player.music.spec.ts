@@ -107,6 +107,7 @@ describe('AudioPlayerService music mode', () => {
             stopSession,
             buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl,
             positionRequest: () => ({ url: '/x', init: {} }),
+            stopSessionRequest: () => ({ url: '/x', init: {} }),
           },
         },
         { provide: CastService, useValue: cast },
