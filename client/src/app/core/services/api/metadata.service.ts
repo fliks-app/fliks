@@ -243,6 +243,12 @@ export class MetadataService {
     return abortable(this.http.get<RecordingHit[]>('/api/metadata/search/album', this.searchRequest(q, opts, 'recording')), signal);
   }
 
+  /** The week's most listened albums, artists or recordings of the music provider; `[]` when none serves lists. */
+  trendingMusic<T extends 'album' | 'artist' | 'recording'>(target: T) {
+    type Hit = T extends 'artist' ? ArtistHit : T extends 'recording' ? RecordingHit : SearchHit;
+    return firstValueFrom(this.http.get<Hit[]>('/api/metadata/trending/album', { params: { target } }));
+  }
+
   /** A provider search a failure of which leaves its section empty: the server cuts a slow provider at 3 s. */
   private searchRequest(q: string, opts: SearchOptions, target?: string) {
     let params = new HttpParams();

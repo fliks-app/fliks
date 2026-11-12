@@ -115,6 +115,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     void this.loadDiscovery(ct, external);
   });
 
+  private musicTrendingLoading = false;
+  private readonly musicTrendingEffect = effect(() => {
+    if (!this.isMusic() || this.state.hasQuery() || !this.state.externalEnabled() || this.state.musicTrending()) return;
+    untracked(() => void this.loadMusicTrending());
+  });
+
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   /** Refocus the input on an external request (e.g. dock search re-tap), selecting the text so it can be overwritten. */
@@ -390,6 +396,26 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.discoveryLoading.set(false);
     }
   }
+
+  private async loadMusicTrending(): Promise<void> {
+    if (this.musicTrendingLoading) return;
+    this.musicTrendingLoading = true;
+    const [albums, artists, recordings] = await Promise.all([
+      this.metadata.trendingMusic('album').catch(() => []),
+      this.metadata.trendingMusic('artist').catch(() => []),
+      this.metadata.trendingMusic('recording').catch(() => []),
+    ]);
+    this.state.musicTrending.set({ albums, artists, recordings });
+    this.musicTrendingLoading = false;
+  }
+
+  /** The trends the music scope lists: one kind for a kind tab, all three for the music tab. */
+  private readonly trendingWant = computed(() => SOURCES[this.state.scope()].provider);
+  protected readonly trendAlbums = computed(() => (this.trendingWant().includes('album') ? this.state.musicTrending()?.albums ?? [] : []));
+  protected readonly trendArtists = computed(() => (this.trendingWant().includes('artist') ? this.state.musicTrending()?.artists ?? [] : []));
+  protected readonly trendTracks = computed(() =>
+    this.trendingWant().includes('recording') ? (this.state.musicTrending()?.recordings ?? []).filter((r) => r.trackId == null) : [],
+  );
 
   /** Map the viewer's most-recurring recommendation genres to TMDB genre ids. */
   private deriveTasteGenreIds(

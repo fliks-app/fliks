@@ -67,6 +67,8 @@ export class SearchStateService {
    *  "Suggestions pour vous" row, deliberately NOT limited to the library. */
   readonly discoverySuggestions = signal<MetadataSearchResult[]>([]);
   readonly discoveryLoading = signal(false);
+  /** The music provider's weekly trends, loaded once; null until then. */
+  readonly musicTrending = signal<{ albums: SearchHit[]; artists: ArtistHit[]; recordings: RecordingHit[] } | null>(null);
 
   // ── Discover filter panel (TMDB /discover) ──
   /** Genre list for the active tab (movie vs tv). */

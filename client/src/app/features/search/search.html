@@ -62,7 +62,16 @@
     <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
   } @else if (!state.hasQuery() && isMusic()) {
     <ng-container *ngTemplateOutlet="externalToggle" />
-    <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
+    @if (state.externalEnabled() && (trendTracks().length || trendArtists().length || trendAlbums().length)) {
+      <section data-testid="music-trending" aria-labelledby="music-trending-title" class="flex flex-col gap-6">
+        <h2 id="music-trending-title" class="text-xl font-semibold">{{ 'search.discover_trending' | translate }}</h2>
+        <ng-container *ngTemplateOutlet="musicHits; context: { tracks: trendTracks(), artists: trendArtists(), albums: trendAlbums() }" />
+      </section>
+    } @else if (state.externalEnabled() && !state.musicTrending()) {
+      <ng-container *ngTemplateOutlet="skeletonRows" />
+    } @else {
+      <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
+    }
   } @else if (!state.hasQuery()) {
     <!-- Discover / library browse: filter sidebar (desktop) + content -->
     <ng-container *ngTemplateOutlet="externalToggle" />
@@ -262,78 +271,7 @@
             }
 
 
-            @if (recordingsToAdd().length) {
-              <div>
-                <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
-                <ul class="flex flex-col gap-1 max-w-3xl">
-                  @for (r of visible(recordingsToAdd(), 'tracks'); track r.provider + ':' + r.externalId) {
-                    <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
-                      <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
-                        <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
-                      </app-track-line>
-                      <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
-                        @if (canAdd() || (r.album.existingMediaId == null && canRequest())) {
-                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="canAdd() ? wantRecording(r) : addRecording(r)" data-testid="add-track">
-                            {{ (canAdd() ? 'discover.add_to_library' : 'discover.request') | translate }}
-                          </button>
-                        }
-                      </span>
-                    </li>
-                  }
-                </ul>
-                @if (recordingsToAdd().length > cap && !more().has('tracks')) {
-                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('tracks')">{{ 'common.show_more' | translate }}</button>
-                }
-              </div>
-            } @else if (state.pending().has('recording')) {
-              <ng-container *ngTemplateOutlet="skeletonRows" />
-            }
-
-            @if (artistsToAdd().length) {
-              <div>
-                <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
-                <ul class="flex flex-col gap-1 max-w-xl">
-                  @for (a of visible(artistsToAdd(), 'artists'); track a.provider + ':' + a.externalId) {
-                    <li>
-                      <button type="button" class="flex w-full items-center gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
-                        <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: null, name: a.name }" />
-                        <span class="min-w-0 flex-1">
-                          <span class="block truncate font-medium">{{ a.name }}</span>
-                          @if (a.disambiguation) {
-                            <span class="block truncate text-sm text-base-content/60">{{ a.disambiguation }}</span>
-                          }
-                        </span>
-                        @if (a.country) {
-                          <span class="badge badge-sm badge-ghost">{{ a.country }}</span>
-                        }
-                      </button>
-                    </li>
-                  }
-                </ul>
-                @if (artistsToAdd().length > cap && !more().has('artists')) {
-                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
-                }
-              </div>
-            } @else if (state.pending().has('artist')) {
-              <ng-container *ngTemplateOutlet="skeletonRows" />
-            }
-
-
-            @if (albumsToAdd().length) {
-              <div>
-                <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
-                <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-                  @for (row of visible(albumsToAdd(), 'albums'); track row.provider + ':' + row.externalId) {
-                    <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
-                  }
-                </div>
-                @if (albumsToAdd().length > cap && !more().has('albums')) {
-                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
-                }
-              </div>
-            } @else if (state.pending().has('album')) {
-              <ng-container *ngTemplateOutlet="skeletonGrid" />
-            }
+            <ng-container *ngTemplateOutlet="musicHits; context: { tracks: recordingsToAdd(), artists: artistsToAdd(), albums: albumsToAdd() }" />
 
             @if (!state.externalLoading() && providerCount() === 0) {
               <p class="text-base-content/50" data-testid="provider-empty">{{ 'search.no_results' | translate }}</p>
@@ -403,6 +341,81 @@
 </ng-template>
 
 <!-- Reserved places while a source answers, so the sections below do not jump -->
+<ng-template #musicHits let-tracks="tracks" let-artists="artists" let-albums="albums">
+  @if (tracks.length) {
+    <div>
+      <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
+      <ul class="flex flex-col gap-1 max-w-3xl">
+        @for (r of visible(tracks, 'tracks'); track r.provider + ':' + r.externalId) {
+          <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
+            <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
+              <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
+            </app-track-line>
+            <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
+              @if (canAdd() || (r.album.existingMediaId == null && canRequest())) {
+                <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="canAdd() ? wantRecording(r) : addRecording(r)" data-testid="add-track">
+                  {{ (canAdd() ? 'discover.add_to_library' : 'discover.request') | translate }}
+                </button>
+              }
+            </span>
+          </li>
+        }
+      </ul>
+      @if (tracks.length > cap && !more().has('tracks')) {
+        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('tracks')">{{ 'common.show_more' | translate }}</button>
+      }
+    </div>
+  } @else if (state.pending().has('recording')) {
+    <ng-container *ngTemplateOutlet="skeletonRows" />
+  }
+
+  @if (artists.length) {
+    <div>
+      <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
+      <ul class="flex flex-col gap-1 max-w-xl">
+        @for (a of visible(artists, 'artists'); track a.provider + ':' + a.externalId) {
+          <li>
+            <button type="button" class="flex w-full items-center gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
+              <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: null, name: a.name }" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{{ a.name }}</span>
+                @if (a.disambiguation) {
+                  <span class="block truncate text-sm text-base-content/60">{{ a.disambiguation }}</span>
+                }
+              </span>
+              @if (a.country) {
+                <span class="badge badge-sm badge-ghost">{{ a.country }}</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+      @if (artists.length > cap && !more().has('artists')) {
+        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
+      }
+    </div>
+  } @else if (state.pending().has('artist')) {
+    <ng-container *ngTemplateOutlet="skeletonRows" />
+  }
+
+
+  @if (albums.length) {
+    <div>
+      <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
+      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+        @for (row of visible(albums, 'albums'); track row.provider + ':' + row.externalId) {
+          <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
+        }
+      </div>
+      @if (albums.length > cap && !more().has('albums')) {
+        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
+      }
+    </div>
+  } @else if (state.pending().has('album')) {
+    <ng-container *ngTemplateOutlet="skeletonGrid" />
+  }
+</ng-template>
+
 <ng-template #skeletonGrid>
   <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8" aria-hidden="true">
     @for (i of placeholders; track i) {

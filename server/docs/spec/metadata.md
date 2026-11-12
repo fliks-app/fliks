@@ -107,6 +107,7 @@ Errors share the standard body (auth rule 15): `{"message":<string>,"error":"Bad
 53. State of a hit. Next to `existingMediaId` every hit of rule 9 carries `state`, read from the held media (rule 12): `owned` when the media has a file (a `media_files` row or an `item_parts` row), `wanted` when it has none and is monitored, `missing` when it has none and is not, `null` when the caller holds none; and `requestStatus`, the status of the caller's newest `add` request of the hit (the title key of `requests.md` over the ids of rule 12, in the current namespace generation), `null` when there is none or it is `removed`. One query reads the media, one the requests; no id to look for makes neither.
 54. Cache and marks. The cache of rule 11 stores no mark: `existingMediaId`, `existingMediaType`, `state`, `requestStatus`, `personId` and `trackId` are written on a copy after the cache, for the caller and the libraries they can read.
 55. Album preview. `GET /api/metadata/{provider}/album/{externalId}` answers the album hit with its main release's tracklist (`music.md` rule 75).
+56. Music trends. `GET /api/metadata/trending/album?target=album|artist|recording` asks the first available album provider declaring `lists` for its `trending` list with that `target` (`album` when absent; another value is the 400 of rule 52) and answers the hits of rule 52 with the marks of rules 53 and 54; no such provider answers `[]`, and a failed call serves the last good copy (`provider-plugins.md` rule 44).
 
 ## SQL
 

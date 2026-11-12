@@ -2929,6 +2929,18 @@
         }
       }
     },
+    "/api/metadata/trending/album": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "The week's most listened albums, artists or recordings (`target`), as search hits; empty when\nno music provider serves lists (`docs/spec/metadata.md` rule 56).",
+        "operationId": "trending_album",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/metadata/trending/movie": {
       "get": {
         "tags": [
@@ -2990,6 +3002,18 @@
           "metadata"
         ],
         "operationId": "upcoming_tv",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/metadata/{provider}/album/{externalId}": {
+      "get": {
+        "tags": [
+          "metadata::music::routes"
+        ],
+        "summary": "`GET /api/metadata/{provider}/album/{externalId}` (`docs/spec/music.md` rule 75).",
+        "operationId": "preview_album",
         "responses": {
           "200": {}
         }
