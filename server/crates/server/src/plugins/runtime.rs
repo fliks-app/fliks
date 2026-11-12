@@ -316,7 +316,11 @@ impl Ctx {
 
     /// The gate of the latest outbound request of the export in progress.
     pub fn last_gate(&self) -> Option<Arc<super::outbound::Gate>> {
-        self.out.last.clone()
+        let own = self
+            .out
+            .last_refused
+            .load(std::sync::atomic::Ordering::SeqCst);
+        self.out.last.clone().filter(|_| !own)
     }
 
     /// Starts a provider export: no request of an earlier one counts.
@@ -710,6 +714,7 @@ impl PluginRt {
                 last: None,
                 priority: Priority::Background,
                 deadline: Instant::now() + env.cfg.deadlines.hello,
+                last_refused: Arc::default(),
                 queued: None,
                 over: env.cfg.upstream_override.clone(),
             },

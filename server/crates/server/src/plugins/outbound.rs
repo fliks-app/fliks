@@ -89,6 +89,8 @@ pub struct Outbound {
     /// The gate of the latest request of the export in progress: what its `rate-limited`, spent quota and
     /// checked records are about.
     pub last: Option<Arc<Gate>>,
+    /// Whether the host answered that latest request itself (rule 57): a `rate-limited` echoing it pauses nothing.
+    pub last_refused: Arc<AtomicBool>,
     /// The export in progress in this Store (rule 58).
     pub priority: Priority,
     /// When the export in progress is interrupted.
@@ -120,6 +122,8 @@ impl WasiHttpHooks for Outbound {
         let internal = self.internal | self.over.rewrite(request.uri_mut());
         let gate = gate.map(|g| g.for_host(request.uri().host().unwrap_or_default()));
         self.last.clone_from(&gate);
+        let refused = self.last_refused.clone();
+        refused.store(false, Ordering::SeqCst);
         Box::new(async move {
             // The call's deadline aborts a guest still queued here, like any other host wait.
             let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
@@ -170,7 +174,10 @@ impl WasiHttpHooks for Outbound {
                     Ok((res, io))
                 }
                 Done::Failed(e) => Err(e),
-                Done::Refused(r) => Ok(r.into_response()),
+                Done::Refused(r) => {
+                    refused.store(true, Ordering::SeqCst);
+                    Ok(r.into_response())
+                }
             }
         })
     }
@@ -180,8 +187,8 @@ impl WasiHttpHooks for Outbound {
 const INTERACTIVE_BUDGET_MS: u64 = 5_000;
 /// Consecutive failures that open the breaker.
 const BREAKER_FAILURES: u32 = 3;
-const BACKGROUND_RETRIES: u32 = 3;
-const INTERACTIVE_RETRIES: u32 = 1;
+/// Replays of a 429 or 503; an interactive one also stops at its wait budget.
+const RETRIES: u32 = 3;
 const SLOW_CALL_MS: u64 = 1_000;
 const DAY_MS: u64 = 86_400_000;
 /// The largest request body the host keeps to replay it.
@@ -449,6 +456,15 @@ impl Gate {
         Ok(())
     }
 
+    /// The breaker's outcome of a final answer. A 429, or a 503 with `Retry-After`, is the upstream
+    /// throttling: the limiter is paused for it, and it is no outage.
+    fn settle<R>(&self, r: &Reply<R>) {
+        if r.status == 429 || (r.status == 503 && r.retry_after_ms.is_some()) {
+            return;
+        }
+        self.record(Outcome::of_status(r.status));
+    }
+
     /// Pauses the limiter after a 429 or 503 and returns the pause length.
     fn throttled(&self, retry_after: Option<u64>) -> u64 {
         let now = self.clock.now_ms();
@@ -495,7 +511,7 @@ impl Gate {
             if let Err(refused) = self.admit(p, budget, &mut waited, queued).await {
                 return match last {
                     Some(r) => {
-                        self.record(Outcome::of_status(r.status));
+                        self.settle(&r);
                         Done::Reply(r)
                     }
                     None => Done::Refused(refused),
@@ -517,10 +533,8 @@ impl Gate {
             if matches!(reply.status, 429 | 503) {
                 let pause = self.throttled(reply.retry_after_ms);
                 let fits = match p {
-                    Priority::Background => retries < BACKGROUND_RETRIES,
-                    Priority::Interactive => {
-                        retries < INTERACTIVE_RETRIES && waited + pause <= budget
-                    }
+                    Priority::Background => retries < RETRIES,
+                    Priority::Interactive => retries < RETRIES && waited + pause <= budget,
                 };
                 if fits && replayable() {
                     (retries, last) = (retries + 1, Some(reply));
@@ -529,7 +543,7 @@ impl Gate {
             } else {
                 self.limiter.lock_clean().reset_backoff();
             }
-            self.record(Outcome::of_status(reply.status));
+            self.settle(&reply);
             return Done::Reply(reply);
         }
     }
@@ -1075,7 +1089,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_interactive_call_retries_once_within_five_seconds() {
+    async fn an_interactive_call_retries_within_five_seconds() {
         let (g, clock) = gate(fast());
         let h = AtomicU32::new(0);
         let d = call(&g, Interactive, &[(429, Some(2))], &h, true).await;
@@ -1085,7 +1099,9 @@ mod tests {
         let h = AtomicU32::new(0);
         let d = call(&g, Interactive, &[(503, None); 9], &h, true).await;
         assert_eq!(status(&d), 503);
-        assert_eq!((hits(&h), sleeps(&clock)), (2, vec![1_000]));
+        // the next backoff step (4 s) would end past the budget
+        assert_eq!((hits(&h), sleeps(&clock)), (3, vec![1_000, 2_000]));
+        assert_eq!(failures(&g), 1);
     }
 
     #[tokio::test]
@@ -1093,7 +1109,7 @@ mod tests {
         let (g, _) = gate(fast());
         let h = AtomicU32::new(0);
         let d = call(&g, Interactive, &[(429, Some(0)); 9], &h, true).await;
-        assert_eq!((status(&d), hits(&h)), (429, 2));
+        assert_eq!((status(&d), hits(&h)), (429, 4));
     }
 
     #[tokio::test]
@@ -1184,7 +1200,19 @@ mod tests {
         assert!(matches!(&d, Done::Reply(r) if r.status == 429));
         assert_eq!(hits(&h), 1);
         assert_eq!(sleeps(&clock), [4_000]);
-        assert_eq!(failures(&g), 1);
+        assert_eq!(failures(&g), 0);
+    }
+
+    #[tokio::test]
+    async fn a_throttle_never_opens_the_breaker() {
+        let (g, _) = gate(fast());
+        let h = AtomicU32::new(0);
+        for _ in 0..3 {
+            let d = call(&g, Interactive, &[(503, Some(0)); 4], &h, true).await;
+            assert_eq!(status(&d), 503);
+            h.store(0, Ordering::Relaxed);
+        }
+        assert_eq!(failures(&g), 0);
     }
 
     #[tokio::test]
@@ -1552,6 +1580,7 @@ mod tests {
             last: None,
             priority: Background,
             deadline: Instant::now() + Duration::from_secs(600),
+            last_refused: Arc::default(),
             queued: None,
             over: Arc::new(Override::default()),
         }
@@ -1597,5 +1626,7 @@ mod tests {
         let (port, seen) = serve(&[]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
         assert!(seen.lock().unwrap().is_empty());
+        // the plugin echoing this 429 as `rate-limited` must not pause the gate again
+        assert!(h.last_refused.load(Ordering::SeqCst));
     }
 }
