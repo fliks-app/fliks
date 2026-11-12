@@ -1890,6 +1890,7 @@
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementos",
     "search": "Buscar…",
+    "no_results": "Sin resultados",
     "confirm": "Confirmar",
     "clear": "Vaciar",
     "cancel": "Cancelar",
