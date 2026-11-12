@@ -599,6 +599,7 @@ describe('PlaybackSession', () => {
     it('unloads the engine, stops its stream and turns the open route into the view, without resuming it', async () => {
       const { session, remote, local, streaming, remoteSvc } = setup();
       session.attachLocal(local);
+      session.beginRoute();
       TestBed.tick();
       expect(await session.yieldToView()).toBe(true);
       remote.isObserving.set(true);
@@ -607,6 +608,53 @@ describe('PlaybackSession', () => {
       expect(session.kind()).toBe('remote');
       expect(local.resume).not.toHaveBeenCalled();
       expect(remoteSvc.selectTarget).not.toHaveBeenCalled();
+    });
+
+    it('refuses while a cast receiver is connected, and a second time once it is the view', async () => {
+      const { session, cast, local } = setup();
+      session.attachLocal(local);
+      session.beginRoute();
+      cast.isConnected.set(true);
+      expect(await session.yieldToView()).toBe(false);
+      cast.isConnected.set(false);
+      expect(await session.yieldToView()).toBe(true);
+      expect(await session.yieldToView()).toBe(false);
+      expect(local.release).toHaveBeenCalledOnce();
+    });
+
+    it('goes back to local when this device takes the session again', async () => {
+      const { session, remote, local } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: undefined });
+      session.attachLocal(local);
+      session.beginRoute();
+      await session.yieldToView();
+      remote.isObserving.set(true);
+      expect(session.kind()).toBe('remote');
+      expect(await session.moveTo('local')).toBe(true);
+      expect(session.kind()).toBe('local');
+      expect(TestBed.inject(FullPlayerState).remote()).toBe(false);
+      expect(local.resume).toHaveBeenCalledOnce();
+    });
+
+    it('goes back to local from a view opened on the observed session', async () => {
+      const { session, remote, local } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: undefined });
+      session.attachLocal(local);
+      session.viewObserved({ fileId: 7, mediaId: 3 });
+      expect(session.kind()).toBe('remote');
+      expect(await session.moveTo('local')).toBe(true);
+      expect(session.kind()).toBe('local');
+    });
+
+    it('leaves an open audio player alone when the view ends', async () => {
+      const { session, local } = setup();
+      session.attachLocal(local);
+      session.beginRoute();
+      TestBed.inject(FullPlayerState).show('audio', false);
+      expect(await session.yieldToView()).toBe(true);
+      expect(TestBed.inject(FullPlayerState).open()).toBe('audio');
+      session.endView();
+      expect(TestBed.inject(FullPlayerState).open()).toBe('audio');
     });
 
     it('leaves the route alone when no engine was loaded', async () => {

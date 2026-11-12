@@ -325,6 +325,7 @@ describe('SessionSyncService takeover', () => {
     sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2, silent: true });
     await vi.waitFor(() => expect(yielded).toHaveBeenCalledOnce());
     await Promise.resolve();
+    expect(yielded).toHaveBeenCalledWith(true);
     expect(confirm).not.toHaveBeenCalled();
     expect(resume).not.toHaveBeenCalled();
     await service.handleSuperseded('sid-1');

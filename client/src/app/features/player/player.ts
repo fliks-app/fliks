@@ -1111,6 +1111,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async ngAfterViewInit() {
     void this.audioPlayer.close();
+    this.session.beginRoute();
     this.keyboardOverlay.enter();
     this.state.reset();
     this.qoe.reset();
@@ -1411,8 +1412,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.detachLocalOutput();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
-    this.qoe.flushKeepalive(this.activeSessionId());
     if (this.session.isLocal()) {
+      this.qoe.flushKeepalive(this.activeSessionId());
       // keepalive fetch (not HttpClient) so the stop survives if this destroy
       // coincides with a page unload / app background.
       this.fireAndForgetStopSessions();
@@ -3148,7 +3149,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const { mediaId, mediaFileId: fileId, episodeId } = this;
       if (!mediaId || !fileId) return null;
       // The view needs the new owner to observe: read the session before the route commits to it.
-      if (keepOpen && this.engine && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
+      if (keepOpen && this.engine && this.session.isLocal() && !this.firstLoadPending && !this.preRollActive() && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
         await this.savePosition();
         if (await this.session.yieldToView()) return null;
       }
@@ -3446,9 +3447,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private onBeforeUnload = () => {
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
-    this.qoe.flushKeepalive(this.activeSessionId());
     this.keepalivePositionSave();
-    if (this.session.isLocal()) this.fireAndForgetStopSessions();
+    if (this.session.isLocal()) {
+      this.qoe.flushKeepalive(this.activeSessionId());
+      this.fireAndForgetStopSessions();
+    }
   };
 
   /** Home, input switch and standby hide the app without unloading it: bank the position, pause, and let the engine

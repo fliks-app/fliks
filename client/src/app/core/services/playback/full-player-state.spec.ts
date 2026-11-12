@@ -11,4 +11,14 @@ describe('FullPlayerState', () => {
     full.handTo('video', false);
     expect(full.remote()).toBe(false);
   });
+
+  it('follows a video hand-over without touching an audio player', () => {
+    const full = TestBed.inject(FullPlayerState);
+    full.show('audio', false);
+    full.handTo('video', true);
+    expect(full.remote()).toBe(false);
+    full.show('video', false);
+    full.handTo('video', true);
+    expect(full.remote()).toBe(true);
+  });
 });
