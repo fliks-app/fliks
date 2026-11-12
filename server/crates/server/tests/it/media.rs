@@ -544,3 +544,30 @@ async fn identifying_with_the_same_id_clears_nothing(pool: PgPool) {
         )
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn type_lists_several_kinds(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES
+          (5, 'Series', 2000, 'series', 1, 's'), (6, 'Book', 2000, 'book', 1, 'b')"#,
+    )
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+    for uri in [
+        "/api/media?type=movie,series&sortBy=title",
+        "/api/media?type=movie&type=series&sortBy=title",
+    ] {
+        let (s, v) = c.get(&c.admin, uri).await;
+        assert_eq!((s, v["total"].as_i64()), (200, Some(5)), "{uri}");
+        assert!(!ids(&v).contains(&6), "{uri}");
+    }
+    for uri in [
+        "/api/media?type=movie,bogus",
+        "/api/media?type=",
+        "/api/media?type=book,movie&format=pdf",
+    ] {
+        assert_eq!(c.get(&c.admin, uri).await.0, 400, "{uri}");
+    }
+}

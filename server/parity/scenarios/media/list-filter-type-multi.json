@@ -1,0 +1,39 @@
+{
+  "name": "media-list-filter-type-multi",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: movie, series, book, comic, album"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?type=movie,bogus"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: movie, series, book, comic, album"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?type="
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}
