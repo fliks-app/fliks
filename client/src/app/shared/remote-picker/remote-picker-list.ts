@@ -80,12 +80,16 @@ export class RemotePickerListComponent {
   protected readonly followed = computed(() => {
     const s = this.sync.session();
     if (!s || this.sync.role() !== 'observer') return null;
+    // The device card already shows this session.
+    if (this.surface.here() || (this.card() && this.playing.name())) return null;
     const reading = this.sync.isReading(s);
-    if (this.surface.here()) return null;
     const position = reading ? `${this.readPercent(s)}%` : formatTime(this.sync.positionNow(s));
+    const track = this.sessionTrack();
+    const album = s.item.kind === 'album';
+    const sub = album ? track?.artist : s.item.subtitle;
     return {
-      title: s.item.title,
-      detail: s.item.subtitle ? `${s.item.subtitle} · ${position}` : position,
+      title: track?.title || (album ? (s.item.subtitle ?? s.item.title) : s.item.title),
+      detail: sub ? `${sub} · ${position}` : position,
       line: this.sync.line(s),
     };
   });
@@ -124,7 +128,7 @@ export class RemotePickerListComponent {
         resumable && session
           ? this.sync.isReading(session)
             ? this.translate.instant('session.open_here')
-            : this.translate.instant('session.resume_at', { position: formatTime(this.sync.positionNow(session)) })
+            : this.translate.instant('session.resume_here')
           : null,
       connected: this.session.isLocal() && !resumable,
       disabled: this.surface.here() && this.session.isLocal(),
@@ -192,7 +196,8 @@ export class RemotePickerListComponent {
     const group = (r: PickerRow) => (r.kind === 'local' ? -1 : r.kind === 'airplay' ? 0 : r.kind === 'remote' ? 2 : 1);
     const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
     rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
-    return rows;
+    // A transfer list has nothing to do with a device it cannot transfer to, the session's owner included.
+    return this.transferOnly() ? rows.filter((r) => r.kind !== 'remote' || r.connected || this.canTransfer(r)) : rows;
   });
 
   /** The sheet branch mounts the list only while it is open, so this covers

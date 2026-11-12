@@ -88,7 +88,7 @@
       </button>
     }
     @if (!reading() && !audio()) {
-      <app-dropdown-menu placement="top-end" [heading]="'session.transfer' | translate">
+      <app-dropdown-menu placement="top-end">
         <button trigger type="button" class="btn btn-ghost btn-circle btn-sm" [attr.aria-label]="'session.transfer' | translate"
                 [title]="'session.transfer' | translate" (click)="refreshTransfer()">
           <svg lucideArrowRightLeft class="h-5 w-5"></svg>

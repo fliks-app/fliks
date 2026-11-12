@@ -154,6 +154,7 @@ export class AudioPlayerService {
 
   readonly track = this._track.asReadonly();
   readonly playing = this._playing.asReadonly();
+  readonly uiPlaying = computed(() => this._playing() || this._starting());
   readonly loading = this._loading.asReadonly();
   /** Seconds on the item timeline. */
   readonly position = this._position.asReadonly();
@@ -276,6 +277,7 @@ export class AudioPlayerService {
     if (!req) return null;
     const positionSeconds = this._position();
     const queue = this._musicMode() ? this.wireQueue() : null;
+    this.fullPlayer.handTo(true);
     await this.close();
     if (!queue) return { title: req.title, positionSeconds, resume: async () => void (await this.play(req, { startAt: positionSeconds })) };
     return {
@@ -1396,6 +1398,7 @@ export class AudioPlayerService {
     }
     // A paused load reports no play state: its first beat is what claims the session.
     if (paused && loaded) this.onPlayState(false);
+    if (loaded) this.fullPlayer.handTo(false);
   }
 
   /** Commands of a controller for the playback this device holds; a `load` goes through the loader. */

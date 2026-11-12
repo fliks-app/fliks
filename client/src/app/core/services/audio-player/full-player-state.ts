@@ -15,4 +15,9 @@ export class FullPlayerState {
   hide(): void {
     this.open.set(false);
   }
+
+  /** The session changed device, in either direction: an open player follows it instead of closing. */
+  handTo(remote: boolean): void {
+    if (this.open()) this.remote.set(remote);
+  }
 }

@@ -52,7 +52,6 @@ import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
-import { FullPlayerState } from '../../core/services/audio-player/full-player-state';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { LyricsApiService } from '../../core/services/api/lyrics-api.service';
@@ -139,7 +138,6 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 export class AudioPlayerComponent {
   protected readonly local = inject(AudioPlayerService);
   private readonly remoteOut = inject(RemoteAudioOutput);
-  private readonly fullPlayer = inject(FullPlayerState);
   protected readonly sync = inject(SessionSyncService);
   protected readonly surface = inject(PlaybackSurface);
   /** The full player drives another device's session. */
@@ -239,16 +237,6 @@ export class AudioPlayerComponent {
           void this.loadLyricsState(t.itemId);
         });
       }
-    });
-    // This device took the session over: the open dialog moves to the local output once its track is up, else it closes.
-    effect(() => {
-      const s = this.sync.session();
-      if (!this.remoteView() || !s || this.sync.role() !== 'owner') return;
-      const track = this.local.track();
-      untracked(() => {
-        if (track?.itemId === s.item.id) this.fullPlayer.remote.set(false);
-        else if (!track && !this.local.loading() && !this.sync.claimPending()) this.fullPlayer.hide();
-      });
     });
     effect(() => {
       const c = this.likes.changed();

@@ -4041,7 +4041,6 @@
     "open_here": "Ouvrir ici",
     "playing_on": "En lecture sur {{device}}",
     "current": "Session en cours",
-    "resume_at": "Reprendre à {{position}}",
     "settings_title": "Reprise automatique entre appareils",
     "settings_hint": "Ce que vous lisez sur un appareil apparaît sur vos autres appareils, pilotable ou reprenable en un geste. Une seule lecture à la fois sur le compte pour les types choisis.",
     "scope_all": "Tous les types",

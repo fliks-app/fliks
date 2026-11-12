@@ -48,6 +48,8 @@ export class RemoteAudioOutput implements AudioOutput {
   readonly shuffle = computed(() => this.wire()?.shuffle ?? false);
   readonly repeat = computed<Repeat>(() => this.wire()?.repeat ?? 'off');
   readonly playing = computed(() => (this.live() ? !this.target.uiPaused() : (this.session()?.playing ?? false) && this.controllable()));
+  /** While this device claims the session, the old owner's pause on its way out is not shown. */
+  readonly uiPlaying = computed(() => (this.sync.claimPending() ? (this.session()?.playing ?? false) : this.playing()));
   readonly position = computed(() => {
     const s = this.session();
     return s ? Math.min(this.sync.positionNow(s), s.durationSeconds ?? Infinity) : 0;
