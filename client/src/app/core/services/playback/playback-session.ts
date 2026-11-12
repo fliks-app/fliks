@@ -344,9 +344,21 @@ export class PlaybackSession {
     const remote = this.remoteSvc();
     remote.selectTarget(targetId);
     void remote.send(targetId, snapshotToWire(handoff.snapshot));
-    const sid = handoff.localSessionId;
-    if (sid) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
+    this.stopStream(handoff.localSessionId);
     return true;
+  }
+
+  /** Another device took the account session: the local engine unloads in place and the open route becomes the view of the new owner. */
+  async yieldToView(): Promise<boolean> {
+    const handoff = await this.local()?.release();
+    if (!handoff) return false;
+    this.fullPlayer.show('video', true);
+    this.stopStream(handoff.localSessionId);
+    return true;
+  }
+
+  private stopStream(sid: string | undefined): void {
+    if (sid) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
   }
 
   /** Moves playback between two other devices without the local engine starting in between. */

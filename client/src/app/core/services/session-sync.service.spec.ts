@@ -272,6 +272,16 @@ describe('SessionSyncService takeover', () => {
     expect(confirm.mock.calls[0][0].message).toBe('A film. session.superseded_message');
   });
 
+  it('asks the player to stay open as the view, and offers nothing when it did', async () => {
+    const { service, confirm } = setup({ confirm: true });
+    const { p, yielded } = player('sid-1');
+    yielded.mockResolvedValue(null);
+    service.registerPlayer(p);
+    await service.handleSuperseded('sid-1', 'Pixel');
+    expect(yielded).toHaveBeenCalledWith(true);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it('does not reject when "resume here" fails to start', async () => {
     const { service } = setup({ confirm: true });
     const { p, resume } = player('sid-1');
