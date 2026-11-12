@@ -35,7 +35,6 @@
   }
 } @else if (observed(); as s) {
   <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
-       [class.opacity-80]="sync.parked()"
        [class.opacity-60]="surface.syncing()"
        [attr.aria-busy]="surface.syncing()"
        style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))">
@@ -49,57 +48,39 @@
       </div>
     }
     <ng-template #info>
-      <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12" [class.grayscale]="sync.parked()">
+      <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12">
         @if (observedArtwork(); as art) {
-          <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
+          @for (a of [art]; track a) {
+            <img [cachedSrc]="a | resolveUrl:'thumb'" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" />
+          }
+        }
+        @if (swipe.cover(); as sc) {
+          <img [cachedSrc]="sc.url | resolveUrl: 'thumb'" alt="" class="absolute inset-0 z-[2] h-full w-full object-cover" [class.swipe-settle]="sc.settle" [style.opacity]="sc.opacity" />
         }
       </div>
-      <span class="min-w-0 flex-1">
-        <app-marquee class="text-sm font-semibold" [text]="observedTitle()" [secondary]="observedTrack()?.artist ?? ''" />
-        <span class="block truncate text-sm text-base-content/60">
-          @if (reading()) {
-            {{ sync.line(s) }} · {{ readPercent() }}%
-          } @else if (sync.parked()) {
-            {{ sync.line(s) }}
-          } @else {
-            <span class="flex items-center gap-1 text-info">
-              <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
-              <span class="truncate">{{ sync.ownerName(s) }}</span>
-              <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ time() }}</span>
-            </span>
-          }
+      <app-swipe-track #swipe [output]="audioView" [lines]="observedLines" [disabled]="!audio()" (skipped)="$event === 'next' ? audioView.next() : audioView.previous()" />
+      <!-- `n`: the neighbour a swipe brings in, null for the session's own track. -->
+      <ng-template #observedLines let-n>
+        <app-marquee class="text-sm font-semibold" [text]="n ? n.title : observedTitle()" [secondary]="n ? n.artists : observedArtist()" />
+        <span class="flex items-center gap-1 truncate text-sm text-info">
+          <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
+          <span class="truncate">{{ sync.ownerName(s) }}</span>
+          <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ n ? clock(0) : time() }}</span>
         </span>
-        @if (!reading() && !sync.parked() && percent() > 0) {
-          <progress class="progress progress-primary mt-1 block h-1 w-full" [value]="percent()" max="100"></progress>
+        @if (audio() || percent() > 0) {
+          <div class="mt-1 h-1 w-full overflow-hidden rounded-full bg-base-content/15" aria-hidden="true" data-testid="observed-progress">
+            <div class="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" [style.width.%]="n ? 0 : percent()"></div>
+          </div>
         }
-      </span>
+      </ng-template>
     </ng-template>
-    @if (controllable()) {
-      <button type="button" class="btn btn-ghost btn-circle btn-sm sm:btn-md" (click)="toggleObserved()"
-              [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate">
-        @if (paused()) {
-          <svg lucidePlay class="h-5 w-5"></svg>
-        } @else {
-          <svg lucidePause class="h-5 w-5"></svg>
-        }
-      </button>
-    }
-    @if (sync.canPlayHere() && !audio()) {
-      <button type="button" class="btn btn-primary btn-sm px-2 sm:px-3" (click)="sync.playHere()">
-        {{ (reading() ? 'session.open_here' : sync.parked() ? 'session.resume' : 'session.play_here') | translate }}
-      </button>
-    }
-    @if (!reading() && !audio()) {
-      <app-dropdown-menu placement="top-end">
-        <button trigger type="button" class="btn btn-ghost btn-circle btn-sm" [attr.aria-label]="'session.transfer' | translate"
-                [title]="'session.transfer' | translate" (click)="refreshTransfer()">
-          <svg lucideArrowRightLeft class="h-5 w-5"></svg>
-        </button>
-        <app-remote-picker-list [transferOnly]="true" [card]="true" />
-      </app-dropdown-menu>
-    }
-    <button type="button" class="btn btn-ghost btn-circle btn-sm" (click)="hide()" [attr.aria-label]="'session.hide' | translate">
-      <svg lucideX class="h-5 w-5"></svg>
+    <button type="button" class="btn btn-ghost btn-circle btn-sm sm:btn-md" (click)="toggleObserved()"
+            [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate">
+      @if (paused()) {
+        <svg lucidePlay class="h-5 w-5"></svg>
+      } @else {
+        <svg lucidePause class="h-5 w-5"></svg>
+      }
     </button>
   </div>
 }

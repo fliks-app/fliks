@@ -52,6 +52,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -150,6 +151,7 @@ final class MusicHost {
     private boolean jsEditing;
     private boolean externalQueue;
     private int lastIndex = -1;
+    @Nullable private Long previousItem;
     /** The track whose failed load was retried once; cleared when playback resumes. */
     private int recoveredAt = -1;
     private long lastBeat;
@@ -307,7 +309,8 @@ final class MusicHost {
             exo.stop();
             exo.clearMediaItems();
         });
-        stopSessions(null, null);
+        stopSessions();
+        previousItem = null;
         sessionKey = null;
         book = null;
         lastIndex = -1;
@@ -422,10 +425,11 @@ final class MusicHost {
         }
     }
 
-    private void stopSessions(@Nullable Long keep, @Nullable Long alsoKeep) {
+    private void stopSessions(@Nullable Long... keep) {
         String key = sessionKey;
+        List<Long> kept = Arrays.asList(keep);
         for (Map.Entry<Long, Resolved> e : resolved.entrySet()) {
-            if (e.getKey().equals(keep) || e.getKey().equals(alsoKeep)) continue;
+            if (kept.contains(e.getKey())) continue;
             resolved.remove(e.getKey());
             String sid = e.getValue().sessionId;
             if (key != null) io.execute(() -> endSession(sid, key));
@@ -705,11 +709,14 @@ final class MusicHost {
             applyGain();
             int index = exo.getCurrentMediaItemIndex();
             if (index != lastIndex) {
-                beat(false);
+                beat(exo.getPlayWhenReady());
                 lastIndex = index;
-                // The next track resolves ahead of its turn: its session stays.
+                // The next track resolves ahead of its turn; the previous one ends a track later, once the
+                // current one has claimed the account session, or its end would park it between tracks.
                 Long next = exo.hasNextMediaItem() ? itemOf(exo.getMediaItemAt(exo.getNextMediaItemIndex())) : null;
-                stopSessions(itemOf(item), next);
+                Long current = itemOf(item);
+                stopSessions(current, next, previousItem);
+                previousItem = current;
                 emitTrack();
             }
         }

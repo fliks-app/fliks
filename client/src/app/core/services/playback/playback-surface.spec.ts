@@ -91,12 +91,25 @@ describe('PlaybackSurface keepalive on an older server', () => {
 });
 
 describe('PlaybackSurface bar', () => {
-  it('shows the session an owner without a player holds as parked, local once a player mounts', () => {
+  it('holds the session of an owner without a player as parked, with no bar', () => {
     const { session, surface } = setup('owner', false);
     session.set(playing());
     TestBed.tick();
     expect(surface.state()).toBe('parked');
-    expect(surface.bar()).not.toBeNull();
+    expect(surface.bar()).toBeNull();
+  });
+
+  it('shows parked music as the mini-player, and no parked item as a bar', () => {
+    const { session, surface } = setup();
+    session.set(playing({ state: 'parked', item: { id: 5, kind: 'album' } as AccountSession['item'] }));
+    TestBed.tick();
+    expect(surface.bar()).toBeNull();
+    expect(surface.parkedMusic()).toBe(true);
+
+    session.set(playing({ state: 'parked', item: { id: 6, kind: 'movie' } as AccountSession['item'] }));
+    TestBed.tick();
+    expect(surface.bar()).toBeNull();
+    expect(surface.parkedMusic()).toBe(false);
   });
 
   it('keeps an owner with a player local, with no bar', () => {
@@ -104,43 +117,6 @@ describe('PlaybackSurface bar', () => {
     session.set(playing());
     TestBed.tick();
     expect(surface.state()).toBe('local');
-    expect(surface.bar()).toBeNull();
-  });
-
-  it('shows the bar of the next playback of an owner whose earlier bar was hidden', () => {
-    const { session, surface } = setup();
-    session.set(playing({ item: { id: 1 } as AccountSession['item'] }));
-    TestBed.tick();
-    surface.hide();
-    TestBed.tick();
-    expect(surface.bar()).toBeNull();
-
-    session.set(playing({ state: 'parked' }));
-    TestBed.tick();
-    expect(surface.bar()).not.toBeNull();
-
-    session.set(playing({ item: { id: 2 } as AccountSession['item'] }));
-    TestBed.tick();
-    expect(surface.bar()).not.toBeNull();
-  });
-
-  it('keeps a hidden bar hidden when the owner passes from its web layer to its native service', () => {
-    const { session, surface } = setup();
-    session.set(playing({ owner: { targetId: 'dev#ab12', deviceName: null, formFactor: null } }));
-    TestBed.tick();
-    surface.hide();
-    session.set(playing({ owner: { targetId: 'dev#native', deviceName: 'Phone', formFactor: 'phone' } }));
-    TestBed.tick();
-    expect(surface.bar()).toBeNull();
-  });
-
-  it('keeps the bar hidden while the same playback moves to its next track', () => {
-    const { session, surface } = setup();
-    session.set(playing());
-    TestBed.tick();
-    surface.hide();
-    session.set(playing({ item: { id: 6 } as AccountSession['item'] }));
-    TestBed.tick();
     expect(surface.bar()).toBeNull();
   });
 });

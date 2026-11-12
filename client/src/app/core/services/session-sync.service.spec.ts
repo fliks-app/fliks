@@ -349,6 +349,36 @@ describe('SessionSyncService takeover', () => {
   });
 });
 
+describe('SessionSyncService dismiss on stop', () => {
+  afterEach(() => TestBed.resetTestingModule());
+  const mine = { targetId: 'phone#1', deviceName: 'Phone', formFactor: 'phone' };
+
+  it('deletes the session of the item this device stopped once the server parks it', async () => {
+    const { service, flush, http, sse } = setup();
+    await flush(session({ owner: mine }));
+    service.dismissOnPark(5);
+    TestBed.tick();
+    http.expectNone({ method: 'DELETE', url: '/api/session' });
+
+    sse.sessionEvents.next({ type: 'session.changed' } as SessionEvent);
+    await flush(session({ owner: mine, state: 'parked' }));
+    TestBed.tick();
+    http.expectOne({ method: 'DELETE', url: '/api/session' }).flush(null, { status: 204, statusText: 'No Content' });
+  });
+
+  it('keeps a session another device took before it was parked', async () => {
+    const { service, flush, http, sse } = setup();
+    await flush(session({ owner: mine }));
+    service.dismissOnPark(5);
+    sse.sessionEvents.next({ type: 'session.changed' } as SessionEvent);
+    await flush(session());
+    sse.sessionEvents.next({ type: 'session.changed' } as SessionEvent);
+    await flush(session({ owner: mine, state: 'parked' }));
+    TestBed.tick();
+    http.expectNone({ method: 'DELETE', url: '/api/session' });
+  });
+});
+
 describe('SessionSyncService play here', () => {
   afterEach(() => TestBed.resetTestingModule());
 

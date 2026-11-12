@@ -17,6 +17,7 @@ import { RemoteService, type RemoteCommandInput } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
 import { Subject } from 'rxjs';
+import { PlayerStateService } from '../player-state.service';
 
 const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRequest => ({
   itemId: id,
@@ -97,6 +98,7 @@ describe('AudioPlayerService music mode', () => {
       { provide: MusicApiService, useValue: { trackRequests } },
       { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
+        { provide: PlayerStateService, useValue: { volume: signal(1) } },
         {
           provide: StreamingApiService,
           useValue: {
@@ -224,18 +226,59 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
   });
 
+  it('takes its level from the full player and reports it to the other devices once settled', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    audio.setVolume(0.4);
+    audio.setVolume(0.3);
+    expect(audio.volume()).toBe(0.3);
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ volume: 0.3, muted: false })));
+    audio.toggleMute();
+    expect(audio.muted()).toBe(true);
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ volume: 0.3, muted: true })));
+  });
+
+  it('reports a skip as playing while the next track loads, never as a pause', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    els(audio)[0].dispatchEvent(new Event('play'));
+    TestBed.tick();
+    updatePlaybackState.mockClear();
+    audio.next();
+    await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
+    TestBed.tick();
+    await vi.waitFor(() => expect(updatePlaybackState.mock.calls.some((c) => c[1].itemId === 2)).toBe(true));
+    expect(updatePlaybackState.mock.calls.map((c) => c[1].state)).not.toContain('paused');
+  });
+
+  it('shows the track a skip moves to before it has loaded', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    audio.next();
+    expect(audio.track()?.itemId).toBe(1);
+    expect(audio.uiTrack()?.itemId).toBe(2);
+    await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
+    expect(audio.uiTrack()).toBe(audio.track());
+  });
+
   it('preloads the next track near the end and starts it on the standby element at ended', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     const [a, b] = els(audio);
+    a.dispatchEvent(new Event('play'));
     a.currentTime = 90;
     a.dispatchEvent(new Event('timeupdate'));
     await vi.waitFor(() => expect(b.getAttribute('src')).toBe('/s/2'));
     a.dispatchEvent(new Event('ended'));
     await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
     expect(getItemPlaybackInfo).toHaveBeenCalledTimes(2);
-    expect(stopSession).toHaveBeenCalledWith('sid1');
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(stopSession).not.toHaveBeenCalled();
+    expect(updatePlaybackState).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ sessionId: 'sid1', state: 'playing' }));
+    TestBed.tick();
+    await vi.waitFor(() => expect(stopSession).toHaveBeenCalledWith('sid1'));
+    expect(updatePlaybackState).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ sessionId: 'sid2', state: 'playing' }));
   });
 
   it('stops at the end of the queue with repeat off and wraps with repeat all', async () => {
@@ -465,6 +508,19 @@ describe('AudioPlayerService music mode', () => {
       validated.next(cmd('shuffle', { shuffle: true }));
       await vi.waitFor(() => expect([audio.repeat(), audio.shuffle()]).toEqual(['one', true]));
       expect(markApplied).toHaveBeenCalledWith('c2');
+    });
+
+    it('never reports the next queue index against the track a remote skip is leaving', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2), track(3)]);
+      TestBed.tick();
+      updatePlaybackState.mockClear();
+      validated.next(cmd('next'));
+      await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
+      TestBed.tick();
+      await vi.waitFor(() => expect(updatePlaybackState.mock.calls.some((c) => c[1].itemId === 2)).toBe(true));
+      const mismatched = updatePlaybackState.mock.calls.filter((c) => c[1].queue && c[1].queue.itemIds[c[1].queue.index] !== c[1].itemId);
+      expect(mismatched).toEqual([]);
     });
 
     it('enqueues the tracks of an enqueue command and acknowledges it', async () => {

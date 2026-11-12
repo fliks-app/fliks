@@ -19,6 +19,7 @@ import { RemoteService } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
 import { Subject } from 'rxjs';
+import { PlayerStateService } from '../player-state.service';
 
 const track = (id: number): MusicTrackRequest => ({
   itemId: id,
@@ -65,6 +66,7 @@ describe('AudioPlayerService on the native player', () => {
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
+        { provide: PlayerStateService, useValue: { volume: signal(1) } },
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }) } },
         { provide: AuthService, useValue: { refreshAccessToken, user } },
