@@ -47,7 +47,7 @@
   @if (state.scope() === 'people') {
     <!-- People: default roster (no query) or filtered results -->
     @if (state.pending().has('people') && !state.peopleResults().length) {
-      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <ng-container *ngTemplateOutlet="skeletonRows" />
     } @else if (state.peopleResults().length > 0) {
       <div class="flex flex-col gap-1 max-w-xl">
         @for (u of state.peopleResults(); track u.id) {
@@ -83,7 +83,7 @@
           <!-- Filters applied → results grid (TMDB discover, or the local library when external search is off) -->
           @if (state.externalEnabled()) {
             @if (state.discoverLoading()) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <ng-container *ngTemplateOutlet="skeletonGrid" />
             } @else if (state.discoverResults().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
                 @for (row of state.discoverResults(); track row.mediaType + ':' + resultKey(row)) {
@@ -95,7 +95,7 @@
             }
           } @else {
             @if (state.localLoading()) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <ng-container *ngTemplateOutlet="skeletonGrid" />
             } @else if (state.localResults().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
                 @for (media of state.localResults(); track media.id) {
@@ -116,7 +116,10 @@
           <!-- No filters → discovery rows -->
           @if (state.externalEnabled()) {
             @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoverySuggestions().length) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <div class="flex flex-col gap-6">
+                <ng-container *ngTemplateOutlet="skeletonScroller" />
+                <ng-container *ngTemplateOutlet="skeletonScroller" />
+              </div>
             }
             <div class="flex flex-col gap-6">
               @if (state.discoveryTrending().length) {
@@ -408,6 +411,16 @@
     @for (i of placeholders; track i) {
       <div class="aspect-2/3 rounded-lg bg-base-300/40 animate-pulse"></div>
     }
+  </div>
+</ng-template>
+<ng-template #skeletonScroller>
+  <div class="flex flex-col gap-3 overflow-hidden" aria-hidden="true">
+    <div class="h-6 w-40 rounded bg-base-300/40 animate-pulse"></div>
+    <div class="flex gap-4">
+      @for (i of placeholders; track i) {
+        <div class="aspect-2/3 w-28 sm:w-32 lg:w-40 shrink-0 rounded-lg bg-base-300/40 animate-pulse"></div>
+      }
+    </div>
   </div>
 </ng-template>
 <ng-template #skeletonRows>
