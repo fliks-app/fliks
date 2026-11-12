@@ -2,6 +2,7 @@ import { computed, provideZonelessChangeDetection, signal } from '@angular/core'
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MusicApiService } from '../api/music-api.service';
+import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
@@ -46,6 +47,7 @@ async function setup(account: AccountSession | null, live = true) {
     positionNow: (s: AccountSession) => (live ? 70 : s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0)),
     durationNow: (s: AccountSession) => (live ? 200 : (s.durationSeconds ?? 0)),
   };
+  const primeTracks = vi.fn();
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
   const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn() };
   TestBed.configureTestingModule({
@@ -54,6 +56,7 @@ async function setup(account: AccountSession | null, live = true) {
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: RemoteService, useValue: remote },
+      { provide: NowPlayingMetadataService, useValue: { primeTracks } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async (ids: number[]) => ids.map(track)) } },
     ],
   });
@@ -62,7 +65,7 @@ async function setup(account: AccountSession | null, live = true) {
   await Promise.resolve();
   await Promise.resolve();
   TestBed.tick();
-  return { out, sync, target, remote };
+  return { out, sync, target, remote, primeTracks };
 }
 
 describe('RemoteAudioOutput', () => {
@@ -75,6 +78,34 @@ describe('RemoteAudioOutput', () => {
     expect(out.track()).toMatchObject({ itemId: 12, title: 'Track 12', artist: 'Artist', album: 'Album' });
     expect(out.playing()).toBe(true);
     expect(out.position()).toBe(70);
+  });
+
+  it('shows an album session by its track title, with no artist, until the rows load', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null) } },
+        { provide: RemotePlaybackTarget, useValue: {} },
+        { provide: RemoteService, useValue: {} },
+        { provide: NowPlayingMetadataService, useValue: { primeTracks: vi.fn() } },
+        { provide: MusicApiService, useValue: { trackRequests: () => new Promise(() => {}) } },
+      ],
+    });
+    expect(TestBed.inject(RemoteAudioOutput).track()).toMatchObject({ title: 'Track A', artist: undefined });
+  });
+
+  it('primes the metadata service with the rows it loads', async () => {
+    const { primeTracks } = await setup(session());
+    expect(primeTracks).toHaveBeenCalledWith([track(11), track(12), track(13)]);
+  });
+
+  it('keeps the same track through a report that changes only the transport', async () => {
+    const { out, sync } = await setup(session());
+    const before = out.track();
+    sync.session.set(session({ queue: { itemIds: [11, 12, 13], index: 1, shuffle: true, repeat: 'all' } }));
+    expect(out.track()).toBe(before);
+    sync.session.set(session({ item: { ...session().item, id: 13 }, queue: { itemIds: [11, 12, 13], index: 2, shuffle: true, repeat: 'all' } }));
+    expect(out.track()?.itemId).toBe(13);
   });
 
   it('reads the stored position and no playback while the session is parked', async () => {

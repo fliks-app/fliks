@@ -1,5 +1,6 @@
 import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal, untracked } from '@angular/core';
 import { CastService } from '../cast.service';
+import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
@@ -369,9 +370,7 @@ export class AudioPlayerService {
     if (!this._musicMode()) return void this.playTracks(tracks);
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
   }
 
   /** The next track of the queue, or the next chapter of a book. */
@@ -409,10 +408,10 @@ export class AudioPlayerService {
   removeFromQueue(index: number): void {
     const removingCurrent = index === this.mq.index;
     this.mq.remove(index);
+    if (!removingCurrent) return this.queueEdited();
     this.dropPreload();
     this.syncQueue();
     this.pushQueue();
-    if (!removingCurrent) return;
     const t = this.mq.current;
     if (!t) void this.close();
     else if (!this.nativeOn) void this.goTo(t);
@@ -420,16 +419,12 @@ export class AudioPlayerService {
 
   moveInQueue(from: number, to: number): void {
     this.mq.move(from, to);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
   }
 
   setShuffle(on: boolean): void {
     this.mq.setShuffle(on);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
   }
 
   cycleRepeat(): void {
@@ -441,6 +436,15 @@ export class AudioPlayerService {
     this.dropPreload();
     this.syncQueue();
     if (this.nativeOn) void this.nativeAudio!.setRepeat({ mode: this.mq.repeat });
+    this.beat();
+  }
+
+  /** An edit that keeps the current track; the beat shows it to observers now, not on the next tick. */
+  private queueEdited(): void {
+    this.dropPreload();
+    this.syncQueue();
+    this.pushQueue();
+    this.beat();
   }
 
   setReplayGain(mode: ReplayGainMode): void {
@@ -628,6 +632,7 @@ export class AudioPlayerService {
 
   private async startCast(req: MusicTrackRequest, generation: number): Promise<void> {
     await this.nativeAudio?.stop().catch(() => undefined);
+    this.injector.get(NowPlayingMetadataService).primeTracks([req]);
     const info = await this.injector.get(CastPlayerService).castTrack(req);
     if (generation !== this.generation) return;
     if (!info) return void (await this.close());
@@ -1392,10 +1397,19 @@ export class AudioPlayerService {
         this.setLevel(this.level, cmd.muted ?? !this.muted);
         break;
       case 'shuffle':
-        if (music) this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
+        if (music) {
+          // The edit beats at once, so the ack goes out with that beat.
+          this.remote.markApplied(cmd.cmdId);
+          this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
+          return;
+        }
         break;
       case 'repeat':
-        if (music) this.setRepeat(cmd.repeat ?? this.mq.repeat);
+        if (music) {
+          this.remote.markApplied(cmd.cmdId);
+          this.setRepeat(cmd.repeat ?? this.mq.repeat);
+          return;
+        }
         break;
       case 'queue':
         if (music && cmd.queue) await this.replaceQueue(cmd.queue, cmd.shuffle ?? this.mq.shuffle);

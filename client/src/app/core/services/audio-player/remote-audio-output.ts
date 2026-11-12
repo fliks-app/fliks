@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
+import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
@@ -16,6 +17,7 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly remote = inject(RemoteService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly music = inject(MusicApiService);
+  private readonly metadata = inject(NowPlayingMetadataService);
 
   private readonly session = this.sync.session;
   private readonly wire = computed(() => this.session()?.queue ?? null);
@@ -35,6 +37,7 @@ export class RemoteAudioOutput implements AudioOutput {
 
   readonly expanded = this._expanded.asReadonly();
   readonly musicMode = signal(true).asReadonly();
+  readonly rate = signal(1).asReadonly();
   readonly queue = computed(() => this.rows().map((r) => r.row));
   readonly queueIndex = computed(() => {
     const index = this.wire()?.index;
@@ -56,15 +59,17 @@ export class RemoteAudioOutput implements AudioOutput {
     const s = this.session();
     if (!s) return null;
     const row = this.rows().find((r) => r.row.itemId === s.item.id)?.row;
+    // An album session's `subtitle` is the track title, `title` the album.
+    const album = s.item.kind === 'album';
     return {
       mediaId: s.item.mediaId,
       itemId: s.item.id,
-      title: row?.title ?? s.item.title ?? '',
-      artist: row?.artists ?? s.item.subtitle ?? undefined,
+      title: row?.title ?? (album ? s.item.subtitle : s.item.title) ?? '',
+      artist: row?.artists ?? (album ? undefined : (s.item.subtitle ?? undefined)),
       album: row?.albumTitle,
       coverUrl: row?.coverUrl ?? s.item.posterUrl,
     };
-  });
+  }, { equal: sameTrack });
 
   constructor() {
     effect((onCleanup) => {
@@ -72,7 +77,11 @@ export class RemoteAudioOutput implements AudioOutput {
       let stale = false;
       onCleanup(() => (stale = true));
       void this.music.trackRequests(ids).then(
-        (r) => !stale && this.rows.set(alignTrackRows(ids, r)),
+        (r) => {
+          if (stale) return;
+          this.metadata.primeTracks(r);
+          this.rows.set(alignTrackRows(ids, r));
+        },
         () => !stale && this.rows.set([]),
       );
     });
@@ -129,4 +138,10 @@ export class RemoteAudioOutput implements AudioOutput {
     const id = this.remote.observedTargetId();
     if (id) void this.remote.send(id, input);
   }
+}
+
+/** Every session report rebuilds the track; only a real change may re-run what follows it. */
+function sameTrack(a: AudioRequest | null, b: AudioRequest | null): boolean {
+  return a === b || (!!a && !!b && a.itemId === b.itemId && a.mediaId === b.mediaId && a.title === b.title
+    && a.artist === b.artist && a.album === b.album && a.coverUrl === b.coverUrl);
 }

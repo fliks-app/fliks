@@ -234,9 +234,7 @@ export class AudioPlayerComponent {
         untracked(() => {
           this.lyricsEdit.set(false);
           void this.loadTrackState(t.mediaId, t.itemId);
-          // Lyrics follow the local clock and its karaoke stems: another device's session has none.
-          if (this.remoteView()) this.hasLyrics.set(false);
-          else void this.loadLyricsState(t.itemId);
+          void this.loadLyricsState(t.itemId);
         });
       }
     });
@@ -389,6 +387,7 @@ export class AudioPlayerComponent {
     this.fav.set(!was);
     try {
       await (was ? this.likes.unlike(target) : this.likes.like(target));
+      this.albums.delete(t.mediaId);
     } catch {
       this.fav.set(was);
     }

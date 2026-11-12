@@ -66,8 +66,8 @@ export class RemoteNotificationService {
         muted: t.muted(),
         hasNext: t.canPlayNext(),
         liked: this.like.liked(),
-        // The target reports no queue; a film has nothing to step through.
-        seekButtons: !s?.episodeId,
+        // A film is seeked by 10 s; an episode or a track steps to the next one.
+        seekButtons: meta.kind !== 'album' && !s?.episodeId,
       }).catch(() => {});
     }, { injector: this.injector });
   }

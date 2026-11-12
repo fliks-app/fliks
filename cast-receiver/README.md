@@ -120,6 +120,7 @@ Sender sends, receiver reads:
   edl?: { start: number; end: number; action: "cut" | "mute" | "commercial" }[],
   edlLabels?: { cut: string; commercial: string },  // notice texts, translated by the sender
   episodeId?: number,  // when applicable
+  itemId?: number,     // the music track, whose media is the album
 }
 ```
 

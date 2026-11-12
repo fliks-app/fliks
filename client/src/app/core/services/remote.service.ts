@@ -787,6 +787,7 @@ export class RemoteService {
       mediaId: s.mediaId,
       mediaFileId: s.mediaFileId,
       episodeId: s.episodeId,
+      itemId: s.itemId,
       mediaTitle: s.mediaTitle,
       episodeLabel: s.episodeLabel,
       posterUrl: s.posterUrl,

@@ -8,6 +8,7 @@ export interface AudioOutput {
   readonly playing: Signal<boolean>;
   readonly position: Signal<number>;
   readonly duration: Signal<number>;
+  readonly rate: Signal<number>;
   /** A track queue (music) rather than one long recording (audiobook). */
   readonly musicMode: Signal<boolean>;
   readonly queue: Signal<readonly MusicTrackRequest[]>;

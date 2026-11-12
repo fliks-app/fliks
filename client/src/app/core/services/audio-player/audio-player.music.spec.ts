@@ -378,7 +378,7 @@ describe('AudioPlayerService music mode', () => {
   });
 
   describe('remote control', () => {
-    it('publishes its queue on the first beat and again only when it changes', async () => {
+    it('publishes its queue on the first beat and again at once when it changes', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
       const beat = () => (audio as unknown as { beat(): void }).beat();
@@ -389,8 +389,9 @@ describe('AudioPlayerService music mode', () => {
       expect(first.queue).toEqual({ itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' });
       expect(second.queue).toBeUndefined();
       audio.setRepeat('all');
-      beat();
       expect(updatePlaybackState.mock.calls[2][1].queue.repeat).toBe('all');
+      audio.setShuffle(true);
+      expect(updatePlaybackState.mock.calls[3][1].queue.shuffle).toBe(true);
     });
 
     it('applies transport, shuffle and repeat commands and acknowledges them', async () => {

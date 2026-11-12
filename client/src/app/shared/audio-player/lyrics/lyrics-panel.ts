@@ -8,6 +8,7 @@ import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../.
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import type { StemMode } from '../../../core/services/audio-player/stem-mix';
+import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SseService } from '../../../core/services/sse.service';
@@ -36,6 +37,9 @@ export class LyricsPanelComponent {
   readonly itemId = input.required<number>();
   /** Shows the offset, import and fetch tools (with `media.edit`). */
   readonly edit = input(false);
+  /** Another device's session: the lines follow it, and karaoke (local stems) is off. */
+  readonly output = input<AudioOutput | null>(null);
+  readonly seekable = input(true);
   /** Whether the track has lyrics, after each load. */
   readonly found = output<boolean>();
 
@@ -80,7 +84,7 @@ export class LyricsPanelComponent {
   protected readonly stemModes = STEM_MODES;
   /** Karaoke controls apply to the track that is playing, in a library with the feature ready. */
   protected readonly karaokeOn = computed(
-    () => !!this.kStatus()?.ready && this.audio.musicMode() && this.audio.track()?.itemId === this.itemId(),
+    () => !this.output() && !!this.kStatus()?.ready && this.audio.musicMode() && this.audio.track()?.itemId === this.itemId(),
   );
 
   private anchor = { pos: 0, at: 0 };

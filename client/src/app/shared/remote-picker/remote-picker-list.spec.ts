@@ -8,6 +8,7 @@ import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { CastService } from '../../core/services/cast.service';
 import { DeviceService } from '../../core/services/device.service';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
+import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemoteService } from '../../core/services/remote.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
@@ -41,6 +42,7 @@ function setup(
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: PlaybackSurface, useValue: { here: signal(false) } },
       { provide: ToastService, useValue: {} },
+      { provide: NowPlayingMetadataService, useValue: { track: () => signal(null) } },
     ],
   });
   const fixture = TestBed.createComponent(RemotePickerListComponent);

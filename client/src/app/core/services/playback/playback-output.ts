@@ -57,7 +57,7 @@ export interface PlaybackOutput {
   /** Loaded and seekable: the party only drives an output that is ready. */
   readonly ready: () => boolean;
   /** The identity of what plays; display metadata comes from `NowPlayingMetadataService`. */
-  readonly item: () => { mediaId: number; episodeId: number | undefined };
+  readonly item: () => { mediaId: number; episodeId: number | undefined; itemId?: number };
   readonly paused: () => boolean;
   /** What a handoff carries; null while nothing is open. */
   snapshot(): PlaybackSnapshot | null;

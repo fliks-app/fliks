@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, DestroyRef, afterNextRender, inject, input, signal, viewChild } from '@angular/core';
 
 const GAP = 48;
@@ -6,11 +7,14 @@ const GAP = 48;
 @Component({
   selector: 'app-marquee',
   host: { class: 'block min-w-0' },
+  imports: [NgTemplateOutlet],
   templateUrl: './marquee.html',
   styleUrl: './marquee.css',
 })
 export class MarqueeComponent {
   readonly text = input.required<string>();
+  /** Dimmed after the text on the same line, e.g. the artist after a track. */
+  readonly secondary = input('');
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
   private readonly line = viewChild.required<ElementRef<HTMLElement>>('line');

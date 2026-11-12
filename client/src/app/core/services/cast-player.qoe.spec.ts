@@ -147,6 +147,7 @@ describe('CastPlayerService reporting without the player page', () => {
       mediaFileId: { set: vi.fn() },
       mediaId: { set: vi.fn() },
       episodeId: { set: vi.fn() },
+      itemId: { set: vi.fn() },
       mediaTitle: { set: vi.fn() },
       episodeTitle: { set: vi.fn() },
       fanartUrl: { set: vi.fn() },

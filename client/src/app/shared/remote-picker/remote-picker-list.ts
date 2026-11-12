@@ -7,6 +7,7 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
+import { NowPlayingMetadataService, nowPlayingLine } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
@@ -89,10 +90,18 @@ export class RemotePickerListComponent {
     };
   });
 
-  /** What the current device plays: the observed session's title, else the cast or remote output's. */
-  protected readonly cardTrack = computed(
-    () => this.sync.session()?.item.title ?? this.session.nowPlaying()?.title ?? null,
-  );
+  /** The parked or observed album session's track, whose item title is the album. */
+  private readonly sessionTrack = inject(NowPlayingMetadataService).track(() => {
+    const item = this.sync.session()?.item;
+    return item?.kind === 'album' ? { mediaId: item.mediaId, episodeId: item.episodeId ?? undefined, itemId: item.id } : null;
+  });
+
+  /** What the current device plays: the account session's item (a track with its artists for an album), else the cast or remote output's. */
+  protected readonly cardTrack = computed(() => {
+    const item = this.sync.session()?.item;
+    if (!item) return nowPlayingLine(this.session.nowPlaying()) || null;
+    return nowPlayingLine(this.sessionTrack()) || (item.kind === 'album' ? (item.subtitle ?? item.title) : item.title);
+  });
 
   protected onVolume(event: Event): void {
     this.playing.setVolume(+(event.target as HTMLInputElement).value / 100);

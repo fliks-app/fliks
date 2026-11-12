@@ -9,9 +9,7 @@
         }
       </div>
       <span class="min-w-0">
-        <span class="block truncate text-sm font-semibold">
-          {{ o.isIdle() ? ('remote.idle_message' | translate) : session.nowPlaying()?.title }}
-        </span>
+        <app-marquee class="text-sm font-semibold" [text]="o.isIdle() ? ('remote.idle_message' | translate) : (session.nowPlaying()?.title ?? '')" [secondary]="o.isIdle() ? '' : (session.nowPlaying()?.artist ?? '')" />
         <span class="flex items-center gap-1 text-sm text-info">
           <app-device-icon [icon]="playing.icon()" iconClass="h-4 w-4 shrink-0" />
           <span class="truncate">{{ session.deviceName() }}</span>
@@ -55,7 +53,7 @@
         }
       </div>
       <span class="min-w-0 flex-1">
-        <span class="block truncate text-sm font-semibold">{{ s.item.title }}</span>
+        <app-marquee class="text-sm font-semibold" [text]="observedTitle()" [secondary]="observedTrack()?.artist ?? ''" />
         <span class="block truncate text-sm text-base-content/60">
           @if (reading()) {
             {{ sync.line(s) }} · {{ readPercent() }}%

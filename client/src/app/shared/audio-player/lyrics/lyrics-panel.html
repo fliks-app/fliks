@@ -25,7 +25,7 @@
     </div>
   }
 
-  @if (kStatus()?.ready && audio.musicMode() && audio.stemsNative) {
+  @if (!output() && kStatus()?.ready && audio.musicMode() && audio.stemsNative) {
     <p class="text-sm text-base-content/60" data-testid="karaoke-native">{{ 'karaoke.native_hint' | translate }}</p>
   } @else if (karaokeOn() && kState(); as k) {
     <div class="scroll-ring-safe flex flex-wrap items-center gap-2" appTvSection data-testid="karaoke-block">
@@ -99,7 +99,7 @@
         @if (stage() && karaokeOn()) {
           <app-karaoke-stage [doc]="d" [title]="audio.track()?.title ?? ''" />
         } @else {
-          <app-lyrics-view [doc]="d" [layer]="under()" />
+          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable()" />
         }
       } @else if (res()?.instrumental) {
         <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>

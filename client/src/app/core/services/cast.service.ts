@@ -59,6 +59,8 @@ export interface CastMediaInfo {
   /** IDs forwarded to the Fliks receiver via `customData`; ignored by the Default Media Receiver fallback. */
   mediaId?: number;
   episodeId?: number;
+  /** The music track, whose media is the album. */
+  itemId?: number;
   /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
@@ -181,7 +183,7 @@ const CAST_SEEK_CONVERGE_TOL = 1.5;
 /** A receiver can ignore the LOAD's `activeTrackIds` while it is still publishing its tracks. */
 const CAST_TEXT_REAPPLY_MS = 1500;
 
-const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'sid', 'userId'];
+const RECEIVER_MEDIA_KEYS = ['mediaId', 'mediaFileId', 'episodeId', 'itemId', 'sid', 'userId'];
 
 function sameReceiverMedia(a: Record<string, unknown> | null, b: Record<string, unknown> | null): boolean {
   return a === b || (!!a && !!b && RECEIVER_MEDIA_KEYS.every((k) => a[k] === b[k]));
@@ -660,6 +662,7 @@ export class CastService implements OnDestroy {
       posterUrl: info.posterUrl,
       mediaId: info.mediaId,
       episodeId: info.episodeId,
+      itemId: info.itemId,
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
       sid: info.sid,

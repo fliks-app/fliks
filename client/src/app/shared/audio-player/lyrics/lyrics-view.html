@@ -15,7 +15,7 @@
         [class.opacity-40]="timed() && i !== active() && !r.cues"
         [class.opacity-100]="!timed() || i === active() || r.cues"
         [attr.aria-current]="i === active() ? 'true' : null"
-        [disabled]="!timed()"
+        [disabled]="!timed() || !seekable()"
         (click)="seekTo(i)"
       >
         @if (segments()[i]; as segs) {
