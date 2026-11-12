@@ -5121,6 +5121,7 @@
     "series_name": "Série",
     "series_position": "Posição",
     "series_position_hint": "Número ou rótulo, por exemplo Especial",
+    "series_reset": "Usar a série dos fornecedores",
     "series_remove": "Remover da série"
   },
   "wants": {

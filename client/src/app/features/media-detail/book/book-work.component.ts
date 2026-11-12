@@ -67,7 +67,11 @@ export class BookWorkComponent {
   private readonly start = inject(MediaStartService);
   private readonly translate = inject(TranslateService);
 
-  protected readonly book = computed(() => asBookMedia(this.media())?.book ?? null);
+  /** The media read again after an edit, until the page hands over a newer one. */
+  private readonly latest = signal<Media | null>(null);
+  protected readonly current = computed(() => this.latest() ?? this.media());
+  protected readonly book = computed(() => asBookMedia(this.current())?.book ?? null);
+  protected readonly seriesLocked = computed(() => this.current().fieldSources?.['series'] === null);
   protected readonly canEdit = computed(() => this.auth.hasPermission('media.edit'));
   protected readonly link = (id: number) => mediaDetailLink('book', id);
 
@@ -141,6 +145,10 @@ export class BookWorkComponent {
 
   constructor() {
     effect(() => {
+      this.media();
+      untracked(() => this.latest.set(null));
+    });
+    effect(() => {
       const id = this.id();
       const seriesId = this.seriesId();
       const authorId = this.authorId();
@@ -156,8 +164,14 @@ export class BookWorkComponent {
   }
 
   protected listen(): void {
-    const m = asBookMedia(this.media());
+    const m = asBookMedia(this.current());
     if (m) void this.start.listen(m, this.seriesItems());
+  }
+
+  protected async reload(): Promise<void> {
+    const id = this.id();
+    const fresh = await this.mediaApi.getOne(id, { force: true }).catch(() => null);
+    if (fresh && this.id() === id) this.latest.set(fresh);
   }
 
   protected closeSeries(): void {

@@ -391,6 +391,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::books::routes::sources_delete,
         metadata::books::routes::series_put,
         metadata::books::routes::series_delete,
+        metadata::books::routes::series_reset,
         collections::list,
         collections::detail,
         media::edition_chapters,

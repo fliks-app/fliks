@@ -2,7 +2,7 @@
 use super::{
     ANCHOR,
     identify::{self, BookMatch},
-    link::{attach, put_series, stored},
+    link::{Pick, attach, put_series, stored},
     people, text, work_id,
 };
 use crate::{
@@ -53,6 +53,10 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
     .route(
         "/api/media/{id}/series",
         axum::routing::put(series_put).delete(series_delete),
+    )
+    .route(
+        "/api/media/{id}/series/reset",
+        axum::routing::post(series_reset),
     )
 }
 
@@ -527,12 +531,12 @@ pub async fn series_put(
     ValidJson(v): ValidJson<Value>,
 ) -> Res {
     let g = gate(&st, &a, Action::Update, id).await?;
-    let b = Body::new(v, &["name", "position"])?;
-    let name = b
-        .required(b.str("name")?, "name", "should not be empty")?
-        .trim()
-        .to_owned();
-    if name.is_empty() || name.chars().count() > 255 {
+    let b = Body::new(v, &["id", "name", "position"])?;
+    let series = b.id("id")?.flatten();
+    let name = b.str("name")?.flatten().map(|n| n.trim().to_owned());
+    if series.is_none() && name.as_deref().is_none_or(str::is_empty)
+        || name.as_deref().is_some_and(|n| n.chars().count() > 255)
+    {
         return Err(AppError::bad_request(vec![
             "name must be between 1 and 255 characters".to_owned(),
         ]));
@@ -543,7 +547,11 @@ pub async fn series_put(
             "position must be shorter than or equal to 100 characters".to_owned(),
         ]));
     }
-    write_series(&st, g.media, Some((&name, at.as_deref()))).await
+    let pick = match (series, name.as_deref()) {
+        (Some(id), _) => Pick::Id(id),
+        (None, name) => Pick::Name(name.unwrap_or_default()),
+    };
+    write_series(&st, &g, Some((pick, at.as_deref()))).await
 }
 
 /// `DELETE /api/media/:id/series` (rule 26).
@@ -554,30 +562,74 @@ pub async fn series_delete(
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
     let g = gate(&st, &a, Action::Update, id).await?;
-    write_series(&st, g.media, None).await
+    write_series(&st, &g, None).await
 }
 
-async fn write_series(st: &AppState, media: i32, entry: Option<(&str, Option<&str>)>) -> Res {
+/// `POST /api/media/:id/series/reset` (rule 26): unlocks `series` and reads the providers again.
+#[utoipa::path(post, path = "/api/media/{id}/series/reset", responses((status = 200)))]
+pub async fn series_reset(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Res {
+    let g = gate(&st, &a, Action::Update, id).await?;
+    sqlx::query!(
+        r#"DELETE FROM media_field_sources WHERE "mediaId" = $1 AND field = 'series' AND locked"#,
+        g.media
+    )
+    .execute(&st.db)
+    .await?;
+    crate::ingest::books::refresh_media(&st, g.media, GO)
+        .await
+        .map_err(|e| match e.retry {
+            true => AppError::with_message(axum::http::StatusCode::SERVICE_UNAVAILABLE, e.cause),
+            false => AppError::internal(e.cause),
+        })?;
+    let series = current_series(&mut *st.db.acquire().await?, g.media).await?;
+    Ok(Json(json!({ "series": series })))
+}
+
+async fn current_series(c: &mut sqlx::PgConnection, media: i32) -> sqlx::Result<Option<Value>> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT jsonb_build_object('id', c.id, 'name', c.name, 'position', e.position::float8,
+                                     'positionLabel', e."positionLabel") AS "json: Value"
+           FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+           WHERE e."mediaId" = $1 AND e."itemId" IS NULL ORDER BY c.id LIMIT 1"#,
+        media
+    )
+    .fetch_optional(c)
+    .await?
+    .flatten())
+}
+
+async fn write_series(st: &AppState, g: &Gate, entry: Option<(Pick<'_>, Option<&str>)>) -> Res {
+    let media = g.media;
     let mut tx = st.db.begin().await?;
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
         .execute(&mut *tx)
         .await?;
+    crate::media::write::orphans::hold(&mut tx).await?;
     let title = sqlx::query_scalar!("SELECT title FROM media WHERE id = $1 FOR UPDATE", media)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media))?;
+    if let Some((Pick::Id(id), _)) = &entry {
+        let ok = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM collection_entries e JOIN media m ON m.id = e."mediaId"
+                              WHERE e."collectionId" = $1 AND e."itemId" IS NULL AND m.type = 'book'
+                                AND m."libraryId" = ANY($2)) AS "ok!""#,
+            id,
+            &g.acl
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if !ok {
+            return Err(AppError::not_found(format!("Series #{id} not found")));
+        }
+    }
     put_series(&mut tx, media, entry).await?;
     field_sources::lock(&mut *tx, media, Field::Series).await?;
-    let series = sqlx::query_scalar!(
-        r#"SELECT jsonb_build_object('id', c.id, 'name', c.name, 'position', e.position::float8,
-                                     'positionLabel', e."positionLabel") AS "json: Value"
-           FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
-           WHERE e."mediaId" = $1 AND e."itemId" IS NULL"#,
-        media
-    )
-    .fetch_optional(&mut *tx)
-    .await?
-    .flatten();
+    let series = current_series(&mut tx, media).await?;
     tx.commit().await?;
     st.hub.emit(SseEvent::MetadataRefreshed {
         media_id: i64::from(media),

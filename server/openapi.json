@@ -2568,6 +2568,18 @@
         }
       }
     },
+    "/api/media/{id}/series/reset": {
+      "post": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`POST /api/media/:id/series/reset` (rule 26): unlocks `series` and reads the providers again.",
+        "operationId": "series_reset",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media/{id}/similar": {
       "get": {
         "tags": [

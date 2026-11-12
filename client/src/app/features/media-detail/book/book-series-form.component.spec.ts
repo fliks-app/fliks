@@ -38,15 +38,19 @@ describe('BookSeriesFormComponent', () => {
     const { fixture, http, input, done } = await setup(null);
     const name = input('series-name');
     name.value = 'Fresh Saga';
+    vi.useFakeTimers();
     name.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(250);
+    vi.useRealTimers();
     const position = input('series-position');
     position.value = 'Special';
     position.dispatchEvent(new Event('input'));
-    http.expectOne((r) => r.url === '/api/collections' && r.params.get('q') === 'Fresh Saga').flush([]);
+    http.expectOne((r) => r.url === '/api/collections' && r.params.get('q') === 'Fresh Saga').flush([{ id: 42, name: 'Fresh Saga' }]);
+    await fixture.whenStable();
     fixture.detectChanges();
     input('series-save').click();
     const req = http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/1/series');
-    expect(req.request.body).toEqual({ name: 'Fresh Saga', position: 'Special' });
+    expect(req.request.body).toEqual({ id: 42, name: 'Fresh Saga', position: 'Special' });
     req.flush({ series: null });
     await fixture.whenStable();
     expect(done).toHaveBeenCalled();
@@ -56,6 +60,27 @@ describe('BookSeriesFormComponent', () => {
     const { fixture, http, input, done } = await setup();
     input('series-remove').click();
     http.expectOne((r) => r.method === 'DELETE' && r.url === '/api/media/1/series').flush({ series: null });
+    await fixture.whenStable();
+    expect(done).toHaveBeenCalled();
+  });
+
+  it('keeps the form usable when the save fails', async () => {
+    const { fixture, http, input, done } = await setup();
+    input('series-save').click();
+    http.expectOne((r) => r.method === 'PUT').flush('no', { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(done).not.toHaveBeenCalled();
+    expect(input('series-save').disabled).toBe(false);
+  });
+
+  it('offers the providers series back only while the series is locked', async () => {
+    const { fixture, http, el, input, done } = await setup();
+    expect(el.querySelector('[data-testid="series-reset"]')).toBeNull();
+    fixture.componentRef.setInput('locked', true);
+    fixture.detectChanges();
+    input('series-reset').click();
+    http.expectOne((r) => r.method === 'POST' && r.url === '/api/media/1/series/reset').flush({ series: null });
     await fixture.whenStable();
     expect(done).toHaveBeenCalled();
   });

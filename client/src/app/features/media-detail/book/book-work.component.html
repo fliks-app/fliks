@@ -1,4 +1,4 @@
-@let m = media();
+@let m = current();
 @let b = book();
 
 <app-detail-hero [title]="m.title" [mediaId]="m.id" mediaType="book" [media]="m" [actions]="actions()" [posterUrl]="m.posterUrl" [overview]="m.overview" [progress]="percent() ?? 0" [progressText]="progressLabel()" [liked]="like.focusedLiked()" (likeToggled)="like.toggle()">
@@ -156,7 +156,8 @@
       }
     </div>
     <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
-  </dialog>  <dialog #seriesDialog class="modal" data-testid="series-dialog" (close)="seriesOpen.set(false)">
+  </dialog>
+  <dialog #seriesDialog class="modal" data-testid="series-dialog" (close)="seriesOpen.set(false)">
     <div class="modal-box max-w-md">
       <app-modal-header [title]="'books_work.series_edit' | translate" />
       @if (seriesOpen()) {
@@ -164,7 +165,8 @@
           [mediaId]="m.id"
           [series]="b.series[0] ?? null"
           [authorIds]="authorIds()"
-          (done)="closeSeries()"
+          [locked]="seriesLocked()"
+          (done)="closeSeries(); reload()"
         />
       }
     </div>

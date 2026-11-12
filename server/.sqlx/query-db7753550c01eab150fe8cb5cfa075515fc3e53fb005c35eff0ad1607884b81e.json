@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media_field_sources WHERE \"mediaId\" = $1 AND field = 'series' AND locked",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db7753550c01eab150fe8cb5cfa075515fc3e53fb005c35eff0ad1607884b81e"
+}

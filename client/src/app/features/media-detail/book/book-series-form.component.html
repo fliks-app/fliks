@@ -29,8 +29,13 @@
     />
   </label>
   <div class="flex flex-wrap justify-end gap-2">
+    @if (locked()) {
+      <button type="button" class="btn btn-ghost" data-testid="series-reset" [disabled]="busy()" (click)="reset()">
+        {{ 'books_work.series_reset' | translate }}
+      </button>
+    }
     @if (series()) {
-      <button type="button" class="btn btn-ghost text-error mr-auto" data-testid="series-remove" [disabled]="busy()" (click)="remove()">
+      <button type="button" class="btn btn-ghost text-error" data-testid="series-remove" [disabled]="busy()" (click)="remove()">
         {{ 'books_work.series_remove' | translate }}
       </button>
     }

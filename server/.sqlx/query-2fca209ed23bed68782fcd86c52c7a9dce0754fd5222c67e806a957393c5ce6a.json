@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n                       WHERE e.\"mediaId\" = $1 AND e.\"itemId\" IS NULL AND name_key(c.name) = name_key($2)\n                       ORDER BY c.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "collections",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2fca209ed23bed68782fcd86c52c7a9dce0754fd5222c67e806a957393c5ce6a"
+}

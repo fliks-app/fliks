@@ -5121,6 +5121,7 @@
     "series_name": "Series",
     "series_position": "Position",
     "series_position_hint": "Number or label, e.g. Special",
+    "series_reset": "Use the providers' series",
     "series_remove": "Remove from series"
   },
   "wants": {

@@ -13,6 +13,7 @@ Keys absent for other kinds: a movie or series payload carries no `book` key, so
 | `GET /api/media/:id/editions/:editionId/chapters` | `BookChapter[]` | track A |
 | `GET /api/collections?libraryId=&kind=book&q=&page=&limit=` | `CollectionSummary` page | track A |
 | `GET /api/collections/:id` | `CollectionDetail` | track A |
+| `PUT/DELETE /api/media/:id/series`, `POST /api/media/:id/series/reset` | `{ series: SeriesRef \| null }` (`book-metadata.md` rule 26) | track D |
 | `GET /api/persons?role=author\|narrator&libraryId=&q=&sortBy=name\|works&page=&limit=` | `PersonListItem` page | track A |
 | `GET /api/persons/:id/works?role=author\|narrator` | `PersonWorks` | track A |
 | `GET /api/persons/:id/bibliography` | `BookSearchResult[]` | track D |

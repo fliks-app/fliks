@@ -100,4 +100,6 @@ export interface BookSourceDelete {
 }
 
 // PUT /api/media/:id/series -> { series: SeriesRef | null }; DELETE /api/media/:id/series answers the same
-export interface BookSeriesPut { name: string; position: string | null }
+// `id` joins that exact series (a suggestion); without it the name finds or creates one
+export interface BookSeriesPut { id?: number; name: string; position: string | null }
+// POST /api/media/:id/series/reset unlocks the series and reads the providers again

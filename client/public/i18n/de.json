@@ -5121,6 +5121,7 @@
     "series_name": "Reihe",
     "series_position": "Position",
     "series_position_hint": "Nummer oder Bezeichnung, z. B. Sonderband",
+    "series_reset": "Reihe der Anbieter übernehmen",
     "series_remove": "Aus der Reihe entfernen"
   },
   "wants": {

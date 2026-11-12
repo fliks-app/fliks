@@ -3,6 +3,8 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import type { BookDetail } from '../../../core/services/api/books.models';
 
+const DEBOUNCE_MS = 250;
+
 /** Puts a book in a series by hand, or takes it out; the author's series are suggested first. */
 @Component({
   selector: 'app-book-series-form',
@@ -14,17 +16,21 @@ export class BookSeriesFormComponent {
   readonly mediaId = input.required<number>();
   readonly series = input<BookDetail['series'][number] | null>(null);
   readonly authorIds = input<number[]>([]);
+  /** The series is a hand choice the providers no longer overwrite. */
+  readonly locked = input(false);
   readonly done = output<void>();
 
   private readonly api = inject(BooksApiService);
   protected readonly name = signal('');
   protected readonly position = signal('');
   protected readonly busy = signal(false);
-  private readonly ofAuthors = signal<string[]>([]);
-  private readonly found = signal<string[]>([]);
-  private lookup = 0;
+  private readonly ofAuthors = signal<{ id: number; name: string }[]>([]);
+  private readonly found = signal<{ id: number; name: string }[]>([]);
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private abort: AbortController | undefined;
 
-  protected readonly suggestions = computed(() => [...new Set([...this.ofAuthors(), ...this.found()])]);
+  private readonly known = computed(() => [...this.ofAuthors(), ...this.found()]);
+  protected readonly suggestions = computed(() => [...new Set(this.known().map((s) => s.name))]);
   protected readonly canSave = computed(() => !this.busy() && !!this.name().trim());
 
   constructor() {
@@ -43,15 +49,23 @@ export class BookSeriesFormComponent {
 
   protected typed(value: string): void {
     this.name.set(value);
-    void this.search(value.trim());
+    clearTimeout(this.timer);
+    this.abort?.abort();
+    this.timer = setTimeout(() => void this.search(value.trim()), DEBOUNCE_MS);
   }
 
   protected save(): Promise<void> {
-    return this.run(() => this.api.putSeries(this.mediaId(), { name: this.name().trim(), position: this.position().trim() || null }));
+    const name = this.name().trim();
+    const picked = this.known().find((s) => s.name.toLowerCase() === name.toLowerCase());
+    return this.run(() => this.api.putSeries(this.mediaId(), { ...(picked && { id: picked.id }), name, position: this.position().trim() || null }));
   }
 
   protected remove(): Promise<void> {
     return this.run(() => this.api.deleteSeries(this.mediaId()));
+  }
+
+  protected reset(): Promise<void> {
+    return this.run(() => this.api.resetSeries(this.mediaId()));
   }
 
   private async run(call: () => Promise<unknown>): Promise<void> {
@@ -67,13 +81,15 @@ export class BookSeriesFormComponent {
   }
 
   private async loadAuthorSeries(ids: number[]): Promise<void> {
-    const all = await Promise.all(ids.map((id) => this.api.personWorks(id, 'author').then((w) => w.series.map((s) => s.collection.name), () => [])));
+    const all = await Promise.all(ids.map((id) => this.api.personWorks(id, 'author', true).then((w) => w.series.map((s) => s.collection), () => [])));
     this.ofAuthors.set(all.flat());
   }
 
   private async search(q: string): Promise<void> {
-    const call = ++this.lookup;
-    const rows = q.length < 2 ? [] : await this.api.collections({ kind: 'book', q, limit: 10 }).then((r) => r.map((c) => c.name), () => []);
-    if (call === this.lookup) this.found.set(rows);
+    if (q.length < 2) return this.found.set([]);
+    this.abort = new AbortController();
+    const { signal } = this.abort;
+    const rows = await this.api.collections({ kind: 'book', q, limit: 10 }, signal, true).then((r) => r.map((c) => ({ id: c.id, name: c.name })), () => null);
+    if (rows && !signal.aborted) this.found.set(rows);
   }
 }

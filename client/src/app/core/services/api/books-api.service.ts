@@ -10,6 +10,7 @@ import type {
 } from './books.models';
 
 type Params = Record<string, string | number | boolean>;
+const QUIET = new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 /** Plain calls over the book routes; the list and detail of a book are `/api/media`, read through MediaService. */
 @Injectable({ providedIn: 'root' })
@@ -22,8 +23,8 @@ export class BooksApiService {
     );
   }
 
-  collections(params: Params = {}, signal?: AbortSignal) {
-    return abortable(this.http.get<CollectionSummary[]>('/api/collections', { params }), signal);
+  collections(params: Params = {}, signal?: AbortSignal, quiet = false) {
+    return abortable(this.http.get<CollectionSummary[]>('/api/collections', { params, ...(quiet && { context: QUIET }) }), signal);
   }
 
   collection(id: number) {
@@ -34,8 +35,8 @@ export class BooksApiService {
     return abortable(this.http.get<PersonListItem[]>('/api/persons', { params }), signal);
   }
 
-  personWorks(id: number, role: 'author' | 'narrator') {
-    return firstValueFrom(this.http.get<PersonWorks>(`/api/persons/${id}/works`, { params: { role } }));
+  personWorks(id: number, role: 'author' | 'narrator', quiet = false) {
+    return firstValueFrom(this.http.get<PersonWorks>(`/api/persons/${id}/works`, { params: { role }, ...(quiet && { context: QUIET }) }));
   }
 
   personBibliography(id: number) {
@@ -54,6 +55,10 @@ export class BooksApiService {
 
   putSeries(mediaId: number, body: BookSeriesPut) {
     return firstValueFrom(this.http.put(`/api/media/${mediaId}/series`, body));
+  }
+
+  resetSeries(mediaId: number) {
+    return firstValueFrom(this.http.post(`/api/media/${mediaId}/series/reset`, {}));
   }
 
   deleteSeries(mediaId: number) {

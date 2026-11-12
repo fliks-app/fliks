@@ -107,6 +107,24 @@ impl Ctx {
             .unwrap()
     }
 
+    /// A new person credited as author of each media given.
+    async fn author(&self, name: &str, media: &[i32]) -> i32 {
+        let p: i32 = sqlx::query_scalar("INSERT INTO persons (name) VALUES ($1) RETURNING id")
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap();
+        for m in media {
+            sqlx::query(r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES ($1, $2, 'author', 0)"#)
+                .bind(m)
+                .bind(p)
+                .execute(&self.pool)
+                .await
+                .unwrap();
+        }
+        p
+    }
+
     async fn edition(&self, media: i32, family: &str) -> i32 {
         sqlx::query_scalar(
             r#"INSERT INTO editions ("mediaId", family) VALUES ($1, $2) RETURNING id"#,
@@ -824,6 +842,7 @@ async fn series_rows(c: &Ctx, media: i32) -> Vec<String> {
 async fn a_series_is_set_changed_and_removed_by_hand(pool: PgPool) {
     let (c, _) = ctx(pool, vec![]).await;
     let (a, b) = (c.book(1).await, c.book(1).await);
+    c.author("Una Roe", &[a, b]).await;
     let uri = format!("/api/media/{a}/series");
     let put = |name: &str, position: Value| json!({"name": name, "position": position});
 
@@ -959,5 +978,218 @@ async fn a_hand_set_series_survives_an_attach(pool: PgPool) {
     assert!(
         series_rows(&c, book).await.is_empty(),
         "an explicit no series stays"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_resave_keeps_the_collection_of_a_book_with_no_author(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![]).await;
+    let book = c.book(1).await;
+    let uri = format!("/api/media/{book}/series");
+    let (_, first) = c
+        .call(
+            &c.admin,
+            "PUT",
+            &uri,
+            Some(json!({"name": "Saga", "position": "1"})),
+        )
+        .await;
+    let (_, again) = c
+        .call(
+            &c.admin,
+            "PUT",
+            &uri,
+            Some(json!({"name": "saga", "position": "2"})),
+        )
+        .await;
+    assert_eq!(first["series"]["id"], again["series"]["id"]);
+    assert_eq!(series_rows(&c, book).await, ["Saga|2|"]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_series_is_joined_by_id_without_a_shared_author(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    c.author("Una Roe", &[a]).await;
+    c.author("Vic Doe", &[b]).await;
+    let (_, v) = c
+        .call(
+            &c.admin,
+            "PUT",
+            &format!("/api/media/{a}/series"),
+            Some(json!({"name": "Saga"})),
+        )
+        .await;
+    let saga = v["series"]["id"].as_i64().unwrap();
+    let uri = format!("/api/media/{b}/series");
+    let (s, v) = c
+        .call(
+            &c.admin,
+            "PUT",
+            &uri,
+            Some(json!({"id": saga, "position": "3"})),
+        )
+        .await;
+    assert_eq!((s, &v["series"]["id"]), (200, &json!(saga)), "{v}");
+    assert_eq!(series_rows(&c, b).await, ["Saga|3|"]);
+    let (s, _) = c
+        .call(&c.admin, "PUT", &uri, Some(json!({"id": 9999})))
+        .await;
+    assert_eq!(s, 404);
+    let film: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('F', 'movie', 1) RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let other: i32 =
+        sqlx::query_scalar("INSERT INTO collections (name) VALUES ('Films') RETURNING id")
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    sqlx::query(r#"INSERT INTO collection_entries ("collectionId", "mediaId") VALUES ($1, $2)"#)
+        .bind(other)
+        .bind(film)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        c.call(&c.admin, "PUT", &uri, Some(json!({"id": other})))
+            .await
+            .0,
+        404
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_watched_series_is_not_deleted_when_its_last_book_leaves(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![]).await;
+    let book = c.book(1).await;
+    let uri = format!("/api/media/{book}/series");
+    let (_, v) = c
+        .call(&c.admin, "PUT", &uri, Some(json!({"name": "Saga"})))
+        .await;
+    sqlx::query(r#"INSERT INTO series_watches ("userId", "collectionId", "libraryId", wants) VALUES (1, $1, 1, '{}')"#)
+        .bind(v["series"]["id"].as_i64().unwrap() as i32)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    c.call(&c.admin, "DELETE", &uri, None).await;
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM series_watches")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hand_edit_committed_before_the_attach_transaction_wins(pool: PgPool) {
+    use crate::metadata::books::{
+        identify::BookMatch,
+        link::{BEFORE_TX, attach},
+    };
+    use fliks_domain::metadata::limiter::Priority;
+    let (c, st) = ctx(pool, vec![anchor()]).await;
+    let book = c.book(1).await;
+    let m = BookMatch {
+        work: "OL1W".into(),
+        edition: vec![],
+        confidence: 100,
+    };
+    let db = c.pool.clone();
+    let hook: std::sync::Arc<
+        dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
+    > = std::sync::Arc::new(move || {
+        let db = db.clone();
+        Box::pin(async move {
+            sqlx::query(
+                r#"WITH c AS (INSERT INTO collections (name) VALUES ('Mine') RETURNING id),
+                        e AS (INSERT INTO collection_entries ("collectionId", "mediaId") SELECT id, $1 FROM c)
+                   INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES ($1, 'series', NULL, true)"#,
+            )
+            .bind(book)
+                .execute(&db)
+                .await
+                .unwrap();
+        })
+    });
+    BEFORE_TX
+        .scope(hook, async {
+            attach(&st, book, None, &m, Priority::Interactive)
+                .await
+                .unwrap()
+        })
+        .await;
+    assert_eq!(series_rows(&c, book).await, ["Mine||"]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hand_set_series_survives_a_file_only_rescan(pool: PgPool) {
+    use crate::metadata::books::link::attach_with;
+    use fliks_domain::metadata::limiter::Priority;
+    let (c, st) = ctx(pool, vec![]).await;
+    let book = c.book(1).await;
+    c.call(
+        &c.admin,
+        "PUT",
+        &format!("/api/media/{book}/series"),
+        Some(json!({"name": "Mine"})),
+    )
+    .await;
+    let file = json!({"title": "Untitled", "series": [{"name": "File Saga", "position": "1"}]});
+    attach_with(
+        &st,
+        book,
+        None,
+        None,
+        file.as_object(),
+        Priority::Interactive,
+    )
+    .await
+    .unwrap();
+    assert_eq!(series_rows(&c, book).await, ["Mine||"]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn resetting_the_series_unlocks_it_for_the_providers(pool: PgPool) {
+    use crate::metadata::books::{identify::BookMatch, link::attach};
+    use fliks_domain::metadata::limiter::Priority;
+    let (c, st) = ctx(pool, vec![anchor()]).await;
+    let book = c.book(1).await;
+    let m = BookMatch {
+        work: "OL1W".into(),
+        edition: vec![],
+        confidence: 100,
+    };
+    c.call(
+        &c.admin,
+        "PUT",
+        &format!("/api/media/{book}/series"),
+        Some(json!({"name": "Mine"})),
+    )
+    .await;
+    let (s, _) = c
+        .call(
+            &c.admin,
+            "POST",
+            &format!("/api/media/{book}/series/reset"),
+            None,
+        )
+        .await;
+    assert_eq!(s, 200);
+    attach(&st, book, None, &m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(series_rows(&c, book).await, ["Cycle|2|"]);
+    assert_eq!(
+        c.call(
+            &c.reader,
+            "POST",
+            &format!("/api/media/{book}/series/reset"),
+            None
+        )
+        .await
+        .0,
+        403
     );
 }
