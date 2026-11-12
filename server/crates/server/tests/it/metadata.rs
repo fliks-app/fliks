@@ -799,6 +799,14 @@ async fn a_failed_discography_is_partial_never_an_empty_list(pool: PgPool) {
         (s, &d["albums"], &d["partial"]),
         (200, &json!([]), &json!(true))
     );
+    // a fallback serving the same artists that knows nothing of them keeps it partial
+    let other = Scripted::new(Namespace::Core(ExternalProvider::FanartTv));
+    other.serve_persons_of(Namespace::MUSICBRAINZ);
+    c.st.metadata.add_plugin(other.clone());
+    other.ok(&format!("credits/{MBID}"), json!({"albums": []}));
+    assert_eq!(disco().await.1["partial"], json!(true));
+    other.fail(&format!("credits/{MBID}"), 404);
+    assert_eq!(disco().await.1["partial"], json!(true));
     mb.fail(&format!("credits/{MBID}"), 404);
     assert_eq!(disco().await.1["partial"], json!(false));
     mb.ok(
