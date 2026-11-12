@@ -19,6 +19,7 @@ import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
 import { asBookMedia } from '../../../core/services/api/book-media';
 import { BookSourcesComponent } from './book-sources.component';
+import { BookSeriesFormComponent } from './book-series-form.component';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 
@@ -45,6 +46,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
     BookChaptersComponent,
     BookWorksRowComponent,
     BookSourcesComponent,
+    BookSeriesFormComponent,
     MediaWantsComponent,
     ModalHeaderComponent,
   ],
@@ -65,7 +67,11 @@ export class BookWorkComponent {
   private readonly start = inject(MediaStartService);
   private readonly translate = inject(TranslateService);
 
-  protected readonly book = computed(() => asBookMedia(this.media())?.book ?? null);
+  /** The media read again after an edit, until the page hands over a newer one. */
+  private readonly latest = signal<Media | null>(null);
+  protected readonly current = computed(() => this.latest() ?? this.media());
+  protected readonly book = computed(() => asBookMedia(this.current())?.book ?? null);
+  protected readonly seriesLocked = computed(() => this.current().fieldSources?.['series'] === null);
   protected readonly canEdit = computed(() => this.auth.hasPermission('media.edit'));
   protected readonly link = (id: number) => mediaDetailLink('book', id);
 
@@ -110,14 +116,17 @@ export class BookWorkComponent {
 
   protected readonly wantsOpen = signal(false);
   protected readonly sourcesOpen = signal(false);
+  protected readonly seriesOpen = signal(false);
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
   private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
+  private readonly seriesDialog = viewChild<ElementRef<HTMLDialogElement>>('seriesDialog');
 
   /** Profiles are the wants dialog for a book; both dialogs are offered once rendered. */
   protected readonly actions = computed<MediaActionHandlers>(() =>
     this.canEdit() && this.book()
       ? {
           'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
+          'media.edit-series': () => this.openDialog(this.seriesOpen, this.seriesDialog()),
           ...(this.book()!.editions.length && {
             'media.edit-sources': () => this.openDialog(this.sourcesOpen, this.sourcesDialog()),
           }),
@@ -131,9 +140,14 @@ export class BookWorkComponent {
 
   private readonly id = computed(() => this.media().id);
   private readonly seriesId = computed(() => this.book()?.series[0]?.id ?? null);
+  protected readonly authorIds = computed(() => this.book()?.authors.map((a) => a.id) ?? []);
   private readonly authorId = computed(() => this.book()?.authors[0]?.id ?? null);
 
   constructor() {
+    effect(() => {
+      this.media();
+      untracked(() => this.latest.set(null));
+    });
     effect(() => {
       const id = this.id();
       const seriesId = this.seriesId();
@@ -150,8 +164,18 @@ export class BookWorkComponent {
   }
 
   protected listen(): void {
-    const m = asBookMedia(this.media());
+    const m = asBookMedia(this.current());
     if (m) void this.start.listen(m, this.seriesItems());
+  }
+
+  protected async reload(): Promise<void> {
+    const id = this.id();
+    const fresh = await this.mediaApi.getOne(id, { force: true }).catch(() => null);
+    if (fresh && this.id() === id) this.latest.set(fresh);
+  }
+
+  protected closeSeries(): void {
+    this.seriesDialog()?.nativeElement.close();
   }
 
   protected openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {

@@ -1890,6 +1890,7 @@
     "item_count_one": "{{count}} Element",
     "item_count_other": "{{count}} Elemente",
     "search": "Suchen…",
+    "no_results": "Keine Ergebnisse",
     "confirm": "Bestätigen",
     "clear": "Leeren",
     "cancel": "Abbrechen",
@@ -5115,7 +5116,14 @@
     "offline_audio_unplayable": "Dieses Hörbuch lässt sich auf diesem Gerät nicht unverändert abspielen und kann daher nicht offline gespeichert werden",
     "offline_wifi_only": "Downloads sind auf WLAN beschränkt",
     "row_similar": "Ähnliche Bücher",
-    "edit_profiles": "Formate und Sprachen"
+    "edit_profiles": "Formate und Sprachen",
+    "series_edit": "Reihe bearbeiten",
+    "series_name": "Reihe",
+    "series_new": "Neue Reihe…",
+    "series_position": "Position",
+    "series_position_hint": "Nummer oder Bezeichnung, z. B. Sonderband",
+    "series_reset": "Reihe der Anbieter übernehmen",
+    "series_remove": "Aus der Reihe entfernen"
   },
   "wants": {
     "title": "Formate und Sprachen",

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM collection_entries e JOIN media m ON m.id = e.\"mediaId\"\n                              WHERE e.\"collectionId\" = $1 AND e.\"itemId\" IS NULL AND m.type = 'book'\n                                AND m.\"libraryId\" = ANY($2)) AS \"ok!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ok!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4b564bf4cf608b93906004ecb98079f4cedb37cb85810a8c75d9709430551f80"
+}

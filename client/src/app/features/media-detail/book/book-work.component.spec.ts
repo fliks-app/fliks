@@ -163,7 +163,7 @@ describe('BookWorkComponent', () => {
     TestBed.resetTestingModule();
     const editor = await setup({ series: [], authors: [], editions: [textEditionFixture] }, true);
     editor.http.verify();
-    expect(editor.el.querySelectorAll('[data-testid$="-dialog"]')).toHaveLength(2);
+    expect(editor.el.querySelectorAll('[data-testid$="-dialog"]')).toHaveLength(3);
     expect(editor.el.querySelector('app-book-sources')).toBeNull();
   });
 });

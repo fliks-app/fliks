@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO collection_entries (\"collectionId\", \"mediaId\", position, \"positionLabel\")\n           VALUES ($1, $2, $3::text::numeric, $4)\n           ON CONFLICT ON CONSTRAINT \"UQ_collection_entries\" DO UPDATE\n           SET position = EXCLUDED.position, \"positionLabel\" = EXCLUDED.\"positionLabel\",\n                        \"positionEnd\" = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8743a2a3ff6e4afcbe54f769dd9a4bdb3701430b4a99974298b58252efee1f50"
+}

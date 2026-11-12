@@ -166,6 +166,16 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       when: ['hasPermission:media.edit', '!isEpisode'],
       action: { kind: 'action', actionId: 'media.edit-sources' },
     },
+    {
+      // Only the book page handles it.
+      id: 'core.edit_series',
+      slot: 'media.actions',
+      weight: 31,
+      labelKey: 'books_work.series_edit',
+      icon: 'list-plus',
+      when: ['hasPermission:media.edit', '!isEpisode'],
+      action: { kind: 'action', actionId: 'media.edit-series' },
+    },
     ],
   },
   {

@@ -32,6 +32,17 @@ use fliks_domain::{
 use serde_json::{Map, Value};
 use sqlx::PgConnection;
 
+#[cfg(test)]
+type Hook = std::sync::Arc<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
+>;
+
+#[cfg(test)]
+tokio::task_local! {
+    /// Runs between the lock read and the write transaction of `attach_with`.
+    pub(crate) static BEFORE_TX: Hook;
+}
+
 /// Links the work and the edition ids, fetches, merges and writes work and edition facts, credits, series.
 pub async fn attach(
     st: &AppState,
@@ -125,6 +136,10 @@ pub async fn attach_with(
         edition_locked.as_deref(),
     );
 
+    #[cfg(test)]
+    if let Ok(hook) = BEFORE_TX.try_with(Clone::clone) {
+        hook().await;
+    }
     let mut tx = st.db.begin().await?;
     // Persons and series are found by name: one lock keeps two attaches from creating both.
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
@@ -218,7 +233,13 @@ pub async fn attach_with(
         &authors,
     )
     .await?;
-    set_series(&mut tx, media, &wmap, provider_of(&wprov, Field::Series)).await?;
+    // A hand edit committed since `work_locked` was read still wins.
+    if !field_sources::locked_fields(&mut *tx, media)
+        .await?
+        .contains(&Field::Series)
+    {
+        set_series(&mut tx, media, &wmap, provider_of(&wprov, Field::Series)).await?;
+    }
     field_sources::merge_field_sources(&mut tx, media, &wprov).await?;
 
     if let (Some(e), Some((emap, eprov))) = (edition, &emerged) {
@@ -578,23 +599,40 @@ async fn set_series(
             _ => None,
         };
         let id = collection(c, media, name, ext.as_ref()).await?;
-        sqlx::query!(
-            r#"INSERT INTO collection_entries ("collectionId", "mediaId", position, "positionLabel")
-               VALUES ($1, $2, $3::text::numeric, $4)
-               ON CONFLICT ON CONSTRAINT "UQ_collection_entries" DO UPDATE
-               SET position = EXCLUDED.position, "positionLabel" = EXCLUDED."positionLabel""#,
-            id,
-            media,
-            at.0,
-            at.1
-        )
-        .execute(&mut *c)
-        .await?;
+        enter(c, media, id, at).await?;
         keep.push(id);
     }
     if keep.is_empty() {
         return Ok(());
     }
+    leave_others(c, media, &keep).await
+}
+
+/// Writes the media's work-level entry of a series.
+async fn enter(
+    c: &mut PgConnection,
+    media: i32,
+    series: i32,
+    at: (Option<String>, Option<String>),
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO collection_entries ("collectionId", "mediaId", position, "positionLabel")
+           VALUES ($1, $2, $3::text::numeric, $4)
+           ON CONFLICT ON CONSTRAINT "UQ_collection_entries" DO UPDATE
+           SET position = EXCLUDED.position, "positionLabel" = EXCLUDED."positionLabel",
+                        "positionEnd" = NULL"#,
+        series,
+        media,
+        at.0,
+        at.1
+    )
+    .execute(&mut *c)
+    .await?;
+    Ok(())
+}
+
+/// Takes the media out of every work-level series but `keep`, deleting a series left empty.
+async fn leave_others(c: &mut PgConnection, media: i32, keep: &[i32]) -> sqlx::Result<()> {
     sqlx::query!(
         r#"WITH left_ AS (
              DELETE FROM collection_entries
@@ -602,13 +640,53 @@ async fn set_series(
               RETURNING "collectionId")
            DELETE FROM collections c WHERE c.id IN (SELECT "collectionId" FROM left_)
              AND NOT EXISTS (SELECT 1 FROM collection_entries e
-                              WHERE e."collectionId" = c.id AND e."mediaId" <> $1)"#,
+                              WHERE e."collectionId" = c.id AND e."mediaId" <> $1)
+             AND NOT EXISTS (SELECT 1 FROM series_watches w WHERE w."collectionId" = c.id)"#,
         media,
-        &keep
+        keep
     )
     .execute(&mut *c)
     .await?;
     Ok(())
+}
+
+/// The series a hand edit names: an existing collection by id, or one by name.
+pub(crate) enum Pick<'a> {
+    Id(i32),
+    Name(&'a str),
+}
+
+/// Puts the media in one series at `position` (`None`: in none), as a hand edit (rule 26). A name
+/// keeps the media's current series of that `name_key`, so a re-save never swaps the collection.
+pub(crate) async fn put_series(
+    c: &mut PgConnection,
+    media: i32,
+    entry: Option<(Pick<'_>, Option<&str>)>,
+) -> sqlx::Result<()> {
+    let mut keep = vec![];
+    if let Some((pick, at)) = entry {
+        let id = match pick {
+            Pick::Id(id) => id,
+            Pick::Name(name) => {
+                let current = sqlx::query_scalar!(
+                    r#"SELECT c.id FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+                       WHERE e."mediaId" = $1 AND e."itemId" IS NULL AND name_key(c.name) = name_key($2)
+                       ORDER BY c.id LIMIT 1"#,
+                    media,
+                    name
+                )
+                .fetch_optional(&mut *c)
+                .await?;
+                match current {
+                    Some(id) => id,
+                    None => collection(c, media, name, None).await?,
+                }
+            }
+        };
+        enter(c, media, id, at.map_or((None, None), position)).await?;
+        keep.push(id);
+    }
+    leave_others(c, media, &keep).await
 }
 
 /// The series with this id, else with this name among the series of books sharing an author with `media`,

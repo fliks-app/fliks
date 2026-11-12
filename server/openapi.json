@@ -2546,6 +2546,40 @@
         }
       }
     },
+    "/api/media/{id}/series": {
+      "put": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`PUT /api/media/:id/series` (rule 26): the book's series by hand, locked against a refresh.",
+        "operationId": "series_put",
+        "responses": {
+          "200": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`DELETE /api/media/:id/series` (rule 26).",
+        "operationId": "series_delete",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/media/{id}/series/reset": {
+      "post": {
+        "tags": [
+          "metadata::books::routes"
+        ],
+        "summary": "`POST /api/media/:id/series/reset` (rule 26): unlocks `series` and reads the providers again.",
+        "operationId": "series_reset",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media/{id}/similar": {
       "get": {
         "tags": [

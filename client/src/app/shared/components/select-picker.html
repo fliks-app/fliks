@@ -1,11 +1,25 @@
 <app-popover-menu
+  #menu
   [open]="picker.open()"
   [anchor]="picker.anchor()"
   placement="bottom-start"
   [heading]="picker.title()"
   (closed)="picker.close()"
 >
-  @for (opt of picker.options(); track opt.value) {
+  @if (showFilter()) {
+    <!-- Pinned above the scrolling list; autofocus only with a mouse, so touch gets no keyboard. -->
+    <div class="sticky top-0 z-10 pt-2 pb-1" style="background-color: var(--popover-surface, var(--color-base-200))">
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [attr.autofocus]="menu.useDropdown() ? '' : null"
+        [placeholder]="'common.search' | translate"
+        [value]="query()"
+        (input)="query.set($any($event.target).value)"
+      />
+    </div>
+  }
+  @for (opt of filtered(); track opt.value) {
     <button
       type="button"
       [disabled]="opt.disabled"
@@ -20,5 +34,7 @@
         <span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
       }
     </button>
+  } @empty {
+    <p class="px-2 py-2 text-sm text-base-content/50 italic">{{ 'common.no_results' | translate }}</p>
   }
 </app-popover-menu>
