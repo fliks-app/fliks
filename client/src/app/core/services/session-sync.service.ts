@@ -58,8 +58,9 @@ export interface SessionPlayer {
   sessionId(): string | undefined;
   /** This device plays something itself (also what does not claim the session: live TV, a party, a download). */
   active(): boolean;
-  /** Stops playback after saving the position; null when it had nothing to resume. */
-  yield(): Promise<SupersededPlayback | null>;
+  /** Stops playback after saving the position; null when it had nothing to resume. With `keepOpen` an open player
+   *  stays up as the view of the new owner, which also answers null: nothing to offer. */
+  yield(keepOpen?: boolean): Promise<SupersededPlayback | null>;
   /** The item it holds for the account session; null when it holds none or plays for a party. */
   itemId?(): number | null;
   /** Beats now: the server answers a takeover this player missed, and learns its new connection. */
@@ -116,9 +117,12 @@ export class SessionSyncService {
   });
 
   /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */
-  readonly observedOwnerTargetId = computed<string | null>(() => {
+  readonly observedOwnerTargetId = computed<string | null>(() => (this.localPlaying() ? null : this.observableOwner()));
+
+  /** The owner another device holds live, whether or not a local player is busy. */
+  readonly observableOwner = computed<string | null>(() => {
     const s = this._session();
-    if (!s || this.role() !== 'observer' || s.state === 'parked' || this.device.isTv() || this.localPlaying()) return null;
+    if (!s || this.role() !== 'observer' || s.state === 'parked' || this.device.isTv()) return null;
     return s.owner.targetId;
   });
 
@@ -162,7 +166,7 @@ export class SessionSyncService {
   private handoff: { sid: string | null; until: number; skip: Set<string | undefined> } | null = null;
   /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
   private readonly tick = signal(0);
-  private fetching = false;
+  private fetching: Promise<void> | null = null;
   private dismissItem: number | null = null;
   private refetch = false;
 
@@ -244,12 +248,15 @@ export class SessionSyncService {
   }
 
   /** Re-reads the session; a burst of events costs one request in flight and at most one more. */
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
     if (this.fetching) {
       this.refetch = true;
-      return;
+      return this.fetching;
     }
-    this.fetching = true;
+    return (this.fetching = this.fetchSession().finally(() => (this.fetching = null)));
+  }
+
+  private async fetchSession(): Promise<void> {
     try {
       do {
         this.refetch = false;
@@ -260,8 +267,6 @@ export class SessionSyncService {
       } while (this.refetch);
     } catch (err) {
       console.warn('[session] failed to read the account session', err);
-    } finally {
-      this.fetching = false;
     }
   }
 
@@ -347,7 +352,7 @@ export class SessionSyncService {
     if (!player) return;
     this.handled.push(sessionId);
     if (this.handled.length > HANDLED_MAX) this.handled.shift();
-    const stopped = await player.yield();
+    const stopped = await player.yield(true);
     if (!stopped || this.silent.has(sessionId)) return;
     if (!byDeviceName) await this.refresh();
     const s = this._session();

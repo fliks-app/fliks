@@ -595,6 +595,29 @@ describe('PlaybackSession', () => {
     });
   });
 
+  describe('yieldToView', () => {
+    it('unloads the engine, stops its stream and turns the open route into the view, without resuming it', async () => {
+      const { session, remote, local, streaming, remoteSvc } = setup();
+      session.attachLocal(local);
+      TestBed.tick();
+      expect(await session.yieldToView()).toBe(true);
+      remote.isObserving.set(true);
+      TestBed.tick();
+      expect(streaming.stopSession).toHaveBeenCalledWith('sid-local');
+      expect(session.kind()).toBe('remote');
+      expect(local.resume).not.toHaveBeenCalled();
+      expect(remoteSvc.selectTarget).not.toHaveBeenCalled();
+    });
+
+    it('leaves the route alone when no engine was loaded', async () => {
+      const { session, local } = setup();
+      vi.mocked(local.release).mockResolvedValue(null);
+      session.attachLocal(local);
+      expect(await session.yieldToView()).toBe(false);
+      expect(session.kind()).toBe('local');
+    });
+  });
+
   describe('openPlayer', () => {
     it('opens the route on what the receiver plays, with the party', () => {
       const { session, cast, party, router, castPlayer } = setup();

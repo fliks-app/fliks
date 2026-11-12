@@ -3138,15 +3138,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
   }
 
-  /** Another device took the account session: close like a back, and hand over what it takes to start again. */
+  /** Another device took the account session: stay as its view, else close like a back and hand over what it takes to start again. */
   private readonly unregisterSession = this.sessionSync.registerPlayer({
     sessionId: () => this.activeSessionId(),
     // Watching another device's session is not playing: observing it must not stop.
     active: () => !this.session.viewing(),
     report: () => void this.savePosition(),
-    yield: async () => {
+    yield: async (keepOpen) => {
       const { mediaId, mediaFileId: fileId, episodeId } = this;
       if (!mediaId || !fileId) return null;
+      // The view needs the new owner to observe: read the session before the route commits to it.
+      if (keepOpen && this.engine && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
+        await this.savePosition();
+        if (await this.session.yieldToView()) return null;
+      }
       const at = Math.floor(this.engine?.currentTime || this.state.currentTime() || 0);
       const title = [this.mediaTitle(), this.episodeTitle()].filter(Boolean).join(' · ') || null;
       this.onBack();
