@@ -57,6 +57,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       ownedHere() && parked() ? 'session.parked_here' : `${a.item.family === 'text' ? 'session.read_on' : parked() ? 'session.parked_device' : 'session.playing_on'} ${a.owner.deviceName ?? ''}`,
     canPlayHere: signal(over.canPlayHere ?? false),
     isReading: (s: AccountSession) => s.item.family === 'text' || s.item.family === 'image',
+    isAudio: SessionSyncService.prototype.isAudio,
     playHere: vi.fn(),
     enabled: signal(true),
     observedOwnerTargetId: () => (over.account?.state === 'parked' ? null : (over.account?.owner.targetId ?? null)),
