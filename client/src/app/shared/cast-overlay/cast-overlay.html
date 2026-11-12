@@ -59,6 +59,9 @@
         <span class="flex items-center gap-1 truncate text-sm text-info">
           <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
           <span class="truncate">{{ sync.ownerName(s) }}</span>
+          @if (!n && observedEpisode(); as ep) {
+            <span class="shrink-0 text-base-content/60">· {{ ep }}</span>
+          }
           <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ n ? clock(0) : time() }}</span>
         </span>
         @if (audio() || percent() > 0) {

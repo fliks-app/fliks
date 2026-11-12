@@ -58,6 +58,11 @@ export class CastOverlayComponent {
     return this.audioTrack()?.title || this.observedTrack()?.title || (item?.kind === 'album' ? (item.subtitle ?? item.title ?? '') : (item?.title ?? ''));
   });
   protected readonly observedArtist = computed(() => this.audioTrack()?.artist ?? this.observedTrack()?.artist ?? '');
+  /** `S01E02` of an episode, from the item subtitle the server builds as `S01E02: title`. */
+  protected readonly observedEpisode = computed(() => {
+    const item = this.observed()?.item;
+    return item?.kind === 'series' ? (item.subtitle?.split(':')[0] ?? null) : null;
+  });
   protected readonly observedArtwork = computed(() => this.audioTrack()?.coverUrl ?? this.observed()?.item.posterUrl ?? null);
 
   /** The owner reports the file the session names: another file's report never drives this card. */
