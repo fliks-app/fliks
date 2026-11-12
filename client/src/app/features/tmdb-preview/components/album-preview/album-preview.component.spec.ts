@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Router } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,7 +33,7 @@ function setup() {
       provideHttpClient(),
       provideHttpClientTesting(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
-      { provide: Router, useValue: { navigate: vi.fn() } },
+      provideRouter([]),
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => p === 'media.create' } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
