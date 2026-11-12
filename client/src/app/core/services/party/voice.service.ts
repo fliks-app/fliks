@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyMember, type PartySignalKind } from '../api/party-api.service';
@@ -98,7 +98,11 @@ export class VoiceService {
       });
     });
     this.party.rejoined.subscribe(() => void this.onRejoin());
-    if (typeof addEventListener === 'function') addEventListener('pagehide', () => this.onUnload());
+    if (typeof addEventListener === 'function') {
+      const onHide = () => this.onUnload();
+      addEventListener('pagehide', onHide);
+      inject(DestroyRef).onDestroy(() => removeEventListener('pagehide', onHide));
+    }
   }
 
   setDuck(on: boolean): void {
