@@ -122,7 +122,6 @@ async fn popular_recordings_carry_the_owned_track(pool: PgPool) {
     *f.top.lock().unwrap() = vec![
         json!({"recordingId": OWNED, "title": "One", "listenCount": 9, "albumExternalId": GROUP}),
         json!({"recordingId": OTHER, "title": "Two", "listenCount": 5, "albumExternalId": GROUP}),
-        json!({"recordingId": "nope", "title": "Bad"}),
     ];
     let (app, t) = ctx(&pool, f).await;
     let (s, v) = get(&app, &t, "/api/persons/1/discography").await;

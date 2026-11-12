@@ -1031,3 +1031,23 @@ fn top_recordings(v: &Value) -> Vec<Value> {
         .take(10)
         .collect()
 }
+
+#[cfg(test)]
+mod top_recordings_tests {
+    use super::top_recordings;
+    use serde_json::json;
+
+    #[test]
+    fn keeps_entries_with_a_recording_id_and_a_title_up_to_ten() {
+        let id = |n: u32| format!("11111111-1111-4111-8111-{n:012}");
+        let mut v: Vec<_> = (0..12)
+            .map(|n| json!({"recordingId": id(n), "title": "T"}))
+            .collect();
+        v.push(json!({"recordingId": "nope", "title": "T"}));
+        v.insert(0, json!({"recordingId": id(99), "title": " "}));
+        let out = top_recordings(&json!(v));
+        assert_eq!(out.len(), 10);
+        assert_eq!(out[0]["recordingId"], id(0));
+        assert!(top_recordings(&json!(null)).is_empty());
+    }
+}

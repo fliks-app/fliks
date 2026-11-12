@@ -57,6 +57,9 @@ impl MetadataProvider for MusicFake {
     fn has_persons(&self) -> bool {
         false
     }
+    fn serves_persons_of(&self, _: MediaKind, ns: Namespace) -> bool {
+        ns == Namespace::MUSICBRAINZ
+    }
     fn has_lyrics(&self) -> bool {
         self.lyrics.lock().unwrap().is_some()
     }
