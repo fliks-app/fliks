@@ -930,7 +930,8 @@
     "want_track": "Diesen Titel wünschen",
     "partial": "Einige Anbieter haben nicht rechtzeitig geantwortet.",
     "scope_video": "Video",
-    "scope_people": "Mitglieder"
+    "scope_people": "Mitglieder",
+    "kind_all": "Alle"
   },
   "discover": {
     "seasons_failed": "Staffeln konnten nicht geladen werden",

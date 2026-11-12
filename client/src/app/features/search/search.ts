@@ -45,7 +45,9 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
-import { LucideSearch, LucideX, LucideSettings, LucidePlay } from '@lucide/angular';
+import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
@@ -67,7 +69,7 @@ const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucidePlay, ModalHeaderComponent, SearchFiltersComponent],
+  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -273,20 +275,29 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     { value: 'all' as const, labelKey: 'search.filter_all' },
     { value: 'video' as const, labelKey: 'search.scope_video' },
     { value: 'book' as const, labelKey: 'books_search.filter_books' },
-    { value: 'album' as const, labelKey: 'search.filter_music' },
+    { value: 'music' as const, labelKey: 'search.filter_music' },
     ...(this.showPeople() ? [{ value: 'people' as const, labelKey: 'search.scope_people' }] : []),
   ]);
   protected readonly videoKinds = [
-    { value: 'video' as const, labelKey: 'search.filter_all' },
+    { value: 'video' as const, labelKey: 'search.kind_all' },
     { value: 'movie' as const, labelKey: 'search.filter_movies' },
     { value: 'series' as const, labelKey: 'search.filter_series' },
   ];
+  protected readonly musicKinds = [
+    { value: 'music' as const, labelKey: 'search.kind_all' },
+    { value: 'music-tracks' as const, labelKey: 'music.tab_tracks' },
+    { value: 'music-artists' as const, labelKey: 'music.section_artists' },
+    { value: 'music-albums' as const, labelKey: 'music.group_album' },
+  ];
   protected readonly isVideo = computed(() => hasFilters(this.state.scope()));
+  protected readonly isMusic = computed(() => this.state.scope().startsWith('music'));
   /** Several kinds share the grid: the cards carry a type badge. */
   protected readonly mixed = computed(() => this.state.scope() === 'all' || this.state.scope() === 'video');
 
   protected scopeActive(value: SearchScope): boolean {
-    return value === 'video' ? this.isVideo() : this.state.scope() === value;
+    if (value === 'video') return this.isVideo();
+    if (value === 'music') return this.isMusic();
+    return this.state.scope() === value;
   }
 
   setScope(s: SearchScope) {

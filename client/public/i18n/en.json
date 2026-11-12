@@ -930,7 +930,8 @@
     "want_track": "Want this track",
     "partial": "Some providers did not answer in time.",
     "scope_video": "Video",
-    "scope_people": "Members"
+    "scope_people": "Members",
+    "kind_all": "All"
   },
   "discover": {
     "seasons_failed": "Could not load the seasons",

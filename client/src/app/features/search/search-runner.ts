@@ -14,7 +14,10 @@ export const SOURCES: Record<SearchScope, { local: SearchSource[]; provider: Sea
   movie: { local: ['media'], provider: ['movie'], types: ['movie'] },
   series: { local: ['media'], provider: ['tv'], types: ['series'] },
   book: { local: ['media', 'authors', 'series'], provider: ['book'], types: ['book'] },
-  album: { local: ['media', 'tracks', 'artists'], provider: ['album', 'artist', 'recording'], types: ['album'] },
+  music: { local: ['media', 'tracks', 'artists'], provider: ['album', 'artist', 'recording'], types: ['album'] },
+  'music-tracks': { local: ['tracks'], provider: ['recording'] },
+  'music-artists': { local: ['artists'], provider: ['artist'] },
+  'music-albums': { local: ['media'], provider: ['album'], types: ['album'] },
   people: { local: ['people'], provider: [] },
 };
 

@@ -9,9 +9,10 @@ import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-fil
 
 const EXTERNAL_KEY = 'fliks-search-external';
 
-/** The type selector: `video` is movies and series, `movie` and `series` its two halves. */
-export type SearchScope = 'all' | 'video' | 'movie' | 'series' | 'book' | 'album' | 'people';
-const SCOPES: SearchScope[] = ['all', 'video', 'movie', 'series', 'book', 'album', 'people'];
+/** The type selector: `video` and `music` hold every kind of their group, the others one each. */
+export type SearchScope =
+  | 'all' | 'video' | 'movie' | 'series' | 'book' | 'music' | 'music-tracks' | 'music-artists' | 'music-albums' | 'people';
+const SCOPES: SearchScope[] = ['all', 'video', 'movie', 'series', 'book', 'music', 'music-tracks', 'music-artists', 'music-albums', 'people'];
 const SCOPE_KEY = 'fliks-search-scope';
 
 /** What one search asks: the library and the providers, each of its own kinds. */

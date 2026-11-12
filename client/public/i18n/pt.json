@@ -930,7 +930,8 @@
     "want_track": "Querer esta faixa",
     "partial": "Alguns fornecedores não responderam a tempo.",
     "scope_video": "Vídeo",
-    "scope_people": "Membros"
+    "scope_people": "Membros",
+    "kind_all": "Todos"
   },
   "discover": {
     "seasons_failed": "Não foi possível carregar as temporadas",
