@@ -156,6 +156,9 @@ pub struct NowPlaying {
     pub poster_url: Option<String>,
     pub position_seconds: Num,
     pub state: crate::events::event::PlayState,
+    pub volume: Option<Num>,
+    pub muted: Option<bool>,
+    pub supports_volume: Option<bool>,
 }
 
 /// Sessions with an SSE connection id, oldest first; the swap point for `live_sessions` in remote.
@@ -179,6 +182,9 @@ fn live_at(sessions: Vec<LiveSession>, now: f64, ttl: f64) -> Vec<Live> {
                     poster_url: s.poster_url,
                     position_seconds: Num(s.position),
                     state: s.state,
+                    volume: s.volume.map(Num),
+                    muted: s.muted,
+                    supports_volume: s.supports_volume,
                 }),
             })
         })

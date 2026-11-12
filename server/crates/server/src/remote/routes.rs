@@ -583,6 +583,9 @@ mod tests {
                 poster_url: None,
                 position_seconds: crate::events::event::Num(0.0),
                 state: PlayState::Playing,
+                volume: None,
+                muted: None,
+                supports_volume: None,
             }),
         }
     }
