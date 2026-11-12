@@ -133,7 +133,7 @@ const checks = [
     else console.log('    note: the owner has no device name (web client), name assertion skipped');
   }],
 
-  [3, 'play here on B: handover and superseded modal on A', async () => {
+  [3, 'play here on B: handover and silent close on A', async () => {
     await reset(ON);
     await startVideo(A);
     await playingVideo(A);
@@ -143,8 +143,6 @@ const checks = [
     await clickWait(B, 'app-cast-overlay', t('session.play_here'));
     const startB = await firstPlayedAt(B);
     assert(Math.abs(startB - pA) <= 2, `B started at ${startB.toFixed(1)} s, A was at ${pA.toFixed(1)} s`);
-    const title = new RegExp(t('session.superseded_title', { device: '@@' }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('@@', '.*'));
-    await until(async () => title.test(await dialogText(A)), 15_000, 'A superseded modal');
     await until(async () => !(await video(A)) && !(await path(A)).startsWith('/watch'), 10_000, 'A player closed');
     const after = await liveSession((x) => x.owner.targetId === B.targetId, 15_000, 'B owns the session');
     assert(after.epoch > before.epoch, `epoch ${before.epoch} -> ${after.epoch}`);

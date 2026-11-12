@@ -4024,10 +4024,7 @@
   },
   "session": {
     "another_device": "ein anderes Gerät",
-    "superseded_title": "Wiedergabe auf {{device}} fortgesetzt",
-    "superseded_message": "Ihre Position ({{position}}) ist gespeichert.",
     "resume_here": "Hier fortsetzen",
-    "close": "Schließen",
     "listen_here": "Auf diesem Gerät hören",
     "error_no_session": "Keine Wiedergabe zum Übertragen.",
     "error_not_parked": "Diese Sitzung ist nicht geparkt.",

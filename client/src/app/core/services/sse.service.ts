@@ -109,7 +109,7 @@ export interface RemoteState {
 /** Identity and ownership only: observers refetch `GET /api/session`. */
 export type SessionEvent =
   | { type: 'session.changed'; epoch: number | null; itemId: number | null; state: string | null; ownerTargetId: string | null }
-  | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number; silent?: boolean };
+  | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number };
 
 /** One like of the account changed on any device; the ids repeat the granularity of the like. */
 export interface LikesChangedEvent {

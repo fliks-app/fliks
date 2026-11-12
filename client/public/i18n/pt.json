@@ -4024,10 +4024,7 @@
   },
   "session": {
     "another_device": "outro dispositivo",
-    "superseded_title": "Reprodução retomada em {{device}}",
-    "superseded_message": "A sua posição ({{position}}) está guardada.",
     "resume_here": "Retomar aqui",
-    "close": "Fechar",
     "listen_here": "Ouvir neste dispositivo",
     "error_no_session": "Nenhuma reprodução para transferir.",
     "error_not_parked": "Esta sessão não está estacionada.",

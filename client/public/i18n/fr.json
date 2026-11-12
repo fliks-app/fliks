@@ -4024,10 +4024,7 @@
   },
   "session": {
     "another_device": "un autre appareil",
-    "superseded_title": "Lecture reprise sur {{device}}",
-    "superseded_message": "Votre position ({{position}}) est enregistrée.",
     "resume_here": "Reprendre ici",
-    "close": "Fermer",
     "listen_here": "Écouter sur cet appareil",
     "error_no_session": "Aucune lecture à transférer.",
     "error_not_parked": "Cette session n'est pas en pause hors ligne.",

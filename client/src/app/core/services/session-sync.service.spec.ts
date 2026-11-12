@@ -171,7 +171,7 @@ describe('SessionSyncService one surface', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const held = (itemId: number, active = false) => {
-    const yielded = vi.fn().mockResolvedValue(null);
+    const yielded = vi.fn().mockResolvedValue(undefined);
     const p: SessionPlayer = { sessionId: () => 'sid-old', active: () => active, itemId: () => itemId, yield: yielded };
     return { p, yielded };
   };
@@ -213,7 +213,7 @@ describe('SessionSyncService one surface', () => {
     const { service, flush } = setup();
     const playing = held(5, true);
     const parked = held(6);
-    const noItem = { sessionId: () => 'sid-live', active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(null) };
+    const noItem = { sessionId: () => 'sid-live', active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(undefined) };
     service.registerPlayer(playing.p);
     service.registerPlayer(noItem);
     await flush(session());
@@ -241,7 +241,7 @@ describe('SessionSyncService one surface', () => {
   it('has every player beat once the stream connects again', async () => {
     const { service, flush, sse } = setup();
     const report = vi.fn();
-    service.registerPlayer({ sessionId: () => 'sid-1', active: () => true, yield: async () => null, report });
+    service.registerPlayer({ sessionId: () => 'sid-1', active: () => true, yield: async () => undefined, report });
     await flush(null);
     report.mockClear();
     sse.connectionId.set(null);
@@ -255,91 +255,29 @@ describe('SessionSyncService one surface', () => {
 describe('SessionSyncService takeover', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  const player = (sid: string | undefined, resume = vi.fn()) => {
-    const yielded = vi.fn().mockResolvedValue({ title: 'A film', positionSeconds: 754, resume });
+  const player = (sid: string | undefined) => {
+    const yielded = vi.fn().mockResolvedValue(undefined);
     const p: SessionPlayer = { sessionId: () => sid, active: () => true, yield: yielded };
-    return { p, yielded, resume };
+    return { p, yielded };
   };
 
-  it('stops the player holding the superseded session and offers to resume', async () => {
+  it('stops the player holding the superseded session, asking it to stay open as the view, with no modal', async () => {
     const { service, sse, confirm } = setup({ confirm: true });
-    const { p, yielded, resume } = player('sid-1');
-    service.registerPlayer(p);
-    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2 });
-    await vi.waitFor(() => expect(resume).toHaveBeenCalled());
-    expect(yielded).toHaveBeenCalledOnce();
-    expect(confirm.mock.calls[0][0].title).toBe('session.superseded_title');
-    expect(confirm.mock.calls[0][0].message).toBe('A film. session.superseded_message');
-  });
-
-  it('asks the player to stay open as the view, and offers nothing when it did', async () => {
-    const { service, confirm } = setup({ confirm: true });
     const { p, yielded } = player('sid-1');
-    yielded.mockResolvedValue(null);
     service.registerPlayer(p);
-    await service.handleSuperseded('sid-1', 'Pixel');
-    expect(yielded).toHaveBeenCalledWith(true);
+    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2 });
+    await vi.waitFor(() => expect(yielded).toHaveBeenCalledWith(true));
+    await Promise.resolve();
     expect(confirm).not.toHaveBeenCalled();
-  });
-
-  it('does not reject when "resume here" fails to start', async () => {
-    const { service } = setup({ confirm: true });
-    const { p, resume } = player('sid-1');
-    resume.mockRejectedValue(new Error('chunk failed'));
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    service.registerPlayer(p);
-    await expect(service.handleSuperseded('sid-1', 'Pixel')).resolves.toBeUndefined();
-    expect(resume).toHaveBeenCalled();
-  });
-
-  it('flags the session started by "resume here" as a hand-over', async () => {
-    const { service, sse } = setup({ confirm: true });
-    const { p } = player('sid-1');
-    service.registerPlayer(p);
-    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2 });
-    await vi.waitFor(() => expect(service.handoffFor('sid-2')).toBe(true));
-  });
-
-  it('leaves the player closed when the modal is dismissed', async () => {
-    const { service, sse, confirm } = setup({ confirm: false });
-    const { p, resume } = player('sid-1');
-    service.registerPlayer(p);
-    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2 });
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
-    expect(resume).not.toHaveBeenCalled();
   });
 
   it('handles one supersede once, whichever of the event or the beat flag comes second', async () => {
     const { service } = setup();
     const { p, yielded } = player('sid-1');
     service.registerPlayer(p);
-    await service.handleSuperseded('sid-1', 'Pixel');
+    await service.handleSuperseded('sid-1');
     await service.handleSuperseded('sid-1');
     expect(yielded).toHaveBeenCalledOnce();
-  });
-
-  it('stops a silent hand-over without a modal, still saving the position', async () => {
-    const { service, sse, confirm } = setup({ confirm: true });
-    const { p, yielded, resume } = player('sid-1');
-    service.registerPlayer(p);
-    sse.sessionEvents.next({ type: 'session.superseded', sessionId: 'sid-1', byDeviceName: 'Pixel', epoch: 2, silent: true });
-    await vi.waitFor(() => expect(yielded).toHaveBeenCalledOnce());
-    await Promise.resolve();
-    expect(yielded).toHaveBeenCalledWith(true);
-    expect(confirm).not.toHaveBeenCalled();
-    expect(resume).not.toHaveBeenCalled();
-    await service.handleSuperseded('sid-1');
-    expect(confirm).not.toHaveBeenCalled();
-  });
-
-  it('shows no modal when the silent event lands while the beat flag is yielding', async () => {
-    const { service, confirm } = setup({ confirm: true });
-    const { p } = player('sid-1');
-    service.registerPlayer(p);
-    const beat = service.handleSuperseded('sid-1');
-    await service.handleSuperseded('sid-1', 'Pixel', true);
-    await beat;
-    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('ignores a session no local player holds', async () => {
@@ -355,7 +293,7 @@ describe('SessionSyncService takeover', () => {
     const { service } = setup();
     const { p, yielded } = player('sid-1');
     service.registerPlayer(p)();
-    await service.handleSuperseded('sid-1', 'Pixel');
+    await service.handleSuperseded('sid-1');
     expect(yielded).not.toHaveBeenCalled();
   });
 });
@@ -408,7 +346,7 @@ describe('SessionSyncService play here', () => {
     const { service, flush } = setup();
     await flush(session());
     service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
-    service.registerPlayer({ sessionId: () => 'busy', active: () => true, yield: async () => null });
+    service.registerPlayer({ sessionId: () => 'busy', active: () => true, yield: async () => undefined });
     await service.playHere();
     expect(service.handoffFor('busy')).toBeUndefined();
     expect(service.handoffFor('new')).toBe(true);
@@ -452,7 +390,7 @@ describe('SessionSyncService play here', () => {
   it('holds the claim of a resume until this device owns the session', async () => {
     const { service, flush } = setup();
     await flush(session());
-    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(null) });
+    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(undefined) });
     service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
     expect(service.claimPending()).toBe(false);
     await service.playHere();
@@ -473,7 +411,7 @@ describe('SessionSyncService play here', () => {
     const taking = service.playHere();
     TestBed.tick();
     expect(service.claimPending()).toBe(true);
-    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(null) });
+    service.registerPlayer({ sessionId: () => 'sid-new', active: () => true, yield: vi.fn().mockResolvedValue(undefined) });
     done();
     await taking;
     TestBed.tick();
@@ -502,9 +440,9 @@ describe('SessionSyncService play here', () => {
 
   it('does not count a registered idle player as holding one', () => {
     const { service } = setup();
-    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(null) });
+    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => null, yield: vi.fn().mockResolvedValue(undefined) });
     expect(service.holdsPlayer()).toBe(false);
-    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => 4, yield: vi.fn().mockResolvedValue(null) });
+    service.registerPlayer({ sessionId: () => undefined, active: () => false, itemId: () => 4, yield: vi.fn().mockResolvedValue(undefined) });
     expect(service.holdsPlayer()).toBe(true);
   });
 

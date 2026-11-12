@@ -4024,10 +4024,7 @@
   },
   "session": {
     "another_device": "another device",
-    "superseded_title": "Playback moved to {{device}}",
-    "superseded_message": "Your position ({{position}}) is saved.",
     "resume_here": "Resume here",
-    "close": "Close",
     "listen_here": "Listen on this device",
     "error_no_session": "No playback to move.",
     "error_not_parked": "This session is not parked.",

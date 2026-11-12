@@ -5,13 +5,11 @@ import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import type { MediaType } from '../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
-import { formatTime } from '../utils/player.utils';
 import { projectPosition } from '../utils/position-anchor';
 import { deviceIdOf, sameTarget } from './remote-target-id';
 import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
 import { ClockService } from './party/clock.service';
-import { ConfirmationService } from './confirmation.service';
 import { DeviceService } from './device.service';
 import { SseService, type SessionEvent } from './sse.service';
 
@@ -45,22 +43,13 @@ export interface AccountSession {
 /** `owner` plays it here, `observer` sees it elsewhere (or parked), `none` when the account has no session. */
 export type SessionRole = 'owner' | 'observer' | 'none';
 
-/** What a player hands back once it has stopped because another device took over. */
-export interface SupersededPlayback {
-  title: string | null;
-  positionSeconds: number;
-  /** Claims the session again: replays the stopped item where it was left. */
-  resume: () => Promise<void> | void;
-}
-
 /** A local player (video, music) that holds an engine session and can be stopped by a takeover. */
 export interface SessionPlayer {
   sessionId(): string | undefined;
   /** This device plays something itself (also what does not claim the session: live TV, a party, a download). */
   active(): boolean;
-  /** Stops playback after saving the position; null when it had nothing to resume. With `keepOpen` an open player
-   *  stays up as the view of the new owner, which also answers null: nothing to offer. */
-  yield(keepOpen?: boolean): Promise<SupersededPlayback | null>;
+  /** Stops playback after saving the position. With `keepOpen` an open player stays up as the view of the new owner. */
+  yield(keepOpen?: boolean): Promise<void>;
   /** The item it holds for the account session; null when it holds none or plays for a party. */
   itemId?(): number | null;
   /** Beats now: the server answers a takeover this player missed, and learns its new connection. */
@@ -90,7 +79,6 @@ export class SessionSyncService {
   private readonly device = inject(DeviceService);
   private readonly clock = inject(ClockService);
   private readonly translate = inject(TranslateService);
-  private readonly confirmation = inject(ConfirmationService);
   private liveSource: () => LiveReport | null = () => null;
   private livePosition: () => number = () => 0;
 
@@ -160,8 +148,6 @@ export class SessionSyncService {
   private readonly registered = signal(0);
   private readonly resumers: Partial<Record<MediaFamily, SessionResumer>> = {};
   private readonly handled: string[] = [];
-  /** Sids a `session.superseded` event called silent, for a beat flag that outruns it. */
-  private readonly silent = new Set<string>();
   /** A hand-over armed by this device: the first new sid to beat carries `handoff`. */
   private handoff: { sid: string | null; until: number; skip: Set<string | undefined> } | null = null;
   /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
@@ -244,7 +230,7 @@ export class SessionSyncService {
     if (e.type === 'session.changed') {
       if (this.enabled()) void this.refresh();
     }
-    else void this.handleSuperseded(e.sessionId, e.byDeviceName, e.silent);
+    else void this.handleSuperseded(e.sessionId);
   }
 
   /** Re-reads the session; a burst of events costs one request in flight and at most one more. */
@@ -341,40 +327,14 @@ export class SessionSyncService {
     }
   }
 
-  /** The player has stopped on a takeover (event or beat flag): hand back the device, then, unless the takeover was a hand-over, offer to take it again. */
-  async handleSuperseded(sessionId: string, byDeviceName?: string | null, silent = false): Promise<void> {
-    if (silent) {
-      this.silent.add(sessionId);
-      if (this.silent.size > HANDLED_MAX) this.silent.delete(this.silent.values().next().value as string);
-    }
+  /** Another device took the session (event or beat flag): the local player stops, silently. */
+  async handleSuperseded(sessionId: string): Promise<void> {
     if (this.handled.includes(sessionId)) return;
     const player = [...this.players].find((p) => p.sessionId() === sessionId);
     if (!player) return;
     this.handled.push(sessionId);
     if (this.handled.length > HANDLED_MAX) this.handled.shift();
-    const stopped = await player.yield(true);
-    if (!stopped || this.silent.has(sessionId)) return;
-    if (!byDeviceName) await this.refresh();
-    const s = this._session();
-    const device = byDeviceName ?? (s ? this.ownerName(s) : this.translate.instant('session.another_device'));
-    const resume = await this.confirmation.confirm({
-      title: this.translate.instant('session.superseded_title', { device }),
-      message: [
-        stopped.title,
-        this.translate.instant('session.superseded_message', { position: formatTime(stopped.positionSeconds) }),
-      ]
-        .filter(Boolean)
-        .join('. '),
-      confirmLabel: this.translate.instant('session.resume_here'),
-      cancelLabel: this.translate.instant('session.close'),
-      variant: 'info',
-    });
-    if (!resume) return;
-    try {
-      await this.handOver(() => stopped.resume());
-    } catch (err) {
-      console.warn('[session] could not resume the superseded playback', err);
-    }
+    await player.yield(true);
   }
 
   /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */
