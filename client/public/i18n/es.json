@@ -4028,7 +4028,6 @@
     "error_no_session": "No hay reproducción que transferir.",
     "error_not_parked": "Esta sesión no está aparcada.",
     "error_not_transferable": "Este elemento no se puede transferir a otro dispositivo.",
-    "transfer": "Transferir",
     "parked_device": "Última reproducción en {{device}}",
     "parked_here": "Detenido en este dispositivo",
     "read_on": "Leído en {{device}}",

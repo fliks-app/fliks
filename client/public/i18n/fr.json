@@ -4028,7 +4028,6 @@
     "error_no_session": "Aucune lecture à transférer.",
     "error_not_parked": "Cette session n'est pas en pause hors ligne.",
     "error_not_transferable": "Cet élément ne peut pas être transféré vers un autre appareil.",
-    "transfer": "Transférer",
     "parked_device": "Dernière lecture sur {{device}}",
     "parked_here": "Arrêté sur cet appareil",
     "read_on": "Lu sur {{device}}",

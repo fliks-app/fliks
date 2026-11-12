@@ -4028,7 +4028,6 @@
     "error_no_session": "Keine Wiedergabe zum Übertragen.",
     "error_not_parked": "Diese Sitzung ist nicht geparkt.",
     "error_not_transferable": "Dieser Titel kann nicht auf ein anderes Gerät übertragen werden.",
-    "transfer": "Übertragen",
     "parked_device": "Zuletzt abgespielt auf {{device}}",
     "parked_here": "Auf diesem Gerät angehalten",
     "read_on": "Gelesen auf {{device}}",

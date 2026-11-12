@@ -4028,7 +4028,6 @@
     "error_no_session": "No playback to move.",
     "error_not_parked": "This session is not parked.",
     "error_not_transferable": "This item cannot be moved to another device.",
-    "transfer": "Transfer",
     "parked_device": "Last played on {{device}}",
     "parked_here": "Stopped on this device",
     "read_on": "Read on {{device}}",
