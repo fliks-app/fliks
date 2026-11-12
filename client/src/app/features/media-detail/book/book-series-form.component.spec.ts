@@ -6,7 +6,7 @@ import { BookSeriesFormComponent } from './book-series-form.component';
 import { bookSpecProviders } from './book-test-setup';
 
 describe('BookSeriesFormComponent', () => {
-  async function setup(series: (typeof bookDetailFixture.series)[number] | null = bookDetailFixture.series[0], works = personWorksFixture) {
+  async function setup(series: (typeof bookDetailFixture.series)[number] | null = bookDetailFixture.series[0], works = personWorksFixture, all: { id: number; name: string }[] = []) {
     TestBed.configureTestingModule({ providers: bookSpecProviders() });
     const fixture = TestBed.createComponent(BookSeriesFormComponent);
     fixture.componentRef.setInput('mediaId', 1);
@@ -17,7 +17,11 @@ describe('BookSeriesFormComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne((r) => r.url === '/api/persons/5/works').flush(works);
+    const req = http.expectOne((r) => r.url === '/api/collections');
+    expect(req.request.params.get('kind')).toBe('book');
+    req.flush(all);
     await fixture.whenStable();
+    await Promise.resolve();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const select = () => el.querySelector('select') as HTMLSelectElement | null;
@@ -68,6 +72,14 @@ describe('BookSeriesFormComponent', () => {
     const { el, input } = await setup(null, { ...personWorksFixture, series: [] });
     expect(el.querySelector('select')).toBeNull();
     expect(input('series-save').disabled).toBe(true);
+  });
+
+  it('lists every book series, the authors first, when the authors have none', async () => {
+    const { select } = await setup(null, { ...personWorksFixture, series: [] }, [
+      { id: 31, name: 'Zeta' },
+      { id: 30, name: 'Alpha' },
+    ]);
+    expect(Array.from(select()!.options).map((o) => o.textContent?.trim())).toEqual(['Alpha', 'Zeta', 'books_work.series_new']);
   });
 
   it('removes the book from its series', async () => {

@@ -28,10 +28,12 @@ export class BookSeriesFormComponent {
   protected readonly position = signal('');
   protected readonly busy = signal(false);
   private readonly ofAuthors = signal<{ id: number; name: string }[]>([]);
+  private readonly allSeries = signal<{ id: number; name: string }[]>([]);
 
   protected readonly options = computed(() => {
     const current = this.series();
-    const all = current ? [{ id: current.id, name: current.name }, ...this.ofAuthors()] : this.ofAuthors();
+    const others = [...this.allSeries()].sort((a, b) => a.name.localeCompare(b.name));
+    const all = [...(current ? [{ id: current.id, name: current.name }] : []), ...this.ofAuthors(), ...others];
     return [...new Map(all.map((s) => [s.id, s])).values()];
   });
   protected readonly isNew = computed(() => this.options().length === 0 || this.choice() === NEW);
@@ -46,6 +48,7 @@ export class BookSeriesFormComponent {
         this.position.set(s?.positionLabel ?? (s?.position != null ? String(s.position) : ''));
       });
     });
+    void this.loadAllSeries();
     effect(() => {
       const ids = this.authorIds();
       untracked(() => void this.loadAuthorSeries(ids));
@@ -76,6 +79,11 @@ export class BookSeriesFormComponent {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private async loadAllSeries(): Promise<void> {
+    const all = await this.api.collections({ kind: 'book' }, undefined, true).catch(() => []);
+    this.allSeries.set(all.map((c) => ({ id: c.id, name: c.name })));
   }
 
   private async loadAuthorSeries(ids: number[]): Promise<void> {
