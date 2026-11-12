@@ -19,6 +19,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { ToastService } from '../toast.service';
 import { LocalPlaybackOutput, type LocalOutputHost } from '../../../features/player/local-playback-output';
 import { PartySync, type PartyHost } from './party-sync';
+import { MusicApiService } from '../api/music-api.service';
 import { AudioPartyHost } from './audio-party-host';
 import { PlaybackQueueService } from '../playback-queue.service';
 
@@ -104,10 +105,11 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
-      { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
+      { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), itemId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false), isObserving: signal(false) } },
       { provide: MediaService, useValue: { getOne: vi.fn().mockRejectedValue(new Error('x')) } },
+      { provide: MusicApiService, useValue: { trackRequests: vi.fn().mockResolvedValue([]) } },
       { provide: PlayerSettingsService, useValue: { settings: () => ({ autoPlayNext: false }) } },
       { provide: DeviceService, useValue: { tvPlatform: () => null, isTv: () => false } },
       { provide: ToastService, useValue: toast },
