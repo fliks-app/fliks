@@ -246,7 +246,7 @@ export class AudioPlayerComponent {
       if (!this.remoteView() || !s || this.sync.role() !== 'owner') return;
       const track = this.local.track();
       untracked(() => {
-        if (track?.itemId === s.item.id) this.fullPlayer.remote.set(false);
+        if (track?.itemId === s.item.id) this.fullPlayer.handTo(false);
         else if (!track && !this.local.loading() && !this.sync.claimPending()) this.fullPlayer.hide();
       });
     });

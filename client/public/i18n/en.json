@@ -4041,7 +4041,6 @@
     "open_here": "Open here",
     "playing_on": "Playing on {{device}}",
     "current": "Current session",
-    "resume_at": "Resume at {{position}}",
     "settings_title": "Continue across devices",
     "settings_hint": "What you play on one device shows on your others, where you can control it or pick it up in one tap. Only one playback at a time on the account for the chosen types.",
     "scope_all": "All types",

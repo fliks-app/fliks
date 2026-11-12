@@ -4041,7 +4041,6 @@
     "open_here": "Apri qui",
     "playing_on": "In riproduzione su {{device}}",
     "current": "Sessione in corso",
-    "resume_at": "Riprendi da {{position}}",
     "settings_title": "Continua tra i dispositivi",
     "settings_hint": "Ciò che riproduci su un dispositivo appare sugli altri, dove puoi controllarlo o riprenderlo con un tocco. Una sola riproduzione alla volta sull'account per i tipi scelti.",
     "scope_all": "Tutti i tipi",

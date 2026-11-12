@@ -4041,7 +4041,6 @@
     "open_here": "Hier öffnen",
     "playing_on": "Läuft auf {{device}}",
     "current": "Aktuelle Sitzung",
-    "resume_at": "Fortsetzen bei {{position}}",
     "settings_title": "Geräteübergreifend fortsetzen",
     "settings_hint": "Was Sie auf einem Gerät abspielen, erscheint auf Ihren anderen Geräten, wo Sie es steuern oder mit einem Tipp übernehmen können. Für die gewählten Typen läuft pro Konto jeweils nur eine Wiedergabe.",
     "scope_all": "Alle Typen",

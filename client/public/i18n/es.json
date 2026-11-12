@@ -4041,7 +4041,6 @@
     "open_here": "Abrir aquí",
     "playing_on": "Reproduciendo en {{device}}",
     "current": "Sesión actual",
-    "resume_at": "Reanudar en {{position}}",
     "settings_title": "Continuar entre dispositivos",
     "settings_hint": "Lo que reproduce en un dispositivo aparece en los demás, donde puede controlarlo o retomarlo con un toque. Solo una reproducción a la vez en la cuenta para los tipos elegidos.",
     "scope_all": "Todos los tipos",

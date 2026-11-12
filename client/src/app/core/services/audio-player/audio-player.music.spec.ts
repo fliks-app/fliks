@@ -12,6 +12,7 @@ import { CastPlayerService } from '../cast-player.service';
 import { AudioPlayerService } from './audio-player.service';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
+import { FullPlayerState } from './full-player-state';
 import { RemoteService, type RemoteCommandInput } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
@@ -53,6 +54,7 @@ describe('AudioPlayerService music mode', () => {
   };
   type Loader = (cmd: RemoteCommand) => Promise<void>;
   const loaders: Record<string, Loader> = {};
+  let player: { yield(): Promise<unknown> } | undefined;
   const resumers: Record<string, (s: unknown, at: number) => Promise<void>> = {};
   let validated = new Subject<RemoteCommand>();
   const markApplied = vi.fn();
@@ -93,7 +95,7 @@ describe('AudioPlayerService music mode', () => {
       providers: [
       { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), isRemoting: () => remoting, selectedTargetId: () => 'tv#1', send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,
@@ -255,6 +257,25 @@ describe('AudioPlayerService music mode', () => {
     ownerCanEnqueue = false;
     audio.enqueueTracks([track(3)], 'next');
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it('keeps the open full player on the session when another device takes it over', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const full = TestBed.inject(FullPlayerState);
+    await audio.playTracks([track(1), track(2)]);
+    audio.expand();
+    await player!.yield();
+    expect(audio.track()).toBeNull();
+    expect([full.open(), full.remote()]).toEqual([true, true]);
+  });
+
+  it('closes the full player when this device stops on its own', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const full = TestBed.inject(FullPlayerState);
+    await audio.playTracks([track(1)]);
+    audio.expand();
+    await audio.close();
+    expect(full.open()).toBe(false);
   });
 
   it('enqueues after the current track and at the end', async () => {

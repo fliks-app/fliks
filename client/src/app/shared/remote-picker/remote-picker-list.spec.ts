@@ -17,7 +17,7 @@ import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { RemotePickerListComponent } from './remote-picker-list';
 
 function setup(
-  over: { name?: string | null; canSetVolume?: boolean; card?: boolean; volumeKnown?: boolean; sync?: object; remote?: object } = {},
+  over: { name?: string | null; canSetVolume?: boolean; card?: boolean; transferOnly?: boolean; volumeKnown?: boolean; sync?: object; remote?: object } = {},
 ) {
   const playing = {
     name: signal(over.name === undefined ? 'Living room' : over.name),
@@ -47,6 +47,7 @@ function setup(
   });
   const fixture = TestBed.createComponent(RemotePickerListComponent);
   fixture.componentRef.setInput('card', over.card ?? true);
+  fixture.componentRef.setInput('transferOnly', over.transferOnly ?? false);
   fixture.detectChanges();
   return { el: fixture.nativeElement as HTMLElement, playing, component: fixture.componentInstance };
 }
@@ -145,5 +146,30 @@ describe('RemotePickerListComponent twin tabs', () => {
     const { component } = setup({ remote: { targets: signal([twin('pc#abcd1234'), twin('pc#wxyz5678'), { ...twin('tv#1'), deviceName: null, systemName: 'tvOS 18' }]) } });
     const rows = component['pickerRows']().filter((r: { kind: string }) => r.kind === 'remote');
     expect(rows.map((r: { tab?: string }) => r.tab)).toEqual(['abcd', 'wxyz', undefined]);
+  });
+});
+
+describe('RemotePickerListComponent transfer sheet', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('shows the observed session once, on the device card, and lists only devices it can move to', () => {
+    const target = (targetId: string, deviceName: string) => ({ targetId, userAgent: null, deviceName, systemName: null, formFactor: 'desktop', tvPlatform: null, nowPlaying: null });
+    const { el, component } = setup({
+      transferOnly: true,
+      sync: {
+        session: signal({ owner: { targetId: 'pc#1' }, state: 'playing', item: { id: 7, mediaId: 3, kind: 'album', title: 'Album', subtitle: 'Track', mediaFileId: 9 } }),
+        role: signal('observer'),
+        canPlayHere: signal(false),
+        canTransfer: signal(true),
+        isReading: () => false,
+        positionNow: () => 0,
+        line: () => '',
+        parked: () => false,
+      },
+      remote: { targets: signal([target('pc#1', 'Desk'), target('tv#2', 'Lounge')]) },
+    });
+    expect(el.textContent).not.toContain('session.current');
+    const remotes = component['pickerRows']().filter((r: { kind: string }) => r.kind === 'remote');
+    expect(remotes.map((r: { id: string }) => r.id)).toEqual(['tv#2']);
   });
 });

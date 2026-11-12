@@ -58,9 +58,9 @@
       type="button"
       class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full"
       (click)="local.toggle()"
-      [attr.aria-label]="(local.playing() ? 'audio_player.pause' : 'audio_player.play') | translate"
+      [attr.aria-label]="(local.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate"
     >
-      @if (local.playing()) {
+      @if (local.uiPlaying()) {
         <svg lucidePause class="h-5 w-5"></svg>
       } @else {
         <svg lucidePlay class="h-5 w-5"></svg>
@@ -132,8 +132,8 @@
             </button>
           }
           @if (i === audio.queueIndex()) {
-            <button type="button" class="btn btn-primary btn-circle btn-sm mx-1 shrink-0" [disabled]="!controllable()" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
-              @if (audio.playing()) {
+            <button type="button" class="btn btn-primary btn-circle btn-sm mx-1 shrink-0" [disabled]="!controllable()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+              @if (audio.uiPlaying()) {
                 <svg lucidePause class="h-4 w-4"></svg>
               } @else {
                 <svg lucidePlay class="h-4 w-4"></svg>
@@ -399,8 +399,8 @@
         <button type="button" class="btn btn-ghost btn-circle" [disabled]="!controllable()" (click)="audio.previous()" [attr.aria-label]="'music_player.previous' | translate">
           <svg lucideSkipBack class="h-6 w-6"></svg>
         </button>
-        <button type="button" class="btn btn-primary btn-circle btn-lg [--size:4.25rem]" [disabled]="!controllable()" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
-          @if (audio.playing()) {
+        <button type="button" class="btn btn-primary btn-circle btn-lg [--size:4.25rem]" [disabled]="!controllable()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+          @if (audio.uiPlaying()) {
             <svg lucidePause class="h-7 w-7"></svg>
           } @else {
             <svg lucidePlay class="h-7 w-7"></svg>
@@ -426,7 +426,7 @@
       </div>
       <div class="flex items-center gap-1" appTvRow>
         @if (!isTv()) {
-          <app-dropdown-menu placement="top-start" [heading]="'remote.picker_title' | translate">
+          <app-dropdown-menu placement="top-start">
             <app-device-chip trigger (click)="refreshDevices()" />
             <app-remote-picker-list [card]="true" [transferOnly]="true" />
           </app-dropdown-menu>
@@ -470,8 +470,8 @@
         <button type="button" class="btn btn-ghost btn-circle" (click)="local.skip(-local.skipBack())" [attr.aria-label]="'audio_player.skip_back' | translate: { s: local.skipBack() }">
           <svg lucideRotateCcw class="h-6 w-6"></svg>
         </button>
-        <button type="button" class="btn btn-primary btn-circle btn-lg" (click)="audio.toggle()" [attr.aria-label]="(audio.playing() ? 'audio_player.pause' : 'audio_player.play') | translate">
-          @if (audio.playing()) {
+        <button type="button" class="btn btn-primary btn-circle btn-lg" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+          @if (audio.uiPlaying()) {
             <svg lucidePause class="h-7 w-7"></svg>
           } @else {
             <svg lucidePlay class="h-7 w-7"></svg>

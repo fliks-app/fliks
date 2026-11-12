@@ -6,6 +6,8 @@ import type { MusicTrackRequest, Repeat } from './music-queue';
 export interface AudioOutput {
   readonly track: Signal<AudioRequest | null>;
   readonly playing: Signal<boolean>;
+  /** What the play button shows: a start in flight counts as playing. */
+  readonly uiPlaying: Signal<boolean>;
   readonly position: Signal<number>;
   readonly duration: Signal<number>;
   readonly rate: Signal<number>;

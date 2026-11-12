@@ -41,6 +41,7 @@ function session(over: Partial<AccountSession> = {}): AccountSession {
 async function setup(account: AccountSession | null, live = true) {
   const sync = {
     session: signal(account),
+    claimPending: signal(false),
     parked: signal(account?.state === 'parked'),
     role: signal(account ? 'observer' : 'none'),
     liveReport: computed(() => (live ? { mediaFileId: 9, durationSeconds: 200 } : null)),
@@ -106,6 +107,14 @@ describe('RemoteAudioOutput', () => {
     expect(out.track()).toBe(before);
     sync.session.set(session({ item: { ...session().item, id: 13 }, queue: { itemIds: [11, 12, 13], index: 2, shuffle: true, repeat: 'all' } }));
     expect(out.track()?.itemId).toBe(13);
+  });
+
+  it('shows the session playing while this device claims it, not the old owner pausing on its way out', async () => {
+    const { out, sync, target } = await setup(session());
+    target.uiPaused.set(true);
+    expect(out.uiPlaying()).toBe(false);
+    sync.claimPending.set(true);
+    expect(out.uiPlaying()).toBe(true);
   });
 
   it('reads the stored position and no playback while the session is parked', async () => {
