@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeviceService } from '../../core/services/device.service';
+import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
@@ -18,6 +19,12 @@ import { SseService } from '../../core/services/sse.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { CastOverlayComponent } from './cast-overlay';
+
+// jsdom has no ResizeObserver (the title marquee).
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+  observe() {}
+  disconnect() {}
+};
 
 @Component({ selector: 'app-dropdown-menu', template: '<ng-content select="[trigger]" />' })
 class DropdownStub {
@@ -46,7 +53,7 @@ function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   };
 }
 
-function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?: AccountSession | null; canPlayHere?: boolean; live?: boolean; localTrack?: number } = {}) {
+function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?: AccountSession | null; canPlayHere?: boolean; live?: boolean; localTrack?: number; trackMeta?: { title: string; artist: string } } = {}) {
   const account = signal(over.account ?? null);
   const parked = signal(over.account?.state === 'parked');
   const ownedHere = computed(() => {
@@ -105,6 +112,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       provideZonelessChangeDetection(),
       provideHttpClient(),
       { provide: PlaybackSession, useValue: session },
+      { provide: NowPlayingMetadataService, useValue: { track: () => signal(over.trackMeta ?? null) } },
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
@@ -173,6 +181,16 @@ describe('CastOverlayComponent', () => {
       buttons[1].click();
       expect(target.pause).toHaveBeenCalled();
       expect(sync.playHere).toHaveBeenCalled();
+    });
+
+    it('shows an observed album session as track and artist, and as the track title while it loads', () => {
+      const album = { ...accountSession().item, kind: 'album' as const, family: 'audio' as const, title: 'Album A', subtitle: 'Track A' };
+      const loaded = setup({ local: true, account: accountSession({ item: album }), trackMeta: { title: 'Track A', artist: 'Artist A' } });
+      expect(loaded.el.textContent).toContain('Track A · Artist A');
+      TestBed.resetTestingModule();
+      const loading = setup({ local: true, account: accountSession({ item: album }) });
+      expect(loading.el.textContent).toContain('Track A');
+      expect(loading.el.textContent).not.toContain('Album A');
     });
 
     it('plays a paused owner that has not reported since this device started following it', () => {

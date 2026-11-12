@@ -5,6 +5,7 @@ import { LucideArrowRightLeft, LucidePause, LucidePlay, LucideX } from '@lucide/
 import { DeviceIconComponent } from '../device-chip/device-icon';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DeviceService } from '../../core/services/device.service';
+import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
@@ -16,11 +17,12 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { MarqueeComponent } from '../components/marquee';
 
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe],
+  imports: [NgTemplateOutlet, LucideArrowRightLeft, LucidePause, LucidePlay, LucideX, DropdownMenuComponent, RemotePickerListComponent, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe, MarqueeComponent],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
@@ -42,6 +44,17 @@ export class CastOverlayComponent {
 
   /** The account session played elsewhere that this device follows without having selected it. */
   protected readonly observed = this.surface.bar;
+
+  /** The track of an observed album session, whose item title is the album and subtitle the track. */
+  protected readonly observedTrack = inject(NowPlayingMetadataService).track(() => {
+    const item = this.observed()?.item;
+    return item?.kind === 'album' ? { mediaId: item.mediaId, episodeId: item.episodeId ?? undefined, itemId: item.id } : null;
+  });
+
+  protected readonly observedTitle = computed(() => {
+    const item = this.observed()?.item;
+    return this.observedTrack()?.title || (item?.kind === 'album' ? (item.subtitle ?? item.title ?? '') : (item?.title ?? ''));
+  });
 
   /** A reader's position: read elsewhere, opened here, with a percentage instead of a clock. */
   protected readonly reading = computed(() => {

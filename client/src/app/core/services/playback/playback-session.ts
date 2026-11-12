@@ -103,8 +103,8 @@ export class PlaybackSession {
   readonly nowPlaying = inject(NowPlayingMetadataService).track(() => {
     const observing = this.observing();
     if (this.kind() === 'local' && !observing) return null;
-    const { mediaId, episodeId } = (observing ? this.injector.get(RemotePlaybackTarget) : this.output()!).item();
-    return mediaId ? { mediaId, episodeId } : null;
+    const { mediaId, episodeId, itemId } = (observing ? this.injector.get(RemotePlaybackTarget) : this.output()!).item();
+    return mediaId ? { mediaId, episodeId, itemId } : null;
   });
 
   /** Name of the device playing, null while local and not observing one. */

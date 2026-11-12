@@ -1,5 +1,6 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { activeIndex, cueFills, cueSegments, toRows } from './lyrics-logic';
@@ -14,13 +15,21 @@ const MANUAL_SCROLL_MS = 3000;
   templateUrl: './lyrics-view.html',
 })
 export class LyricsViewComponent {
-  protected readonly audio = inject(AudioPlayerService);
+  private readonly local = inject(AudioPlayerService);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
   readonly doc = input.required<StructuredLyrics>();
   /** A translation or pronunciation with one line per main line, shown under each. */
   readonly layer = input<StructuredLyrics | null>(null);
   readonly large = input(false);
+  /** The output the lines follow, when not the local player. */
+  readonly output = input<AudioOutput | null>(null);
+  /** False when the output cannot be driven: a tap on a line does nothing. */
+  readonly seekable = input(true);
+
+  private get audio(): AudioOutput {
+    return this.output() ?? this.local;
+  }
 
   protected readonly rows = computed(() => toRows(this.doc()));
   protected readonly segments = computed(() => this.rows().map((r) => (r.cues?.length ? cueSegments(r.text, r.cues) : null)));

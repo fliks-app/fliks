@@ -523,10 +523,12 @@ function renderBar() {
   const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
   const time = playerData.currentTime || 0;
   const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
-  // An episode leads with its own label (`subtitle`), the series name under it, as the CAF overlay does.
-  barTitle.textContent = playerData.subtitle || playerData.title || '';
-  barSubtitle.textContent = playerData.subtitle ? playerData.title || '' : '';
-  barTitle.classList.toggle('small', !!playerData.subtitle);
+  // An episode leads with its own label (`subtitle`), the series name under it; any other subtitle (artists) stays below.
+  const info = playerManager.getMediaInformation();
+  const episode = !!(playerData.subtitle && info && info.customData && info.customData.episodeId);
+  barTitle.textContent = (episode ? playerData.subtitle : playerData.title) || '';
+  barSubtitle.textContent = (episode ? playerData.title : playerData.subtitle) || '';
+  barTitle.classList.toggle('small', episode);
   // Just above the bar's text, whose height depends on the title lines; never below the margin.
   const textTop = (innerHeight - barTitle.getBoundingClientRect().top) / innerHeight * 100;
   captionsEl.style.setProperty('--sub-bottom-bar', Math.max(captionMargin + 1, textTop + 1.5).toFixed(1) + 'vh');

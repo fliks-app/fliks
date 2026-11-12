@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
+import { SseService } from '../../../core/services/sse.service';
+import { Subject } from 'rxjs';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { DownloadManagerService } from '../../../core/services/download-manager.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -38,6 +40,7 @@ describe('BookWorkComponent', () => {
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: AuthService, useValue: { user: () => null, hasPermission: (p: string) => canEdit && p === 'media.edit' } },
+        { provide: SseService, useValue: { likeEvents: new Subject() } },
         { provide: AudioPlayerService, useValue: { play } },
         { provide: PlayableMediaService, useValue: {} },
         { provide: StreamingApiService, useValue: {} },
@@ -112,6 +115,7 @@ describe('BookWorkComponent', () => {
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: AuthService, useValue: { user: () => null, hasPermission: () => false } },
+        { provide: SseService, useValue: { likeEvents: new Subject() } },
         { provide: AudioPlayerService, useValue: { play } },
         { provide: PlayableMediaService, useValue: {} },
         { provide: StreamingApiService, useValue: {} },

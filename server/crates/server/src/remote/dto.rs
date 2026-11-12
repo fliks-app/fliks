@@ -2,7 +2,7 @@
 use crate::{
     events::{
         Num,
-        event::{Queue, RemoteAction, Repeat},
+        event::{EnqueueAt, Queue, RemoteAction, Repeat},
     },
     http::AppError,
 };
@@ -124,6 +124,9 @@ pub struct Command {
     pub shuffle: Option<bool>,
     pub repeat: Option<Repeat>,
     pub kind: Option<MediaKind>,
+    pub item_ids: Option<Vec<i64>>,
+    #[serde(rename = "where")]
+    pub position: Option<EnqueueAt>,
 }
 
 impl Command {
@@ -150,6 +153,47 @@ impl Command {
                 e.push("queue.index must be lower than the number of items".into());
             }
         }
+        if self.item_ids.as_ref().is_some_and(|i| i.len() > QUEUE_MAX) {
+            e.push(format!(
+                "itemIds must contain no more than {QUEUE_MAX} elements"
+            ));
+        }
+        if self.action == RemoteAction::Enqueue {
+            if self.item_ids.as_ref().is_none_or(|i| i.is_empty()) {
+                e.push("itemIds must contain at least 1 elements".into());
+            }
+            if self.position.is_none() {
+                e.push("where must be one of the following values: next, last".into());
+            }
+        }
         fail(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn check(v: serde_json::Value) -> bool {
+        serde_json::from_value::<Command>(v)
+            .unwrap()
+            .validate()
+            .is_ok()
+    }
+
+    #[test]
+    fn an_enqueue_needs_its_tracks_and_where_and_at_most_the_queue_cap() {
+        assert!(check(
+            json!({"action":"enqueue","itemIds":[1,2],"where":"next"})
+        ));
+        assert!(!check(json!({"action":"enqueue","itemIds":[1]})));
+        assert!(!check(
+            json!({"action":"enqueue","itemIds":[],"where":"last"})
+        ));
+        let many: Vec<i64> = (0..=QUEUE_MAX as i64).collect();
+        assert!(!check(
+            json!({"action":"enqueue","itemIds":many,"where":"last"})
+        ));
     }
 }

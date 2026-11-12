@@ -1,5 +1,6 @@
 import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal, untracked } from '@angular/core';
 import { CastService } from '../cast.service';
+import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { CastPlayerService } from '../cast-player.service';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
@@ -31,6 +32,7 @@ import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
+import { FullPlayerState } from './full-player-state';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -95,6 +97,9 @@ const BEAT_MS = 15_000;
 const STARTING_MAX_MS = 5000;
 const PRELOAD_S = 20;
 const RESTART_S = 3;
+/** A native position this far from where the beats' clock expects is a seek made on the device itself. */
+const SEEK_JUMP_S = 3;
+const NATIVE_POSITION_GAP_MS = 2000;
 /** Ids a wire queue carries at most (the server and `/api/tracks?ids` cap). */
 const WIRE_QUEUE_MAX = 500;
 const POSITION_STATE_MS = 1000;
@@ -120,6 +125,7 @@ export class AudioPlayerService {
   private readonly sessionSync = inject(SessionSyncService);
   private readonly remote = inject(RemoteService);
   private readonly music = inject(MusicApiService);
+  private readonly fullPlayer = inject(FullPlayerState);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -134,7 +140,6 @@ export class AudioPlayerService {
   private readonly _sleepLeft = signal(0);
   private readonly _prefs = signal<Prefs>(this.readPrefs());
   private readonly _bookmarks = signal<AudioBookmark[]>([]);
-  private readonly _expanded = signal(false);
   private readonly _musicMode = signal(false);
   private readonly _queue = signal<readonly MusicTrackRequest[]>([]);
   private readonly _queueIndex = signal(-1);
@@ -158,7 +163,7 @@ export class AudioPlayerService {
   /** Seconds left on a duration timer. */
   readonly sleepLeft = this._sleepLeft.asReadonly();
   readonly bookmarks = this._bookmarks.asReadonly();
-  readonly expanded = this._expanded.asReadonly();
+  readonly expanded = computed(() => this.fullPlayer.open() && !this.fullPlayer.remote());
   /** True while a track queue plays instead of an audiobook. */
   readonly musicMode = this._musicMode.asReadonly();
   readonly queue = this._queue.asReadonly();
@@ -190,7 +195,13 @@ export class AudioPlayerService {
   private parts: PlayPart[] = [];
   private partIndex = 0;
   private preloaded = -1;
-  private info: PlaybackInfoResponse | null = null;
+  private readonly _info = signal<PlaybackInfoResponse | null>(null);
+  private get info(): PlaybackInfoResponse | null {
+    return this._info();
+  }
+  private set info(v: PlaybackInfoResponse | null) {
+    this._info.set(v);
+  }
   private sessionId: string | undefined;
   private hls: { destroy(): Promise<void> } | null = null;
   private beatTimer: ReturnType<typeof setInterval> | undefined;
@@ -218,7 +229,19 @@ export class AudioPlayerService {
   private nativeEnded = false;
   private nativeRate = 1;
   private nativeIndex = -1;
+  private positionAt = 0;
   private routedSent = false;
+
+  /** Key of what a beat publishes besides the position; null while nothing is loaded to report. */
+  private readonly published = computed(() => {
+    const track = this._track();
+    const info = this._info();
+    if (!track || !info) return null;
+    // A skip syncs the queue before the next track loads: no beat reports the new index against the old track.
+    if (this._musicMode() && this._queue()[this._queueIndex()]?.itemId !== track.itemId) return null;
+    const queue = this._musicMode() ? [this._queue().map((t) => t.itemId), this._queueIndex(), this._shuffle(), this._repeat(), this.neighbour(1) !== null] : null;
+    return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.effectiveRate(), queue]);
+  });
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -234,6 +257,10 @@ export class AudioPlayerService {
       yield: () => this.yieldToTakeover(),
       itemId: () => (this.routed({ type: 'drives' }) ? null : (this._track()?.itemId ?? null)),
       report: () => this.beat(),
+    });
+    // Everything observers show but the position: a change beats once, whichever path made it.
+    effect(() => {
+      if (this.published() !== null) untracked(() => this.beat());
     });
     let signedIn = !!this.auth.user();
     effect(() => {
@@ -366,12 +393,18 @@ export class AudioPlayerService {
   /** Adds tracks after the current one or at the end; starts them when nothing plays. */
   enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
     if (!tracks.length || this.blockedByParty()) return;
-    if (!this._musicMode()) return void this.playTracks(tracks);
+    if (!this._musicMode()) return void (this.enqueueOnOwner(tracks, where) || this.playTracks(tracks));
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
+  }
+
+  /** Adds to the queue of the device this one observes instead of taking its session; false when it cannot. */
+  private enqueueOnOwner(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): boolean {
+    const target = this.sessionSync.observedOwnerTargetId();
+    if (!target || !this.sessionSync.session()?.queue || this._track() || !this.remote.observedCan('enqueue')) return false;
+    void this.remote.send(target, { action: 'enqueue', itemIds: tracks.map((t) => t.itemId), where });
+    return true;
   }
 
   /** The next track of the queue, or the next chapter of a book. */
@@ -409,10 +442,10 @@ export class AudioPlayerService {
   removeFromQueue(index: number): void {
     const removingCurrent = index === this.mq.index;
     this.mq.remove(index);
+    if (!removingCurrent) return this.queueEdited();
     this.dropPreload();
     this.syncQueue();
     this.pushQueue();
-    if (!removingCurrent) return;
     const t = this.mq.current;
     if (!t) void this.close();
     else if (!this.nativeOn) void this.goTo(t);
@@ -420,16 +453,12 @@ export class AudioPlayerService {
 
   moveInQueue(from: number, to: number): void {
     this.mq.move(from, to);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
   }
 
   setShuffle(on: boolean): void {
     this.mq.setShuffle(on);
-    this.dropPreload();
-    this.syncQueue();
-    this.pushQueue();
+    this.queueEdited();
   }
 
   cycleRepeat(): void {
@@ -441,6 +470,12 @@ export class AudioPlayerService {
     this.dropPreload();
     this.syncQueue();
     if (this.nativeOn) void this.nativeAudio!.setRepeat({ mode: this.mq.repeat });
+  }
+
+  private queueEdited(): void {
+    this.dropPreload();
+    this.syncQueue();
+    this.pushQueue();
   }
 
   setReplayGain(mode: ReplayGainMode): void {
@@ -514,6 +549,12 @@ export class AudioPlayerService {
 
   duckLevel(): number {
     return this.duck;
+  }
+
+  /** The speed the track actually plays at: a cast receiver and a party's server clock ignore the preference. */
+  private effectiveRate(): number {
+    if (this.casting) return 1;
+    return this._musicMode() ? this.playRate() : this.rate();
   }
 
   private playRate(): number {
@@ -628,6 +669,7 @@ export class AudioPlayerService {
 
   private async startCast(req: MusicTrackRequest, generation: number): Promise<void> {
     await this.nativeAudio?.stop().catch(() => undefined);
+    this.injector.get(NowPlayingMetadataService).primeTracks([req]);
     const info = await this.injector.get(CastPlayerService).castTrack(req);
     if (generation !== this.generation) return;
     if (!info) return void (await this.close());
@@ -1084,11 +1126,11 @@ export class AudioPlayerService {
   }
 
   expand(): void {
-    this._expanded.set(this._track() !== null);
+    if (this._track() !== null) this.fullPlayer.show(false);
   }
 
   collapse(): void {
-    this._expanded.set(false);
+    this.fullPlayer.hide();
   }
 
   /** Saves the position, ends the session and drops the player. */
@@ -1101,7 +1143,7 @@ export class AudioPlayerService {
     void this.nativeAudio?.stop().catch(() => undefined);
     this.leaveMusic();
     this._track.set(null);
-    this._expanded.set(false);
+    if (!this.fullPlayer.remote()) this.fullPlayer.hide();
     this._loading.set(false);
     this.markStarting(false);
     this._position.set(0);
@@ -1253,7 +1295,6 @@ export class AudioPlayerService {
     this.beatTimer = setInterval(() => {
       if (playing || this.network.isOnline()) this.beat();
     }, BEAT_MS);
-    this.beat();
     if (!this.nativeAudio && 'mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   }
 
@@ -1397,6 +1438,9 @@ export class AudioPlayerService {
       case 'repeat':
         if (music) this.setRepeat(cmd.repeat ?? this.mq.repeat);
         break;
+      case 'enqueue':
+        if (music && cmd.itemIds?.length && cmd.where) this.enqueueTracks(await this.music.trackRequests(cmd.itemIds), cmd.where);
+        break;
       case 'queue':
         if (music && cmd.queue) await this.replaceQueue(cmd.queue, cmd.shuffle ?? this.mq.shuffle);
         break;
@@ -1484,6 +1528,8 @@ export class AudioPlayerService {
         sessionId: this.sessionId,
         handoff: this.sessionSync.handoffFor(this.sessionId),
         state: this._playing() ? ('playing' as const) : ('paused' as const),
+        hasNext: this._musicMode() && this.neighbour(1) !== null,
+        playbackRate: this.effectiveRate(),
         ...this.volumeReport(),
       } satisfies BeatBody,
     } as { mediaId: number; payload: BeatBody };
@@ -1774,7 +1820,14 @@ export class AudioPlayerService {
       this.partIndex = p.index;
       position += part.offset;
     }
+    const now = Date.now();
+    // Native emits positions only while playing: after a pause the gap is not a seek.
+    const continuous = this._playing() && this.positionAt > 0 && now - this.positionAt < NATIVE_POSITION_GAP_MS;
+    const elapsed = continuous ? ((now - this.positionAt) / 1000) * this.rate() : 0;
+    const expected = this._position() + elapsed;
+    this.positionAt = now;
     this._position.set(position);
+    if (continuous && Math.abs(position - expected) > SEEK_JUMP_S && this.info) this.beat();
     const sleep = this._sleep();
     if (sleep?.kind === 'chapter' && position >= sleep.end - 0.3) this.fireSleep();
   }

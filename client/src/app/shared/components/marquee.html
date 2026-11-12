@@ -5,9 +5,11 @@
     [style.--shift.px]="-(width() + gap)"
     [style.--duration.s]="(width() + gap) / 32"
   >
-    <span #line class="inline-block">{{ text() }}</span>
+    <span #line class="inline-block"><ng-container *ngTemplateOutlet="content" /></span>
     @if (overflowing()) {
-      <span class="inline-block" [style.padding-left.px]="gap" aria-hidden="true">{{ text() }}</span>
+      <span class="inline-block" [style.padding-left.px]="gap" aria-hidden="true"><ng-container *ngTemplateOutlet="content" /></span>
     }
   </span>
 </div>
+
+<ng-template #content>{{ text() }}@if (secondary()) {<span class="font-normal opacity-60"> · {{ secondary() }}</span>}</ng-template>

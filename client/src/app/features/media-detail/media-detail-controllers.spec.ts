@@ -73,6 +73,19 @@ describe('LikeController', () => {
     await c.toggleSeason(3);
     expect(api.unlike).toHaveBeenCalledWith({ mediaId: 7, seasonId: 3 });
   });
+
+  it('never lets an older reload overwrite a newer one', async () => {
+    const answers: ((s: { media: boolean; seasonIds: number[]; episodeIds: number[] }) => void)[] = [];
+    const { c } = setup({ state: vi.fn(() => new Promise((r) => answers.push(r))) as never });
+    const reload = (c as unknown as { load(id: number): Promise<void> }).load.bind(c);
+    const older = reload(7);
+    const newer = reload(7);
+    answers[1]({ media: true, seasonIds: [], episodeIds: [] });
+    await newer;
+    answers[0]({ media: false, seasonIds: [], episodeIds: [] });
+    await older;
+    expect(c.state().media).toBe(true);
+  });
 });
 
 describe('EpisodeViewController.nextPlayEpisode', () => {

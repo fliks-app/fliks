@@ -666,6 +666,8 @@ export class StreamingApiService {
       // Remote-control fields: the caller stamps its own truth, never this service.
       volume?: number;
       muted?: boolean;
+      playbackRate?: number;
+      hasNext?: boolean;
       lastCmdId?: string;
       /** An audio playback's queue, sent when it changes and on the first beat. */
       queue?: { itemIds: number[]; index: number; shuffle: boolean; repeat: 'off' | 'all' | 'one' };

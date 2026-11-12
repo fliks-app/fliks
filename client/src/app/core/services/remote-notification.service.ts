@@ -49,8 +49,9 @@ export class RemoteNotificationService {
       if (t.isStarting()) return;
       const s = this.remote.targetState();
       this.shown = true;
-      untracked(() => void this.like.track(s?.mediaId, s?.episodeId));
       const meta = this.session.nowPlaying();
+      // A track is liked as an item of its album, an episode as itself.
+      untracked(() => void this.like.track(s?.mediaId, meta?.kind === 'album' ? s?.itemId : s?.episodeId));
       if (!meta) return;
       const art = meta.fanartUrl ?? meta.posterUrl;
       void RemoteNotification.update({
@@ -66,8 +67,8 @@ export class RemoteNotificationService {
         muted: t.muted(),
         hasNext: t.canPlayNext(),
         liked: this.like.liked(),
-        // The target reports no queue; a film has nothing to step through.
-        seekButtons: !s?.episodeId,
+        // A film is seeked by 10 s; an episode or a track steps to the next one.
+        seekButtons: meta.kind !== 'album' && !s?.episodeId,
       }).catch(() => {});
     }, { injector: this.injector });
   }
@@ -90,6 +91,11 @@ export class RemoteNotificationService {
         break;
       case 'next':
         t.playNext();
+        break;
+      case 'prev':
+        // A track goes to the previous one; anything else restarts.
+        if (this.session.nowPlaying()?.kind === 'album') t.playPrevious();
+        else t.seek(0);
         break;
       case 'stop':
         // Native has already dropped the notification; clear the state now so

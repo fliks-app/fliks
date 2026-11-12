@@ -408,6 +408,8 @@ pub(crate) fn send(
         shuffle: dto.shuffle,
         repeat: dto.repeat,
         kind: dto.kind,
+        item_ids: dto.item_ids,
+        position: dto.position,
     };
     // Never `emit_to_user`: a broadcast would let one phone drive every device of the account.
     // A polled target released between the resolution and now: its device's web stream takes over.

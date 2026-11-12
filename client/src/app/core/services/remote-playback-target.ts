@@ -38,10 +38,14 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   readonly ended = computed(() => false);
   readonly seekLocked = computed(() => false);
   readonly ready = computed(() => this.duration() > 0);
-  readonly item = computed(() => ({
-    mediaId: this.remote.targetState()?.mediaId ?? 0,
-    episodeId: this.remote.targetState()?.episodeId ?? undefined,
-  }));
+  readonly item = computed(
+    () => ({
+      mediaId: this.remote.targetState()?.mediaId ?? 0,
+      episodeId: this.remote.targetState()?.episodeId ?? undefined,
+      itemId: this.remote.targetState()?.itemId,
+    }),
+    { equal: sameItem },
+  );
   snapshot(): PlaybackSnapshot | null {
     const s = this.remote.targetState();
     if (!s?.mediaId || !s.mediaFileId) return null;
@@ -262,6 +266,11 @@ export class RemotePlaybackTarget implements PlaybackOutput {
     void this.remote.send(targetId, { action: 'next' });
   }
 
+  playPrevious(): void {
+    const targetId = this.remote.observedTargetId();
+    if (targetId) void this.remote.send(targetId, { action: 'prev' });
+  }
+
   stopPlayback(): void {
     const targetId = this.remote.observedTargetId();
     if (!targetId) {
@@ -336,4 +345,9 @@ export class RemotePlaybackTarget implements PlaybackOutput {
       console.warn('[remote-playback-target] failed to load sprites', mediaFileId, err);
     }
   }
+}
+
+/** Every report rebuilds the item; only a change of identity may re-run what follows it. */
+function sameItem(a: { mediaId: number; episodeId?: number; itemId?: number }, b: typeof a): boolean {
+  return a.mediaId === b.mediaId && a.episodeId === b.episodeId && a.itemId === b.itemId;
 }

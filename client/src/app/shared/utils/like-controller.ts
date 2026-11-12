@@ -22,6 +22,7 @@ export class LikeController {
   });
 
   private lastLikeStateId = 0;
+  private loadSeq = 0;
 
   /** Call from an injection context: it registers the effects that keep the state current. */
   constructor(
@@ -43,8 +44,10 @@ export class LikeController {
   }
 
   private async load(id: number): Promise<void> {
+    const seq = ++this.loadSeq;
     try {
-      this.state.set(await this.api.state(id, { force: true }));
+      const state = await this.api.state(id, { force: true });
+      if (seq === this.loadSeq) this.state.set(state);
     } catch {
       /* interceptor surfaces errors */
     }

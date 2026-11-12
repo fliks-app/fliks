@@ -43,7 +43,7 @@ export interface RemoteCommand {
   byTargetId: string | null;
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
-    | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue'
+    | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue' | 'enqueue'
     | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
   mediaType?: MediaType;
@@ -62,6 +62,9 @@ export interface RemoteCommand {
   repeat?: 'off' | 'all' | 'one';
   /** Family of the item to load; absent means video (an older sender). */
   kind?: MediaType;
+  /** An `enqueue`: the tracks to add and where. */
+  itemIds?: number[];
+  where?: 'next' | 'last';
 }
 
 /** An audio playback's queue on the wire: item ids in play order and the current index. */
@@ -88,6 +91,8 @@ export interface RemoteState {
   state: 'playing' | 'paused' | 'buffering';
   volume: number | null;
   muted: boolean | null;
+  /** Absent from an older server: 1. */
+  playbackRate?: number;
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;
@@ -105,6 +110,15 @@ export interface RemoteState {
 export type SessionEvent =
   | { type: 'session.changed'; epoch: number | null; itemId: number | null; state: string | null; ownerTargetId: string | null }
   | { type: 'session.superseded'; sessionId: string; byDeviceName: string | null; epoch: number; silent?: boolean };
+
+/** One like of the account changed on any device; the ids repeat the granularity of the like. */
+export interface LikesChangedEvent {
+  type: 'likes.changed';
+  mediaId: number;
+  seasonId?: number;
+  itemId?: number;
+  liked: boolean;
+}
 
 export interface PartyStateEvent {
   type: 'party.state';
@@ -217,6 +231,8 @@ export class SseService implements OnDestroy {
   readonly stopped = new Subject<{ targetId: string; sessionId: string | null }>();
   /** `session.changed` / `session.superseded`, on their own Subject like `commands`: a supersede must not be replaced on `lastEvent` before it is read. */
   readonly sessionEvents = new Subject<SessionEvent>();
+  /** `likes.changed`, on its own Subject: each change matters to the view showing that like. */
+  readonly likeEvents = new Subject<LikesChangedEvent>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
   readonly partyEvents = new Subject<PartyEvent>();
   /** Optimizer queue events, on their own Subject: progress ticks every heartbeat and must not flood `lastEvent`. */
@@ -415,6 +431,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type === 'session.changed' || data.type === 'session.superseded') {
           this.sessionEvents.next(data as unknown as SessionEvent);
+          return;
+        }
+        if (data.type === 'likes.changed') {
+          this.likeEvents.next(data as unknown as LikesChangedEvent);
           return;
         }
         if (data.type.startsWith('party.')) {

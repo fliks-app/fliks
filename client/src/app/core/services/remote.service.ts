@@ -79,6 +79,8 @@ export type RemoteCommandInput = {
   shuffle?: boolean;
   repeat?: 'off' | 'all' | 'one';
   kind?: MediaType;
+  itemIds?: number[];
+  where?: 'next' | 'last';
 };
 
 /** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
@@ -242,7 +244,7 @@ export class RemoteService {
     const position = pinned ?? s?.positionSeconds ?? 0;
     if (!s) return position;
     const at = pinned !== null ? this.positionPinAt : this.stateAt;
-    return projectPosition({ position, at, playing: s.state === 'playing', duration: s.durationSeconds || null }, this.wallClock());
+    return projectPosition({ position, at, playing: s.state === 'playing', duration: s.durationSeconds || null, rate: s.playbackRate }, this.wallClock());
   });
   readonly targetState = computed(() => {
     const s = this.reportedState();
@@ -473,7 +475,7 @@ export class RemoteService {
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'audio', 'subtitle', 'quality', 'browse',
+      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'enqueue', 'audio', 'subtitle', 'quality', 'browse',
     ].includes(action);
   }
 
@@ -787,6 +789,7 @@ export class RemoteService {
       mediaId: s.mediaId,
       mediaFileId: s.mediaFileId,
       episodeId: s.episodeId,
+      itemId: s.itemId,
       mediaTitle: s.mediaTitle,
       episodeLabel: s.episodeLabel,
       posterUrl: s.posterUrl,
@@ -796,6 +799,7 @@ export class RemoteService {
       state: s.state,
       volume: s.volume,
       muted: s.muted,
+      playbackRate: s.playbackRate,
       supportsVolume: s.supportsVolume,
       subtitleId: s.subtitleId,
       quality: s.quality,

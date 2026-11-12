@@ -35,6 +35,8 @@ const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRe
 describe('AudioPlayerService music mode', () => {
   const getItemPlaybackInfo = vi.fn();
   const updatePlaybackState = vi.fn();
+  let observedOwner: string | null = null;
+  let ownerCanEnqueue = true;
   const stopSession = vi.fn();
   const castTrack = vi.fn();
   const castStem = vi.fn();
@@ -64,6 +66,8 @@ describe('AudioPlayerService music mode', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    observedOwner = null;
+    ownerCanEnqueue = true;
     validated = new Subject<RemoteCommand>();
     markApplied.mockClear();
     send.mockClear();
@@ -87,9 +91,9 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), isRemoting: () => remoting, selectedTargetId: () => 'tv#1', send, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), isRemoting: () => remoting, selectedTargetId: () => 'tv#1', send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
         {
           provide: StreamingApiService,
@@ -122,6 +126,7 @@ describe('AudioPlayerService music mode', () => {
     expect(audio.position()).toBe(0);
     expect(audio.queue().length).toBe(2);
     els(audio)[0].dispatchEvent(new Event('play'));
+    TestBed.tick();
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 10, sessionId: 'sid1' }));
   });
 
@@ -130,6 +135,7 @@ describe('AudioPlayerService music mode', () => {
     const item = { id: 1, mediaId: 1, kind: 'album' };
     await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1], index: 0, shuffle: false, repeat: 'off' } }, 30);
     expect(audio.playing()).toBe(false);
+    TestBed.tick();
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, state: 'paused', sessionId: 'sid1' }));
   });
 
@@ -139,6 +145,7 @@ describe('AudioPlayerService music mode', () => {
     const item = { id: 1, mediaId: 1, kind: 'album' };
     await resumers['audio']({ item, state: 'paused', queue: { itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' } }, 30);
     expect(audio.playing()).toBe(false);
+    TestBed.tick();
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, state: 'paused' }));
     expect(getItemPlaybackInfo).toHaveBeenCalledWith(2, {}, { startAt: 0 });
   });
@@ -230,6 +237,24 @@ describe('AudioPlayerService music mode', () => {
     expect(audio.repeat()).toBe('all');
     els(audio)[0].dispatchEvent(new Event('ended'));
     await vi.waitFor(() => expect(getItemPlaybackInfo).toHaveBeenCalledTimes(2));
+  });
+
+  it('asks the observed owner to enqueue instead of playing when nothing plays here', () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    observedOwner = 'pc#1';
+    audio.enqueueTracks([track(3)], 'next');
+    audio.enqueueTracks([track(4)], 'last');
+    expect(send).toHaveBeenNthCalledWith(1, 'pc#1', { action: 'enqueue', itemIds: [3], where: 'next' });
+    expect(send).toHaveBeenNthCalledWith(2, 'pc#1', { action: 'enqueue', itemIds: [4], where: 'last' });
+    expect(audio.track()).toBeNull();
+  });
+
+  it('plays here when the observed owner cannot enqueue', () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    observedOwner = 'pc#1';
+    ownerCanEnqueue = false;
+    audio.enqueueTracks([track(3)], 'next');
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('enqueues after the current track and at the end', async () => {
@@ -378,19 +403,25 @@ describe('AudioPlayerService music mode', () => {
   });
 
   describe('remote control', () => {
-    it('publishes its queue on the first beat and again only when it changes', async () => {
+    it('publishes its queue on the first beat and again when it changes', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
-      const beat = () => (audio as unknown as { beat(): void }).beat();
+      TestBed.tick();
+      const queues = () => updatePlaybackState.mock.calls.map((c) => c[1].queue);
+      expect(queues().at(-1)).toEqual({ itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' });
+      expect(updatePlaybackState.mock.calls.at(-1)![1]).toMatchObject({ hasNext: true, playbackRate: 1 });
       updatePlaybackState.mockClear();
-      beat();
-      beat();
-      const [first, second] = updatePlaybackState.mock.calls.map((c) => c[1]);
-      expect(first.queue).toEqual({ itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' });
-      expect(second.queue).toBeUndefined();
+      (audio as unknown as { beat(): void }).beat();
+      expect(queues()).toEqual([undefined]);
       audio.setRepeat('all');
-      beat();
-      expect(updatePlaybackState.mock.calls[2][1].queue.repeat).toBe('all');
+      TestBed.tick();
+      expect(queues().at(-1).repeat).toBe('all');
+      audio.setShuffle(true);
+      TestBed.tick();
+      expect(queues().at(-1).shuffle).toBe(true);
+      audio.setRate(1.5);
+      TestBed.tick();
+      expect(updatePlaybackState.mock.calls.at(-1)![1].playbackRate).toBe(1.5);
     });
 
     it('applies transport, shuffle and repeat commands and acknowledges them', async () => {
@@ -406,6 +437,49 @@ describe('AudioPlayerService music mode', () => {
       expect(markApplied).toHaveBeenCalledWith('c2');
     });
 
+    it('enqueues the tracks of an enqueue command and acknowledges it', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      validated.next(cmd('enqueue', { itemIds: [3, 4], where: 'next' }));
+      await vi.waitFor(() => expect(markApplied).toHaveBeenCalledWith('c1'));
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 3, 4, 2]);
+      expect(audio.queueIndex()).toBe(0);
+    });
+
+    it('beats with the ack when a repeat or shuffle command changes nothing', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      TestBed.tick();
+      updatePlaybackState.mockClear();
+      validated.next(cmd('repeat', { repeat: 'off' }));
+      await vi.waitFor(() => expect(markApplied).toHaveBeenCalledWith('c1'));
+      expect(updatePlaybackState).toHaveBeenCalledTimes(1);
+      validated.next(cmd('shuffle', { shuffle: false, cmdId: 'c2' }));
+      await vi.waitFor(() => expect(markApplied).toHaveBeenCalledWith('c2'));
+      expect(updatePlaybackState).toHaveBeenCalledTimes(2);
+    });
+
+    it('never beats the new queue index against the track that is still loaded', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      TestBed.tick();
+      updatePlaybackState.mockClear();
+      audio.next();
+      TestBed.tick();
+      const stale = updatePlaybackState.mock.calls.filter((c) => c[1].itemId === 1 && c[1].queue?.index === 1);
+      expect(stale).toEqual([]);
+    });
+
+    it('reports the rate it plays at, 1 while casting', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1)]);
+      audio.setRate(1.5);
+      (audio as unknown as { casting: boolean }).casting = true;
+      updatePlaybackState.mockClear();
+      (audio as unknown as { beat(): void }).beat();
+      expect(updatePlaybackState.mock.calls.at(-1)![1].playbackRate).toBe(1);
+    });
+
     it('beats once on a pause, from the element event that carries the new state', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1)]);
@@ -415,6 +489,7 @@ describe('AudioPlayerService music mode', () => {
       await vi.waitFor(() => expect(markApplied).toHaveBeenCalledWith('c1'));
       expect(updatePlaybackState).not.toHaveBeenCalled();
       els(audio)[0].dispatchEvent(new Event('pause'));
+      TestBed.tick();
       expect(updatePlaybackState).toHaveBeenCalledTimes(1);
       expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ state: 'paused' }));
     });

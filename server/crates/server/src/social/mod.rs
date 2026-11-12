@@ -1,7 +1,7 @@
 //! `/api/likes/*` and `/api/social/*` (`docs/spec/social.md`): likes, follow graph, discovery, profiles,
 //! stats, recommendations and the leave-social teardown.
 mod graph;
-mod likes;
+pub(crate) mod likes;
 mod profile;
 mod recommend;
 mod stats;

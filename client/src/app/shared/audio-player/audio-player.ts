@@ -52,6 +52,7 @@ import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS } from '../../core/services/audio-player/replay-gain';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
+import { FullPlayerState } from '../../core/services/audio-player/full-player-state';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { LyricsApiService } from '../../core/services/api/lyrics-api.service';
@@ -138,6 +139,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 export class AudioPlayerComponent {
   protected readonly local = inject(AudioPlayerService);
   private readonly remoteOut = inject(RemoteAudioOutput);
+  private readonly fullPlayer = inject(FullPlayerState);
   protected readonly sync = inject(SessionSyncService);
   protected readonly surface = inject(PlaybackSurface);
   /** The full player drives another device's session. */
@@ -234,11 +236,27 @@ export class AudioPlayerComponent {
         untracked(() => {
           this.lyricsEdit.set(false);
           void this.loadTrackState(t.mediaId, t.itemId);
-          // Lyrics follow the local clock and its karaoke stems: another device's session has none.
-          if (this.remoteView()) this.hasLyrics.set(false);
-          else void this.loadLyricsState(t.itemId);
+          void this.loadLyricsState(t.itemId);
         });
       }
+    });
+    // This device took the session over: the open dialog moves to the local output once its track is up, else it closes.
+    effect(() => {
+      const s = this.sync.session();
+      if (!this.remoteView() || !s || this.sync.role() !== 'owner') return;
+      const track = this.local.track();
+      untracked(() => {
+        if (track?.itemId === s.item.id) this.fullPlayer.remote.set(false);
+        else if (!track && !this.local.loading() && !this.sync.claimPending()) this.fullPlayer.hide();
+      });
+    });
+    effect(() => {
+      const c = this.likes.changed();
+      if (!c) return;
+      untracked(() => {
+        this.albums.delete(c.mediaId);
+        if (c.itemId !== undefined && c.itemId === this.audio.track()?.itemId) this.fav.set(c.liked);
+      });
     });
     effect(() => {
       const el = this.dialog()?.nativeElement;
@@ -403,7 +421,6 @@ export class AudioPlayerComponent {
   }
 
   protected async listenHere(): Promise<void> {
-    this.remoteOut.collapse();
     await this.sync.playHere();
   }
 

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MediaService } from '../api/media.service';
+import { MusicApiService } from '../api/music-api.service';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
@@ -112,6 +113,7 @@ function setup() {
       { provide: StreamingApiService, useValue: streaming },
       { provide: ToastService, useValue: { error: vi.fn() } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
+      { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });

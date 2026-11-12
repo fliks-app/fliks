@@ -99,6 +99,15 @@ fn num(b: &Value, k: &str) -> Option<f64> {
     b.get(k).and_then(Value::as_f64)
 }
 
+/// The player's speed range (`SPEEDS` of the client): a stray value never reaches an observer's clock.
+const RATE_RANGE: (f64, f64) = (0.5, 3.0);
+
+fn playback_rate(b: &Value) -> Option<f64> {
+    num(b, "playbackRate")
+        .filter(|r| *r > 0.0)
+        .map(|r| r.clamp(RATE_RANGE.0, RATE_RANGE.1))
+}
+
 fn int(b: &Value, k: &str) -> Option<i64> {
     b.get(k).and_then(Value::as_i64)
 }
@@ -157,6 +166,7 @@ fn presence_beat(
         owner,
         volume: nullable(b, "volume", Value::as_f64),
         muted: nullable(b, "muted", Value::as_bool),
+        playback_rate: playback_rate(b),
     }
 }
 
@@ -272,6 +282,7 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         state: s.state.clone(),
         volume: s.volume.map(Num),
         muted: s.muted,
+        playback_rate: Some(Num(s.playback_rate)),
         supports_volume: s.supports_volume,
         subtitle_id: s.subtitle_id.clone(),
         quality: s.quality.clone(),
@@ -729,6 +740,7 @@ mod tests {
             subtitle_track_index: None,
             volume: None,
             muted: None,
+            playback_rate: 1.0,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,
@@ -736,6 +748,16 @@ mod tests {
             transcode_reasons: vec![],
             client_tonemap: false,
         }
+    }
+
+    #[test]
+    fn the_playback_rate_is_clamped_to_the_speed_range() {
+        let rate = |v: Value| playback_rate(&json!({ "playbackRate": v }));
+        assert_eq!(rate(json!(1.5)), Some(1.5));
+        assert_eq!(rate(json!(100)), Some(3.0));
+        assert_eq!(rate(json!(0.01)), Some(0.5));
+        assert_eq!(rate(json!(0)), None);
+        assert_eq!(rate(json!(-1)), None);
     }
 
     #[test]

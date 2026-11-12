@@ -259,7 +259,7 @@
 
         <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="lyricsShown()" [class.flex-1]="lyricsShown()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
           @if (audio.musicMode() && lyricsShown()) {
-            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" (found)="hasLyrics.set($event)" />
+            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" (found)="hasLyrics.set($event)" />
           } @else if (audio.musicMode()) {
             @if (!asSheet()) {
               <section animate.enter="fade-up-in" class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">

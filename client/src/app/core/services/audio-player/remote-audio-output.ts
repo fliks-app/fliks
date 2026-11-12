@@ -1,9 +1,11 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
+import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
 import type { AudioRequest } from './audio-player.service';
+import { FullPlayerState } from './full-player-state';
 import type { AudioOutput } from './audio-output';
 import type { MusicTrackRequest, Repeat } from './music-queue';
 
@@ -16,6 +18,8 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly remote = inject(RemoteService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly music = inject(MusicApiService);
+  private readonly metadata = inject(NowPlayingMetadataService);
+  private readonly fullPlayer = inject(FullPlayerState);
 
   private readonly session = this.sync.session;
   private readonly wire = computed(() => this.session()?.queue ?? null);
@@ -26,15 +30,15 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly live = computed(() => this.sync.liveReport() !== null);
   /** Commands reach a playing owner whether or not its report has arrived; a parked session has no owner to send to. */
   readonly controllable = computed(() => !this.sync.parked());
-  private readonly _expanded = signal(false);
 
   /** Whether the observed device applies `action`; a control for one it refuses stays disabled. */
   supports(action: RemoteAction): boolean {
     return this.remote.observedCan(action);
   }
 
-  readonly expanded = this._expanded.asReadonly();
+  readonly expanded = computed(() => this.fullPlayer.open() && this.fullPlayer.remote());
   readonly musicMode = signal(true).asReadonly();
+  readonly rate = computed(() => (this.live() ? (this.remote.targetState()?.playbackRate ?? 1) : 1));
   readonly queue = computed(() => this.rows().map((r) => r.row));
   readonly queueIndex = computed(() => {
     const index = this.wire()?.index;
@@ -56,15 +60,17 @@ export class RemoteAudioOutput implements AudioOutput {
     const s = this.session();
     if (!s) return null;
     const row = this.rows().find((r) => r.row.itemId === s.item.id)?.row;
+    // An album session's `subtitle` is the track title, `title` the album.
+    const album = s.item.kind === 'album';
     return {
       mediaId: s.item.mediaId,
       itemId: s.item.id,
-      title: row?.title ?? s.item.title ?? '',
-      artist: row?.artists ?? s.item.subtitle ?? undefined,
+      title: row?.title ?? (album ? s.item.subtitle : s.item.title) ?? '',
+      artist: row?.artists ?? (album ? undefined : (s.item.subtitle ?? undefined)),
       album: row?.albumTitle,
       coverUrl: row?.coverUrl ?? s.item.posterUrl,
     };
-  });
+  }, { equal: sameTrack });
 
   constructor() {
     effect((onCleanup) => {
@@ -72,22 +78,26 @@ export class RemoteAudioOutput implements AudioOutput {
       let stale = false;
       onCleanup(() => (stale = true));
       void this.music.trackRequests(ids).then(
-        (r) => !stale && this.rows.set(alignTrackRows(ids, r)),
+        (r) => {
+          if (stale) return;
+          this.metadata.primeTracks(r);
+          this.rows.set(alignTrackRows(ids, r));
+        },
         () => !stale && this.rows.set([]),
       );
     });
-    // The view ends with the observation: the session is gone or this device took it over.
+    // The view ends with the observation; a takeover by this device is handed over by the player component.
     effect(() => {
-      if (this._expanded() && (!this.session() || this.sync.role() === 'owner')) this._expanded.set(false);
+      if (this.expanded() && !this.session()) this.fullPlayer.hide();
     });
   }
 
   expand(): void {
-    this._expanded.set(true);
+    this.fullPlayer.show(true);
   }
 
   collapse(): void {
-    this._expanded.set(false);
+    this.fullPlayer.hide();
   }
 
   /** Stopping the other device is not offered here: closing leaves the view. */
@@ -129,4 +139,10 @@ export class RemoteAudioOutput implements AudioOutput {
     const id = this.remote.observedTargetId();
     if (id) void this.remote.send(id, input);
   }
+}
+
+/** Every session report rebuilds the track; only a real change may re-run what follows it. */
+function sameTrack(a: AudioRequest | null, b: AudioRequest | null): boolean {
+  return a === b || (!!a && !!b && a.itemId === b.itemId && a.mediaId === b.mediaId && a.title === b.title
+    && a.artist === b.artist && a.album === b.album && a.coverUrl === b.coverUrl);
 }

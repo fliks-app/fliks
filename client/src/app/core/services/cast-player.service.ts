@@ -143,6 +143,7 @@ interface CastResumeState {
   mediaFileId: number;
   mediaId: number;
   episodeId: number | undefined;
+  itemId?: number;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
   playbackId?: string | null;
@@ -259,6 +260,7 @@ export class CastPlayerService {
         subtitle: t.artists,
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
         mediaId: t.mediaId,
+        itemId: t.itemId,
         mediaFileId: fileId,
         userId: this.authService.user()?.id,
         currentTime: position,
@@ -291,6 +293,7 @@ export class CastPlayerService {
         subtitle: t.artists,
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
         mediaId: t.mediaId,
+        itemId: t.itemId,
         mediaFileId: pi.mediaFileId,
         sid: pi.sessionId,
         userId: this.authService.user()?.id,
@@ -416,6 +419,8 @@ export class CastPlayerService {
   readonly mediaFileId = signal(0);
   readonly mediaId = signal(0);
   readonly episodeId = signal<number | undefined>(undefined);
+  /** Set only while a music track plays. */
+  readonly itemId = signal<number | undefined>(undefined);
   readonly playbackMode = signal<PlaybackMode>('transcode');
   /** Markers, chapters and EDL of the file on the receiver, from its playback-info. */
   readonly timeline = signal<PlaybackTimeline>(NO_TIMELINE);
@@ -467,6 +472,7 @@ export class CastPlayerService {
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
+    this.itemId.set(undefined);
     this.playbackMode.set(opts.playbackMode);
     this.selectionFileId = opts.mediaFileId;
     this.activeQualityId.set(opts.activeQualityId);
@@ -508,6 +514,7 @@ export class CastPlayerService {
       mediaFileId: this.mediaFileId(),
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
+      itemId: this.itemId(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
       playbackId: this.playbackId,
@@ -528,6 +535,7 @@ export class CastPlayerService {
       mediaFileId: d['mediaFileId'] as number,
       mediaId: d['mediaId'] as number,
       episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
+      itemId: typeof d['itemId'] === 'number' ? d['itemId'] : undefined,
       playbackMode: 'transcode',
       liveSessionId: typeof d['sid'] === 'string' && !this.controlOnly() ? d['sid'] : null,
       playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
@@ -573,6 +581,7 @@ export class CastPlayerService {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
+    this.itemId.set(s.itemId);
     this.playbackMode.set(s.playbackMode);
     this.setLiveSession(s.liveSessionId);
     this.playbackId = s.playbackId ?? null;
@@ -613,6 +622,7 @@ export class CastPlayerService {
     this.mediaFileId.set(0);
     this.mediaId.set(0);
     this.episodeId.set(undefined);
+    this.itemId.set(undefined);
     this.timeline.set(NO_TIMELINE);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);

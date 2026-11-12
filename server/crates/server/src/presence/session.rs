@@ -47,6 +47,7 @@ pub struct LiveSession {
     pub subtitle_track_index: Option<i32>,
     pub volume: Option<f64>,
     pub muted: Option<bool>,
+    pub playback_rate: f64,
     pub audio_plan: Option<AudioPlan>,
     pub source_fps: Option<f64>,
     pub bitrate_by_quality: Option<BTreeMap<String, BitrateHint>>,
@@ -129,6 +130,7 @@ pub struct Beat {
     pub owner: Option<Identity>,
     pub volume: Option<Option<f64>>,
     pub muted: Option<Option<bool>>,
+    pub playback_rate: Option<f64>,
 }
 
 impl LiveSession {
@@ -177,6 +179,7 @@ impl LiveSession {
             audio_track_index: None,
             subtitle_track_index: None,
             volume: None,
+            playback_rate: 1.0,
             muted: None,
             audio_plan: Some(r.audio_plan.clone()),
             source_fps: r.source.frame_rate.as_deref().and_then(parse_source_fps),
@@ -238,6 +241,9 @@ impl LiveSession {
             volume,
             muted
         );
+        if let Some(r) = b.playback_rate {
+            self.playback_rate = r;
+        }
         if b.item_id.is_some() {
             self.item_id = b.item_id;
         }
