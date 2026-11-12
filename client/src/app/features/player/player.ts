@@ -265,7 +265,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
 export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly sessionSync = inject(SessionSyncService);
+  protected readonly sessionSync = inject(SessionSyncService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoe = new PlayerQoe(inject(QoeReporter));
   private readonly offlineStorage = inject(OfflineStorageService);
@@ -1799,12 +1799,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   protected onNext(): void {
     if (!this.session.command({ type: 'next' })) void this.queueCtl.advance();
-  }
-
-  /** Stopping on a cast ends the session's media, so there is nothing left to show here. */
-  protected onStopOutput(o: PlaybackOutput): void {
-    o.stopPlayback();
-    if (!o.hasMedia()) this.onBack();
   }
 
   onTogglePlay() {

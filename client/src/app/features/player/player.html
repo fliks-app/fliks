@@ -95,7 +95,7 @@
           [class.opacity-0]="backdropLoaded() !== backdrop" [class.opacity-40]="backdropLoaded() === backdrop" />
       }
     </div>
-    <!-- The middle row leaves the center controls' height free: the status sits above them, the stop button below. -->
+    <!-- The middle row leaves the center controls' height free: the status sits above them, the play-here button below. -->
     <div class="absolute inset-0 z-[45] grid grid-rows-[1fr_auto_1fr] justify-items-center px-6 text-center text-white/80 pointer-events-none">
       <div class="self-end flex flex-col items-center gap-3 pb-2 landscape:gap-2 landscape:pb-0">
         <svg lucideCast class="h-12 w-12 landscape:h-10 landscape:w-10"></svg>
@@ -115,8 +115,8 @@
       </div>
       <div class="h-24 landscape:h-20"></div>
       <div class="self-start pt-2">
-        @if (!o.targetOffline() && !o.isIdle()) {
-          <button type="button" class="btn btn-ghost btn-sm text-white pointer-events-auto" (click)="onStopOutput(o)">{{ 'remote.stop_playback' | translate }}</button>
+        @if (!o.targetOffline() && !o.isIdle() && sessionSync.canPlayHere()) {
+          <button type="button" class="btn btn-ghost btn-sm text-white pointer-events-auto" (click)="sessionSync.playHere()">{{ 'session.play_here' | translate }}</button>
         }
       </div>
     </div>

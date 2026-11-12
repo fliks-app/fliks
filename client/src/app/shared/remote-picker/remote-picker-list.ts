@@ -1,7 +1,7 @@
 import { Component, Signal, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
-import { LucideArrowRightLeft, LucidePlus } from '@lucide/angular';
+import { LucidePlus } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
@@ -41,7 +41,7 @@ export interface PickerRow {
   standalone: true,
   imports: [
     TranslatePipe,
-    LucideArrowRightLeft, LucidePlus, DeviceIconComponent,
+    LucidePlus, DeviceIconComponent,
     RouterLink,
   ],
   styles: [':host { display: block; }'],
