@@ -24,23 +24,7 @@ import UIKit
     /// The on-screen player, if any. Every action but `load` needs one.
     weak var activeCoordinator: PlayerCoordinator?
 
-    /// Set when another device took the account session over: `RootView` shows the alert.
-    var supersededPrompt: SupersededPrompt?
     private var supersededGate = SupersededGate()
-    /// Sids a `session.superseded` event called silent, for a beat flag that outruns it.
-    private var silentSids = Set<String>()
-    /// A hand-over armed by this device ("resume here"): the first new sid to beat carries `handoff`.
-    private var handoff: (sid: String?, until: Date, skip: String?)?
-
-    struct SupersededPrompt: Identifiable {
-        let id = UUID()
-        let sessionId: String
-        let device: String?
-        let mediaFileId: Int
-        let mediaId: Int
-        let episodeId: Int?
-        let position: Double
-    }
 
     private init() {}
 
@@ -90,8 +74,8 @@ import UIKit
             for entry in entries {
                 switch entry {
                 case .command(let cmd): await apply(cmd)
-                case .superseded(let sid, let device, let silent):
-                    await sessionSuperseded(sessionId: sid, byDeviceName: device, silent: silent)
+                case .superseded(let sid, _, _):
+                    await sessionSuperseded(sessionId: sid)
                 case .other: break
                 }
             }
@@ -105,37 +89,12 @@ import UIKit
         }
     }
 
-    /// Another device claimed the account session: remember where we were, leave the player, then
-    /// `RootView` offers to take it back. The server skips the superseded session's saves.
+    /// Another device claimed the account session: the player closes, silently. The server skips the superseded session's saves.
     @MainActor
-    func sessionSuperseded(sessionId: String, byDeviceName: String?, silent: Bool = false) {
-        if silent {
-            silentSids.insert(sessionId)
-            if supersededPrompt?.sessionId == sessionId { supersededPrompt = nil }
-        }
+    func sessionSuperseded(sessionId: String) {
         guard let coordinator = activeCoordinator,
               supersededGate.accept(sessionId, current: coordinator.playback.sessionId) else { return }
-        if !silentSids.contains(sessionId) {
-            supersededPrompt = SupersededPrompt(
-                sessionId: sessionId, device: byDeviceName, mediaFileId: coordinator.playback.mediaFileId,
-                mediaId: coordinator.currentItemIds.mediaId, episodeId: coordinator.currentItemIds.episodeId,
-                position: coordinator.currentPosition)
-        }
         coordinator.onStopRequested?()
-    }
-
-    /// What a beat of `sid` sends as `handoff`: true for the session an armed hand-over bound to.
-    func handoff(for sid: String) -> Bool? {
-        guard var h = handoff, h.until > Date() else { return nil }
-        if h.sid == nil, h.skip != sid { h.sid = sid; handoff = h }
-        return h.sid == sid ? true : nil
-    }
-
-    /// "Resume here": loads the item again at the saved position, which claims the session back.
-    @MainActor
-    func resume(_ p: SupersededPrompt) {
-        handoff = (nil, Date().addingTimeInterval(60), activeCoordinator?.playback.sessionId)
-        onLoadRequested?(p.mediaFileId, p.mediaId, p.episodeId, p.position, false, LaunchTracks(audioId: nil, subtitleId: nil, subtitleSent: false))
     }
 
     private static let audioKinds: Set<String> = ["album", "book"]

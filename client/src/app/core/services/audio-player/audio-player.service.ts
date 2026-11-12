@@ -25,7 +25,7 @@ import {
   type NativeAudioTrack,
   type NativeAudioTrackRequest,
 } from '../../plugins/audio-player.plugin';
-import { SessionSyncService, type AccountSession, type SupersededPlayback } from '../session-sync.service';
+import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
@@ -289,20 +289,11 @@ export class AudioPlayerService {
     });
   }
 
-  /** Another device took the account session: the player closes with its position saved and offers to start again. */
-  private async yieldToTakeover(): Promise<SupersededPlayback | null> {
-    const req = this._track();
-    if (!req) return null;
-    const positionSeconds = this._position();
-    const queue = this._musicMode() ? this.wireQueue() : null;
+  /** Another device took the account session: the player closes with its position saved. */
+  private async yieldToTakeover(): Promise<void> {
+    if (!this._track()) return;
     this.fullPlayer.handTo('audio', true);
     await this.close();
-    if (!queue) return { title: req.title, positionSeconds, resume: async () => void (await this.play(req, { startAt: positionSeconds })) };
-    return {
-      title: req.title,
-      positionSeconds,
-      resume: async () => void (await this.startQueue(queue, queue.shuffle, queue.repeat, positionSeconds, true)),
-    };
   }
 
   /** The account left: its queue goes without a progress beat, which would reach the next account. */
@@ -1163,7 +1154,7 @@ export class AudioPlayerService {
     void this.nativeAudio?.stop().catch(() => undefined);
     this.leaveMusic();
     this._track.set(null);
-    if (!this.fullPlayer.remote()) this.fullPlayer.hide();
+    if (this.fullPlayer.open() === 'audio' && !this.fullPlayer.remote()) this.fullPlayer.hide();
     this._loading.set(false);
     this.markStarting(false);
     this._position.set(0);

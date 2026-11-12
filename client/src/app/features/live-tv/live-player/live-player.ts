@@ -95,7 +95,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly unregisterSession = this.sessionSync.registerPlayer({
     sessionId: () => undefined,
     active: () => true,
-    yield: async () => null,
+    yield: async () => {},
   });
   /** Same owner as the VOD player: auto-hide, pins, cursor. */
   readonly chrome = inject(ControlsVisibilityService);

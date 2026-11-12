@@ -375,23 +375,6 @@ function createHarness(opts: {
   };
 }
 
-describe('PlayerComponent session takeover', () => {
-  afterEach(() => TestBed.resetTestingModule());
-
-  it('resumes only once the navigation to the player has settled', async () => {
-    const h = createHarness();
-    const stopped = await h.registered.find((p) => !p.itemId).yield();
-    let done!: (ok: boolean) => void;
-    h.router.navigate.mockReturnValueOnce(new Promise<boolean>((r) => (done = r)));
-    const settled = vi.fn();
-    void stopped.resume().then(settled);
-    await Promise.resolve();
-    expect(settled).not.toHaveBeenCalled();
-    done(true);
-    await vi.waitFor(() => expect(settled).toHaveBeenCalled());
-  });
-});
-
 describe('PlayerComponent pre-roll', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

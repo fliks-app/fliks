@@ -3146,25 +3146,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     active: () => !this.session.viewing(),
     report: () => void this.savePosition(),
     yield: async (keepOpen) => {
-      const { mediaId, mediaFileId: fileId, episodeId } = this;
-      if (!mediaId || !fileId) return null;
+      const { mediaId, mediaFileId: fileId } = this;
+      if (!mediaId || !fileId) return;
       // The view needs the new owner to observe: read the session before the route commits to it.
       if (keepOpen && this.engine && this.session.isLocal() && !this.firstLoadPending && !this.preRollActive() && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
         await this.savePosition();
-        if (await this.session.yieldToView()) return null;
+        if (await this.session.yieldToView()) return;
       }
-      const at = Math.floor(this.engine?.currentTime || this.state.currentTime() || 0);
-      const title = [this.mediaTitle(), this.episodeTitle()].filter(Boolean).join(' · ') || null;
       this.onBack();
-      return {
-        title,
-        positionSeconds: at,
-        resume: async () => {
-          await this.router.navigate(['/watch', fileId], {
-            queryParams: { mediaId, ...(episodeId ? { episodeId } : {}), t: at },
-          });
-        },
-      };
     },
   });
 

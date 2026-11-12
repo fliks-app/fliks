@@ -331,6 +331,15 @@ describe('AudioPlayerService music mode', () => {
     expect(full.open()).toBeNull();
   });
 
+  it('leaves an open video player alone when it closes', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const full = TestBed.inject(FullPlayerState);
+    await audio.playTracks([track(1)]);
+    full.show('video', false);
+    await audio.close();
+    expect(full.open()).toBe('video');
+  });
+
   it('enqueues after the current track and at the end', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);

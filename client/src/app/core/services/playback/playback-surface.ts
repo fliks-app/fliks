@@ -115,8 +115,9 @@ export class PlaybackSurface {
   /** Opens the full player of the session's family on its owner's playback, without selecting the device. */
   open(s: AccountSession): void {
     if (this.isAudio(s)) this.audioView.expand();
-    else if (this.canOpen(s) && s.item.mediaFileId) {
-      this.session.viewObserved({ fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined });
+    else if (this.canOpen(s)) {
+      const item = this.sync.videoItem(s);
+      if (item) this.session.viewObserved(item);
     }
   }
 
