@@ -62,8 +62,7 @@ export class BottomSheetComponent {
   /** Y of the previous touchmove and the last move's direction; release dismisses only if still heading down. */
   private prevY = 0;
   private movingDown = true;
-  private prevBodyOverflow: string | null = null;
-  private prevHtmlOverflow: string | null = null;
+  private scrollLocked = false;
   private registered = false;
   private focusTrapActive = false;
   /** Element focused when the sheet opened — restored on close. */
@@ -96,14 +95,9 @@ export class BottomSheetComponent {
           this.visible.set(true);
           this.dismissing.set(false);
           this.dragOffset.set(0);
-          // Lock page scroll, saving the prior inline overflow; TV scrolls on html (body is scaled), elsewhere locking html shifts the pinned drawer.
-          if (typeof document !== 'undefined') {
-            this.prevBodyOverflow = document.body.style.overflow;
-            document.body.style.overflow = 'hidden';
-            if (this.tv.isTv()) {
-              this.prevHtmlOverflow = document.documentElement.style.overflow;
-              document.documentElement.style.overflow = 'hidden';
-            }
+          if (!this.scrollLocked && typeof document !== 'undefined') {
+            lockPageScroll(this.tv.isTv());
+            this.scrollLocked = true;
           }
           // Register on the dismiss stack so the hardware/gesture back closes
           // this sheet before falling through to the route-level back handler.
@@ -225,13 +219,9 @@ export class BottomSheetComponent {
   /** Undo the open-time side effects: restore page scroll, leave the dismiss
    *  stack, and (TV) drop the focus trap and restore the trigger's focus. */
   private releaseOpenState() {
-    if (this.prevBodyOverflow !== null) {
-      if (typeof document !== 'undefined') {
-        document.body.style.overflow = this.prevBodyOverflow;
-        document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
-      }
-      this.prevBodyOverflow = null;
-      this.prevHtmlOverflow = null;
+    if (this.scrollLocked) {
+      unlockPageScroll();
+      this.scrollLocked = false;
     }
     if (this.registered) {
       this.dismissStack.remove(this.dismissCallback);
@@ -244,6 +234,25 @@ export class BottomSheetComponent {
       this.prevFocused = null;
     }
   }
+}
+
+/** Shared by every open sheet: nested sheets release out of order (a child torn down after its parent closed), so only the last one restores. */
+let scrollLocks = 0;
+let savedOverflow: { body: string; html: string } | null = null;
+
+/** TV scrolls on html (body is scaled); elsewhere locking html shifts the pinned drawer. */
+function lockPageScroll(tv: boolean): void {
+  if (scrollLocks++ > 0) return;
+  savedOverflow = { body: document.body.style.overflow, html: document.documentElement.style.overflow };
+  document.body.style.overflow = 'hidden';
+  if (tv) document.documentElement.style.overflow = 'hidden';
+}
+
+function unlockPageScroll(): void {
+  if (--scrollLocks > 0 || !savedOverflow) return;
+  document.body.style.overflow = savedOverflow.body;
+  document.documentElement.style.overflow = savedOverflow.html;
+  savedOverflow = null;
 }
 
 /** Whether anything from the touched element up to the sheet is scrolled away
