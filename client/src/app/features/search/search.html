@@ -272,13 +272,10 @@
                         <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
                       </app-track-line>
                       <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
-                        @if (r.album.existingMediaId == null && (canAdd() || canRequest())) {
-                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="addRecording(r)" data-testid="add-album">
-                            {{ (canAdd() ? 'search.add_album' : 'search.request_album') | translate }}
+                        @if (canAdd() || (r.album.existingMediaId == null && canRequest())) {
+                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="canAdd() ? wantRecording(r) : addRecording(r)" data-testid="add-track">
+                            {{ (canAdd() ? 'discover.add_to_library' : 'discover.request') | translate }}
                           </button>
-                        }
-                        @if (canAdd()) {
-                          <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="wantRecording(r)" data-testid="want-track">{{ 'search.want_track' | translate }}</button>
                         }
                       </span>
                     </li>
