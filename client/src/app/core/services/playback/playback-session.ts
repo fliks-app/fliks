@@ -432,9 +432,15 @@ export class PlaybackSession {
     if (!local || !from || from === local) return false;
     const snap = from.snapshot() ?? this.awaySnapshot;
     if (!snap) return false;
-    this.leave(from);
+    // The account session's owner is superseded instead of stopped: it stays open as the view of this device.
+    const sync = this.sync();
+    const owner = sync.observableOwner();
+    const takeover = from === this.injector.get(RemotePlaybackTarget) && !!owner && owner === this.remoteSvc().observedTargetId();
+    if (takeover) from.disconnect();
+    else this.leave(from);
     this.fullPlayer.handTo('video', false);
-    await local.resume(snap);
+    if (takeover) await sync.handOver(() => local.resume(snap));
+    else await local.resume(snap);
     return true;
   }
 

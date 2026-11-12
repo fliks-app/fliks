@@ -279,7 +279,7 @@ export class SessionSyncService {
   }
 
   /** The next session this device starts takes the account session over on purpose: its beats say so, and the old owner stops silently. */
-  private async handOver(start: () => Promise<void> | void): Promise<void> {
+  async handOver(start: () => Promise<void> | void): Promise<void> {
     const skip = new Set([...this.players].map((p) => p.sessionId()));
     this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
     this.claiming.set(true);

@@ -102,6 +102,8 @@ function setup() {
   const syncSvc = {
     session: signal<any>(null),
     observedOwnerTargetId: signal<string | null>('tv-1'),
+    observableOwner: signal<string | null>(null),
+    handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
     isReading: (s: any) => s.item.family === 'text',
     isAudio: (s: any) => s.item.family === 'audio',
     videoItem: SessionSyncService.prototype.videoItem,
@@ -330,6 +332,20 @@ describe('PlaybackSession', () => {
       expect(remote.stopPlayback).toHaveBeenCalled();
       expect(remote.disconnect).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
+    });
+
+    it('takes the account session over from its owner instead of stopping it', async () => {
+      const { session, remote, local, syncSvc } = setup();
+      syncSvc.observableOwner.set('tv-1');
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      session.attachLocal(local);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      expect(await session.moveTo('local')).toBe(true);
+      expect(remote.stopPlayback).not.toHaveBeenCalled();
+      expect(remote.disconnect).toHaveBeenCalled();
+      expect(syncSvc.handOver).toHaveBeenCalled();
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42 }));
     });
 
     it('opens the player first when taking back with none mounted, then resumes once it attaches', async () => {
