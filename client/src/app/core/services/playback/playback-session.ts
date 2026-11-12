@@ -151,8 +151,8 @@ export class PlaybackSession {
       if (this.fullPlayer.open() !== 'audio' || !this.fullPlayer.remote()) return;
       const sync = this.sync();
       const s = sync.session();
-      if (!s?.item.mediaFileId || sync.isAudio(s) || sync.isReading(s) || !sync.observedOwnerTargetId()) return;
-      const item = { fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined };
+      const item = s && sync.videoItem(s);
+      if (!s || !item || sync.isAudio(s) || sync.isReading(s) || !sync.observedOwnerTargetId()) return;
       untracked(() => this.viewObserved(item));
     });
   }
@@ -341,7 +341,9 @@ export class PlaybackSession {
     const kind = this.kind();
     if (kind === 'local') return null;
     const { mediaId, episodeId } = this.output()!.item();
-    const fileId = kind === 'cast' ? this.castPlayer().mediaFileId() : (this.remoteSvc().targetState()?.mediaFileId ?? 0);
+    const held = this.sync().session();
+    const observed = held?.item.mediaId === mediaId ? (held.item.mediaFileId ?? 0) : 0;
+    const fileId = kind === 'cast' ? this.castPlayer().mediaFileId() : (this.remoteSvc().targetState()?.mediaFileId || observed);
     return fileId && mediaId ? { fileId, mediaId, episodeId } : null;
   });
 

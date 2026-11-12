@@ -45,6 +45,7 @@ function setup(role: 'owner' | 'observer' = 'observer', holdsPlayer = false, ser
           ownedHere: () => role === 'owner',
           isReading: () => false,
           isAudio: SessionSyncService.prototype.isAudio,
+          videoItem: SessionSyncService.prototype.videoItem,
           observedOwnerTargetId: () => (observed ? 'tv' : null),
         },
       },

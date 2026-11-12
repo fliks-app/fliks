@@ -104,6 +104,7 @@ function setup() {
     observedOwnerTargetId: signal<string | null>('tv-1'),
     isReading: (s: any) => s.item.family === 'text',
     isAudio: (s: any) => s.item.family === 'audio',
+    videoItem: SessionSyncService.prototype.videoItem,
   };
   const device = { isTv: signal(false) };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };

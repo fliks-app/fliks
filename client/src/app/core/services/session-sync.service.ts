@@ -375,6 +375,11 @@ export class SessionSyncService {
     return s.item.family === 'text' || s.item.family === 'image';
   }
 
+  /** What the video player opens on for the session; null when its owner has not named a file. */
+  videoItem(s: AccountSession): { fileId: number; mediaId: number; episodeId?: number } | null {
+    return s.item.mediaFileId ? { fileId: s.item.mediaFileId, mediaId: s.item.mediaId, episodeId: s.item.episodeId ?? undefined } : null;
+  }
+
   /** Whether the session plays in the audio player, which has its own controller; any other family is watched in the video player. */
   isAudio(s: AccountSession): boolean {
     if (s.item.family) return s.item.family === 'audio';
