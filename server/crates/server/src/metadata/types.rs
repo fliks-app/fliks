@@ -102,4 +102,6 @@ pub struct Credits {
     pub cast: Vec<Value>,
     pub crew: Vec<Value>,
     pub albums: Vec<Value>,
+    /// A music artist's most listened recordings, at most 10.
+    pub top_recordings: Vec<Value>,
 }

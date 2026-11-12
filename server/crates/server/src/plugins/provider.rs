@@ -12,7 +12,7 @@ use crate::metadata::{
 };
 use fliks_domain::{
     comics::provider as comics,
-    external_id::Namespace,
+    external_id::{ExternalProvider, Namespace},
     media::kind::MediaKind,
     metadata::{
         language::Resolved,
@@ -665,6 +665,7 @@ impl MetadataProvider for PluginProvider {
                             .filter(|r| music::album(r).is_ok())
                             .cloned()
                             .collect(),
+                        top_recordings: top_recordings(&v["topRecordings"]),
                         ..Credits::default()
                     }),
                 );
@@ -1012,5 +1013,41 @@ impl Plugins {
                 ours = me.rt(&id);
             }
         });
+    }
+}
+
+/// The entries of `topRecordings` with a MusicBrainz `recordingId` (normalized) and a title, at most 10.
+fn top_recordings(v: &Value) -> Vec<Value> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["title"].as_str().is_some_and(|t| !t.trim().is_empty()))
+        .filter_map(|r| {
+            let id = ExternalProvider::MusicBrainz.normalize(r["recordingId"].as_str()?.trim())?;
+            let mut r = r.clone();
+            r["recordingId"] = id.into();
+            Some(r)
+        })
+        .take(10)
+        .collect()
+}
+
+#[cfg(test)]
+mod top_recordings_tests {
+    use super::top_recordings;
+    use serde_json::json;
+
+    #[test]
+    fn keeps_entries_with_a_recording_id_and_a_title_up_to_ten() {
+        let id = |n: u32| format!("11111111-1111-4111-8111-{n:012}");
+        let mut v: Vec<_> = (0..12)
+            .map(|n| json!({"recordingId": id(n), "title": "T"}))
+            .collect();
+        v.push(json!({"recordingId": "nope", "title": "T"}));
+        v.insert(0, json!({"recordingId": id(99), "title": " "}));
+        let out = top_recordings(&json!(v));
+        assert_eq!(out.len(), 10);
+        assert_eq!(out[0]["recordingId"], id(0));
+        assert!(top_recordings(&json!(null)).is_empty());
     }
 }

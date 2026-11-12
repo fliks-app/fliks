@@ -1,6 +1,6 @@
 <div class="flex flex-col sm:flex-row gap-6 items-start">
   <div class="avatar">
-    <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full" [style.view-transition-name]="viewTransitionName()">
+    <div class="w-32 h-32 rounded-full" [class]="size() === 'hero' ? 'sm:w-56 sm:h-56' : 'sm:w-40 sm:h-40'" [style.view-transition-name]="viewTransitionName()">
       @if (avatarUrl(); as url) {
         <img [cachedSrc]="url | resolveUrl:'medium'" [alt]="name()" />
       } @else {
@@ -9,7 +9,7 @@
     </div>
   </div>
   <div class="flex min-w-0 flex-col gap-2">
-    <h1 class="text-3xl font-bold" data-testid="person-name">{{ name() }}</h1>
+    <h1 class="font-bold" [class]="size() === 'hero' ? 'text-4xl md:text-6xl' : 'text-3xl'" data-testid="person-name">{{ name() }}</h1>
     <ng-content />
     @if (biography(); as bio) {
       <p [appClampToggle]="bio" #clamp="clampToggle" class="text-sm leading-relaxed" [class.line-clamp-4]="!clamp.expanded()" data-testid="biography">{{ bio }}</p>

@@ -94,31 +94,28 @@ export function trackRowRequest(t: TrackRow): MusicTrackRequest {
   };
 }
 
-export type ReleaseGroup = 'album' | 'ep' | 'single' | 'compilation' | 'live' | 'other';
-export const RELEASE_GROUPS: readonly ReleaseGroup[] = ['album', 'ep', 'single', 'compilation', 'live', 'other'];
+export type DiscographyTab = 'albums' | 'singles' | 'compilations' | 'other';
+export const DISCOGRAPHY_TABS: readonly DiscographyTab[] = ['albums', 'singles', 'compilations', 'other'];
 
-export function releaseGroup(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTypes'>): ReleaseGroup {
-  const sec = a.secondaryTypes.map((s) => s.toLowerCase());
-  if (sec.includes('compilation')) return 'compilation';
-  if (sec.includes('live')) return 'live';
+/** Albums holds studio albums only: live, remix, soundtrack and the like go to `other`. */
+export function discographyTab(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTypes'>): DiscographyTab {
+  const secondary = a.secondaryTypes.map((s) => s.toLowerCase());
+  if (secondary.includes('compilation')) return 'compilations';
   const p = a.primaryType?.toLowerCase();
-  return p === 'album' || p === 'ep' || p === 'single' ? p : 'other';
+  if (p === 'ep' || p === 'single') return 'singles';
+  return p === 'album' && !secondary.length ? 'albums' : 'other';
 }
 
-export interface DiscographyGroups {
-  groups: { key: ReleaseGroup; albums: ArtistAlbum[] }[];
-  missing: ArtistAlbum[];
-}
-
-const byYear = (a: ArtistAlbum, b: ArtistAlbum) => (a.year ?? 9999) - (b.year ?? 9999) || a.title.localeCompare(b.title);
-
-/** Owned albums by release type, oldest first; the albums not in the library are one Missing group. */
-export function groupDiscography(albums: ArtistAlbum[]): DiscographyGroups {
-  const owned = albums.filter((a) => a.owned);
-  return {
-    groups: RELEASE_GROUPS.map((key) => ({ key, albums: owned.filter((a) => releaseGroup(a) === key).sort(byYear) })).filter(
-      (g) => g.albums.length,
-    ),
-    missing: albums.filter((a) => !a.owned).sort(byYear),
-  };
+/** The albums by tab, owned and missing together: those holding a popular track first, in its order, then newest first. */
+export function discographyTabs(albums: ArtistAlbum[], popular: { albumExternalId?: string | null }[] = []): Record<DiscographyTab, ArtistAlbum[]> {
+  const out: Record<DiscographyTab, ArtistAlbum[]> = { albums: [], singles: [], compilations: [], other: [] };
+  for (const a of albums) out[discographyTab(a)].push(a);
+  const rank = new Map<string, number>();
+  popular.forEach((p, i) => p.albumExternalId && !rank.has(p.albumExternalId) && rank.set(p.albumExternalId, i));
+  const rankOf = (a: ArtistAlbum) => (a.externalId != null ? (rank.get(a.externalId) ?? Infinity) : Infinity);
+  // Infinity - Infinity is NaN, which falls through to the year like a tie.
+  const order = (a: ArtistAlbum, b: ArtistAlbum) =>
+    rankOf(a) - rankOf(b) || (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
+  for (const k of DISCOGRAPHY_TABS) out[k].sort(order);
+  return out;
 }

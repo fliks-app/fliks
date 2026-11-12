@@ -24,38 +24,40 @@ pub(crate) type Res = Result<Json<Value>, AppError>;
 
 pub fn router() -> Router<AppState> {
     let m = "/api/metadata";
-    super::comics::routes::routes(super::books::routes::routes(Router::new()))
-        .route(&format!("{m}/providers"), get(providers))
-        .route(&format!("{m}/search/{{kind}}"), get(search_hits))
-        .route(&format!("{m}/trending/movie"), get(trending_movie))
-        .route(&format!("{m}/popular/movie"), get(popular_movie))
-        .route(&format!("{m}/upcoming/movie"), get(upcoming_movie))
-        .route(&format!("{m}/trending/tv"), get(trending_tv))
-        .route(&format!("{m}/popular/tv"), get(popular_tv))
-        .route(&format!("{m}/upcoming/tv"), get(upcoming_tv))
-        .route(&format!("{m}/genres/movie"), get(genres_movie))
-        .route(&format!("{m}/genres/tv"), get(genres_tv))
-        .route(&format!("{m}/discover/movie"), get(discover_movie))
-        .route(&format!("{m}/discover/tv"), get(discover_tv))
-        .route(
-            &format!("{m}/{{provider}}/movie/{{externalId}}"),
-            get(details_movie),
-        )
-        .route(
-            &format!("{m}/{{provider}}/tv/{{externalId}}"),
-            get(details_tv),
-        )
-        .route(
-            &format!("{m}/{{provider}}/tv/{{externalId}}/seasons"),
-            get(seasons),
-        )
-        .route(
-            &format!("{m}/{{provider}}/tv/{{externalId}}/season-stubs"),
-            get(season_stubs),
-        )
-        .route(&format!("{m}/movie/{{tmdbId}}"), get(legacy_movie))
-        .route(&format!("{m}/tv/{{tmdbId}}"), get(legacy_tv))
-        .route(&format!("{m}/tv/{{tmdbId}}/seasons"), get(legacy_seasons))
+    super::music::routes::routes(super::comics::routes::routes(super::books::routes::routes(
+        Router::new(),
+    )))
+    .route(&format!("{m}/providers"), get(providers))
+    .route(&format!("{m}/search/{{kind}}"), get(search_hits))
+    .route(&format!("{m}/trending/movie"), get(trending_movie))
+    .route(&format!("{m}/popular/movie"), get(popular_movie))
+    .route(&format!("{m}/upcoming/movie"), get(upcoming_movie))
+    .route(&format!("{m}/trending/tv"), get(trending_tv))
+    .route(&format!("{m}/popular/tv"), get(popular_tv))
+    .route(&format!("{m}/upcoming/tv"), get(upcoming_tv))
+    .route(&format!("{m}/genres/movie"), get(genres_movie))
+    .route(&format!("{m}/genres/tv"), get(genres_tv))
+    .route(&format!("{m}/discover/movie"), get(discover_movie))
+    .route(&format!("{m}/discover/tv"), get(discover_tv))
+    .route(
+        &format!("{m}/{{provider}}/movie/{{externalId}}"),
+        get(details_movie),
+    )
+    .route(
+        &format!("{m}/{{provider}}/tv/{{externalId}}"),
+        get(details_tv),
+    )
+    .route(
+        &format!("{m}/{{provider}}/tv/{{externalId}}/seasons"),
+        get(seasons),
+    )
+    .route(
+        &format!("{m}/{{provider}}/tv/{{externalId}}/season-stubs"),
+        get(season_stubs),
+    )
+    .route(&format!("{m}/movie/{{tmdbId}}"), get(legacy_movie))
+    .route(&format!("{m}/tv/{{tmdbId}}"), get(legacy_tv))
+    .route(&format!("{m}/tv/{{tmdbId}}/seasons"), get(legacy_seasons))
 }
 
 /// A bare `@Query` string; a repeated key is an array to the pipe, joined here (only `q` rejects it).

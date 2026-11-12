@@ -1,9 +1,11 @@
 //! The target edition of a monitored album (`docs/spec/music.md` rule 9): the release that best fits the
 //! library, its tracks made wanted, a track already owned through another album left alone.
-use super::{fetch, fetch_edition, write_edition};
+use super::{Fetched, fetch, fetch_edition, write_edition};
 use crate::{http::AppError, ingest::music::identify, libraries, state::AppState};
 use fliks_domain::{
-    external_id::Namespace, metadata::limiter::Priority, music::target::pick_target,
+    external_id::Namespace,
+    metadata::{language::Resolved, limiter::Priority},
+    music::{profile::MetadataProfile, provider::Edition, target::pick_target},
 };
 use sqlx::PgPool;
 
@@ -145,6 +147,23 @@ async fn pick(st: &AppState, media: i32, a: Album, prio: Priority) -> Result<boo
     Ok(true)
 }
 
+/// The release group `group` and, when it picks one, the release a new album with `profile` would target.
+pub async fn main_release(
+    st: &AppState,
+    group: &str,
+    lang: &Resolved,
+    profile: &MetadataProfile,
+    prio: Priority,
+) -> Result<(Fetched, Option<Edition>), AppError> {
+    let fetched = fetch(st, NS, group, lang, prio).await?;
+    let cfg = identify::config(st).await;
+    let Some(release) = pick_target(&fetched.releases, profile, &cfg) else {
+        return Ok((fetched, None));
+    };
+    let edition = fetch_edition(st, NS, &release.external_id, lang, prio).await?;
+    Ok((fetched, Some(edition)))
+}
+
 /// The tracklist of the release a new album of the library would target.
 pub async fn preview(
     st: &AppState,
@@ -153,15 +172,9 @@ pub async fn preview(
     prio: Priority,
 ) -> Result<Vec<fliks_domain::music::provider::Track>, AppError> {
     let lang = crate::metadata::library_language(st, library).await?;
-    let fetched = fetch(st, NS, group, &lang, prio).await?;
     let profile = libraries::metadata_profile(&st.db, library).await?;
-    let cfg = identify::config(st).await;
-    let Some(release) = pick_target(&fetched.releases, &profile, &cfg) else {
-        return Ok(vec![]);
-    };
-    Ok(fetch_edition(st, NS, &release.external_id, &lang, prio)
-        .await?
-        .tracks)
+    let (_, edition) = main_release(st, group, &lang, &profile, prio).await?;
+    Ok(edition.map(|e| e.tracks).unwrap_or_default())
 }
 
 /// An album that was just monitored wants every track of its target edition, unless its files stand for it.

@@ -18,4 +18,5 @@ export class PersonHeaderComponent {
   readonly biography = input<string | null>(null);
   /** Pairs the avatar with the card that opened the page (`person-avatar-card`'s `posterName`). */
   readonly viewTransitionName = input<string | null>(null);
+  readonly size = input<'default' | 'hero'>('default');
 }

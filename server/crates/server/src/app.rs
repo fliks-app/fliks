@@ -385,6 +385,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::legacy_tv,
         metadata::legacy_seasons,
         metadata::books::routes::preview_book,
+        metadata::music::routes::preview_album,
         metadata::comics::routes::preview_comic,
         metadata::books::routes::sources_get,
         metadata::books::routes::sources_put,
