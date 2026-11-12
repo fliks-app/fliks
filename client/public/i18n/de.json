@@ -466,7 +466,6 @@
     "section_recommendations": "Empfehlungen",
     "section_recently_watched": "Kürzlich angesehen",
     "section_likes": "Favoriten",
-    "search_tab_people": "Benutzer",
     "no_people_results": "Kein Benutzer gefunden.",
     "edit_privacy": "Datenschutz",
     "privacy_title": "Datenschutz des Profils",
@@ -897,7 +896,6 @@
     "placeholder": "Filme, Serien, Bücher und Musik suchen...",
     "hint": "Tippen Sie, um in Ihrer Bibliothek und externen Anbietern zu suchen.",
     "hint_local": "Tippen Sie, um in Ihrer Bibliothek zu suchen.",
-    "tab_videos": "Videos",
     "filter_all": "Alle",
     "filter_movies": "Filme",
     "filter_series": "Serien",
@@ -905,7 +903,6 @@
     "section_discover": "Zur Bibliothek hinzufügen",
     "no_results": "Keine Ergebnisse gefunden.",
     "external_search": "Außerhalb der Bibliothek suchen",
-    "enable_external": "Außerhalb der Bibliothek suchen",
     "discover_trending": "Trends",
     "discover_popular": "Beliebt",
     "discover_suggestions": "Vorschläge für Sie",
@@ -931,7 +928,10 @@
     "add_album": "Album hinzufügen",
     "request_album": "Album anfragen",
     "want_track": "Diesen Titel wünschen",
-    "partial": "Einige Anbieter haben nicht rechtzeitig geantwortet."
+    "partial": "Einige Anbieter haben nicht rechtzeitig geantwortet.",
+    "scope_video": "Video",
+    "scope_people": "Mitglieder",
+    "kind_all": "Alle"
   },
   "discover": {
     "seasons_failed": "Staffeln konnten nicht geladen werden",

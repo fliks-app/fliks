@@ -3,21 +3,23 @@ import type { BooksApiService } from '../../core/services/api/books-api.service'
 import type { MediaService, SearchParams } from '../../core/services/api/media.service';
 import type { MetadataService } from '../../core/services/api/metadata.service';
 import type { MusicApiService } from '../../core/services/api/music-api.service';
-import type { SearchSource, SearchStateService } from '../../core/services/search-state.service';
+import type { SearchScope, SearchSource, SearchStateService } from '../../core/services/search-state.service';
+import type { SocialApiService } from '../../core/services/api/social-api.service';
 import { isAbort } from '../../core/utils/abortable';
 
-export type ContentChip = 'all' | MediaType;
-
-/** What each chip asks of the library and of the providers. */
-export const SOURCES: Record<'all' | 'movie' | 'series' | 'book' | 'album', { local: SearchSource[]; provider: SearchSource[] }> = {
-  all: { local: ['media', 'tracks', 'artists'], provider: ['movie', 'tv', 'book', 'album', 'artist', 'recording'] },
-  movie: { local: ['media'], provider: ['movie'] },
-  series: { local: ['media'], provider: ['tv'] },
-  book: { local: ['media', 'authors', 'series'], provider: ['book'] },
-  album: { local: ['media', 'tracks', 'artists'], provider: ['album', 'artist', 'recording'] },
+/** What each scope asks of the library and the providers, and the library kinds it lists. */
+export const SOURCES: Record<SearchScope, { local: SearchSource[]; provider: SearchSource[]; types?: MediaType[] }> = {
+  all: { local: ['media', 'tracks', 'artists', 'people'], provider: ['movie', 'tv', 'book', 'album', 'artist', 'recording'] },
+  video: { local: ['media'], provider: ['movie', 'tv'], types: ['movie', 'series'] },
+  movie: { local: ['media'], provider: ['movie'], types: ['movie'] },
+  series: { local: ['media'], provider: ['tv'], types: ['series'] },
+  book: { local: ['media', 'authors', 'series'], provider: ['book'], types: ['book'] },
+  music: { local: ['media', 'tracks', 'artists'], provider: ['album', 'artist', 'recording'], types: ['album'] },
+  'music-tracks': { local: ['tracks'], provider: ['recording'] },
+  'music-artists': { local: ['artists'], provider: ['artist'] },
+  'music-albums': { local: ['media'], provider: ['album'], types: ['album'] },
+  people: { local: ['people'], provider: [] },
 };
-
-export const sourcesOf = (chip: ContentChip) => SOURCES[chip === 'comic' ? 'all' : chip];
 
 /** The provider calls start from this many characters; the library from one. */
 export const PROVIDER_MIN_CHARS = 2;
@@ -28,6 +30,7 @@ export interface RunDeps {
   metadata: MetadataService;
   music: MusicApiService;
   books: BooksApiService;
+  social: SocialApiService;
 }
 
 /** Runs the sources of one query together: each lands in the state on its own, and a new run cancels the one before. */
@@ -44,16 +47,17 @@ export class SearchRunner {
     this.d.state.pending.set(new Set());
   }
 
-  run(q: string, chip: ContentChip, opts: { external: boolean; mediaParams: SearchParams }): void {
+  run(q: string, scope: SearchScope, opts: { external: boolean; people: boolean; mediaParams: SearchParams }): void {
     this.ctl?.abort();
     this.mediaCtl?.abort();
     const { signal } = (this.ctl = new AbortController());
     const mediaSignal = (this.mediaCtl = new AbortController()).signal;
-    const { state: s, media, metadata, music, books } = this.d;
-    const want = sourcesOf(chip);
+    const { state: s, media, metadata, music, books, social } = this.d;
+    const want = SOURCES[scope];
+    const local = opts.people ? want.local : want.local.filter((k) => k !== 'people');
     const provider = opts.external && q.length >= PROVIDER_MIN_CHARS ? want.provider : [];
     s.failed.set(new Set());
-    this.dropOthers([...want.local, ...provider]);
+    this.dropOthers([...local, ...provider]);
 
     const jobs: [SearchSource, (() => Promise<void>)][] = [
       ['media', async () => s.localResults.set((await media.getAll({ ...opts.mediaParams, q, limit: 20 }, { force: true }, mediaSignal)).data)],
@@ -61,6 +65,7 @@ export class SearchRunner {
       ['artists', async () => s.localArtists.set(await music.people('artist', { q, limit: 12 }, signal))],
       ['authors', async () => s.localAuthors.set(await books.persons({ role: 'author', q, limit: 12 }, signal))],
       ['series', async () => s.localSeries.set(await books.collections({ kind: 'book', q, limit: 12 }, signal))],
+      ['people', async () => s.peopleResults.set(await social.searchUsers(q, signal))],
       ['movie', async () => s.movieHits.set(await metadata.search('movie', q, {}, signal))],
       ['tv', async () => s.seriesHits.set(await metadata.search('series', q, {}, signal))],
       ['book', async () => s.bookHits.set(await metadata.search('book', q, {}, signal))],
@@ -68,7 +73,7 @@ export class SearchRunner {
       ['artist', async () => s.artistHits.set(await metadata.searchArtists(q, {}, signal))],
       ['recording', async () => s.recordingHits.set(await metadata.searchRecordings(q, {}, signal))],
     ];
-    const asked = jobs.filter(([k]) => want.local.includes(k) || provider.includes(k));
+    const asked = jobs.filter(([k]) => local.includes(k) || provider.includes(k));
     s.pending.set(new Set(asked.map(([k]) => k)));
     for (const [key, job] of asked) void this.settle(key, job, key === 'media' ? mediaSignal : signal);
   }
@@ -101,11 +106,11 @@ export class SearchRunner {
     });
   }
 
-  /** A chip change empties the sources the new chip does not ask. */
+  /** A scope change empties the sources the new scope does not ask. */
   private dropOthers(keep: SearchSource[]): void {
     const s = this.d.state;
     const lists: Record<SearchSource, { set(v: never[]): void }> = {
-      media: s.localResults, tracks: s.localTracks, artists: s.localArtists, authors: s.localAuthors, series: s.localSeries,
+      media: s.localResults, tracks: s.localTracks, artists: s.localArtists, authors: s.localAuthors, series: s.localSeries, people: s.peopleResults,
       movie: s.movieHits, tv: s.seriesHits, book: s.bookHits, album: s.albumHits, artist: s.artistHits, recording: s.recordingHits,
     };
     for (const [k, l] of Object.entries(lists)) if (!keep.includes(k as SearchSource)) l.set([]);

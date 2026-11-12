@@ -24,7 +24,7 @@ const STREAM_HREF: &str = "/api/opds/issues";
 
 pub fn comic_search(page: i64) -> Search {
     Search {
-        media_type: Some(MediaKind::Comic),
+        media_types: vec![MediaKind::Comic],
         page: Some(page as f64),
         limit: Some(PAGE as f64),
         ..Search::default()

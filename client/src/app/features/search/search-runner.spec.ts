@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SearchRunner } from './search-runner';
+import { SearchRunner, SOURCES } from './search-runner';
 import { SearchStateService } from '../../core/services/search-state.service';
 import type { SearchHit } from '../../core/services/api/metadata.service';
 
@@ -39,6 +39,7 @@ function setup() {
     } as never,
     music: { tracks: (_q: unknown, s?: AbortSignal) => ask('tracks', s), people: (_r: string, _q: unknown, s?: AbortSignal) => ask('artists', s) } as never,
     books: { persons: (_q: unknown, s?: AbortSignal) => ask('authors', s), collections: (_q: unknown, s?: AbortSignal) => ask('series', s) } as never,
+    social: { searchUsers: (_q: string, s?: AbortSignal) => ask('people', s) } as never,
   });
   return { state, runner, asked, getAll };
 }
@@ -48,13 +49,13 @@ describe('SearchRunner', () => {
 
   it('starts the library and the provider calls of the All chip together', () => {
     const { runner, asked } = setup();
-    runner.run('matrix', 'all', { external: true, mediaParams: {} });
+    runner.run('matrix', 'all', { external: true, people: false, mediaParams: {} });
     expect(Object.keys(asked).sort()).toEqual(['album', 'artist', 'artists', 'book', 'media', 'movie', 'recording', 'series', 'tracks']);
   });
 
   it('lets each section land on its own while the others are pending', async () => {
     const { runner, asked, state } = setup();
-    runner.run('matrix', 'all', { external: true, mediaParams: {} });
+    runner.run('matrix', 'all', { external: true, people: false, mediaParams: {} });
     asked['movie']![0]!.resolve([hit('1')]);
     await Promise.resolve();
     await Promise.resolve();
@@ -66,9 +67,9 @@ describe('SearchRunner', () => {
 
   it('cancels the calls of the query before and drops what they answer late', async () => {
     const { runner, asked, state } = setup();
-    runner.run('ma', 'movie', { external: true, mediaParams: {} });
+    runner.run('ma', 'movie', { external: true, people: false, mediaParams: {} });
     const first = asked['movie']![0]!;
-    runner.run('mat', 'movie', { external: true, mediaParams: {} });
+    runner.run('mat', 'movie', { external: true, people: false, mediaParams: {} });
     expect(first.signal!.aborted).toBe(true);
     expect(asked['movie']![1]!.signal!.aborted).toBe(false);
     first.resolve([hit('old')]);
@@ -79,24 +80,24 @@ describe('SearchRunner', () => {
 
   it('asks the providers from two characters and never when external search is off', () => {
     const one = setup();
-    one.runner.run('a', 'all', { external: true, mediaParams: {} });
+    one.runner.run('a', 'all', { external: true, people: false, mediaParams: {} });
     expect(Object.keys(one.asked).sort()).toEqual(['artists', 'media', 'tracks']);
     TestBed.resetTestingModule();
     const off = setup();
-    off.runner.run('matrix', 'movie', { external: false, mediaParams: {} });
+    off.runner.run('matrix', 'movie', { external: false, people: false, mediaParams: {} });
     expect(Object.keys(off.asked)).toEqual(['media']);
   });
 
   it('asks the library once, from the network, with the filters', () => {
     const { runner, getAll } = setup();
-    runner.run('matrix', 'movie', { external: false, mediaParams: { type: 'movie', yearMin: 1999 } });
+    runner.run('matrix', 'movie', { external: false, people: false, mediaParams: { type: 'movie', yearMin: 1999 } });
     expect(getAll).toHaveBeenCalledTimes(1);
     expect(getAll.mock.calls[0]!.slice(0, 2)).toEqual([{ type: 'movie', yearMin: 1999, q: 'matrix', limit: 20 }, { force: true }]);
   });
 
   it('marks a failed source and keeps the others', async () => {
     const { runner, asked, state } = setup();
-    runner.run('matrix', 'book', { external: true, mediaParams: {} });
+    runner.run('matrix', 'book', { external: true, people: false, mediaParams: {} });
     asked['book']![0]!.reject(new Error('503'));
     asked['authors']![0]!.resolve([{ id: 1 }]);
     await new Promise((r) => setTimeout(r));
@@ -108,21 +109,36 @@ describe('SearchRunner', () => {
 
   it('empties the sources the new chip does not ask', async () => {
     const { runner, asked, state } = setup();
-    runner.run('matrix', 'all', { external: true, mediaParams: {} });
+    runner.run('matrix', 'all', { external: true, people: false, mediaParams: {} });
     asked['book']![0]!.resolve([hit('b', { mediaType: 'book' })]);
     await new Promise((r) => setTimeout(r));
     expect(state.bookHits()).toHaveLength(1);
-    runner.run('matrix', 'movie', { external: true, mediaParams: {} });
+    runner.run('matrix', 'movie', { external: true, people: false, mediaParams: {} });
     expect(state.bookHits()).toEqual([]);
   });
 
   it('re-runs the library alone after a filter change', async () => {
     const { runner, asked } = setup();
-    runner.run('matrix', 'movie', { external: true, mediaParams: {} });
+    runner.run('matrix', 'movie', { external: true, people: false, mediaParams: {} });
     const movie = asked['movie']![0]!;
     runner.runMedia('matrix', { yearMin: 2000 });
     expect(asked['media']).toHaveLength(2);
     expect(asked['media']![0]!.signal!.aborted).toBe(true);
     expect(movie.signal!.aborted).toBe(false);
+  });
+
+  it('asks each scope its own sources', () => {
+    const video = setup();
+    video.runner.run('matrix', 'video', { external: true, people: true, mediaParams: {} });
+    expect(Object.keys(video.asked).sort()).toEqual(['media', 'movie', 'series']);
+    TestBed.resetTestingModule();
+    const people = setup();
+    people.runner.run('', 'people', { external: true, people: true, mediaParams: {} });
+    expect(Object.keys(people.asked)).toEqual(['people']);
+    TestBed.resetTestingModule();
+    const all = setup();
+    all.runner.run('matrix', 'all', { external: true, people: true, mediaParams: {} });
+    expect(Object.keys(all.asked)).toContain('people');
+    expect(SOURCES.video.types).toEqual(['movie', 'series']);
   });
 });

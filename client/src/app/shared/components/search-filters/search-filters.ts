@@ -23,11 +23,11 @@ export function filtersEngaged(genres: ReadonlySet<number>, voteMin: number, yea
 }
 
 /** Library query fields for the panel's values; genres go by name, the library stores no TMDB id. */
-export function libraryFilterParams(f: { type: SearchContentType; genreNames: string[]; sort: string; voteMin: number; yearMin: number | null; yearMax: number | null }): SearchParams {
+export function libraryFilterParams(f: { type: SearchContentType | MediaType[]; genreNames: string[]; sort: string; voteMin: number; yearMin: number | null; yearMax: number | null }): SearchParams {
   const p: SearchParams = {};
   if (f.sort === 'primary_release_date.desc') Object.assign(p, { sortBy: 'year', sortOrder: 'DESC' });
   if (f.sort === 'vote_average.desc') Object.assign(p, { sortBy: 'rating', sortOrder: 'DESC' });
-  if (f.type !== 'all') p.type = f.type as SearchParams['type'];
+  if (f.type !== 'all') p.type = f.type;
   if (f.genreNames.length) p.genres = f.genreNames;
   if (f.yearMin != null) p.yearMin = f.yearMin;
   if (f.yearMax != null) p.yearMax = f.yearMax;

@@ -1,103 +1,93 @@
 <div appDefaultFocus="input" focusKey="search" focusIdAttr="data-card-link" class="flex flex-col gap-4">
-  <!-- Search input + settings -->
-  <div class="flex gap-2 items-center">
-    <form class="relative flex-1" (ngSubmit)="dismissKeyboard()">
-      <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-base-content/40 pointer-events-none z-10"></svg>
-      <input
-        #searchInput
-        type="text"
-        enterkeyhint="search"
-        data-tv-skip-spatial
-        class="input input-bordered w-full pl-10 pr-10"
-        [placeholder]="'search.placeholder' | translate"
-        [ngModel]="state.query()"
-        (ngModelChange)="onQueryInput($event)"
-        [ngModelOptions]="{ standalone: true }"
-        (focus)="onInputFocus()"
-        (blur)="onInputBlur()"
-      />
-      @if (state.hasQuery()) {
-        <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 z-10" (click)="clearQuery()">
-          <svg lucideX class="h-4 w-4"></svg>
-        </button>
-      }
-    </form>
-    <app-dropdown-menu placement="bottom-end">
-      <div trigger tabindex="0" role="button" class="btn btn-square btn-ghost">
-        <svg lucideSettings class="h-5 w-5"></svg>
-      </div>
-      <label class="flex items-center justify-between gap-3 cursor-pointer px-3 py-2">
-        <span class="text-sm">{{ 'search.external_search' | translate }}</span>
-        <input type="checkbox" class="toggle toggle-primary toggle-sm"
-               [ngModel]="state.externalEnabled()"
-               (ngModelChange)="toggleExternal()" />
-      </label>
-    </app-dropdown-menu>
-  </div>
-
-  <!-- Top tabs: videos vs members -->
-  <div role="tablist" class="tabs tabs-boxed w-fit">
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'videos'" (click)="setTab('videos')">
-      {{ 'search.tab_videos' | translate }}
-    </button>
-    @if (!tv.isTv() && !sharingDisabled()) {
-      <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'people'" (click)="setTab('people')">
-        {{ 'social.search_tab_people' | translate }}
+  <form class="relative" (ngSubmit)="dismissKeyboard()">
+    <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-base-content/40 pointer-events-none z-10"></svg>
+    <input
+      #searchInput
+      type="text"
+      enterkeyhint="search"
+      data-tv-skip-spatial
+      class="input input-bordered w-full pl-10 pr-10"
+      [placeholder]="'search.placeholder' | translate"
+      [ngModel]="state.query()"
+      (ngModelChange)="onQueryInput($event)"
+      [ngModelOptions]="{ standalone: true }"
+      (focus)="onInputFocus()"
+      (blur)="onInputBlur()"
+    />
+    @if (state.hasQuery()) {
+      <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 z-10" (click)="clearQuery()">
+        <svg lucideX class="h-4 w-4"></svg>
       </button>
+    }
+  </form>
+
+  <!-- Scope: one selector, with the movies/series split of Video on its own row -->
+  <div class="flex flex-col gap-2">
+    <div class="join w-full lg:w-fit max-w-full overflow-x-auto scroll-ring-safe" role="group">
+      @for (t of scopes(); track t.value) {
+        <button type="button" class="btn btn-sm join-item flex-1 shrink-0 whitespace-nowrap" [attr.data-scope]="t.value" [class.btn-primary]="scopeActive(t.value)" [attr.aria-pressed]="scopeActive(t.value)" (click)="setScope(t.value)">{{ t.labelKey | translate }}</button>
+      }
+    </div>
+    @if (isVideo()) {
+      <div class="join w-full lg:w-fit max-w-full overflow-x-auto scroll-ring-safe" role="group">
+        @for (k of videoKinds; track k.value) {
+          <button type="button" class="btn btn-sm join-item flex-1 shrink-0 whitespace-nowrap" [class.btn-primary]="state.scope() === k.value" [attr.aria-pressed]="state.scope() === k.value" (click)="setScope(k.value)">{{ k.labelKey | translate }}</button>
+        }
+      </div>
+    }
+    @if (isMusic()) {
+      <div class="join w-full lg:w-fit max-w-full overflow-x-auto scroll-ring-safe" role="group">
+        @for (k of musicKinds; track k.value) {
+          <button type="button" class="btn btn-sm join-item flex-1 shrink-0 whitespace-nowrap" [class.btn-primary]="state.scope() === k.value" [attr.aria-pressed]="state.scope() === k.value" (click)="setScope(k.value)">{{ k.labelKey | translate }}</button>
+        }
+      </div>
     }
   </div>
 
-  <!-- Media type: drives search + discover (reloads the discover genre list).
-       Spans the filter-column width, the three tabs sharing it equally. -->
-  @if (state.tab() === 'videos') {
-    <app-content-type-toggle class="w-full lg:w-fit" [withBooks]="true" [withMusic]="true" [value]="state.contentType()" (valueChange)="setContentType($event)" />
-  }
-
-  @if (state.tab() === 'people') {
+  @if (state.scope() === 'people') {
     <!-- People: default roster (no query) or filtered results -->
-    @if (state.peopleLoading() && !state.peopleResults().length) {
-      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+    @if (state.pending().has('people') && !state.peopleResults().length) {
+      <ng-container *ngTemplateOutlet="skeletonRows" />
     } @else if (state.peopleResults().length > 0) {
       <div class="flex flex-col gap-1 max-w-xl">
         @for (u of state.peopleResults(); track u.id) {
-          <button type="button" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left cursor-pointer" (click)="openProfile(u.id)">
-            <app-user-avatar [username]="u.username" [avatar]="u.avatar" />
-            <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
-            @if (u.isFollowing) {
-              <span class="badge badge-sm badge-ghost">{{ 'social.following' | translate }}</span>
-            } @else if (u.followsYou) {
-              <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>
-            }
-          </button>
+          <ng-container *ngTemplateOutlet="personRow; context: { $implicit: u }" />
         }
       </div>
     } @else {
       <p class="text-base-content/50 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
     }
-  } @else if (!state.hasQuery() && state.contentType() === 'book') {
+  } @else if (!state.hasQuery() && state.scope() === 'book') {
+    <ng-container *ngTemplateOutlet="externalToggle" />
     <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
-  } @else if (!state.hasQuery() && state.contentType() === 'album') {
+  } @else if (!state.hasQuery() && isMusic()) {
+    <ng-container *ngTemplateOutlet="externalToggle" />
     <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
   } @else if (!state.hasQuery()) {
     <!-- Discover / library browse: filter sidebar (desktop) + content -->
+    <ng-container *ngTemplateOutlet="externalToggle" />
     <div class="flex gap-6">
-      <aside class="hidden lg:block w-60 shrink-0">
-        <ng-container *ngTemplateOutlet="filterPanel" />
-      </aside>
+      @if (showFilters()) {
+        <aside class="hidden lg:block w-60 shrink-0">
+          <ng-container *ngTemplateOutlet="filterPanel" />
+        </aside>
+      }
       <div class="flex-1 min-w-0">
-        <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
-          <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
-        </button>
+        @if (showFilters()) {
+          <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
+            <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+          </button>
+        }
 
         @if (state.discoverActive()) {
           <!-- Filters applied → results grid (TMDB discover, or the local library when external search is off) -->
           @if (state.externalEnabled()) {
             @if (state.discoverLoading()) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <ng-container *ngTemplateOutlet="skeletonGrid" />
             } @else if (state.discoverResults().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
                 @for (row of state.discoverResults(); track row.mediaType + ':' + resultKey(row)) {
-                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
+                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
                 }
               </div>
             } @else {
@@ -105,7 +95,7 @@
             }
           } @else {
             @if (state.localLoading()) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <ng-container *ngTemplateOutlet="skeletonGrid" />
             } @else if (state.localResults().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
                 @for (media of state.localResults(); track media.id) {
@@ -126,7 +116,10 @@
           <!-- No filters → discovery rows -->
           @if (state.externalEnabled()) {
             @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoverySuggestions().length) {
-              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+              <div class="flex flex-col gap-6">
+                <ng-container *ngTemplateOutlet="skeletonScroller" />
+                <ng-container *ngTemplateOutlet="skeletonScroller" />
+              </div>
             }
             <div class="flex flex-col gap-6">
               @if (state.discoveryTrending().length) {
@@ -136,21 +129,21 @@
                     <button type="button" class="btn btn-xs join-item" [class.btn-primary]="state.trendingWindow() === 'week'" (click)="setTrendingWindow('week')">{{ 'search.trending_week' | translate }}</button>
                   </div>
                   @for (row of state.discoveryTrending(); track row.mediaType + ':' + resultKey(row)) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
                   }
                 </app-horizontal-scroller>
               }
               @if (state.discoveryPopular().length) {
                 <app-horizontal-scroller [title]="'search.discover_popular' | translate" class="block">
                   @for (row of state.discoveryPopular(); track row.mediaType + ':' + resultKey(row)) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
                   }
                 </app-horizontal-scroller>
               }
               @if (state.discoverySuggestions().length) {
                 <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
                   @for (row of state.discoverySuggestions(); track row.mediaType + ':' + resultKey(row)) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
                   }
                 </app-horizontal-scroller>
               }
@@ -188,72 +181,14 @@
         <section data-testid="zone-library" aria-labelledby="zone-library-title" class="flex flex-col gap-6">
           <h2 id="zone-library-title" class="text-xl font-semibold">{{ 'search.zone_library' | translate }}</h2>
 
-          @if (state.localResults().length || videoHeld().length || booksHeld().length || albumsHeld().length) {
-            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-              @for (media of state.localResults(); track media.id) {
-                <app-media-card
-                  [media]="media"
-                  [status]="media.watched ? 'watched' : null"
-                  [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
-                  [interactiveWatched]="canMarkMediaWatched(media)"
-                  (watchedToggled)="toggleMediaWatched(media, $event)"
-                />
-              }
-              <!-- Held titles the local title search missed but the provider matched (franchise, keywords, other ids). -->
-              @for (row of videoHeld(); track row.mediaType + ':' + resultKey(row)) {
-                <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating ?? 0" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" />
-              }
-              @for (row of booksHeld(); track row.provider + ':' + row.externalId) {
-                <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="(row.authors ?? []).join(', ')" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? 'book' : null" [link]="externalLink(row)" />
-              }
-              @for (row of albumsHeld(); track row.provider + ':' + row.externalId) {
-                <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? 'album' : null" [link]="externalLink(row)" />
-              }
-            </div>
-          } @else if (state.pending().has('media')) {
-            <ng-container *ngTemplateOutlet="skeletonGrid" />
-          }
-
-          @if (state.localArtists().length) {
-            <div>
-              <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
-              <ul class="flex flex-col gap-1 max-w-xl">
-                @for (a of state.localArtists(); track a.id) {
-                  <li>
-                    <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/artists', a.id]">
-                      <span class="min-w-0 truncate font-medium">{{ a.name }}</span>
-                      <span class="badge badge-sm badge-ghost">{{ 'music.album_count' | translatePlural: a.albumCount }}</span>
-                    </a>
-                  </li>
-                }
-              </ul>
-            </div>
-          } @else if (state.pending().has('artists')) {
-            <ng-container *ngTemplateOutlet="skeletonRows" />
-          }
-
-          @if (state.localTracks().length) {
-            <div>
-              <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
-              <ul class="flex flex-col gap-1 max-w-3xl">
-                @for (r of state.localTracks(); track r.itemId; let i = $index) {
-                  <li class="flex items-center gap-1" data-testid="local-track">
-                    <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" data-card-link [disabled]="!r.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="playTrack(state.localTracks(), i)">
-                      <app-track-line [title]="r.title" [itemId]="r.itemId" [subtitle]="artistLine(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
-                        <svg lead lucidePlay class="size-4 shrink-0 text-base-content/50"></svg>
-                        @if (!r.hasFile) {
-                          <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
-                        }
-                        <span class="hidden sm:inline min-w-0 max-w-48 truncate text-sm text-base-content/60">{{ r.albumTitle }}</span>
-                      </app-track-line>
-                    </button>
-                    <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
-                  </li>
-                }
-              </ul>
-            </div>
-          } @else if (state.pending().has('tracks')) {
-            <ng-container *ngTemplateOutlet="skeletonRows" />
+          @if (isMusic()) {
+            <ng-container *ngTemplateOutlet="libTracks" />
+            <ng-container *ngTemplateOutlet="libArtists" />
+            <ng-container *ngTemplateOutlet="libGrid" />
+          } @else {
+            <ng-container *ngTemplateOutlet="libGrid" />
+            <ng-container *ngTemplateOutlet="libTracks" />
+            <ng-container *ngTemplateOutlet="libArtists" />
           }
 
           @if (state.localAuthors().length) {
@@ -294,17 +229,16 @@
 
         <!-- Not in your library -->
         <section data-testid="zone-provider" aria-labelledby="zone-provider-title" class="flex flex-col gap-6">
-          <h2 id="zone-provider-title" class="text-xl font-semibold">{{ 'search.zone_provider' | translate }}</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="zone-provider-title" class="text-xl font-semibold">{{ 'search.zone_provider' | translate }}</h2>
+            <ng-container *ngTemplateOutlet="externalToggle" />
+          </div>
 
-          @if (!state.externalEnabled()) {
-            <div>
-              <button class="btn btn-primary btn-sm" (click)="toggleExternal()">{{ 'search.enable_external' | translate }}</button>
-            </div>
-          } @else {
+          @if (state.externalEnabled()) {
             @if (videoToAdd().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
                 @for (row of videoToAdd(); track row.mediaType + ':' + resultKey(row)) {
-                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating ?? 0" [badge]="cardStatus(row)" [mediaTypeBadge]="state.contentType() === 'all' ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
+                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating ?? 0" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" [extraActions]="hitActions(row)" />
                 }
               </div>
             } @else if (state.pending().has('movie') || state.pending().has('tv')) {
@@ -327,49 +261,6 @@
               <ng-container *ngTemplateOutlet="skeletonGrid" />
             }
 
-            @if (albumsToAdd().length) {
-              <div>
-                <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
-                <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-                  @for (row of visible(albumsToAdd(), 'albums'); track row.provider + ':' + row.externalId) {
-                    <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
-                  }
-                </div>
-                @if (albumsToAdd().length > cap && !more().has('albums')) {
-                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
-                }
-              </div>
-            } @else if (state.pending().has('album')) {
-              <ng-container *ngTemplateOutlet="skeletonGrid" />
-            }
-
-            @if (artistsToAdd().length) {
-              <div>
-                <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
-                <ul class="flex flex-col gap-1 max-w-xl">
-                  @for (a of visible(artistsToAdd(), 'artists'); track a.provider + ':' + a.externalId) {
-                    <li>
-                      <button type="button" class="flex w-full items-center justify-between gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
-                        <span class="min-w-0">
-                          <span class="block truncate font-medium">{{ a.name }}</span>
-                          @if (a.disambiguation) {
-                            <span class="block truncate text-sm text-base-content/60">{{ a.disambiguation }}</span>
-                          }
-                        </span>
-                        @if (a.country) {
-                          <span class="badge badge-sm badge-ghost">{{ a.country }}</span>
-                        }
-                      </button>
-                    </li>
-                  }
-                </ul>
-                @if (artistsToAdd().length > cap && !more().has('artists')) {
-                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
-                }
-              </div>
-            } @else if (state.pending().has('artist')) {
-              <ng-container *ngTemplateOutlet="skeletonRows" />
-            }
 
             @if (recordingsToAdd().length) {
               <div>
@@ -377,7 +268,9 @@
                 <ul class="flex flex-col gap-1 max-w-3xl">
                   @for (r of visible(recordingsToAdd(), 'tracks'); track r.provider + ':' + r.externalId) {
                     <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
-                      <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null" />
+                      <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
+                        <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
+                      </app-track-line>
                       <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
                         @if (r.album.existingMediaId == null && (canAdd() || canRequest())) {
                           <button type="button" class="btn btn-ghost btn-sm" data-card-link (click)="addRecording(r)" data-testid="add-album">
@@ -399,6 +292,52 @@
               <ng-container *ngTemplateOutlet="skeletonRows" />
             }
 
+            @if (artistsToAdd().length) {
+              <div>
+                <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
+                <ul class="flex flex-col gap-1 max-w-xl">
+                  @for (a of visible(artistsToAdd(), 'artists'); track a.provider + ':' + a.externalId) {
+                    <li>
+                      <button type="button" class="flex w-full items-center gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
+                        <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: null, name: a.name }" />
+                        <span class="min-w-0 flex-1">
+                          <span class="block truncate font-medium">{{ a.name }}</span>
+                          @if (a.disambiguation) {
+                            <span class="block truncate text-sm text-base-content/60">{{ a.disambiguation }}</span>
+                          }
+                        </span>
+                        @if (a.country) {
+                          <span class="badge badge-sm badge-ghost">{{ a.country }}</span>
+                        }
+                      </button>
+                    </li>
+                  }
+                </ul>
+                @if (artistsToAdd().length > cap && !more().has('artists')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
+                }
+              </div>
+            } @else if (state.pending().has('artist')) {
+              <ng-container *ngTemplateOutlet="skeletonRows" />
+            }
+
+
+            @if (albumsToAdd().length) {
+              <div>
+                <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
+                <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+                  @for (row of visible(albumsToAdd(), 'albums'); track row.provider + ':' + row.externalId) {
+                    <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
+                  }
+                </div>
+                @if (albumsToAdd().length > cap && !more().has('albums')) {
+                  <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
+                }
+              </div>
+            } @else if (state.pending().has('album')) {
+              <ng-container *ngTemplateOutlet="skeletonGrid" />
+            }
+
             @if (!state.externalLoading() && providerCount() === 0) {
               <p class="text-base-content/50" data-testid="provider-empty">{{ 'search.no_results' | translate }}</p>
             }
@@ -407,10 +346,43 @@
             }
           }
         </section>
+
+        @if (state.scope() === 'all' && state.peopleResults().length) {
+          <section data-testid="zone-people" aria-labelledby="zone-people-title" class="flex flex-col gap-3">
+            <h2 id="zone-people-title" class="text-xl font-semibold">{{ 'search.scope_people' | translate }}</h2>
+            <div class="flex flex-col gap-1 max-w-xl">
+              @for (u of state.peopleResults().slice(0, peopleCap); track u.id) {
+                <ng-container *ngTemplateOutlet="personRow; context: { $implicit: u }" />
+              }
+            </div>
+            @if (state.peopleResults().length > peopleCap) {
+              <button type="button" class="btn btn-ghost btn-sm self-start" (click)="showAllPeople()">{{ 'common.show_more' | translate }}</button>
+            }
+          </section>
+        }
       </div>
     </div>
   }
 </div>
+
+<ng-template #personRow let-u>
+  <button type="button" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left cursor-pointer" (click)="openProfile(u.id)">
+    <app-user-avatar [username]="u.username" [avatar]="u.avatar" />
+    <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
+    @if (u.isFollowing) {
+      <span class="badge badge-sm badge-ghost">{{ 'social.following' | translate }}</span>
+    } @else if (u.followsYou) {
+      <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>
+    }
+  </button>
+</ng-template>
+
+<ng-template #externalToggle>
+  <label class="flex w-fit items-center gap-3 cursor-pointer text-sm">
+    <input type="checkbox" class="toggle toggle-primary toggle-sm" [checked]="state.externalEnabled()" (change)="toggleExternal()" />
+    <span>{{ 'search.external_search' | translate }}</span>
+  </label>
+</ng-template>
 
 <!-- Mobile filter sheet — top-level so it opens during discovery and search alike -->
 <dialog #filterSheet class="modal">
@@ -441,6 +413,16 @@
     }
   </div>
 </ng-template>
+<ng-template #skeletonScroller>
+  <div class="flex flex-col gap-3 overflow-hidden" aria-hidden="true">
+    <div class="h-6 w-40 rounded bg-base-300/40 animate-pulse"></div>
+    <div class="flex gap-4">
+      @for (i of placeholders; track i) {
+        <div class="aspect-2/3 w-28 sm:w-32 lg:w-40 shrink-0 rounded-lg bg-base-300/40 animate-pulse"></div>
+      }
+    </div>
+  </div>
+</ng-template>
 <ng-template #skeletonRows>
   <div class="flex flex-col gap-2 max-w-xl" aria-hidden="true">
     @for (i of [0, 1, 2]; track i) {
@@ -450,3 +432,97 @@
 </ng-template>
 
 <app-add-dialog (done)="onAdded($event)" />
+
+<ng-template #libGrid>
+  @if (state.localResults().length || videoHeld().length || booksHeld().length || albumsHeld().length) {
+    <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
+      @for (media of state.localResults(); track media.id) {
+        <app-media-card
+          [media]="media"
+          [status]="media.watched ? 'watched' : null"
+          [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
+          [interactiveWatched]="canMarkMediaWatched(media)"
+          (watchedToggled)="toggleMediaWatched(media, $event)"
+        />
+      }
+      <!-- Held titles the local title search missed but the provider matched (franchise, keywords, other ids). -->
+      @for (row of videoHeld(); track row.mediaType + ':' + resultKey(row)) {
+        <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating ?? 0" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? row.mediaType : null" [link]="externalLink(row)" [fanartUrl]="row.fanartUrl ?? null" />
+      }
+      @for (row of booksHeld(); track row.provider + ':' + row.externalId) {
+        <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="(row.authors ?? []).join(', ')" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? 'book' : null" [link]="externalLink(row)" />
+      }
+      @for (row of albumsHeld(); track row.provider + ':' + row.externalId) {
+        <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? 'album' : null" [link]="externalLink(row)" />
+      }
+    </div>
+  } @else if (state.pending().has('media')) {
+    <ng-container *ngTemplateOutlet="skeletonGrid" />
+  }
+</ng-template>
+
+<ng-template #libTracks>
+  @if (state.localTracks().length) {
+    <div>
+      <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
+      <ul class="flex flex-col gap-1 max-w-3xl">
+        @for (r of state.localTracks(); track r.itemId; let i = $index) {
+          <li class="flex items-center gap-1" data-testid="local-track">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" data-card-link [disabled]="!r.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="playTrack(state.localTracks(), i)">
+              <app-track-line [title]="r.title" [itemId]="r.itemId" [subtitle]="artistLine(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
+                <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.posterUrl }" />
+                @if (!r.hasFile) {
+                  <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
+                }
+                <span class="hidden sm:inline min-w-0 max-w-48 truncate text-sm text-base-content/60">{{ r.albumTitle }}</span>
+              </app-track-line>
+            </button>
+            <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
+          </li>
+        }
+      </ul>
+    </div>
+  } @else if (state.pending().has('tracks')) {
+    <ng-container *ngTemplateOutlet="skeletonRows" />
+  }
+</ng-template>
+
+<ng-template #libArtists>
+  @if (state.localArtists().length) {
+    <div>
+      <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
+      <ul class="flex flex-col gap-1 max-w-xl">
+        @for (a of state.localArtists(); track a.id) {
+          <li>
+            <a class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/artists', a.id]">
+              <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: a.avatarUrl, name: a.name }" />
+              <span class="min-w-0 flex-1 truncate font-medium">{{ a.name }}</span>
+              <span class="badge badge-sm badge-ghost">{{ 'music.album_count' | translatePlural: a.albumCount }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    </div>
+  } @else if (state.pending().has('artists')) {
+    <ng-container *ngTemplateOutlet="skeletonRows" />
+  }
+</ng-template>
+
+<!-- The placeholder stays under the image: it shows while the image loads and when it fails. -->
+<ng-template #cover let-url>
+  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-base-300">
+    <svg lucideMusic class="size-4 text-base-content/40"></svg>
+    @if (url) {
+      <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+    }
+  </span>
+</ng-template>
+
+<ng-template #artistThumb let-url let-name="name">
+  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-300 font-bold text-base-content/40">
+    {{ name.charAt(0) }}
+    @if (url) {
+      <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+    }
+  </span>
+</ng-template>

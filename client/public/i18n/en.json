@@ -466,7 +466,6 @@
     "section_recommendations": "Recommendations",
     "section_recently_watched": "Recently watched",
     "section_likes": "Favorites",
-    "search_tab_people": "Users",
     "no_people_results": "No users found.",
     "edit_privacy": "Privacy",
     "privacy_title": "Profile privacy",
@@ -897,7 +896,6 @@
     "placeholder": "Search movies, series, books and music...",
     "hint": "Type to search your library and external providers.",
     "hint_local": "Type to search your library.",
-    "tab_videos": "Videos",
     "filter_all": "All",
     "filter_movies": "Movies",
     "filter_series": "Series",
@@ -905,7 +903,6 @@
     "section_discover": "Add to library",
     "no_results": "No results found.",
     "external_search": "Search outside the library",
-    "enable_external": "Search outside the library",
     "discover_trending": "Trending",
     "discover_popular": "Popular",
     "discover_suggestions": "Suggestions for you",
@@ -931,7 +928,10 @@
     "add_album": "Add album",
     "request_album": "Request album",
     "want_track": "Want this track",
-    "partial": "Some providers did not answer in time."
+    "partial": "Some providers did not answer in time.",
+    "scope_video": "Video",
+    "scope_people": "Members",
+    "kind_all": "All"
   },
   "discover": {
     "seasons_failed": "Could not load the seasons",

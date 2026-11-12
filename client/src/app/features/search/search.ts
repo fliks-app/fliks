@@ -34,7 +34,7 @@ import {
   searchResultKey,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
-import { SearchStateService } from '../../core/services/search-state.service';
+import { SearchStateService, type SearchScope } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -42,12 +42,12 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { MediaCardComponent, CardBadge, SEARCH_CARD_CONTEXT } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
-import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
-import { ContentTypeToggleComponent } from '../../shared/components/search-filters/content-type-toggle';
-import { LucideSearch, LucideX, LucideSettings, LucidePlay } from '@lucide/angular';
+import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
@@ -55,19 +55,21 @@ import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialo
 import type { AddRequest, AddResult } from '../../shared/components/add-dialog/add-plan';
 import { TrackLineComponent } from '../music/track-line.component';
 import { artistLine, toTrackRequest } from '../music/music-utils';
-import { SearchRunner } from './search-runner';
+import { SearchRunner, SOURCES } from './search-runner';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
-/** The content types searched as shelves of their own (library, people and providers), not through the video flow. */
 const DEBOUNCE_MS = 250;
 
-/** The content types without discovery rows or filter panel: their search is the shelves of the results. */
-const isShelf = (ct: 'all' | MediaType) => ct === 'book' || ct === 'album';
+/** The scopes the filter panel (genre, year, rating, sort) narrows. */
+const hasFilters = (s: SearchScope) => s === 'video' || s === 'movie' || s === 'series';
+/** The video kind of the discovery rows and TMDB discover; `all` is movies and series, null for no rows. */
+const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
+  s === 'all' || s === 'video' ? 'all' : s === 'movie' || s === 'series' ? s : null;
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, LucidePlay, ModalHeaderComponent, SearchFiltersComponent, ContentTypeToggleComponent],
+  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -78,14 +80,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly music = inject(MusicApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
-  /** Opted out of the social layer → the people tab is hidden. */
+  private readonly social = inject(SocialApiService);
   protected readonly resultKey = searchResultKey;
-  protected readonly sharingDisabled = this.auth.sharingDisabled;
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly injector = inject(Injector);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly social = inject(SocialApiService);
   readonly tv = inject(TvService);
+  /** Members are a scope off TV and while the social layer is on. */
+  protected readonly showPeople = computed(() => !this.tv.isTv() && !this.auth.sharingDisabled());
   private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
   private readonly player = inject(AudioPlayerService);
@@ -96,17 +98,17 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     metadata: this.metadata,
     music: this.music,
     books: this.booksApi,
+    social: this.social,
   });
 
   readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
   private lastDiscoveryKey = '';
   /** Load discovery rows whenever the empty state is showing, keyed on the
-   *  active tab + external-search toggle so a tab/toggle change refreshes them. */
+   *  video kind + external-search toggle so a change of either refreshes them. */
   private readonly discoveryEffect = effect(() => {
-    const tab = this.state.tab();
-    const ct = this.state.contentType();
+    const ct = discoveryKind(this.state.scope());
     const external = this.state.externalEnabled();
-    if (this.state.hasQuery() || tab !== 'videos') return;
+    if (this.state.hasQuery() || ct == null) return;
     const key = `${ct}:${external}`;
     if (key === this.lastDiscoveryKey) return;
     this.lastDiscoveryKey = key;
@@ -142,8 +144,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Keep the discover genre list populated for the active type (movie genres for "all"/"movie", TV list for series) so chips render during text search. */
   private readonly discoverGenreEffect = effect(() => {
-    this.state.tab();
-    this.state.contentType();
+    this.state.scope();
     this.state.externalEnabled();
     untracked(() => void this.ensureDiscoverGenres());
   });
@@ -156,7 +157,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverYearMin();
     this.state.discoverYearMax();
     untracked(() => {
-      if (this.state.tab() !== 'videos') return;
+      if (!hasFilters(this.state.scope())) return;
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
       this.filterDebounce = setTimeout(() => void this.applyFiltersNow(), 300);
     });
@@ -164,9 +165,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Apply filters to the right source: text query → local library; filters → TMDB /discover (external on) or local browse; none → discovery rows. */
   private async applyFiltersNow(): Promise<void> {
-    if (this.state.tab() !== 'videos') return;
-    const ct = this.state.contentType();
-    if (isShelf(ct)) return;
+    const ct = this.state.scope();
+    if (!hasFilters(ct)) return;
     if (this.state.hasQuery()) {
       const q = this.state.query().trim();
       if (this.filterSig(q, ct) !== this.lastLocalSig) await this.runLocalSearch(q, ct);
@@ -197,6 +197,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   ngOnInit() {
+    if (this.state.scope() === 'people' && !this.showPeople()) this.state.scope.set('all');
     this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
     this.scrollMemory.restore(SearchComponent.SCROLL_KEY, this.injector);
   }
@@ -258,8 +259,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   onQueryInput(value: string) {
     this.state.query.set(value);
     if (this.searchTimer) clearTimeout(this.searchTimer);
-    // People keeps searching on an empty query (→ default roster); videos clear.
-    if (value.trim() || this.state.tab() === 'people') {
+    // People keeps searching on an empty query (the default roster); the others clear.
+    if (value.trim() || this.state.scope() === 'people') {
       this.searchTimer = setTimeout(() => this.runSearch(), DEBOUNCE_MS);
     } else {
       this.runner.cancel();
@@ -270,26 +271,51 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  setTab(t: 'videos' | 'people') {
-    if (t === this.state.tab()) return;
-    this.state.tab.set(t);
-    // Load the default member roster when switching to people (even with no
-    // query); videos only searches when a query is present.
-    if (t === 'people' || this.state.query().trim()) {
+  protected readonly scopes = computed(() => [
+    { value: 'all' as const, labelKey: 'search.filter_all' },
+    { value: 'video' as const, labelKey: 'search.scope_video' },
+    { value: 'book' as const, labelKey: 'books_search.filter_books' },
+    { value: 'music' as const, labelKey: 'search.filter_music' },
+    ...(this.showPeople() ? [{ value: 'people' as const, labelKey: 'search.scope_people' }] : []),
+  ]);
+  protected readonly videoKinds = [
+    { value: 'video' as const, labelKey: 'search.kind_all' },
+    { value: 'movie' as const, labelKey: 'search.filter_movies' },
+    { value: 'series' as const, labelKey: 'search.filter_series' },
+  ];
+  protected readonly musicKinds = [
+    { value: 'music' as const, labelKey: 'search.kind_all' },
+    { value: 'music-tracks' as const, labelKey: 'music.tab_tracks' },
+    { value: 'music-artists' as const, labelKey: 'music.section_artists' },
+    { value: 'music-albums' as const, labelKey: 'music.group_album' },
+  ];
+  protected readonly isVideo = computed(() => hasFilters(this.state.scope()));
+  protected readonly isMusic = computed(() => this.state.scope().startsWith('music'));
+  /** Several kinds share the grid: the cards carry a type badge. */
+  protected readonly mixed = computed(() => this.state.scope() === 'all' || this.state.scope() === 'video');
+
+  protected scopeActive(value: SearchScope): boolean {
+    if (value === 'video') return this.isVideo();
+    if (value === 'music') return this.isMusic();
+    return this.state.scope() === value;
+  }
+
+  setScope(s: SearchScope) {
+    if (s === 'people' && !this.showPeople()) s = 'all';
+    if (s === this.state.scope()) return;
+    // Genre ids differ between movies and series, and the other scopes take no filter.
+    this.state.resetDiscover();
+    this.state.scope.set(s);
+    if (s === 'people' || this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
       this.runSearch();
     }
   }
 
-  setContentType(ct: 'all' | MediaType) {
-    if (ct === this.state.contentType()) return;
-    // Discover genres/results are type-specific — drop them when the type changes.
-    this.state.resetDiscover();
-    this.state.contentType.set(ct);
-    if (this.state.query().trim()) {
-      if (this.searchTimer) clearTimeout(this.searchTimer);
-      this.runSearch();
-    }
+  /** "Show more" of the members block: the focus moves to the Members scope it opens. */
+  protected showAllPeople() {
+    this.setScope('people');
+    setTimeout(() => document.querySelector<HTMLElement>('[data-scope="people"]')?.focus(), 0);
   }
 
   toggleExternal() {
@@ -324,7 +350,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ct: 'all' | MediaType,
     external: boolean,
   ): Promise<void> {
-    if (isShelf(ct)) return;
     this.state.discoveryLoading.set(true);
     try {
 
@@ -442,8 +467,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     external: boolean,
   ): boolean {
     return (
-      this.state.tab() !== 'videos' ||
-      this.state.contentType() !== ct ||
+      discoveryKind(this.state.scope()) !== ct ||
       this.state.externalEnabled() !== external
     );
   }
@@ -470,15 +494,18 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   setTrendingWindow(w: 'day' | 'week') {
     if (this.state.trendingWindow() === w) return;
     this.state.trendingWindow.set(w);
-    void this.fetchTrending(this.state.contentType(), w).then((rows) => {
+    const ct = discoveryKind(this.state.scope());
+    if (ct == null) return;
+    void this.fetchTrending(ct, w).then((rows) => {
       if (this.state.trendingWindow() === w) this.state.discoveryTrending.set(rows);
     });
   }
 
   /** Run the TMDB /discover query from the panel filters and show the results grid; stale responses are dropped. */
   async applyDiscover() {
-    const ct = this.state.contentType();
-    const sig = (this.lastDiscoverSig = this.filterSig('', ct));
+    const scope = this.state.scope();
+    const ct = discoveryKind(scope) ?? 'all';
+    const sig = (this.lastDiscoverSig = this.filterSig('', scope));
     const opts: DiscoverFilters = {
       genreIds: [...this.state.discoverSelectedGenres()],
       sort: this.state.discoverSort(),
@@ -504,7 +531,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Preload the discover panel on a caller-resolved genre id (language-proof); liveFilterEffect auto-applies it. */
   private applyGenreFilter(genreId: number): void {
-    this.state.tab.set('videos');
+    this.state.resetDiscover();
+    this.state.scope.set('video');
     this.state.query.set('');
     this.state.discoverSelectedGenres.set(new Set([genreId]));
   }
@@ -527,13 +555,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Load the discover genre list for the active content type when missing, so
    *  the filter panel's genre chips render during a text search. Fails soft. */
   private async ensureDiscoverGenres(): Promise<void> {
-    if (this.state.tab() !== 'videos' || isShelf(this.state.contentType())) return;
-    const type = kindOfListFilter(this.state.contentType());
+    const kind = discoveryKind(this.state.scope());
+    if (!hasFilters(this.state.scope()) || kind == null) return;
+    const type = kindOfListFilter(kind);
     if (type === this.lastGenreType && this.state.discoverGenres().length) return;
     this.lastGenreType = type;
-    const stale = () =>
-      this.state.tab() !== 'videos' ||
-      kindOfListFilter(this.state.contentType()) !== type;
+    const stale = () => {
+      const k = discoveryKind(this.state.scope());
+      return !hasFilters(this.state.scope()) || k == null || kindOfListFilter(k) !== type;
+    };
     try {
       const genres = await this.metadata.genresByKind(type);
       if (!stale()) this.state.discoverGenres.set(genres);
@@ -574,40 +604,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private async runSearch() {
     const q = this.state.query().trim();
-
-    // People is a distinct surface — no local/external media lookups. Runs even
-    // with an empty query: the backend then returns the default member roster.
-    if (this.state.tab() === 'people') {
-      this.state.peopleLoading.set(true);
-      try {
-        const results = await this.social.searchUsers(q);
-        // Ignore a stale response if the query/tab moved on meanwhile.
-        if (this.state.query().trim() !== q || this.state.tab() !== 'people') return;
-        this.state.peopleResults.set(results);
-      } catch {
-        if (this.state.query().trim() === q && this.state.tab() === 'people') {
-          this.state.peopleResults.set([]);
-        }
-      } finally {
-        this.state.peopleLoading.set(false);
-      }
-      return;
-    }
-
-    if (!q) return;
-
-    const ct = this.state.contentType();
-    if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
+    const scope = this.state.scope();
+    // Members search on an empty query too: the server then returns the default roster.
+    if (!q && scope !== 'people') return;
+    if (hasFilters(scope) && this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
     else void this.ensureDiscoverGenres();
-    this.lastLocalSig = this.filterSig(q, ct);
+    this.lastLocalSig = this.filterSig(q, scope);
     this.more.set(new Set());
-    this.runner.run(q, ct, { external: this.state.externalEnabled(), mediaParams: this.mediaParams(ct) });
+    this.runner.run(q, scope, { external: this.state.externalEnabled(), people: this.showPeople(), mediaParams: this.mediaParams(scope) });
   }
 
   /** The library query of the discover panel filters: text, genres, year, rating and sort. */
-  private mediaParams(ct: 'all' | MediaType): SearchParams {
+  private mediaParams(scope: SearchScope): SearchParams {
     return libraryFilterParams({
-      type: ct,
+      type: SOURCES[scope].types ?? 'all',
       genreNames: this.state.selectedGenreNames(),
       sort: this.state.discoverSort(),
       voteMin: this.state.discoverVoteMin(),
@@ -617,7 +627,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Re-runs the library media alone after a filter change; the provider hits re-filter in the state. */
-  private async runLocalSearch(q: string, ct: 'all' | MediaType) {
+  private async runLocalSearch(q: string, ct: SearchScope) {
     this.lastLocalSig = this.filterSig(q, ct);
     if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
     this.runner.runMedia(q, this.mediaParams(ct));
@@ -637,7 +647,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly artistsToAdd = this.state.artistsToAdd;
   protected readonly recordingsToAdd = this.state.recordingsToAdd;
   /** The filter panel (genre, year, rating, sort) narrows videos; books and music have none. */
-  protected readonly showFilters = computed(() => !isShelf(this.state.contentType()));
+  protected readonly showFilters = this.isVideo;
   protected readonly libraryCount = computed(
     () =>
       this.state.localResults().length + this.videoHeld().length + this.booksHeld().length + this.albumsHeld().length +
@@ -761,6 +771,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected readonly placeholders = [0, 1, 2, 3, 4, 5];
+  protected readonly peopleCap = 4;
 
   /** Books, albums, artists and tracks of the providers show a first page; the sections below them stay in reach. */
   protected readonly cap = 12;

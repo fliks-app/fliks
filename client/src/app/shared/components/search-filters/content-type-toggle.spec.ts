@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ContentTypeToggleComponent } from './content-type-toggle';
 
-function render(withBooks?: boolean) {
+function render() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -13,7 +13,6 @@ function render(withBooks?: boolean) {
     ],
   });
   const fixture = TestBed.createComponent(ContentTypeToggleComponent);
-  if (withBooks !== undefined) fixture.componentRef.setInput('withBooks', withBooks);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -23,9 +22,5 @@ describe('ContentTypeToggleComponent', () => {
 
   it('offers all, movies and series by default', () => {
     expect(render().querySelectorAll('button').length).toBe(3);
-  });
-
-  it('adds Books on demand', () => {
-    expect(render(true).querySelectorAll('button').length).toBe(4);
   });
 });

@@ -81,6 +81,25 @@ impl<'a> Reader<'a> {
             .and_then(|s| MediaKind::parse(&s))
     }
 
+    /// A comma list or repeated keys; an unknown name or an empty token is a 400.
+    pub(crate) fn kinds(&mut self, key: &str) -> Vec<MediaKind> {
+        let tokens: Vec<&str> = self
+            .all(key)
+            .into_iter()
+            .flat_map(|v| v.split(','))
+            .map(str::trim)
+            .collect();
+        let parsed: Vec<_> = tokens.iter().map(|t| MediaKind::parse(t)).collect();
+        if parsed.iter().any(Option::is_none) {
+            self.errors.push(format!(
+                "{key} must be one of the following values: {}",
+                MediaKind::NAMES.join(", ")
+            ));
+            return vec![];
+        }
+        parsed.into_iter().flatten().collect()
+    }
+
     /// `@Type(() => Number)` + `IsNumber`: an array, NaN or an infinity is a 400.
     pub(crate) fn number(&mut self, key: &str) -> Option<f64> {
         match self.all(key).as_slice() {
@@ -128,7 +147,7 @@ impl<'a> Reader<'a> {
 #[derive(Debug, Default)]
 pub struct Search {
     pub q: Option<String>,
-    pub media_type: Option<MediaKind>,
+    pub media_types: Vec<MediaKind>,
     pub status: Option<String>,
     pub monitored: Option<bool>,
     pub year: Option<i32>,
@@ -230,7 +249,7 @@ impl Search {
         };
         let s = Self {
             q: r.string("q"),
-            media_type: r.kind("type"),
+            media_types: r.kinds("type"),
             status: r.one_of("status", &STATUSES),
             monitored: r.flag("monitored"),
             year: r.int("year"),
@@ -262,7 +281,7 @@ impl Search {
             series_id: r.int("seriesId"),
             in_progress: r.flag("inProgress") == Some(true),
         };
-        if s.media_type != Some(MediaKind::Book) {
+        if s.media_types != [MediaKind::Book] {
             let present: Vec<_> = BOOK_KEYS
                 .into_iter()
                 .filter(|k| !r.all(k).is_empty())

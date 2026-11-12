@@ -175,7 +175,7 @@ async fn acquisition(
 
 fn book_search(page: i64) -> Search {
     Search {
-        media_type: Some(MediaKind::Book),
+        media_types: vec![MediaKind::Book],
         page: Some(page as f64),
         limit: Some(PAGE as f64),
         ..Search::default()

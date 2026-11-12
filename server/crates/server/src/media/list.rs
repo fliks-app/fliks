@@ -89,8 +89,13 @@ fn push_scope(
     if let Some(l) = p.library_id.filter(|l| *l != 0) {
         qb.push(" AND media.\"libraryId\" = ").push_bind(l);
     }
-    if let Some(t) = &p.media_type {
-        qb.push(" AND media.type = ").push_bind(t.as_str());
+    if !p.media_types.is_empty() {
+        let names: Vec<String> = p
+            .media_types
+            .iter()
+            .map(|k| k.as_str().to_owned())
+            .collect();
+        qb.push(" AND media.type = ANY(").push_bind(names).push(")");
     }
     if let Some(s) = &p.status {
         qb.push(" AND media.status::text = ").push_bind(s.clone());
@@ -209,7 +214,7 @@ fn push_visible(qb: &mut QueryBuilder<Postgres>, ids: &[i32]) {
         .push(")");
 }
 
-/// `books-api.md` A1; `Search::parse` already refused these keys for any other type.
+/// `books-api.md` A1; `Search::parse` already refused these keys unless the type is exactly book.
 fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], uid: i32) {
     if let Some(f) = &p.format {
         qb.push(" AND EXISTS (SELECT 1 FROM editions e JOIN items i ON i.\"editionId\" = e.id JOIN item_parts ip ON ip.\"itemId\" = i.id WHERE e.\"mediaId\" = media.id AND e.family = ")
