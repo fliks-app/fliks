@@ -19,6 +19,7 @@ import { BookChaptersComponent } from './book-chapters.component';
 import { BookEditionsComponent } from './book-editions.component';
 import { asBookMedia } from '../../../core/services/api/book-media';
 import { BookSourcesComponent } from './book-sources.component';
+import { BookSeriesFormComponent } from './book-series-form.component';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 
@@ -45,6 +46,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
     BookChaptersComponent,
     BookWorksRowComponent,
     BookSourcesComponent,
+    BookSeriesFormComponent,
     MediaWantsComponent,
     ModalHeaderComponent,
   ],
@@ -110,14 +112,17 @@ export class BookWorkComponent {
 
   protected readonly wantsOpen = signal(false);
   protected readonly sourcesOpen = signal(false);
+  protected readonly seriesOpen = signal(false);
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
   private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
+  private readonly seriesDialog = viewChild<ElementRef<HTMLDialogElement>>('seriesDialog');
 
   /** Profiles are the wants dialog for a book; both dialogs are offered once rendered. */
   protected readonly actions = computed<MediaActionHandlers>(() =>
     this.canEdit() && this.book()
       ? {
           'media.edit-profiles': () => this.openDialog(this.wantsOpen, this.wantsDialog()),
+          'media.edit-series': () => this.openDialog(this.seriesOpen, this.seriesDialog()),
           ...(this.book()!.editions.length && {
             'media.edit-sources': () => this.openDialog(this.sourcesOpen, this.sourcesDialog()),
           }),
@@ -131,6 +136,7 @@ export class BookWorkComponent {
 
   private readonly id = computed(() => this.media().id);
   private readonly seriesId = computed(() => this.book()?.series[0]?.id ?? null);
+  protected readonly authorIds = computed(() => this.book()?.authors.map((a) => a.id) ?? []);
   private readonly authorId = computed(() => this.book()?.authors[0]?.id ?? null);
 
   constructor() {
@@ -152,6 +158,10 @@ export class BookWorkComponent {
   protected listen(): void {
     const m = asBookMedia(this.media());
     if (m) void this.start.listen(m, this.seriesItems());
+  }
+
+  protected closeSeries(): void {
+    this.seriesDialog()?.nativeElement.close();
   }
 
   protected openDialog(open: { set(v: boolean): void }, dialog: ElementRef<HTMLDialogElement> | undefined): void {

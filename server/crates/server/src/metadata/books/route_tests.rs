@@ -807,3 +807,157 @@ async fn the_bibliography_fails_with_the_anchor(pool: PgPool) {
     .unwrap();
     assert_eq!(c.get("/api/persons/1/bibliography").await.0, 503);
 }
+
+async fn series_rows(c: &Ctx, media: i32) -> Vec<String> {
+    sqlx::query_scalar(
+        r#"SELECT c.name || '|' || COALESCE(e.position::text, '') || '|' || COALESCE(e."positionLabel", '')
+           FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+           WHERE e."mediaId" = $1 ORDER BY 1"#,
+    )
+    .bind(media)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_series_is_set_changed_and_removed_by_hand(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![]).await;
+    let (a, b) = (c.book(1).await, c.book(1).await);
+    let uri = format!("/api/media/{a}/series");
+    let put = |name: &str, position: Value| json!({"name": name, "position": position});
+
+    let (s, v) = c
+        .call(&c.admin, "PUT", &uri, Some(put(" Saga ", json!("2"))))
+        .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v["series"]["name"], "Saga");
+    assert_eq!(v["series"]["position"], 2.0);
+    c.call(
+        &c.admin,
+        "PUT",
+        &format!("/api/media/{b}/series"),
+        Some(put("Saga", json!(null))),
+    )
+    .await;
+    assert_eq!(series_rows(&c, a).await, ["Saga|2|"]);
+    assert_eq!(series_rows(&c, b).await, ["Saga||"]);
+
+    let (_, v) = c
+        .call(
+            &c.admin,
+            "PUT",
+            &uri,
+            Some(put("Other", json!("Hors-série"))),
+        )
+        .await;
+    assert_eq!(v["series"]["positionLabel"], "Hors-série");
+    assert_eq!(series_rows(&c, a).await, ["Other||Hors-série"]);
+    let saga: i64 = sqlx::query_scalar("SELECT count(*) FROM collections WHERE name = 'Saga'")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(saga, 1, "Saga keeps the other book");
+
+    let (s, v) = c.call(&c.admin, "DELETE", &uri, None).await;
+    assert_eq!((s, &v["series"]), (200, &Value::Null));
+    assert!(series_rows(&c, a).await.is_empty());
+    let other: i64 = sqlx::query_scalar("SELECT count(*) FROM collections WHERE name = 'Other'")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(other, 0, "an emptied series is deleted");
+    let locked: bool = sqlx::query_scalar(
+        r#"SELECT locked FROM media_field_sources WHERE "mediaId" = $1 AND field = 'series'"#,
+    )
+    .bind(a)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert!(locked);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_series_route_checks_input_access_and_kind(pool: PgPool) {
+    let (c, _) = ctx(pool, vec![]).await;
+    let book = c.book(1).await;
+    let film: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('F', 'movie', 1) RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let uri = format!("/api/media/{book}/series");
+    for body in [
+        json!({}),
+        json!({"name": "  "}),
+        json!({"name": "x".repeat(256)}),
+        json!({"name": "A", "position": 3}),
+        json!({"name": "A", "extra": 1}),
+    ] {
+        assert_eq!(c.call(&c.admin, "PUT", &uri, Some(body)).await.0, 400);
+    }
+    assert_eq!(
+        c.call(
+            &c.admin,
+            "PUT",
+            &format!("/api/media/{film}/series"),
+            Some(json!({"name": "A"}))
+        )
+        .await
+        .0,
+        400
+    );
+    assert_eq!(
+        c.call(&c.reader, "PUT", &uri, Some(json!({"name": "A"})))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(c.call(&c.reader, "DELETE", &uri, None).await.0, 403);
+    assert_eq!(
+        c.call(
+            &c.admin,
+            "PUT",
+            "/api/media/9999/series",
+            Some(json!({"name": "A"}))
+        )
+        .await
+        .0,
+        404
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_hand_set_series_survives_an_attach(pool: PgPool) {
+    use crate::metadata::books::{identify::BookMatch, link::attach};
+    use fliks_domain::metadata::limiter::Priority;
+    let (c, st) = ctx(pool, vec![anchor()]).await;
+    let book = c.book(1).await;
+    let m = BookMatch {
+        work: "OL1W".into(),
+        edition: vec![],
+        confidence: 100,
+    };
+    let uri = format!("/api/media/{book}/series");
+    c.call(
+        &c.admin,
+        "PUT",
+        &uri,
+        Some(json!({"name": "Mine", "position": "1"})),
+    )
+    .await;
+    attach(&st, book, None, &m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert_eq!(series_rows(&c, book).await, ["Mine|1|"]);
+
+    c.call(&c.admin, "DELETE", &uri, None).await;
+    attach(&st, book, None, &m, Priority::Interactive)
+        .await
+        .unwrap();
+    assert!(
+        series_rows(&c, book).await.is_empty(),
+        "an explicit no series stays"
+    );
+}

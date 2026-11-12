@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', c.id, 'name', c.name, 'position', e.position::float8,\n                                     'positionLabel', e.\"positionLabel\") AS \"json: Value\"\n           FROM collection_entries e JOIN collections c ON c.id = e.\"collectionId\"\n           WHERE e.\"mediaId\" = $1 AND e.\"itemId\" IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8bd07619c01f27ef730a29572f1e29ad06cc75f7f701acff90c8f36d9386138b"
+}

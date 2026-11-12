@@ -1,0 +1,41 @@
+<form class="flex flex-col gap-3" (submit)="$event.preventDefault(); save()">
+  <label class="flex flex-col gap-1 text-sm">
+    {{ 'books_work.series_name' | translate }}
+    <input
+      type="text"
+      class="input w-full"
+      list="book-series-suggestions"
+      maxlength="255"
+      data-testid="series-name"
+      [value]="name()"
+      (input)="typed($any($event.target).value)"
+    />
+    <datalist id="book-series-suggestions">
+      @for (s of suggestions(); track s) {
+        <option [value]="s"></option>
+      }
+    </datalist>
+  </label>
+  <label class="flex flex-col gap-1 text-sm">
+    {{ 'books_work.series_position' | translate }}
+    <input
+      type="text"
+      class="input w-full"
+      maxlength="100"
+      data-testid="series-position"
+      [placeholder]="'books_work.series_position_hint' | translate"
+      [value]="position()"
+      (input)="position.set($any($event.target).value)"
+    />
+  </label>
+  <div class="flex flex-wrap justify-end gap-2">
+    @if (series()) {
+      <button type="button" class="btn btn-ghost text-error mr-auto" data-testid="series-remove" [disabled]="busy()" (click)="remove()">
+        {{ 'books_work.series_remove' | translate }}
+      </button>
+    }
+    <button type="submit" class="btn btn-primary" data-testid="series-save" [disabled]="!canSave()">
+      {{ 'common.save' | translate }}
+    </button>
+  </div>
+</form>

@@ -5116,7 +5116,12 @@
     "offline_audio_unplayable": "Este audiolivro não pode ser reproduzido tal como está neste dispositivo, por isso não pode ser guardado offline",
     "offline_wifi_only": "As transferências estão limitadas a Wi-Fi",
     "row_similar": "Livros semelhantes",
-    "edit_profiles": "Formatos e idiomas"
+    "edit_profiles": "Formatos e idiomas",
+    "series_edit": "Editar série",
+    "series_name": "Série",
+    "series_position": "Posição",
+    "series_position_hint": "Número ou rótulo, por exemplo Especial",
+    "series_remove": "Remover da série"
   },
   "wants": {
     "title": "Formatos e idiomas",

@@ -2,10 +2,11 @@
 use super::{
     ANCHOR,
     identify::{self, BookMatch},
-    link::{attach, stored},
+    link::{attach, put_series, stored},
     people, text, work_id,
 };
 use crate::{
+    events::SseEvent,
     http::{
         AppError,
         auth::Authed,
@@ -14,6 +15,7 @@ use crate::{
     libraries::{accessible_library_ids, assert_media_accessible},
     media::{
         external_ids::{self, EDITION_NAMESPACES, edition_id},
+        field_sources,
         write::body::Body,
     },
     metadata::{
@@ -32,7 +34,7 @@ use fliks_domain::{
     acl::{Action, Subject},
     external_id::{Namespace, Namespaces},
     media::{is_audio_format, kind::MediaKind},
-    metadata::limiter::Priority,
+    metadata::{field::Field, limiter::Priority},
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
@@ -47,6 +49,10 @@ pub fn routes(r: Router<AppState>) -> Router<AppState> {
     .route(
         "/api/media/{id}/sources",
         get(sources_get).put(sources_put).delete(sources_delete),
+    )
+    .route(
+        "/api/media/{id}/series",
+        axum::routing::put(series_put).delete(series_delete),
     )
 }
 
@@ -510,4 +516,72 @@ pub async fn sources_delete(
         }
     }
     Ok(Json(sources(&st.db, &g).await?))
+}
+
+/// `PUT /api/media/:id/series` (rule 26): the book's series by hand, locked against a refresh.
+#[utoipa::path(put, path = "/api/media/{id}/series", responses((status = 200)))]
+pub async fn series_put(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+    ValidJson(v): ValidJson<Value>,
+) -> Res {
+    let g = gate(&st, &a, Action::Update, id).await?;
+    let b = Body::new(v, &["name", "position"])?;
+    let name = b
+        .required(b.str("name")?, "name", "should not be empty")?
+        .trim()
+        .to_owned();
+    if name.is_empty() || name.chars().count() > 255 {
+        return Err(AppError::bad_request(vec![
+            "name must be between 1 and 255 characters".to_owned(),
+        ]));
+    }
+    let at = b.str("position")?.flatten();
+    if at.as_deref().is_some_and(|p| p.chars().count() > 100) {
+        return Err(AppError::bad_request(vec![
+            "position must be shorter than or equal to 100 characters".to_owned(),
+        ]));
+    }
+    write_series(&st, g.media, Some((&name, at.as_deref()))).await
+}
+
+/// `DELETE /api/media/:id/series` (rule 26).
+#[utoipa::path(delete, path = "/api/media/{id}/series", responses((status = 200)))]
+pub async fn series_delete(
+    State(st): State<AppState>,
+    a: Authed,
+    id: Result<PathParams<i32>, AppError>,
+) -> Res {
+    let g = gate(&st, &a, Action::Update, id).await?;
+    write_series(&st, g.media, None).await
+}
+
+async fn write_series(st: &AppState, media: i32, entry: Option<(&str, Option<&str>)>) -> Res {
+    let mut tx = st.db.begin().await?;
+    sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
+        .execute(&mut *tx)
+        .await?;
+    let title = sqlx::query_scalar!("SELECT title FROM media WHERE id = $1 FOR UPDATE", media)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| crate::libraries::media_not_found(media))?;
+    put_series(&mut tx, media, entry).await?;
+    field_sources::lock(&mut *tx, media, Field::Series).await?;
+    let series = sqlx::query_scalar!(
+        r#"SELECT jsonb_build_object('id', c.id, 'name', c.name, 'position', e.position::float8,
+                                     'positionLabel', e."positionLabel") AS "json: Value"
+           FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
+           WHERE e."mediaId" = $1 AND e."itemId" IS NULL"#,
+        media
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+    tx.commit().await?;
+    st.hub.emit(SseEvent::MetadataRefreshed {
+        media_id: i64::from(media),
+        title,
+    });
+    Ok(Json(json!({ "series": series })))
 }

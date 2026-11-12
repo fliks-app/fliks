@@ -5116,7 +5116,12 @@
     "offline_audio_unplayable": "Este audiolibro no se puede reproducir tal cual en este dispositivo, así que no se puede guardar sin conexión",
     "offline_wifi_only": "Las descargas están limitadas a Wi-Fi",
     "row_similar": "Libros similares",
-    "edit_profiles": "Formatos e idiomas"
+    "edit_profiles": "Formatos e idiomas",
+    "series_edit": "Editar serie",
+    "series_name": "Serie",
+    "series_position": "Posición",
+    "series_position_hint": "Número o etiqueta, por ejemplo Especial",
+    "series_remove": "Quitar de la serie"
   },
   "wants": {
     "title": "Formatos e idiomas",

@@ -5116,7 +5116,12 @@
     "offline_audio_unplayable": "Dieses Hörbuch lässt sich auf diesem Gerät nicht unverändert abspielen und kann daher nicht offline gespeichert werden",
     "offline_wifi_only": "Downloads sind auf WLAN beschränkt",
     "row_similar": "Ähnliche Bücher",
-    "edit_profiles": "Formate und Sprachen"
+    "edit_profiles": "Formate und Sprachen",
+    "series_edit": "Reihe bearbeiten",
+    "series_name": "Reihe",
+    "series_position": "Position",
+    "series_position_hint": "Nummer oder Bezeichnung, z. B. Sonderband",
+    "series_remove": "Aus der Reihe entfernen"
   },
   "wants": {
     "title": "Formate und Sprachen",

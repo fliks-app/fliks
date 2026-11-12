@@ -156,5 +156,18 @@
       }
     </div>
     <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  </dialog>  <dialog #seriesDialog class="modal" data-testid="series-dialog" (close)="seriesOpen.set(false)">
+    <div class="modal-box max-w-md">
+      <app-modal-header [title]="'books_work.series_edit' | translate" />
+      @if (seriesOpen()) {
+        <app-book-series-form
+          [mediaId]="m.id"
+          [series]="b.series[0] ?? null"
+          [authorIds]="authorIds()"
+          (done)="closeSeries()"
+        />
+      }
+    </div>
+    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
   </dialog>
 }

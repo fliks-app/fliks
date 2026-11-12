@@ -578,23 +578,39 @@ async fn set_series(
             _ => None,
         };
         let id = collection(c, media, name, ext.as_ref()).await?;
-        sqlx::query!(
-            r#"INSERT INTO collection_entries ("collectionId", "mediaId", position, "positionLabel")
-               VALUES ($1, $2, $3::text::numeric, $4)
-               ON CONFLICT ON CONSTRAINT "UQ_collection_entries" DO UPDATE
-               SET position = EXCLUDED.position, "positionLabel" = EXCLUDED."positionLabel""#,
-            id,
-            media,
-            at.0,
-            at.1
-        )
-        .execute(&mut *c)
-        .await?;
+        enter(c, media, id, at).await?;
         keep.push(id);
     }
     if keep.is_empty() {
         return Ok(());
     }
+    leave_others(c, media, &keep).await
+}
+
+/// Writes the media's work-level entry of a series.
+async fn enter(
+    c: &mut PgConnection,
+    media: i32,
+    series: i32,
+    at: (Option<String>, Option<String>),
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO collection_entries ("collectionId", "mediaId", position, "positionLabel")
+           VALUES ($1, $2, $3::text::numeric, $4)
+           ON CONFLICT ON CONSTRAINT "UQ_collection_entries" DO UPDATE
+           SET position = EXCLUDED.position, "positionLabel" = EXCLUDED."positionLabel""#,
+        series,
+        media,
+        at.0,
+        at.1
+    )
+    .execute(&mut *c)
+    .await?;
+    Ok(())
+}
+
+/// Takes the media out of every work-level series but `keep`, deleting a series left empty.
+async fn leave_others(c: &mut PgConnection, media: i32, keep: &[i32]) -> sqlx::Result<()> {
     sqlx::query!(
         r#"WITH left_ AS (
              DELETE FROM collection_entries
@@ -604,11 +620,26 @@ async fn set_series(
              AND NOT EXISTS (SELECT 1 FROM collection_entries e
                               WHERE e."collectionId" = c.id AND e."mediaId" <> $1)"#,
         media,
-        &keep
+        keep
     )
     .execute(&mut *c)
     .await?;
     Ok(())
+}
+
+/// Puts the media in the series `name` at `position` (`None`: in none), as a hand edit (rule 26).
+pub(crate) async fn put_series(
+    c: &mut PgConnection,
+    media: i32,
+    entry: Option<(&str, Option<&str>)>,
+) -> sqlx::Result<()> {
+    let mut keep = vec![];
+    if let Some((name, at)) = entry {
+        let id = collection(c, media, name, None).await?;
+        enter(c, media, id, at.map_or((None, None), position)).await?;
+        keep.push(id);
+    }
+    leave_others(c, media, &keep).await
 }
 
 /// The series with this id, else with this name among the series of books sharing an author with `media`,

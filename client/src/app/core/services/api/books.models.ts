@@ -99,3 +99,5 @@ export interface BookSourceDelete {
   level: 'work' | 'edition'; editionId?: number; provider: string; value: string;
 }
 
+// PUT /api/media/:id/series -> { series: SeriesRef | null }; DELETE /api/media/:id/series answers the same
+export interface BookSeriesPut { name: string; position: string | null }

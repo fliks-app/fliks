@@ -5116,7 +5116,12 @@
     "offline_audio_unplayable": "Cet audiolivre ne peut pas être lu tel quel sur cet appareil, il ne peut donc pas être enregistré hors ligne",
     "offline_wifi_only": "Les téléchargements sont limités au Wi-Fi",
     "row_similar": "Livres similaires",
-    "edit_profiles": "Formats et langues"
+    "edit_profiles": "Formats et langues",
+    "series_edit": "Modifier la série",
+    "series_name": "Série",
+    "series_position": "Position",
+    "series_position_hint": "Numéro ou libellé, par exemple Hors-série",
+    "series_remove": "Retirer de la série"
   },
   "wants": {
     "title": "Formats et langues",
