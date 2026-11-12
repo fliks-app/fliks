@@ -4,13 +4,12 @@ import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { DeviceService } from '../device.service';
 import { RemoteService } from '../remote.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import { deviceIdOf } from '../remote-target-id';
 import { SseService } from '../sse.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { PlaybackSession } from './playback-session';
 
-/** `local`: only this device's player shows. `remote`: another device plays, one bar. `parked`: the same bar, to resume here. */
+/** `local`: only this device's player shows. `remote`: another device plays, one bar. `parked`: stopped elsewhere, no bar. */
 export type SurfaceState = 'idle' | 'local' | 'remote' | 'parked';
 
 /** The server stops listing a stream whose client has not said it is reading it for 120 s. */
@@ -33,13 +32,6 @@ export class PlaybackSurface {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** The stream was dropped for idleness and the app has not come back to the foreground yet. */
   private streamDropped = false;
-
-  /** The playback whose bar was hidden here: another owner or epoch, or no session in between, shows it again. */
-  private readonly hiddenKey = signal<string | null>(null);
-
-  private static keyOf(s: AccountSession): string {
-    return `${deviceIdOf(s.owner.targetId ?? '')}|${s.epoch}|${s.state === 'parked'}`;
-  }
 
   /** The session already sits on this device: a reader's position it saved, or the track its own player holds. */
   readonly here = computed(() => {
@@ -64,26 +56,28 @@ export class PlaybackSurface {
   readonly bar = computed<AccountSession | null>(() => {
     const s = this.sync.session();
     const state = this.state();
-    if (!s || this.device.isTv() || !this.session.isLocal() || this.session.partyActive()) return null;
-    // Another device plays: its bar replaces a paused local track. A parked session never covers one.
-    if (state !== 'remote' && !(state === 'parked' && !this.audio.active())) return null;
-    return this.hiddenKey() === PlaybackSurface.keyOf(s) ? null : s;
+    // Only another device's live playback, which the bar can pause; it replaces a paused local track.
+    if (!s || state !== 'remote' || this.sync.isReading(s) || this.device.isTv() || !this.session.isLocal() || this.session.partyActive()) return null;
+    return s;
   });
+
+  private readonly musicParked = computed(() => {
+    const s = this.sync.session();
+    return s?.state === 'parked' && s.item.kind === 'album';
+  });
+
+  /** A parked music session is every device's own paused mini-player while nothing else holds it, never a bar. */
+  readonly parkedMusic = computed(
+    () => this.musicParked() && !this.device.isTv() && this.session.isLocal() && !this.session.partyActive() && !this.audio.track(),
+  );
 
   /** Whether the audio mini-player gives way to the bar of another device's playback. */
   readonly miniHidden = computed(() => this.state() === 'remote' && this.bar() !== null);
 
   /** Another bar (cast, remote output) rises above the audio mini-player at the same place. */
-  readonly aboveAudio = computed(() => this.audio.active() && !this.miniHidden());
+  readonly aboveAudio = computed(() => (this.audio.active() || this.parkedMusic()) && !this.miniHidden());
 
   constructor() {
-    // A hidden bar stays hidden for the same playback only: any other state of the session shows it again.
-    effect(() => {
-      const s = this.sync.session();
-      const hidden = untracked(this.hiddenKey);
-      if (!s || (hidden !== null && hidden !== PlaybackSurface.keyOf(s))) this.hiddenKey.set(null);
-    });
-
     // A frozen WebView runs no timer, so its silence is what unlists it.
     effect((onCleanup) => {
       const connectionId = this.sse.connectionId();
@@ -104,12 +98,6 @@ export class PlaybackSurface {
         untracked(() => void this.sse.connect());
       }
     });
-  }
-
-  /** Hides the bar on this device only; the session stays for the account. */
-  hide(): void {
-    const s = this.bar();
-    if (s) this.hiddenKey.set(PlaybackSurface.keyOf(s));
   }
 
   /** Nothing here plays, is followed or controlled: a suspended WebView would only time out on a command sent to it. */

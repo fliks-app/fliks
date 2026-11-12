@@ -43,6 +43,7 @@ async function setup(account: AccountSession | null, live = true) {
     session: signal(account),
     claimPending: signal(false),
     parked: signal(account?.state === 'parked'),
+    playHere: vi.fn(),
     role: signal(account ? 'observer' : 'none'),
     liveReport: computed(() => (live ? { mediaFileId: 9, durationSeconds: 200 } : null)),
     positionNow: (s: AccountSession) => (live ? 70 : s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0)),
@@ -107,6 +108,23 @@ describe('RemoteAudioOutput', () => {
     expect(out.track()).toBe(before);
     sync.session.set(session({ item: { ...session().item, id: 13 }, queue: { itemIds: [11, 12, 13], index: 2, shuffle: true, repeat: 'all' } }));
     expect(out.track()?.itemId).toBe(13);
+  });
+
+  it('shows the track a skip asked for until the owner reports, then follows the report', async () => {
+    const { out, sync, remote } = await setup(session());
+    out.next();
+    expect(remote.send).toHaveBeenCalledWith('pc#1', { action: 'next' });
+    expect(out.track()?.itemId).toBe(13);
+    expect(out.neighbour(1)).toBeNull();
+    sync.session.set(session({ item: { ...session().item, id: 11 }, queue: { itemIds: [11, 12, 13], index: 0, shuffle: false, repeat: 'off' } }));
+    expect(out.track()?.itemId).toBe(11);
+  });
+
+  it('takes a parked session here on play instead of commanding a device that left', async () => {
+    const { out, sync, remote } = await setup(session({ state: 'parked' }));
+    out.toggle();
+    expect(sync.playHere).toHaveBeenCalled();
+    expect(remote.send).not.toHaveBeenCalled();
   });
 
   it('shows the session playing while this device claims it, not the old owner pausing on its way out', async () => {

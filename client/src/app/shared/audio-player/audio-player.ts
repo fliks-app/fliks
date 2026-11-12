@@ -13,7 +13,6 @@ import {
   LucideArrowUp,
   LucideArrowUpToLine,
   LucideChevronDown,
-  LucideSquare,
   LucideChevronRight,
   LucideGauge,
   LucideHeart,
@@ -38,6 +37,7 @@ import {
   LucideListPlus,
   LucidePencil,
   LucideVolume2,
+  LucideVolumeX,
   LucideX,
 } from '@lucide/angular';
 import {
@@ -69,7 +69,7 @@ import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { DropListSettleDirective } from '../directives/drop-list-settle.directive';
 import { SwipeRemoveDirective } from '../directives/swipe-remove.directive';
 import { coverTint } from '../utils/cover-tint';
-import { SwipeSkipDirective } from '../directives/swipe-skip.directive';
+import { SwipeTrackComponent } from './swipe-track';
 import { LyricsPanelComponent } from './lyrics/lyrics-panel';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
@@ -85,7 +85,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     CdkDropList,
     DropListSettleDirective,
     SwipeRemoveDirective,
-    SwipeSkipDirective,
+    SwipeTrackComponent,
     RouterLink,
     NgTemplateOutlet,
     BottomSheetComponent,
@@ -106,7 +106,6 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideArrowUp,
     LucideArrowUpToLine,
     LucideChevronDown,
-    LucideSquare,
     LucideChevronRight,
     LucideGauge,
     LucideHeart,
@@ -131,6 +130,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideListPlus,
     LucidePencil,
     LucideVolume2,
+    LucideVolumeX,
     LucideX,
   ],
   templateUrl: './audio-player.html',
@@ -144,6 +144,9 @@ export class AudioPlayerComponent {
   protected readonly remoteView = this.remoteOut.expanded;
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
   protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.controllable());
+  protected readonly canToggle = computed(() => this.controllable() || this.parkedView());
+  /** The video player's rule: a touch device sets its own level with its buttons, not another device's; a TV uses its remote. */
+  protected readonly showVolume = computed(() => !this.isTv() && this.audio.canSetVolume() && (!this.isTouch() || this.remoteView()));
   protected readonly queueControls = computed(() => this.controllable() && (!this.remoteView() || this.audio.queue().length > 0));
 
   private readonly remoteCan = (action: RemoteAction) => !this.remoteView() || this.remoteOut.supports(action);
@@ -155,14 +158,19 @@ export class AudioPlayerComponent {
     return this.remoteView() ? this.remoteOut : this.local;
   }
 
+  /** The mini-player's output: the local player, else a parked music session shown as this device's own. */
+  protected readonly mini = computed<AudioOutput | null>(() => (this.local.track() ? this.local : this.surface.parkedMusic() ? this.remoteOut : null));
+  /** The full player of a parked music session: it reads as this device's, paused, and play takes it here. */
+  protected readonly parkedView = computed(() => this.remoteView() && this.remoteOut.parked());
+
   /** Reset by every new cover: a cover that fails to load shows the placeholder, not a broken image. */
   protected readonly coverFailed = linkedSignal<string | null | undefined, boolean>({
-    source: () => this.audio.track()?.coverUrl,
+    source: () => this.audio.uiTrack()?.coverUrl,
     computation: () => false,
   });
   /** Kept across tracks until the new cover has loaded, so the bar doesn't flash back to grey. */
   protected readonly tint = linkedSignal<string | null | undefined, string | null>({
-    source: () => this.local.track()?.coverUrl,
+    source: () => this.mini()?.uiTrack()?.coverUrl,
     computation: (url, prev) => (url ? (prev?.value ?? null) : null),
   });
   private readonly likes = inject(LikesApiService);
@@ -183,20 +191,8 @@ export class AudioPlayerComponent {
   protected readonly asSheet = computed(() => this.device.isTouch() || this.device.isTv());
 
   protected readonly clock = formatTime;
-  protected readonly swipeDx = signal(0);
-  /** Swipe offset as a fraction of the title width: the title is gone at 40%, the neighbour shows from 50% to 80%. */
-  protected readonly swipeOut = computed(() => Math.max(0, 1 - Math.abs(this.swipeDx()) / 0.4));
-  protected readonly swipeIn = computed(() => Math.min(1, Math.max(0, (Math.abs(this.swipeDx()) - 0.5) / 0.3)));
-  /** No swipe past either end of the queue, nor on a single track that repeat-all would loop onto itself. */
-  protected readonly swipeable = computed(() => {
-    const many = this.local.queue().length > 1;
-    return { next: many && !!this.local.neighbour(1), previous: many && !!this.local.neighbour(-1) };
-  });
-  protected readonly peek = computed(() => (this.swipeDx() ? this.local.neighbour(this.swipeDx() < 0 ? 1 : -1) : null));
-  protected readonly percent = computed(() => {
-    const d = this.audio.duration();
-    return d ? Math.min(100, (this.audio.position() / d) * 100) : 0;
-  });
+  protected readonly percent = computed(() => percentOf(this.audio));
+  protected readonly miniPercent = computed(() => percentOf(this.mini() ?? this.audio));
   /** The slider value while the user drags, so `timeupdate` doesn't snap the thumb back. */
   protected readonly scrub = signal<number | null>(null);
   protected readonly shown = computed(() => {
@@ -229,7 +225,7 @@ export class AudioPlayerComponent {
 
   constructor() {
     effect(() => {
-      const t = this.audio.musicMode() ? this.audio.track() : null;
+      const t = this.audio.musicMode() ? this.audio.uiTrack() : null;
       if (t) {
         untracked(() => {
           this.lyricsEdit.set(false);
@@ -243,7 +239,7 @@ export class AudioPlayerComponent {
       if (!c) return;
       untracked(() => {
         this.albums.delete(c.mediaId);
-        if (c.itemId !== undefined && c.itemId === this.audio.track()?.itemId) this.fav.set(c.liked);
+        if (c.itemId !== undefined && c.itemId === this.audio.uiTrack()?.itemId) this.fav.set(c.liked);
       });
     });
     effect(() => {
@@ -306,7 +302,7 @@ export class AudioPlayerComponent {
     }
     const a = await album;
     const track = a?.tracks.find((x) => x.itemId === itemId);
-    if (this.audio.track()?.itemId !== itemId) return;
+    if (this.audio.uiTrack()?.itemId !== itemId) return;
     if (track) this.fav.set(track.favourite);
     this.artistId.set(track?.artists.find((x) => x.id != null)?.id ?? a?.artists[0]?.id ?? null);
   }
@@ -317,7 +313,7 @@ export class AudioPlayerComponent {
       (r) => r.structuredLyrics.length > 0,
       () => false,
     );
-    if (this.audio.track()?.itemId === itemId) this.hasLyrics.set(found);
+    if (this.audio.uiTrack()?.itemId === itemId) this.hasLyrics.set(found);
   }
 
   protected async tintFrom(img: HTMLImageElement): Promise<void> {
@@ -373,22 +369,25 @@ export class AudioPlayerComponent {
   }
 
   /** The playing track stays put, and a track never crosses it. */
-  protected readonly sortAllowed = (index: number, drag: CdkDrag<number>): boolean => {
-    const cur = this.audio.queueIndex();
-    return index !== cur && drag.data > cur === index > cur;
-  };
+  /** The queue view starts at the current track: played ones stay reachable by previous, not listed. */
+  protected readonly queueStart = computed(() => Math.max(0, this.audio.queueIndex()));
+  protected readonly upcoming = computed(() => this.audio.queue().slice(this.queueStart()));
+
+  /** Rendered indexes: the current track is row 0 and stays first. */
+  protected readonly sortAllowed = (index: number): boolean => index > 0;
 
   protected onQueueDrop(e: CdkDragDrop<unknown>): void {
-    if (e.previousIndex !== e.currentIndex) this.local.moveInQueue(e.previousIndex, e.currentIndex);
+    const start = this.queueStart();
+    if (e.previousIndex !== e.currentIndex) this.local.moveInQueue(e.previousIndex + start, e.currentIndex + start);
   }
 
   protected addToPlaylist(): void {
-    const t = this.audio.track();
+    const t = this.audio.uiTrack();
     if (t) this.playlists.open({ itemId: t.itemId });
   }
 
   protected async toggleFavourite(): Promise<void> {
-    const t = this.audio.track();
+    const t = this.audio.uiTrack();
     if (!t) return;
     const target = { mediaId: t.mediaId, itemId: t.itemId };
     const was = this.fav();
@@ -408,6 +407,13 @@ export class AudioPlayerComponent {
     void this.local.seek(b.position);
   }
 
+  /** Stopping ends the session for every device of the account, not just this player. */
+  protected async stop(): Promise<void> {
+    if (this.parkedView()) return this.sync.dismiss();
+    this.sync.dismissOnPark(this.local.track()?.itemId);
+    await this.local.close();
+  }
+
   protected async listenHere(): Promise<void> {
     await this.sync.playHere();
   }
@@ -419,4 +425,9 @@ export class AudioPlayerComponent {
 
 function next<T>(steps: T[], value: T): T {
   return steps[(steps.indexOf(value) + 1) % steps.length];
+}
+
+function percentOf(o: AudioOutput): number {
+  const d = o.duration();
+  return d ? Math.min(100, (o.position() / d) * 100) : 0;
 }

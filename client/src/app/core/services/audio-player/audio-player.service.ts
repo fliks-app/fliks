@@ -33,6 +33,7 @@ import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
 import { FullPlayerState } from './full-player-state';
+import { PlayerStateService } from '../player-state.service';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -155,6 +156,12 @@ export class AudioPlayerService {
   readonly track = this._track.asReadonly();
   readonly playing = this._playing.asReadonly();
   readonly uiPlaying = computed(() => this._playing() || this._starting());
+  /** A skip moves the queue first; the loaded track follows once its player reports it. */
+  readonly uiTrack = computed(() => {
+    const t = this._track();
+    const q = this._musicMode() ? this._queue()[this._queueIndex()] : undefined;
+    return q && t && q.itemId !== t.itemId ? this.audioOf(q) : t;
+  });
   readonly loading = this._loading.asReadonly();
   /** Seconds on the item timeline. */
   readonly position = this._position.asReadonly();
@@ -206,11 +213,19 @@ export class AudioPlayerService {
   private sessionId: string | undefined;
   private hls: { destroy(): Promise<void> } | null = null;
   private beatTimer: ReturnType<typeof setInterval> | undefined;
+  /** Sessions of earlier items, stopped once the next one's beat is taken. */
+  private retiring: string[] = [];
   private sleepTimer: ReturnType<typeof setInterval> | undefined;
   private lastPositionState = 0;
   private generation = 0;
   /** True while the playing track is on a Cast receiver instead of the local elements. */
-  private casting = false;
+  private readonly _casting = signal(false);
+  private get casting(): boolean {
+    return this._casting();
+  }
+  private set casting(on: boolean) {
+    this._casting.set(on);
+  }
   private cast: CastService | null = null;
   private readonly mq = new MusicQueue();
   private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
@@ -222,8 +237,12 @@ export class AudioPlayerService {
   private partyRouter: AudioPartyRouter | null = null;
   /** Voice-chat ducking factor, never persisted. */
   private duck = 1;
-  private level = 1;
-  private muted = false;
+  /** The level the video player keeps too: one volume for the user, saved across sessions. */
+  private readonly level = inject(PlayerStateService).volume;
+  readonly volume = this.level.asReadonly();
+  private readonly _muted = signal(false);
+  readonly muted = this._muted.asReadonly();
+  private volumeBeat: ReturnType<typeof setTimeout> | undefined;
   /** True while the native player holds the playing track; it resolves the streams of a music queue itself. */
   private nativeOn = false;
   private nativeReady = false;
@@ -238,15 +257,14 @@ export class AudioPlayerService {
     const track = this._track();
     const info = this._info();
     if (!track || !info) return null;
-    // A skip syncs the queue before the next track loads: no beat reports the new index against the old track.
-    if (this._musicMode() && this._queue()[this._queueIndex()]?.itemId !== track.itemId) return null;
+    if (this.queueAhead()) return null;
     const queue = this._musicMode() ? [this._queue().map((t) => t.itemId), this._queueIndex(), this._shuffle(), this._repeat(), this.neighbour(1) !== null] : null;
     return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.effectiveRate(), queue]);
   });
 
   constructor() {
     if (typeof window === 'undefined') return;
-    window.addEventListener('pagehide', () => this.beatOnExit());
+    window.addEventListener('pagehide', (e) => this.beatOnExit(e.persisted));
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     if (this.nativeAudio) void this.attachNative().catch(() => undefined);
     this.remote.registerLoader('audio', (cmd) => this.loadFromRemote(cmd));
@@ -301,7 +319,7 @@ export class AudioPlayerService {
       return true;
     }
     const generation = ++this.generation;
-    await this.release();
+    await this.release(true);
     this.leaveMusic();
     this._track.set(req);
     this._loading.set(true);
@@ -594,10 +612,11 @@ export class AudioPlayerService {
   /** False when the start was overtaken by another one or failed. */
   private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0): Promise<boolean> {
     const generation = ++this.generation;
-    await this.release();
+    await this.release(true);
     this._pitch.set(0);
     this._musicMode.set(true);
     this._track.set(this.audioOf(req));
+    this.markStarting(autoplay);
     this._loading.set(true);
     this._position.set(startAt);
     this._duration.set(req.durationSeconds ?? 0);
@@ -760,10 +779,9 @@ export class AudioPlayerService {
   private swapToPreloaded(pre: NonNullable<typeof this.pre>): void {
     const old = this.els[this.current];
     const standby = this.els[1 - this.current];
-    this._playing.set(false);
     this._position.set(this._duration());
     this.beat();
-    if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+    if (this.sessionId) this.retiring.push(this.sessionId);
     this.pre = null;
     this.preTried = null;
     this._pitch.set(0);
@@ -1138,10 +1156,10 @@ export class AudioPlayerService {
   /** Saves the position, ends the session and drops the player. */
   async close(): Promise<void> {
     this.generation++;
-    this.level = 1;
-    this.muted = false;
+    this._muted.set(false);
     if (this.casting) this.cast?.stop();
     await this.release();
+    this.stopRetired();
     void this.nativeAudio?.stop().catch(() => undefined);
     this.leaveMusic();
     this._track.set(null);
@@ -1337,13 +1355,13 @@ export class AudioPlayerService {
   }
 
   private userLevel(): number {
-    return this.muted ? 0 : this.level;
+    return this._muted() ? 0 : this.volume();
   }
 
   /** Web elements only: a native or cast output keeps its own volume. */
   private volumeReport() {
     const supportsVolume = !this.nativeOn && !this.casting;
-    return { supportsVolume, ...(supportsVolume && { volume: this.level, muted: this.muted }) };
+    return { supportsVolume, ...(supportsVolume && { volume: this.volume(), muted: this._muted() }) };
   }
 
   /** `exact` is false when the queue's current track is unavailable and `index` lands on a later one; `tracks` is empty when none follows. */
@@ -1386,7 +1404,7 @@ export class AudioPlayerService {
 
   /** "Play here" on a session of another device: its queue and its position now. */
   private async resumeSession(s: AccountSession, positionSeconds: number): Promise<void> {
-    const paused = s.state === 'paused' || s.state === 'parked';
+    const paused = s.state === 'paused';
     const itemIds = s.queue?.itemIds ?? [s.item.id];
     let loaded: boolean;
     if (s.item.kind === 'album') {
@@ -1430,10 +1448,10 @@ export class AudioPlayerService {
         await this.close();
         return;
       case 'volume':
-        if (cmd.level !== undefined) this.setLevel(cmd.level, this.muted);
+        if (cmd.level !== undefined) this.setLevel(cmd.level, this._muted());
         break;
       case 'mute':
-        this.setLevel(this.level, cmd.muted ?? !this.muted);
+        this.setLevel(this.volume(), cmd.muted ?? !this._muted());
         break;
       case 'shuffle':
         if (music) this.setShuffle(cmd.shuffle ?? !this.mq.shuffle);
@@ -1457,9 +1475,28 @@ export class AudioPlayerService {
   }
 
   private setLevel(level: number, muted: boolean): void {
-    this.level = Math.min(1, Math.max(0, level));
-    this.muted = muted;
+    this.level.set(Math.min(1, Math.max(0, level)));
+    this._muted.set(muted);
     this.applyGains();
+  }
+
+  /** Web elements only: a native player or a cast keeps its own level. */
+  readonly canSetVolume = computed(() => !this.nativeAudio && !this._casting());
+
+  setVolume(level: number): void {
+    this.setLevel(level, false);
+    this.reportVolume();
+  }
+
+  toggleMute(): void {
+    this.setLevel(this.volume(), !this._muted());
+    this.reportVolume();
+  }
+
+  /** A dragged slider reports its level once it settles, not on every step. */
+  private reportVolume(): void {
+    clearTimeout(this.volumeBeat);
+    this.volumeBeat = setTimeout(() => this.beat(), 300);
   }
 
   /** Swaps the queue under the running track; another current track starts it. */
@@ -1530,7 +1567,8 @@ export class AudioPlayerService {
         itemId: track.itemId,
         sessionId: this.sessionId,
         handoff: this.sessionSync.handoffFor(this.sessionId),
-        state: this._playing() ? ('playing' as const) : ('paused' as const),
+        // A start in flight reports playing: a skip never shows as a pause elsewhere.
+        state: this.uiPlaying() ? ('playing' as const) : ('paused' as const),
         hasNext: this._musicMode() && this.neighbour(1) !== null,
         playbackRate: this.effectiveRate(),
         ...this.volumeReport(),
@@ -1544,7 +1582,7 @@ export class AudioPlayerService {
     if (!b) return;
     const { positionSeconds, durationSeconds, mediaFileId, itemId } = b.payload;
     // The closing beat belongs to the ended session: a queue adopted for the next one must not ride on it.
-    const queue = final ? null : this.queueToSend();
+    const queue = final || this.queueAhead() ? null : this.queueToSend();
     if (queue) b.payload.queue = queue;
     const ack = this.remote.lastAppliedCmdId();
     if (ack) b.payload.lastCmdId = ack;
@@ -1554,6 +1592,8 @@ export class AudioPlayerService {
     this.streaming
       .updatePlaybackState(b.mediaId, b.payload)
       .then((r) => {
+        const sid = b.payload.sessionId;
+        if (sid && !r?.superseded && !this.retiring.includes(sid)) this.stopRetired();
         if (lostCurrentSession(r, b.payload.sessionId, this.sessionId)) this.sessionId = undefined;
         if (r?.superseded && b.payload.sessionId) void this.sessionSync.handleSuperseded(b.payload.sessionId);
         if (!music) this.sync.record(saved);
@@ -1562,6 +1602,16 @@ export class AudioPlayerService {
         if (queue) this.queueSent = null;
         if (!music) this.sync.queue(saved);
       });
+  }
+
+  /** A skip moves the queue before the next track loads: until it does, no beat reports the new index against the old track. */
+  private queueAhead(): boolean {
+    return this._musicMode() && this._queue()[this._queueIndex()]?.itemId !== this._track()?.itemId;
+  }
+
+  /** Stops the sessions of earlier items; until the next one beats, stopping them would park the account session between tracks. */
+  private stopRetired(): void {
+    for (const sid of this.retiring.splice(0)) void this.streaming.stopSession(sid).catch(() => undefined);
   }
 
   /** What the last beat carried: the queue goes out on the first beat of a session and when it changes. */
@@ -1590,19 +1640,27 @@ export class AudioPlayerService {
     return value;
   }
 
-  private beatOnExit(): void {
+  /** An unloading page ends its session, so the server parks it now and a reload finds it parked, not owned by a dead tab. */
+  private beatOnExit(persisted = false): void {
     const b = this.body();
     if (!b) return;
     const { url, init } = this.streaming.positionRequest(b.mediaId);
     void fetch(url, { ...init, body: JSON.stringify({ ...b.payload, sessionId: undefined }) }).catch(() => undefined);
+    // Native music and a cast keep playing across a WebView reload.
+    if (persisted) return;
+    const sids = [...this.retiring.splice(0), ...(this.sessionId && !this.casting && !(this.nativeOn && this._musicMode()) ? [this.sessionId] : [])];
+    for (const sid of sids) {
+      const stop = this.streaming.stopSessionRequest(sid);
+      void fetch(stop.url, stop.init).catch(() => undefined);
+    }
   }
 
-  /** Saves the position and tears the current item down. */
-  private async release(): Promise<void> {
+  /** Saves the position and tears the current item down; `next` when another item follows, which the session plays on into. */
+  private async release(next = false): Promise<void> {
     clearInterval(this.beatTimer);
     const el = this.el();
     if ((el || this.casting || this.nativeOn) && this.info) {
-      this._playing.set(false);
+      if (!next) this._playing.set(false);
       this.beat(true);
     }
     this.dropPreload();
@@ -1615,7 +1673,7 @@ export class AudioPlayerService {
       e.load();
     }
     // The native player ends the sessions of the tracks it resolved itself.
-    if (this.sessionId && !(this.nativeOn && this._musicMode())) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+    if (this.sessionId && !(this.nativeOn && this._musicMode())) this.retiring.push(this.sessionId);
     this.sessionId = undefined;
     this.info = null;
     this.nativeOn = false;
@@ -1794,7 +1852,9 @@ export class AudioPlayerService {
     if (!this.nativeOn) return;
     this.nativeReady = s.ready;
     this._buffering.set(s.buffering);
-    if (s.playing !== this._playing()) this.onPlayState(s.playing);
+    // Buffering on its way to play (a skip, a seek) is still playing: no pause flickers out.
+    const playing = s.playing || (s.playWhenReady && s.buffering);
+    if (playing !== this._playing()) this.onPlayState(playing);
     if (!s.ended) this.nativeEnded = false;
     else if (!this.nativeEnded) {
       this.nativeEnded = true;
@@ -1849,11 +1909,8 @@ export class AudioPlayerService {
     if (!cur) return;
     if (e.index !== this.nativeIndex || this._track()?.itemId !== cur.itemId) {
       this.nativeIndex = e.index;
-      const playing = this._playing();
-      this._playing.set(false);
       this._position.set(this._duration());
       this.beat();
-      this._playing.set(playing);
       this._track.set(this.audioOf(cur));
       this._duration.set(cur.durationSeconds ?? 0);
       this._position.set(0);

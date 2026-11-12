@@ -12,6 +12,7 @@ import { RemoteService } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
 import { Subject } from 'rxjs';
+import { PlayerStateService } from '../player-state.service';
 
 const info = {
   playMethod: 'DirectPlay',
@@ -45,6 +46,7 @@ describe('AudioPlayerService', () => {
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
+        { provide: PlayerStateService, useValue: { volume: signal(1) } },
         {
           provide: StreamingApiService,
           useValue: {
@@ -53,6 +55,7 @@ describe('AudioPlayerService', () => {
             stopSession,
             buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl,
             positionRequest: () => ({ url: '/x', init: {} }),
+            stopSessionRequest: (sid: string) => ({ url: `/stop/${sid}`, init: { method: 'DELETE' } }),
           },
         },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
@@ -75,6 +78,14 @@ describe('AudioPlayerService', () => {
     expect(audio.chapters().map((c) => c.start)).toEqual([0, 10]);
     expect(audio.track()?.title).toBe('Book');
     expect(audio.loading()).toBe(false);
+  });
+
+  it('ends its session when the page unloads, so a reload finds it parked', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play(req);
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(fetch).toHaveBeenCalledWith('/stop/sid', { method: 'DELETE' });
   });
 
   it('never pauses an item that is already playing when asked to play it again', async () => {

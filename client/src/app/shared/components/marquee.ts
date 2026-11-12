@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, ElementRef, DestroyRef, afterNextRender, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, DestroyRef, afterNextRender, afterRenderEffect, inject, input, signal, viewChild } from '@angular/core';
 
 const GAP = 48;
 
@@ -25,15 +25,23 @@ export class MarqueeComponent {
   protected readonly gap = GAP;
 
   constructor() {
-    const observer = new ResizeObserver(() => {
-      const width = this.line().nativeElement.offsetWidth;
-      this.width.set(width);
-      this.overflowing.set(width > this.box().nativeElement.clientWidth);
+    // A new text is measured in the render that shows it: an observer's callback lands a frame late, with the old state.
+    afterRenderEffect(() => {
+      this.text();
+      this.secondary();
+      this.measure();
     });
+    const observer = new ResizeObserver(() => this.measure());
     afterNextRender(() => {
       observer.observe(this.box().nativeElement);
       observer.observe(this.line().nativeElement);
     });
     inject(DestroyRef).onDestroy(() => observer.disconnect());
+  }
+
+  private measure(): void {
+    const width = this.line().nativeElement.offsetWidth;
+    this.width.set(width);
+    this.overflowing.set(width > this.box().nativeElement.clientWidth);
   }
 }

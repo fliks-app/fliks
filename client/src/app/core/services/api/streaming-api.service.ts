@@ -582,7 +582,7 @@ export class StreamingApiService {
   }
 
   /** `fetch` init for a request on exit: bearer on standalone bundles, the cookie on web. */
-  private keepaliveRequest(path: string, method: 'POST' | 'PUT'): { url: string; init: RequestInit } {
+  private keepaliveRequest(path: string, method: 'POST' | 'PUT' | 'DELETE'): { url: string; init: RequestInit } {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!this.serverConfig.isNative) {
       return { url: path, init: { headers, credentials: 'include', keepalive: true, method } };
@@ -602,6 +602,11 @@ export class StreamingApiService {
   /** Resume-point write for a page going away; carries no sid so it cannot revive the session the stop ends. */
   positionRequest(mediaId: number) {
     return this.keepaliveRequest(`/api/playback/media/${mediaId}/state`, 'PUT');
+  }
+
+  /** The stop of a page going away, where an HttpClient request would be cancelled. */
+  stopSessionRequest(sessionId: string) {
+    return this.keepaliveRequest(`/api/stream/sessions/${encodeURIComponent(sessionId)}`, 'DELETE');
   }
 
   stopSession(sessionId: string) {
