@@ -617,7 +617,9 @@ mod tests {
     ) -> fliks_engine_core::api::ModelInfo {
         serde_json::from_value(json!({
             "id": id, "kind": kind, "name": id, "version": "1", "default": default, "state": state,
-            "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0
+            "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0,
+            "languages": [], "homepage": "", "sizeBytes": 0, "diskBytes": 0, "outdated": false,
+            "verifying": false
         }))
         .unwrap()
     }
