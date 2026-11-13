@@ -1,4 +1,4 @@
-import { detectPitch } from './pitch-detect';
+import { PitchSmoother, detectPitch } from './pitch-detect';
 import type { PitchFrame } from './karaoke-score';
 
 export const WINDOW = 2048;
@@ -31,7 +31,8 @@ export class MicCapture {
       await ctx.audioWorklet.addModule(new URL('karaoke-worklet.js', document.baseURI).href);
       const node = new AudioWorkletNode(ctx, 'karaoke-capture', { numberOfOutputs: 0 });
       const win = new PitchWindow();
-      node.port.onmessage = (ev: MessageEvent<Float32Array>) => onFrame({ t: now(), midi: win.push(ev.data, ctx.sampleRate) });
+      const smooth = new PitchSmoother();
+      node.port.onmessage = (ev: MessageEvent<Float32Array>) => onFrame({ t: now(), midi: smooth.push(win.push(ev.data, ctx.sampleRate)) });
       ctx.createMediaStreamSource(this.stream).connect(node);
       await ctx.resume();
     } catch (err) {

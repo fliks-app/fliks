@@ -5413,7 +5413,11 @@
     "tap_sync": "Tap to sync",
     "tap_hint": "Press Stamp as each line starts to sing; Back undoes the last one.",
     "tap_stamp": "Stamp line",
-    "tap_back": "Back"
+    "tap_back": "Back",
+    "source_user": "Added by hand",
+    "source_sidecar": "Lyrics file",
+    "source_embedded": "In the audio file",
+    "source_generated": "Word by word"
   },
   "karaoke": {
     "title": "Karaoke",

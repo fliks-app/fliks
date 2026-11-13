@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMicVocal } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
 import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
@@ -11,6 +11,7 @@ import type { StemMode } from '../../../core/services/audio-player/stem-mix';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { localizeLanguage } from '../../../core/utils/language.utils';
 import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
@@ -31,6 +32,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
   private readonly karaoke = inject(KaraokeApiService);
+  private readonly translate = inject(TranslateService);
   protected readonly audio = inject(AudioPlayerService);
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
@@ -56,7 +58,14 @@ export class LyricsPanelComponent {
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
   protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   protected readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  protected readonly main = computed(() => this.mains().find((d) => d.id === this.mainId()) ?? this.mains()[0] ?? null);
+  /** The karaoke view defaults to the first word-synced document: the only kind with a fill and a melody. */
+  protected readonly main = computed(
+    () =>
+      this.mains().find((d) => d.id === this.mainId()) ??
+      (this.stage() ? this.mains().find((d) => d.cueLine?.length) : undefined) ??
+      this.mains()[0] ??
+      null,
+  );
   private readonly layer = computed(() => this.layers().find((d) => d.id === this.layerId()) ?? null);
   /** An aligned layer goes under each main line; any other replaces the main text. */
   protected readonly under = computed(() => {
@@ -263,6 +272,9 @@ export class LyricsPanelComponent {
   }
 
   protected label(d: StructuredLyrics): string {
-    return d.lang === 'und' ? d.source : `${d.lang} · ${d.source}`;
+    const source = d.source.startsWith('provider:')
+      ? (d.sourceLabel ?? d.source.slice(d.source.lastIndexOf(':') + 1))
+      : this.translate.instant(`lyrics.source_${d.source}`);
+    return d.lang === 'und' ? source : `${localizeLanguage(d.lang, this.translate)} · ${source}`;
   }
 }

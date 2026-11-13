@@ -5413,7 +5413,11 @@
     "tap_sync": "Synchroniser au tap",
     "tap_hint": "Appuyez sur Marquer au début de chaque ligne chantée ; Retour annule la dernière.",
     "tap_stamp": "Marquer la ligne",
-    "tap_back": "Retour"
+    "tap_back": "Retour",
+    "source_user": "Ajoutées à la main",
+    "source_sidecar": "Fichier de paroles",
+    "source_embedded": "Dans le fichier audio",
+    "source_generated": "Synchro au mot"
   },
   "karaoke": {
     "title": "Karaoké",
