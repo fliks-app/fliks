@@ -13,7 +13,7 @@ services:
       target: engine-dev
     working_dir: /engine
     command: >
-      cargo watch -w crates -x 'run --bin fliks-engine -- --listen 0.0.0.0:7400 --public-listen 0.0.0.0:3000 --upstream http://server:3001'
+      cargo watch -w crates -x 'run --bin fliks-engine --features karaoke -- --listen 0.0.0.0:7400 --public-listen 0.0.0.0:3000 --upstream http://server:3001'
     environment:
       FLIKS_ENGINE_TOKEN: dev-engine-token
       CARGO_TARGET_DIR: /cargo-target
@@ -39,6 +39,10 @@ services:
       - engine-registry:/usr/local/cargo/registry
       # Engine reads media by path: same mount as the server.
       - ./.dev/medias:/medias
+      # Job outputs (karaoke stems) land under the server's data dir.
+      - ./.dev/data:/src/data
+      # Downloaded models survive a recreate.
+      - engine-models:/models
 
   server:
     build:
@@ -115,6 +119,7 @@ services:
 volumes:
   postgres:
   engine-target:
+  engine-models:
   engine-registry:
   server-target:
   server-registry:
