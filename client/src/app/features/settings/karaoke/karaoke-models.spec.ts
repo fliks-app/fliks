@@ -27,7 +27,7 @@ function model(over: Partial<KaraokeModel>): KaraokeModel {
   };
 }
 
-function create(models: KaraokeModel[]) {
+function create(models: KaraokeModel[], realign: object = { tracks: 0, running: false }) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -37,7 +37,7 @@ function create(models: KaraokeModel[]) {
       }),
       {
         provide: HttpClient,
-        useValue: { get: () => of({ languages: [], tracks: 0, running: false }) },
+        useValue: { get: () => of({ languages: [], ...realign }) },
       },
       { provide: SseService, useValue: { karaokeEvents: new Subject() } },
     ],
@@ -54,7 +54,7 @@ function create(models: KaraokeModel[]) {
   fixture.componentRef.setInput('aligners', {});
   fixture.detectChanges();
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  return fixture.componentInstance as any;
+  return Object.assign(fixture.componentInstance as any, { fixture });
 }
 
 describe('KaraokeModelsComponent', () => {
@@ -96,5 +96,15 @@ describe('KaraokeModelsComponent', () => {
     const c = create([]);
     expect(c.canDownload(model({ state: 'installed', outdated: true }))).toBe(true);
     expect(c.canDownload(model({ state: 'installed' }))).toBe(false);
+  });
+
+  it('keeps the card and its details button when only refused tracks remain', async () => {
+    const c = create([], { tracks: 0, refused: 2, running: false, total: 0, done: 0 });
+    await new Promise((r) => setTimeout(r, 10));
+    c.fixture.detectChanges();
+    const el: HTMLElement = c.fixture.nativeElement;
+    expect(el.querySelector('[data-testid="karaoke-refused"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="karaoke-stale-details-open"]')).not.toBeNull();
+    expect(el.querySelector('button.btn-primary')).toBeNull();
   });
 });

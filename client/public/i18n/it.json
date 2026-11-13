@@ -5553,6 +5553,8 @@
       "stale_hint": "La nuova sincronizzazione sostituisce i testi generati. I testi rivisti restano.",
       "resync": "Sincronizza di nuovo",
       "resyncing": "Nuova sincronizzazione",
+      "refused_one": "{{count}} brano rifiutato",
+      "refused_other": "{{count}} brani rifiutati",
       "details": "Dettagli",
       "details_title": "Brani da sincronizzare di nuovo",
       "details_models": "{{language}}: sincronizzato con {{current}}, verrebbe sincronizzato con {{next}}",

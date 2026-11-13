@@ -5553,6 +5553,8 @@
       "stale_hint": "Re-syncing replaces generated lyrics. Lyrics you reviewed stay.",
       "resync": "Re-sync",
       "resyncing": "Re-syncing",
+      "refused_one": "{{count}} track refused",
+      "refused_other": "{{count}} tracks refused",
       "details": "Details",
       "details_title": "Tracks to re-sync",
       "details_models": "{{language}}: synced with {{current}}, would be synced with {{next}}",

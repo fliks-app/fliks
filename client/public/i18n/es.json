@@ -5553,6 +5553,8 @@
       "stale_hint": "Volver a sincronizar reemplaza las letras generadas. Las letras revisadas se conservan.",
       "resync": "Volver a sincronizar",
       "resyncing": "Sincronizando de nuevo",
+      "refused_one": "{{count}} pista rechazada",
+      "refused_other": "{{count}} pistas rechazadas",
       "details": "Detalles",
       "details_title": "Pistas por sincronizar de nuevo",
       "details_models": "{{language}}: sincronizada con {{current}}, se sincronizaría con {{next}}",

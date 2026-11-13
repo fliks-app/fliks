@@ -357,8 +357,10 @@ pub async fn realign_items(
 pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
     let models = st.engine.models().await.map_err(engine_err)?.models;
+    let all = stale(&st, &models).await?;
     Ok(Json(json!({
-        "tracks": stale(&st, &models).await?.iter().filter(|s| !s.blocked).count(),
+        "tracks": all.iter().filter(|s| !s.blocked).count(),
+        "refused": all.iter().filter(|s| s.blocked).count(),
         "running": st.karaoke.realigning.load(Ordering::SeqCst),
         "total": st.karaoke.realign_total.load(Ordering::SeqCst),
         "done": st.karaoke.realign_done.load(Ordering::SeqCst),

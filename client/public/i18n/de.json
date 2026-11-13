@@ -5553,6 +5553,8 @@
       "stale_hint": "Die erneute Synchronisation ersetzt erzeugte Texte. Geprüfte Texte bleiben.",
       "resync": "Neu synchronisieren",
       "resyncing": "Wird neu synchronisiert",
+      "refused_one": "{{count}} Titel abgelehnt",
+      "refused_other": "{{count}} Titel abgelehnt",
       "details": "Details",
       "details_title": "Titel zum erneuten Synchronisieren",
       "details_models": "{{language}}: synchronisiert mit {{current}}, würde mit {{next}} synchronisiert",
