@@ -253,6 +253,7 @@ export class AudioPlayerComponent {
       if (!el) return;
       if (this.audio.expanded() && !el.open) el.showModal();
       else if (!this.audio.expanded() && el.open) el.close();
+      if (!this.audio.expanded()) untracked(() => this.fullscreen.set(false));
     });
   }
 

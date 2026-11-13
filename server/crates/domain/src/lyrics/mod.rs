@@ -81,6 +81,17 @@ pub struct CueNote {
     pub pitch: f32,
 }
 
+/// The main note of a cue: its longest note, the earliest on a tie.
+pub(crate) fn main_pitch(notes: &[CueNote]) -> Option<f32> {
+    notes
+        .iter()
+        .fold(None::<&CueNote>, |best, c| match best {
+            Some(b) if b.end - b.start >= c.end - c.start => Some(b),
+            _ => Some(c),
+        })
+        .map(|n| n.pitch)
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
