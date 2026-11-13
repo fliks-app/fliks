@@ -40,13 +40,13 @@
                 @if (g.key === 'alignment') {
                   {{ languagesOf(m) }} ·
                 }
-                {{ size(m.sizeBytes) }} · {{ 'karaoke.state_' + m.state | translate }}
+                {{ size(m.sizeBytes) }} · {{ (m.outdated ? 'karaoke.state_outdated' : 'karaoke.state_' + m.state) | translate }}
               </p>
             </div>
             <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
               @if (canDownload(m)) {
                 <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === m.id" (click)="start(m)">
-                  {{ (m.state === 'outdated' ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
+                  {{ (m.outdated ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
                 </button>
               }
               @if (canCancel(m)) {
@@ -164,7 +164,7 @@
         <button type="button" class="btn" (click)="closeReview()">{{ 'common.close' | translate }}</button>
         @if (canDownload(m) && !m.licence.clear) {
           <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="confirmDownload()">
-            {{ (m.state === 'outdated' ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
+            {{ (m.outdated ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
           </button>
         }
       </app-modal-footer>

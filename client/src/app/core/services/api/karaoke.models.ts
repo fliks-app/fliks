@@ -1,5 +1,5 @@
 export type KaraokeModelKind = 'separation' | 'alignment' | 'melody';
-export type KaraokeModelState = 'absent' | 'downloading' | 'installed' | 'outdated' | 'failed';
+export type KaraokeModelState = 'absent' | 'downloading' | 'installed' | 'failed';
 export type KaraokeStage = 'separate' | 'align' | 'melody';
 export type KaraokeJobState = 'none' | 'queued' | 'running' | 'ready' | 'failed';
 export type StemKind = 'vocals' | 'instrumental' | 'guide';
@@ -37,6 +37,8 @@ export interface KaraokeModel {
   sizeBytes: number;
   diskBytes: number;
   installedVersion?: string;
+  /** Installed with an older version than the catalogue's: still usable. */
+  outdated: boolean;
   state: KaraokeModelState;
   downloadedBytes: number;
   /** While downloading. */
