@@ -1,0 +1,176 @@
+@let c = catalogue();
+
+<div class="flex flex-col gap-2" data-testid="karaoke-disk">
+  <h3 class="font-medium">{{ 'karaoke.admin.disk_title' | translate }}</h3>
+  @if (c.freeBytes !== undefined) {
+    <progress class="progress progress-primary w-full" [value]="c.usedBytes" [max]="diskMax()" [attr.aria-label]="'karaoke.admin.disk_title' | translate"></progress>
+    <p class="text-sm text-base-content/60">{{ 'karaoke.admin.disk_summary' | translate: { used: size(c.usedBytes), free: size(c.freeBytes) } }}</p>
+  } @else {
+    <p class="text-sm text-base-content/60">{{ 'karaoke.admin.disk_used' | translate: { used: size(c.usedBytes) } }}</p>
+  }
+  <p class="break-all text-sm text-base-content/60">{{ c.modelsDir }}</p>
+</div>
+
+@for (g of groups(); track g.key) {
+  <section class="flex flex-col gap-3" [attr.data-testid]="'karaoke-group-' + g.key">
+    <div class="flex flex-wrap items-start gap-2">
+      <div class="min-w-0 flex-1">
+        <h3 class="font-medium">{{ 'karaoke.admin.group_' + g.key | translate }}</h3>
+        <p class="text-sm text-base-content/60">{{ 'karaoke.admin.group_' + g.key + '_hint' | translate }}</p>
+      </div>
+      @if (g.key === 'alignment' && selection().length) {
+        <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === 'selection'" (click)="installSelection()" data-testid="karaoke-install-recommended">
+          {{ 'karaoke.admin.install_recommended' | translate: { size: selectionSize() } }}
+        </button>
+      }
+    </div>
+
+    <ul class="flex flex-col gap-3" data-testid="karaoke-models">
+      @for (m of g.models; track m.id) {
+        <li class="flex flex-col gap-2 rounded-lg bg-base-200 p-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium">
+                {{ m.name }} <span class="text-sm font-normal text-base-content/60">{{ m.version }}</span>
+                @if (m.recommended && g.key === 'alignment') {
+                  <span class="badge badge-primary badge-sm">{{ 'karaoke.admin.recommended' | translate }}</span>
+                }
+              </p>
+              <p class="text-sm text-base-content/60">
+                @if (g.key === 'alignment') {
+                  {{ languagesOf(m) }} ·
+                }
+                {{ size(m.sizeBytes) }} · {{ 'karaoke.state_' + m.state | translate }}
+              </p>
+            </div>
+            <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
+              @if (canDownload(m)) {
+                <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === m.id" (click)="start(m)">
+                  {{ (m.state === 'outdated' ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
+                </button>
+              }
+              @if (canCancel(m)) {
+                <button type="button" class="btn btn-ghost btn-sm" [disabled]="busy() === m.id" (click)="cancel(m)">{{ 'karaoke.admin.cancel' | translate }}</button>
+              }
+              @if (m.state === 'installed') {
+                <button type="button" class="btn btn-ghost btn-sm" [disabled]="busy() === m.id" (click)="verify(m)">{{ 'karaoke.admin.verify' | translate }}</button>
+              }
+              <button type="button" class="btn btn-ghost btn-sm" (click)="review(m)">{{ 'karaoke.admin.licence_label' | translate: { name: m.licence.name } }}</button>
+              <a class="btn btn-ghost btn-sm" [href]="m.homepage" target="_blank" rel="noopener noreferrer">{{ 'karaoke.admin.model_card' | translate }}</a>
+              @if (canDelete(m)) {
+                <button type="button" class="btn btn-error btn-outline btn-sm" [disabled]="busy() === m.id" (click)="remove(m)">{{ 'common.delete' | translate }}</button>
+              }
+            </div>
+          </div>
+          @if (m.state === 'downloading') {
+            <progress class="progress progress-primary w-full" [value]="percent(m)" max="100" [attr.aria-label]="'karaoke.admin.progress' | translate"></progress>
+            @if (speed(m); as s) {
+              <p class="text-sm text-base-content/60">{{ s }}</p>
+            }
+          }
+          @if (m.state === 'failed' && m.error) {
+            <p class="text-sm text-error" role="alert">{{ m.error }}</p>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (g.key === 'alignment' && languages().length) {
+      <div class="flex flex-col gap-2" data-testid="karaoke-languages">
+        <h4 class="text-sm font-medium">{{ 'karaoke.admin.languages_title' | translate }}</h4>
+        <p class="text-sm text-base-content/60">{{ 'karaoke.admin.languages_hint' | translate }}</p>
+        <ul class="flex flex-col gap-2">
+          @for (l of languages(); track l.language) {
+            <li class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 p-3">
+              <div class="min-w-0 flex-1">
+                <p class="font-medium">
+                  {{ name(l.language) }}
+                  <span class="text-sm font-normal text-base-content/60">{{ 'karaoke.admin.tracks' | translatePlural: l.tracks }}</span>
+                </p>
+                @if (!l.aligner) {
+                  <p class="text-sm text-warning" role="status">{{ 'karaoke.admin.no_aligner' | translate }}</p>
+                } @else if (modelOf(l.aligner)?.engine === 'whisper') {
+                  <p class="text-sm text-warning" role="status">{{ 'karaoke.admin.recogniser_aligner' | translate }}</p>
+                }
+              </div>
+              <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
+                @if (missing(l); as r) {
+                  <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() === r.id" (click)="start(r)">
+                    {{ 'karaoke.admin.download_named' | translate: { name: r.name } }}
+                  </button>
+                }
+                @if (options(l).length > 1) {
+                  <app-select-field size="sm" [hideLabel]="true" [label]="'karaoke.admin.aligner_of' | translate: { language: name(l.language) }" [value]="l.aligner ?? ''" (valueChange)="choose(l, $event)">
+                    @for (m of options(l); track m.id) {
+                      <option [value]="m.id">{{ m.name }}</option>
+                    }
+                  </app-select-field>
+                } @else if (modelOf(l.aligner); as m) {
+                  <span class="text-sm">{{ m.name }}</span>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </section>
+}
+
+@if (stale() > 0) {
+  <div class="flex flex-col items-start gap-2 rounded-lg bg-base-200 p-4" data-testid="karaoke-realign">
+    <p class="font-medium">{{ 'karaoke.admin.stale' | translatePlural: stale() }}</p>
+    <p class="text-sm text-base-content/60">{{ 'karaoke.admin.stale_hint' | translate }}</p>
+    <button type="button" class="btn btn-primary btn-sm" [disabled]="resyncing()" (click)="resync()">
+      @if (resyncing()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ (resyncing() ? 'karaoke.admin.resyncing' : 'karaoke.admin.resync') | translate }}
+    </button>
+  </div>
+}
+
+@if (c.orphans.length) {
+  <section class="flex flex-col gap-3" data-testid="karaoke-orphans">
+    <div>
+      <h3 class="font-medium">{{ 'karaoke.admin.orphans_title' | translate }}</h3>
+      <p class="text-sm text-base-content/60">{{ 'karaoke.admin.orphans_hint' | translate }}</p>
+    </div>
+    <ul class="flex flex-col gap-2">
+      @for (o of c.orphans; track o.name) {
+        <li class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 p-3">
+          <p class="min-w-0 flex-1 break-all">{{ o.name }} <span class="text-sm text-base-content/60">{{ size(o.sizeBytes) }}</span></p>
+          <div class="scroll-ring-safe">
+            <button type="button" class="btn btn-error btn-outline btn-sm" [disabled]="busy() === o.name" (click)="removeOrphan(o)">{{ 'common.delete' | translate }}</button>
+          </div>
+        </li>
+      }
+    </ul>
+  </section>
+}
+
+<dialog #licence class="modal" role="dialog" aria-modal="true" (close)="closeReview()">
+  @if (reviewing(); as m) {
+    <div class="modal-box max-w-2xl">
+      <app-modal-header [title]="m.licence.name" />
+      <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded bg-base-200 p-3 text-sm" tabindex="0">{{ m.licence.text }}</pre>
+      @if (canDownload(m) && !m.licence.clear) {
+        <label class="mt-4 flex cursor-pointer items-start gap-3">
+          <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" [checked]="accepted()" (change)="accepted.set($any($event.target).checked)" />
+          <span>{{ 'karaoke.admin.accept' | translate: { name: m.name } }}</span>
+        </label>
+      }
+      <app-modal-footer>
+        <button type="button" class="btn" (click)="closeReview()">{{ 'common.close' | translate }}</button>
+        @if (canDownload(m) && !m.licence.clear) {
+          <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="confirmDownload()">
+            {{ (m.state === 'outdated' ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
+          </button>
+        }
+      </app-modal-footer>
+    </div>
+  }
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeReview()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>
