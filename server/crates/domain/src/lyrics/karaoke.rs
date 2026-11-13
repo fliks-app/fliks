@@ -1,5 +1,5 @@
 //! The documents karaoke jobs read and write (`docs/spec/karaoke.md` rules 18, 19). Pure.
-use super::{Cue, CueNote, Doc, Line, main_agent};
+use super::{Cue, CueNote, Doc, Line, main_agent, main_pitch};
 
 /// A word the engine timed, with its byte range in the request line's text.
 pub struct Word {
@@ -96,15 +96,18 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
 }
 
 /// The `(start, end)` of every line that has cues, in document order: from the line's start (or its
-/// first cue) to its last cue, so a note sung off its word's timing is still found.
+/// first cue) to its last cue, so a note sung off its word's timing is found; spans never overlap.
 pub fn line_spans(doc: &Doc) -> Vec<(i64, i64)> {
+    let mut prev_end = i64::MIN;
     doc.lines
         .iter()
         .filter_map(|l| {
-            let (first, last) = (l.cues.first()?, l.cues.last()?);
+            let first = l.cues.first()?;
             let start = l.start.map_or(first.start, |s| s.min(first.start));
-            let end = l.cues.iter().map(|c| c.end).max().unwrap_or(last.end);
-            Some((start, end.max(start + 1)))
+            let start = start.max(prev_end);
+            let end = l.cues.iter().map(|c| c.end).max()?.max(start + 1);
+            prev_end = end;
+            Some((start, end))
         })
         .collect()
 }
@@ -112,9 +115,8 @@ pub fn line_spans(doc: &Doc) -> Vec<(i64, i64)> {
 /// A note `(start, end, midi)` found in a span.
 pub type Note = (i64, i64, f64);
 
-/// Writes the notes of each line (`notes[i]` is the span of the i-th line of `line_spans`) into its
-/// cues: a note goes to the cue holding its midpoint, else the nearest. A cue's `pitch` is its longest
-/// note, the earliest on a tie; both absent when it gets none.
+/// Writes the notes of each line (`notes[i]` is the i-th span of `line_spans`) into the cue holding
+/// their midpoint, else the nearest; a cue's `pitch` is its main note (`main_pitch`).
 pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
     let mut spans = notes.iter();
     for line in doc.lines.iter_mut().filter(|l| !l.cues.is_empty()) {
@@ -134,14 +136,7 @@ pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
             }
         }
         for cue in &mut line.cues {
-            cue.pitch = cue
-                .notes
-                .iter()
-                .fold(None::<&CueNote>, |best, c| match best {
-                    Some(b) if b.end - b.start >= c.end - c.start => Some(b),
-                    _ => Some(c),
-                })
-                .map(|n| n.pitch);
+            cue.pitch = main_pitch(&cue.notes);
         }
     }
 }
@@ -173,6 +168,35 @@ mod tests {
             ],
             bg: vec![],
         }
+    }
+
+    #[test]
+    fn line_spans_never_overlap() {
+        let cue = |start, end| Cue {
+            start,
+            end,
+            byte_start: 0,
+            byte_end: 1,
+            agent_id: None,
+            pitch: None,
+            notes: vec![],
+            golden: false,
+        };
+        let line = |start, cues| Line {
+            start: Some(start),
+            text: "a".into(),
+            cues,
+            ..Line::default()
+        };
+        let d = Doc {
+            agents: vec![],
+            lines: vec![
+                line(0, vec![cue(0, 2000)]),
+                line(1500, vec![cue(1800, 3000)]),
+            ],
+            bg: vec![],
+        };
+        assert_eq!(line_spans(&d), [(0, 2000), (2000, 3000)]);
     }
 
     #[test]

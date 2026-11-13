@@ -1,5 +1,5 @@
 //! UltraStar `.txt`: syllable notes become word cues with a MIDI pitch, `P1`/`P2` become agents.
-use super::{Agent, Cue, CueNote, Doc, Line, Parsed, main_agent};
+use super::{Agent, Cue, CueNote, Doc, Line, Parsed, main_agent, main_pitch};
 
 /// An UltraStar file carries a `#BPM:` header.
 pub(super) fn looks_like(text: &str) -> bool {
@@ -111,15 +111,17 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
                 let pitch = (kind != 'F' && kind != 'R').then(|| (60 + p) as f32);
                 if syl.trim() == "~" {
                     if let Some(c) = o.cues.last_mut() {
-                        if let (Some(first), Some(pitch)) = (c.pitch, pitch) {
-                            if c.notes.is_empty() {
+                        if let Some(pitch) = pitch {
+                            if let (true, Some(first)) = (c.notes.is_empty(), c.pitch) {
+                                let (start, end) = (c.start, c.end);
                                 c.notes.push(CueNote {
-                                    start: c.start,
-                                    end: c.end,
+                                    start,
+                                    end,
                                     pitch: first,
                                 });
                             }
                             c.notes.push(CueNote { start, end, pitch });
+                            c.pitch = main_pitch(&c.notes);
                         }
                         c.end = end;
                     }
@@ -207,6 +209,19 @@ mod tests {
             [(0, 500, 60.0), (500, 1000, 63.0)]
         );
         assert!(c[1].notes.is_empty());
+    }
+
+    #[test]
+    fn a_held_note_after_a_freestyle_syllable_is_kept_and_the_longest_is_the_pitch() {
+        let p = parse("#BPM:120\n#GAP:0\n F 0 4 0 la\n: 4 8 3 ~\n: 12 2 5 ~\nE\n").unwrap();
+        let c = &p.doc.lines[0].cues[0];
+        assert_eq!(c.pitch, Some(63.0));
+        assert_eq!(
+            c.notes.iter().map(|n| (n.start, n.end)).collect::<Vec<_>>(),
+            [(500, 1500), (1500, 1750)]
+        );
+        let p = parse("#BPM:120\n#GAP:0\n: 0 2 0 a\n: 2 6 3 ~\nE\n").unwrap();
+        assert_eq!(p.doc.lines[0].cues[0].pitch, Some(63.0));
     }
 
     #[test]
