@@ -32,7 +32,7 @@
             <div class="min-w-0 flex-1">
               <p class="font-medium">
                 {{ m.name }} <span class="text-sm font-normal text-base-content/60">{{ m.version }}</span>
-                @if (m.recommended && g.key === 'alignment') {
+                @if (recommended().has(m.id) && g.key === 'alignment') {
                   <span class="badge badge-primary badge-sm">{{ 'karaoke.admin.recommended' | translate }}</span>
                 }
               </p>
@@ -40,7 +40,7 @@
                 @if (g.key === 'alignment') {
                   {{ languagesOf(m) }} ·
                 }
-                {{ size(m.sizeBytes) }} · {{ (m.outdated ? 'karaoke.state_outdated' : 'karaoke.state_' + m.state) | translate }}
+                {{ size(m.sizeBytes) }} · {{ (m.verifying ? 'karaoke.state_verifying' : m.outdated ? 'karaoke.state_outdated' : 'karaoke.state_' + m.state) | translate }}
               </p>
             </div>
             <div class="scroll-ring-safe flex flex-wrap items-center gap-2">
@@ -63,7 +63,7 @@
             </div>
           </div>
           @if (m.state === 'downloading') {
-            <progress class="progress progress-primary w-full" [value]="percent(m)" max="100" [attr.aria-label]="'karaoke.admin.progress' | translate"></progress>
+            <progress class="progress progress-primary w-full" [value]="percent(m)" max="100" [attr.aria-label]="'karaoke.admin.progress' | translate: { name: m.name }"></progress>
             @if (speed(m); as s) {
               <p class="text-sm text-base-content/60">{{ s }}</p>
             }
@@ -100,7 +100,8 @@
                   </button>
                 }
                 @if (options(l).length > 1) {
-                  <app-select-field size="sm" [hideLabel]="true" [label]="'karaoke.admin.aligner_of' | translate: { language: name(l.language) }" [value]="l.aligner ?? ''" (valueChange)="choose(l, $event)">
+                  <app-select-field size="sm" [hideLabel]="true" [label]="'karaoke.admin.aligner_of' | translate: { language: name(l.language) }" [value]="aligners()[l.language] ?? ''" (valueChange)="choose(l, $event)">
+                    <option value="">{{ 'karaoke.admin.automatic' | translate }}</option>
                     @for (m of options(l); track m.id) {
                       <option [value]="m.id">{{ m.name }}</option>
                     }

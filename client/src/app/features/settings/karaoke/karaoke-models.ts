@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, model, output, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
@@ -30,7 +30,7 @@ const GROUPS: { key: Group; kind: KaraokeModelKind; whisper: boolean }[] = [
   imports: [TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './karaoke-models.html',
 })
-export class KaraokeModelsComponent implements OnInit {
+export class KaraokeModelsComponent {
   private readonly api = inject(KaraokeApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly confirm = inject(ConfirmationService);
@@ -39,6 +39,8 @@ export class KaraokeModelsComponent implements OnInit {
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('licence');
 
   readonly catalogue = input.required<KaraokeModels>();
+  /** The admin's `karaoke.aligners` choices, language to model id; the parent read them with the settings. */
+  readonly aligners = model.required<Record<string, string>>();
   /** A model or the folder changed: the parent loads the catalogue again. */
   readonly reload = output<void>();
 
@@ -46,7 +48,6 @@ export class KaraokeModelsComponent implements OnInit {
   protected readonly reviewing = signal<KaraokeModel | null>(null);
   protected readonly accepted = signal(false);
   protected readonly languages = signal<KaraokeLanguage[]>([]);
-  protected readonly aligners = signal<Record<string, string>>({});
   protected readonly stale = signal(0);
   protected readonly resyncing = signal(false);
 
@@ -60,9 +61,9 @@ export class KaraokeModelsComponent implements OnInit {
   private readonly settled = computed(() => this.catalogue().models.map((m) => `${m.id}:${m.state}`).join());
   protected readonly diskMax = computed(() => this.catalogue().usedBytes + (this.catalogue().freeBytes ?? 0));
   /** The recommended aligners the library's languages miss and whose licence needs no acceptance. */
+  protected readonly recommended = computed(() => new Set(this.languages().map((l) => l.recommended)));
   protected readonly selection = computed(() => {
-    const wanted = new Set(this.languages().map((l) => l.recommended));
-    return this.catalogue().models.filter((m) => wanted.has(m.id) && this.notInstalled(m) && m.licence.clear);
+    return this.catalogue().models.filter((m) => this.recommended().has(m.id) && this.notInstalled(m) && m.licence.clear);
   });
   protected readonly selectionSize = computed(() => formatBytes(this.selection().reduce((n, m) => n + m.sizeBytes, 0)));
 
@@ -70,8 +71,9 @@ export class KaraokeModelsComponent implements OnInit {
     inject(SseService)
       .karaokeEvents.pipe(takeUntilDestroyed())
       .subscribe((e) => {
-        if (e.type === 'karaoke.job_changed' && (e['state'] === 'ready' || e['state'] === 'failed')) void this.refreshStale();
+        if (e.type === 'karaoke.job_changed' && (e['state'] === 'ready' || e['state'] === 'failed')) this.scheduleStale();
       });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.staleTimer));
     effect(() => {
       this.settled();
       void this.refreshLanguages();
@@ -85,14 +87,6 @@ export class KaraokeModelsComponent implements OnInit {
     });
   }
 
-  async ngOnInit(): Promise<void> {
-    try {
-      this.aligners.set(parseAligners((await this.settingsApi.getAll())['karaoke.aligners']));
-    } catch {
-      // The interceptor toasts the reason; no choice is shown.
-    }
-  }
-
   private async refreshLanguages(): Promise<void> {
     try {
       this.languages.set(await this.api.languages());
@@ -102,13 +96,23 @@ export class KaraokeModelsComponent implements OnInit {
     await this.refreshStale();
   }
 
+  private staleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** A run ends one track at a time: ask once it settles. */
+  private scheduleStale(): void {
+    clearTimeout(this.staleTimer);
+    this.staleTimer = setTimeout(() => void this.refreshStale(), 1500);
+  }
+
   private async refreshStale(): Promise<void> {
     try {
-      this.stale.set(await this.api.staleTracks());
+      const { tracks, running } = await this.api.staleTracks();
+      this.stale.set(tracks);
+      this.resyncing.set(running);
     } catch {
       this.stale.set(0);
+      this.resyncing.set(false);
     }
-    if (!this.stale()) this.resyncing.set(false);
   }
 
   protected percent(m: KaraokeModel): number {
@@ -143,9 +147,9 @@ export class KaraokeModelsComponent implements OnInit {
     return this.notInstalled(m) || m.outdated;
   }
 
-  /** A downloading model with no installed version has nothing to lose; an update or a check keeps its files. */
+  /** Only a download cancels: deleting a model that is being verified would remove installed files. */
   protected canCancel(m: KaraokeModel): boolean {
-    return m.state === 'downloading' && !m.installedVersion;
+    return m.state === 'downloading' && !m.verifying;
   }
 
   protected canDelete(m: KaraokeModel): boolean {
@@ -229,8 +233,10 @@ export class KaraokeModelsComponent implements OnInit {
     return this.act('selection', () => Promise.all(this.selection().map((m) => this.api.download(m.id, false))));
   }
 
+  /** An empty `id` is the automatic choice: the override goes. */
   protected async choose(l: KaraokeLanguage, id: string): Promise<void> {
-    const next = { ...this.aligners(), [l.language]: id };
+    const kept = Object.entries(this.aligners()).filter(([language]) => language !== l.language);
+    const next = Object.fromEntries(id ? [...kept, [l.language, id]] : kept);
     try {
       await this.settingsApi.setBulk({ 'karaoke.aligners': JSON.stringify(next) });
       this.aligners.set(next);
@@ -264,7 +270,7 @@ export class KaraokeModelsComponent implements OnInit {
   }
 }
 
-function parseAligners(raw: string | null | undefined): Record<string, string> {
+export function parseAligners(raw: string | null | undefined): Record<string, string> {
   try {
     const v: unknown = JSON.parse(raw ?? '{}');
     return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string>) : {};
