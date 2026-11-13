@@ -74,6 +74,13 @@
               (input)="audio.setVocalLevel(+$any($event.target).value / 100)"
             />
           </label>
+          @if (canEdit) {
+            <app-dropdown-menu placement="bottom-start" [heading]="'karaoke.recompute' | translate">
+              <div trigger tabindex="0" role="button" class="btn btn-sm" [class.btn-disabled]="kBusy()" data-testid="karaoke-recompute">{{ 'karaoke.recompute' | translate }}</div>
+              <button type="button" class="dropdown-item" (click)="recompute('melody')" data-testid="karaoke-recompute-melody">{{ 'karaoke.recompute_melody' | translate }}</button>
+              <button type="button" class="dropdown-item" (click)="recompute('sync')" data-testid="karaoke-recompute-sync">{{ 'karaoke.recompute_sync' | translate }}</button>
+            </app-dropdown-menu>
+          }
           @if (k.lyricsError) {
             <span class="text-sm text-error" role="alert" data-testid="karaoke-lyrics-error">{{ 'karaoke.lyrics_failed' | translate }} {{ failure(k.lyricsError) }}</span>
           }

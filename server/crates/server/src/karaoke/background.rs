@@ -94,7 +94,7 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
         let opts = run::Opts {
             align: true,
             melody: true,
-            realign: false,
+            force: false,
         };
         let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
         else {
@@ -138,7 +138,7 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
         let opts = run::Opts {
             align: true,
             melody: true,
-            realign: true,
+            force: true,
         };
         let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
             run::Start::Started(handle) => {

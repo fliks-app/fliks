@@ -24,8 +24,9 @@ const MAX_MELODY_SPANS: usize = 100_000;
 pub struct Opts {
     pub align: bool,
     pub melody: bool,
-    /// Align again from the source lyrics: the generated row stays until a new one replaces it.
-    pub realign: bool,
+    /// Redo done work: `Align` reads the source lyrics again (the generated row stays until a new one
+    /// replaces it); `Melody` runs over existing pitch unless `Align` is asked too.
+    pub force: bool,
 }
 
 #[derive(Clone)]
@@ -39,6 +40,13 @@ pub struct RunState {
     pub user: Option<i32>,
     /// The users `karaoke.job_changed` goes to.
     pub viewers: Arc<[i32]>,
+}
+
+impl Opts {
+    /// A forced `Melody` alone recomputes the pitch; beside `Align` it only follows a new row.
+    fn repitch(self) -> bool {
+        self.force && !self.align
+    }
 }
 
 impl RunState {
@@ -283,10 +291,14 @@ async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
         return true;
     };
     lstore::sort(&mut rows);
-    (opts.align && caps.align && align_source(&rows, opts.realign).is_some())
+    has_work(&rows, &caps, opts)
+}
+
+fn has_work(rows: &[lstore::Row], caps: &super::Caps, opts: Opts) -> bool {
+    (opts.align && caps.align && align_source(rows, opts.force).is_some())
         || (opts.melody
             && caps.melody
-            && melody_of(&rows).is_some_and(|r| melody_spans(r).is_some()))
+            && melody_of(rows).is_some_and(|r| melody_spans(r, opts.repitch()).is_some()))
 }
 
 /// Registers the run and spawns it, unless it joins a running one, has nothing to do, or the caller is over a limit.
@@ -403,16 +415,7 @@ async fn steps(
     let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
     if opts.align
         && caps.align
-        && let Err(e) = align(
-            st,
-            item,
-            &t,
-            &vocals,
-            &models.models,
-            opts.realign,
-            priority,
-        )
-        .await
+        && let Err(e) = align(st, item, &t, &vocals, &models.models, opts.force, priority).await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
         if let Failure::LyricsNotFoundInVocals { matched, .. } = &e {
@@ -423,7 +426,7 @@ async fn steps(
     if opts.melody
         && caps.melody
         && let Some(model) = pick(ModelKind::Melody)
-        && let Err(e) = melody(st, item, &t, &vocals, model, priority).await
+        && let Err(e) = melody(st, item, &t, &vocals, model, opts.repitch(), priority).await
     {
         tracing::warn!("karaoke melody of item #{item} failed: {e}");
         out.lyrics_error.get_or_insert(e);
@@ -520,10 +523,10 @@ fn ms(v: i64) -> u32 {
 }
 
 /// The text `Align` times: the best main row of rule 66's order, unless a word-synced or reviewed one exists.
-fn align_source(rows: &[lstore::Row], realign: bool) -> Option<&lstore::Row> {
+fn align_source(rows: &[lstore::Row], force: bool) -> Option<&lstore::Row> {
     let mains: Vec<_> = rows
         .iter()
-        .filter(|r| r.kind == "main" && !(realign && r.source == "generated" && !r.reviewed))
+        .filter(|r| r.kind == "main" && !(force && r.source == "generated" && !r.reviewed))
         .collect();
     let done = mains
         .iter()
@@ -540,14 +543,14 @@ async fn align(
     t: &Track,
     vocals: &std::path::Path,
     models: &[ModelInfo],
-    realign: bool,
+    force: bool,
     priority: JobPriority,
 ) -> Result<(), Failure> {
     let mut rows = lstore::list(&st.db, item)
         .await
         .map_err(|e| e.to_string())?;
     lstore::sort(&mut rows);
-    let Some(src) = align_source(&rows, realign) else {
+    let Some(src) = align_source(&rows, force) else {
         return Ok(());
     };
     let request = kd::align_request(&src.doc.0);
@@ -662,10 +665,10 @@ fn melody_of(rows: &[lstore::Row]) -> Option<&lstore::Row> {
     rows.iter().find(|r| r.kind == "main" && r.sync == "word")
 }
 
-/// The spans a `Melody` would look at: the row has cues and no pitch yet.
-fn melody_spans(r: &lstore::Row) -> Option<Vec<(i64, i64)>> {
+/// The spans a `Melody` would look at: the row has cues and, unless `repitch`, no pitch yet.
+fn melody_spans(r: &lstore::Row, repitch: bool) -> Option<Vec<(i64, i64)>> {
     let spans = kd::line_spans(&r.doc.0);
-    (!spans.is_empty() && !has_pitch(&r.doc.0)).then_some(spans)
+    (!spans.is_empty() && (repitch || !has_pitch(&r.doc.0))).then_some(spans)
 }
 
 pub fn has_pitch(d: &dl::Doc) -> bool {
@@ -707,12 +710,13 @@ async fn melody(
     t: &Track,
     vocals: &std::path::Path,
     model: &str,
+    repitch: bool,
     priority: JobPriority,
 ) -> Result<(), Failure> {
     let Some(target) = melody_target(st, item).await.map_err(|e| e.to_string())? else {
         return Ok(());
     };
-    let Some(spans) = melody_spans(&target) else {
+    let Some(spans) = melody_spans(&target, repitch) else {
         return Ok(());
     };
     if spans.len() > MAX_MELODY_SPANS {
@@ -786,6 +790,75 @@ mod tests {
             reviewed,
             preferred: false,
         }
+    }
+
+    fn caps() -> super::super::Caps {
+        super::super::Caps {
+            separate: true,
+            align: true,
+            melody: true,
+        }
+    }
+
+    fn opts(align: bool, melody: bool, force: bool) -> Opts {
+        Opts {
+            align,
+            melody,
+            force,
+        }
+    }
+
+    fn with_pitch(mut r: lstore::Row) -> lstore::Row {
+        r.doc = sqlx::types::Json(
+            serde_json::from_value(serde_json::json!({"agents": [], "lines": [
+                {"text": "a", "start": 0, "end": 900,
+                 "cues": [{"start": 0, "end": 900, "byteStart": 0, "byteEnd": 1, "pitch": 60.0}]}]}))
+            .unwrap(),
+        );
+        r
+    }
+
+    #[test]
+    fn a_prepared_track_has_no_work_until_it_is_forced() {
+        let done = [
+            with_pitch(row(1, "generated", "word", false)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&done, &caps(), opts(true, true, false)));
+        assert!(has_work(&done, &caps(), opts(true, false, true)));
+        assert!(has_work(&done, &caps(), opts(false, true, true)));
+        assert!(!has_work(&done, &caps(), opts(false, true, false)));
+    }
+
+    #[test]
+    fn a_forced_sync_leaves_a_reviewed_row_and_a_forced_melody_needs_a_synced_row() {
+        let reviewed = [
+            with_pitch(row(1, "generated", "word", true)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&reviewed, &caps(), opts(true, false, true)));
+        let line_only = [row(2, "lrclib", "line", false)];
+        assert!(!has_work(&line_only, &caps(), opts(false, true, true)));
+        let no_align = super::super::Caps {
+            align: false,
+            ..caps()
+        };
+        let done = [
+            with_pitch(row(1, "generated", "word", false)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&done, &no_align, opts(true, false, true)));
+    }
+
+    #[test]
+    fn a_forced_melody_beside_a_sync_only_follows_the_new_row() {
+        let o = opts(true, true, true);
+        assert!(!o.repitch());
+        assert!(opts(false, true, true).repitch());
+        assert!(!opts(false, true, false).repitch());
+        let sung = with_pitch(row(1, "generated", "word", false));
+        assert!(melody_spans(&sung, false).is_none());
+        assert!(melody_spans(&sung, true).is_some());
     }
 
     #[test]

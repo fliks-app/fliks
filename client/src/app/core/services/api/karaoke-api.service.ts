@@ -59,7 +59,7 @@ export class KaraokeApiService {
     return firstValueFrom(this.http.get<KaraokeItemState>(`/api/items/${itemId}/karaoke`, this.quiet));
   }
 
-  prepare(itemId: number, body: { align?: boolean; melody?: boolean } = {}): Promise<KaraokeItemState> {
+  prepare(itemId: number, body: { align?: boolean; melody?: boolean; force?: boolean } = {}): Promise<KaraokeItemState> {
     return firstValueFrom(this.http.post<KaraokeItemState>(`/api/items/${itemId}/karaoke`, body));
   }
 
