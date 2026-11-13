@@ -1,5 +1,5 @@
 //! The aligner of a language, the library's languages and the re-alignment (`docs/spec/karaoke.md` rules 38-41).
-use super::{engine_err, flag, manage_settings, run::usable};
+use super::{engine_err, flag, manage_settings};
 use crate::{
     http::{AppError, auth::Authed},
     settings::setting_value,
@@ -45,7 +45,7 @@ pub(crate) fn aligner<'a>(
     language: Option<&'a str>,
     overrides: &HashMap<String, String>,
 ) -> Option<&'a ModelInfo> {
-    let installed = |m: &&ModelInfo| usable(m);
+    let installed = |m: &&ModelInfo| m.state == ModelState::Installed;
     language
         .and_then(|l| overrides.get(l))
         .and_then(|id| {
