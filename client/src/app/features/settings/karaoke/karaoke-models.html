@@ -1,6 +1,6 @@
 @let c = catalogue();
 
-<div class="flex flex-col gap-2" data-testid="karaoke-disk">
+<div class="flex flex-col gap-2 rounded-lg bg-base-200 p-4" data-testid="karaoke-disk">
   <h3 class="font-medium">{{ 'karaoke.admin.disk_title' | translate }}</h3>
   @if (c.freeBytes !== undefined) {
     <progress class="progress progress-primary w-full" [value]="c.usedBytes" [max]="diskMax()" [attr.aria-label]="'karaoke.admin.disk_title' | translate"></progress>
@@ -12,10 +12,11 @@
 </div>
 
 @for (g of groups(); track g.key) {
+  <div class="divider my-0"></div>
   <section class="flex flex-col gap-3" [attr.data-testid]="'karaoke-group-' + g.key">
-    <div class="flex flex-wrap items-start gap-2">
-      <div class="min-w-0 flex-1">
-        <h3 class="font-medium">{{ 'karaoke.admin.group_' + g.key | translate }}</h3>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h3 class="text-lg font-semibold">{{ 'karaoke.admin.group_' + g.key | translate }}</h3>
         <p class="text-sm text-base-content/60">{{ 'karaoke.admin.group_' + g.key + '_hint' | translate }}</p>
       </div>
       @if (g.key === 'alignment' && selection().length) {
@@ -29,9 +30,9 @@
       @for (m of g.models; track m.id) {
         <li class="flex flex-col gap-2 rounded-lg bg-base-200 p-3">
           <div class="flex flex-wrap items-center gap-2">
-            <div class="min-w-0 flex-1">
-              <p class="font-medium">
-                {{ m.name }} <span class="text-sm font-normal text-base-content/60">{{ m.version }}</span>
+            <div class="min-w-0 flex-1 basis-60">
+              <p class="flex flex-wrap items-center gap-x-2 font-medium">
+                <span>{{ m.name }}</span><span class="text-sm font-normal text-base-content/60">v{{ m.version }}</span>
                 @if (recommended().has(m.id) && g.key === 'alignment') {
                   <span class="badge badge-primary badge-sm">{{ 'karaoke.admin.recommended' | translate }}</span>
                 }
@@ -76,13 +77,14 @@
     </ul>
 
     @if (g.key === 'alignment' && languages().length) {
-      <div class="flex flex-col gap-2" data-testid="karaoke-languages">
-        <h4 class="text-sm font-medium">{{ 'karaoke.admin.languages_title' | translate }}</h4>
+      <div class="divider my-0"></div>
+      <div class="flex flex-col gap-3" data-testid="karaoke-languages">
+        <h4 class="text-lg font-semibold">{{ 'karaoke.admin.languages_title' | translate }}</h4>
         <p class="text-sm text-base-content/60">{{ 'karaoke.admin.languages_hint' | translate }}</p>
         <ul class="flex flex-col gap-2">
           @for (l of languages(); track l.language) {
             <li class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 p-3">
-              <div class="min-w-0 flex-1">
+              <div class="min-w-0 flex-1 basis-60">
                 <p class="font-medium">
                   {{ name(l.language) }}
                   <span class="text-sm font-normal text-base-content/60">{{ 'karaoke.admin.tracks' | translatePlural: l.tracks }}</span>
@@ -132,9 +134,10 @@
 }
 
 @if (c.orphans.length) {
+  <div class="divider my-0"></div>
   <section class="flex flex-col gap-3" data-testid="karaoke-orphans">
     <div>
-      <h3 class="font-medium">{{ 'karaoke.admin.orphans_title' | translate }}</h3>
+      <h3 class="text-lg font-semibold">{{ 'karaoke.admin.orphans_title' | translate }}</h3>
       <p class="text-sm text-base-content/60">{{ 'karaoke.admin.orphans_hint' | translate }}</p>
     </div>
     <ul class="flex flex-col gap-2">
