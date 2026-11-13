@@ -135,6 +135,7 @@ pub(super) fn parse(xml: &str) -> Result<Parsed, String> {
                                     byte_end: to,
                                     agent_id: None,
                                     pitch: None,
+                                    notes: vec![],
                                     golden: false,
                                 });
                             }
