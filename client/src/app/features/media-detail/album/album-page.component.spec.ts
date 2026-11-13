@@ -9,6 +9,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { SseService } from '../../../core/services/sse.service';
 import { Subject } from 'rxjs';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
+import { CardActionsService } from '../../../core/services/card-actions.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { bookSpecProviders } from '../book/book-test-setup';
 import { AlbumPageComponent } from './album-page.component';
@@ -80,6 +81,16 @@ describe('AlbumPageComponent', () => {
     const actions = (fixture.componentInstance as unknown as { actions: () => Record<string, () => void> }).actions();
     actions['media.identify']!();
     http.expectOne('/api/media/9/music/candidates').flush([]);
+  });
+
+  it('opens the shared panel with the track actions on a track menu', () => {
+    const { el, player } = setup([track(1), track(2, { hasFile: false })]);
+    (el.querySelectorAll('[data-testid="track-menu"]')[0] as HTMLButtonElement).click();
+    const panel = TestBed.inject(CardActionsService);
+    expect(panel.title()).toBe('T1');
+    expect(panel.actions()!.map((a) => a.icon)).toEqual(['list-start', 'list-end', 'list-plus', 'download']);
+    panel.actions()![0]!.run();
+    expect(player.enqueueTracks).toHaveBeenCalledWith([expect.objectContaining({ itemId: 1 })], 'next');
   });
 
   it('draws a work heading only over a group of tracks', () => {
