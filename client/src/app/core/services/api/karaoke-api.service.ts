@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import type { KaraokeItemState, KaraokeModel, KaraokeModels, KaraokeStatus, StemKind } from './karaoke.models';
+import type { KaraokeItemState, KaraokeLanguage, KaraokeModel, KaraokeModels, KaraokeStatus, StemKind } from './karaoke.models';
 
 @Injectable({ providedIn: 'root' })
 export class KaraokeApiService {
@@ -28,6 +28,27 @@ export class KaraokeApiService {
 
   deleteModel(id: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`/api/karaoke/models/${encodeURIComponent(id)}`));
+  }
+
+  verifyModel(id: string): Promise<KaraokeModel> {
+    return firstValueFrom(this.http.post<KaraokeModel>(`/api/karaoke/models/${encodeURIComponent(id)}/verify`, {}));
+  }
+
+  deleteOrphan(name: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/karaoke/models/orphans/${encodeURIComponent(name)}`));
+  }
+
+  async languages(): Promise<KaraokeLanguage[]> {
+    return (await firstValueFrom(this.http.get<{ languages: KaraokeLanguage[] }>('/api/karaoke/languages', this.quiet))).languages;
+  }
+
+  /** Generated lyrics a model other than their language's aligner timed. */
+  async staleTracks(): Promise<number> {
+    return (await firstValueFrom(this.http.get<{ tracks: number }>('/api/karaoke/realign', this.quiet))).tracks;
+  }
+
+  async realign(): Promise<number> {
+    return (await firstValueFrom(this.http.post<{ tracks: number }>('/api/karaoke/realign', {}))).tracks;
   }
 
   itemState(itemId: number): Promise<KaraokeItemState> {

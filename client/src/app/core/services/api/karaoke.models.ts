@@ -1,5 +1,5 @@
 export type KaraokeModelKind = 'separation' | 'alignment' | 'melody';
-export type KaraokeModelState = 'absent' | 'downloading' | 'installed' | 'failed';
+export type KaraokeModelState = 'absent' | 'downloading' | 'installed' | 'outdated' | 'failed';
 export type KaraokeStage = 'separate' | 'align' | 'melody';
 export type KaraokeJobState = 'none' | 'queued' | 'running' | 'ready' | 'failed';
 export type StemKind = 'vocals' | 'instrumental' | 'guide';
@@ -27,10 +27,27 @@ export interface KaraokeModel {
   version: string;
   licence: KaraokeLicence;
   default: boolean;
-  files: { name: string; url: string; sha256: string; sizeBytes: number }[];
+  /** Alignment only: the language codes it times, empty for every language. */
+  languages: string[];
+  /** Alignment only. */
+  engine?: 'ctc' | 'whisper';
+  /** The model card. */
+  homepage: string;
+  recommended: boolean;
+  sizeBytes: number;
+  diskBytes: number;
+  installedVersion?: string;
   state: KaraokeModelState;
   downloadedBytes: number;
+  /** While downloading. */
+  bytesPerSecond?: number;
   error?: string;
+}
+
+/** A directory of the models folder that no model names. */
+export interface KaraokeOrphan {
+  name: string;
+  sizeBytes: number;
 }
 
 export interface KaraokeRuntime {
@@ -46,7 +63,18 @@ export interface KaraokeRuntime {
 export interface KaraokeModels {
   runtime: KaraokeRuntime;
   modelsDir: string;
+  freeBytes?: number;
+  usedBytes: number;
+  orphans: KaraokeOrphan[];
   models: KaraokeModel[];
+}
+
+/** A language of the library and the model that times its lyrics (ids from `models`). */
+export interface KaraokeLanguage {
+  language: string;
+  tracks: number;
+  aligner: string | null;
+  recommended: string | null;
 }
 
 export interface KaraokeItemState {
@@ -70,9 +98,4 @@ export interface KaraokeJobChanged {
   state: KaraokeJobState;
   stage?: KaraokeStage;
   progress?: number;
-}
-
-/** Total bytes of a model's files. */
-export function karaokeModelSize(m: KaraokeModel): number {
-  return m.files.reduce((n, f) => n + f.sizeBytes, 0);
 }
