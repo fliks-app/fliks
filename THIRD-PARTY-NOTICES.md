@@ -56,6 +56,9 @@ page, which shows each licence before the download:
 | Spleeter 2 stems (vocals, accompaniment), ONNX export published by sherpa-onnx | MIT | https://github.com/deezer/spleeter |
 | SwiftF0 (voice pitch) | MIT | https://github.com/lars76/swift-f0 |
 | Whisper small, ggml 5-bit conversion published by whisper.cpp | MIT | https://github.com/openai/whisper |
+| wav2vec2 French CTC (XLSR-53 by Meta AI fine-tuned by Jonatas Grosman, converted to half-precision ONNX) | Apache-2.0 | https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-french |
+| wav2vec2 English CTC (Large LV-60 self-trained by Meta AI, converted to half-precision ONNX) | Apache-2.0 | https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self |
+| Omnilingual ASR CTC 300M (Meta AI), ONNX conversion published by OpenVoiceOS | Apache-2.0 | https://huggingface.co/facebook/omniASR-CTC-300M |
 
 ## Server: Windows and macOS apps
 
