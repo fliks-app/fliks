@@ -1,5 +1,5 @@
 //! Preparation of a track: `Separate`, `Align`, `Melody` (`docs/spec/karaoke.md` rules 13, 18, 19).
-use super::store;
+use super::{aligner, store};
 use crate::{
     events::SseEvent, ingest::post_import::file_path, lyrics::store as lstore, state::AppState,
 };
@@ -348,8 +348,7 @@ async fn steps(
     let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
     if opts.align
         && caps.align
-        && let Some(model) = pick(ModelKind::Alignment)
-        && let Err(e) = align(st, item, &t, &vocals, model, priority).await
+        && let Err(e) = align(st, item, &t, &vocals, &models.models, priority).await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
         out.lyrics_error = Some(e);
@@ -470,7 +469,7 @@ async fn align(
     item: i32,
     t: &Track,
     vocals: &std::path::Path,
-    model: &str,
+    models: &[ModelInfo],
     priority: JobPriority,
 ) -> Result<(), String> {
     let mut rows = lstore::list(&st.db, item)
@@ -488,8 +487,12 @@ async fn align(
     if request.len() > MAX_ALIGN_LINES || words > MAX_ALIGN_WORDS {
         return Err("the lyrics are too long to align".into());
     }
+    let language = aligner::language_of(&src.lang, &src.doc.0);
+    let model = aligner::aligner(models, language.as_deref(), &aligner::overrides(st).await)
+        .ok_or("model_missing: no alignment model is installed")?
+        .id
+        .clone();
     stage(st, item, "align");
-    let language = Some(src.lang.clone()).filter(|l| (2..=3).contains(&l.len()) && l != "und");
     let req = JobRequest {
         kind: JobKind::Align {
             lines: request
@@ -505,7 +508,7 @@ async fn align(
                 })
                 .collect(),
             language,
-            model: Some(model.to_owned()),
+            model: Some(model),
         },
         media: MediaRef {
             media_file_id: t.file as u32,

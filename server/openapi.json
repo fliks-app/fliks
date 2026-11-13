@@ -1282,6 +1282,18 @@
         }
       }
     },
+    "/api/karaoke/languages": {
+      "get": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "languages",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      }
+    },
     "/api/karaoke/models": {
       "get": {
         "tags": [
@@ -1317,6 +1329,29 @@
           "202": {},
           "400": {},
           "404": {}
+        }
+      }
+    },
+    "/api/karaoke/realign": {
+      "get": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "realign_count",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "realign",
+        "responses": {
+          "202": {},
+          "409": {},
+          "503": {}
         }
       }
     },
