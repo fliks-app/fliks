@@ -35,7 +35,14 @@ pub fn router() -> Router<AppState> {
 }
 
 /// The entry of rule 66; `enhanced` adds the agents and the word cues, `bg` the background lines.
-fn entry(r: &Row, enhanced: bool, bg: bool, artist: &str, title: &str) -> Value {
+fn entry(
+    r: &Row,
+    label: Option<String>,
+    enhanced: bool,
+    bg: bool,
+    artist: &str,
+    title: &str,
+) -> Value {
     let synced = r.sync != "none";
     let mut o = Map::new();
     o.insert("id".into(), json!(r.id));
@@ -46,6 +53,9 @@ fn entry(r: &Row, enhanced: bool, bg: bool, artist: &str, title: &str) -> Value 
     o.insert("displayArtist".into(), json!(artist));
     o.insert("displayTitle".into(), json!(title));
     o.insert("source".into(), json!(r.source));
+    if let Some(l) = label {
+        o.insert("sourceLabel".into(), json!(l));
+    }
     if let Some(s) = &r.source_ref {
         o.insert("sourceRef".into(), json!(s));
     }
@@ -102,6 +112,9 @@ fn cue_line(index: usize, l: &lyrics::Line) -> Value {
                 if let Some(p) = c.pitch {
                     v["pitch"] = json!(p);
                 }
+                if !c.notes.is_empty() {
+                    v["notes"] = json!(c.notes);
+                }
                 if c.golden {
                     v["golden"] = json!(true);
                 }
@@ -141,8 +154,13 @@ pub(crate) async fn body(
     .fetch_one(&st.db)
     .await?;
     let (title, artist) = (title.unwrap_or_default(), artist.unwrap_or_default());
+    let known = st.namespaces();
+    let label = |r: &Row| {
+        let ns = known.parse(r.source.strip_prefix("provider:")?)?;
+        Some(known.label(ns))
+    };
     let mut out = json!({
-        "structuredLyrics": rows.iter().map(|r| entry(r, enhanced, bg, &artist, &title)).collect::<Vec<_>>(),
+        "structuredLyrics": rows.iter().map(|r| entry(r, label(r), enhanced, bg, &artist, &title)).collect::<Vec<_>>(),
     });
     if rows.iter().all(|r| r.kind != "main") {
         let instrumental: bool = sqlx::query_scalar(

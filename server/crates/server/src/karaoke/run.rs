@@ -589,7 +589,7 @@ fn melody_of(rows: &[lstore::Row]) -> Option<&lstore::Row> {
 
 /// The spans a `Melody` would look at: the row has cues and no pitch yet.
 fn melody_spans(r: &lstore::Row) -> Option<Vec<(i64, i64)>> {
-    let spans = kd::cue_spans(&r.doc.0);
+    let spans = kd::line_spans(&r.doc.0);
     (!spans.is_empty() && !has_pitch(&r.doc.0)).then_some(spans)
 }
 
