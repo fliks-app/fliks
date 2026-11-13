@@ -62,7 +62,7 @@ export class KaraokeModelsComponent implements OnInit {
   /** The recommended aligners the library's languages miss and whose licence needs no acceptance. */
   protected readonly selection = computed(() => {
     const wanted = new Set(this.languages().map((l) => l.recommended));
-    return this.catalogue().models.filter((m) => wanted.has(m.id) && this.canDownload(m) && m.licence.clear);
+    return this.catalogue().models.filter((m) => wanted.has(m.id) && this.notInstalled(m) && m.licence.clear);
   });
   protected readonly selectionSize = computed(() => formatBytes(this.selection().reduce((n, m) => n + m.sizeBytes, 0)));
 
@@ -134,8 +134,13 @@ export class KaraokeModelsComponent implements OnInit {
     return localizeLanguage(language, this.translate);
   }
 
+  private notInstalled(m: KaraokeModel): boolean {
+    return m.state === 'absent' || m.state === 'failed';
+  }
+
+  /** Downloads a model that is not installed, or updates an outdated one. */
   protected canDownload(m: KaraokeModel): boolean {
-    return m.state === 'absent' || m.state === 'failed' || m.state === 'outdated';
+    return this.notInstalled(m) || m.outdated;
   }
 
   /** A downloading model with no installed version has nothing to lose; an update or a check keeps its files. */
@@ -156,7 +161,7 @@ export class KaraokeModelsComponent implements OnInit {
     return this.catalogue().models.filter(
       (m) =>
         m.kind === 'alignment' &&
-        (m.state === 'installed' || m.state === 'outdated') &&
+        m.state === 'installed' &&
         (!m.languages.length || m.languages.includes(l.language)),
     );
   }
@@ -164,7 +169,7 @@ export class KaraokeModelsComponent implements OnInit {
   /** The recommended aligner of a language, when it is not installed. */
   protected missing(l: KaraokeLanguage): KaraokeModel | undefined {
     const m = this.modelOf(l.recommended);
-    return m && this.canDownload(m) ? m : undefined;
+    return m && this.notInstalled(m) ? m : undefined;
   }
 
   protected review(m: KaraokeModel): void {
