@@ -18,7 +18,7 @@ services:
       FLIKS_ENGINE_TOKEN: dev-engine-token
       CARGO_TARGET_DIR: /cargo-target
       XDG_CACHE_HOME: /tmp
-      FLIKS_MODELS_DIR: /src/data/models
+      FLIKS_DATA_DIR: /src/data
     # Uncomment for Intel QSV/VAAPI. The render device is root:render, so a
     # non-root container user also needs the group_add line or the probe fails
     # and transcodes fall back to CPU. Your gid: `getent group render | cut -d: -f3`.
