@@ -88,6 +88,11 @@ pub fn router() -> Router<AppState> {
         .route("/api/karaoke/status", get(status))
         .route("/api/karaoke/models", get(models))
         .route("/api/karaoke/models/{id}/download", post(download))
+        .route("/api/karaoke/models/{id}/verify", post(verify_model))
+        .route(
+            "/api/karaoke/models/orphans/{name}",
+            axum::routing::delete(delete_model_orphan),
+        )
         .route(
             "/api/karaoke/models/{id}",
             axum::routing::delete(delete_model),
@@ -262,6 +267,31 @@ pub async fn delete_model(
     manage_settings(&a)?;
     st.engine.delete_model(&id).await.map_err(engine_err)?;
     store::invalidate_model(&st.db, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/karaoke/models/{id}/verify", responses((status = 202), (status = 404), (status = 409)))]
+pub async fn verify_model(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<fliks_engine_core::api::ModelInfo>), AppError> {
+    manage_settings(&a)?;
+    let m = st.engine.verify_model(&id).await.map_err(engine_err)?;
+    Ok((StatusCode::ACCEPTED, Json(m)))
+}
+
+#[utoipa::path(delete, path = "/api/karaoke/models/orphans/{name}", responses((status = 204), (status = 404)))]
+pub async fn delete_model_orphan(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(name): Path<String>,
+) -> Result<StatusCode, AppError> {
+    manage_settings(&a)?;
+    st.engine
+        .delete_model_orphan(&name)
+        .await
+        .map_err(engine_err)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
