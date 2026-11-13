@@ -29,6 +29,7 @@ const GROUPS: { key: Group; kind: KaraokeModelKind; whisper: boolean }[] = [
   selector: 'app-karaoke-models',
   imports: [TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './karaoke-models.html',
+  host: { class: 'flex flex-col gap-5' },
 })
 export class KaraokeModelsComponent {
   private readonly api = inject(KaraokeApiService);
