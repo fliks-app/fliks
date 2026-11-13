@@ -1,4 +1,5 @@
 import type { LyricsCue, StructuredLyrics } from '../api/lyrics.models';
+import { cueNotes } from './pitch-lane';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -42,7 +43,7 @@ export function scoredLines(doc: StructuredLyrics, agentId: string | null): Scor
 }
 
 /**
- * Score against the reference melody. A cue is worth its duration (golden twice): the share of its
+ * Score against the reference melody. A note is worth its duration (golden twice): the share of its
  * span whose frames fall within the tolerance, `offsetMs` shifting the lyrics clock to the frames' one
  * and `latencyMs` removing the device's capture delay. 90 % of a line adds a bonus of 10 % of its worth.
  */
@@ -55,17 +56,17 @@ export function scoreSinger(
 ): SingerScore {
   const tol = TOLERANCE[difficulty];
   const sorted = [...frames].sort((a, b) => a.t - b.t);
-  const worth = (c: LyricsCue) => (c.end - c.start) * (c.golden ? GOLDEN_WEIGHT : 1);
-  const total = lines.reduce((n, l) => n + l.cues.reduce((m, c) => m + worth(c), 0), 0);
+  const notes = lines.map((l) => l.cues.flatMap((c) => cueNotes(c).map((n) => ({ ...n, worth: (n.end - n.start) * (c.golden ? GOLDEN_WEIGHT : 1) }))));
+  const total = notes.reduce((n, l) => n + l.reduce((m, c) => m + c.worth, 0), 0);
   if (total === 0) return { score: 0, lineBonus: 0, lines: lines.map(() => 0) };
   let points = 0;
   let bonus = 0;
   const per: number[] = [];
   let from = 0;
-  for (const line of lines) {
+  for (const line of notes) {
     let got = 0;
     let max = 0;
-    for (const c of line.cues) {
+    for (const c of line) {
       const a = c.start - offsetMs;
       const b = c.end - offsetMs;
       while (from < sorted.length && sorted[from].t - latencyMs < a - 100) from++;
@@ -75,9 +76,9 @@ export function scoreSinger(
         if (sorted[i].t - latencyMs < a) continue;
         seen++;
         const m = sorted[i].midi;
-        if (m !== null && foldedDistance(m, c.pitch!) <= tol) hit++;
+        if (m !== null && foldedDistance(m, c.pitch) <= tol) hit++;
       }
-      const w = worth(c);
+      const w = c.worth;
       max += w;
       if (seen > 0) got += (w * hit) / seen;
     }

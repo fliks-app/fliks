@@ -5413,7 +5413,11 @@
     "tap_sync": "Sincronizza a tocchi",
     "tap_hint": "Premi Segna quando inizia ogni riga; Indietro annulla l'ultima.",
     "tap_stamp": "Segna riga",
-    "tap_back": "Indietro"
+    "tap_back": "Indietro",
+    "source_user": "Aggiunte a mano",
+    "source_sidecar": "File dei testi",
+    "source_embedded": "Nel file audio",
+    "source_generated": "Parola per parola"
   },
   "karaoke": {
     "title": "Karaoke",

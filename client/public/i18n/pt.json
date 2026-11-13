@@ -5413,7 +5413,11 @@
     "tap_sync": "Sincronizar por toques",
     "tap_hint": "Prima Marcar quando cada linha começar; Voltar anula a última.",
     "tap_stamp": "Marcar linha",
-    "tap_back": "Voltar"
+    "tap_back": "Voltar",
+    "source_user": "Adicionada à mão",
+    "source_sidecar": "Ficheiro de letras",
+    "source_embedded": "No ficheiro de áudio",
+    "source_generated": "Palavra a palavra"
   },
   "karaoke": {
     "title": "Karaoke",

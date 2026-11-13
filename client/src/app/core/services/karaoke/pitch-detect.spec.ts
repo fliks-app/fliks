@@ -1,4 +1,4 @@
-import { detectPitch, hzToMidi } from './pitch-detect';
+import { PitchSmoother, detectPitch, hzToMidi } from './pitch-detect';
 
 const sine = (hz: number, rate = 16000, n = 1024, amp = 0.5): Float32Array =>
   Float32Array.from({ length: n }, (_, i) => amp * Math.sin((2 * Math.PI * hz * i) / rate));
@@ -13,4 +13,21 @@ describe('detectPitch', () => {
     expect(detectPitch(sine(440, 16000, 1024, 0.001), 16000)).toBeNull();
   });
   it('maps hz to midi', () => expect(hzToMidi(261.6256)).toBeCloseTo(60, 2));
+});
+
+describe('PitchSmoother', () => {
+  const run = (frames: (number | null)[]) => {
+    const s = new PitchSmoother();
+    return frames.map((f) => s.push(f));
+  };
+  it('waits for three voiced frames and drops a lone blip', () => {
+    expect(run([60, 60, 60])).toEqual([null, null, 60]);
+    expect(run([null, 67, null, null, null])).toEqual([null, null, null, null, null]);
+  });
+  it('folds octave jumps and outvotes a stray fifth', () => {
+    expect(run([60, 60, 60, 72, 48, 67, 60])).toEqual([null, null, 60, 60, 60, 60, 60]);
+  });
+  it('starts a phrase in any octave after a silence', () => {
+    expect(run([60, 60, 60, null, null, null, null, null, 72, 72, 72]).slice(-1)).toEqual([72]);
+  });
 });

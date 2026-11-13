@@ -12,14 +12,22 @@ export interface LyricsAgent {
   name?: string;
 }
 
+export interface LyricsNote {
+  start: number;
+  end: number;
+  pitch: number;
+}
+
 export interface LyricsCue {
   start: number;
   end: number;
   value: string;
   byteStart: number;
   byteEnd: number;
-  /** MIDI note of the reference melody; absent when unvoiced or unknown. */
+  /** Main MIDI note of the reference melody; absent when unvoiced or unknown. */
   pitch?: number;
+  /** Every note sung on the cue; absent means `pitch` over the whole cue. */
+  notes?: LyricsNote[];
   golden?: boolean;
 }
 
@@ -42,6 +50,8 @@ export interface StructuredLyrics {
   displayArtist: string;
   displayTitle: string;
   source: string;
+  /** A provider source's display name. */
+  sourceLabel?: string;
   sourceRef?: string;
   reviewed: boolean;
   preferred: boolean;
