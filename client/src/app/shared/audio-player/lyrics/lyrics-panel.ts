@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMicVocal } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import type { KaraokeFailure, KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import { failureText } from '../../../core/services/karaoke/karaoke-failure';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import type { StemMode } from '../../../core/services/audio-player/stem-mix';
@@ -34,6 +35,7 @@ export class LyricsPanelComponent {
   private readonly karaoke = inject(KaraokeApiService);
   private readonly translate = inject(TranslateService);
   protected readonly audio = inject(AudioPlayerService);
+  protected readonly failure = (f: KaraokeFailure) => failureText(this.translate, f);
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
   readonly itemId = input.required<number>();

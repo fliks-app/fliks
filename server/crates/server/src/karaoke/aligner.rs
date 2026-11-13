@@ -253,7 +253,7 @@ pub(super) struct Stale {
 pub(crate) struct RealignResult {
     status: &'static str,
     matched: Option<f64>,
-    error: Option<String>,
+    error: Option<run::Failure>,
     at: i64,
     #[serde(skip)]
     aligner: String,
@@ -262,7 +262,10 @@ pub(crate) struct RealignResult {
 }
 
 /// `None` is a track the run skipped because it was busy.
-pub(super) fn result_of(run: Option<Result<run::Outcome, String>>, s: &Stale) -> RealignResult {
+pub(super) fn result_of(
+    run: Option<Result<run::Outcome, run::Failure>>,
+    s: &Stale,
+) -> RealignResult {
     let (status, matched, error) = match run {
         None => ("skipped", None, None),
         Some(Err(e)) => ("failed", None, Some(e)),

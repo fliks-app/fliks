@@ -2,7 +2,8 @@ import { Component, ElementRef, effect, inject, input, output, signal, viewChild
 import { DatePipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeModel, KaraokeStaleTrack } from '../../../core/services/api/karaoke.models';
+import { failureText } from '../../../core/services/karaoke/karaoke-failure';
+import type { KaraokeFailure, KaraokeModel, KaraokeStaleTrack } from '../../../core/services/api/karaoke.models';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -76,6 +77,10 @@ export class KaraokeStaleDetailsComponent {
 
   protected language(code: string | null): string {
     return code ? localizeLanguage(code, this.translate) : '';
+  }
+
+  protected failure(f: KaraokeFailure): string {
+    return failureText(this.translate, f);
   }
 
   protected percent(matched: number | null): number {

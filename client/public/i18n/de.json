@@ -5426,6 +5426,12 @@
     "queued": "Wartet auf den Start",
     "failed": "Die Vorbereitung ist fehlgeschlagen.",
     "lyrics_failed": "Die Liedtexte wurden nicht erzeugt.",
+    "failure": {
+      "lyrics_not_found_in_vocals": "Nur {{matched}} % des Textes in der Stimme gefunden (Minimum {{min}} %).",
+      "lyrics_too_long": "Der Text ist zu lang.",
+      "no_word_timed": "Kein Wort des Textes konnte zeitlich zugeordnet werden.",
+      "failed": "Die Engine konnte diesen Titel nicht verarbeiten."
+    },
     "progress": "Fortschritt der Vorbereitung",
     "mix": "Klangmix",
     "native_hint": "Karaoke braucht den Web- oder Desktop-Player.",

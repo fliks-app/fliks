@@ -18,7 +18,7 @@
                   {{ 'karaoke.admin.result_rejected' | translate: { percent: percent(r.matched), min: minPercent(), previous: name(t.model) } }}
                 }
                 @case ('failed') {
-                  {{ 'karaoke.admin.result_failed' | translate: { error: r.error } }}
+                  {{ 'karaoke.admin.result_failed' | translate: { error: r.error ? failure(r.error) : '' } }}
                 }
                 @case ('skipped') {
                   {{ 'karaoke.admin.result_skipped' | translate }}

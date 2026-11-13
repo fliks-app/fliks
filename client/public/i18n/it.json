@@ -5426,6 +5426,12 @@
     "queued": "In attesa",
     "failed": "La preparazione non è riuscita.",
     "lyrics_failed": "I testi non sono stati generati.",
+    "failure": {
+      "lyrics_not_found_in_vocals": "Solo il {{matched}} % del testo è stato trovato nella voce (minimo {{min}} %).",
+      "lyrics_too_long": "Il testo è troppo lungo.",
+      "no_word_timed": "Nessuna parola del testo ha potuto essere sincronizzata.",
+      "failed": "Il motore non ha potuto elaborare questo brano."
+    },
     "progress": "Avanzamento della preparazione",
     "mix": "Mix del suono",
     "native_hint": "Il karaoke richiede il lettore web o desktop.",
