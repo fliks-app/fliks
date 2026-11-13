@@ -90,6 +90,7 @@ COPY --from=client-build /app/dist/client/browser ./client
 
 ENV SERVE_STATIC_PATH=/app/client
 ENV FLIKS_TRANSCODE_DIR=/app/transcode
+ENV FLIKS_MODELS_DIR=/app/data/models
 
 # Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
 # with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.

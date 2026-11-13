@@ -67,6 +67,7 @@ bytes = "1"
 url = "2"
 chrono-tz = "0.10.4"
 regex.workspace = true
+whatlang = "0.18.0"
 wasmtime = { version = "=50.0.1", default-features = false, features = ["anyhow", "async", "component-model", "cranelift", "parallel-compilation", "runtime", "std"] }
 wasmtime-wasi = { version = "=50.0.1", default-features = false, features = ["p2"] }
 wasmtime-wasi-http = { version = "=50.0.1", default-features = false, features = ["p2"] }

@@ -1,4 +1,5 @@
 //! Karaoke core (`docs/spec/karaoke.md`): models, stems, preparation and the background pass.
+pub mod aligner;
 mod background;
 pub mod cdg;
 pub mod run;
@@ -65,6 +66,8 @@ pub struct Shared {
     /// Tracks the pass failed on, left alone until the process restarts.
     pub(crate) failed: Mutex<HashSet<i32>>,
     pub(crate) wake: Notify,
+    /// A re-alignment is running (rule 41).
+    pub(crate) realigning: AtomicBool,
 }
 
 impl Default for Shared {
@@ -75,6 +78,7 @@ impl Default for Shared {
             stopped: AtomicBool::new(false),
             failed: Mutex::default(),
             wake: Notify::new(),
+            realigning: AtomicBool::new(false),
         }
     }
 }
@@ -87,6 +91,11 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/karaoke/models/{id}",
             axum::routing::delete(delete_model),
+        )
+        .route("/api/karaoke/languages", get(aligner::languages))
+        .route(
+            "/api/karaoke/realign",
+            get(aligner::realign_count).post(aligner::realign),
         )
         .route(
             "/api/items/{itemId}/karaoke",
