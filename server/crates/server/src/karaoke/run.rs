@@ -133,11 +133,14 @@ pub async fn track(st: &AppState, item: i32) -> Result<Track, String> {
     })
 }
 
+/// An installed model runs, an outdated one too; a download in progress or a failed one does not.
+pub(crate) fn usable(m: &ModelInfo) -> bool {
+    matches!(m.state, ModelState::Installed | ModelState::Outdated)
+}
+
 /// The model a job of `kind` names (rule 2): the engine's default when installed, else the first installed one.
 pub fn installed_model(models: &[ModelInfo], kind: ModelKind) -> Option<&ModelInfo> {
-    let mut installed = models
-        .iter()
-        .filter(|m| m.kind == kind && m.state == ModelState::Installed);
+    let mut installed = models.iter().filter(|m| m.kind == kind && usable(m));
     installed.clone().find(|m| m.default).or(installed.next())
 }
 
