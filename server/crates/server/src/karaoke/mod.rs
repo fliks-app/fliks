@@ -610,12 +610,12 @@ mod tests {
     #[test]
     fn a_failure_is_a_code_with_params_and_the_message_stays_with_managers() {
         let low = run::Failure::LyricsNotFoundInVocals {
-            matched: 26,
-            min: 30,
+            matched: 12,
+            min: 17,
         };
         assert_eq!(
             failure_json(&low, false),
-            json!({"code": "lyrics_not_found_in_vocals", "matched": 26, "min": 30})
+            json!({"code": "lyrics_not_found_in_vocals", "matched": 12, "min": 17})
         );
         let other = run::Failure::from("engine said no");
         assert_eq!(

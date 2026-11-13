@@ -49,7 +49,7 @@ describe('KaraokeStaleDetailsComponent', () => {
               const { offset } = o.params;
               offsets.push(offset);
               const items = Array.from({ length: Math.min(50, 120 - offset) }, (_, i) => track(offset + i));
-              return of({ total: 120, minMatch: 0.3, items });
+              return of({ total: 120, minMatch: 0.17, items });
             },
           },
         },
