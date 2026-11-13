@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "fliks-plugin-manifest"
-version = "6.0.2"
+version = "6.1.0"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek 3.0.0",
@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "fliks-server"
-version = "6.0.2"
+version = "6.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1435,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "fliks_domain"
-version = "6.0.2"
+version = "6.1.0"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "kepub"
-version = "6.0.2"
+version = "6.1.0"
 dependencies = [
  "encoding_rs",
  "percent-encoding",
