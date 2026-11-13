@@ -159,6 +159,15 @@
             <h2 class="truncate text-base font-semibold">{{ t.title }}</h2>
           }
         </div>
+        @if (!asSheet()) {
+          <button type="button" class="btn btn-ghost btn-circle max-lg:hidden" (click)="fullscreen.set(!fullscreen())" [attr.aria-pressed]="fullscreen()" [attr.aria-label]="(fullscreen() ? 'player.exit_fullscreen' : 'player.fullscreen') | translate" data-testid="audio-fullscreen">
+            @if (fullscreen()) {
+              <svg lucideMinimize class="h-5 w-5"></svg>
+            } @else {
+              <svg lucideMaximize class="h-5 w-5"></svg>
+            }
+          </button>
+        }
         @if (remoteView() && !parkedView()) {
           <span class="w-12 shrink-0"></span>
         } @else {
@@ -224,8 +233,8 @@
       </div>
 
       <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row" [class.overflow-hidden]="lyricsShown()" [class.overflow-y-auto]="!lyricsShown()" [class.short:min-h-56]="lyricsShown()" appTvSection>
-        <div class="fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
-          <div class="flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 sm:max-w-64">
+        <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
+          <div class="player-cover flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 sm:max-w-64">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
               @if (!coverFailed()) {
                 <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" (error)="coverFailed.set(true)" />
@@ -569,7 +578,7 @@
   </app-bottom-sheet>
 } @else {
   <dialog #dialog class="modal" (close)="onDialogClose()">
-    <div class="modal-box flex h-full max-h-none w-full max-w-none flex-col rounded-none p-4 sm:p-6 lg:mx-auto lg:h-[44rem] lg:max-h-[92vh] lg:max-w-3xl lg:rounded-2xl">
+    <div class="player-box modal-box flex h-full max-h-none w-full max-w-none flex-col rounded-none p-4 sm:p-6 lg:mx-auto lg:h-[44rem] lg:max-h-[92vh] lg:max-w-3xl lg:rounded-2xl" [class.player-box-full]="fullscreen()">
       <ng-container *ngTemplateOutlet="full" />
     </div>
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
