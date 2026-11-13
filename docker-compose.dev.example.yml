@@ -39,6 +39,8 @@ services:
       - engine-registry:/usr/local/cargo/registry
       # Engine reads media by path: same mount as the server.
       - ./.dev/medias:/medias
+      # Job outputs (karaoke stems) land under the server's data dir.
+      - ./.dev/data:/src/data
 
   server:
     build:
