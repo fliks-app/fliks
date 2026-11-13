@@ -33,7 +33,6 @@ export interface KaraokeModel {
   engine?: 'ctc' | 'whisper';
   /** The model card. */
   homepage: string;
-  recommended: boolean;
   sizeBytes: number;
   diskBytes: number;
   installedVersion?: string;
@@ -43,6 +42,8 @@ export interface KaraokeModel {
   downloadedBytes: number;
   /** While downloading. */
   bytesPerSecond?: number;
+  /** Hashing the files of an installed model (`state` is `downloading`): nothing to cancel. */
+  verifying: boolean;
   error?: string;
 }
 

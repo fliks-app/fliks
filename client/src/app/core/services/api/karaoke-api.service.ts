@@ -43,8 +43,8 @@ export class KaraokeApiService {
   }
 
   /** Generated lyrics a model other than their language's aligner timed. */
-  async staleTracks(): Promise<number> {
-    return (await firstValueFrom(this.http.get<{ tracks: number }>('/api/karaoke/realign', this.quiet))).tracks;
+  staleTracks(): Promise<{ tracks: number; running: boolean }> {
+    return firstValueFrom(this.http.get<{ tracks: number; running: boolean }>('/api/karaoke/realign', this.quiet));
   }
 
   async realign(): Promise<number> {

@@ -10,7 +10,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { InputFieldComponent } from '../../../shared/components/forms/input-field/input-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
-import { KaraokeModelsComponent } from './karaoke-models';
+import { KaraokeModelsComponent, parseAligners } from './karaoke-models';
 
 /** The engine's provider names: each is ticked once `provider-check` showed it matches the CPU. */
 export const VERIFIABLE_PROVIDERS = [
@@ -55,6 +55,7 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly budget = signal('4096');
   protected readonly queueCap = signal('2');
   protected readonly verified = signal<string[]>(['coreml']);
+  protected readonly aligners = signal<Record<string, string>>({});
 
   protected readonly catalogue = signal<KaraokeModels | null>(null);
   /** The engine is absent or lacks the model routes. */
@@ -80,6 +81,7 @@ export class KaraokeSettingsComponent implements OnInit {
       this.budget.set(all['karaoke.disk_budget_mb'] ?? '4096');
       this.queueCap.set(all['karaoke.queue_cap'] ?? '2');
       this.verified.set(parseProviders(all['karaoke.verified_providers']));
+      this.aligners.set(parseAligners(all['karaoke.aligners']));
     } catch {
       // The interceptor toasts the reason; the defaults stay.
     }
