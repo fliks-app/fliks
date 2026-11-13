@@ -51,6 +51,7 @@ export class KaraokeModelsComponent {
   protected readonly accepted = signal(false);
   protected readonly languages = signal<KaraokeLanguage[]>([]);
   protected readonly stale = signal(0);
+  protected readonly refused = signal(0);
   protected readonly resyncing = signal(false);
   protected readonly details = signal(false);
   protected readonly progress = signal({ done: 0, total: 0 });
@@ -110,12 +111,14 @@ export class KaraokeModelsComponent {
 
   private async refreshStale(): Promise<void> {
     try {
-      const { tracks, running, total, done } = await this.api.staleTracks();
+      const { tracks, refused, running, total, done } = await this.api.staleTracks();
       this.stale.set(tracks);
+      this.refused.set(refused);
       this.resyncing.set(running);
       this.progress.set({ done, total });
     } catch {
       this.stale.set(0);
+      this.refused.set(0);
       this.resyncing.set(false);
     }
   }

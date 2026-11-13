@@ -5553,6 +5553,8 @@
       "stale_hint": "La resynchronisation remplace les paroles générées. Les paroles relues restent.",
       "resync": "Resynchroniser",
       "resyncing": "Resynchronisation",
+      "refused_one": "{{count}} titre refusé",
+      "refused_other": "{{count}} titres refusés",
       "details": "Détails",
       "details_title": "Titres à resynchroniser",
       "details_models": "{{language}} : synchronisé avec {{current}}, serait synchronisé avec {{next}}",
