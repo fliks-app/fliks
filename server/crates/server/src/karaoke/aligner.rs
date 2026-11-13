@@ -1,14 +1,20 @@
 //! The aligner of a language, the library's languages and the re-alignment (`docs/spec/karaoke.md` rules 38-41).
+use super::run;
 use super::{engine_err, flag, manage_settings};
 use crate::{
     http::{AppError, auth::Authed},
     settings::setting_value,
     state::AppState,
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
 use fliks_domain::language::{normalize_language_code, parse_language_code};
 use fliks_domain::lyrics::Doc;
 use fliks_engine_core::api::{ModelInfo, ModelKind, ModelState};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::types::Json as Jsonb;
 use std::{collections::BTreeMap, collections::HashMap, sync::atomic::Ordering};
@@ -185,9 +191,12 @@ pub(super) async fn auto_download(st: &AppState) {
 
 /// Rule 41: the items whose unreviewed generated row the current aligner of its language did not make.
 /// A row the recogniser placed after a CTC failure is not stale: the same model would fail again.
-async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<i32>> {
-    let rows: Vec<(i32, String, String, Option<Jsonb<Doc>>)> = sqlx::query_as(
-        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END FROM lyrics
+/// A track whose last re-alignment was rejected is `blocked` until its aligner or lyrics change.
+async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> {
+    type Row = (i32, String, String, Option<Jsonb<Doc>>, i64);
+    let rows: Vec<Row> = sqlx::query_as(
+        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END,
+             extract(epoch FROM "updatedAt")::bigint FROM lyrics
            WHERE kind = 'main' AND source = 'generated' AND NOT reviewed
              AND "sourceRef" IS NOT NULL AND "sourceRef" NOT LIKE '%#fallback=%'"#,
     )
@@ -195,22 +204,153 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<i32>> {
     .await?;
     let languages = blocking(move || {
         rows.into_iter()
-            .map(|(item, lang, source_ref, doc)| {
+            .map(|(item, lang, source_ref, doc, updated)| {
                 let doc = doc.map(|d| d.0).unwrap_or_default();
-                (item, language_of(&lang, &doc), source_ref)
+                (item, language_of(&lang, &doc), source_ref, updated)
             })
             .collect::<Vec<_>>()
     })
     .await?;
     let chosen = overrides(st).await;
+    let results = st
+        .karaoke
+        .realign_results
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     Ok(languages
         .into_iter()
-        .filter(|(_, language, source_ref)| {
-            let model = source_ref.split('#').next().unwrap_or_default();
-            aligner(models, language.as_deref(), &chosen).is_some_and(|m| m.id != model)
+        .filter_map(|(item, language, source_ref, updated)| {
+            let current = aligner(models, language.as_deref(), &chosen)?.id.clone();
+            let model = source_ref.split('#').next().unwrap_or_default().to_owned();
+            let blocked = results.get(&item).is_some_and(|r| {
+                r.status == "rejected" && r.aligner == current && r.lyrics_at == updated
+            });
+            (current != model).then_some(Stale {
+                item,
+                language,
+                model,
+                aligner: current,
+                updated,
+                blocked,
+            })
         })
-        .map(|(item, ..)| item)
         .collect())
+}
+
+/// A stale track, with the model that timed it and the one that would time it now.
+pub(super) struct Stale {
+    pub(super) item: i32,
+    language: Option<String>,
+    model: String,
+    aligner: String,
+    /// When the lyrics row was last written.
+    updated: i64,
+    blocked: bool,
+}
+
+/// The last re-alignment attempt of a track; a server restart forgets it.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct RealignResult {
+    status: &'static str,
+    matched: Option<f64>,
+    error: Option<String>,
+    at: i64,
+    #[serde(skip)]
+    aligner: String,
+    #[serde(skip)]
+    lyrics_at: i64,
+}
+
+/// `None` is a track the run skipped because it was busy.
+pub(super) fn result_of(run: Option<Result<run::Outcome, String>>, s: &Stale) -> RealignResult {
+    let (status, matched, error) = match run {
+        None => ("skipped", None, None),
+        Some(Err(e)) => ("failed", None, Some(e)),
+        Some(Ok(o)) => match (o.rejected_match, o.lyrics_error) {
+            (Some(m), _) => ("rejected", Some(m), None),
+            (None, Some(e)) => ("failed", None, Some(e)),
+            (None, None) => ("ok", None, None),
+        },
+    };
+    RealignResult {
+        status,
+        matched,
+        error,
+        at: chrono::Utc::now().timestamp(),
+        aligner: s.aligner.clone(),
+        lyrics_at: s.updated,
+    }
+}
+
+const PAGE: usize = 50;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PageQuery {
+    #[serde(default)]
+    offset: usize,
+}
+
+fn page_of<T>(all: Vec<T>, offset: usize) -> Vec<T> {
+    all.into_iter().skip(offset).take(PAGE).collect()
+}
+
+#[derive(sqlx::FromRow)]
+struct Label {
+    id: i32,
+    title: Option<String>,
+    album: Option<String>,
+    artists: Option<String>,
+}
+
+/// Rule 41: the stale tracks, 50 at a time, with the outcome of their last re-alignment.
+#[utoipa::path(get, path = "/api/karaoke/realign/items", responses((status = 200), (status = 503)))]
+pub async fn realign_items(
+    State(st): State<AppState>,
+    a: Authed,
+    Query(q): Query<PageQuery>,
+) -> Result<Json<Value>, AppError> {
+    manage_settings(&a)?;
+    let models = st.engine.models().await.map_err(engine_err)?.models;
+    let mut all = stale(&st, &models).await?;
+    all.sort_by_key(|s| s.item);
+    let total = all.len();
+    let page = page_of(all, q.offset);
+    let ids: Vec<i32> = page.iter().map(|s| s.item).collect();
+    let labels: Vec<Label> = sqlx::query_as(
+        r#"SELECT i.id, i.title, m.title AS album,
+             (SELECT string_agg(COALESCE(c."creditedName", p.name), ', ' ORDER BY c.position)
+              FROM item_credits c JOIN persons p ON p.id = c."personId"
+              WHERE c."itemId" = i.id AND c.role = 'artist') AS artists
+           FROM items i LEFT JOIN media m ON m.id = i."mediaId" WHERE i.id = ANY($1)"#,
+    )
+    .bind(&ids)
+    .fetch_all(&st.db)
+    .await?;
+    let results = st
+        .karaoke
+        .realign_results
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let items: Vec<Value> = page
+        .into_iter()
+        .map(|s| {
+            let l = labels.iter().find(|l| l.id == s.item);
+            json!({
+                "itemId": s.item,
+                "title": l.and_then(|l| l.title.as_deref()),
+                "album": l.and_then(|l| l.album.as_deref()),
+                "artist": l.and_then(|l| l.artists.as_deref()),
+                "language": s.language,
+                "model": s.model,
+                "aligner": s.aligner,
+                "result": results.get(&s.item),
+            })
+        })
+        .collect();
+    Ok(Json(
+        json!({ "total": total, "minMatch": run::MIN_MATCHED, "items": items }),
+    ))
 }
 
 #[utoipa::path(get, path = "/api/karaoke/realign", responses((status = 200), (status = 503)))]
@@ -218,8 +358,10 @@ pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json
     manage_settings(&a)?;
     let models = st.engine.models().await.map_err(engine_err)?.models;
     Ok(Json(json!({
-        "tracks": stale(&st, &models).await?.len(),
+        "tracks": stale(&st, &models).await?.iter().filter(|s| !s.blocked).count(),
         "running": st.karaoke.realigning.load(Ordering::SeqCst),
+        "total": st.karaoke.realign_total.load(Ordering::SeqCst),
+        "done": st.karaoke.realign_done.load(Ordering::SeqCst),
     })))
 }
 
@@ -243,7 +385,7 @@ pub async fn realign(
         return Err(AppError::conflict("karaoke_realign_running"));
     }
     let tracks = match stale(&st, &models).await {
-        Ok(t) => t,
+        Ok(t) => t.into_iter().filter(|s| !s.blocked).collect::<Vec<_>>(),
         Err(e) => {
             st.karaoke.realigning.store(false, Ordering::SeqCst);
             return Err(e.into());
@@ -322,6 +464,46 @@ mod tests {
         let rec = |l| recommended(&all, l).map(|m| m.id.clone());
         assert_eq!(rec(Some("fr")).as_deref(), Some("fr"));
         assert_eq!(rec(Some("it")).as_deref(), Some("omni"));
+    }
+
+    #[test]
+    fn the_details_page_by_fifty() {
+        let all: Vec<usize> = (0..120).collect();
+        assert_eq!(page_of(all.clone(), 0), (0..50).collect::<Vec<_>>());
+        assert_eq!(page_of(all.clone(), 100), (100..120).collect::<Vec<_>>());
+        assert!(page_of(all, 150).is_empty());
+        assert!(page_of(Vec::<usize>::new(), 0).is_empty());
+    }
+
+    #[test]
+    fn the_last_attempt_is_ok_rejected_failed_or_skipped() {
+        let out = |rejected_match, lyrics_error| run::Outcome {
+            rejected_match,
+            lyrics_error,
+            ..Default::default()
+        };
+        let s = Stale {
+            item: 1,
+            language: None,
+            model: "a".into(),
+            aligner: "b".into(),
+            updated: 7,
+            blocked: false,
+        };
+        let status = |r| result_of(r, &s).status;
+        assert_eq!(status(Some(Ok(out(None, None)))), "ok");
+        assert_eq!(
+            status(Some(Ok(out(Some(0.18), Some("x".into()))))),
+            "rejected"
+        );
+        assert_eq!(status(Some(Ok(out(None, Some("x".into()))))), "failed");
+        assert_eq!(status(Some(Err("engine".into()))), "failed");
+        assert_eq!(status(None), "skipped");
+        let r = result_of(Some(Ok(out(Some(0.18), None))), &s);
+        assert_eq!(
+            (r.matched, r.aligner.as_str(), r.lyrics_at),
+            (Some(0.18), "b", 7)
+        );
     }
 
     #[test]

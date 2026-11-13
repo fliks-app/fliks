@@ -1,0 +1,48 @@
+<dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="closed.emit()" data-testid="karaoke-stale-details">
+  <div class="modal-box max-w-3xl">
+    <app-modal-header [title]="'karaoke.admin.details_title' | translate" />
+    <ul class="flex max-h-[60vh] flex-col gap-2 overflow-auto">
+      @for (t of items(); track t.itemId) {
+        <li class="rounded-lg bg-base-200 p-3" data-testid="karaoke-stale-item">
+          <p class="font-medium">{{ t.title || ('#' + t.itemId) }}</p>
+          @if (t.artist || t.album) {
+            <p class="text-sm text-base-content/60">{{ byline(t) }}</p>
+          }
+          <p class="text-sm text-base-content/60">
+            {{ 'karaoke.admin.details_models' | translate: { language: language(t.language), current: name(t.model), next: name(t.aligner) } }}
+          </p>
+          @if (t.result; as r) {
+            <p class="text-sm" [class.text-error]="r.status === 'failed'" [class.text-warning]="r.status === 'rejected'">
+              @switch (r.status) {
+                @case ('rejected') {
+                  {{ 'karaoke.admin.result_rejected' | translate: { percent: percent(r.matched), min: minPercent(), previous: name(t.model) } }}
+                }
+                @case ('failed') {
+                  {{ 'karaoke.admin.result_failed' | translate: { error: r.error } }}
+                }
+                @case ('skipped') {
+                  {{ 'karaoke.admin.result_skipped' | translate }}
+                }
+                @default {
+                  {{ 'karaoke.admin.result_ok' | translate }}
+                }
+              }
+              <span class="text-base-content/60">· {{ r.at * 1000 | date: 'short' }}</span>
+            </p>
+          } @else {
+            <p class="text-sm text-base-content/60">{{ 'karaoke.admin.result_none' | translate }}</p>
+          }
+        </li>
+      }
+      @if (!loaded() || hasMore) {
+        <li #sentinel class="flex justify-center py-2"><span class="loading loading-spinner loading-sm"></span></li>
+      }
+    </ul>
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="closed.emit()">{{ 'common.close' | translate }}</button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closed.emit()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

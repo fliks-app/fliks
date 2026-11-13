@@ -30,7 +30,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Mutex, atomic::AtomicBool},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicUsize},
+    },
 };
 use tokio::sync::{Notify, Semaphore};
 use tower::ServiceExt;
@@ -68,6 +71,10 @@ pub struct Shared {
     pub(crate) wake: Notify,
     /// A re-alignment is running (rule 41).
     pub(crate) realigning: AtomicBool,
+    /// Tracks of the running re-alignment, and how many are finished.
+    pub(crate) realign_total: AtomicUsize,
+    pub(crate) realign_done: AtomicUsize,
+    pub(crate) realign_results: Mutex<HashMap<i32, aligner::RealignResult>>,
 }
 
 impl Default for Shared {
@@ -79,6 +86,9 @@ impl Default for Shared {
             failed: Mutex::default(),
             wake: Notify::new(),
             realigning: AtomicBool::new(false),
+            realign_total: AtomicUsize::new(0),
+            realign_done: AtomicUsize::new(0),
+            realign_results: Mutex::default(),
         }
     }
 }
@@ -102,6 +112,7 @@ pub fn router() -> Router<AppState> {
             "/api/karaoke/realign",
             get(aligner::realign_count).post(aligner::realign),
         )
+        .route("/api/karaoke/realign/items", get(aligner::realign_items))
         .route(
             "/api/items/{itemId}/karaoke",
             get(item_state).post(prepare).delete(remove),

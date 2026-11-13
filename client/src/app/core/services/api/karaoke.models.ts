@@ -80,6 +80,32 @@ export interface KaraokeLanguage {
   recommended: string | null;
 }
 
+/** The last re-sync of a track; the server forgets it on restart. */
+export interface KaraokeRealignResult {
+  status: 'ok' | 'rejected' | 'failed' | 'skipped';
+  /** Share of the lyrics found in the vocals, 0 to 1, when `rejected`. */
+  matched: number | null;
+  error: string | null;
+  at: number;
+}
+
+export interface KaraokeStaleTrack {
+  itemId: number;
+  title: string | null;
+  album: string | null;
+  artist: string | null;
+  language: string | null;
+  model: string;
+  aligner: string;
+  result: KaraokeRealignResult | null;
+}
+
+export interface KaraokeStalePage {
+  total: number;
+  minMatch: number;
+  items: KaraokeStaleTrack[];
+}
+
 export interface KaraokeItemState {
   state: KaraokeJobState;
   stage?: KaraokeStage;

@@ -8,6 +8,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
+import { KaraokeStaleDetailsComponent } from './karaoke-stale-details';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
@@ -27,7 +28,7 @@ const GROUPS: { key: Group; kind: KaraokeModelKind; whisper: boolean }[] = [
 /** The model manager: disk usage, the models by group, the library's languages, orphans and the re-sync. */
 @Component({
   selector: 'app-karaoke-models',
-  imports: [TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent, KaraokeStaleDetailsComponent],
   templateUrl: './karaoke-models.html',
   host: { class: 'flex flex-col gap-5' },
 })
@@ -51,6 +52,8 @@ export class KaraokeModelsComponent {
   protected readonly languages = signal<KaraokeLanguage[]>([]);
   protected readonly stale = signal(0);
   protected readonly resyncing = signal(false);
+  protected readonly details = signal(false);
+  protected readonly progress = signal({ done: 0, total: 0 });
 
   protected readonly groups = computed(() =>
     GROUPS.map((g) => ({
@@ -107,9 +110,10 @@ export class KaraokeModelsComponent {
 
   private async refreshStale(): Promise<void> {
     try {
-      const { tracks, running } = await this.api.staleTracks();
+      const { tracks, running, total, done } = await this.api.staleTracks();
       this.stale.set(tracks);
       this.resyncing.set(running);
+      this.progress.set({ done, total });
     } catch {
       this.stale.set(0);
       this.resyncing.set(false);
