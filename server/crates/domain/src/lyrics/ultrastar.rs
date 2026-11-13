@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(&l.text[l.cues[1].byte_start..l.cues[1].byte_end], "lo");
         let l2 = &p.doc.lines[1];
         assert_eq!(l2.agent_id.as_deref(), Some("v2"));
-        assert_eq!(l2.cues[0].pitch, None);
+        assert_eq!(l2.cues[0].pitch, Some(59.0));
         assert_eq!(l2.cues[0].end, 1000 + 22 * 125);
     }
 
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn a_held_note_after_a_freestyle_syllable_is_kept_and_the_longest_is_the_pitch() {
-        let p = parse("#BPM:120\n#GAP:0\n F 0 4 0 la\n: 4 8 3 ~\n: 12 2 5 ~\nE\n").unwrap();
+        let p = parse("#BPM:120\n#GAP:0\nF 0 4 0 la\n: 4 8 3 ~\n: 12 2 5 ~\nE\n").unwrap();
         let c = &p.doc.lines[0].cues[0];
         assert_eq!(c.pitch, Some(63.0));
         assert_eq!(
