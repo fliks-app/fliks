@@ -3,7 +3,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
-import { activeIndex, cueFills, cueSegments, toRows } from './lyrics-logic';
+import { activeIndex, cueFills, cueSegments, startedIndex, toRows } from './lyrics-logic';
 
 const AGENT_COLOURS = ['text-primary', 'text-secondary', 'text-accent', 'text-info'];
 const MANUAL_SCROLL_MS = 3000;
@@ -40,8 +40,9 @@ export class LyricsViewComponent {
   /** Interpolated player position in ms, advanced every frame while playing. */
   private readonly clock = signal(0);
   protected readonly active = computed(() => (this.timed() ? activeIndex(this.rows(), this.clock(), this.doc().offset) : -1));
+  private readonly started = computed(() => (this.timed() ? startedIndex(this.rows(), this.clock(), this.doc().offset) : -1));
   protected readonly fills = computed(() => {
-    const i = this.active();
+    const i = this.started();
     const cues = this.rows()[i]?.cues;
     return cues ? cueFills(cues, this.clock(), this.doc().offset) : [];
   });
@@ -97,7 +98,7 @@ export class LyricsViewComponent {
   }
 
   protected fill(i: number, k: number): number {
-    const a = this.active();
+    const a = this.started();
     return i < a ? 100 : i === a ? (this.fills()[k] ?? 0) : 0;
   }
 

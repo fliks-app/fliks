@@ -44,8 +44,13 @@ export function cueSegments(text: string, cues: readonly LyricsCue[]): CueSegmen
   return out;
 }
 
+/** A line stays lit this long after its end. */
+export const GAP_GRACE_MS = 500;
+/** A silence at least this long between a line's end and the next start is a gap. */
+export const GAP_MIN_MS = 3000;
+
 /** The last line started at `posMs`; -1 before the first. A positive offset shows the text sooner. */
-export function activeIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
+export function startedIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
   const t = posMs + offsetMs;
   let found = -1;
   for (let i = 0; i < rows.length; i++) {
@@ -55,6 +60,17 @@ export function activeIndex(rows: readonly LyricsRow[], posMs: number, offsetMs:
     else break;
   }
   return found;
+}
+
+/** The line to light: the started one, or -1 in an instrumental gap after its end. */
+export function activeIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
+  const i = startedIndex(rows, posMs, offsetMs);
+  const r = rows[i];
+  const end = r?.cues?.length ? r.cues[r.cues.length - 1].end : undefined;
+  const next = rows[i + 1]?.start;
+  if (end === undefined || next === undefined) return i;
+  const t = posMs + offsetMs;
+  return t > end + GAP_GRACE_MS && next - end >= GAP_MIN_MS ? -1 : i;
 }
 
 /** Fill 0..100 of each cue of a row at `posMs`. */
