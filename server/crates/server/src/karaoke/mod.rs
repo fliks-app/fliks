@@ -306,9 +306,14 @@ pub async fn delete_model_orphan(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// What a caller who does not manage settings reads of a failed step (rule 8).
-const REASON: &str = "The engine could not process this track";
-const LYRICS_REASON: &str = "The engine could not time the lyrics";
+/// A failure as sent: the engine's `message` goes to users who manage settings only (rule 8).
+fn failure_json(f: &run::Failure, detail: bool) -> Value {
+    let mut v = json!(f);
+    if let Some(o) = v.as_object_mut().filter(|_| !detail) {
+        o.remove("message");
+    }
+    v
+}
 
 /// Rule 8.
 async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
@@ -372,10 +377,10 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
             out["progress"] = json!(p);
         }
         if let Some(e) = r.error {
-            out["error"] = json!(if detail { e } else { REASON.to_owned() });
+            out["error"] = failure_json(&e, detail);
         }
         if let Some(e) = r.lyrics_error {
-            out["lyricsError"] = json!(if detail { e } else { LYRICS_REASON.to_owned() });
+            out["lyricsError"] = failure_json(&e, detail);
         }
     }
     Ok(out)
@@ -594,6 +599,24 @@ mod tests {
         );
         assert_eq!(gpu_provider(&feats, &s(&["directml"])), None);
         assert_eq!(gpu_provider(&s(&["onnx"]), &s(&["cuda"])), None);
+    }
+
+    #[test]
+    fn a_failure_is_a_code_with_params_and_the_message_stays_with_managers() {
+        let low = run::Failure::LyricsNotFoundInVocals {
+            matched: 26,
+            min: 30,
+        };
+        assert_eq!(
+            failure_json(&low, false),
+            json!({"code": "lyrics_not_found_in_vocals", "matched": 26, "min": 30})
+        );
+        let other = run::Failure::from("engine said no");
+        assert_eq!(
+            failure_json(&other, true),
+            json!({"code": "failed", "message": "engine said no"})
+        );
+        assert_eq!(failure_json(&other, false), json!({"code": "failed"}));
     }
 
     fn run(user: Option<i32>, state: &'static str) -> run::RunState {

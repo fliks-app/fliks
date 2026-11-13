@@ -5426,6 +5426,12 @@
     "queued": "Waiting to start",
     "failed": "Preparation failed.",
     "lyrics_failed": "Lyrics were not generated.",
+    "failure": {
+      "lyrics_not_found_in_vocals": "Only {{matched}} % of the lyrics were found in the vocals (minimum {{min}} %).",
+      "lyrics_too_long": "The lyrics are too long.",
+      "no_word_timed": "No lyrics word could be timed.",
+      "failed": "The engine could not process this track."
+    },
     "progress": "Preparation progress",
     "mix": "Sound mix",
     "native_hint": "Karaoke needs the web or desktop player.",

@@ -142,7 +142,7 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
         };
         let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
             run::Start::Started(handle) => {
-                Some(handle.await.map_err(|e| e.to_string()).and_then(|r| r))
+                Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
             }
             _ => None,
         };

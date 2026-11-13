@@ -33,8 +33,8 @@ pub struct RunState {
     pub state: &'static str,
     pub stage: Option<&'static str>,
     pub progress: Option<f64>,
-    pub error: Option<String>,
-    pub lyrics_error: Option<String>,
+    pub error: Option<Failure>,
+    pub lyrics_error: Option<Failure>,
     /// Who asked; `None` for the background pass.
     pub user: Option<i32>,
     /// The users `karaoke.job_changed` goes to.
@@ -51,38 +51,58 @@ impl RunState {
 #[derive(Default)]
 pub struct Outcome {
     pub provider: Option<String>,
-    pub lyrics_error: Option<String>,
+    pub lyrics_error: Option<Failure>,
     /// Share of the lyrics found in the vocals, when that was too low to save the alignment.
     pub rejected_match: Option<f64>,
 }
 
-/// Why an alignment was not saved.
-enum AlignError {
-    LowMatch(f64),
-    Other(String),
+/// Why a step failed; `code` and its params are the wire form, the `Display` text is for logs.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum Failure {
+    /// Percentages of the lyrics found in the vocals and the least that is kept.
+    LyricsNotFoundInVocals {
+        matched: u32,
+        min: u32,
+    },
+    LyricsTooLong,
+    NoWordTimed,
+    /// Anything else; `message` is the engine's or the server's text, for settings managers only.
+    Failed {
+        message: String,
+    },
 }
 
-impl From<String> for AlignError {
-    fn from(e: String) -> Self {
-        Self::Other(e)
+impl Failure {
+    fn low_match(matched: f64) -> Self {
+        Self::LyricsNotFoundInVocals {
+            matched: (matched * 100.0).round() as u32,
+            min: (MIN_MATCHED * 100.0).round() as u32,
+        }
     }
 }
 
-impl From<&str> for AlignError {
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self::Failed { message }
+    }
+}
+
+impl From<&str> for Failure {
     fn from(e: &str) -> Self {
-        Self::Other(e.into())
+        e.to_owned().into()
     }
 }
 
-impl std::fmt::Display for AlignError {
+impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LowMatch(m) => write!(
-                f,
-                "only {:.0} % of the lyrics were found in the vocals",
-                m * 100.0
-            ),
-            Self::Other(e) => f.write_str(e),
+            Self::LyricsNotFoundInVocals { matched, .. } => {
+                write!(f, "only {matched} % of the lyrics were found in the vocals")
+            }
+            Self::LyricsTooLong => f.write_str("the lyrics are too long to align"),
+            Self::NoWordTimed => f.write_str("no lyrics word could be timed"),
+            Self::Failed { message } => f.write_str(message),
         }
     }
 }
@@ -99,7 +119,7 @@ pub enum Refusal {
 }
 
 pub enum Start {
-    Started(tokio::task::JoinHandle<Result<Outcome, String>>),
+    Started(tokio::task::JoinHandle<Result<Outcome, Failure>>),
     /// Already running, or nothing left to run.
     Idle,
     Refused(Refusal),
@@ -356,7 +376,7 @@ async fn steps(
     item: i32,
     opts: Opts,
     priority: JobPriority,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, Failure> {
     let t = track(st, item).await?;
     let models = st.engine.models().await.map_err(|e| e.to_string())?;
     let sep = installed_model(&models.models, ModelKind::Separation)
@@ -395,10 +415,10 @@ async fn steps(
         .await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
-        if let AlignError::LowMatch(m) = &e {
-            out.rejected_match = Some(*m);
+        if let Failure::LyricsNotFoundInVocals { matched, .. } = &e {
+            out.rejected_match = Some(f64::from(*matched) / 100.0);
         }
-        out.lyrics_error = Some(e.to_string());
+        out.lyrics_error = Some(e);
     }
     if opts.melody
         && caps.melody
@@ -522,7 +542,7 @@ async fn align(
     models: &[ModelInfo],
     realign: bool,
     priority: JobPriority,
-) -> Result<(), AlignError> {
+) -> Result<(), Failure> {
     let mut rows = lstore::list(&st.db, item)
         .await
         .map_err(|e| e.to_string())?;
@@ -536,7 +556,7 @@ async fn align(
         .map(|r| r.text.split_whitespace().count())
         .sum();
     if request.len() > MAX_ALIGN_LINES || words > MAX_ALIGN_WORDS {
-        return Err("the lyrics are too long to align".into());
+        return Err(Failure::LyricsTooLong);
     }
     let language = aligner::language_of(&src.lang, &src.doc.0);
     let model = aligner::aligner(models, language.as_deref(), &aligner::overrides(st).await)
@@ -598,10 +618,10 @@ async fn align(
         .collect();
     let doc = kd::from_alignment(&src.doc.0, &request, &placed);
     if doc.lines.is_empty() {
-        return Err("no lyrics word could be timed".into());
+        return Err(Failure::NoWordTimed);
     }
     if a.matched < MIN_MATCHED {
-        return Err(AlignError::LowMatch(a.matched));
+        return Err(Failure::low_match(a.matched));
     }
     let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
     if let Some(why) = &a.fallback {
@@ -688,7 +708,7 @@ async fn melody(
     vocals: &std::path::Path,
     model: &str,
     priority: JobPriority,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let Some(target) = melody_target(st, item).await.map_err(|e| e.to_string())? else {
         return Ok(());
     };
@@ -696,7 +716,7 @@ async fn melody(
         return Ok(());
     };
     if spans.len() > MAX_MELODY_SPANS {
-        return Err("the lyrics have too many words for the melody".into());
+        return Err(Failure::LyricsTooLong);
     }
     stage(st, item, "melody");
     let req = JobRequest {

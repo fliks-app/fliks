@@ -80,12 +80,21 @@ export interface KaraokeLanguage {
   recommended: string | null;
 }
 
+/** Why a step failed: a stable `code` with its params; `message` only for settings managers. */
+export interface KaraokeFailure {
+  code: 'lyrics_not_found_in_vocals' | 'lyrics_too_long' | 'no_word_timed' | 'failed';
+  /** Percent of the lyrics found in the vocals, and the least that is kept. */
+  matched?: number;
+  min?: number;
+  message?: string;
+}
+
 /** The last re-sync of a track; the server forgets it on restart. */
 export interface KaraokeRealignResult {
   status: 'ok' | 'rejected' | 'failed' | 'skipped';
   /** Share of the lyrics found in the vocals, 0 to 1, when `rejected`. */
   matched: number | null;
-  error: string | null;
+  error: KaraokeFailure | null;
   at: number;
 }
 
@@ -110,9 +119,9 @@ export interface KaraokeItemState {
   state: KaraokeJobState;
   stage?: KaraokeStage;
   progress?: number;
-  error?: string;
+  error?: KaraokeFailure;
   /** The `Align` or `Melody` failure of the last run; the stems are ready. */
-  lyricsError?: string;
+  lyricsError?: KaraokeFailure;
   fileId: number;
   stems: Partial<Record<StemKind, { size: number; durationMs: number; contentType: string }>>;
   lyrics: boolean;

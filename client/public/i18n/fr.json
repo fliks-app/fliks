@@ -5426,6 +5426,12 @@
     "queued": "En attente",
     "failed": "La préparation a échoué.",
     "lyrics_failed": "Les paroles n'ont pas été générées.",
+    "failure": {
+      "lyrics_not_found_in_vocals": "Seulement {{matched}} % des paroles retrouvées dans la voix (minimum {{min}} %).",
+      "lyrics_too_long": "Les paroles sont trop longues.",
+      "no_word_timed": "Aucun mot des paroles n'a pu être placé.",
+      "failed": "Le moteur n'a pas pu traiter ce titre."
+    },
     "progress": "Progression de la préparation",
     "mix": "Mixage du son",
     "native_hint": "Le karaoké demande le lecteur web ou bureau.",
