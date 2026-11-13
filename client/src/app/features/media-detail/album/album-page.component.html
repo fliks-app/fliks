@@ -132,6 +132,12 @@
             {{ (downloads.itemIds().has(t.itemId) ? 'downloads.remove_from_device' : 'downloads.download') | translate }}
           </button>
         }
+        @if (canAcquire()) {
+          <button type="button" class="dropdown-item text-white" (click)="openFiles(t, $any($event.currentTarget).closest('li'))" data-testid="track-files">
+            <svg lucideDownload class="h-4 w-4"></svg>
+            {{ 'media_detail.files_group' | translate }}
+          </button>
+        }
         @if (party.active()) {
           <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="sing(t)" data-testid="sing-track">
             <svg lucideMic class="h-4 w-4"></svg>

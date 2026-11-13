@@ -15,6 +15,9 @@ import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { CardActionsService } from '../../../core/services/card-actions.service';
+import { MediaActionsController } from '../../../shared/utils/media-actions-controller';
+import { openMediaMenu } from '../../../shared/utils/media-menu';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
@@ -80,6 +83,13 @@ export class AlbumPageComponent {
       .filter((t) => t.editionId === this.editionId())
       .map((t) => ({ ...t, ...this.overrides().get(t.itemId) })),
   );
+  private readonly cardActions = inject(CardActionsService);
+  private readonly activeTrack = signal<Track | null>(null);
+  private readonly trackActions = new MediaActionsController({
+    base: () => ({ mediaId: this.media().id, kind: 'album', level: 'item', itemId: this.activeTrack()?.itemId }),
+    facts: () => ({ isAdmin: this.auth.hasPermission('settings.access'), hasFiles: !!this.activeTrack()?.hasFile, identified: true }),
+  });
+  protected readonly canAcquire = computed(() => this.trackActions.rows().length > 0);
   protected readonly discs = computed<DiscView[]>(() =>
     groupDiscs(this.tracks()).map((disc) => ({ disc, sections: groupByWork(disc.tracks) })),
   );
@@ -161,6 +171,11 @@ export class AlbumPageComponent {
 
   protected addToPlaylist(t: Track): void {
     this.playlists.open({ itemId: t.itemId });
+  }
+
+  protected openFiles(t: Track, anchor: HTMLElement): void {
+    this.activeTrack.set(t);
+    openMediaMenu(this.cardActions, this.trackActions.rows(), anchor, { title: t.title, imageUrl: this.coverUrl(), imageAspect: 'square' });
   }
 
   protected sing(t: Track): void {
