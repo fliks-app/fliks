@@ -243,6 +243,7 @@ pub(super) async fn match_one(
 pub(super) async fn score(
     st: &AppState,
     m: &MediaRow,
+    unit: Option<&t::UnitRef>,
     releases: Vec<t::CandidateRelease>,
 ) -> sqlx::Result<Vec<t::ScoredRelease>> {
     let db = &st.db;
@@ -250,6 +251,9 @@ pub(super) async fn score(
     let formats = custom_formats(db).await?;
     let inp = Inputs::of(releases);
     let x = extras(db, &[m.id]).await?;
+    let track = unit
+        .and_then(|u| u.label.clone())
+        .filter(|l| !l.trim().is_empty());
     let artists: Vec<String> = x
         .creators
         .get(&m.id)
@@ -267,10 +271,16 @@ pub(super) async fn score(
         size_by_quality: sizes(db, Family::Audio).await?,
         source_min_seeders: inp.min_seeders,
         source_unknown_lang: inp.unknown_lang,
-        duration_minutes: f64::from(x.minutes.get(&m.id).copied().unwrap_or(0)),
-        expected_title: Some(ExpectedTitle::Many(
-            resolve_search_titles(&m.search(), None).expected_titles,
-        )),
+        // A track is scored on its own title; the album's length says nothing of its size.
+        duration_minutes: if track.is_some() {
+            0.0
+        } else {
+            f64::from(x.minutes.get(&m.id).copied().unwrap_or(0))
+        },
+        expected_title: Some(ExpectedTitle::Many(match track {
+            Some(title) => vec![title],
+            None => resolve_search_titles(&m.search(), None).expected_titles,
+        })),
         expected_year: None,
         min_custom_format_score: want
             .as_ref()
@@ -556,5 +566,36 @@ mod tests {
                 .any(|r| r.code == "DISCOGRAPHY")
         );
         assert_eq!(scored[0].id, "ok", "the clean release sorts first");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_track_is_scored_on_its_own_title(db: PgPool) {
+        album(&db).await;
+        let st = state(&db);
+        let score = |unit: Option<t::UnitRef>| {
+            score_any(
+                &st,
+                1,
+                None,
+                None,
+                unit,
+                vec![release("r", "Cora Vell - T2 [FLAC]")],
+            )
+        };
+        let track = t::UnitRef {
+            group: Some(1),
+            number: Some(2.0),
+            end_number: None,
+            label: Some("T2".into()),
+            absolute: None,
+        };
+        let codes = |s: Vec<t::ScoredRelease>| {
+            s[0].rejections
+                .iter()
+                .map(|r| r.code.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(codes(score(None).await.unwrap()).contains(&"TITLE_MISMATCH".to_owned()));
+        assert!(!codes(score(Some(track)).await.unwrap()).contains(&"TITLE_MISMATCH".to_owned()));
     }
 }

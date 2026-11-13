@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe } from '@ngx-translate/core';
-import { LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePause, LucidePlay, LucideShuffle, LucideUsers } from '@lucide/angular';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucideShuffle } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -15,6 +15,9 @@ import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { CardActionsService, type CardAction } from '../../../core/services/card-actions.service';
+import { MediaActionsController } from '../../../shared/utils/media-actions-controller';
+import { toCardAction } from '../../../shared/utils/media-menu';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
@@ -26,7 +29,6 @@ import { LikeController } from '../../../shared/utils/like-controller';
 import {
   artistLine, formatDuration, groupByWork, groupDiscs, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
 } from '../../music/music-utils';
-import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TrackLineComponent } from '../../music/track-line.component';
@@ -43,8 +45,8 @@ interface DiscView {
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    DropdownMenuComponent, ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent,
-    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListEnd, LucideListPlus, LucideListStart, LucideMic, LucidePause, LucidePlay, LucideShuffle, LucideUsers,
+    ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent,
+    LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucideShuffle,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -80,6 +82,13 @@ export class AlbumPageComponent {
       .filter((t) => t.editionId === this.editionId())
       .map((t) => ({ ...t, ...this.overrides().get(t.itemId) })),
   );
+  private readonly cardActions = inject(CardActionsService);
+  private readonly translate = inject(TranslateService);
+  private readonly activeTrack = signal<Track | null>(null);
+  private readonly trackActions = new MediaActionsController({
+    base: () => ({ mediaId: this.media().id, kind: 'album', level: 'item', itemId: this.activeTrack()?.itemId }),
+    facts: () => ({ isAdmin: this.auth.hasPermission('settings.access'), hasFiles: !!this.activeTrack()?.hasFile, identified: true }),
+  });
   protected readonly discs = computed<DiscView[]>(() =>
     groupDiscs(this.tracks()).map((disc) => ({ disc, sections: groupByWork(disc.tracks) })),
   );
@@ -161,6 +170,29 @@ export class AlbumPageComponent {
 
   protected addToPlaylist(t: Track): void {
     this.playlists.open({ itemId: t.itemId });
+  }
+
+  /** The track's own actions, then the acquisition rows, in the panel the other kinds use. */
+  protected openTrackMenu(t: Track, anchor: HTMLElement): void {
+    this.activeTrack.set(t);
+    const own = (key: string, icon: string, run: () => void, disabled = false, params?: object): CardAction => ({
+      label: this.translate.instant(key, params), icon, run, disabled, section: 'track',
+    });
+    const actions: CardAction[] = [
+      own('music.play_next', 'list-start', () => this.enqueue(t, 'next'), !t.hasFile),
+      own('music.add_to_queue', 'list-end', () => this.enqueue(t, 'last'), !t.hasFile),
+      own('playlists.add_to_playlist_title', 'list-plus', () => this.addToPlaylist(t), !t.hasFile),
+      ...(this.downloads.available() && t.hasFile
+        ? [own(this.downloads.itemIds().has(t.itemId) ? 'downloads.remove_from_device' : 'downloads.download', 'download', () => this.toggleDownload(t))]
+        : []),
+      ...(this.party.active()
+        ? [own('karaoke.queue_sing_this', 'mic', () => this.sing(t), !t.hasFile, { title: t.title })]
+        : []),
+      ...(this.creditGroups(t).length ? [own('music.credits', 'users', () => this.openCredits(t))] : []),
+      ...this.trackActions.rows().map((r) => toCardAction(r)),
+    ];
+    this.cardActions.register({ actions, anchor, placement: 'button', title: t.title, subtitle: this.artistsText(), imageUrl: this.coverUrl(), imageAspect: 'square' });
+    this.cardActions.show();
   }
 
   protected sing(t: Track): void {

@@ -110,41 +110,9 @@
       <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [class.text-white]="!t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
         <svg lucideHeart class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
       </button>
-      <app-dropdown-menu placement="bottom-end" [heading]="t.title">
-        <div trigger tabindex="0" role="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" data-testid="track-menu">
-          <svg lucideEllipsisVertical class="size-5"></svg>
-        </div>
-        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="enqueue(t, 'next')" data-testid="track-play-next">
-          <svg lucideListStart class="h-4 w-4"></svg>
-          {{ 'music.play_next' | translate }}
-        </button>
-        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="enqueue(t, 'last')" data-testid="track-enqueue">
-          <svg lucideListEnd class="h-4 w-4"></svg>
-          {{ 'music.add_to_queue' | translate }}
-        </button>
-        <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="addToPlaylist(t)" data-testid="track-add-playlist">
-          <svg lucideListPlus class="h-4 w-4"></svg>
-          {{ 'playlists.add_to_playlist_title' | translate }}
-        </button>
-        @if (downloads.available() && t.hasFile) {
-          <button type="button" class="dropdown-item text-white" (click)="toggleDownload(t)" data-testid="track-download">
-            <svg lucideDownload class="h-4 w-4"></svg>
-            {{ (downloads.itemIds().has(t.itemId) ? 'downloads.remove_from_device' : 'downloads.download') | translate }}
-          </button>
-        }
-        @if (party.active()) {
-          <button type="button" class="dropdown-item text-white" [disabled]="!t.hasFile" (click)="sing(t)" data-testid="sing-track">
-            <svg lucideMic class="h-4 w-4"></svg>
-            {{ 'karaoke.queue_sing_this' | translate: { title: t.title } }}
-          </button>
-        }
-        @if (creditGroups(t).length) {
-          <button type="button" class="dropdown-item text-white" (click)="openCredits(t)" data-testid="track-credits">
-            <svg lucideUsers class="h-4 w-4"></svg>
-            {{ 'music.credits' | translate }}
-          </button>
-        }
-      </app-dropdown-menu>
+      <button #more type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" (click)="openTrackMenu(t, more)" data-testid="track-menu">
+        <svg lucideEllipsisVertical class="size-5"></svg>
+      </button>
     </li>
   </ng-template>
 
