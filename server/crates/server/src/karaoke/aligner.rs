@@ -18,7 +18,16 @@ pub(crate) fn language_of(lang: &str, doc: &Doc) -> Option<String> {
     parse_language_code(lang).or_else(|| {
         let text: Vec<&str> = doc.lines.iter().map(|l| l.text.as_str()).collect();
         let info = whatlang::detect(&text.join("\n")).filter(whatlang::Info::is_reliable)?;
-        Some(normalize_language_code(Some(info.lang().code())))
+        let code = match info.lang().code() {
+            "cmn" => "zh",
+            "pes" => "fa",
+            "arb" => "ar",
+            "azj" => "az",
+            "uzn" => "uz",
+            "ydd" => "yi",
+            other => other,
+        };
+        Some(normalize_language_code(Some(code))).filter(|c| c.len() == 2)
     })
 }
 
@@ -68,14 +77,36 @@ fn recommended<'a>(models: &'a [ModelInfo], language: Option<&'a str>) -> Option
         .min_by_key(|m| rank(m))
 }
 
-/// The admin's per-language choices; a value that is not a JSON object is no choice.
+/// `karaoke.aligners` is a JSON object of language to model id.
+pub(crate) fn validate_overrides(value: &str) -> Result<(), &'static str> {
+    serde_json::from_str::<HashMap<String, String>>(value)
+        .map(drop)
+        .map_err(|_| "karaoke.aligners must be a JSON object of language to model id")
+}
+
+/// The admin's per-language choices; an entry that is not a model id is skipped.
 pub(crate) async fn overrides(st: &AppState) -> HashMap<String, String> {
-    setting_value(&st.db, "karaoke.aligners")
+    let Some(raw) = setting_value(&st.db, "karaoke.aligners")
         .await
         .ok()
         .flatten()
-        .and_then(|v| serde_json::from_str(&v).ok())
-        .unwrap_or_default()
+    else {
+        return HashMap::new();
+    };
+    let Ok(entries) = serde_json::from_str::<HashMap<String, Value>>(&raw) else {
+        tracing::warn!("karaoke.aligners is not a JSON object: ignored");
+        return HashMap::new();
+    };
+    entries
+        .into_iter()
+        .filter_map(|(lang, id)| match id {
+            Value::String(id) => Some((lang, id)),
+            _ => {
+                tracing::warn!("karaoke.aligners entry {lang} is not a model id: skipped");
+                None
+            }
+        })
+        .collect()
 }
 
 /// Rule 40: tracks per language of their first non-generated main row.
@@ -87,14 +118,24 @@ async fn library_languages(st: &AppState) -> sqlx::Result<BTreeMap<String, i64>>
     )
     .fetch_all(&st.db)
     .await?;
-    let mut counts = BTreeMap::new();
-    for (lang, doc) in rows {
-        let doc = doc.map(|d| d.0).unwrap_or_default();
-        if let Some(l) = language_of(&lang, &doc) {
-            *counts.entry(l).or_insert(0) += 1;
+    blocking(move || {
+        let mut counts = BTreeMap::new();
+        for (lang, doc) in rows {
+            let doc = doc.map(|d| d.0).unwrap_or_default();
+            if let Some(l) = language_of(&lang, &doc) {
+                *counts.entry(l).or_insert(0) += 1;
+            }
         }
-    }
-    Ok(counts)
+        counts
+    })
+    .await
+}
+
+/// Language detection is CPU-bound: off the async workers.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> sqlx::Result<T> {
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))
 }
 
 #[utoipa::path(get, path = "/api/karaoke/languages", responses((status = 200), (status = 503)))]
@@ -133,7 +174,8 @@ pub(super) async fn auto_download(st: &AppState) {
         .filter_map(|l| recommended(&models, Some(l)))
         .filter(|m| m.state == ModelState::Absent && m.licence.clear)
         .collect();
-    wanted.dedup_by_key(|m| &m.id);
+    let mut seen = std::collections::HashSet::new();
+    wanted.retain(|m| seen.insert(&m.id));
     for m in wanted {
         if let Err(e) = st.engine.download_model(&m.id).await {
             tracing::warn!("karaoke auto-download of {} failed: {e}", m.id);
@@ -141,23 +183,33 @@ pub(super) async fn auto_download(st: &AppState) {
     }
 }
 
-/// Rule 41: the unreviewed generated rows the current aligner of their language did not make, as `(row, item)`.
-async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<(i32, i32)>> {
-    let rows: Vec<(i32, i32, String, String, Jsonb<Doc>)> = sqlx::query_as(
-        r#"SELECT id, "itemId", lang, "sourceRef", doc FROM lyrics
-           WHERE kind = 'main' AND source = 'generated' AND NOT reviewed AND "sourceRef" IS NOT NULL"#,
+/// Rule 41: the items whose unreviewed generated row the current aligner of its language did not make.
+/// A row the recogniser placed after a CTC failure is not stale: the same model would fail again.
+async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<i32>> {
+    let rows: Vec<(i32, String, String, Option<Jsonb<Doc>>)> = sqlx::query_as(
+        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END FROM lyrics
+           WHERE kind = 'main' AND source = 'generated' AND NOT reviewed
+             AND "sourceRef" IS NOT NULL AND "sourceRef" NOT LIKE '%#fallback=%'"#,
     )
     .fetch_all(&st.db)
     .await?;
+    let languages = blocking(move || {
+        rows.into_iter()
+            .map(|(item, lang, source_ref, doc)| {
+                let doc = doc.map(|d| d.0).unwrap_or_default();
+                (item, language_of(&lang, &doc), source_ref)
+            })
+            .collect::<Vec<_>>()
+    })
+    .await?;
     let chosen = overrides(st).await;
-    Ok(rows
+    Ok(languages
         .into_iter()
-        .filter(|(_, _, lang, source_ref, doc)| {
-            let language = language_of(lang, &doc.0);
+        .filter(|(_, language, source_ref)| {
             let model = source_ref.split('#').next().unwrap_or_default();
             aligner(models, language.as_deref(), &chosen).is_some_and(|m| m.id != model)
         })
-        .map(|(id, item, ..)| (id, item))
+        .map(|(item, ..)| item)
         .collect())
 }
 
@@ -165,7 +217,10 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<(i32, i3
 pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
     let models = st.engine.models().await.map_err(engine_err)?.models;
-    Ok(Json(json!({ "tracks": stale(&st, &models).await?.len() })))
+    Ok(Json(json!({
+        "tracks": stale(&st, &models).await?.len(),
+        "running": st.karaoke.realigning.load(Ordering::SeqCst),
+    })))
 }
 
 #[utoipa::path(post, path = "/api/karaoke/realign", responses((status = 202), (status = 409), (status = 503)))]
