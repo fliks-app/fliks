@@ -433,7 +433,8 @@ impl Engine {
         self.get("GET /v1/models", "/v1/models", &[]).await
     }
 
-    /// Starts a model download; an installed or running one answers its state unchanged.
+    /// Starts a model download or the update of an outdated one; a current or running one answers
+    /// its state unchanged.
     pub async fn download_model(&self, id: &str) -> Result<ModelInfo, EngineError> {
         let path = format!("/v1/models/{}/download", enc(id));
         let reply = self
@@ -441,6 +442,29 @@ impl Engine {
             .send(Method::POST, &path, &serde_json::json!({}))
             .await?;
         expect("POST model download", &reply)
+    }
+
+    /// Re-hashes an installed model's files; the model answers `downloading` while it runs.
+    pub async fn verify_model(&self, id: &str) -> Result<ModelInfo, EngineError> {
+        let path = format!("/v1/models/{}/verify", enc(id));
+        let reply = self
+            .need()?
+            .send(Method::POST, &path, &serde_json::json!({}))
+            .await?;
+        expect("POST model verify", &reply)
+    }
+
+    /// Removes a directory of the models directory that no manifest entry names.
+    pub async fn delete_model_orphan(&self, name: &str) -> Result<(), EngineError> {
+        let reply = self
+            .need()?
+            .delete(&format!("/v1/models/orphans/{}", enc(name)), &[])
+            .await?;
+        if reply.ok() {
+            Ok(())
+        } else {
+            Err(EngineError::http("DELETE model orphan", &reply))
+        }
     }
 
     pub async fn delete_model(&self, id: &str) -> Result<(), EngineError> {

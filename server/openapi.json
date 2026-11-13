@@ -1306,6 +1306,18 @@
         }
       }
     },
+    "/api/karaoke/models/orphans/{name}": {
+      "delete": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "delete_model_orphan",
+        "responses": {
+          "204": {},
+          "404": {}
+        }
+      }
+    },
     "/api/karaoke/models/{id}": {
       "delete": {
         "tags": [
@@ -1329,6 +1341,19 @@
           "202": {},
           "400": {},
           "404": {}
+        }
+      }
+    },
+    "/api/karaoke/models/{id}/verify": {
+      "post": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "verify_model",
+        "responses": {
+          "202": {},
+          "404": {},
+          "409": {}
         }
       }
     },
