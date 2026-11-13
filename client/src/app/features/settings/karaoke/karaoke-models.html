@@ -124,13 +124,26 @@
   <div class="flex flex-col items-start gap-2 rounded-lg bg-base-200 p-4" data-testid="karaoke-realign">
     <p class="font-medium">{{ 'karaoke.admin.stale' | translatePlural: stale() }}</p>
     <p class="text-sm text-base-content/60">{{ 'karaoke.admin.stale_hint' | translate }}</p>
+    <div class="flex flex-wrap gap-2">
     <button type="button" class="btn btn-primary btn-sm" [disabled]="resyncing()" (click)="resync()">
       @if (resyncing()) {
         <span class="loading loading-spinner loading-xs"></span>
       }
       {{ (resyncing() ? 'karaoke.admin.resyncing' : 'karaoke.admin.resync') | translate }}
     </button>
+    <button type="button" class="btn btn-ghost btn-sm" (click)="details.set(true)" data-testid="karaoke-stale-details-open">{{ 'karaoke.admin.details' | translate }}</button>
+    </div>
+    @if (resyncing() && progress().total > 0) {
+      <div class="flex w-full items-center gap-3">
+        <progress class="progress progress-primary flex-1" [value]="progress().done" [max]="progress().total" [attr.aria-label]="'karaoke.admin.resyncing' | translate"></progress>
+        <span class="text-sm tabular-nums text-base-content/60">{{ progress().done }} / {{ progress().total }}</span>
+      </div>
+    }
   </div>
+}
+
+@if (details()) {
+  <app-karaoke-stale-details [models]="c.models" (closed)="details.set(false)" />
 }
 
 @if (c.orphans.length) {

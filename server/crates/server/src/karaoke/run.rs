@@ -52,12 +52,45 @@ impl RunState {
 pub struct Outcome {
     pub provider: Option<String>,
     pub lyrics_error: Option<String>,
+    /// Share of the lyrics found in the vocals, when that was too low to save the alignment.
+    pub rejected_match: Option<f64>,
+}
+
+/// Why an alignment was not saved.
+enum AlignError {
+    LowMatch(f64),
+    Other(String),
+}
+
+impl From<String> for AlignError {
+    fn from(e: String) -> Self {
+        Self::Other(e)
+    }
+}
+
+impl From<&str> for AlignError {
+    fn from(e: &str) -> Self {
+        Self::Other(e.into())
+    }
+}
+
+impl std::fmt::Display for AlignError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LowMatch(m) => write!(
+                f,
+                "only {:.0} % of the lyrics were found in the vocals",
+                m * 100.0
+            ),
+            Self::Other(e) => f.write_str(e),
+        }
+    }
 }
 
 /// Most queued or running runs one caller holds (rule 13).
 const MAX_RUNS_PER_USER: usize = 2;
 /// Align results matching fewer lyric words than this are not saved (rule 18).
-const MIN_MATCHED: f64 = 0.3;
+pub(super) const MIN_MATCHED: f64 = 0.3;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
@@ -362,7 +395,10 @@ async fn steps(
         .await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
-        out.lyrics_error = Some(e);
+        if let AlignError::LowMatch(m) = &e {
+            out.rejected_match = Some(*m);
+        }
+        out.lyrics_error = Some(e.to_string());
     }
     if opts.melody
         && caps.melody
@@ -486,7 +522,7 @@ async fn align(
     models: &[ModelInfo],
     realign: bool,
     priority: JobPriority,
-) -> Result<(), String> {
+) -> Result<(), AlignError> {
     let mut rows = lstore::list(&st.db, item)
         .await
         .map_err(|e| e.to_string())?;
@@ -565,10 +601,7 @@ async fn align(
         return Err("no lyrics word could be timed".into());
     }
     if a.matched < MIN_MATCHED {
-        return Err(format!(
-            "only {:.0} % of the lyrics were found in the vocals",
-            a.matched * 100.0
-        ));
+        return Err(AlignError::LowMatch(a.matched));
     }
     let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
     if let Some(why) = &a.fallback {

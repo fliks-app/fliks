@@ -128,18 +128,32 @@ fn fail_list(k: &Shared) -> Vec<i32> {
 }
 
 /// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
-pub(super) async fn realign(st: AppState, items: Vec<i32>) {
-    for item in items {
+pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
+    st.karaoke
+        .realign_total
+        .store(items.len(), Ordering::SeqCst);
+    st.karaoke.realign_done.store(0, Ordering::SeqCst);
+    for stale in items {
+        let item = stale.item;
         let opts = run::Opts {
             align: true,
             melody: true,
             realign: true,
         };
-        if let run::Start::Started(handle) =
-            run::start(&st, item, opts, JobPriority::Low, None).await
-        {
-            let _ = handle.await;
-        }
+        let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
+            run::Start::Started(handle) => {
+                Some(handle.await.map_err(|e| e.to_string()).and_then(|r| r))
+            }
+            _ => None,
+        };
+        st.karaoke
+            .realign_results
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(item, aligner::result_of(outcome, &stale));
+        st.karaoke.realign_done.fetch_add(1, Ordering::SeqCst);
     }
+    st.karaoke.realign_total.store(0, Ordering::SeqCst);
+    st.karaoke.realign_done.store(0, Ordering::SeqCst);
     st.karaoke.realigning.store(false, Ordering::SeqCst);
 }
