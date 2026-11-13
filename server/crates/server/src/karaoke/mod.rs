@@ -409,6 +409,7 @@ pub async fn prepare(
     let opts = run::Opts {
         align: dto.align.unwrap_or(true),
         melody: dto.melody.unwrap_or(true),
+        realign: false,
     };
     let priority = if a.perms.can(Action::Update, &Subject::Media) {
         JobPriority::Normal

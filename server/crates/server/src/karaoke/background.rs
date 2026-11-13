@@ -94,6 +94,7 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
         let opts = run::Opts {
             align: true,
             melody: true,
+            realign: false,
         };
         let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
         else {
@@ -126,32 +127,13 @@ fn fail_list(k: &Shared) -> Vec<i32> {
         .collect()
 }
 
-/// Rule 41: replaces the stale rows one track at a time.
-pub(super) async fn realign(st: AppState, tracks: Vec<(i32, i32)>) {
-    for (row, item) in tracks {
-        let busy = st
-            .karaoke
-            .runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&item)
-            .is_some_and(run::RunState::active);
-        if busy {
-            continue;
-        }
-        if let Err(e) = sqlx::query(
-            "DELETE FROM lyrics WHERE id = $1 AND source = 'generated' AND NOT reviewed",
-        )
-        .bind(row)
-        .execute(&st.db)
-        .await
-        {
-            tracing::warn!("karaoke re-align of item #{item} failed: {e}");
-            continue;
-        }
+/// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
+pub(super) async fn realign(st: AppState, items: Vec<i32>) {
+    for item in items {
         let opts = run::Opts {
             align: true,
             melody: true,
+            realign: true,
         };
         if let run::Start::Started(handle) =
             run::start(&st, item, opts, JobPriority::Low, None).await

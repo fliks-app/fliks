@@ -24,6 +24,8 @@ const MAX_MELODY_SPANS: usize = 100_000;
 pub struct Opts {
     pub align: bool,
     pub melody: bool,
+    /// Align again from the source lyrics: the generated row stays until a new one replaces it.
+    pub realign: bool,
 }
 
 #[derive(Clone)]
@@ -228,7 +230,7 @@ async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
         return true;
     };
     lstore::sort(&mut rows);
-    (opts.align && caps.align && align_source(&rows).is_some())
+    (opts.align && caps.align && align_source(&rows, opts.realign).is_some())
         || (opts.melody
             && caps.melody
             && melody_of(&rows).is_some_and(|r| melody_spans(r).is_some()))
@@ -348,7 +350,16 @@ async fn steps(
     let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
     if opts.align
         && caps.align
-        && let Err(e) = align(st, item, &t, &vocals, &models.models, priority).await
+        && let Err(e) = align(
+            st,
+            item,
+            &t,
+            &vocals,
+            &models.models,
+            opts.realign,
+            priority,
+        )
+        .await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
         out.lyrics_error = Some(e);
@@ -453,8 +464,11 @@ fn ms(v: i64) -> u32 {
 }
 
 /// The text `Align` times: the best main row of rule 66's order, unless a word-synced or reviewed one exists.
-fn align_source(rows: &[lstore::Row]) -> Option<&lstore::Row> {
-    let mains: Vec<_> = rows.iter().filter(|r| r.kind == "main").collect();
+fn align_source(rows: &[lstore::Row], realign: bool) -> Option<&lstore::Row> {
+    let mains: Vec<_> = rows
+        .iter()
+        .filter(|r| r.kind == "main" && !(realign && r.source == "generated" && !r.reviewed))
+        .collect();
     let done = mains
         .iter()
         .any(|r| r.sync == "word" || (r.source == "generated" && r.reviewed));
@@ -470,13 +484,14 @@ async fn align(
     t: &Track,
     vocals: &std::path::Path,
     models: &[ModelInfo],
+    realign: bool,
     priority: JobPriority,
 ) -> Result<(), String> {
     let mut rows = lstore::list(&st.db, item)
         .await
         .map_err(|e| e.to_string())?;
     lstore::sort(&mut rows);
-    let Some(src) = align_source(&rows) else {
+    let Some(src) = align_source(&rows, realign) else {
         return Ok(());
     };
     let request = kd::align_request(&src.doc.0);
@@ -509,6 +524,7 @@ async fn align(
                 .collect(),
             language,
             model: Some(model),
+            providers: Some(super::verified_providers(st).await),
         },
         media: MediaRef {
             media_file_id: t.file as u32,
@@ -554,7 +570,10 @@ async fn align(
             a.matched * 100.0
         ));
     }
-    let source_ref = format!("{}#matched={:.2}", a.model, a.matched);
+    let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
+    if let Some(why) = &a.fallback {
+        source_ref.push_str(&format!("#fallback={why}"));
+    }
     lstore::upsert(
         &st.db,
         &lstore::New {
@@ -689,4 +708,45 @@ async fn melody(
         tracing::info!("karaoke melody of item #{item} dropped: the lyrics changed meanwhile");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: i32, source: &str, sync: &str, reviewed: bool) -> lstore::Row {
+        lstore::Row {
+            id,
+            item_id: 1,
+            kind: "main".into(),
+            lang: "fr".into(),
+            sync: sync.into(),
+            source: source.into(),
+            source_ref: None,
+            offset_ms: 0,
+            doc: sqlx::types::Json(
+                serde_json::from_value(
+                    serde_json::json!({"agents": [], "lines": [{"text": "a b"}]}),
+                )
+                .unwrap(),
+            ),
+            reviewed,
+            preferred: false,
+        }
+    }
+
+    #[test]
+    fn a_realign_reads_the_source_lyrics_and_keeps_the_generated_row() {
+        let rows = [
+            row(1, "generated", "word", false),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(align_source(&rows, false).is_none());
+        assert_eq!(align_source(&rows, true).map(|r| r.id), Some(2));
+        let reviewed = [
+            row(1, "generated", "word", true),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(align_source(&reviewed, true).is_none());
+    }
 }
