@@ -14,6 +14,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import { AuthService } from '../../../core/services/auth.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { SseService } from '../../../core/services/sse.service';
+import { DropdownMenuComponent } from '../../components/dropdown-menu';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
@@ -27,7 +28,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
+  imports: [FormsModule, TranslatePipe, DropdownMenuComponent, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
@@ -147,10 +148,19 @@ export class LyricsPanelComponent {
     this.kState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
   }
 
-  protected async prepare(): Promise<void> {
+  protected prepare(): Promise<void> {
+    return this.start({});
+  }
+
+  /** Redoes the lyrics timing (and the melody of the new lyrics) or the melody only; the stems stay. */
+  protected recompute(part: 'sync' | 'melody'): Promise<void> {
+    return this.start({ align: part === 'sync', melody: true, force: true });
+  }
+
+  private async start(body: { align?: boolean; melody?: boolean; force?: boolean }): Promise<void> {
     this.kBusy.set(true);
     try {
-      const s = await this.karaoke.prepare(this.itemId());
+      const s = await this.karaoke.prepare(this.itemId(), body);
       this.kState.set(s);
       if (s.state === 'ready') void this.audio.refreshStems();
     } catch {

@@ -402,6 +402,9 @@ pub async fn item_state(
 pub struct PrepareDto {
     align: Option<bool>,
     melody: Option<bool>,
+    /// Redo the asked steps on a prepared track (never `Separate`).
+    #[serde(default)]
+    force: bool,
 }
 
 #[utoipa::path(post, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 202), (status = 409), (status = 429), (status = 503)))]
@@ -413,6 +416,9 @@ pub async fn prepare(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Read, Subject::Media)?;
     crate::music::assert_track(&st, &a, item).await?;
+    if dto.force {
+        a.require(Action::Update, Subject::Media)?;
+    }
     if !flag(&st, "karaoke.enabled", false).await {
         return Err(AppError::conflict("karaoke_disabled"));
     }
@@ -425,7 +431,7 @@ pub async fn prepare(
     let opts = run::Opts {
         align: dto.align.unwrap_or(true),
         melody: dto.melody.unwrap_or(true),
-        realign: false,
+        force: dto.force,
     };
     let priority = if a.perms.can(Action::Update, &Subject::Media) {
         JobPriority::Normal
