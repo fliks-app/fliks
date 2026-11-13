@@ -371,6 +371,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::popular_movie,
         metadata::upcoming_movie,
         metadata::trending_tv,
+        metadata::trending_album,
         metadata::popular_tv,
         metadata::upcoming_tv,
         metadata::genres_movie,

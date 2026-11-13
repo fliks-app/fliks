@@ -4,7 +4,7 @@ use super::{
     Search, Target, Upstream,
     books::routes::{self as book_hits, unknown_provider},
     comics::routes as comic_hits,
-    routes::{Pairs, Res, bare, lang, stamp, unavailable, year},
+    routes::{Pairs, Res, bare, fail, lang, stamp, unavailable, year},
 };
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
@@ -403,11 +403,65 @@ pub async fn search_hits(
             hits
         }
     };
+    mark_target(&st.db, &a, kind, target, &mut hits).await?;
+    Ok(Json(Value::Array(hits)))
+}
+
+fn target_hit(
+    known: &Namespaces,
+    kind: MediaKind,
+    p: Namespace,
+    target: Option<Target>,
+    v: &Value,
+) -> Option<Value> {
     match target {
-        None => mark_existing(&st.db, &a, kind, &mut hits).await?,
-        Some(Target::Artist) => mark_artists(&st.db, &mut hits).await?,
-        Some(Target::Recording) => mark_recordings(&st.db, &a, &mut hits).await?,
+        None => hit(known, kind, p, v),
+        Some(Target::Artist) => super::music::routes::artist_hit(known, p, v),
+        Some(Target::Recording) => super::music::routes::recording_hit(known, p, v),
     }
+}
+
+async fn mark_target(
+    db: &PgPool,
+    a: &Authed,
+    kind: MediaKind,
+    target: Option<Target>,
+    hits: &mut [Value],
+) -> Result<(), AppError> {
+    match target {
+        None => mark_existing(db, a, kind, hits).await,
+        Some(Target::Artist) => mark_artists(db, hits).await,
+        Some(Target::Recording) => mark_recordings(db, a, hits).await,
+    }
+}
+
+/// The week's most listened albums, artists or recordings (`target`), as search hits; empty when
+/// no music provider serves lists (`docs/spec/metadata.md` rule 56).
+#[utoipa::path(get, path = "/api/metadata/trending/album", responses((status = 200)))]
+pub async fn trending_album(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
+    let kind = MediaKind::Album;
+    let target = target(kind, bare(&q, "target").as_deref())?;
+    let Some(p) = st.metadata.lister(kind) else {
+        return Ok(Json(json!([])));
+    };
+    let params = [(
+        "target".to_owned(),
+        target.map_or("album", Target::as_str).to_owned(),
+    )];
+    let lang = lang(&st).await?;
+    let v = st
+        .metadata
+        .list(p, kind, "trending", &params, &lang, Priority::Interactive)
+        .await
+        .map_err(|(p, e)| fail(p, &e, false))?;
+    let known = st.namespaces();
+    let mut hits: Vec<Value> = v
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| target_hit(&known, kind, p, target, v))
+        .collect();
+    mark_target(&st.db, &a, kind, target, &mut hits).await?;
     Ok(Json(Value::Array(hits)))
 }
 
@@ -598,13 +652,7 @@ pub(crate) async fn walk_with(
             Ok(r) => {
                 let hits: Vec<Value> = r
                     .iter()
-                    .filter_map(|v| match how.target {
-                        None => hit(&known, kind, p, v),
-                        Some(Target::Artist) => super::music::routes::artist_hit(&known, p, v),
-                        Some(Target::Recording) => {
-                            super::music::routes::recording_hit(&known, p, v)
-                        }
-                    })
+                    .filter_map(|v| target_hit(&known, kind, p, how.target, v))
                     .collect();
                 if !hits.is_empty() {
                     return Ok((hits, failed.is_some()));

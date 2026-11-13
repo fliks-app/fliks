@@ -1,5 +1,5 @@
 //! `/api/metadata/*` except the search (`docs/spec/metadata.md` rules 1-16, 38-39).
-use super::{Upstream, mark_existing, search_hits};
+use super::{Upstream, mark_existing, search_hits, trending_album};
 use crate::{
     http::{
         AppError,
@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
     .route(&format!("{m}/popular/movie"), get(popular_movie))
     .route(&format!("{m}/upcoming/movie"), get(upcoming_movie))
     .route(&format!("{m}/trending/tv"), get(trending_tv))
+    .route(&format!("{m}/trending/album"), get(trending_album))
     .route(&format!("{m}/popular/tv"), get(popular_tv))
     .route(&format!("{m}/upcoming/tv"), get(upcoming_tv))
     .route(&format!("{m}/genres/movie"), get(genres_movie))
