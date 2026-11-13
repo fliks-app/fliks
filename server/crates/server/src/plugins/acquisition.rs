@@ -409,7 +409,9 @@ pub async fn score_any(
             .map_err(db_err);
     }
     if m.kind == MediaKind::Album {
-        return album::score(st, &m, releases).await.map_err(db_err);
+        return album::score(st, &m, unit.as_ref(), releases)
+            .await
+            .map_err(db_err);
     }
     if m.kind != MediaKind::Book {
         let (season, episode) = super::units::video(unit.as_ref())?;
