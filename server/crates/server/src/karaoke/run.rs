@@ -118,7 +118,7 @@ impl std::fmt::Display for Failure {
 /// Most queued or running runs one caller holds (rule 13).
 const MAX_RUNS_PER_USER: usize = 2;
 /// Align results matching fewer lyric words than this are not saved (rule 18).
-pub(super) const MIN_MATCHED: f64 = 0.3;
+pub(super) const MIN_MATCHED: f64 = 0.17;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
