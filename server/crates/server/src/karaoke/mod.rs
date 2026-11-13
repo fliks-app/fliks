@@ -1,4 +1,5 @@
 //! Karaoke core (`docs/spec/karaoke.md`): models, stems, preparation and the background pass.
+pub mod aligner;
 mod background;
 pub mod cdg;
 pub mod run;
@@ -29,7 +30,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Mutex, atomic::AtomicBool},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicUsize},
+    },
 };
 use tokio::sync::{Notify, Semaphore};
 use tower::ServiceExt;
@@ -65,6 +69,12 @@ pub struct Shared {
     /// Tracks the pass failed on, left alone until the process restarts.
     pub(crate) failed: Mutex<HashSet<i32>>,
     pub(crate) wake: Notify,
+    /// A re-alignment is running (rule 41).
+    pub(crate) realigning: AtomicBool,
+    /// Tracks of the running re-alignment, and how many are finished.
+    pub(crate) realign_total: AtomicUsize,
+    pub(crate) realign_done: AtomicUsize,
+    pub(crate) realign_results: Mutex<HashMap<i32, aligner::RealignResult>>,
 }
 
 impl Default for Shared {
@@ -75,6 +85,10 @@ impl Default for Shared {
             stopped: AtomicBool::new(false),
             failed: Mutex::default(),
             wake: Notify::new(),
+            realigning: AtomicBool::new(false),
+            realign_total: AtomicUsize::new(0),
+            realign_done: AtomicUsize::new(0),
+            realign_results: Mutex::default(),
         }
     }
 }
@@ -84,10 +98,21 @@ pub fn router() -> Router<AppState> {
         .route("/api/karaoke/status", get(status))
         .route("/api/karaoke/models", get(models))
         .route("/api/karaoke/models/{id}/download", post(download))
+        .route("/api/karaoke/models/{id}/verify", post(verify_model))
+        .route(
+            "/api/karaoke/models/orphans/{name}",
+            axum::routing::delete(delete_model_orphan),
+        )
         .route(
             "/api/karaoke/models/{id}",
             axum::routing::delete(delete_model),
         )
+        .route("/api/karaoke/languages", get(aligner::languages))
+        .route(
+            "/api/karaoke/realign",
+            get(aligner::realign_count).post(aligner::realign),
+        )
+        .route("/api/karaoke/realign/items", get(aligner::realign_items))
         .route(
             "/api/items/{itemId}/karaoke",
             get(item_state).post(prepare).delete(remove),
@@ -256,9 +281,39 @@ pub async fn delete_model(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// What a caller who does not manage settings reads of a failed step (rule 8).
-const REASON: &str = "The engine could not process this track";
-const LYRICS_REASON: &str = "The engine could not time the lyrics";
+#[utoipa::path(post, path = "/api/karaoke/models/{id}/verify", responses((status = 202), (status = 404), (status = 409)))]
+pub async fn verify_model(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<fliks_engine_core::api::ModelInfo>), AppError> {
+    manage_settings(&a)?;
+    let m = st.engine.verify_model(&id).await.map_err(engine_err)?;
+    Ok((StatusCode::ACCEPTED, Json(m)))
+}
+
+#[utoipa::path(delete, path = "/api/karaoke/models/orphans/{name}", responses((status = 204), (status = 404)))]
+pub async fn delete_model_orphan(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(name): Path<String>,
+) -> Result<StatusCode, AppError> {
+    manage_settings(&a)?;
+    st.engine
+        .delete_model_orphan(&name)
+        .await
+        .map_err(engine_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// A failure as sent: the engine's `message` goes to users who manage settings only (rule 8).
+fn failure_json(f: &run::Failure, detail: bool) -> Value {
+    let mut v = json!(f);
+    if let Some(o) = v.as_object_mut().filter(|_| !detail) {
+        o.remove("message");
+    }
+    v
+}
 
 /// Rule 8.
 async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
@@ -322,10 +377,10 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
             out["progress"] = json!(p);
         }
         if let Some(e) = r.error {
-            out["error"] = json!(if detail { e } else { REASON.to_owned() });
+            out["error"] = failure_json(&e, detail);
         }
         if let Some(e) = r.lyrics_error {
-            out["lyricsError"] = json!(if detail { e } else { LYRICS_REASON.to_owned() });
+            out["lyricsError"] = failure_json(&e, detail);
         }
     }
     Ok(out)
@@ -347,6 +402,9 @@ pub async fn item_state(
 pub struct PrepareDto {
     align: Option<bool>,
     melody: Option<bool>,
+    /// Redo the asked steps on a prepared track (never `Separate`).
+    #[serde(default)]
+    force: bool,
 }
 
 #[utoipa::path(post, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 202), (status = 409), (status = 429), (status = 503)))]
@@ -358,6 +416,9 @@ pub async fn prepare(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Read, Subject::Media)?;
     crate::music::assert_track(&st, &a, item).await?;
+    if dto.force {
+        a.require(Action::Update, Subject::Media)?;
+    }
     if !flag(&st, "karaoke.enabled", false).await {
         return Err(AppError::conflict("karaoke_disabled"));
     }
@@ -370,6 +431,7 @@ pub async fn prepare(
     let opts = run::Opts {
         align: dto.align.unwrap_or(true),
         melody: dto.melody.unwrap_or(true),
+        force: dto.force,
     };
     let priority = if a.perms.can(Action::Update, &Subject::Media) {
         JobPriority::Normal
@@ -545,6 +607,24 @@ mod tests {
         assert_eq!(gpu_provider(&s(&["onnx"]), &s(&["cuda"])), None);
     }
 
+    #[test]
+    fn a_failure_is_a_code_with_params_and_the_message_stays_with_managers() {
+        let low = run::Failure::LyricsNotFoundInVocals {
+            matched: 12,
+            min: 17,
+        };
+        assert_eq!(
+            failure_json(&low, false),
+            json!({"code": "lyrics_not_found_in_vocals", "matched": 12, "min": 17})
+        );
+        let other = run::Failure::from("engine said no");
+        assert_eq!(
+            failure_json(&other, true),
+            json!({"code": "failed", "message": "engine said no"})
+        );
+        assert_eq!(failure_json(&other, false), json!({"code": "failed"}));
+    }
+
     fn run(user: Option<i32>, state: &'static str) -> run::RunState {
         run::RunState {
             state,
@@ -577,7 +657,9 @@ mod tests {
     ) -> fliks_engine_core::api::ModelInfo {
         serde_json::from_value(json!({
             "id": id, "kind": kind, "name": id, "version": "1", "default": default, "state": state,
-            "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0
+            "licence": {"name": "l", "text": "t", "clear": true}, "files": [], "downloadedBytes": 0,
+            "languages": [], "homepage": "", "sizeBytes": 0, "diskBytes": 0, "outdated": false,
+            "verifying": false
         }))
         .unwrap()
     }

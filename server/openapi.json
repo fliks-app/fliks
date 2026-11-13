@@ -1282,6 +1282,18 @@
         }
       }
     },
+    "/api/karaoke/languages": {
+      "get": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "languages",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      }
+    },
     "/api/karaoke/models": {
       "get": {
         "tags": [
@@ -1291,6 +1303,18 @@
         "responses": {
           "200": {},
           "503": {}
+        }
+      }
+    },
+    "/api/karaoke/models/orphans/{name}": {
+      "delete": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "delete_model_orphan",
+        "responses": {
+          "204": {},
+          "404": {}
         }
       }
     },
@@ -1317,6 +1341,42 @@
           "202": {},
           "400": {},
           "404": {}
+        }
+      }
+    },
+    "/api/karaoke/models/{id}/verify": {
+      "post": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "operationId": "verify_model",
+        "responses": {
+          "202": {},
+          "404": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/karaoke/realign": {
+      "get": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "realign_count",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "operationId": "realign",
+        "responses": {
+          "202": {},
+          "409": {},
+          "503": {}
         }
       }
     },

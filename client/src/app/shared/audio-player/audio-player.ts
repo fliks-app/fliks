@@ -33,6 +33,8 @@ import {
   LucideTrash2,
   LucideCheck,
   LucideEllipsisVertical,
+  LucideMaximize,
+  LucideMinimize,
   LucideGripVertical,
   LucideListPlus,
   LucidePencil,
@@ -126,6 +128,8 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideTrash2,
     LucideCheck,
     LucideEllipsisVertical,
+    LucideMaximize,
+    LucideMinimize,
     LucideGripVertical,
     LucideListPlus,
     LucidePencil,
@@ -215,6 +219,8 @@ export class AudioPlayerComponent {
   protected readonly queueOpen = signal(false);
   protected readonly queueEditing = signal(false);
   protected readonly selected = signal<ReadonlySet<MusicTrackRequest>>(new Set());
+  /** The desktop dialog fills the viewport instead of its centred box. */
+  protected readonly fullscreen = signal(false);
   protected readonly menuOpen = signal(false);
   protected readonly levelOpen = signal(false);
   protected readonly fav = signal(false);
@@ -247,6 +253,7 @@ export class AudioPlayerComponent {
       if (!el) return;
       if (this.audio.expanded() && !el.open) el.showModal();
       else if (!this.audio.expanded() && el.open) el.close();
+      if (!this.audio.expanded()) untracked(() => this.fullscreen.set(false));
     });
   }
 

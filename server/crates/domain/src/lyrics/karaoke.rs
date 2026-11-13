@@ -1,5 +1,5 @@
 //! The documents karaoke jobs read and write (`docs/spec/karaoke.md` rules 18, 19). Pure.
-use super::{Cue, Doc, Line, main_agent};
+use super::{Cue, CueNote, Doc, Line, main_agent, main_pitch};
 
 /// A word the engine timed, with its byte range in the request line's text.
 pub struct Word {
@@ -71,6 +71,7 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
                     byte_end: w.byte_end,
                     agent_id: agent_id.clone(),
                     pitch: None,
+                    notes: vec![],
                     golden: false,
                 })
                 .collect();
@@ -94,30 +95,49 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
     }
 }
 
-/// The `(start, end)` of every cue of the main lines, in document order.
-pub fn cue_spans(doc: &Doc) -> Vec<(i64, i64)> {
+/// The `(start, end)` of every line that has cues, in document order: from the line's start (or its
+/// first cue) to its last cue, so a note sung off its word's timing is found; spans never overlap.
+pub fn line_spans(doc: &Doc) -> Vec<(i64, i64)> {
+    let mut prev_end = i64::MIN;
     doc.lines
         .iter()
-        .flat_map(|l| l.cues.iter().map(|c| (c.start, c.end)))
+        .filter_map(|l| {
+            let first = l.cues.first()?;
+            let start = l.start.map_or(first.start, |s| s.min(first.start));
+            let start = start.max(prev_end);
+            let end = l.cues.iter().map(|c| c.end).max()?.max(start + 1);
+            prev_end = end;
+            Some((start, end))
+        })
         .collect()
 }
 
 /// A note `(start, end, midi)` found in a span.
 pub type Note = (i64, i64, f64);
 
-/// Writes each cue's `pitch` from the notes of its span (`notes[i]` is the span of the i-th cue):
-/// the longest note's MIDI value, the earliest on a tie, absent when unvoiced.
+/// Writes the notes of each line (`notes[i]` is the i-th span of `line_spans`) into the cue holding
+/// their midpoint, else the nearest; a cue's `pitch` is its main note (`main_pitch`).
 pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
     let mut spans = notes.iter();
-    for cue in doc.lines.iter_mut().flat_map(|l| l.cues.iter_mut()) {
-        cue.pitch = spans.next().and_then(|n| {
-            n.iter()
-                .fold(None::<&Note>, |best, c| match best {
-                    Some(b) if b.1 - b.0 >= c.1 - c.0 => Some(b),
-                    _ => Some(c),
-                })
-                .map(|n| n.2 as f32)
-        });
+    for line in doc.lines.iter_mut().filter(|l| !l.cues.is_empty()) {
+        let n = spans.next().map(Vec::as_slice).unwrap_or_default();
+        for cue in &mut line.cues {
+            cue.notes.clear();
+        }
+        for &(start, end, m) in n {
+            let mid = (start + end) / 2;
+            let off = |c: &Cue| (c.start - mid).max(mid - c.end).max(0);
+            if let Some(c) = line.cues.iter_mut().min_by_key(|c| off(c)) {
+                c.notes.push(CueNote {
+                    start,
+                    end,
+                    pitch: m as f32,
+                });
+            }
+        }
+        for cue in &mut line.cues {
+            cue.pitch = main_pitch(&cue.notes);
+        }
     }
 }
 
@@ -148,6 +168,35 @@ mod tests {
             ],
             bg: vec![],
         }
+    }
+
+    #[test]
+    fn line_spans_never_overlap() {
+        let cue = |start, end| Cue {
+            start,
+            end,
+            byte_start: 0,
+            byte_end: 1,
+            agent_id: None,
+            pitch: None,
+            notes: vec![],
+            golden: false,
+        };
+        let line = |start, cues| Line {
+            start: Some(start),
+            text: "a".into(),
+            cues,
+            ..Line::default()
+        };
+        let d = Doc {
+            agents: vec![],
+            lines: vec![
+                line(0, vec![cue(0, 2000)]),
+                line(1500, vec![cue(1800, 3000)]),
+            ],
+            bg: vec![],
+        };
+        assert_eq!(line_spans(&d), [(0, 2000), (2000, 3000)]);
     }
 
     #[test]
@@ -198,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn a_cue_takes_the_longest_note() {
+    fn a_note_goes_to_the_word_at_its_midpoint_and_the_longest_is_the_pitch() {
         let mut d = from_alignment(
             &doc(),
             &align_request(&doc()),
@@ -222,9 +271,17 @@ mod tests {
                 ],
             }],
         );
-        apply_pitch(&mut d, &[vec![(0, 2, 60.0), (2, 5, 62.5)], vec![]]);
+        assert_eq!(line_spans(&d), [(0, 10)]);
+        apply_pitch(&mut d, &[vec![(0, 2, 60.0), (2, 5, 62.5), (9, 14, 64.0)]]);
         let c = &d.lines[0].cues;
-        assert_eq!((c[0].pitch, c[1].pitch), (Some(62.5), None));
-        assert_eq!(cue_spans(&d), [(0, 5), (5, 10)]);
+        assert_eq!((c[0].pitch, c[1].pitch), (Some(62.5), Some(64.0)));
+        assert_eq!(
+            c[0].notes
+                .iter()
+                .map(|n| (n.start, n.pitch))
+                .collect::<Vec<_>>(),
+            [(0, 60.0), (2, 62.5)]
+        );
+        assert_eq!(c[1].notes.len(), 1);
     }
 }

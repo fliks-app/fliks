@@ -63,10 +63,33 @@ pub struct Cue {
     pub byte_end: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// The cue's main note (MIDI).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pitch: Option<f32>,
+    /// Every note sung on the cue, in time order; empty means `pitch` over the whole cue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<CueNote>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub golden: bool,
+}
+
+/// A note sung inside a cue: times in milliseconds, `pitch` a MIDI note.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CueNote {
+    pub start: i64,
+    pub end: i64,
+    pub pitch: f32,
+}
+
+/// The main note of a cue: its longest note, the earliest on a tie.
+pub(crate) fn main_pitch(notes: &[CueNote]) -> Option<f32> {
+    notes
+        .iter()
+        .fold(None::<&CueNote>, |best, c| match best {
+            Some(b) if b.end - b.start >= c.end - c.start => Some(b),
+            _ => Some(c),
+        })
+        .map(|n| n.pitch)
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

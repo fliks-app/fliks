@@ -1,5 +1,5 @@
 //! Preparation of a track: `Separate`, `Align`, `Melody` (`docs/spec/karaoke.md` rules 13, 18, 19).
-use super::store;
+use super::{aligner, store};
 use crate::{
     events::SseEvent, ingest::post_import::file_path, lyrics::store as lstore, state::AppState,
 };
@@ -24,6 +24,9 @@ const MAX_MELODY_SPANS: usize = 100_000;
 pub struct Opts {
     pub align: bool,
     pub melody: bool,
+    /// Redo done work: `Align` reads the source lyrics again (the generated row stays until a new one
+    /// replaces it); `Melody` runs over existing pitch unless `Align` is asked too.
+    pub force: bool,
 }
 
 #[derive(Clone)]
@@ -31,12 +34,19 @@ pub struct RunState {
     pub state: &'static str,
     pub stage: Option<&'static str>,
     pub progress: Option<f64>,
-    pub error: Option<String>,
-    pub lyrics_error: Option<String>,
+    pub error: Option<Failure>,
+    pub lyrics_error: Option<Failure>,
     /// Who asked; `None` for the background pass.
     pub user: Option<i32>,
     /// The users `karaoke.job_changed` goes to.
     pub viewers: Arc<[i32]>,
+}
+
+impl Opts {
+    /// A forced `Melody` alone recomputes the pitch; beside `Align` it only follows a new row.
+    fn repitch(self) -> bool {
+        self.force && !self.align
+    }
 }
 
 impl RunState {
@@ -49,13 +59,66 @@ impl RunState {
 #[derive(Default)]
 pub struct Outcome {
     pub provider: Option<String>,
-    pub lyrics_error: Option<String>,
+    pub lyrics_error: Option<Failure>,
+    /// Share of the lyrics found in the vocals, when that was too low to save the alignment.
+    pub rejected_match: Option<f64>,
+}
+
+/// Why a step failed; `code` and its params are the wire form, the `Display` text is for logs.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum Failure {
+    /// Percentages of the lyrics found in the vocals and the least that is kept.
+    LyricsNotFoundInVocals {
+        matched: u32,
+        min: u32,
+    },
+    LyricsTooLong,
+    NoWordTimed,
+    /// Anything else; `message` is the engine's or the server's text, for settings managers only.
+    Failed {
+        message: String,
+    },
+}
+
+impl Failure {
+    fn low_match(matched: f64) -> Self {
+        Self::LyricsNotFoundInVocals {
+            matched: (matched * 100.0).round() as u32,
+            min: (MIN_MATCHED * 100.0).round() as u32,
+        }
+    }
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self::Failed { message }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(e: &str) -> Self {
+        e.to_owned().into()
+    }
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LyricsNotFoundInVocals { matched, .. } => {
+                write!(f, "only {matched} % of the lyrics were found in the vocals")
+            }
+            Self::LyricsTooLong => f.write_str("the lyrics are too long to align"),
+            Self::NoWordTimed => f.write_str("no lyrics word could be timed"),
+            Self::Failed { message } => f.write_str(message),
+        }
+    }
 }
 
 /// Most queued or running runs one caller holds (rule 13).
 const MAX_RUNS_PER_USER: usize = 2;
 /// Align results matching fewer lyric words than this are not saved (rule 18).
-const MIN_MATCHED: f64 = 0.3;
+pub(super) const MIN_MATCHED: f64 = 0.17;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
@@ -64,7 +127,7 @@ pub enum Refusal {
 }
 
 pub enum Start {
-    Started(tokio::task::JoinHandle<Result<Outcome, String>>),
+    Started(tokio::task::JoinHandle<Result<Outcome, Failure>>),
     /// Already running, or nothing left to run.
     Idle,
     Refused(Refusal),
@@ -228,10 +291,14 @@ async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
         return true;
     };
     lstore::sort(&mut rows);
-    (opts.align && caps.align && align_source(&rows).is_some())
+    has_work(&rows, &caps, opts)
+}
+
+fn has_work(rows: &[lstore::Row], caps: &super::Caps, opts: Opts) -> bool {
+    (opts.align && caps.align && align_source(rows, opts.force).is_some())
         || (opts.melody
             && caps.melody
-            && melody_of(&rows).is_some_and(|r| melody_spans(r).is_some()))
+            && melody_of(rows).is_some_and(|r| melody_spans(r, opts.repitch()).is_some()))
 }
 
 /// Registers the run and spawns it, unless it joins a running one, has nothing to do, or the caller is over a limit.
@@ -321,7 +388,7 @@ async fn steps(
     item: i32,
     opts: Opts,
     priority: JobPriority,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, Failure> {
     let t = track(st, item).await?;
     let models = st.engine.models().await.map_err(|e| e.to_string())?;
     let sep = installed_model(&models.models, ModelKind::Separation)
@@ -348,16 +415,18 @@ async fn steps(
     let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
     if opts.align
         && caps.align
-        && let Some(model) = pick(ModelKind::Alignment)
-        && let Err(e) = align(st, item, &t, &vocals, model, priority).await
+        && let Err(e) = align(st, item, &t, &vocals, &models.models, opts.force, priority).await
     {
         tracing::warn!("karaoke align of item #{item} failed: {e}");
+        if let Failure::LyricsNotFoundInVocals { matched, .. } = &e {
+            out.rejected_match = Some(f64::from(*matched) / 100.0);
+        }
         out.lyrics_error = Some(e);
     }
     if opts.melody
         && caps.melody
         && let Some(model) = pick(ModelKind::Melody)
-        && let Err(e) = melody(st, item, &t, &vocals, model, priority).await
+        && let Err(e) = melody(st, item, &t, &vocals, model, opts.repitch(), priority).await
     {
         tracing::warn!("karaoke melody of item #{item} failed: {e}");
         out.lyrics_error.get_or_insert(e);
@@ -454,8 +523,11 @@ fn ms(v: i64) -> u32 {
 }
 
 /// The text `Align` times: the best main row of rule 66's order, unless a word-synced or reviewed one exists.
-fn align_source(rows: &[lstore::Row]) -> Option<&lstore::Row> {
-    let mains: Vec<_> = rows.iter().filter(|r| r.kind == "main").collect();
+fn align_source(rows: &[lstore::Row], force: bool) -> Option<&lstore::Row> {
+    let mains: Vec<_> = rows
+        .iter()
+        .filter(|r| r.kind == "main" && !(force && r.source == "generated" && !r.reviewed))
+        .collect();
     let done = mains
         .iter()
         .any(|r| r.sync == "word" || (r.source == "generated" && r.reviewed));
@@ -470,14 +542,15 @@ async fn align(
     item: i32,
     t: &Track,
     vocals: &std::path::Path,
-    model: &str,
+    models: &[ModelInfo],
+    force: bool,
     priority: JobPriority,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let mut rows = lstore::list(&st.db, item)
         .await
         .map_err(|e| e.to_string())?;
     lstore::sort(&mut rows);
-    let Some(src) = align_source(&rows) else {
+    let Some(src) = align_source(&rows, force) else {
         return Ok(());
     };
     let request = kd::align_request(&src.doc.0);
@@ -486,10 +559,14 @@ async fn align(
         .map(|r| r.text.split_whitespace().count())
         .sum();
     if request.len() > MAX_ALIGN_LINES || words > MAX_ALIGN_WORDS {
-        return Err("the lyrics are too long to align".into());
+        return Err(Failure::LyricsTooLong);
     }
+    let language = aligner::language_of(&src.lang, &src.doc.0);
+    let model = aligner::aligner(models, language.as_deref(), &aligner::overrides(st).await)
+        .ok_or("model_missing: no alignment model is installed")?
+        .id
+        .clone();
     stage(st, item, "align");
-    let language = Some(src.lang.clone()).filter(|l| (2..=3).contains(&l.len()) && l != "und");
     let req = JobRequest {
         kind: JobKind::Align {
             lines: request
@@ -505,7 +582,8 @@ async fn align(
                 })
                 .collect(),
             language,
-            model: Some(model.to_owned()),
+            model: Some(model),
+            providers: Some(super::verified_providers(st).await),
         },
         media: MediaRef {
             media_file_id: t.file as u32,
@@ -543,15 +621,15 @@ async fn align(
         .collect();
     let doc = kd::from_alignment(&src.doc.0, &request, &placed);
     if doc.lines.is_empty() {
-        return Err("no lyrics word could be timed".into());
+        return Err(Failure::NoWordTimed);
     }
     if a.matched < MIN_MATCHED {
-        return Err(format!(
-            "only {:.0} % of the lyrics were found in the vocals",
-            a.matched * 100.0
-        ));
+        return Err(Failure::low_match(a.matched));
     }
-    let source_ref = format!("{}#matched={:.2}", a.model, a.matched);
+    let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
+    if let Some(why) = &a.fallback {
+        source_ref.push_str(&format!("#fallback={why}"));
+    }
     lstore::upsert(
         &st.db,
         &lstore::New {
@@ -587,10 +665,10 @@ fn melody_of(rows: &[lstore::Row]) -> Option<&lstore::Row> {
     rows.iter().find(|r| r.kind == "main" && r.sync == "word")
 }
 
-/// The spans a `Melody` would look at: the row has cues and no pitch yet.
-fn melody_spans(r: &lstore::Row) -> Option<Vec<(i64, i64)>> {
-    let spans = kd::cue_spans(&r.doc.0);
-    (!spans.is_empty() && !has_pitch(&r.doc.0)).then_some(spans)
+/// The spans a `Melody` would look at: the row has cues and, unless `repitch`, no pitch yet.
+fn melody_spans(r: &lstore::Row, repitch: bool) -> Option<Vec<(i64, i64)>> {
+    let spans = kd::line_spans(&r.doc.0);
+    (!spans.is_empty() && (repitch || !has_pitch(&r.doc.0))).then_some(spans)
 }
 
 pub fn has_pitch(d: &dl::Doc) -> bool {
@@ -632,16 +710,17 @@ async fn melody(
     t: &Track,
     vocals: &std::path::Path,
     model: &str,
+    repitch: bool,
     priority: JobPriority,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let Some(target) = melody_target(st, item).await.map_err(|e| e.to_string())? else {
         return Ok(());
     };
-    let Some(spans) = melody_spans(&target) else {
+    let Some(spans) = melody_spans(&target, repitch) else {
         return Ok(());
     };
     if spans.len() > MAX_MELODY_SPANS {
-        return Err("the lyrics have too many words for the melody".into());
+        return Err(Failure::LyricsTooLong);
     }
     stage(st, item, "melody");
     let req = JobRequest {
@@ -686,4 +765,114 @@ async fn melody(
         tracing::info!("karaoke melody of item #{item} dropped: the lyrics changed meanwhile");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: i32, source: &str, sync: &str, reviewed: bool) -> lstore::Row {
+        lstore::Row {
+            id,
+            item_id: 1,
+            kind: "main".into(),
+            lang: "fr".into(),
+            sync: sync.into(),
+            source: source.into(),
+            source_ref: None,
+            offset_ms: 0,
+            doc: sqlx::types::Json(
+                serde_json::from_value(
+                    serde_json::json!({"agents": [], "lines": [{"text": "a b"}]}),
+                )
+                .unwrap(),
+            ),
+            reviewed,
+            preferred: false,
+        }
+    }
+
+    fn caps() -> super::super::Caps {
+        super::super::Caps {
+            separate: true,
+            align: true,
+            melody: true,
+        }
+    }
+
+    fn opts(align: bool, melody: bool, force: bool) -> Opts {
+        Opts {
+            align,
+            melody,
+            force,
+        }
+    }
+
+    fn with_pitch(mut r: lstore::Row) -> lstore::Row {
+        r.doc = sqlx::types::Json(
+            serde_json::from_value(serde_json::json!({"agents": [], "lines": [
+                {"text": "a", "start": 0, "end": 900,
+                 "cues": [{"start": 0, "end": 900, "byteStart": 0, "byteEnd": 1, "pitch": 60.0}]}]}))
+            .unwrap(),
+        );
+        r
+    }
+
+    #[test]
+    fn a_prepared_track_has_no_work_until_it_is_forced() {
+        let done = [
+            with_pitch(row(1, "generated", "word", false)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&done, &caps(), opts(true, true, false)));
+        assert!(has_work(&done, &caps(), opts(true, false, true)));
+        assert!(has_work(&done, &caps(), opts(false, true, true)));
+        assert!(!has_work(&done, &caps(), opts(false, true, false)));
+    }
+
+    #[test]
+    fn a_forced_sync_leaves_a_reviewed_row_and_a_forced_melody_needs_a_synced_row() {
+        let reviewed = [
+            with_pitch(row(1, "generated", "word", true)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&reviewed, &caps(), opts(true, false, true)));
+        let line_only = [row(2, "lrclib", "line", false)];
+        assert!(!has_work(&line_only, &caps(), opts(false, true, true)));
+        let no_align = super::super::Caps {
+            align: false,
+            ..caps()
+        };
+        let done = [
+            with_pitch(row(1, "generated", "word", false)),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(!has_work(&done, &no_align, opts(true, false, true)));
+    }
+
+    #[test]
+    fn a_forced_melody_beside_a_sync_only_follows_the_new_row() {
+        let o = opts(true, true, true);
+        assert!(!o.repitch());
+        assert!(opts(false, true, true).repitch());
+        assert!(!opts(false, true, false).repitch());
+        let sung = with_pitch(row(1, "generated", "word", false));
+        assert!(melody_spans(&sung, false).is_none());
+        assert!(melody_spans(&sung, true).is_some());
+    }
+
+    #[test]
+    fn a_realign_reads_the_source_lyrics_and_keeps_the_generated_row() {
+        let rows = [
+            row(1, "generated", "word", false),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(align_source(&rows, false).is_none());
+        assert_eq!(align_source(&rows, true).map(|r| r.id), Some(2));
+        let reviewed = [
+            row(1, "generated", "word", true),
+            row(2, "lrclib", "line", false),
+        ];
+        assert!(align_source(&reviewed, true).is_none());
+    }
 }

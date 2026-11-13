@@ -69,6 +69,49 @@ fn caps(node: Option<&str>) -> Value {
         "gpus": node.map(|n| json!([{"renderNode": n, "name": "g"}])).unwrap_or(json!([]))})
 }
 
+mod model_actions {
+    use super::*;
+
+    fn model(state: &str) -> Value {
+        json!({"id": "m", "kind": "alignment", "name": "m", "version": "1", "default": false,
+            "state": state, "licence": {"name": "l", "text": "t", "clear": true}, "files": [],
+            "downloadedBytes": 0})
+    }
+
+    #[tokio::test]
+    async fn a_verify_answers_the_model_and_an_uninstalled_one_is_the_engines_409() {
+        let f = Fake::start().await;
+        f.script(
+            "POST",
+            "/v1/models/m/verify",
+            vec![Answer {
+                status: 202,
+                ..ok(model("downloading"))
+            }],
+        );
+        f.script("POST", "/v1/models/n/verify", vec![status(409)]);
+        let e = boot(&f).await;
+        assert_eq!(e.verify_model("m").await.unwrap().id, "m");
+        assert!(matches!(
+            e.verify_model("n").await,
+            Err(EngineError::Http { status: 409, .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn an_orphan_is_deleted_by_name_and_a_stranger_is_the_engines_404() {
+        let f = Fake::start().await;
+        f.script("DELETE", "/v1/models/orphans/old%20dir", vec![status(204)]);
+        f.script("DELETE", "/v1/models/orphans/m", vec![status(404)]);
+        let e = boot(&f).await;
+        e.delete_model_orphan("old dir").await.unwrap();
+        assert!(matches!(
+            e.delete_model_orphan("m").await,
+            Err(EngineError::Http { status: 404, .. })
+        ));
+    }
+}
+
 mod hello_gating {
     use super::*;
 
