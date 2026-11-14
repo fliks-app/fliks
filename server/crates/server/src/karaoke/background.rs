@@ -1,5 +1,5 @@
 //! The engine feed, the sweep and the background pass (`docs/spec/karaoke.md` rules 6, 15-17).
-use super::{Shared, flag, gpu_provider, run, store, verified_providers};
+use super::{Shared, aligner, flag, gpu_provider, run, store, verified_providers};
 use crate::{engine::Feed, state::AppState};
 use fliks_engine_core::api::{EngineEvent, JobPriority, ModelKind, ModelState};
 use std::{sync::atomic::Ordering, time::Duration};
@@ -72,6 +72,7 @@ async fn pass_loop(st: AppState) {
                 st.karaoke.stopped.store(false, Ordering::Relaxed);
             }
         }
+        aligner::auto_download(&st).await;
         if let Err(e) = pass(&st).await {
             tracing::warn!("karaoke background pass failed: {e}");
         }
@@ -93,6 +94,7 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
         let opts = run::Opts {
             align: true,
             melody: true,
+            force: false,
         };
         let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
         else {
@@ -123,4 +125,35 @@ fn fail_list(k: &Shared) -> Vec<i32> {
         .iter()
         .copied()
         .collect()
+}
+
+/// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
+pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
+    st.karaoke
+        .realign_total
+        .store(items.len(), Ordering::SeqCst);
+    st.karaoke.realign_done.store(0, Ordering::SeqCst);
+    for stale in items {
+        let item = stale.item;
+        let opts = run::Opts {
+            align: true,
+            melody: true,
+            force: true,
+        };
+        let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
+            run::Start::Started(handle) => {
+                Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
+            }
+            _ => None,
+        };
+        st.karaoke
+            .realign_results
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(item, aligner::result_of(outcome, &stale));
+        st.karaoke.realign_done.fetch_add(1, Ordering::SeqCst);
+    }
+    st.karaoke.realign_total.store(0, Ordering::SeqCst);
+    st.karaoke.realign_done.store(0, Ordering::SeqCst);
+    st.karaoke.realigning.store(false, Ordering::SeqCst);
 }

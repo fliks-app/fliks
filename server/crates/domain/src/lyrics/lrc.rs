@@ -58,6 +58,7 @@ fn words(rest: &str) -> (String, Vec<Cue>) {
                     byte_end: to,
                     agent_id: None,
                     pitch: None,
+                    notes: vec![],
                     golden: false,
                 });
             }

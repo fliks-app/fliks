@@ -32,6 +32,12 @@ describe('karaoke score', () => {
     expect(scoreSinger(lines, [...sing(0, 1000, 60), ...sing(1000, 2000, 62)], 'medium').lineBonus).toBeGreaterThan(0);
   });
 
+  it('scores each note of a held word', () => {
+    const lines = [{ cues: [{ ...cue(0, 1000, 60), notes: [{ start: 0, end: 500, pitch: 60 }, { start: 500, end: 1000, pitch: 64 }] }] }];
+    expect(scoreSinger(lines, [...sing(0, 500, 60), ...sing(500, 1000, 64)], 'hard').score).toBe(10000);
+    expect(scoreSinger(lines, sing(0, 1000, 60), 'hard').score).toBeLessThan(5000);
+  });
+
   it('removes the device latency', () => {
     const lines = [{ cues: [cue(0, 1000, 60)] }];
     expect(scoreSinger(lines, sing(150, 1150, 60), 'medium', 0, 150).score).toBe(10000);

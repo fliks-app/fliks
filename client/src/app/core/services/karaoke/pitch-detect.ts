@@ -43,3 +43,24 @@ export function detectPitch(buf: Float32Array, sampleRate: number): Pitch | null
   const shift = denom === 0 ? 0 : (a - c) / denom;
   return { midi: hzToMidi(sampleRate / (tau + shift)), clarity: 1 - d[tau] };
 }
+
+const SMOOTH_FRAMES = 5;
+const MIN_VOICED = 3;
+
+/** Steadies the mic pitch: a frame moves to the octave of the last output (scoring and the lane ignore
+ *  octaves), then the median of the last five; under three voiced among them is silence. */
+export class PitchSmoother {
+  private readonly recent: (number | null)[] = [];
+  private last: number | null = null;
+
+  push(midi: number | null): number | null {
+    const m = midi === null || this.last === null ? midi : midi + 12 * Math.round((this.last - midi) / 12);
+    this.recent.push(m);
+    if (this.recent.length > SMOOTH_FRAMES) this.recent.shift();
+    const voiced = this.recent.filter((v): v is number => v !== null).sort((a, b) => a - b);
+    if (!voiced.length) this.last = null;
+    if (m === null || voiced.length < MIN_VOICED) return null;
+    this.last = voiced[voiced.length >> 1];
+    return this.last;
+  }
+}

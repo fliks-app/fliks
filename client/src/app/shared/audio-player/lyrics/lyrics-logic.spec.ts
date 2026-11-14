@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import { activeIndex, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
+import { GAP_GRACE_MS, GAP_MIN_MS, activeIndex, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
 
 const doc = (o: Partial<StructuredLyrics>): StructuredLyrics =>
   ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [], ...o }) as StructuredLyrics;
@@ -13,6 +13,29 @@ describe('lyrics logic', () => {
     expect(activeIndex(rows, 3000, 0)).toBe(1);
     expect(activeIndex(rows, 2500, 500)).toBe(1);
     expect(activeIndex(rows, 9000, 0)).toBe(2);
+  });
+
+  it('shows no active line in an instrumental gap', () => {
+    const cue = (start: number, end: number) => ({ start, end, byteStart: 0, byteEnd: 1, value: 'x' });
+    const r = toRows(doc({
+      line: [{ start: 0, value: 'a' }, { start: 10000, value: 'b' }, { start: 12000, value: 'c' }],
+      cueLine: [
+        { index: 0, start: 0, end: 5000, value: 'a', cue: [cue(0, 5000)] },
+        { index: 1, start: 10000, end: 11000, value: 'b', cue: [cue(10000, 11000)] },
+      ],
+    }));
+    expect(activeIndex(r, 5000 + GAP_GRACE_MS, 0)).toBe(0);
+    expect(activeIndex(r, 5000 + GAP_GRACE_MS + 1, 0)).toBe(-1);
+    expect(activeIndex(r, 10000, 0)).toBe(1);
+    expect(activeIndex(r, 11000 + GAP_GRACE_MS + 1, 0)).toBe(1);
+  });
+
+  it('needs a gap of GAP_MIN_MS', () => {
+    const cue = [{ start: 0, end: 1000, byteStart: 0, byteEnd: 1, value: 'x' }];
+    const mk = (next: number) =>
+      toRows(doc({ line: [{ start: 0, value: 'a' }, { start: next, value: 'b' }], cueLine: [{ index: 0, start: 0, end: 1000, value: 'a', cue }] }));
+    expect(activeIndex(mk(1000 + GAP_MIN_MS), 3000, 0)).toBe(-1);
+    expect(activeIndex(mk(1000 + GAP_MIN_MS - 1), 3000, 0)).toBe(0);
   });
 
   it('has no active line for untimed rows', () => {

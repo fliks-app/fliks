@@ -3,7 +3,7 @@
 # ============================================================
 
 # Engine image (ffmpeg, mkvmerge, fpcalc, OpenCL, the fliks-engine binary): bump with scripts/bump-engine.sh.
-ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.22.0@sha256:99277990c02793f89db38008cbfff419557141cf735ffb3f7cd466a17bdf6ea2
+ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.23.0@sha256:94e76deac7bfd221328fb5ce5b60dab9ccbf49882e4897cc38d8e1d0f810dbaa
 
 # --- Stage 1: Build client ---
 FROM node:24.22.0-alpine AS client-build
@@ -90,6 +90,7 @@ COPY --from=client-build /app/dist/client/browser ./client
 
 ENV SERVE_STATIC_PATH=/app/client
 ENV FLIKS_TRANSCODE_DIR=/app/transcode
+ENV FLIKS_DATA_DIR=/app/data
 
 # Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
 # with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.

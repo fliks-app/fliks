@@ -1,17 +1,20 @@
 import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMicVocal } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import type { KaraokeFailure, KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import { failureText } from '../../../core/services/karaoke/karaoke-failure';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import type { StemMode } from '../../../core/services/audio-player/stem-mix';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { localizeLanguage } from '../../../core/utils/language.utils';
 import { SseService } from '../../../core/services/sse.service';
+import { DropdownMenuComponent } from '../../components/dropdown-menu';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
@@ -25,13 +28,15 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
+  imports: [FormsModule, TranslatePipe, DropdownMenuComponent, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
   private readonly karaoke = inject(KaraokeApiService);
+  private readonly translate = inject(TranslateService);
   protected readonly audio = inject(AudioPlayerService);
+  protected readonly failure = (f: KaraokeFailure) => failureText(this.translate, f);
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
   readonly itemId = input.required<number>();
@@ -56,7 +61,14 @@ export class LyricsPanelComponent {
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
   protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   protected readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  protected readonly main = computed(() => this.mains().find((d) => d.id === this.mainId()) ?? this.mains()[0] ?? null);
+  /** The karaoke view defaults to the first word-synced document: the only kind with a fill and a melody. */
+  protected readonly main = computed(
+    () =>
+      this.mains().find((d) => d.id === this.mainId()) ??
+      (this.stage() ? this.mains().find((d) => d.cueLine?.length) : undefined) ??
+      this.mains()[0] ??
+      null,
+  );
   private readonly layer = computed(() => this.layers().find((d) => d.id === this.layerId()) ?? null);
   /** An aligned layer goes under each main line; any other replaces the main text. */
   protected readonly under = computed(() => {
@@ -136,10 +148,19 @@ export class LyricsPanelComponent {
     this.kState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
   }
 
-  protected async prepare(): Promise<void> {
+  protected prepare(): Promise<void> {
+    return this.start({});
+  }
+
+  /** Redoes the lyrics timing (and the melody of the new lyrics) or the melody only; the stems stay. */
+  protected recompute(part: 'sync' | 'melody'): Promise<void> {
+    return this.start({ align: part === 'sync', melody: true, force: true });
+  }
+
+  private async start(body: { align?: boolean; melody?: boolean; force?: boolean }): Promise<void> {
     this.kBusy.set(true);
     try {
-      const s = await this.karaoke.prepare(this.itemId());
+      const s = await this.karaoke.prepare(this.itemId(), body);
       this.kState.set(s);
       if (s.state === 'ready') void this.audio.refreshStems();
     } catch {
@@ -263,6 +284,9 @@ export class LyricsPanelComponent {
   }
 
   protected label(d: StructuredLyrics): string {
-    return d.lang === 'und' ? d.source : `${d.lang} · ${d.source}`;
+    const source = d.source.startsWith('provider:')
+      ? (d.sourceLabel ?? d.source.slice(d.source.lastIndexOf(':') + 1))
+      : this.translate.instant(`lyrics.source_${d.source}`);
+    return d.lang === 'und' ? source : `${localizeLanguage(d.lang, this.translate)} · ${source}`;
   }
 }

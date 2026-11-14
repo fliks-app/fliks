@@ -115,6 +115,34 @@ async fn stem(st: &AppState, dir: &std::path::Path, file: i32, kind: &str, model
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_forced_run_needs_the_right_to_edit_the_track(pool: PgPool) {
+    let (app, st, admin) = ctx(&pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO roles (id, name, permissions) VALUES (60, 'Viewer', '["media.read"]');
+           INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (2, 'reader', false, 60);
+           INSERT INTO library_user_access ("userId", "libraryId") VALUES (2, 1);"#,
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+    let reader = session::token(&st, 2, "reader").await;
+    let force = |t: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/items/1/karaoke")
+            .header("authorization", format!("Bearer {t}"))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"align":false,"melody":true,"force":true}"#))
+            .unwrap()
+    };
+    assert_eq!(
+        app.clone().oneshot(force(&reader)).await.unwrap().status(),
+        403
+    );
+    assert_eq!(app.oneshot(force(&admin)).await.unwrap().status(), 409);
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_stem_is_served_with_ranges_to_a_session_or_its_own_file_token(pool: PgPool) {
     let (app, st, t) = ctx(&pool).await;
     let dir = Dir::new();
