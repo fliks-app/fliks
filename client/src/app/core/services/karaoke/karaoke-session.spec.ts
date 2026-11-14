@@ -1,5 +1,6 @@
 import type { LyricsCue, StructuredLyrics } from '../api/lyrics.models';
-import { FrameStore, calibrate, onsets, scoreAll, sides } from './karaoke-session';
+import { FrameStore, calibrate, onsets, scoreAll } from './karaoke-session';
+import { scoredLines, sides } from './karaoke-score';
 import type { PitchFrame } from './karaoke-score';
 
 const cue = (start: number, end: number, pitch: number): LyricsCue => ({ start, end, value: 'x', byteStart: 0, byteEnd: 1, pitch });
@@ -34,6 +35,14 @@ describe('karaoke session', () => {
     expect([a.agentId, a.score]).toEqual([null, 10000]);
   });
 
+  it('scores a group line for every singer', () => {
+    const d = doc([line(0, 'g', [cue(0, 1000, 60)])], [{ id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }, { id: 'g', role: 'group' }]);
+    const store = new FrameStore();
+    store.add(7, sing(0, 1000, 60));
+    store.add(9, sing(0, 1000, 72));
+    expect(scoreAll(d, store, 'hard', 0).map((r) => r.score)).toEqual([10000, 10000]);
+  });
+
   it('bounds the frames it keeps', () => {
     const store = new FrameStore();
     store.add(1, Array.from({ length: 20050 }, (_, i) => ({ t: i, midi: 60 })));
@@ -47,5 +56,11 @@ describe('karaoke session', () => {
     const take = [...sing(300, 800, 60), ...sing(2300, 2800, 60), ...sing(4300, 4800, 60)];
     expect(onsets(take)).toEqual([300, 2300, 4300]);
     expect(calibrate(d, take)).toBe(300);
+  });
+
+  it('reads an unattributed line as the first side, groups apart', () => {
+    const d = doc([{ index: 0, start: 0, end: 1000, value: 'x', cue: [cue(0, 1000, 60)] }], [{ id: 'g', role: 'group' }, { id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }]);
+    expect(scoredLines(d, 'v1')).toHaveLength(1);
+    expect(scoredLines(d, 'v2')).toHaveLength(0);
   });
 });

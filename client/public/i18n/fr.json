@@ -5459,6 +5459,8 @@
     "difficulty_medium": "Moyen",
     "difficulty_hard": "Difficile",
     "key": "Tonalité",
+    "singer_n": "Chanteur {{n}}",
+    "singer_both": "Tout le monde",
     "key_down": "Baisser la tonalité",
     "key_up": "Monter la tonalité",
     "key_stems_off": "Une autre tonalité joue le mix original.",

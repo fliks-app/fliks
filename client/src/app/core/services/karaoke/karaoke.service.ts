@@ -132,8 +132,9 @@ export class KaraokeService {
     return true;
   }
 
+  // Frames carry no key: the key in force now scores the whole take.
   results(doc: StructuredLyrics): BoardRow[] {
-    return scoreAll(doc, this.store, this.difficulty(), this.latencyMs()).map((r) => ({ ...r, name: this.nameOf(r.userId) }));
+    return scoreAll(doc, this.store, this.difficulty(), this.latencyMs(), undefined, this.audio.pitch()).map((r) => ({ ...r, name: this.nameOf(r.userId) }));
   }
 
   /** Ends the song for the scoreboard: nothing is shown when nobody sang. */

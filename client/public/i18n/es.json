@@ -5459,6 +5459,8 @@
     "difficulty_medium": "Media",
     "difficulty_hard": "Difícil",
     "key": "Tono",
+    "singer_n": "Cantante {{n}}",
+    "singer_both": "Todos juntos",
     "key_down": "Bajar el tono",
     "key_up": "Subir el tono",
     "key_stems_off": "Con otro tono suena la mezcla original.",

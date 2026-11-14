@@ -5,6 +5,13 @@ const sing = (from: number, to: number, midi: number | null): PitchFrame[] =>
   Array.from({ length: (to - from) / 20 }, (_, i) => ({ t: from + i * 20, midi }));
 
 describe('karaoke score', () => {
+  it('scores a take sung in the new key against the shifted melody', () => {
+    const lines = [{ cues: [cue(0, 1000, 60), cue(1000, 2000, 64)] }];
+    const sung = [...sing(0, 1000, 63), ...sing(1000, 2000, 67)];
+    expect(scoreSinger(lines, sung, 'hard', 0, 0, 3).score).toBe(10000);
+    expect(scoreSinger(lines, sung, 'hard').score).toBe(0);
+  });
+
   it('folds octaves', () => {
     expect(foldedDistance(48, 60)).toBe(0);
     expect(foldedDistance(60, 66.5)).toBeCloseTo(5.5);
@@ -15,6 +22,11 @@ describe('karaoke score', () => {
     const perfect = [...sing(0, 1000, 48), ...sing(1000, 2000, 76)];
     expect(scoreSinger(lines, perfect, 'hard').score).toBe(10000);
     expect(scoreSinger(lines, sing(0, 2000, null), 'hard').score).toBe(0);
+  });
+
+  it('loses no frame on cues that start before the previous one', () => {
+    const lines = [{ cues: [cue(1000, 3000, 60)] }, { cues: [cue(0, 2000, 64)] }];
+    expect(scoreSinger(lines, [...sing(0, 1000, 64), ...sing(1000, 2000, 62), ...sing(2000, 3000, 60)], 'hard').lines).toEqual([0.5, 0.5]);
   });
 
   it('honours the difficulty window', () => {
@@ -36,6 +48,14 @@ describe('karaoke score', () => {
     const lines = [{ cues: [{ ...cue(0, 1000, 60), notes: [{ start: 0, end: 500, pitch: 60 }, { start: 500, end: 1000, pitch: 64 }] }] }];
     expect(scoreSinger(lines, [...sing(0, 500, 60), ...sing(500, 1000, 64)], 'hard').score).toBe(10000);
     expect(scoreSinger(lines, sing(0, 1000, 60), 'hard').score).toBeLessThan(5000);
+  });
+
+  it('counts only the best-sung of two overlapping copies of a line', () => {
+    const lines = [{ cues: [cue(0, 1000, 60)] }, { cues: [cue(0, 1000, 67)] }];
+    const r = scoreSinger(lines, sing(0, 1000, 60), 'hard');
+    expect(r.score).toBe(10000);
+    expect(r.lines).toEqual([1, 0]);
+    expect(scoreSinger([{ cues: [cue(0, 1000, 60)] }, { cues: [cue(0, 1000, 60)] }], sing(0, 1000, 60), 'hard').lines).toEqual([1, 0]);
   });
 
   it('removes the device latency', () => {

@@ -1,5 +1,5 @@
 import type { StructuredLyrics } from '../api/lyrics.models';
-import { estimateLatency, scoreSinger, scoredLines, type Difficulty, type PitchFrame, type SingerScore } from './karaoke-score';
+import { estimateLatency, sides, scoreSinger, scoredLines, type Difficulty, type PitchFrame, type SingerScore } from './karaoke-score';
 
 export const MAX_FRAMES = 20000;
 
@@ -28,11 +28,6 @@ export class FrameStore {
   }
 }
 
-/** Agents that sing: a duet has two or more of them, a background or group agent never takes a side. */
-export function sides(doc: StructuredLyrics): string[] {
-  return (doc.agents ?? []).filter((a) => a.role === 'main' || a.role === 'voice').map((a) => a.id);
-}
-
 export interface SingerResult extends SingerScore {
   userId: number;
   /** The duet side this singer takes, null when the song is solo or the singer sings every line. */
@@ -46,12 +41,13 @@ export function scoreAll(
   difficulty: Difficulty,
   latencyMs: number,
   singers: readonly number[] = store.singers(),
+  keyShift = 0,
 ): SingerResult[] {
   const agents = sides(doc);
   const duet = agents.length >= 2 && singers.length >= 2;
   return singers.map((userId, i) => {
     const agentId = duet ? (agents[i] ?? null) : null;
-    return { userId, agentId, ...scoreSinger(scoredLines(doc, agentId), store.frames(userId), difficulty, doc.offset, latencyMs) };
+    return { userId, agentId, ...scoreSinger(scoredLines(doc, agentId), store.frames(userId), difficulty, doc.offset, latencyMs, keyShift) };
   });
 }
 

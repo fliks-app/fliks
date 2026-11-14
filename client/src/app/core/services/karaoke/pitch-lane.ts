@@ -16,8 +16,8 @@ export interface LaneRange {
 }
 
 /** The song's range without its outliers (5th to 95th percentile), padded, at least an octave tall. */
-export function laneRange(doc: StructuredLyrics): LaneRange {
-  const p = (doc.cueLine ?? []).flatMap((l) => l.cue.flatMap((c) => cueNotes(c).map((n) => n.pitch))).sort((a, b) => a - b);
+export function laneRange(doc: StructuredLyrics, shift = 0): LaneRange {
+  const p = (doc.cueLine ?? []).flatMap((l) => l.cue.flatMap((c) => cueNotes(c).map((n) => n.pitch + shift))).sort((a, b) => a - b);
   if (!p.length) return { lo: 54, hi: 72 };
   let lo = Math.floor(p[Math.floor(p.length * 0.05)]) - 2;
   let hi = Math.ceil(p[Math.ceil(p.length * 0.95) - 1]) + 2;
@@ -43,15 +43,16 @@ export function cueNotes(c: LyricsCue): LyricsNote[] {
   return c.pitch === undefined ? [] : [{ start: c.start, end: c.end, pitch: c.pitch }];
 }
 
-/** Notes whose span meets `[from, to]` (lyrics time, ms). */
-export function laneNotes(doc: StructuredLyrics, from: number, to: number, range: LaneRange): LaneNote[] {
+/** Notes whose span meets `[from, to]` (lyrics time, ms), `shift` semitones up; each keeps its stored octave, moved into the range only when it falls outside. */
+export function laneNotes(doc: StructuredLyrics, from: number, to: number, range: LaneRange, shift = 0): LaneNote[] {
   const out: LaneNote[] = [];
   for (const l of doc.cueLine ?? []) {
     if (l.end < from || l.start > to) continue;
     for (const c of l.cue) {
       for (const n of cueNotes(c)) {
         if (n.end <= from || n.start >= to) continue;
-        out.push({ start: n.start, end: n.end, midi: intoRange(n.pitch, range), golden: !!c.golden, agentId: l.agentId });
+        const midi = intoRange(n.pitch + shift, range);
+        out.push({ start: n.start, end: n.end, midi, golden: !!c.golden, agentId: l.agentId });
       }
     }
   }
