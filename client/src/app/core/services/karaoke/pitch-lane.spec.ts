@@ -16,6 +16,14 @@ describe('pitch lane', () => {
     expect(laneRange(flat)).toEqual({ lo: 54, hi: 66 });
   });
 
+  it('draws the notes in the new key, a fall drawn as a fall', () => {
+    const r = { lo: 55, hi: 80 };
+    expect(laneNotes(doc, 0, 1000, r, 3).map((n) => n.midi)).toEqual([65]);
+    const jump = { cueLine: [{ index: 0, start: 0, end: 2000, value: 'x', cue: [c(0, 1000, 69), c(1000, 2000, 62)] }] } as unknown as StructuredLyrics;
+    expect(laneNotes(jump, 0, 2000, { lo: 55, hi: 80 }).map((n) => n.midi)).toEqual([69, 62]);
+    expect(laneRange(doc, 3)).toEqual({ lo: 63, hi: 77 });
+  });
+
   it('keeps the order of the notes: B3 sits under D4', () => {
     const r = { lo: 55, hi: 67 };
     expect(intoRange(59, r)).toBeLessThan(intoRange(62, r));

@@ -25,7 +25,7 @@ function setup() {
   TestBed.configureTestingModule({
     providers: [
       KaraokeService,
-      { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1) } },
+      { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1), pitch: signal(0) } },
       { provide: KaraokeRelayService, useValue: { received, open: vi.fn(), close: vi.fn(), send: vi.fn() } },
       { provide: DeviceService, useValue: { isTv: () => true } },
       { provide: PartyService, useValue: { party: signal(null), members: signal([{ userId: 5, username: 'Ana' }]) } },
