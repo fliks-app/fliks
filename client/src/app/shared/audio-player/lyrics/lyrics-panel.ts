@@ -63,11 +63,11 @@ export class LyricsPanelComponent {
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
   protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   protected readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  /** The karaoke view defaults to the first word-synced document: the only kind with a fill and a melody. */
+  /** The karaoke view defaults to the first word-synced document (several cues on a line): the only kind with a melody. */
   protected readonly main = computed(
     () =>
       this.mains().find((d) => d.id === this.mainId()) ??
-      (this.stage() ? this.mains().find((d) => d.cueLine?.length) : undefined) ??
+      (this.stage() ? this.mains().find((d) => d.cueLine?.some((l) => l.cue.length > 1)) : undefined) ??
       this.mains()[0] ??
       null,
   );
@@ -180,8 +180,9 @@ export class LyricsPanelComponent {
       if (this.itemId() !== id) return;
       this.res.set(r);
       this.found.emit(r.structuredLyrics.length > 0);
-      this.mainId.set(null);
-      this.layerId.set(null);
+      const has = (n: number | null) => r.structuredLyrics.some((d) => d.id === n);
+      if (!has(this.mainId())) this.mainId.set(null);
+      if (!has(this.layerId())) this.layerId.set(null);
     } catch {
       if (this.itemId() === id) {
         this.res.set(null);
