@@ -17,12 +17,13 @@ export interface SingerStyle {
   name?: string;
 }
 
-/** Style of a line's agent; null on a solo song or a background line. */
+/** Style of a line's agent; null on a solo song, an untagged line or a background line. */
 export function singerStyle(doc: StructuredLyrics, agentId?: string): SingerStyle | null {
   const agents = sides(doc);
   if (agents.length < 2) return null;
-  // A line with no agent is sung by the first side, as the score reads it.
-  const id = agentId ?? agents[0];
+  // Nobody tagged the line: no claim here, though scoring still reads it as the first side's.
+  if (!agentId) return null;
+  const id = agentId;
   if (doc.agents?.find((a) => a.id === id)?.role === 'group') {
     return { n: 0, colour: null, mark: SINGER_MARKS[0] + SINGER_MARKS[1], shape: 'both' };
   }

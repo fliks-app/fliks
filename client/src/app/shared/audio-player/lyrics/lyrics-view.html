@@ -23,6 +23,8 @@
           @if (style(r.agentId); as st) {
             <span class="w-[1.6em] shrink-0 whitespace-nowrap" aria-hidden="true" data-testid="lyrics-mark">{{ st.mark }}</span>
             <span class="sr-only">{{ (st.n ? 'karaoke.singer_n' : 'karaoke.singer_both') | translate: { n: st.n } }}</span>
+          } @else if (duet()) {
+            <span class="w-[1.6em] shrink-0" aria-hidden="true"></span>
           }
           <span class="min-w-0">
             @if (segments()[i]; as segs) {

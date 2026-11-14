@@ -40,6 +40,22 @@ describe('LyricsViewComponent', () => {
     expect(widths).toEqual(['50%', '50%', '0%']);
   });
 
+  it('shows no mark on a duet line nobody tagged, and keeps the text column', () => {
+    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    const cl = (index: number, agentId?: string) => ({ index, start: index * 1000, end: index * 1000 + 900, value: 'x', ...(agentId ? { agentId } : {}), cue: [] });
+    f.componentRef.setInput('doc', {
+      id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'x' }, { start: 1000, value: 'x' }],
+      agents: [{ id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }],
+      cueLine: [cl(0, 'v1'), cl(1)],
+    });
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('[data-testid="lyrics-mark"]')].map((m) => m.textContent)).toEqual(['●']);
+    expect(el.querySelectorAll('button .flex > span[aria-hidden="true"]').length).toBe(2);
+  });
+
   it('emits the picked singer of a line from the keyboard-reachable picker', () => {
     const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });

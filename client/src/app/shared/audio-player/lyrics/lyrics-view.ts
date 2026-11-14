@@ -4,6 +4,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
+import { sides } from '../../../core/services/karaoke/karaoke-score';
 import { SINGER_MARKS, singerStyle } from '../../../core/services/karaoke/singer-style';
 import { SINGER_CHOICES, activeIndices, cueFills, cuesEnd, cueSegments, singerChoice, toRows, type SingerChoice } from './lyrics-logic';
 
@@ -122,6 +123,8 @@ export class LyricsViewComponent {
   protected gapLit(i: number, prev: number): boolean {
     return this.fill(i, Math.max(prev, 0)) >= (prev < 0 ? 1 : 100);
   }
+
+  protected readonly duet = computed(() => sides(this.doc()).length > 1);
 
   protected style(agentId?: string) {
     return singerStyle(this.doc(), agentId);
