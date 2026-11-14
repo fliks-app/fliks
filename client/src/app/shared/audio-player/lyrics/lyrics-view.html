@@ -19,24 +19,28 @@
         [style.color]="style(r.agentId)?.colour"
         (click)="seekTo(i)"
       >
-        @if (style(r.agentId); as st) {
-          <span class="mr-2 inline-block w-[1.6em] whitespace-nowrap" aria-hidden="true" data-testid="lyrics-mark">{{ st.mark }}</span>
-          <span class="sr-only">{{ (st.n ? 'karaoke.singer_n' : 'karaoke.singer_both') | translate: { n: st.n } }}</span>
-        }
-        @if (segments()[i]; as segs) {
-          @for (s of segs; track $index) {
-            @if (s.cue === null) {
-              <span class="whitespace-pre" [class.opacity-40]="!gapLit(i, s.prev)">{{ s.text }}</span>
-            } @else {
-              <span class="relative inline-block whitespace-pre">
-                <span class="opacity-40">{{ s.text }}</span>
-                <span class="absolute inset-y-0 left-0 overflow-hidden whitespace-pre" aria-hidden="true" [style.width.%]="fill(i, s.cue)">{{ s.text }}</span>
-              </span>
-            }
+        <span class="flex items-baseline gap-2">
+          @if (style(r.agentId); as st) {
+            <span class="w-[1.6em] shrink-0 whitespace-nowrap" aria-hidden="true" data-testid="lyrics-mark">{{ st.mark }}</span>
+            <span class="sr-only">{{ (st.n ? 'karaoke.singer_n' : 'karaoke.singer_both') | translate: { n: st.n } }}</span>
           }
-        } @else {
-          {{ r.text }}
-        }
+          <span class="min-w-0">
+            @if (segments()[i]; as segs) {
+              @for (s of segs; track $index) {
+                @if (s.cue === null) {
+                  <span class="whitespace-pre" [class.opacity-40]="!gapLit(i, s.prev)">{{ s.text }}</span>
+                } @else {
+                  <span class="relative inline-block whitespace-pre">
+                    <span class="opacity-40">{{ s.text }}</span>
+                    <span class="absolute inset-y-0 left-0 overflow-hidden whitespace-pre" aria-hidden="true" [style.width.%]="fill(i, s.cue)">{{ s.text }}</span>
+                  </span>
+                }
+              }
+            } @else {
+              {{ r.text }}
+            }
+          </span>
+        </span>
       </button>
       @if (singers()) {
         <div class="join px-2" role="group" [attr.aria-label]="'lyrics.singer_of_line' | translate" data-testid="lyrics-singers">
