@@ -96,17 +96,14 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
 }
 
 /// The `(start, end)` of every line that has cues, in document order: from the line's start (or its
-/// first cue) to its last cue, so a note sung off its word's timing is found; spans never overlap.
+/// first cue) to its last cue, so a note sung off its word's timing is found; spans may overlap.
 pub fn line_spans(doc: &Doc) -> Vec<(i64, i64)> {
-    let mut prev_end = i64::MIN;
     doc.lines
         .iter()
         .filter_map(|l| {
             let first = l.cues.first()?;
             let start = l.start.map_or(first.start, |s| s.min(first.start));
-            let start = start.max(prev_end);
             let end = l.cues.iter().map(|c| c.end).max()?.max(start + 1);
-            prev_end = end;
             Some((start, end))
         })
         .collect()
@@ -171,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn line_spans_never_overlap() {
+    fn line_spans_may_overlap() {
         let cue = |start, end| Cue {
             start,
             end,
@@ -196,7 +193,7 @@ mod tests {
             ],
             bg: vec![],
         };
-        assert_eq!(line_spans(&d), [(0, 2000), (2000, 3000)]);
+        assert_eq!(line_spans(&d), [(0, 2000), (1500, 3000)]);
     }
 
     #[test]
