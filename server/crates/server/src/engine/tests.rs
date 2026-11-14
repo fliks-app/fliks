@@ -75,7 +75,8 @@ mod model_actions {
     fn model(state: &str) -> Value {
         json!({"id": "m", "kind": "alignment", "name": "m", "version": "1", "default": false,
             "state": state, "licence": {"name": "l", "text": "t", "clear": true}, "files": [],
-            "downloadedBytes": 0})
+            "downloadedBytes": 0, "languages": [], "homepage": "", "sizeBytes": 0, "diskBytes": 0,
+            "outdated": false, "verifying": false})
     }
 
     #[tokio::test]
