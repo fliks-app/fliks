@@ -34,10 +34,21 @@ interface ScoredLine {
   cues: LyricsCue[];
 }
 
+/** Agents that sing: a duet has two or more of them, a background or group agent never takes a side. */
+export function sides(doc: StructuredLyrics): string[] {
+  return (doc.agents ?? []).filter((a) => a.role === 'main' || a.role === 'voice').map((a) => a.id);
+}
+
+/** A group line is sung by every side. */
+function isSungBy(doc: StructuredLyrics, lineAgent: string | undefined, agentId: string): boolean {
+  const id = lineAgent ?? sides(doc)[0];
+  return id === agentId || doc.agents?.find((a) => a.id === id)?.role === 'group';
+}
+
 /** Pitched cues of a document that belong to `agentId` (every cue when it is null or the document has no agent on cues). */
 export function scoredLines(doc: StructuredLyrics, agentId: string | null): ScoredLine[] {
   return (doc.cueLine ?? [])
-    .filter((l) => agentId === null || (l.agentId ?? doc.agents?.[0]?.id) === agentId)
+    .filter((l) => agentId === null || isSungBy(doc, l.agentId, agentId))
     .map((l) => ({ cues: l.cue.filter((c) => c.pitch !== undefined && c.end > c.start) }))
     .filter((l) => l.cues.length > 0);
 }
@@ -57,23 +68,23 @@ export function scoreSinger(
   const tol = TOLERANCE[difficulty];
   const sorted = [...frames].sort((a, b) => a.t - b.t);
   const notes = lines.map((l) => l.cues.flatMap((c) => cueNotes(c).map((n) => ({ ...n, worth: (n.end - n.start) * (c.golden ? GOLDEN_WEIGHT : 1) }))));
-  const total = notes.reduce((n, l) => n + l.reduce((m, c) => m + c.worth, 0), 0);
-  if (total === 0) return { score: 0, lineBonus: 0, lines: lines.map(() => 0) };
-  let points = 0;
-  let bonus = 0;
-  const per: number[] = [];
-  let from = 0;
-  for (const line of notes) {
+  const spans = lines.map((l) => ({ lo: Math.min(...l.cues.map((c) => c.start)), hi: Math.max(...l.cues.map((c) => c.end)) }));
+  const results = notes.map((line) => {
     let got = 0;
     let max = 0;
     for (const c of line) {
       const a = c.start - offsetMs;
       const b = c.end - offsetMs;
-      while (from < sorted.length && sorted[from].t - latencyMs < a - 100) from++;
+      let lo = 0;
+      let hi = sorted.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid].t - latencyMs < a) lo = mid + 1;
+        else hi = mid;
+      }
       let hit = 0;
       let seen = 0;
-      for (let i = from; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
-        if (sorted[i].t - latencyMs < a) continue;
+      for (let i = lo; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
         seen++;
         const m = sorted[i].midi;
         if (m !== null && foldedDistance(m, c.pitch) <= tol) hit++;
@@ -82,16 +93,36 @@ export function scoreSinger(
       max += w;
       if (seen > 0) got += (w * hit) / seen;
     }
-    per.push(max === 0 ? 0 : got / max);
+    return { got, max };
+  });
+  // One voice sings one line at a time: of lines that overlap, only the best-sung counts.
+  const kept = new Set<number>();
+  [...results.keys()]
+    .sort((x, y) => results[y].got / (results[y].max || 1) - results[x].got / (results[x].max || 1))
+    .forEach((i) => {
+      if ([...kept].every((j) => !overlaps(spans[i], spans[j]))) kept.add(i);
+    });
+  let total = 0;
+  let points = 0;
+  let bonus = 0;
+  results.forEach(({ got, max }, i) => {
+    if (!kept.has(i)) return;
+    total += max;
     points += got;
     if (max > 0 && got / max >= LINE_BONUS_RATIO) bonus += 0.1 * max;
-  }
+  });
+  if (total === 0) return { score: 0, lineBonus: 0, lines: lines.map(() => 0) };
   const cap = total * 1.1;
   return {
     score: Math.round((Math.min(points + bonus, cap) / cap) * MAX_SCORE),
     lineBonus: Math.round((bonus / cap) * MAX_SCORE),
-    lines: per,
+    lines: results.map((r) => (r.max === 0 ? 0 : r.got / r.max)),
   };
+}
+
+/** Two lines overlap when they share more than half of the shorter one. */
+function overlaps(a: { lo: number; hi: number }, b: { lo: number; hi: number }): boolean {
+  return Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo) > 0.5 * Math.min(a.hi - a.lo, b.hi - b.lo);
 }
 
 /** Median offset between detected onsets and the cue starts they answer (ms), for the room calibration; null with fewer than 3 matches. */

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import { GAP_GRACE_MS, GAP_MIN_MS, activeIndex, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
+import { GAP_GRACE_MS, GAP_MIN_MS, activeIndices, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows, singerChoice, withSinger } from './lyrics-logic';
 
 const doc = (o: Partial<StructuredLyrics>): StructuredLyrics =>
   ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [], ...o }) as StructuredLyrics;
+
+const activeIndex = (...a: Parameters<typeof activeIndices>) => activeIndices(...a)[0] ?? -1;
 
 describe('lyrics logic', () => {
   const rows = toRows(doc({ line: [{ start: 1000, value: 'a' }, { start: 3000, value: 'b' }, { start: 5000, value: 'c' }] }));
@@ -36,6 +38,30 @@ describe('lyrics logic', () => {
       toRows(doc({ line: [{ start: 0, value: 'a' }, { start: next, value: 'b' }], cueLine: [{ index: 0, start: 0, end: 1000, value: 'a', cue }] }));
     expect(activeIndex(mk(1000 + GAP_MIN_MS), 3000, 0)).toBe(-1);
     expect(activeIndex(mk(1000 + GAP_MIN_MS - 1), 3000, 0)).toBe(0);
+  });
+
+  it('lights every overlapping line, in any row order', () => {
+    const cue = (start: number, end: number) => [{ start, end, byteStart: 0, byteEnd: 1, value: 'x' }];
+    const line = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: cue(start, end) });
+    const r = toRows(doc({
+      line: [{ start: 4000, value: 'c' }, { start: 0, value: 'a' }, { start: 1000, value: 'b' }],
+      cueLine: [line(0, 4000, 6000), line(1, 0, 3000), line(2, 1000, 5000)],
+    }));
+    expect(activeIndices(r, 500, 0)).toEqual([1]);
+    expect(activeIndices(r, 2000, 0)).toEqual([1, 2]);
+    expect(activeIndices(r, 4500, 0)).toEqual([0, 2]);
+    expect(activeIndices(r, 5500, 0)).toEqual([0]);
+  });
+
+  it('keeps a started line lit while another, longer one still sings', () => {
+    const cue = (start: number, end: number) => ({ start, end, byteStart: 0, byteEnd: 1, value: 'x' });
+    const line = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: [cue(start, end)] });
+    const r = toRows(doc({
+      line: [{ start: 0, value: 'a' }, { start: 2000, value: 'b' }, { start: 20000, value: 'c' }],
+      cueLine: [line(0, 0, 9000), line(1, 2000, 3000), line(2, 20000, 21000)],
+    }));
+    expect(activeIndices(r, 6000, 0)).toEqual([0, 1]);
+    expect(activeIndices(r, 9000 + GAP_GRACE_MS + 1, 0)).toEqual([]);
   });
 
   it('has no active line for untimed rows', () => {
@@ -80,5 +106,24 @@ describe('lyrics logic', () => {
       { start: 2000, end: 3000, text: 'two' },
       { start: 3000, end: undefined, text: 'three' },
     ]);
+  });
+});
+
+describe('singer picker', () => {
+  const doc = (agents: StructuredLyrics['agents'], cueLine: StructuredLyrics['cueLine'] = []) =>
+    ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'a' }, { start: 1000, value: 'b' }], agents, cueLine }) as unknown as StructuredLyrics;
+
+  it('creates main, voice and group on first use and keeps the other lines', () => {
+    const d = doc([{ id: 'v1', role: 'main' }], [{ index: 1, agentId: 'v1', start: 1000, end: 1000, value: 'b', cue: [] }]);
+    const w = withSinger(d, 0, 'both');
+    expect(w.agents.map((a) => a.role)).toEqual(['main', 'voice', 'group']);
+    expect(w.lineAgents).toEqual(['g', 'v1']);
+    expect(withSinger(d, 1, 'none').lineAgents).toEqual([null, null]);
+    expect(withSinger(d, 0, '2').lineAgents[0]).toBe('v2');
+  });
+
+  it('reads a line back as none, 1, 2 or both', () => {
+    const d = doc([{ id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }, { id: 'g', role: 'group' }]);
+    expect(['v1', 'v2', 'g', undefined].map((a) => singerChoice(d, a))).toEqual(['1', '2', 'both', 'none']);
   });
 });

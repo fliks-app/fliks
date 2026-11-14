@@ -5391,6 +5391,9 @@
     "tab_live_other": "En directo y otros"
   },
   "lyrics": {
+    "singers": "Asignar cantantes",
+    "singer_of_line": "Cantante de esta línea",
+    "singer_none": "Sin cantante",
     "edit": "Editar la letra",
     "title": "Letra",
     "none": "No hay letra para esta pista.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Media",
     "difficulty_hard": "Difícil",
     "key": "Tono",
+    "singer_n": "Cantante {{n}}",
+    "singer_both": "Todos juntos",
     "key_down": "Bajar el tono",
     "key_up": "Subir el tono",
     "key_stems_off": "Con otro tono suena la mezcla original.",

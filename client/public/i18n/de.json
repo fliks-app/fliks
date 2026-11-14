@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live & Sonstiges"
   },
   "lyrics": {
+    "singers": "Sänger zuweisen",
+    "singer_of_line": "Sänger dieser Zeile",
+    "singer_none": "Kein Sänger",
     "edit": "Songtext bearbeiten",
     "title": "Songtext",
     "none": "Kein Songtext für diesen Titel.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Mittel",
     "difficulty_hard": "Schwer",
     "key": "Tonart",
+    "singer_n": "Sänger {{n}}",
+    "singer_both": "Alle zusammen",
     "key_down": "Tonart senken",
     "key_up": "Tonart erhöhen",
     "key_stems_off": "In einer anderen Tonart läuft der Originalmix.",

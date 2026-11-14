@@ -5391,6 +5391,9 @@
     "tab_live_other": "Ao vivo e outros"
   },
   "lyrics": {
+    "singers": "Atribuir cantores",
+    "singer_of_line": "Cantor desta linha",
+    "singer_none": "Sem cantor",
     "edit": "Editar a letra",
     "title": "Letra",
     "none": "Sem letra para esta faixa.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Média",
     "difficulty_hard": "Difícil",
     "key": "Tom",
+    "singer_n": "Cantor {{n}}",
+    "singer_both": "Todos juntos",
     "key_down": "Baixar o tom",
     "key_up": "Subir o tom",
     "key_stems_off": "Com outro tom toca a mistura original.",

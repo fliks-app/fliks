@@ -17,6 +17,11 @@ describe('karaoke score', () => {
     expect(scoreSinger(lines, sing(0, 2000, null), 'hard').score).toBe(0);
   });
 
+  it('loses no frame on cues that start before the previous one', () => {
+    const lines = [{ cues: [cue(1000, 3000, 60)] }, { cues: [cue(0, 2000, 64)] }];
+    expect(scoreSinger(lines, [...sing(0, 1000, 64), ...sing(1000, 2000, 62), ...sing(2000, 3000, 60)], 'hard').lines).toEqual([0.5, 0.5]);
+  });
+
   it('honours the difficulty window', () => {
     const lines = [{ cues: [cue(0, 1000, 60)] }];
     const off = sing(0, 1000, 61.2);
@@ -36,6 +41,13 @@ describe('karaoke score', () => {
     const lines = [{ cues: [{ ...cue(0, 1000, 60), notes: [{ start: 0, end: 500, pitch: 60 }, { start: 500, end: 1000, pitch: 64 }] }] }];
     expect(scoreSinger(lines, [...sing(0, 500, 60), ...sing(500, 1000, 64)], 'hard').score).toBe(10000);
     expect(scoreSinger(lines, sing(0, 1000, 60), 'hard').score).toBeLessThan(5000);
+  });
+
+  it('counts only the best-sung of two overlapping copies of a line', () => {
+    const lines = [{ cues: [cue(0, 1000, 60)] }, { cues: [cue(0, 1000, 67)] }];
+    const r = scoreSinger(lines, sing(0, 1000, 60), 'hard');
+    expect(r.score).toBe(10000);
+    expect(r.lines).toEqual([1, 0]);
   });
 
   it('removes the device latency', () => {

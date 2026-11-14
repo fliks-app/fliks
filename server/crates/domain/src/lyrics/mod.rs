@@ -155,6 +155,41 @@ pub fn main_agent() -> Agent {
     }
 }
 
+/// Replaces the agents and the agent of each main line; `lines` is one entry per main line.
+pub fn set_singers(
+    doc: &mut Doc,
+    agents: Vec<Agent>,
+    lines: &[Option<String>],
+) -> Result<(), String> {
+    if lines.len() != doc.lines.len() {
+        return Err("lineAgents must have one entry per line".into());
+    }
+    let mut seen = std::collections::HashSet::new();
+    for a in &agents {
+        if a.id.is_empty() || a.id.len() > 32 || !seen.insert(a.id.as_str()) {
+            return Err("agent ids must be unique, 1 to 32 characters".into());
+        }
+        if !["main", "voice", "bg", "group"].contains(&a.role.as_str()) {
+            return Err("agent role must be main, voice, bg or group".into());
+        }
+    }
+    if lines.iter().flatten().any(|id| !seen.contains(id.as_str())) {
+        return Err("a line names an unknown agent".into());
+    }
+    if doc.bg.iter().any(|b| {
+        b.agent_id
+            .as_ref()
+            .is_some_and(|id| !seen.contains(id.as_str()))
+    }) {
+        return Err("a background line names an unknown agent".into());
+    }
+    doc.agents = agents;
+    for (l, a) in doc.lines.iter_mut().zip(lines) {
+        l.agent_id.clone_from(a);
+    }
+    Ok(())
+}
+
 /// `text` normalised: no BOM, `\n` line ends, NFC.
 pub fn clean(text: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
@@ -367,6 +402,31 @@ pub fn from_lines(lines: &[(Option<i64>, Option<i64>, String)]) -> Result<Parsed
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn singers_are_validated_and_set() {
+        let mut d = parse(Format::Plain, "a\nb").unwrap().doc;
+        let ag = |id: &str, role: &str| Agent {
+            id: id.into(),
+            role: role.into(),
+            name: None,
+        };
+        let agents = vec![ag("v1", "main"), ag("v2", "voice"), ag("g", "group")];
+        set_singers(&mut d, agents.clone(), &[Some("v2".into()), None]).unwrap();
+        assert_eq!(d.lines[0].agent_id.as_deref(), Some("v2"));
+        assert_eq!(d.lines[1].agent_id, None);
+        assert!(set_singers(&mut d, agents.clone(), &[None]).is_err());
+        assert!(set_singers(&mut d, agents.clone(), &[Some("x".into()), None]).is_err());
+        assert!(
+            set_singers(
+                &mut d,
+                vec![ag("v1", "main"), ag("v1", "voice")],
+                &[None, None]
+            )
+            .is_err()
+        );
+        assert!(set_singers(&mut d, vec![ag("v1", "king")], &[None, None]).is_err());
+    }
 
     #[test]
     fn plain_text_has_no_timing_and_a_synced_one_is_sniffed() {

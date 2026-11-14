@@ -1,5 +1,5 @@
 import type { StructuredLyrics } from '../api/lyrics.models';
-import { estimateLatency, scoreSinger, scoredLines, type Difficulty, type PitchFrame, type SingerScore } from './karaoke-score';
+import { estimateLatency, sides, scoreSinger, scoredLines, type Difficulty, type PitchFrame, type SingerScore } from './karaoke-score';
 
 export const MAX_FRAMES = 20000;
 
@@ -26,11 +26,6 @@ export class FrameStore {
   clear(): void {
     this.byUser.clear();
   }
-}
-
-/** Agents that sing: a duet has two or more of them, a background or group agent never takes a side. */
-export function sides(doc: StructuredLyrics): string[] {
-  return (doc.agents ?? []).filter((a) => a.role === 'main' || a.role === 'voice').map((a) => a.id);
 }
 
 export interface SingerResult extends SingerScore {

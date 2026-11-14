@@ -59,10 +59,15 @@
     <ul class="flex flex-wrap gap-3" data-testid="karaoke-scores">
       @for (r of rows(); track r.userId; let i = $index) {
         <li class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-1" [class.text-xl]="tv()" [class.text-base]="!tv()">
-          <span class="h-3 w-3 rounded-full" [style.background]="colour(i)" aria-hidden="true"></span>
+          @let s = singer(r.agentId, i);
+          @if (s.mark) {
+            <span [style.color]="s.colour" aria-hidden="true">{{ s.mark }}</span>
+          } @else {
+            <span class="h-3 w-3 rounded-full" [style.background]="s.colour" aria-hidden="true"></span>
+          }
           <span class="font-medium">{{ r.name }}</span>
-          @if (r.agentId) {
-            <span class="text-sm text-base-content/60">{{ r.agentId }}</span>
+          @if (s.n) {
+            <span class="text-sm text-base-content/60">{{ s.name || ('karaoke.singer_n' | translate: { n: s.n }) }}</span>
           }
           <span class="tabular-nums font-bold">{{ r.score }}</span>
         </li>

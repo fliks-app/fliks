@@ -106,7 +106,7 @@
         @if (stage() && karaokeOn()) {
           <app-karaoke-stage [doc]="d" [title]="audio.track()?.title ?? ''" />
         } @else {
-          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable()" />
+          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable()" [singers]="singers() && edit() && canEdit && d === main()" (singerPick)="setSinger(d, $event)" />
         }
       } @else if (res()?.instrumental) {
         <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
@@ -183,6 +183,11 @@
         <button type="button" class="btn btn-sm" [disabled]="busy() || d.preferred" (click)="prefer(d)">{{ 'lyrics.prefer' | translate }}</button>
       }
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="mode.set('import')">{{ 'lyrics.import' | translate }}</button>
+      @if (shown(); as d) {
+        <button type="button" class="btn btn-sm" [class.btn-primary]="singers()" [attr.aria-pressed]="singers()" [disabled]="busy() || d.kind !== 'main' || !d.synced" (click)="singers.set(!singers())" data-testid="lyrics-singers-toggle">
+          {{ 'lyrics.singers' | translate }}
+        </button>
+      }
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="fetchFromProviders()">{{ 'lyrics.fetch' | translate }}</button>
       @if (shown(); as d) {
         <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="remove(d)">{{ 'lyrics.delete' | translate }}</button>

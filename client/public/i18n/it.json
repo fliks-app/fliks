@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live e altro"
   },
   "lyrics": {
+    "singers": "Assegna i cantanti",
+    "singer_of_line": "Cantante di questa riga",
+    "singer_none": "Nessun cantante",
     "edit": "Modifica il testo",
     "title": "Testo",
     "none": "Nessun testo per questo brano.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Media",
     "difficulty_hard": "Difficile",
     "key": "Tonalità",
+    "singer_n": "Cantante {{n}}",
+    "singer_both": "Tutti insieme",
     "key_down": "Abbassa la tonalità",
     "key_up": "Alza la tonalità",
     "key_stems_off": "Con un'altra tonalità suona il mix originale.",

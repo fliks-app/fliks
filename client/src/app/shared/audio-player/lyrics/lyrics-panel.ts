@@ -19,7 +19,7 @@ import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
-import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
+import { layerAligned, tapBack, tapLines, tapStamp, tapStart, withSinger, type SingerChoice, type TapState } from './lyrics-logic';
 
 const STEM_MODES: StemMode[] = ['original', 'guide', 'instrumental'];
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
@@ -53,6 +53,8 @@ export class LyricsPanelComponent {
   protected readonly failed = signal(false);
   protected readonly busy = signal(false);
   protected readonly mode = signal<'view' | 'import' | 'tap'>('view');
+  /** The per-line singer picker is open. */
+  protected readonly singers = signal(false);
   /** The karaoke view (pitch lane, scores) in place of the plain lyrics. */
   protected readonly stage = signal(false);
 
@@ -61,11 +63,11 @@ export class LyricsPanelComponent {
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
   protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   protected readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  /** The karaoke view defaults to the first word-synced document: the only kind with a fill and a melody. */
+  /** The karaoke view defaults to the first word-synced document (several cues on a line): the only kind with a melody. */
   protected readonly main = computed(
     () =>
       this.mains().find((d) => d.id === this.mainId()) ??
-      (this.stage() ? this.mains().find((d) => d.cueLine?.length) : undefined) ??
+      (this.stage() ? this.mains().find((d) => d.cueLine?.some((l) => l.cue.length > 1)) : undefined) ??
       this.mains()[0] ??
       null,
   );
@@ -178,8 +180,9 @@ export class LyricsPanelComponent {
       if (this.itemId() !== id) return;
       this.res.set(r);
       this.found.emit(r.structuredLyrics.length > 0);
-      this.mainId.set(null);
-      this.layerId.set(null);
+      const has = (n: number | null) => r.structuredLyrics.some((d) => d.id === n);
+      if (!has(this.mainId())) this.mainId.set(null);
+      if (!has(this.layerId())) this.layerId.set(null);
     } catch {
       if (this.itemId() === id) {
         this.res.set(null);
@@ -220,6 +223,13 @@ export class LyricsPanelComponent {
   protected remove(d: StructuredLyrics): Promise<void> {
     return this.act(async () => {
       await this.api.remove(d.id);
+      await this.reload();
+    });
+  }
+
+  protected setSinger(d: StructuredLyrics, e: { line: number; choice: SingerChoice }): Promise<void> {
+    return this.act(async () => {
+      await this.api.patch(d.id, withSinger(d, e.line, e.choice));
       await this.reload();
     });
   }

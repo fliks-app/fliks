@@ -1,4 +1,4 @@
-import type { LyricsCue, LyricsWriteLine, StructuredLyrics } from '../../../core/services/api/lyrics.models';
+import type { LyricsAgent, LyricsCue, LyricsSingers, LyricsWriteLine, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 
 export interface LyricsRow {
   start?: number;
@@ -49,28 +49,37 @@ export const GAP_GRACE_MS = 500;
 /** A silence at least this long between a line's end and the next start is a gap. */
 export const GAP_MIN_MS = 3000;
 
-/** The last line started at `posMs`; -1 before the first. A positive offset shows the text sooner. */
-export function startedIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
+/**
+ * Every line to light at `posMs`: those whose cues hold the clock, plus the latest-started ones until
+ * the next start (or until a long gap after their end). Rows may overlap and come in any order.
+ */
+export function activeIndices(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number[] {
   const t = posMs + offsetMs;
-  let found = -1;
-  for (let i = 0; i < rows.length; i++) {
-    const s = rows[i].start;
-    if (s === undefined) return -1;
-    if (s <= t) found = i;
-    else break;
+  let latest = -Infinity;
+  let next = Infinity;
+  let lastEnd = -Infinity;
+  const ends = rows.map((r) => (r.cues?.length ? cuesEnd(r.cues) : undefined));
+  for (const [i, r] of rows.entries()) {
+    if (r.start === undefined) return [];
+    if (r.start <= t) {
+      latest = Math.max(latest, r.start);
+      lastEnd = Math.max(lastEnd, ends[i] ?? -Infinity);
+    } else next = Math.min(next, r.start);
   }
-  return found;
+  const inGap = lastEnd > -Infinity && next !== Infinity && t > lastEnd + GAP_GRACE_MS && next - lastEnd >= GAP_MIN_MS;
+  const out: number[] = [];
+  rows.forEach((r, i) => {
+    const s = r.start!;
+    if (s > t) return;
+    const end = ends[i];
+    if ((end !== undefined && t <= end) || (s === latest && !inGap)) out.push(i);
+  });
+  return out;
 }
 
-/** The line to light: the started one, or -1 in an instrumental gap after its end. */
-export function activeIndex(rows: readonly LyricsRow[], posMs: number, offsetMs: number): number {
-  const i = startedIndex(rows, posMs, offsetMs);
-  const r = rows[i];
-  const end = r?.cues?.length ? r.cues[r.cues.length - 1].end : undefined;
-  const next = rows[i + 1]?.start;
-  if (end === undefined || next === undefined) return i;
-  const t = posMs + offsetMs;
-  return t > end + GAP_GRACE_MS && next - end >= GAP_MIN_MS ? -1 : i;
+/** End of the last cue of a row. */
+export function cuesEnd(cues: readonly LyricsCue[]): number {
+  return cues.reduce((m, c) => Math.max(m, c.end), -Infinity);
 }
 
 /** Fill 0..100 of each cue of a row at `posMs`. */
@@ -112,4 +121,37 @@ export function tapBack(s: TapState): TapState {
 export function tapLines(s: TapState): LyricsWriteLine[] | null {
   if (s.next < s.lines.length || !s.lines.length) return null;
   return s.lines.map((l, i) => ({ start: l.start, end: s.lines[i + 1]?.start, text: l.text }));
+}
+
+export type SingerChoice = 'none' | '1' | '2' | 'both';
+export const SINGER_CHOICES: SingerChoice[] = ['none', '1', '2', 'both'];
+
+const isSide = (a: LyricsAgent) => a.role === 'main' || a.role === 'voice';
+
+/** The agents of a singer-tagged document: two singing agents and a group, each added when missing. */
+function singerAgents(doc: StructuredLyrics): LyricsAgent[] {
+  const agents = [...(doc.agents ?? [])];
+  const add = (role: LyricsAgent['role'], id: string) => agents.push({ id: agents.some((a) => a.id === id) ? `${id}-${role}` : id, role });
+  if (!agents.some(isSide)) add('main', 'v1');
+  if (agents.filter(isSide).length < 2) add('voice', 'v2');
+  if (!agents.some((a) => a.role === 'group')) add('group', 'g');
+  return agents;
+}
+
+/** The choice a line shows: no agent is none, the group agent is both, otherwise the n-th singing agent. */
+export function singerChoice(doc: StructuredLyrics, agentId?: string): SingerChoice {
+  const agents = doc.agents ?? [];
+  const role = agents.find((a) => a.id === agentId)?.role;
+  if (!agentId || !role) return 'none';
+  if (role === 'group') return 'both';
+  const i = agents.filter(isSide).findIndex((a) => a.id === agentId);
+  return i === 0 ? '1' : i === 1 ? '2' : 'none';
+}
+
+/** The save body that gives line `line` the singer `choice`, creating the missing agents; other lines keep theirs. */
+export function withSinger(doc: StructuredLyrics, line: number, choice: SingerChoice): LyricsSingers {
+  const agents = singerAgents(doc);
+  const rows = toRows(doc);
+  const id = { none: undefined, '1': agents.filter(isSide)[0].id, '2': agents.filter(isSide)[1].id, both: agents.find((a) => a.role === 'group')!.id }[choice];
+  return { agents, lineAgents: rows.map((r, i) => (i === line ? id : r.agentId) ?? null) };
 }

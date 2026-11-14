@@ -11,28 +11,56 @@
       <button
         type="button"
         class="block w-full rounded-lg px-2 py-1 text-left transition-opacity disabled:cursor-default"
-        [class]="colour(r.agentId) + (bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : large() ? ' text-4xl font-bold' : ' text-2xl font-semibold')"
-        [class.opacity-40]="timed() && i !== active() && !r.cues"
-        [class.opacity-100]="!timed() || i === active() || r.cues"
-        [attr.aria-current]="i === active() ? 'true' : null"
+        [class]="(bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : large() ? ' text-4xl font-bold' : ' text-2xl font-semibold')"
+        [class.opacity-40]="timed() && !activeSet().has(i) && !r.cues"
+        [class.opacity-100]="!timed() || activeSet().has(i) || r.cues"
+        [attr.aria-current]="activeSet().has(i) ? 'true' : null"
         [disabled]="!timed() || !seekable()"
+        [style.color]="style(r.agentId)?.colour"
         (click)="seekTo(i)"
       >
-        @if (segments()[i]; as segs) {
-          @for (s of segs; track $index) {
-            @if (s.cue === null) {
-              <span class="whitespace-pre" [class.opacity-40]="!gapLit(i, s.prev)">{{ s.text }}</span>
-            } @else {
-              <span class="relative inline-block whitespace-pre">
-                <span class="opacity-40">{{ s.text }}</span>
-                <span class="absolute inset-y-0 left-0 overflow-hidden whitespace-pre" aria-hidden="true" [style.width.%]="fill(i, s.cue)">{{ s.text }}</span>
-              </span>
-            }
+        <span class="flex items-baseline gap-2">
+          @if (style(r.agentId); as st) {
+            <span class="w-[1.6em] shrink-0 whitespace-nowrap" aria-hidden="true" data-testid="lyrics-mark">{{ st.mark }}</span>
+            <span class="sr-only">{{ (st.n ? 'karaoke.singer_n' : 'karaoke.singer_both') | translate: { n: st.n } }}</span>
+          } @else if (duet()) {
+            <span class="w-[1.6em] shrink-0" aria-hidden="true"></span>
           }
-        } @else {
-          {{ r.text }}
-        }
+          <span class="min-w-0">
+            @if (segments()[i]; as segs) {
+              @for (s of segs; track $index) {
+                @if (s.cue === null) {
+                  <span class="whitespace-pre" [class.opacity-40]="!gapLit(i, s.prev)">{{ s.text }}</span>
+                } @else {
+                  <span class="relative inline-block whitespace-pre">
+                    <span class="opacity-40">{{ s.text }}</span>
+                    <span class="absolute inset-y-0 left-0 overflow-hidden whitespace-pre" aria-hidden="true" [style.width.%]="fill(i, s.cue)">{{ s.text }}</span>
+                  </span>
+                }
+              }
+            } @else {
+              {{ r.text }}
+            }
+          </span>
+        </span>
       </button>
+      @if (singers()) {
+        <div class="join px-2" role="group" [attr.aria-label]="'lyrics.singer_of_line' | translate" data-testid="lyrics-singers">
+          @for (c of choices; track c) {
+            <button
+              type="button"
+              class="btn btn-xs join-item"
+              [class.btn-primary]="choice(r.agentId) === c"
+              [attr.aria-pressed]="choice(r.agentId) === c"
+              [attr.aria-label]="(c === 'none' ? 'lyrics.singer_none' : c === 'both' ? 'karaoke.singer_both' : 'karaoke.singer_n') | translate: { n: c }"
+              [attr.data-choice]="c"
+              (click)="singerPick.emit({ line: i, choice: c })"
+            >
+              {{ choiceMark(c) }}
+            </button>
+          }
+        </div>
+      }
       @if (layerRows(); as lr) {
         <p class="px-2 text-base text-base-content/60" [class.text-xl]="large()" data-testid="lyrics-layer">{{ lr[i]?.text }}</p>
       }

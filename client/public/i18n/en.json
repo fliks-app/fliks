@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live & other"
   },
   "lyrics": {
+    "singers": "Assign singers",
+    "singer_of_line": "Singer of this line",
+    "singer_none": "No singer",
     "edit": "Edit lyrics",
     "title": "Lyrics",
     "none": "No lyrics for this track.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Medium",
     "difficulty_hard": "Hard",
     "key": "Key",
+    "singer_n": "Singer {{n}}",
+    "singer_both": "Everyone",
     "key_down": "Lower the key",
     "key_up": "Raise the key",
     "key_stems_off": "Another key plays the original mix.",

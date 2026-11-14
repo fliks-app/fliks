@@ -75,3 +75,9 @@ export type LyricsWrite = { kind?: LyricsKind; lang?: string; offsetMs?: number 
   | { format: LyricsFormat; body: string }
   | { lines: LyricsWriteLine[] }
 );
+
+/** Who sings what, saved on an existing document: one agent id (or none) per line. */
+export interface LyricsSingers {
+  agents: LyricsAgent[];
+  lineAgents: (string | null)[];
+}

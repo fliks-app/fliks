@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live et autres"
   },
   "lyrics": {
+    "singers": "Attribuer les chanteurs",
+    "singer_of_line": "Chanteur de cette ligne",
+    "singer_none": "Aucun chanteur",
     "edit": "Modifier les paroles",
     "title": "Paroles",
     "none": "Aucune parole pour ce titre.",
@@ -5459,6 +5462,8 @@
     "difficulty_medium": "Moyen",
     "difficulty_hard": "Difficile",
     "key": "Tonalité",
+    "singer_n": "Chanteur {{n}}",
+    "singer_both": "Tout le monde",
     "key_down": "Baisser la tonalité",
     "key_up": "Monter la tonalité",
     "key_stems_off": "Une autre tonalité joue le mix original.",
