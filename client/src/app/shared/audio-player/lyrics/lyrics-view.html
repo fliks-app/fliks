@@ -38,6 +38,23 @@
           {{ r.text }}
         }
       </button>
+      @if (singers()) {
+        <div class="join px-2" role="group" [attr.aria-label]="'lyrics.singer_of_line' | translate" data-testid="lyrics-singers">
+          @for (c of choices; track c) {
+            <button
+              type="button"
+              class="btn btn-xs join-item"
+              [class.btn-primary]="choice(r.agentId) === c"
+              [attr.aria-pressed]="choice(r.agentId) === c"
+              [attr.aria-label]="(c === 'none' ? 'lyrics.singer_none' : c === 'both' ? 'karaoke.singer_both' : 'karaoke.singer_n') | translate: { n: c }"
+              [attr.data-choice]="c"
+              (click)="singerPick.emit({ line: i, choice: c })"
+            >
+              {{ choiceMark(c) }}
+            </button>
+          }
+        </div>
+      }
       @if (layerRows(); as lr) {
         <p class="px-2 text-base text-base-content/60" [class.text-xl]="large()" data-testid="lyrics-layer">{{ lr[i]?.text }}</p>
       }

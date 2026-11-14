@@ -79,7 +79,7 @@ fn entry(
             .lines
             .iter()
             .enumerate()
-            .filter(|(_, l)| !l.cues.is_empty())
+            .filter(|(_, l)| !l.cues.is_empty() || (l.agent_id.is_some() && l.start.is_some()))
             .map(|(i, l)| cue_line(i, l))
             .collect();
         // A background line belongs to the last line that started before it.
@@ -103,7 +103,7 @@ fn cue_line(index: usize, l: &lyrics::Line) -> Value {
             "byteStart": bs, "byteEnd": be})
     };
     let cues: Vec<Value> = if l.cues.is_empty() {
-        vec![cue(l.start, l.end, 0, l.text.len())]
+        vec![cue(l.start, l.end.or(l.start), 0, l.text.len())]
     } else {
         l.cues
             .iter()
@@ -318,6 +318,17 @@ pub async fn put(
 pub struct PatchDto {
     preferred: Option<bool>,
     reviewed: Option<bool>,
+    /// With `line_agents`: the singers of the document and the agent of each line.
+    agents: Option<Vec<AgentDto>>,
+    line_agents: Option<Vec<Option<String>>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentDto {
+    id: String,
+    role: String,
+    name: Option<String>,
 }
 
 async fn row_for(st: &AppState, a: &Authed, id: i32) -> Result<Row, AppError> {
@@ -337,6 +348,27 @@ pub async fn update(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Update, Subject::Media)?;
     let row = row_for(&st, &a, id).await?;
+    match (dto.agents, dto.line_agents) {
+        (Some(agents), Some(lines)) => {
+            let mut doc = row.doc.0.clone();
+            let agents = agents
+                .into_iter()
+                .map(|a| lyrics::Agent {
+                    id: a.id,
+                    role: a.role,
+                    name: a.name,
+                })
+                .collect();
+            lyrics::set_singers(&mut doc, agents, &lines).map_err(bad)?;
+            sqlx::query("UPDATE lyrics SET doc = $2, reviewed = true WHERE id = $1")
+                .bind(id)
+                .bind(sqlx::types::Json(&doc))
+                .execute(&st.db)
+                .await?;
+        }
+        (None, None) => {}
+        _ => return Err(bad("send agents and lineAgents together")),
+    }
     if let Some(r) = dto.reviewed {
         sqlx::query("UPDATE lyrics SET reviewed = $2 WHERE id = $1")
             .bind(id)

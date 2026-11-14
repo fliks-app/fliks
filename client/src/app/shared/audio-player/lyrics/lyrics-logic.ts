@@ -1,4 +1,4 @@
-import type { LyricsCue, LyricsWriteLine, StructuredLyrics } from '../../../core/services/api/lyrics.models';
+import type { LyricsAgent, LyricsCue, LyricsSingers, LyricsWriteLine, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 
 export interface LyricsRow {
   start?: number;
@@ -112,4 +112,37 @@ export function tapBack(s: TapState): TapState {
 export function tapLines(s: TapState): LyricsWriteLine[] | null {
   if (s.next < s.lines.length || !s.lines.length) return null;
   return s.lines.map((l, i) => ({ start: l.start, end: s.lines[i + 1]?.start, text: l.text }));
+}
+
+export type SingerChoice = 'none' | '1' | '2' | 'both';
+export const SINGER_CHOICES: SingerChoice[] = ['none', '1', '2', 'both'];
+
+const isSide = (a: LyricsAgent) => a.role === 'main' || a.role === 'voice';
+
+/** The agents of a singer-tagged document: two singing agents and a group, each added when missing. */
+function singerAgents(doc: StructuredLyrics): LyricsAgent[] {
+  const agents = [...(doc.agents ?? [])];
+  const add = (role: LyricsAgent['role'], id: string) => agents.push({ id: agents.some((a) => a.id === id) ? `${id}-${role}` : id, role });
+  if (!agents.some(isSide)) add('main', 'v1');
+  if (agents.filter(isSide).length < 2) add('voice', 'v2');
+  if (!agents.some((a) => a.role === 'group')) add('group', 'g');
+  return agents;
+}
+
+/** The choice a line shows: no agent is none, the group agent is both, otherwise the n-th singing agent. */
+export function singerChoice(doc: StructuredLyrics, agentId?: string): SingerChoice {
+  const agents = doc.agents ?? [];
+  const role = agents.find((a) => a.id === agentId)?.role;
+  if (!agentId || !role) return 'none';
+  if (role === 'group') return 'both';
+  const i = agents.filter(isSide).findIndex((a) => a.id === agentId);
+  return i === 0 ? '1' : i === 1 ? '2' : 'none';
+}
+
+/** The save body that gives line `line` the singer `choice`, creating the missing agents; other lines keep theirs. */
+export function withSinger(doc: StructuredLyrics, line: number, choice: SingerChoice): LyricsSingers {
+  const agents = singerAgents(doc);
+  const rows = toRows(doc);
+  const id = { none: undefined, '1': agents.filter(isSide)[0].id, '2': agents.filter(isSide)[1].id, both: agents.find((a) => a.role === 'group')!.id }[choice];
+  return { agents, lineAgents: rows.map((r, i) => (i === line ? id : r.agentId) ?? null) };
 }

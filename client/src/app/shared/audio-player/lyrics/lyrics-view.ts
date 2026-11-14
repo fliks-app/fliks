@@ -1,11 +1,11 @@
-import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
-import { singerStyle } from '../../../core/services/karaoke/singer-style';
-import { activeIndices, cueFills, cueSegments, toRows } from './lyrics-logic';
+import { SINGER_MARKS, singerStyle } from '../../../core/services/karaoke/singer-style';
+import { SINGER_CHOICES, activeIndices, cueFills, cueSegments, singerChoice, toRows, type SingerChoice } from './lyrics-logic';
 
 const MANUAL_SCROLL_MS = 3000;
 
@@ -27,6 +27,11 @@ export class LyricsViewComponent {
   readonly output = input<AudioOutput | null>(null);
   /** False when the output cannot be driven: a tap on a line does nothing. */
   readonly seekable = input(true);
+
+  /** Shows a singer picker under each line. */
+  readonly singers = input(false);
+  readonly singerPick = output<{ line: number; choice: SingerChoice }>();
+  protected readonly choices = SINGER_CHOICES;
 
   private get audio(): AudioOutput {
     return this.output() ?? this.local;
@@ -113,5 +118,13 @@ export class LyricsViewComponent {
 
   protected style(agentId?: string) {
     return singerStyle(this.doc(), agentId);
+  }
+
+  protected choice(agentId?: string): SingerChoice {
+    return singerChoice(this.doc(), agentId);
+  }
+
+  protected choiceMark(c: SingerChoice): string {
+    return c === 'none' ? '–' : c === 'both' ? SINGER_MARKS[0] + SINGER_MARKS[1] : SINGER_MARKS[+c - 1];
   }
 }

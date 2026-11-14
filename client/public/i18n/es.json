@@ -5391,6 +5391,9 @@
     "tab_live_other": "En directo y otros"
   },
   "lyrics": {
+    "singers": "Asignar cantantes",
+    "singer_of_line": "Cantante de esta línea",
+    "singer_none": "Sin cantante",
     "edit": "Editar la letra",
     "title": "Letra",
     "none": "No hay letra para esta pista.",

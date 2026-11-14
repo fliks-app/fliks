@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live et autres"
   },
   "lyrics": {
+    "singers": "Attribuer les chanteurs",
+    "singer_of_line": "Chanteur de cette ligne",
+    "singer_none": "Aucun chanteur",
     "edit": "Modifier les paroles",
     "title": "Paroles",
     "none": "Aucune parole pour ce titre.",

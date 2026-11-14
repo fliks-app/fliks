@@ -40,6 +40,19 @@ describe('LyricsViewComponent', () => {
     expect(widths).toEqual(['50%', '50%', '0%']);
   });
 
+  it('emits the picked singer of a line from the keyboard-reachable picker', () => {
+    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    f.componentRef.setInput('doc', { id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'a' }, { start: 1000, value: 'b' }] });
+    f.componentRef.setInput('singers', true);
+    const picks: unknown[] = [];
+    f.componentInstance.singerPick.subscribe((e) => picks.push(e));
+    f.detectChanges();
+    f.nativeElement.querySelectorAll('[data-testid="lyrics-singers"]')[1].querySelector('[data-choice="both"]').click();
+    expect(picks).toEqual([{ line: 1, choice: 'both' }]);
+  });
+
   it('shows untimed lines as static text', () => {
     const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });

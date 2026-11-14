@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live & Sonstiges"
   },
   "lyrics": {
+    "singers": "Sänger zuweisen",
+    "singer_of_line": "Sänger dieser Zeile",
+    "singer_none": "Kein Sänger",
     "edit": "Songtext bearbeiten",
     "title": "Songtext",
     "none": "Kein Songtext für diesen Titel.",

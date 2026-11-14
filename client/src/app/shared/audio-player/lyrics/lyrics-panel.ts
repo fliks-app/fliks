@@ -19,7 +19,7 @@ import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
-import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
+import { layerAligned, tapBack, tapLines, tapStamp, tapStart, withSinger, type SingerChoice, type TapState } from './lyrics-logic';
 
 const STEM_MODES: StemMode[] = ['original', 'guide', 'instrumental'];
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
@@ -53,6 +53,8 @@ export class LyricsPanelComponent {
   protected readonly failed = signal(false);
   protected readonly busy = signal(false);
   protected readonly mode = signal<'view' | 'import' | 'tap'>('view');
+  /** The per-line singer picker is open. */
+  protected readonly singers = signal(false);
   /** The karaoke view (pitch lane, scores) in place of the plain lyrics. */
   protected readonly stage = signal(false);
 
@@ -220,6 +222,13 @@ export class LyricsPanelComponent {
   protected remove(d: StructuredLyrics): Promise<void> {
     return this.act(async () => {
       await this.api.remove(d.id);
+      await this.reload();
+    });
+  }
+
+  protected setSinger(d: StructuredLyrics, e: { line: number; choice: SingerChoice }): Promise<void> {
+    return this.act(async () => {
+      await this.api.patch(d.id, withSinger(d, e.line, e.choice));
       await this.reload();
     });
   }

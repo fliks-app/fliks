@@ -5391,6 +5391,9 @@
     "tab_live_other": "Live & other"
   },
   "lyrics": {
+    "singers": "Assign singers",
+    "singer_of_line": "Singer of this line",
+    "singer_none": "No singer",
     "edit": "Edit lyrics",
     "title": "Lyrics",
     "none": "No lyrics for this track.",
