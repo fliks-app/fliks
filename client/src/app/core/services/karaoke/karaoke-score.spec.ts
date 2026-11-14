@@ -43,6 +43,13 @@ describe('karaoke score', () => {
     expect(scoreSinger(lines, sing(0, 1000, 60), 'hard').score).toBeLessThan(5000);
   });
 
+  it('counts only the best-sung of two overlapping copies of a line', () => {
+    const lines = [{ cues: [cue(0, 1000, 60)] }, { cues: [cue(0, 1000, 67)] }];
+    const r = scoreSinger(lines, sing(0, 1000, 60), 'hard');
+    expect(r.score).toBe(10000);
+    expect(r.lines).toEqual([1, 0]);
+  });
+
   it('removes the device latency', () => {
     const lines = [{ cues: [cue(0, 1000, 60)] }];
     expect(scoreSinger(lines, sing(150, 1150, 60), 'medium', 0, 150).score).toBe(10000);

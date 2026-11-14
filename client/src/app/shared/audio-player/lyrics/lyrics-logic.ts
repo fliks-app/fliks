@@ -57,20 +57,29 @@ export function activeIndices(rows: readonly LyricsRow[], posMs: number, offsetM
   const t = posMs + offsetMs;
   let latest = -Infinity;
   let next = Infinity;
-  for (const r of rows) {
+  let lastEnd = -Infinity;
+  const ends = rows.map((r) => (r.cues?.length ? cuesEnd(r.cues) : undefined));
+  for (const [i, r] of rows.entries()) {
     if (r.start === undefined) return [];
-    if (r.start <= t) latest = Math.max(latest, r.start);
-    else next = Math.min(next, r.start);
+    if (r.start <= t) {
+      latest = Math.max(latest, r.start);
+      lastEnd = Math.max(lastEnd, ends[i] ?? -Infinity);
+    } else next = Math.min(next, r.start);
   }
+  const inGap = lastEnd > -Infinity && next !== Infinity && t > lastEnd + GAP_GRACE_MS && next - lastEnd >= GAP_MIN_MS;
   const out: number[] = [];
   rows.forEach((r, i) => {
     const s = r.start!;
     if (s > t) return;
-    const end = r.cues?.length ? Math.max(...r.cues.map((c) => c.end)) : undefined;
-    const inGap = end !== undefined && next !== Infinity && t > end + GAP_GRACE_MS && next - end >= GAP_MIN_MS;
+    const end = ends[i];
     if ((end !== undefined && t <= end) || (s === latest && !inGap)) out.push(i);
   });
   return out;
+}
+
+/** End of the last cue of a row. */
+export function cuesEnd(cues: readonly LyricsCue[]): number {
+  return cues.reduce((m, c) => Math.max(m, c.end), -Infinity);
 }
 
 /** Fill 0..100 of each cue of a row at `posMs`. */

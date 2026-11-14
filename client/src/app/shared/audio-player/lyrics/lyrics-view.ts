@@ -5,7 +5,7 @@ import type { AudioOutput } from '../../../core/services/audio-player/audio-outp
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { SINGER_MARKS, singerStyle } from '../../../core/services/karaoke/singer-style';
-import { SINGER_CHOICES, activeIndices, cueFills, cueSegments, singerChoice, toRows, type SingerChoice } from './lyrics-logic';
+import { SINGER_CHOICES, activeIndices, cueFills, cuesEnd, cueSegments, singerChoice, toRows, type SingerChoice } from './lyrics-logic';
 
 const MANUAL_SCROLL_MS = 3000;
 
@@ -51,10 +51,17 @@ export class LyricsViewComponent {
   protected readonly activeSet = computed(() => new Set(this.actives()));
   /** The view follows the first active line only. */
   private readonly first = computed(() => this.actives().reduce((m, i) => Math.min(m, i), Infinity));
+  /** Cue span of each row, measured once per document. */
+  private readonly spans = computed(() => this.rows().map((r) => (r.cues?.length ? { lo: Math.min(...r.cues.map((c) => c.start)), hi: cuesEnd(r.cues), full: r.cues.map(() => 100) } : null)));
+  /** Only a row being sung needs its fills computed; the others are all empty or all full. */
   protected readonly fills = computed(() => {
-    const t = this.clock();
-    const off = this.doc().offset;
-    return this.rows().map((r) => (r.cues ? cueFills(r.cues, t, off) : []));
+    const t = this.clock() + this.doc().offset;
+    const spans = this.spans();
+    return this.rows().map((r, i) => {
+      const sp = spans[i];
+      if (!r.cues || !sp || t <= sp.lo) return [];
+      return t >= sp.hi ? sp.full : cueFills(r.cues, t, 0);
+    });
   });
 
   private anchor = { pos: 0, at: 0 };

@@ -53,6 +53,17 @@ describe('lyrics logic', () => {
     expect(activeIndices(r, 5500, 0)).toEqual([0]);
   });
 
+  it('keeps a started line lit while another, longer one still sings', () => {
+    const cue = (start: number, end: number) => ({ start, end, byteStart: 0, byteEnd: 1, value: 'x' });
+    const line = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: [cue(start, end)] });
+    const r = toRows(doc({
+      line: [{ start: 0, value: 'a' }, { start: 2000, value: 'b' }, { start: 20000, value: 'c' }],
+      cueLine: [line(0, 0, 9000), line(1, 2000, 3000), line(2, 20000, 21000)],
+    }));
+    expect(activeIndices(r, 6000, 0)).toEqual([0, 1]);
+    expect(activeIndices(r, 9000 + GAP_GRACE_MS + 1, 0)).toEqual([]);
+  });
+
   it('has no active line for untimed rows', () => {
     expect(activeIndex(toRows(doc({ synced: false, line: [{ value: 'x' }] })), 5000, 0)).toBe(-1);
   });

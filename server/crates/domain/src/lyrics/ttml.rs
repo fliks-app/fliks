@@ -191,8 +191,12 @@ pub(super) fn parse(xml: &str) -> Result<Parsed, String> {
     } else {
         lines.sort_by_key(|l| l.start);
     }
-    if agents.is_empty() {
-        agents.push(main_agent());
+    if agents.iter().all(|a| a.role != "main") {
+        let mut main = main_agent();
+        if agents.iter().any(|a| a.id == main.id) {
+            main.id = "main".into();
+        }
+        agents.insert(0, main);
     }
     if !bg.is_empty() {
         agents.push(Agent {
@@ -261,6 +265,35 @@ mod tests {
         let p = parse(Format::Ttml, &t).unwrap();
         let roles: Vec<_> = p.doc.agents.iter().map(|a| a.role.as_str()).collect();
         assert_eq!(roles, ["main", "group", "bg"]);
+    }
+
+    #[test]
+    fn a_document_of_groups_still_gets_one_main() {
+        let t = DOC
+            .replace(
+                "<ttm:agent xml:id=\"v1\" type=\"person\"/>",
+                "<ttm:agent xml:id=\"v1\" type=\"group\"/>",
+            )
+            .replace(
+                "<ttm:agent xml:id=\"v2\" type=\"person\"/>",
+                "<ttm:agent xml:id=\"g\" type=\"group\"/>",
+            );
+        let p = parse(Format::Ttml, &t).unwrap();
+        let roles: Vec<_> = p
+            .doc
+            .agents
+            .iter()
+            .map(|a| (a.id.as_str(), a.role.as_str()))
+            .collect();
+        assert_eq!(
+            roles,
+            [
+                ("main", "main"),
+                ("v1", "group"),
+                ("g", "group"),
+                ("bg", "bg")
+            ]
+        );
     }
 
     #[test]

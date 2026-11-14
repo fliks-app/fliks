@@ -8,7 +8,7 @@ import { KaraokeRelayService } from '../../../core/services/karaoke/karaoke-rela
 import { KaraokeService, type BoardRow } from '../../../core/services/karaoke/karaoke.service';
 import { intoRange, laneNotes, laneRange } from '../../../core/services/karaoke/pitch-lane';
 import type { Difficulty } from '../../../core/services/karaoke/karaoke-score';
-import { SINGER_COLOURS, singerStyle } from '../../../core/services/karaoke/singer-style';
+import { GOLD, SINGER_COLOURS, singerStyle } from '../../../core/services/karaoke/singer-style';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { LyricsViewComponent } from '../lyrics/lyrics-view';
@@ -102,10 +102,6 @@ export class KaraokeStageComponent {
     return { colour: st?.colour ?? SINGER_COLOURS[i % SINGER_COLOURS.length], mark: st?.mark ?? '', name: st?.name ?? '', n: st?.n ?? 0 };
   }
 
-  private colour(agentId: string | null, i: number): string {
-    return this.singer(agentId, i).colour;
-  }
-
   private draw(): void {
     const cv = this.canvas().nativeElement;
     const dpr = window.devicePixelRatio || 1;
@@ -140,19 +136,28 @@ export class KaraokeStageComponent {
     const notes = laneNotes(doc, lyricNow - BEHIND_MS, lyricNow + AHEAD_MS, this.range());
     for (const n of notes) {
       const st = singerStyle(doc, n.agentId);
-      const colour = st?.colour ?? (n.golden ? '#facc15' : ink);
+      const colour = st?.colour ?? ink;
+      const [bx, by, bw, bh] = [x(n.start), y(n.midi) - bar * 0.35, Math.max(2, (n.end - n.start) * px), bar * 0.7];
       ctx.fillStyle = colour;
-      ctx.strokeStyle = st?.shape === 'both' ? ink : colour;
+      ctx.strokeStyle = colour;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(x(n.start), y(n.midi) - bar * 0.35, Math.max(2, (n.end - n.start) * px), bar * 0.7, bar * 0.35);
+      ctx.roundRect(bx, by, bw, bh, bar * 0.35);
       if (st?.shape !== 'outlined') ctx.fill();
-      if (st && st.shape !== 'filled') ctx.stroke();
+      if (st?.shape === 'outlined') ctx.stroke();
+      if (st?.shape === 'both') this.hatch(ctx, bx, by, bw, bh);
+      if (n.golden) {
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, bar * 0.35 + 2);
+        ctx.stroke();
+      }
     }
     ctx.globalAlpha = 1;
     const latency = this.karaoke.latencyMs();
     this.karaoke.store.singers().forEach((id, i) => {
-      ctx.fillStyle = this.colour(this.rows().find((r) => r.userId === id)?.agentId ?? null, i);
+      ctx.fillStyle = this.singer(null, i).colour;
       const frames = this.karaoke.store.frames(id);
       for (let k = frames.length - 1; k >= 0; k--) {
         const f = frames[k];
@@ -167,4 +172,18 @@ export class KaraokeStageComponent {
     });
   }
 
+  /** Cuts diagonal stripes out of the path just filled, so a group note differs by shape from a singer's. */
+  private hatch(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    ctx.save();
+    ctx.clip();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = 2;
+    for (let k = -h; k < w; k += 6) {
+      ctx.beginPath();
+      ctx.moveTo(x + k, y + h);
+      ctx.lineTo(x + k + h, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }

@@ -1,8 +1,9 @@
 import type { StructuredLyrics } from '../api/lyrics.models';
-import { sides } from './karaoke-session';
+import { sides } from './karaoke-score';
 
 /** One palette for lyrics, mic dots, score chips and the pitch lane; the mark says it without colour. */
-export const SINGER_COLOURS = ['#22c55e', '#38bdf8', '#f472b6', '#facc15'];
+export const GOLD = '#facc15';
+export const SINGER_COLOURS = ['#22c55e', '#38bdf8', '#f472b6', GOLD];
 export const SINGER_MARKS = ['●', '▲', '■', '◆'];
 
 export interface SingerStyle {
@@ -11,7 +12,7 @@ export interface SingerStyle {
   /** Null for a group line: it keeps the main text colour. */
   colour: string | null;
   mark: string;
-  /** Lane bar: singer 1 filled, others outlined, group filled with an outline. */
+  /** Lane bar: singer 1 filled, others outlined, group hatched. */
   shape: 'filled' | 'outlined' | 'both';
   name?: string;
 }
@@ -20,6 +21,7 @@ export interface SingerStyle {
 export function singerStyle(doc: StructuredLyrics, agentId?: string): SingerStyle | null {
   const agents = sides(doc);
   if (agents.length < 2) return null;
+  // A line with no agent is sung by the first side, as the score reads it.
   const id = agentId ?? agents[0];
   if (doc.agents?.find((a) => a.id === id)?.role === 'group') {
     return { n: 0, colour: null, mark: SINGER_MARKS[0] + SINGER_MARKS[1], shape: 'both' };
