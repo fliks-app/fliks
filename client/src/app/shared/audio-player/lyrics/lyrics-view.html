@@ -11,13 +11,18 @@
       <button
         type="button"
         class="block w-full rounded-lg px-2 py-1 text-left transition-opacity disabled:cursor-default"
-        [class]="colour(r.agentId) + (bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : large() ? ' text-4xl font-bold' : ' text-2xl font-semibold')"
-        [class.opacity-40]="timed() && i !== active() && !r.cues"
-        [class.opacity-100]="!timed() || i === active() || r.cues"
-        [attr.aria-current]="i === active() ? 'true' : null"
+        [class]="(bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : large() ? ' text-4xl font-bold' : ' text-2xl font-semibold')"
+        [class.opacity-40]="timed() && !activeSet().has(i) && !r.cues"
+        [class.opacity-100]="!timed() || activeSet().has(i) || r.cues"
+        [attr.aria-current]="activeSet().has(i) ? 'true' : null"
         [disabled]="!timed() || !seekable()"
+        [style.color]="style(r.agentId)?.colour"
         (click)="seekTo(i)"
       >
+        @if (style(r.agentId); as st) {
+          <span class="mr-2 inline-block" aria-hidden="true" data-testid="lyrics-mark">{{ st.mark }}</span>
+          <span class="sr-only">{{ (st.n ? 'karaoke.singer_n' : 'karaoke.singer_both') | translate: { n: st.n } }}</span>
+        }
         @if (segments()[i]; as segs) {
           @for (s of segs; track $index) {
             @if (s.cue === null) {

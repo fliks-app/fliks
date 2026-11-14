@@ -1,17 +1,18 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
-import { activeIndex, cueFills, cueSegments, startedIndex, toRows } from './lyrics-logic';
+import { singerStyle } from '../../../core/services/karaoke/singer-style';
+import { activeIndices, cueFills, cueSegments, toRows } from './lyrics-logic';
 
-const AGENT_COLOURS = ['text-primary', 'text-secondary', 'text-accent', 'text-info'];
 const MANUAL_SCROLL_MS = 3000;
 
 /** Lyric lines that follow the player clock; a click on a timed line seeks to it. */
 @Component({
   selector: 'app-lyrics-view',
-  imports: [TvSectionDirective],
+  imports: [TvSectionDirective, TranslatePipe],
   templateUrl: './lyrics-view.html',
 })
 export class LyricsViewComponent {
@@ -39,12 +40,16 @@ export class LyricsViewComponent {
 
   /** Interpolated player position in ms, advanced every frame while playing. */
   private readonly clock = signal(0);
-  protected readonly active = computed(() => (this.timed() ? activeIndex(this.rows(), this.clock(), this.doc().offset) : -1));
-  private readonly started = computed(() => (this.timed() ? startedIndex(this.rows(), this.clock(), this.doc().offset) : -1));
+  private readonly actives = computed(() => (this.timed() ? activeIndices(this.rows(), this.clock(), this.doc().offset) : []), {
+    equal: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+  });
+  protected readonly activeSet = computed(() => new Set(this.actives()));
+  /** The view follows the first active line only. */
+  private readonly first = computed(() => this.actives().reduce((m, i) => Math.min(m, i), Infinity));
   protected readonly fills = computed(() => {
-    const i = this.started();
-    const cues = this.rows()[i]?.cues;
-    return cues ? cueFills(cues, this.clock(), this.doc().offset) : [];
+    const t = this.clock();
+    const off = this.doc().offset;
+    return this.rows().map((r) => (r.cues ? cueFills(r.cues, t, off) : []));
   });
 
   private anchor = { pos: 0, at: 0 };
@@ -65,11 +70,11 @@ export class LyricsViewComponent {
       if (run) untracked(() => this.tick());
     });
     afterNextRender(() => {
-      this.scrollToLine(untracked(this.active), 'instant');
+      this.scrollToLine(untracked(this.first), 'instant');
       this.placed = true;
     });
     effect(() => {
-      const i = this.active();
+      const i = this.first();
       if (this.placed) this.scrollToLine(i, 'smooth');
     });
   }
@@ -98,8 +103,7 @@ export class LyricsViewComponent {
   }
 
   protected fill(i: number, k: number): number {
-    const a = this.started();
-    return i < a ? 100 : i === a ? (this.fills()[k] ?? 0) : 0;
+    return this.fills()[i]?.[k] ?? 0;
   }
 
   /** The text between two words is lit once the word before it is, and a leading one with the first word. */
@@ -107,9 +111,7 @@ export class LyricsViewComponent {
     return this.fill(i, Math.max(prev, 0)) >= (prev < 0 ? 1 : 100);
   }
 
-  protected colour(agentId?: string): string {
-    const agents = this.doc().agents ?? [];
-    const idx = agents.findIndex((a) => a.id === agentId);
-    return idx > 0 ? AGENT_COLOURS[(idx - 1) % AGENT_COLOURS.length] : '';
+  protected style(agentId?: string) {
+    return singerStyle(this.doc(), agentId);
   }
 }

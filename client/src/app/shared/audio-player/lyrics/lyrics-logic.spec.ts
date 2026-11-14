@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import { GAP_GRACE_MS, GAP_MIN_MS, activeIndex, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
+import { GAP_GRACE_MS, GAP_MIN_MS, activeIndices, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
 
 const doc = (o: Partial<StructuredLyrics>): StructuredLyrics =>
   ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [], ...o }) as StructuredLyrics;
+
+const activeIndex = (...a: Parameters<typeof activeIndices>) => activeIndices(...a)[0] ?? -1;
 
 describe('lyrics logic', () => {
   const rows = toRows(doc({ line: [{ start: 1000, value: 'a' }, { start: 3000, value: 'b' }, { start: 5000, value: 'c' }] }));
@@ -36,6 +38,19 @@ describe('lyrics logic', () => {
       toRows(doc({ line: [{ start: 0, value: 'a' }, { start: next, value: 'b' }], cueLine: [{ index: 0, start: 0, end: 1000, value: 'a', cue }] }));
     expect(activeIndex(mk(1000 + GAP_MIN_MS), 3000, 0)).toBe(-1);
     expect(activeIndex(mk(1000 + GAP_MIN_MS - 1), 3000, 0)).toBe(0);
+  });
+
+  it('lights every overlapping line, in any row order', () => {
+    const cue = (start: number, end: number) => [{ start, end, byteStart: 0, byteEnd: 1, value: 'x' }];
+    const line = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: cue(start, end) });
+    const r = toRows(doc({
+      line: [{ start: 4000, value: 'c' }, { start: 0, value: 'a' }, { start: 1000, value: 'b' }],
+      cueLine: [line(0, 4000, 6000), line(1, 0, 3000), line(2, 1000, 5000)],
+    }));
+    expect(activeIndices(r, 500, 0)).toEqual([1]);
+    expect(activeIndices(r, 2000, 0)).toEqual([1, 2]);
+    expect(activeIndices(r, 4500, 0)).toEqual([0, 2]);
+    expect(activeIndices(r, 5500, 0)).toEqual([0]);
   });
 
   it('has no active line for untimed rows', () => {

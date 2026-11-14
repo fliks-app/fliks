@@ -34,6 +34,14 @@ describe('karaoke session', () => {
     expect([a.agentId, a.score]).toEqual([null, 10000]);
   });
 
+  it('scores a group line for every singer', () => {
+    const d = doc([line(0, 'g', [cue(0, 1000, 60)])], [{ id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }, { id: 'g', role: 'group' }]);
+    const store = new FrameStore();
+    store.add(7, sing(0, 1000, 60));
+    store.add(9, sing(0, 1000, 72));
+    expect(scoreAll(d, store, 'hard', 0).map((r) => r.score)).toEqual([10000, 10000]);
+  });
+
   it('bounds the frames it keeps', () => {
     const store = new FrameStore();
     store.add(1, Array.from({ length: 20050 }, (_, i) => ({ t: i, midi: 60 })));

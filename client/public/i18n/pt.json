@@ -5459,6 +5459,8 @@
     "difficulty_medium": "Média",
     "difficulty_hard": "Difícil",
     "key": "Tom",
+    "singer_n": "Cantor {{n}}",
+    "singer_both": "Todos juntos",
     "key_down": "Baixar o tom",
     "key_up": "Subir o tom",
     "key_stems_off": "Com outro tom toca a mistura original.",

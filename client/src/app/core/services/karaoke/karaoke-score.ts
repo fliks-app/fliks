@@ -34,10 +34,16 @@ interface ScoredLine {
   cues: LyricsCue[];
 }
 
+/** A group line is sung by every side. */
+function isSungBy(doc: StructuredLyrics, lineAgent: string | undefined, agentId: string): boolean {
+  const id = lineAgent ?? doc.agents?.[0]?.id;
+  return id === agentId || doc.agents?.find((a) => a.id === id)?.role === 'group';
+}
+
 /** Pitched cues of a document that belong to `agentId` (every cue when it is null or the document has no agent on cues). */
 export function scoredLines(doc: StructuredLyrics, agentId: string | null): ScoredLine[] {
   return (doc.cueLine ?? [])
-    .filter((l) => agentId === null || (l.agentId ?? doc.agents?.[0]?.id) === agentId)
+    .filter((l) => agentId === null || isSungBy(doc, l.agentId, agentId))
     .map((l) => ({ cues: l.cue.filter((c) => c.pitch !== undefined && c.end > c.start) }))
     .filter((l) => l.cues.length > 0);
 }
@@ -62,18 +68,22 @@ export function scoreSinger(
   let points = 0;
   let bonus = 0;
   const per: number[] = [];
-  let from = 0;
   for (const line of notes) {
     let got = 0;
     let max = 0;
     for (const c of line) {
       const a = c.start - offsetMs;
       const b = c.end - offsetMs;
-      while (from < sorted.length && sorted[from].t - latencyMs < a - 100) from++;
+      let lo = 0;
+      let hi = sorted.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid].t - latencyMs < a) lo = mid + 1;
+        else hi = mid;
+      }
       let hit = 0;
       let seen = 0;
-      for (let i = from; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
-        if (sorted[i].t - latencyMs < a) continue;
+      for (let i = lo; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
         seen++;
         const m = sorted[i].midi;
         if (m !== null && foldedDistance(m, c.pitch) <= tol) hit++;

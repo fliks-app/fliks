@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
@@ -19,6 +20,24 @@ describe('LyricsViewComponent', () => {
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
     buttons[0].click();
     expect(player.seek).toHaveBeenCalledWith(1);
+  });
+
+  it('lights overlapping lines, marks the singers and fills each line on its own cues', () => {
+    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    const cl = (index: number, start: number, end: number, agentId: string) => ({ index, start, end, value: 'x', agentId, cue: [{ start, end, value: 'x', byteStart: 0, byteEnd: 1 }] });
+    f.componentRef.setInput('doc', {
+      id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'x' }, { start: 1000, value: 'x' }, { start: 6000, value: 'x' }],
+      agents: [{ id: 'v1', role: 'main' }, { id: 'v2', role: 'voice' }],
+      cueLine: [cl(0, 0, 4000, 'v1'), cl(1, 1000, 3000, 'v2'), cl(2, 6000, 8000, 'v1')],
+    });
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('button')].map((b) => b.getAttribute('aria-current'))).toEqual(['true', 'true', null]);
+    expect([...el.querySelectorAll('[data-testid="lyrics-mark"]')].map((m) => m.textContent)).toEqual(['●', '▲', '●']);
+    const widths = [...el.querySelectorAll<HTMLElement>('[aria-hidden="true"][style*="width"]')].map((e) => e.style.width);
+    expect(widths).toEqual(['50%', '50%', '0%']);
   });
 
   it('shows untimed lines as static text', () => {

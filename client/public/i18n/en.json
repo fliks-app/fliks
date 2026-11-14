@@ -5459,6 +5459,8 @@
     "difficulty_medium": "Medium",
     "difficulty_hard": "Hard",
     "key": "Key",
+    "singer_n": "Singer {{n}}",
+    "singer_both": "Everyone",
     "key_down": "Lower the key",
     "key_up": "Raise the key",
     "key_stems_off": "Another key plays the original mix.",

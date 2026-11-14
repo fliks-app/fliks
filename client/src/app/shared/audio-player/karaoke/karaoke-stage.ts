@@ -8,6 +8,7 @@ import { KaraokeRelayService } from '../../../core/services/karaoke/karaoke-rela
 import { KaraokeService, type BoardRow } from '../../../core/services/karaoke/karaoke.service';
 import { intoRange, laneNotes, laneRange } from '../../../core/services/karaoke/pitch-lane';
 import type { Difficulty } from '../../../core/services/karaoke/karaoke-score';
+import { SINGER_COLOURS, singerStyle } from '../../../core/services/karaoke/singer-style';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { LyricsViewComponent } from '../lyrics/lyrics-view';
@@ -16,7 +17,6 @@ import { KaraokeQueueComponent } from './karaoke-queue';
 const BEHIND_MS = 2000;
 const AHEAD_MS = 6000;
 const RESULTS_MS = 500;
-const SINGER_COLOURS = ['#22c55e', '#38bdf8', '#f472b6', '#facc15'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores and the singers' controls. */
@@ -96,8 +96,14 @@ export class KaraokeStageComponent {
     this.dialog()?.nativeElement.close();
   }
 
-  protected colour(i: number): string {
-    return SINGER_COLOURS[i % SINGER_COLOURS.length];
+  /** The singer's palette entry: their side's in a duet, else the n-th colour. */
+  protected singer(agentId: string | null, i: number) {
+    const st = agentId ? singerStyle(this.doc(), agentId) : null;
+    return { colour: st?.colour ?? SINGER_COLOURS[i % SINGER_COLOURS.length], mark: st?.mark ?? '', name: st?.name ?? '', n: st?.n ?? 0 };
+  }
+
+  private colour(agentId: string | null, i: number): string {
+    return this.singer(agentId, i).colour;
   }
 
   private draw(): void {
@@ -133,15 +139,20 @@ export class KaraokeStageComponent {
     ctx.globalAlpha = 0.7;
     const notes = laneNotes(doc, lyricNow - BEHIND_MS, lyricNow + AHEAD_MS, this.range());
     for (const n of notes) {
-      ctx.fillStyle = n.golden ? '#facc15' : ink;
+      const st = singerStyle(doc, n.agentId);
+      const colour = st?.colour ?? (n.golden ? '#facc15' : ink);
+      ctx.fillStyle = colour;
+      ctx.strokeStyle = st?.shape === 'both' ? ink : colour;
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.roundRect(x(n.start), y(n.midi) - bar * 0.35, Math.max(2, (n.end - n.start) * px), bar * 0.7, bar * 0.35);
-      ctx.fill();
+      if (st?.shape !== 'outlined') ctx.fill();
+      if (st && st.shape !== 'filled') ctx.stroke();
     }
     ctx.globalAlpha = 1;
     const latency = this.karaoke.latencyMs();
     this.karaoke.store.singers().forEach((id, i) => {
-      ctx.fillStyle = this.colour(i);
+      ctx.fillStyle = this.colour(this.rows().find((r) => r.userId === id)?.agentId ?? null, i);
       const frames = this.karaoke.store.frames(id);
       for (let k = frames.length - 1; k >= 0; k--) {
         const f = frames[k];
