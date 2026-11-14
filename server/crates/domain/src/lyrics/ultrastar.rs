@@ -149,6 +149,7 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
         }
     }
     flush(&mut open, &mut lines);
+    lines.sort_by_key(|l| l.start);
     let mut agents = vec![main_agent()];
     if duet {
         agents.push(Agent {
@@ -194,6 +195,29 @@ mod tests {
         assert_eq!(l2.agent_id.as_deref(), Some("v2"));
         assert_eq!(l2.cues[0].pitch, Some(59.0));
         assert_eq!(l2.cues[0].end, 1000 + 22 * 125);
+    }
+
+    #[test]
+    fn a_duet_file_is_sorted_and_a_shared_line_keeps_both_copies() {
+        let p = parse(
+            "#BPM:120\n#GAP:0\nP1\n: 0 4 0 la\n- 8\n: 16 4 2 lo\n- 24\nP2\n: 8 4 5 li\n- 12\n: 16 4 9 lo\nE\n",
+        )
+        .unwrap();
+        let l: Vec<_> = p
+            .doc
+            .lines
+            .iter()
+            .map(|l| (l.start, l.agent_id.as_deref(), l.cues[0].pitch))
+            .collect();
+        assert_eq!(
+            l,
+            [
+                (Some(0), Some("v1"), Some(60.0)),
+                (Some(1000), Some("v2"), Some(65.0)),
+                (Some(2000), Some("v1"), Some(62.0)),
+                (Some(2000), Some("v2"), Some(69.0)),
+            ]
+        );
     }
 
     #[test]
