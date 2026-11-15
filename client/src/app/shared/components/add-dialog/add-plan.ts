@@ -7,6 +7,9 @@ import { defaultFolderId } from '../library-folder-select/library-folder-select'
 
 export type AddMode = 'import' | 'request';
 
+/** What an album add covers: the one track, a picked set, or every track. */
+export type AddScope = 'track' | 'pick' | 'album';
+
 /** What a page asks the dialog to add: a provider hit of any kind. */
 export interface AddRequest {
   kind: MediaType;
@@ -15,6 +18,8 @@ export interface AddRequest {
   title: string;
   /** Music: one track of the album is wanted, not the whole album. */
   recording?: { externalId: string; albumExternalId: string };
+  /** Where the scope starts: the track when one is given, else the whole album. */
+  scope?: AddScope;
   /** Defaults to `import` for a caller who can add, else `request`. */
   mode?: AddMode;
   /** A page that shows the choices anyway always opens the dialog. */
@@ -33,6 +38,8 @@ export interface AddRequest {
 export interface AddResult {
   mode: AddMode;
   mediaId: number | null;
+  /** A track request: the recordings it asked for. */
+  recordings?: string[];
 }
 
 export interface Profile {

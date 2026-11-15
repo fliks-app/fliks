@@ -45,14 +45,15 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
-import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
+import { LucideChevronDown, LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
+import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
-import type { AddRequest, AddResult } from '../../shared/components/add-dialog/add-plan';
+import type { AddRequest, AddResult, AddScope } from '../../shared/components/add-dialog/add-plan';
 import { TrackLineComponent } from '../music/track-line.component';
 import { artistLine, toTrackRequest } from '../music/music-utils';
 import { SearchRunner, SOURCES } from './search-runner';
@@ -69,7 +70,7 @@ const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
+  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, LucideChevronDown, DropdownMenuComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -735,13 +736,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ];
   }
 
-  protected add(row: SearchHit, recording?: RecordingHit): void {
+  protected add(row: SearchHit, recording?: RecordingHit, scope?: AddScope): void {
     const req: AddRequest = {
       kind: row.mediaType,
       provider: row.provider,
       externalId: row.externalId,
       title: row.title,
       ...(recording ? { recording: { externalId: recording.externalId, albumExternalId: row.externalId } } : {}),
+      ...(scope ? { scope, alwaysAsk: true } : {}),
     };
     this.pendingAdd = { row, recording };
     void this.addDialog()?.add(req);
@@ -754,6 +756,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const hit = this.pendingAdd;
     if (!hit) return;
     this.pendingAdd = null;
+    if (r.recordings) {
+      this.requestedTracks.update((s) => new Set([...s, ...r.recordings!]));
+      return;
+    }
     const next: SearchHit = {
       ...hit.row,
       existingMediaId: r.mediaId ?? hit.row.existingMediaId,
@@ -765,13 +771,26 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.recordingHits.update((rows) => rows.map((x) => (x.album === hit.row ? { ...x, album: next } : x)));
   }
 
-  protected addRecording(rec: RecordingHit): void {
-    this.add(rec.album);
+  /** Tracks asked for since the search, which the hit does not know yet. */
+  protected readonly requestedTracks = signal<ReadonlySet<string>>(new Set());
+
+  /** A request on the album, or on this track, already covers it. */
+  protected trackRequested(rec: RecordingHit): boolean {
+    const s = rec.album.requestStatus;
+    return this.requestedTracks().has(rec.externalId) || s === 'pending' || s === 'approved' || s === 'processing';
   }
 
-  /** Wants that one track: the album is added with only it monitored. */
-  protected wantRecording(rec: RecordingHit): void {
+  /** Wants or requests that one track, not the album. */
+  protected addTrack(rec: RecordingHit): void {
     this.add(rec.album, rec);
+  }
+
+  protected pickTracks(rec: RecordingHit): void {
+    this.add(rec.album, rec, 'pick');
+  }
+
+  protected addAlbumOf(rec: RecordingHit): void {
+    this.add(rec.album);
   }
 
   // ── Artists and tracks ──

@@ -154,7 +154,7 @@ describe('AddDialogComponent', () => {
 
   it('asks for the profile and the tracks of an album, and monitors only the ticked ones', async () => {
     const { cmp, calls, show, done } = setup([lib(1, ['album'])]);
-    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void };
+    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void; setScope(s: string): void };
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
     expect(show).toHaveBeenCalledOnce();
     await dialog.submit();
@@ -162,6 +162,7 @@ describe('AddDialogComponent', () => {
       { provider: 'musicbrainz', externalId: 'g1', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
     ]);
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g2', title: 'B' });
+    dialog.setScope('pick');
     dialog.toggleTrack('r2');
     await dialog.submit();
     expect((calls['album']![1] as { monitoredRecordings: string[] }).monitoredRecordings).toEqual(['r1']);
@@ -183,5 +184,22 @@ describe('AddDialogComponent', () => {
     expect(calls['request']).toEqual([
       { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
     ]);
+  });
+
+  it('requests only the track a non-admin asked for', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])], ['requests.create']);
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r1', albumExternalId: 'g1' } });
+    expect(calls['request']).toEqual([
+      { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], recordings: ['r1'], libraryId: 1 },
+    ]);
+  });
+
+  it('requests the picked tracks, starting from the asked one', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])], ['requests.create']);
+    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void };
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r1', albumExternalId: 'g1' }, scope: 'pick', alwaysAsk: true });
+    dialog.toggleTrack('r2');
+    await dialog.submit();
+    expect((calls['request']![0] as { recordings: string[] }).recordings).toEqual(['r1', 'r2']);
   });
 });

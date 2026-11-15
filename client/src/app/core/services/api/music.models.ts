@@ -86,6 +86,8 @@ export interface Track {
   trackNumber: number | null;
   label: string | null;
   title: string;
+  /** MusicBrainz recording id; null when the track has none. */
+  recordingId?: string | null;
   durationSeconds: number | null;
   explicit: boolean;
   gain: number | null;

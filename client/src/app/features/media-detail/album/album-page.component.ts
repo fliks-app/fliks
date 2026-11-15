@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -10,6 +10,7 @@ import { AudioPlayerService } from '../../../core/services/audio-player/audio-pl
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
+import { RequestsService, titleRef, type TitleRequestState } from '../../../core/services/api/requests.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -18,6 +19,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CardActionsService, type CardAction } from '../../../core/services/card-actions.service';
 import { MediaActionsController } from '../../../shared/utils/media-actions-controller';
 import { toCardAction } from '../../../shared/utils/media-menu';
+import { AddDialogComponent } from '../../../shared/components/add-dialog/add-dialog';
+import type { AddResult } from '../../../shared/components/add-dialog/add-plan';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
@@ -33,6 +36,7 @@ import { MusicDownloadButtonComponent } from '../../../shared/components/music-d
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TrackLineComponent } from '../../music/track-line.component';
 import { asAlbumMedia, defaultEditionId } from './album-media';
+import { mediaTitleKey } from '../request-flow-controller';
 
 interface DiscView {
   disc: Disc;
@@ -45,7 +49,7 @@ interface DiscView {
   selector: 'app-album-page',
   imports: [
     FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
-    ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent,
+    ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent,
     LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucideShuffle,
   ],
   templateUrl: './album-page.component.html',
@@ -62,6 +66,7 @@ export class AlbumPageComponent {
   private readonly playlists = inject(AddToPlaylistService);
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
+  private readonly requestsApi = inject(RequestsService);
   protected readonly party = inject(PartyService);
   protected readonly downloads = inject(MusicDownloadsService);
   protected readonly like = new LikeController(
@@ -101,8 +106,46 @@ export class AlbumPageComponent {
     'media.details': () => this.detailsDialog()?.nativeElement.showModal(),
     ...(this.auth.hasPermission('media.edit') && { 'media.edit-profiles': () => this.openWants() }),
   }));
+  /** A viewer who may only request asks for a missing track from its row. */
+  private readonly titleKey = computed(() => mediaTitleKey(this.media()));
+  protected readonly canRequest = computed(
+    () => !this.auth.hasPermission('media.create') && this.auth.hasPermission('requests.create') && this.titleKey() != null && this.album() != null,
+  );
+  private readonly requestState = signal<TitleRequestState | null>(null);
+  private readonly asked = signal<ReadonlySet<string>>(new Set());
+  private pendingRecording: string | null = null;
+  private readonly addDialog = viewChild(AddDialogComponent);
+
+  protected status(t: Track): 'available' | 'requested' | 'request' | null {
+    if (t.hasFile) return 'available';
+    const s = this.requestState();
+    if (s?.wholeAlbumRequested || (t.recordingId && (this.asked().has(t.recordingId) || s?.requestedRecordings?.includes(t.recordingId)))) return 'requested';
+    return t.recordingId ? 'request' : null;
+  }
+
+  protected requestTrack(t: Track): void {
+    const key = this.titleKey();
+    if (!key || !t.recordingId) return;
+    const [provider, externalId] = titleRef(key);
+    this.pendingRecording = t.recordingId;
+    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId }, mode: 'request' });
+  }
+
+  protected onRequested(r: AddResult): void {
+    const ids = r.recordings ?? (this.pendingRecording ? [this.pendingRecording] : []);
+    this.asked.update((s) => new Set([...s, ...ids]));
+  }
+
   protected readonly wantsOpen = signal(false);
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
+
+  constructor() {
+    effect(() => {
+      const key = this.titleKey();
+      if (!this.canRequest() || !key) return;
+      untracked(() => void this.requestsApi.getTitleState(key, 'album').then((s) => this.requestState.set(s), () => undefined));
+    });
+  }
 
   private openWants(): void {
     this.wantsOpen.set(true);

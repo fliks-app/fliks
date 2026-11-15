@@ -12,6 +12,7 @@ import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
@@ -19,6 +20,7 @@ import {
   FliksRequestRow,
   FliksRequestStatus,
   RequestKind,
+  isTrackRequest,
   requestAddLink,
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
@@ -53,6 +55,7 @@ import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
     FormsModule,
     LocaleDatePipe,
     TranslatePipe,
+    TranslatePluralPipe,
     RouterLink,
     RequestPosterComponent,
     RequestWantsComponent,
@@ -70,6 +73,7 @@ import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
 })
 export class RequestsComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
+  protected readonly isTrackRequest = isTrackRequest;
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -279,10 +283,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
   }
 
-  async approve(id: number) {
+  async approve(id: number, wholeAlbum = false) {
     this.actionBusyId.set(id);
     try {
-      const updated = await this.requestsService.approve(id);
+      const updated = await this.requestsService.approve(id, wholeAlbum);
       this.patchRow(updated);
     } finally {
       this.actionBusyId.set(null);

@@ -931,6 +931,21 @@
     "kind_all": "All"
   },
   "discover": {
+    "scope": "Request scope",
+    "scope_track": "This track",
+    "scope_pick": "Pick",
+    "scope_album": "Whole album",
+    "scope_track_hint": "Only this track is wanted.",
+    "scope_pick_hint": "{{n}} of {{total}} tracks.",
+    "scope_album_hint": "Every track of the album.",
+    "request_one_track": "Request 1 track",
+    "request_tracks": "Request {{n}} tracks",
+    "request_album": "Request the album",
+    "add_album": "Add the album",
+    "request_track": "Request this track",
+    "pick_tracks": "Pick tracks of the album...",
+    "more_choices": "More choices",
+    "requested": "Requested",
     "seasons_failed": "Could not load the seasons",
     "title": "Add to library",
     "subtitle": "Search on The Movie Database (TMDB).",
@@ -1421,6 +1436,11 @@
     "edit_details": "Edit details"
   },
   "requests": {
+    "approve_album": "Approve the whole album",
+    "tracks_of_one": "{{count}} of {{total}} track",
+    "tracks_of_other": "{{count}} of {{total}} tracks",
+    "tracks_count_one": "{{count}} track",
+    "tracks_count_other": "{{count}} tracks",
     "title": "Requests",
     "empty": "No requests",
     "filter_all": "All statuses",
@@ -3842,6 +3862,11 @@
       }
     },
     "acquisition": {
+      "music_title": "Music",
+      "unrequested_tracks": "Tracks nobody asked for",
+      "unrequested_tracks_hint": "Other tracks of a downloaded album.",
+      "unrequested_skip": "Do not import",
+      "unrequested_keep": "Import unmonitored",
       "title": "Downloads",
       "subtitle": "Which download providers are asked for automatic downloads, and how often.",
       "provider_order": "Provider order",
@@ -5320,6 +5345,9 @@
     }
   },
   "music": {
+    "status_available": "Available",
+    "status_requested": "Requested",
+    "request_track": "Request",
     "play": "Play",
     "shuffle": "Shuffle",
     "candidates": "Releases the files may be",

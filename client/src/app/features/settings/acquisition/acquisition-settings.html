@@ -74,6 +74,19 @@
           </div>
         </label>
 
+        <fieldset class="flex max-w-lg flex-col gap-2" data-testid="unrequested-tracks">
+          <legend class="text-sm">{{ 'settings.acquisition.music_title' | translate }}: {{ 'settings.acquisition.unrequested_tracks' | translate }}</legend>
+          <p class="text-sm text-base-content/50">{{ 'settings.acquisition.unrequested_tracks_hint' | translate }}</p>
+          <label class="flex cursor-pointer items-center gap-3">
+            <input type="radio" name="unrequested" class="radio radio-primary radio-sm" value="skip" [ngModel]="unrequested()" (ngModelChange)="unrequested.set($event)" />
+            <span class="text-sm">{{ 'settings.acquisition.unrequested_skip' | translate }}</span>
+          </label>
+          <label class="flex cursor-pointer items-center gap-3">
+            <input type="radio" name="unrequested" class="radio radio-primary radio-sm" value="import_unmonitored" [ngModel]="unrequested()" (ngModelChange)="unrequested.set($event)" />
+            <span class="text-sm">{{ 'settings.acquisition.unrequested_keep' | translate }}</span>
+          </label>
+        </fieldset>
+
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
             @if (saving()) {

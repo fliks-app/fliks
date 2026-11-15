@@ -7,11 +7,12 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { LucideTrash2 } from '@lucide/angular';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestWantsComponent } from '../request-wants/request-wants';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
-import { FliksRequestRow, requestAddLink } from '../../../core/services/api/requests.service';
+import { FliksRequestRow, isTrackRequest, requestAddLink } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { clearPosterStamps } from '../../../shared/utils/view-transition';
 import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
@@ -24,6 +25,7 @@ import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
     LocaleDatePipe,
     RouterLink,
     TranslatePipe,
+    TranslatePluralPipe,
     RequestPosterComponent,
     RequestWantsComponent,
     RequestStatusBadgeComponent,
@@ -53,9 +55,13 @@ export class RequestCardComponent {
   readonly busy = input(false);
 
   readonly approve = output<number>();
+  /** Widens a track request to the whole album. */
+  readonly approveAlbum = output<number>();
   readonly decline = output<number>();
   /** Forwarded up from the status badge: open the download-detail modal. */
   readonly badgeClick = output<void>();
+
+  protected readonly trackRequest = computed(() => isTrackRequest(this.request()));
 
   protected readonly ariaLabel = computed(
     () => this.request().media?.title ?? this.request().title,

@@ -24,7 +24,9 @@ export function placeVisible(stored: string[], visible: string[]): string[] {
   return [...out, ...queue];
 }
 
-const KEYS = { order: 'acquisition.providerOrder', interval: 'acquisition.sweepInterval' };
+const KEYS = { order: 'acquisition.providerOrder', interval: 'acquisition.sweepInterval', unrequested: 'music.unrequested_tracks' };
+
+export type UnrequestedTracks = 'import_unmonitored' | 'skip';
 
 @Component({
   selector: 'app-acquisition-settings',
@@ -52,6 +54,7 @@ export class AcquisitionSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly interval = signal('360');
+  readonly unrequested = signal<UnrequestedTracks>('import_unmonitored');
   private readonly order = signal<string[]>([]);
 
   /** Installed providers in the stored order; a provider the order does not name follows by id. */
@@ -66,6 +69,7 @@ export class AcquisitionSettingsComponent implements OnInit {
       const map = await this.api.getAll();
       this.order.set(listOf(map[KEYS.order]));
       this.interval.set(map[KEYS.interval] ?? '360');
+      this.unrequested.set(map[KEYS.unrequested] === 'skip' ? 'skip' : 'import_unmonitored');
     } catch {
       this.toast.error(this.translate.instant('settings.acquisition.load_error'));
     } finally {
@@ -86,6 +90,7 @@ export class AcquisitionSettingsComponent implements OnInit {
       await this.api.setBulk({
         [KEYS.order]: JSON.stringify(placeVisible(this.order(), this.rows().map((r) => r.id))),
         [KEYS.interval]: String(this.interval()),
+        [KEYS.unrequested]: this.unrequested(),
       });
       this.toast.success(this.translate.instant('settings.acquisition.saved'));
     } catch {

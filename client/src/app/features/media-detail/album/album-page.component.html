@@ -102,11 +102,26 @@
       <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
         <app-track-line [title]="t.title" [itemId]="t.itemId" [active]="t.itemId === playingItemId()" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
           <span lead class="hidden w-8 shrink-0 text-right md:block tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
-          @if (!t.hasFile) {
+          @if (!t.hasFile && !canRequest()) {
             <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
           }
         </app-track-line>
       </button>
+      @if (canRequest()) {
+        <span class="flex w-28 shrink-0 items-center justify-end" data-testid="track-status">
+          @switch (status(t)) {
+            @case ('available') {
+              <span class="badge badge-success badge-soft badge-sm">{{ 'music.status_available' | translate }}</span>
+            }
+            @case ('requested') {
+              <span class="badge badge-warning badge-soft badge-sm" data-testid="track-requested">{{ 'music.status_requested' | translate }}</span>
+            }
+            @case ('request') {
+              <button type="button" class="btn btn-ghost btn-xs" (click)="requestTrack(t)" data-testid="track-request">{{ 'music.request_track' | translate }}</button>
+            }
+          }
+        </span>
+      }
       <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [class.text-white]="!t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
         <svg lucideHeart class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
       </button>
@@ -155,6 +170,7 @@
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
   </dialog>
 }
+<app-add-dialog (done)="onRequested($event)" />
 <dialog #wantsDialog class="modal" data-testid="wants-dialog" (close)="wantsOpen.set(false)">
   <div class="modal-box max-w-lg">
     <app-modal-header [title]="'wants.title' | translate" />

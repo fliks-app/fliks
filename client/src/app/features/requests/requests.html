@@ -83,6 +83,16 @@
                 >
                   {{ 'requests.decline' | translate }}
                 </button>
+                @if (isTrackRequest(row)) {
+                  <button
+                    type="button"
+                    class="hidden sm:inline-flex btn btn-success btn-outline btn-sm"
+                    [disabled]="actionBusyId() === row.id"
+                    (click)="approve(row.id, true)"
+                  >
+                    {{ 'requests.approve_album' | translate }}
+                  </button>
+                }
               }
               @if (row.status === 'declined' && row.declinedReason?.trim()) {
                 <button
@@ -196,6 +206,12 @@
                   <app-request-wants [wants]="row.wants!" />
                 }
 
+                @if (isTrackRequest(row)) {
+                  <p class="text-sm text-base-content/70" data-testid="request-tracks">
+                    {{ (row.trackCount ? 'requests.tracks_of' : 'requests.tracks_count') | translatePlural: row.recordings!.length : { total: row.trackCount } }}
+                  </p>
+                }
+
                 @if (auth.hasPermission('requests.manage')) {
                   <p class="text-sm text-base-content/70">
                     <span class="text-base-content/50">{{
@@ -283,6 +299,16 @@
                   >
                     {{ 'requests.decline' | translate }}
                   </button>
+                  @if (isTrackRequest(row)) {
+                    <button
+                      type="button"
+                      class="btn btn-success btn-outline btn-sm"
+                      [disabled]="actionBusyId() === row.id"
+                      (click)="approve(row.id, true)"
+                    >
+                      {{ 'requests.approve_album' | translate }}
+                    </button>
+                  }
                 }
                 @if (canEdit(row)) {
                   <button

@@ -931,6 +931,21 @@
     "kind_all": "Tous"
   },
   "discover": {
+    "scope": "Portée de la demande",
+    "scope_track": "Ce titre",
+    "scope_pick": "Choisir",
+    "scope_album": "Album entier",
+    "scope_track_hint": "Seul ce titre est voulu.",
+    "scope_pick_hint": "{{n}} titres sur {{total}}.",
+    "scope_album_hint": "Tous les titres de l'album.",
+    "request_one_track": "Demander 1 titre",
+    "request_tracks": "Demander {{n}} titres",
+    "request_album": "Demander l'album",
+    "add_album": "Ajouter l'album",
+    "request_track": "Demander ce titre",
+    "pick_tracks": "Choisir des titres de l'album...",
+    "more_choices": "Autres choix",
+    "requested": "Demandé",
     "seasons_failed": "Impossible de charger les saisons",
     "title": "Ajouter à la bibliothèque",
     "subtitle": "Recherche sur The Movie Database (TMDB).",
@@ -1421,6 +1436,11 @@
     "edit_details": "Modifier les détails"
   },
   "requests": {
+    "approve_album": "Approuver l'album entier",
+    "tracks_of_one": "{{count}} titre sur {{total}}",
+    "tracks_of_other": "{{count}} titres sur {{total}}",
+    "tracks_count_one": "{{count}} titre",
+    "tracks_count_other": "{{count}} titres",
     "title": "Demandes",
     "empty": "Aucune demande",
     "filter_all": "Tous les statuts",
@@ -3842,6 +3862,11 @@
       }
     },
     "acquisition": {
+      "music_title": "Musique",
+      "unrequested_tracks": "Titres non demandés",
+      "unrequested_tracks_hint": "Les autres titres d'un album téléchargé.",
+      "unrequested_skip": "Ne pas importer",
+      "unrequested_keep": "Importer sans surveillance",
       "title": "Téléchargements",
       "subtitle": "Quels fournisseurs de téléchargement sont interrogés pour les téléchargements automatiques, et à quelle fréquence.",
       "provider_order": "Ordre des fournisseurs",
@@ -5320,6 +5345,9 @@
     }
   },
   "music": {
+    "status_available": "Disponible",
+    "status_requested": "Demandé",
+    "request_track": "Demander",
     "play": "Lire",
     "shuffle": "Aléatoire",
     "candidates": "Sorties possibles pour ces fichiers",

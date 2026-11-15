@@ -34,19 +34,19 @@ const playerStub = () => ({
   track: signal<{ mediaId: number; itemId: number } | null>(null),
 });
 
-function setup(tracks: Track[]) {
+function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}) {
   const player = playerStub();
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
       { provide: AudioPlayerService, useValue: player },
       { provide: PartyService, useValue: { active: () => false } },
       { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
-      { provide: AuthService, useValue: { hasPermission: () => false, user: () => null, sessionEpoch: () => 0 } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p), user: () => null, sessionEpoch: () => 0 } },
       { provide: SseService, useValue: { likeEvents: new Subject() } },
     ),
   });
   const fixture = TestBed.createComponent(AlbumPageComponent);
-  fixture.componentRef.setInput('media', { id: 9, type: 'album', title: 'Alb', posterUrl: null, providers: [{}], album: album(tracks) } as unknown as Media);
+  fixture.componentRef.setInput('media', { id: 9, type: 'album', title: 'Alb', posterUrl: null, providers: [{}], album: album(tracks), ...extra } as unknown as Media);
   fixture.detectChanges();
   const http = TestBed.inject(HttpTestingController);
   return { fixture, player, http, el: fixture.nativeElement as HTMLElement };
@@ -162,5 +162,18 @@ describe('AlbumPageComponent', () => {
     (el.querySelector('[data-testid="heart"]') as HTMLButtonElement).click();
     const req = http.expectOne((r) => r.method === 'POST' && r.url === '/api/likes');
     expect(req.request.body).toEqual({ mediaId: 9, episodeId: 1 });
+  });
+
+  it('shows each track of a requester as available, requested or requestable', async () => {
+    const { fixture, http, el } = setup(
+      [track(1), track(2, { hasFile: false, recordingId: 'r2' }), track(3, { hasFile: false, recordingId: 'r3' })],
+      ['requests.create'],
+      { preferredProvider: 'musicbrainz', externalIds: [{ provider: 'musicbrainz', value: 'g1' }] } as Partial<Media>,
+    );
+    http.expectOne((r) => r.url === '/api/requests/title-state').flush({ requested: false, wholeAlbumRequested: false, requestedRecordings: ['r3'] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const cells = [...el.querySelectorAll('[data-testid="track-status"]')].map((c) => c.firstElementChild?.getAttribute('data-testid') ?? c.firstElementChild?.className.split(' ')[0]);
+    expect(cells).toEqual(['badge', 'track-request', 'track-requested']);
   });
 });

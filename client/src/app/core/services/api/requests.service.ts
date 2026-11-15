@@ -63,6 +63,8 @@ export interface CreateAlbumRequestBody {
   externalId: string;
   title: string;
   wants: WantSpec[];
+  /** MusicBrainz recording ids: only those tracks are asked for; omitted asks the whole album. */
+  recordings?: string[];
   libraryId?: number;
   folderId?: number;
 }
@@ -102,6 +104,10 @@ export interface FliksRequestRow {
   externalId?: string;
   /** Books only: the editions asked for. */
   wants?: WantSpec[];
+  /** Albums only: the recordings asked for; null or absent is the whole album. */
+  recordings?: string[] | null;
+  /** Albums only: the tracks of the target edition. */
+  trackCount?: number | null;
   title: string;
   status: FliksRequestStatus;
   /** Discriminates an add request from a deletion request. A delete request's
@@ -126,6 +132,9 @@ export interface FliksRequestRow {
   updatedAt: string;
 }
 
+/** An album request limited to some of its tracks. */
+export const isTrackRequest = (r: FliksRequestRow): boolean => r.mediaType === 'album' && !!r.recordings?.length;
+
 export interface RequestsPage {
   data: FliksRequestRow[];
   total: number;
@@ -141,6 +150,9 @@ export interface TitleRequestState {
   lockedLanguageProfileId: number | null;
   /** Books only: the editions of the active requests. */
   requestedWants?: WantSpec[];
+  /** Albums only: a request covers the whole album; `requestedRecordings` lists the tracks asked alone. */
+  wholeAlbumRequested?: boolean;
+  requestedRecordings?: string[];
 }
 
 export interface ListRequestsParams {
@@ -214,8 +226,9 @@ export class RequestsService {
     return firstValueFrom(this.http.delete<void>(`/api/requests/${id}`));
   }
 
-  approve(id: number) {
-    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, {}));
+  /** `wholeAlbum` widens a track request to the whole album. */
+  approve(id: number, wholeAlbum?: boolean) {
+    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, wholeAlbum ? { wholeAlbum } : {}));
   }
 
   decline(id: number, reason?: string) {
