@@ -200,7 +200,7 @@ describe('LibraryComponent — grid request', () => {
   });
 
   it('searches once the typing pauses, aborting the load a newer one replaces', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const { component } = createHarness();
       component.library.set(library(['movie']));
