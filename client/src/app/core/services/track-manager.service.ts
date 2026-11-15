@@ -61,6 +61,8 @@ export function launchPickFor(tracks: LaunchTracks | null | undefined, fileId: n
   return tracks?.fileId === fileId ? tracks : null;
 }
 
+type MediaFiles = { files?: { id: number; streamInfo?: any }[] };
+
 @Injectable({ providedIn: 'root' })
 export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -167,14 +169,15 @@ export class TrackManagerService {
     mediaId: number,
     mediaFileId: number,
     streamingApi: StreamingApiService,
-    media: { files?: { id: number; streamInfo?: any }[] } | null,
+    media: MediaFiles | null | Promise<MediaFiles | null>,
   ): Promise<SubtitleOption[]> {
     if (!mediaId) return [];
 
     try {
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-      const subs = await this.subtitlesApi.getForMedia(mediaId);
-      const file = media?.files?.find((f) => f.id === mediaFileId);
+      // The list request does not wait for the media GET, only the streamInfo merge does.
+      const [subs, item] = await Promise.all([this.subtitlesApi.getForMedia(mediaId), media]);
+      const file = item?.files?.find((f) => f.id === mediaFileId);
       const si = file?.streamInfo as any;
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn, streams: si?.subtitles });
       const rendersStyled = !!this.deviceProfile.engineTraits().rendersStyledSubtitles;

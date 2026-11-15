@@ -64,6 +64,7 @@ import { QoeReporter } from '../../core/services/qoe-reporter.service';
 import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
+  preloadShakaEngine,
   releaseEngineSurface,
   type EngineSurfaceKind,
 } from '../../core/services/playback-engine/engine-surface';
@@ -1175,6 +1176,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Opens the local engine on the route's item, at `resumeTime` when given; false when the launch did not run to its end. */
   private async startLocal(resumeTime: number | undefined): Promise<boolean> {
+    // The chunk downloads during the start requests; createShakaEngine awaits the same import.
+    if (!this.isTizen && !this.isWebOs && !this.isDesktopNative && !this.isNative) preloadShakaEngine();
     const qp = this.route.snapshot.queryParams;
     this.firstLoadSettled = new Promise<void>((resolve) => (this.settleFirstLoad = resolve));
     // Hoisted so the catch can anchor a remux fallback at the resume point.
@@ -1203,6 +1206,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.offlineMediaType = isMediaKind(download?.media?.type) ? download.media.type : undefined;
       }
 
+      // Minted in parallel with the other loads (time-to-first-frame critical path); awaited before headers are
+      // built.
+      const streamTokenPromise = this.isOfflinePlayback
+        ? null
+        : this.requireStreamToken();
+      streamTokenPromise?.catch(() => {});
+      // None needs the device probe: media, subtitle list and the EDL negotiatePlayback reads run alongside it.
+      const mediaPromise = this.mediaId && !this.isOfflinePlayback ? this.mediaService.getOne(this.mediaId) : null;
+      mediaPromise?.catch(() => {});
+      if (mediaPromise) void this.itemSubtitles(mediaPromise);
+      if (!this.isOfflinePlayback) void this.hasMuteRanges(this.mediaFileId);
+
       // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and
       // startQuality/startAt let the backend pre-spawn ffmpeg.
       await this.deviceProfileService.whenDesktopProbed();
@@ -1218,17 +1233,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           preRollFirst: this.preRollMayRun(resumeTime),
         });
       };
-      // Minted in parallel with the other loads (time-to-first-frame critical path); awaited before headers are
-      // built.
-      const streamTokenPromise = this.isOfflinePlayback
-        ? null
-        : this.requireStreamToken();
-      streamTokenPromise?.catch(() => {});
 
-      // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
-      if (this.mediaId && !this.isOfflinePlayback) {
-        const mediaPromise = this.mediaService.getOne(this.mediaId);
+      if (mediaPromise) {
         const media = await mediaPromise;
         this.media = media;
         this.resolveAudioTarget();
@@ -2579,11 +2586,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** The subtitle list of the file on screen, fetched on first use. */
-  private itemSubtitles(): Promise<SubtitleOption[]> {
+  private itemSubtitles(media: Media | null | Promise<Media> = this.media): Promise<SubtitleOption[]> {
     if (this.subtitleFetch?.fileId !== this.mediaFileId) {
       this.subtitleFetch = {
         fileId: this.mediaFileId,
-        list: this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media),
+        list: this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, media),
       };
     }
     return this.subtitleFetch.list;
