@@ -16,6 +16,13 @@ import { DeviceService } from './device.service';
 export const MAX_CACHE_SIZE = 10;
 /** A TV's WebView has a fraction of the memory: keep only the pages a back press is likely to return to. */
 export const TV_MAX_CACHE_SIZE = 3;
+/** Low-memory phones and desktops (`reducedEffects`): each detached page holds about a thousand DOM nodes. */
+export const REDUCED_MAX_CACHE_SIZE = 4;
+
+function cacheSize(device: DeviceService): number {
+  if (device.isTv()) return TV_MAX_CACHE_SIZE;
+  return device.reducedEffects() ? REDUCED_MAX_CACHE_SIZE : MAX_CACHE_SIZE;
+}
 
 /** Detaches and caches the DOM of routes flagged `data: { reuse: true }`, preserving signals, scroll and focus; opt-in to bound memory and skip unstable pages.
  *  Cached routes get no ngOnInit/ngOnDestroy: use `attached$` / `detached$` filtered by `keyFor(this.route.snapshot)`; parameterized routes cache per param value. */
@@ -28,7 +35,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   private nextRouteId = 0;
 
   private readonly injector = inject(Injector);
-  private readonly maxSize = inject(DeviceService).isTv() ? TV_MAX_CACHE_SIZE : MAX_CACHE_SIZE;
+  private readonly maxSize = cacheSize(inject(DeviceService));
 
   private readonly attachedSubject = new Subject<string>();
   /** The router calls `retrieve` twice per activation; one attach is announced once. */

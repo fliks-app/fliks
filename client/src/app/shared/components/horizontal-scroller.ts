@@ -1,4 +1,5 @@
 import {
+  afterNextRender,
   Component,
   DestroyRef,
   HostListener,
@@ -42,9 +43,32 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private static readonly EDGE_ZONE_PX = 80;
 
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
+  private readonly wrapEl = viewChild<ElementRef<HTMLElement>>('wrap');
+  /** Read once per hover: a layout read per mousemove would cost more than the arrows it drives. */
+  private wrapRect: DOMRect | null = null;
   private resizeObserver?: ResizeObserver;
   /** Offset per page: a detached subtree loses its scroll, and one instance can span pages (an episode page across its param). */
   private readonly parked = new Map<string, number>();
+
+  constructor() {
+    // Plain passive listeners: a template binding would run change detection on every scroll and mousemove.
+    afterNextRender(() => {
+      const scroller = this.scrollerEl()?.nativeElement;
+      const wrap = this.wrapEl()?.nativeElement;
+      if (!scroller || !wrap) return;
+      const onScroll = () => this.updateArrows();
+      const onMove = (e: MouseEvent) => this.onPointerMove(e);
+      const onLeave = () => this.onPointerLeave();
+      scroller.addEventListener('scroll', onScroll, { passive: true });
+      wrap.addEventListener('mousemove', onMove, { passive: true });
+      wrap.addEventListener('mouseleave', onLeave, { passive: true });
+      this.destroyRef.onDestroy(() => {
+        scroller.removeEventListener('scroll', onScroll);
+        wrap.removeEventListener('mousemove', onMove);
+        wrap.removeEventListener('mouseleave', onLeave);
+      });
+    });
+  }
 
   @HostListener('focusin', ['$event'])
   protected onFocusIn(event: FocusEvent): void {
@@ -126,7 +150,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   /** Signals are written only on change so high-frequency mousemove doesn't thrash change detection. */
   onPointerMove(event: MouseEvent) {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const rect = (this.wrapRect ??= (event.currentTarget as HTMLElement).getBoundingClientRect());
     const x = event.clientX - rect.left;
     const zone = HorizontalScrollerComponent.EDGE_ZONE_PX;
     const left = x <= zone;
@@ -136,6 +160,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   }
 
   onPointerLeave() {
+    this.wrapRect = null;
     if (this.showLeft()) this.showLeft.set(false);
     if (this.showRight()) this.showRight.set(false);
   }

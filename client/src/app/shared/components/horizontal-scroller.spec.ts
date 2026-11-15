@@ -34,7 +34,7 @@ describe('HorizontalScrollerComponent', () => {
 
   /** Returns the rail's stubbed scrollTo after parking an offset on it and
    *  driving one detach / reattach cycle through the reuse cache. */
-  function reattachWith(navigatedBack: boolean) {
+  async function reattachWith(navigatedBack: boolean) {
     const back = signal(navigatedBack);
     TestBed.configureTestingModule({
       providers: [
@@ -45,6 +45,8 @@ describe('HorizontalScrollerComponent', () => {
     });
     const fixture = TestBed.createComponent(HostStub);
     fixture.detectChanges();
+    // The scroll listener is attached after the first render.
+    await fixture.whenStable();
 
     const rail = fixture.nativeElement.querySelector('[data-scroller]') as HTMLElement;
     const scrollTo = vi.fn();
@@ -64,7 +66,8 @@ describe('HorizontalScrollerComponent', () => {
     (TestBed.inject(Router).events as Subject<RouterEvent>).next(new NavigationEnd(1, '/', '/'));
 
     // attached$ is emitted from a microtask inside retrieve().
-    return Promise.resolve().then(() => scrollTo);
+    await Promise.resolve();
+    return scrollTo;
   }
 
   it('VERDICT: restores the parked offset on a return, without smooth scroll', async () => {

@@ -95,6 +95,13 @@ export function detectDevice(): DetectResult {
   return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
   }
 
+/** `navigator.deviceMemory` is Chromium-only (secure contexts); where it is missing the full look stays. */
+function lowMemoryDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const gb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return gb !== undefined && gb <= 4;
+}
+
 /** Whether router view transitions are registered, i.e. whether the player's closing animation is theirs to run. */
 export function viewTransitionsEnabled(): boolean {
   return typeof document !== 'undefined' && !!document.startViewTransition;
@@ -123,6 +130,9 @@ export class DeviceService {
   readonly isDesktop = computed(() => this.formFactor() === 'desktop');
   readonly isTouch = computed(() => this.input() === 'touch');
   readonly isDpad = computed(() => this.input() === 'dpad');
+  private readonly lowMemory = lowMemoryDevice();
+  /** TV or at most 4 GB of RAM: drop backdrop blurs, filters and crossfades, keep fewer detached pages. Mirrored as `body.reduced-effects`. */
+  readonly reducedEffects = computed(() => this.isTv() || this.lowMemory);
 
   /** Downloads work only in a browser or Electron: Capacitor WebViews have no download handler and a TV has nowhere to save. */
   readonly canSaveFiles = computed(
@@ -203,6 +213,7 @@ export class DeviceService {
     body.classList.toggle('tablet', this.formFactor() === 'tablet');
     body.classList.toggle('phone', this.formFactor() === 'phone');
     html.classList.toggle('tv-host', this.formFactor() === 'tv');
+    body.classList.toggle('reduced-effects', this.reducedEffects());
 
     // Per-OS hook for CSS, mirrored on <html> because overlays are reparented out of <body>.
     const platforms: TvPlatform[] = ['androidtv', 'tizen', 'webos'];

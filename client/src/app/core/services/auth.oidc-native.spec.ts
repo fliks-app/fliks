@@ -31,7 +31,7 @@ describe('AuthService OpenID Connect on a phone shell', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: Router, useValue: { navigateByUrl: navigate, events: { subscribe: () => undefined } } },
-        { provide: DeviceService, useValue: { isTv: signal(false), tvPlatform: signal('none') } },
+        { provide: DeviceService, useValue: { isTv: signal(false), reducedEffects: signal(false), tvPlatform: signal('none') } },
       ],
     });
     auth = TestBed.inject(AuthService);

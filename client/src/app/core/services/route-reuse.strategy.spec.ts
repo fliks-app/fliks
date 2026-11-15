@@ -11,7 +11,12 @@ import {
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { DeviceService } from './device.service';
-import { CachingReuseStrategy, MAX_CACHE_SIZE, TV_MAX_CACHE_SIZE } from './route-reuse.strategy';
+import {
+  CachingReuseStrategy,
+  MAX_CACHE_SIZE,
+  REDUCED_MAX_CACHE_SIZE,
+  TV_MAX_CACHE_SIZE,
+} from './route-reuse.strategy';
 
 function snapshotFor(route: Route, params: Record<string, string> = {}): ActivatedRouteSnapshot {
   return { routeConfig: route, params } as unknown as ActivatedRouteSnapshot;
@@ -29,13 +34,16 @@ function handleWithDestroy(): DetachedRouteHandle & FakeHandle {
 describe('CachingReuseStrategy', () => {
   let events: Subject<unknown>;
 
-  function setup(isTv = false) {
+  function setup(isTv = false, reducedEffects = isTv) {
     events = new Subject<unknown>();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         { provide: Router, useValue: { events } },
-        { provide: DeviceService, useValue: { isTv: () => isTv } },
+        {
+          provide: DeviceService,
+          useValue: { isTv: () => isTv, reducedEffects: () => reducedEffects },
+        },
       ],
     });
     return TestBed.inject(CachingReuseStrategy);
@@ -99,6 +107,16 @@ describe('CachingReuseStrategy', () => {
     const strategy = setup(true);
     const route: Route = { path: 'libraries/:libraryName' };
     const handles = Array.from({ length: TV_MAX_CACHE_SIZE + 1 }, () => handleWithDestroy());
+    handles.forEach((h, i) => strategy.store(snapshotFor(route, { libraryName: `lib${i}` }), h));
+
+    expect(handles[0].destroy).toHaveBeenCalledTimes(1);
+    expect(handles[1].destroy).not.toHaveBeenCalled();
+  });
+
+  it('keeps fewer pages alive on a low-memory non-TV device', () => {
+    const strategy = setup(false, true);
+    const route: Route = { path: 'libraries/:libraryName' };
+    const handles = Array.from({ length: REDUCED_MAX_CACHE_SIZE + 1 }, () => handleWithDestroy());
     handles.forEach((h, i) => strategy.store(snapshotFor(route, { libraryName: `lib${i}` }), h));
 
     expect(handles[0].destroy).toHaveBeenCalledTimes(1);
