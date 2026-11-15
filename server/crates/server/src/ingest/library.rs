@@ -65,6 +65,8 @@ pub struct Outcome {
     pub errors: Vec<String>,
     /// Files refused for now (a series' scene mapping not known yet): the caller retries them.
     pub retry: Vec<String>,
+    /// Album files left out because they are tracks nobody asked for (`music.unrequested_tracks`).
+    pub skipped: Vec<PathBuf>,
 }
 
 /// An episode row with its season, as rule 20 reads it.
@@ -128,7 +130,12 @@ pub async fn ingest(
     let allowed = transfer::companion_exts(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    let chosen = select(&media, std::mem::take(&mut req.files)).await;
+    let mut chosen = select(&media, std::mem::take(&mut req.files)).await;
+    if media.media_type == MediaKind::Album && super::music::skips_unrequested(st).await {
+        let paths: Vec<PathBuf> = chosen.iter().map(|f| f.path.clone()).collect();
+        out.skipped = super::music::unrequested(st, media.id, &paths).await?;
+        chosen.retain(|f| !out.skipped.contains(&f.path));
+    }
     let parts = if media.media_type == MediaKind::Book {
         book_parts(&chosen)
     } else {

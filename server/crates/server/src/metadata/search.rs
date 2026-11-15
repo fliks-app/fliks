@@ -280,7 +280,7 @@ async fn mark_state(
             r#"SELECT DISTINCT ON (r.provider, r."externalId") r.provider, r."externalId", r.status::text
                FROM requests r
                LEFT JOIN provider_namespaces pn ON pn.name = r.provider
-               WHERE r."userId" = $1 AND r."mediaType" = $2 AND r.kind = 'add'
+               WHERE r."userId" = $1 AND r."mediaType" = $2 AND r.kind = 'add' AND r.recordings IS NULL
                  AND r."namespaceGeneration" IS NOT DISTINCT FROM pn.generation
                  AND (r.provider, r."externalId") IN (SELECT * FROM unnest($3::text[], $4::text[]))
                ORDER BY r.provider, r."externalId", r."createdAt" DESC, r.id DESC"#,

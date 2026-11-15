@@ -140,7 +140,7 @@ pub(crate) async fn track_rows(
         r#"SELECT i.id, jsonb_build_object(
   'itemId', i.id, 'editionId', i."editionId", 'mediaFileId', pf.id, 'hasFile', pf.id IS NOT NULL,
   'orphaned', td."orphanedAt" IS NOT NULL, 'discNumber', td."discNumber", 'discTitle', td."discTitle",
-  'position', td.position, 'trackNumber', td."trackNumber", 'label', td.label, 'title', COALESCE(i.title, ''),
+  'position', td.position, 'trackNumber', td."trackNumber", 'recordingId', td."recordingMbid", 'label', td.label, 'title', COALESCE(i.title, ''),
   'durationSeconds', COALESCE(td."durationMs"::float8 / 1000, pf.dur), 'explicit', td.explicit,
   'gain', td.gain, 'peak', td.peak,
   'artists', COALESCE(

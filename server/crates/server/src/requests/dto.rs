@@ -70,6 +70,8 @@ pub struct CreateRequest {
     pub title: String,
     pub seasons: Option<Vec<i64>>,
     pub wants: Option<Vec<WantSpec>>,
+    /// MusicBrainz recording ids of an album request scoped to some tracks; `None` is the whole album.
+    pub recordings: Option<Vec<String>>,
     pub quality_profile_id: Option<i32>,
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
@@ -106,6 +108,17 @@ const BOOK_KEYS: [&str; 7] = [
     "folderId",
 ];
 
+const ALBUM_KEYS: [&str; 8] = [
+    "mediaType",
+    "kind",
+    "externalId",
+    "title",
+    "wants",
+    "recordings",
+    "libraryId",
+    "folderId",
+];
+
 pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
     let o = object(v);
     let work_kind = o
@@ -114,7 +127,12 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         .and_then(MediaKind::parse)
         .filter(|k| matches!(k, MediaKind::Book | MediaKind::Album));
     let book = work_kind.is_some();
-    let mut c = Check::new(&o, if book { &BOOK_KEYS } else { &VIDEO_KEYS }, "");
+    let keys: &[&str] = match work_kind {
+        Some(MediaKind::Album) => &ALBUM_KEYS,
+        Some(_) => &BOOK_KEYS,
+        None => &VIDEO_KEYS,
+    };
+    let mut c = Check::new(&o, keys, "");
     let media_type = c.kind("mediaType", false);
     let kind = c.one_of("kind", &KINDS, true);
     let delete = kind.as_deref() == Some("delete");
@@ -136,8 +154,10 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
     if !o.get("title").is_some_and(Value::is_string) {
         c.err("title", "must be a string");
     }
-    if book && delete && o.contains_key("wants") {
-        c.errs.push("property wants should not exist".into());
+    for key in ["wants", "recordings"] {
+        if book && delete && o.contains_key(key) {
+            c.errs.push(format!("property {key} should not exist"));
+        }
     }
     let wants = match o.get("wants") {
         Some(w) if book && !delete => {
@@ -158,6 +178,11 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
             None
         }
         _ => None,
+    };
+    let recordings = if work_kind == Some(MediaKind::Album) && !delete {
+        album_recordings(&mut c)
+    } else {
+        None
     };
     let seasons = if book {
         None
@@ -193,11 +218,29 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         title,
         seasons,
         wants,
+        recordings,
         quality_profile_id: quality.value(),
         language_profile_id: language.value(),
         library_id: library.value(),
         folder_id: folder.value(),
     })
+}
+
+/// `recordings` of an album request: MusicBrainz recording ids, at least one, no duplicate.
+fn album_recordings(c: &mut Check) -> Option<Vec<String>> {
+    let ids = c.text_array(
+        "recordings",
+        |v| Namespace::MUSICBRAINZ.core()?.normalize(v),
+        "a MusicBrainz recording id",
+    )?;
+    let mut distinct = ids.clone();
+    distinct.sort_unstable();
+    distinct.dedup();
+    if ids.is_empty() || distinct.len() != ids.len() {
+        c.err("recordings", "must contain at least one distinct recording");
+        return None;
+    }
+    Some(ids)
 }
 
 /// A video title: `tmdbId`, or the `provider` and `externalId` of a search result, never both.
@@ -358,6 +401,21 @@ pub fn update_request(v: Value) -> Res<UpdateRequest> {
         library_id: opt_int(&mut c, "libraryId", true, None),
     };
     c.finish(u)
+}
+
+/// `wholeAlbum` of an approval: widens a track request to the whole album.
+pub fn approve(v: Value) -> Res<bool> {
+    let o = object(v);
+    let mut c = Check::new(&o, &["wholeAlbum"], "");
+    let whole = match c.get("wholeAlbum") {
+        None => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            c.err("wholeAlbum", "must be a boolean value");
+            false
+        }
+    };
+    c.finish(whole)
 }
 
 /// `reason` of a decline: `@IsOptional @IsString @MaxLength(2000)`.

@@ -162,7 +162,9 @@ pub async fn want_recording(
         .map_err(db_err)?;
     let (media, item) = match known {
         Some((m, i)) => {
-            want::monitor(&st.db, m, i, false).await.map_err(db_err)?;
+            want::monitor(&st.db, m, &[i], false)
+                .await
+                .map_err(db_err)?;
             (m, i)
         }
         None => match &recording {

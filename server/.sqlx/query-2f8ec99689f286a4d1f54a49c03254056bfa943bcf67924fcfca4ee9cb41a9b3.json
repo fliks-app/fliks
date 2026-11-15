@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\"\n        FROM requests WHERE id = $1",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\", recordings\n        FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e\n          WHERE e.\"mediaId\" = $1 AND e.kind = r.\"mediaType\" AND e.provider = r.provider\n          AND e.value = r.\"externalId\")\n        ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -157,11 +157,23 @@
             "name": "wants"
           }
         }
+      },
+      {
+        "ordinal": 15,
+        "name": "recordings",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "recordings"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -179,8 +191,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "c25fe9f95a6fd1d489e2537b14f37026b6207fddcc4d8e245d0b42c2988d5ea3"
+  "hash": "2f8ec99689f286a4d1f54a49c03254056bfa943bcf67924fcfca4ee9cb41a9b3"
 }

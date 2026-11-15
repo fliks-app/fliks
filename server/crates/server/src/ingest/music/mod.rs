@@ -327,6 +327,60 @@ pub async fn refresh(
     Ok(changed.len() as i64)
 }
 
+/// The setting `music.unrequested_tracks`: `skip` keeps the tracks nobody asked for out of the library.
+pub async fn skips_unrequested(st: &AppState) -> bool {
+    setting_value(&st.db, "music.unrequested_tracks")
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|v| v == "skip")
+}
+
+/// The `files` that would land on an unmonitored track of an album that has a monitored one.
+pub async fn unrequested(
+    st: &AppState,
+    media: i32,
+    files: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let mut c = st.db.acquire().await.map_err(|e| e.to_string())?;
+    let wanted: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM items WHERE "mediaId" = $1 AND monitored)"#,
+    )
+    .bind(media)
+    .fetch_one(&mut *c)
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(edition) = target_edition(&mut c, media)
+        .await
+        .map_err(|e| e.to_string())?
+        .filter(|_| wanted)
+    else {
+        return Ok(vec![]);
+    };
+    let (mut free, mut next) = Default::default();
+    load_free(&mut c, edition, &mut free, &mut next)
+        .await
+        .map_err(|e| e.to_string())?;
+    let seps = separators_of(st).await;
+    let mut out = vec![];
+    for path in files {
+        let Ok(p) = probe(st, path, false).await else {
+            continue;
+        };
+        let name = file_name(path);
+        let tags =
+            TrackTags::read(&p.info, &seps, stem(&name)).with_folder_disc(&path.to_string_lossy());
+        if free[&edition]
+            .iter()
+            .any(|f| !f.monitored && f.pairs(&tags))
+            && !free[&edition].iter().any(|f| f.monitored && f.pairs(&tags))
+        {
+            out.push(path.clone());
+        }
+    }
+    Ok(out)
+}
+
 struct FileRow {
     id: i32,
     rel: String,
@@ -341,6 +395,7 @@ struct Free {
     number: Option<i32>,
     recording: Option<String>,
     title: Option<String>,
+    monitored: bool,
 }
 
 impl Free {
@@ -378,9 +433,9 @@ async fn load_free(
     let std::collections::hash_map::Entry::Vacant(slot) = free.entry(edition) else {
         return Ok(());
     };
-    type Row = (i32, i32, Option<i32>, Option<String>, Option<String>);
+    type Row = (i32, i32, Option<i32>, Option<String>, Option<String>, bool);
     let list: Vec<Row> = sqlx::query_as(
-        r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, i.title
+        r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, i.title, i.monitored
            FROM items i JOIN track_details td ON td."itemId" = i.id
            WHERE i."editionId" = $1
              AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id)
@@ -391,12 +446,13 @@ async fn load_free(
     .await?;
     slot.insert(
         list.into_iter()
-            .map(|(item, disc, number, recording, title)| Free {
+            .map(|(item, disc, number, recording, title, monitored)| Free {
                 item,
                 disc,
                 number,
                 recording,
                 title,
+                monitored,
             })
             .collect(),
     );

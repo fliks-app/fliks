@@ -309,6 +309,7 @@ fn ingested(sources: &[(PathBuf, String)], out: &library::Outcome) -> Vec<String
         .filter(|(staged, _)| {
             out.imported.iter().any(|i| i.source_path == *staged)
                 || out.already_present.iter().any(|p| Path::new(p) == staged)
+                || out.skipped.contains(staged)
         })
         .map(|(_, rel)| rel.clone())
         .collect()
@@ -997,6 +998,7 @@ mod tests {
             already_present: vec![p("b").to_string_lossy().into_owned()],
             errors: vec!["c.epub: not a book file".into()],
             retry: vec![],
+            skipped: vec![],
         };
         assert_eq!(ingested(&sources, &out), ["a.epub", "b.epub"]);
     }

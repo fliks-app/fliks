@@ -11,6 +11,8 @@ mod rules;
 pub mod services;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod track_tests;
 
 use crate::{events::ExternalId, state::AppState};
 use axum::{
@@ -84,6 +86,8 @@ pub struct ImportSpec {
     pub folder_id: Option<i32>,
     pub seasons: Option<Vec<i64>>,
     pub wants: Option<Vec<fliks_domain::media::wants::WantSpec>>,
+    /// The recordings of an album request scoped to some tracks.
+    pub recordings: Option<Vec<String>>,
 }
 
 /// The media a delete request removed: its title, the folder to purge when it has one, and the media

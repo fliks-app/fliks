@@ -107,23 +107,23 @@ pub async fn held_track(
     .await
 }
 
-/// Makes `item` wanted and its album monitored. An album this call created (`fresh`) keeps only that track
-/// of its target edition monitored; one the library already had keeps its other tracks as they are.
-pub async fn monitor(db: &PgPool, media: i32, item: i32, fresh: bool) -> sqlx::Result<()> {
+/// Makes `items` wanted and their album monitored. An album this call created (`fresh`) keeps only those
+/// tracks of its target edition monitored; one the library already had keeps its other tracks as they are.
+pub async fn monitor(db: &PgPool, media: i32, items: &[i32], fresh: bool) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     if fresh {
         sqlx::query(
             r#"UPDATE items SET monitored = false
-                WHERE "mediaId" = $1 AND id <> $2
+                WHERE "mediaId" = $1 AND id <> ALL($2)
                   AND "editionId" = (SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1)"#,
         )
         .bind(media)
-        .bind(item)
+        .bind(items)
         .execute(&mut *tx)
         .await?;
     }
-    sqlx::query("UPDATE items SET monitored = true WHERE id = $1")
-        .bind(item)
+    sqlx::query("UPDATE items SET monitored = true WHERE id = ANY($1)")
+        .bind(items)
         .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE media SET monitored = true WHERE id = $1 AND NOT monitored")
@@ -141,6 +141,21 @@ pub async fn want(
     existed: bool,
 ) -> Result<i32, Refused> {
     let item = held_track(st, media, recording, existed).await?;
-    monitor(&st.db, media, item, !existed).await?;
+    monitor(&st.db, media, &[item], !existed).await?;
     Ok(item)
+}
+
+/// `want` for several recordings of one album: each is resolved, then all are wanted together.
+pub async fn want_many(
+    st: &AppState,
+    media: i32,
+    recordings: &[Recording<'_>],
+    existed: bool,
+) -> Result<Vec<i32>, Refused> {
+    let mut items = vec![];
+    for r in recordings {
+        items.push(held_track(st, media, *r, existed).await?);
+    }
+    monitor(&st.db, media, &items, !existed).await?;
+    Ok(items)
 }

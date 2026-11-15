@@ -129,3 +129,72 @@ async fn a_single_track_is_imported_alone_and_a_file_without_a_number_keeps_its_
     assert_eq!(names(&dest), ["05 - Low Tide.flac", "hidden.flac"]);
     assert!(one.exists(), "a copy keeps the source");
 }
+
+/// An album with a monitored track 1 and an unmonitored track 2, both without a file.
+async fn two_tracks(c: &Ctx, m: i32) {
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO editions (id, "mediaId", family) VALUES (900, {m}, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", monitored, title) VALUES
+             (901, {m}, 900, true, 'Low Tide'), (902, {m}, 900, false, 'High Tide');
+           INSERT INTO track_details ("itemId", "mediaId", position, "discNumber", "trackNumber") VALUES
+             (901, {m}, 1, 1, 1), (902, {m}, 2, 1, 2);
+           INSERT INTO album_details ("mediaId", "targetEditionId") VALUES ({m}, 900)"#
+    )))
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+}
+
+async fn bring_two(c: &Ctx, m: i32, setting: Option<&str>) -> library::Outcome {
+    two_tracks(c, m).await;
+    if let Some(v) = setting {
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ('music.unrequested_tracks', $1)",
+        )
+        .bind(v)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    }
+    let inbox = c.dir.join("inbox/rel");
+    let (one, two) = (inbox.join("01.flac"), inbox.join("02.flac"));
+    touch(&one, b"x");
+    touch(&two, b"y");
+    let answers = |t: &str, n: u32| track(t, n, 1, 1);
+    c.fake.script(
+        "POST",
+        "/v1/probe",
+        (0..3)
+            .flat_map(|_| [answers("Low Tide", 1), answers("High Tide", 2)])
+            .collect(),
+    );
+    bring(c, m, &[&one, &two], Method::Copy).await
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unrequested_track_is_imported_unmonitored_by_default(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = album(&c).await;
+    let out = bring_two(&c, m, None).await;
+    assert_eq!(
+        (out.imported.len(), out.skipped.len()),
+        (2, 0),
+        "{:?}",
+        out.errors
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unrequested_track_is_skipped_when_the_setting_says_so(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = album(&c).await;
+    let out = bring_two(&c, m, Some("skip")).await;
+    assert_eq!(
+        (out.imported.len(), out.skipped.len()),
+        (1, 1),
+        "{:?}",
+        out.errors
+    );
+    let dest = c.dir.join("music/Cora Vell/Salt Meadows (2019)");
+    assert_eq!(names(&dest), ["01 - Low Tide.flac"]);
+}
