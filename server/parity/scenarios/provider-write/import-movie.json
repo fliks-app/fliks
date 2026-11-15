@@ -237,7 +237,6 @@
             "order": 0,
             "person": {
               "avatarUrl": "/api/images/person/201?v=612f4295",
-              "biography": "Old bio",
               "birthday": null,
               "deathday": null,
               "departments": [
@@ -258,7 +257,6 @@
             "order": 1,
             "person": {
               "avatarUrl": null,
-              "biography": null,
               "birthday": null,
               "deathday": null,
               "departments": [
@@ -289,7 +287,6 @@
             "job": "Director",
             "person": {
               "avatarUrl": null,
-              "biography": null,
               "birthday": null,
               "deathday": null,
               "departments": [
@@ -309,7 +306,6 @@
             "job": "Cameo",
             "person": {
               "avatarUrl": "/api/images/person/201?v=612f4295",
-              "biography": "Old bio",
               "birthday": null,
               "deathday": null,
               "departments": [
