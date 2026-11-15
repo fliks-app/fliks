@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackEngine } from './playback-engine';
-import { isTizenAvplayAvailable } from './tizen-engine';
+import { isTizenAvplayAvailable } from './tizen-avplay';
 
 export type EngineSurfaceKind = 'shaka' | 'webos' | 'tizen' | 'native' | 'desktop';
 

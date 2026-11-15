@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnDestroy,
@@ -71,7 +72,7 @@ import {
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { directPlayMime } from '../../core/services/device-capabilities/direct-play-mime';
-import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
+import { isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-avplay';
 import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { PlayerScreen } from './player-screen';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
@@ -465,6 +466,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
   readonly chrome = inject(ControlsVisibilityService);
+  private readonly destroyRef = inject(DestroyRef);
+  /** Native and passive: a template `(mousemove)` would mark the player for a check on every move. */
+  private readonly _pointerMove = afterNextRender(() => {
+    const el = this.containerEl()?.nativeElement;
+    if (!el) return;
+    const onMove = () => this.chrome.onPointerMove();
+    el.addEventListener('mousemove', onMove, { passive: true });
+    this.destroyRef.onDestroy(() => el.removeEventListener('mousemove', onMove));
+  });
   /** A seek still in flight pins the bar too: one slower than the hide delay
    *  would otherwise retract it before the playhead landed. */
   private readonly _chromePins = (this.chrome.configure({
@@ -591,6 +601,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly introMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
   /** Outro / end-credits marker — drives the "Épisode suivant" floating button. */
   readonly outroMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
+  /** In the credits, or the last 30 s without a marker. */
+  private readonly nearEnd = computed(() => {
+    const d = this.duration();
+    return d > 0 && this.currentTime() >= (this.outroMarker()?.startSeconds ?? d - 30);
+  });
+  /** Warms the next item's media read (cached, in-flight shared) so the next start joins it; no session is opened. */
+  private readonly warmNextEffect = effect(() => {
+    const next = this.queueCtl.upNext();
+    if (!next || !this.nearEnd() || this.isOfflinePlayback) return;
+    untracked(() => void this.mediaService.getOne(next.mediaId).catch(() => {}));
+  });
   /** Embedded chapters from playback-info (MKV/MP4). */
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Set after a manual seek to suppress auto-skip for a short window. */
@@ -1074,7 +1095,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine!.configure?.({
         abr: {
           enabled: savedQualityId === 'auto',
-          defaultBandwidthEstimate: 100_000_000,
+          defaultBandwidthEstimate: this.qualityManager.startBandwidthEstimate(),
         },
         streaming: {
           // connectionTimeout defaults to 10s, well under a legitimate
@@ -3516,9 +3537,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.desktopCropApplied.set(!!c && !!this.engine);
       return;
     }
-    if (this.engine instanceof NativeEngine || this.engine instanceof TizenEngine) {
+    // Duck-typed: the native and AVPlay engines crop on their plane, and naming AVPlay here would bundle it.
+    const plane = this.engine as Pick<NativeEngine, 'setCrop'> | null;
+    if (typeof plane?.setCrop === 'function') {
       const { width, height } = this.sourceSize();
-      this.nativeCropApplied.set(this.engine.setCrop(c, width, height));
+      this.nativeCropApplied.set(plane.setCrop(c, width, height));
       return;
     }
     this.webCrop.refresh();
@@ -3885,6 +3908,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // fatal error would read as playback carrying on and clear it from the verdict.
       if (this.session.isLocal() && this.engine && !this.state.error()) {
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
+        if (!this.isOfflinePlayback) this.qualityManager.rememberBandwidth(payload.qoe?.bandwidthBps);
         void this.qoe.refresh(this.engine, sessionId);
       }
     }

@@ -320,6 +320,7 @@ function createHarness(opts: {
         provide: DeviceService,
         useValue: {
           isTv: () => false,
+          reducedEffects: () => false,
           isTouch: () => false,
           isDpad: () => false,
           isDesktop: () => true,
@@ -3613,5 +3614,24 @@ describe('PlayerComponent review fixes', () => {
     h.component.elsewhere = () => ({ paused: () => false, position: () => 600 });
 
     expect(h.component.keyboard.host.playhead()).toEqual({ paused: false, currentTime: 600 });
+  });
+});
+
+describe('PlayerComponent next item warm-up', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('reads the next item media once the credits start', () => {
+    const h = createHarness();
+    const getOne = TestBed.inject(MediaService).getOne as ReturnType<typeof vi.fn>;
+    h.component.queueCtl.upNext = () => ({ mediaId: 42, title: 'next' });
+    h.state.duration.set(100);
+    h.component.outroMarker.set({ startSeconds: 80, endSeconds: 100 });
+    h.state.currentTime.set(50);
+    TestBed.tick();
+    expect(getOne).not.toHaveBeenCalledWith(42);
+
+    h.state.currentTime.set(81);
+    TestBed.tick();
+    expect(getOne).toHaveBeenCalledWith(42);
   });
 });

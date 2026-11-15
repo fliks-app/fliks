@@ -9,6 +9,7 @@ import {
 import { SubtitleOverlay, type SubtitleHandle } from './subtitle-overlay.util';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
+import { isTizenAvplayAvailable, isTizenCropSupported } from './tizen-avplay';
 
 /** Samsung Tizen AVPlay backend: a singleton bound to the `<object id="fliks-avplay">` declared at HTML parse time (dynamic creation fails),
  * rendering on a plane behind the WebView; HEVC/AV1/Dolby and ABR are native since Shaka chokes on Tizen 6.5 MSE. */
@@ -75,17 +76,7 @@ const storeFlag = (on: boolean): void => {
   } catch { /* storage unavailable */ }
 };
 
-export const isTizenAvplayAvailable = (): boolean => {
-  return (
-    typeof window !== 'undefined' &&
-    typeof (window as unknown as { webapis?: unknown }).webapis !== 'undefined' &&
-    typeof (window as unknown as { webapis?: { avplay?: unknown } }).webapis?.avplay === 'object'
-  );
-};
-
-/** Firmware that exposes the video region-of-interest API can crop letterbox bars on the plane. */
-export const isTizenCropSupported = (): boolean =>
-  isTizenAvplayAvailable() && typeof webapis.avplay.setVideoRoi === 'function';
+export { isTizenAvplayAvailable, isTizenCropSupported };
 
 /** Flip once CURRENT_BANDWIDTH is confirmed to be bps on a real TV: a wrong unit would flag every stall as network. */
 const TIZEN_BANDWIDTH_UNIT_VERIFIED = false;

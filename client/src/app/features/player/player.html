@@ -15,7 +15,6 @@
   [class.closing]="closing()"
   [class.player-hide-cursor]="!chrome.visible() && !elsewhere()"
   [class.native-player]="!!nativeEngine"
-  (mousemove)="chrome.onPointerMove()"
   (wheel)="chrome.wakeFromPointerGesture()"
   (click)="chrome.wakeFromPointerGesture()"
 >

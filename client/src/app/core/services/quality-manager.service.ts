@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine, VariantTrack } from './playback-engine/playback-engine';
 import { bucketResolutionLabel, widthForProfile, type PlaybackMode } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
+import { ServerConfigService } from './server-config.service';
 
 export interface QualityOption {
   id: string;      // 'auto' | 'original' | '2160p' | '1080p' | 'eco-1080p' | ...
@@ -24,6 +25,8 @@ export const BEST_QUALITY_ID = 'best';
 /** ABR: prefer starting at 720p+ and staying there; go below only when no variant meets the restriction. */
 // Seed high so Shaka picks the top variant on the first segment; ABR recalibrates once real bandwidth is observed.
 const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 100_000_000;
+/** Last measured bandwidth per server, seeding the next start instead of {@link ABR_DEFAULT_BANDWIDTH_ESTIMATE}. */
+const BANDWIDTH_STORAGE_KEY = 'player.bandwidthEstimate';
 
 /** Find a variant track by profile name in its URL (e.g. '480p' matches '/480p/'), or null. */
 export function findVariantByProfileName(tracks: VariantTrack[], profileName: string): VariantTrack | null {
@@ -50,6 +53,7 @@ export function highestRungId(options: QualityOption[]): string | undefined {
 export class QualityManagerService {
   private readonly translate = inject(TranslateService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly serverConfig = inject(ServerConfigService);
   readonly activeQualityId = signal('auto');
   readonly availableQualities = signal<QualityOption[]>([]);
   readonly activeResolution = signal('');
@@ -128,7 +132,7 @@ export class QualityManagerService {
         engine.configure?.({
           abr: {
             enabled: true,
-            defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
+            defaultBandwidthEstimate: this.startBandwidthEstimate(),
             // useNetworkInformation is conservative or unsupported; seed from our estimate and let Shaka measure real segments.
             useNetworkInformation: false,
             switchInterval: 5,              // Re-evaluate every 5s (default: 8)
@@ -220,6 +224,30 @@ export class QualityManagerService {
       );
     } catch {
       /* private mode / quota */
+    }
+  }
+
+  /** ABR seed for a start: what the player last measured on this server, else {@link ABR_DEFAULT_BANDWIDTH_ESTIMATE}. */
+  startBandwidthEstimate(): number {
+    try {
+      const bps = (JSON.parse(localStorage.getItem(BANDWIDTH_STORAGE_KEY) ?? '{}') as Record<string, unknown>)[
+        this.serverConfig.serverUrl()
+      ];
+      return typeof bps === 'number' && bps > 0 ? bps : ABR_DEFAULT_BANDWIDTH_ESTIMATE;
+    } catch {
+      return ABR_DEFAULT_BANDWIDTH_ESTIMATE;
+    }
+  }
+
+  /** Store the engine's bandwidth estimate for this server; an unmeasured value is ignored. */
+  rememberBandwidth(bps: number | null | undefined): void {
+    if (!bps || !Number.isFinite(bps) || bps <= 0) return;
+    try {
+      const all = JSON.parse(localStorage.getItem(BANDWIDTH_STORAGE_KEY) ?? '{}') as Record<string, number>;
+      all[this.serverConfig.serverUrl()] = Math.round(bps);
+      localStorage.setItem(BANDWIDTH_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+      /* private mode / quota / corrupt entry */
     }
   }
 

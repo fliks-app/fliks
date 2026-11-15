@@ -11,6 +11,7 @@ export type {
   QoeEngineName,
 } from './playback-engine';
 export { NativeEngine } from './native-engine';
-export { TizenEngine, isTizenAvplayAvailable } from './tizen-engine';
+export { TizenEngine } from './tizen-engine';
+export { isTizenAvplayAvailable } from './tizen-avplay';
 export { WebOsEngine } from './webos-engine';
 export { SubtitleOverlay } from './subtitle-overlay.util';
