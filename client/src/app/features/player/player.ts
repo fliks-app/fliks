@@ -606,12 +606,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const d = this.duration();
     return d > 0 && this.currentTime() >= (this.outroMarker()?.startSeconds ?? d - 30);
   });
+  private readonly warmNextEffect = effect(() => this.warmNext());
   /** Warms the next item's media read (cached, in-flight shared) so the next start joins it; no session is opened. */
-  private readonly warmNextEffect = effect(() => {
+  warmNext(): void {
     const next = this.queueCtl.upNext();
     if (!next || !this.nearEnd() || this.isOfflinePlayback) return;
     untracked(() => void this.mediaService.getOne(next.mediaId).catch(() => {}));
-  });
+  }
   /** Embedded chapters from playback-info (MKV/MP4). */
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Set after a manual seek to suppress auto-skip for a short window. */

@@ -321,6 +321,7 @@ function createHarness(opts: {
         useValue: {
           isTv: () => false,
           isAndroidNative: () => false,
+          isIosNative: () => false,
           reducedEffects: () => false,
           isTouch: () => false,
           isDpad: () => false,
@@ -3628,11 +3629,11 @@ describe('PlayerComponent next item warm-up', () => {
     h.state.duration.set(100);
     h.component.outroMarker.set({ startSeconds: 80, endSeconds: 100 });
     h.state.currentTime.set(50);
-    TestBed.tick();
+    h.component.warmNext();
     expect(getOne).not.toHaveBeenCalledWith(42);
 
     h.state.currentTime.set(81);
-    TestBed.tick();
+    h.component.warmNext();
     expect(getOne).toHaveBeenCalledWith(42);
   });
 });
