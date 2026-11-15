@@ -95,6 +95,7 @@ pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
             .unwrap_or("auto")
             .to_owned(),
         subtitle_prewarm: d.subtitle_prewarm,
+        sprite_decode: d.sprite_decode,
         throttle_enabled: get("streaming_throttle_enabled") != Some("false"),
         throttle_threshold_seconds: jsnum::max(
             MIN_THROTTLE_THRESHOLD_SECONDS,
