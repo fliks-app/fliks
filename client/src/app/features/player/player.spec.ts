@@ -282,7 +282,7 @@ function createHarness(opts: {
         },
       },
       { provide: CastSettingsService, useValue: { get: () => ({ maxQuality: 'auto' }) } },
-      { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
+      { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u, serverUrl: () => '' } },
       { provide: NavigationHistoryService, useValue: { originUrl: null } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn() } },
       { provide: NavbarService, useValue: { markAsBackNavigation: vi.fn() } },

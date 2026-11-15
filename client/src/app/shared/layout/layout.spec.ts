@@ -136,7 +136,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
               })),
         },
       },
-      { provide: ServerConfigService, useValue: {} },
+      { provide: ServerConfigService, useValue: { serverUrl: () => '' } },
       {
         provide: SseService,
         useValue: {

@@ -113,7 +113,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: SubtitlesApiService, useValue: subtitlesApi },
       { provide: AppSettingsService, useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => true } },
       { provide: AuthService, useValue: { ensureStreamToken: async () => 'st', getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({ id: 1 }) } },
-      { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
+      { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
       { provide: PlayerSettingsService, useValue: playerSettings },
       { provide: TrackManagerService, useValue: trackManager },
       { provide: MediaService, useValue: mediaService },
