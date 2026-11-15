@@ -70,6 +70,19 @@ fn size_of(query: Option<&str>) -> &'static str {
     }
 }
 
+/// A fallback is revalidated so the sized file replaces it once made; a `?v=<hash>` URL names fixed bytes.
+fn cache_control(fallback: bool, query: Option<&str>) -> HeaderValue {
+    let versioned = query
+        .unwrap_or_default()
+        .split('&')
+        .any(|kv| kv.strip_prefix("v=").is_some_and(|v| !v.is_empty()));
+    HeaderValue::from_static(match (fallback, versioned) {
+        (true, _) => "no-cache",
+        (false, true) => "public, max-age=31536000, immutable",
+        (false, false) => "public, max-age=86400",
+    })
+}
+
 /// The stored image at `size`, else the full one.
 pub async fn read(t: &Target, size: Size) -> Option<Vec<u8>> {
     for s in [size, Size::Full] {
@@ -135,10 +148,7 @@ async fn serve(
         r.map(Body::new).into_response()
     };
     let h = res.headers_mut();
-    h.insert(
-        CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=86400"),
-    );
+    h.insert(CACHE_CONTROL, cache_control(served != size, query));
     if served != size {
         h.insert("x-image-size-served", HeaderValue::from_static("full"));
     }
@@ -165,5 +175,17 @@ mod tests {
         assert_eq!(size_of(Some("size=huge")), "full");
         assert_eq!(size_of(Some("size=")), "full");
         assert_eq!(size_of(None), "full");
+    }
+
+    #[test]
+    fn cache_control_by_version_and_fallback() {
+        let cc = |f, q| cache_control(f, q).to_str().unwrap().to_owned();
+        assert_eq!(
+            cc(false, Some("v=ab12&size=thumb")),
+            "public, max-age=31536000, immutable"
+        );
+        assert_eq!(cc(true, Some("v=ab12&size=thumb")), "no-cache");
+        assert_eq!(cc(false, Some("v=&size=thumb")), "public, max-age=86400");
+        assert_eq!(cc(false, None), "public, max-age=86400");
     }
 }

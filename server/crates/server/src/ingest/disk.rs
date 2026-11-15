@@ -789,7 +789,7 @@ pub async fn preview(
         return Err(AppError::bad_request("Path must be absolute"));
     }
     let root = resolve(&clean, "/");
-    match fs::metadata(&root) {
+    match tokio::fs::metadata(&root).await {
         Err(_) => return Err(AppError::bad_request(format!("Path not found: {root}"))),
         Ok(m) if !m.is_dir() => {
             return Err(AppError::bad_request(format!("Not a directory: {root}")));

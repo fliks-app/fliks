@@ -143,20 +143,19 @@ pub fn to_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
     if let Some(o) = orientation {
         img.apply_orientation(o);
     }
-    resized(&img, u32::MAX, false)
+    encode(&img, false)
 }
 
-/// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.
-fn resized(img: &DynamicImage, width: u32, png: bool) -> Option<Vec<u8>> {
-    let (w, h) = (img.width(), img.height());
-    let resized;
-    let img = if w > width {
+/// `width` wide with the source's `(w, h)` aspect, or `None` when that would enlarge it.
+fn scaled(img: &DynamicImage, (w, h): (u32, u32), width: u32) -> Option<DynamicImage> {
+    (w > width).then(|| {
         let nh = ((u64::from(h) * u64::from(width) + u64::from(w) / 2) / u64::from(w)).max(1);
-        resized = img.resize_exact(width, nh as u32, FilterType::Lanczos3);
-        &resized
-    } else {
-        img
-    };
+        img.resize_exact(width, nh as u32, FilterType::Lanczos3)
+    })
+}
+
+/// PNG for logos, JPEG q90 otherwise.
+fn encode(img: &DynamicImage, png: bool) -> Option<Vec<u8>> {
     let mut out = vec![];
     if png {
         let rgba = img.to_rgba8();
@@ -172,12 +171,22 @@ fn resized(img: &DynamicImage, width: u32, png: bool) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// Every width from one decode; all `None` when the source does not decode.
+/// Every width from one decode, each scaled from the next larger; all `None` on an undecodable source.
 fn resized_all(bytes: &[u8], widths: &[u32], png: bool) -> Vec<Option<Vec<u8>>> {
-    match decode(bytes) {
-        Some(img) => widths.iter().map(|w| resized(&img, *w, png)).collect(),
-        None => vec![None; widths.len()],
+    let Some(img) = decode(bytes) else {
+        return vec![None; widths.len()];
+    };
+    let dims = (img.width(), img.height());
+    let mut order: Vec<usize> = (0..widths.len()).collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(widths[i]));
+    let mut out = vec![None; widths.len()];
+    let mut src: Option<DynamicImage> = None;
+    for i in order {
+        let made = scaled(src.as_ref().unwrap_or(&img), dims, widths[i]);
+        out[i] = encode(made.as_ref().unwrap_or(&img), png);
+        src = made.or(src);
     }
+    out
 }
 
 impl Default for ImageStore {
@@ -1107,6 +1116,19 @@ mod tests {
                 .all(Option::is_none)
         );
         assert!(decode(&jpeg(40, 30)).is_some());
+    }
+
+    #[test]
+    fn a_thumb_scaled_from_the_medium_keeps_the_source_aspect() {
+        let outs = resized_all(&jpeg(600, 605), &[185, 500], false);
+        let dims = |b: &Option<Vec<u8>>| {
+            ImageReader::new(Cursor::new(b.as_deref().unwrap()))
+                .with_guessed_format()
+                .unwrap()
+                .into_dimensions()
+                .unwrap()
+        };
+        assert_eq!((dims(&outs[0]), dims(&outs[1])), ((185, 187), (500, 504)));
     }
 
     #[test]

@@ -72,9 +72,13 @@ pub fn spawn_claimer(st: &AppState) {
         loop {
             let Ok(host) = st.plugins.host() else { return };
             let env = host.env.clone();
+            // Armed before the checks: a wake sent while they run is not lost.
+            let mut woken = std::pin::pin!(env.wake.notified());
+            woken.as_mut().enable();
+            let restoring = st.jobs.is_restoring();
             let mut ids = vec![];
             let mut claimed = false;
-            if !st.jobs.is_restoring() {
+            if !restoring {
                 for rt in st
                     .plugins
                     .live()
@@ -122,19 +126,18 @@ pub fn spawn_claimer(st: &AppState) {
                     }
                 }
             }
-            let next = scheduled::next_due(&st.db, &ids).await.ok().flatten();
-            let wait = next.map_or(Duration::from_secs(1), |t| {
-                (t - chrono::Utc::now())
-                    .to_std()
-                    .unwrap_or_default()
-                    .min(Duration::from_secs(1))
-            });
+            let wait = match scheduled::next_due(&st.db, &ids).await {
+                Ok(Some(t)) => (t - chrono::Utc::now()).to_std().unwrap_or_default(),
+                // Only a schedule, a plugin turning ready or a freed task slot can add work: each wakes.
+                Ok(None) if !restoring => Duration::MAX,
+                _ => Duration::from_secs(1),
+            };
             let floor = if claimed {
                 Duration::from_millis(5)
             } else {
                 Duration::from_secs(1)
             };
-            let _ = tokio::time::timeout(wait.max(floor), env.wake.notified()).await;
+            let _ = tokio::time::timeout(wait.max(floor), woken).await;
         }
     });
 }

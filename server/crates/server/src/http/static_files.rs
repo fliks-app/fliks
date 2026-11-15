@@ -7,7 +7,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::Request;
 use axum::http::header::{
-    CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED,
+    CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED, VARY,
 };
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{Next, from_fn};
@@ -17,6 +17,7 @@ use tower_http::services::{ServeDir, ServeFile};
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
 async fn validators(req: Request, next: Next) -> Response {
     let inm = req.headers().get(IF_NONE_MATCH).cloned();
+    let hashed = content_hashed(req.uri().path());
     let mut res = next.run(req).await;
     let ok = matches!(
         res.status(),
@@ -25,9 +26,18 @@ async fn validators(req: Request, next: Next) -> Response {
     if !ok {
         return res;
     }
+    // The SPA fallback answers a missing hashed name with `index.html`, which must stay revalidated.
+    let html = res
+        .headers()
+        .get(CONTENT_TYPE)
+        .is_some_and(|v| v.as_bytes().starts_with(b"text/html"));
     res.headers_mut()
         .entry(CACHE_CONTROL)
-        .or_insert(HeaderValue::from_static("public, max-age=0"));
+        .or_insert(HeaderValue::from_static(if hashed && !html {
+            "public, max-age=31536000, immutable"
+        } else {
+            "no-cache"
+        }));
     add_charset(&mut res);
     if res.status() != StatusCode::OK {
         return res;
@@ -49,7 +59,7 @@ async fn validators(req: Request, next: Next) -> Response {
         let headers = res.headers().clone();
         res = Response::new(Body::empty());
         *res.status_mut() = StatusCode::NOT_MODIFIED;
-        for k in [CACHE_CONTROL, LAST_MODIFIED] {
+        for k in [CACHE_CONTROL, LAST_MODIFIED, VARY] {
             if let Some(v) = headers.get(&k) {
                 res.headers_mut().insert(k, v.clone());
             }
@@ -58,6 +68,18 @@ async fn validators(req: Request, next: Next) -> Response {
     res.headers_mut()
         .insert(ETAG, HeaderValue::from_str(&etag).expect("ascii etag"));
     res
+}
+
+/// An Angular build output name: `<name>-<8 uppercase alphanumerics>.<ext>`, renamed whenever its content changes.
+fn content_hashed(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or_default();
+    name.rsplit_once('.')
+        .and_then(|(stem, _)| stem.rsplit_once('-'))
+        .is_some_and(|(_, h)| {
+            h.len() == 8
+                && h.bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+        })
 }
 
 /// `mime-types` rule of 4.x: lowercase `utf-8` on `text/*`, JavaScript and JSON.
@@ -136,7 +158,14 @@ pub fn emoji(dir: PathBuf) -> Router {
 pub fn router(client_dir: Option<PathBuf>) -> Router {
     let mut r = Router::new();
     if let Some(dir) = client_dir {
-        let spa = ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html")));
+        // `.br` / `.gz` siblings exist only in the Docker image; a missing one serves the plain file.
+        let index = ServeFile::new(dir.join("index.html"))
+            .precompressed_br()
+            .precompressed_gzip();
+        let spa = ServeDir::new(&dir)
+            .precompressed_br()
+            .precompressed_gzip()
+            .fallback(index);
         r = r.fallback_service(
             Router::new()
                 .fallback_service(spa)
@@ -193,7 +222,7 @@ mod tests {
         let r = router(Some(c));
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
-        assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
+        assert_eq!(file.headers()[CACHE_CONTROL], "no-cache");
         assert!(file.headers().contains_key(LAST_MODIFIED));
         assert!(file.headers()[ETAG].to_str().unwrap().starts_with("W/\""));
         assert_eq!(
@@ -206,6 +235,10 @@ mod tests {
             "<html>spa</html>"
         );
         assert_eq!(text(get(&r, "/", None).await).await, "<html>spa</html>");
+        assert_eq!(
+            get(&r, "/", None).await.headers()[CACHE_CONTROL],
+            "no-cache"
+        );
         std::fs::create_dir_all(k.join("emoji")).unwrap();
         std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
         let emoji = get(&emoji(k.join("emoji")), "/1f525.webp", None).await;
@@ -248,5 +281,37 @@ mod tests {
         assert!(text(hit).await.is_empty());
         let miss = get(&r, "/app.js", Some(("if-none-match", "W/\"0-0\""))).await;
         assert_eq!(miss.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn hashed_build_files_are_immutable() {
+        let (c, _) = dirs("hashed");
+        std::fs::write(c.join("chunk-DJYWGWGQ.js"), "y=2").unwrap();
+        let r = router(Some(c));
+        let cc = |res: Response| res.headers()[CACHE_CONTROL].to_str().unwrap().to_owned();
+        assert_eq!(
+            cc(get(&r, "/chunk-DJYWGWGQ.js", None).await),
+            "public, max-age=31536000, immutable"
+        );
+        // A chunk from an older build falls back to the SPA document.
+        assert_eq!(cc(get(&r, "/main-OLDBUILD.js", None).await), "no-cache");
+        assert!(!content_hashed("/main-mjvd4bz6.js"));
+        assert!(!content_hashed("/chunk-DJYWGWGQ.js.map"));
+        assert!(content_hashed("/media/font-AB12CD34.woff2"));
+    }
+
+    #[tokio::test]
+    async fn serves_a_precompressed_sibling() {
+        let (c, _) = dirs("br");
+        std::fs::write(c.join("app.js.br"), "brotli").unwrap();
+        let r = router(Some(c));
+        let br = get(&r, "/app.js", Some(("accept-encoding", "br"))).await;
+        assert_eq!(br.headers()["content-encoding"], "br");
+        assert_eq!(br.headers()["vary"], "accept-encoding");
+        assert!(br.headers().contains_key(ETAG));
+        assert_eq!(text(br).await, "brotli");
+        let gz = get(&r, "/app.js", Some(("accept-encoding", "gzip"))).await;
+        assert!(gz.headers().get("content-encoding").is_none());
+        assert_eq!(text(gz).await, "x=1");
     }
 }

@@ -53,8 +53,8 @@ pub struct Metadata {
     dynamic: RwLock<Dynamic>,
     db: sqlx::PgPool,
     flights: orchestrator::Flights,
-    /// Last good copy of each global list (rule 17); never expires.
-    stale: Mutex<HashMap<String, serde_json::Value>>,
+    /// Last good copy of each global list and its fetch time (rule 17).
+    stale: Mutex<HashMap<String, (std::time::SystemTime, serde_json::Value)>>,
     search_cache: search_cache::SearchCache,
 }
 
