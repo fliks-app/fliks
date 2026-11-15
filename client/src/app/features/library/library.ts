@@ -48,7 +48,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
-import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
+import { InfiniteScrollList, VirtualGrid } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
@@ -346,8 +346,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
     BOOK_FILTER_KEYS.some((k) => !!this.bookFilters()[k]),
   );
 
-  @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
-    this.list.observeSentinel(ref);
+  /** The genres, collections, series and authors tabs, windowed like the `all` grid; one is on screen at a time. */
+  readonly genreGrid = new VirtualGrid<GenreSummary>(() => this.genresList());
+  readonly collectionGrid = new VirtualGrid<CollectionSummary>(() => this.collectionsList());
+  readonly seriesGrid = new VirtualGrid<SeriesSummary>(() => this.seriesList());
+  readonly authorGrid = new VirtualGrid<PersonListItem>(() => this.authorsList());
+  private readonly tabGrids = [this.genreGrid, this.collectionGrid, this.seriesGrid, this.authorGrid];
+  @ViewChild('tabRow') set tabRowRef(ref: ElementRef<HTMLElement> | undefined) {
+    const mode = this.viewMode();
+    const current =
+      mode === 'genres' ? this.genreGrid
+      : mode === 'collections' ? this.collectionGrid
+      : mode === 'series' ? this.seriesGrid
+      : mode === 'authors' ? this.authorGrid
+      : null;
+    // Unbinding the others makes their next layout measure afresh.
+    for (const grid of this.tabGrids) grid.bindRow(grid === current ? ref?.nativeElement : undefined);
   }
 
   /** The page's scroll container in every view mode, so the claim and the
@@ -401,7 +415,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
   /** Recreated whenever the `@if` block toggles (tab switch, loading state), so
    *  only what genuinely needs a viewport belongs here. */
-  @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
+  @ViewChild('allViewport', { read: CdkVirtualScrollViewport }) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
     this.viewport = ref;
     if (!ref) return;
     queueMicrotask(() => {
@@ -518,6 +532,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.onResize = () => {
       this.rowMeasured = false;
       this.measureRow(true);
+      for (const grid of this.tabGrids) grid.measure();
     };
     window.addEventListener('resize', this.onResize, { passive: true });
     // Subscribe to route param changes (handles initial load + sidebar nav).
@@ -675,9 +690,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       // Instant: the rows in between are not rendered, so an animated jump
       // would spend its whole duration crossing blank space.
       this.viewport.scrollToOffset(row * this.rowHeight() + this.rowsOffset(), 'instant');
-      return;
     }
-    this.list.scrollToLetter(letter, (m) => m.title, 'media');
   }
 
   /** Live measurements of the `all` grid for windowing, read together so a webOS `zoom` scales them consistently; null until laid out. */

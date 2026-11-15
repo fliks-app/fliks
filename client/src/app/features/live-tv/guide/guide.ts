@@ -6,6 +6,7 @@ import {
   signal,
   computed,
   effect,
+  untracked,
   viewChild,
   ElementRef,
 } from '@angular/core';
@@ -24,6 +25,7 @@ import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { LucideChevronLeft, LucideChevronRight, LucidePlay } from '@lucide/angular';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
+import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 
 /** Visible span of the grid, in hours. */
 const TIMELINE_HOURS = 4;
@@ -33,6 +35,10 @@ const PX_PER_MINUTE = 4;
 const CHANNEL_PAGE_SIZE = 50;
 /** Rows near the bottom that trigger the next channel page. */
 const LOAD_MORE_THRESHOLD_PX = 400;
+/** The rendered window moves in steps of this many rows and keeps one step of rows above and below the scrollport. */
+const WINDOW_STEP_ROWS = 8;
+/** Height of a channel row (`h-16`) until a rendered one is measured; rem-based, so it grows with the TV root font. */
+const DEFAULT_ROW_PX = 64;
 
 interface PositionedProgram extends LiveProgram {
   left: string;
@@ -70,7 +76,11 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
 
   private readonly scrollEl = viewChild<ElementRef<HTMLElement>>('scrollArea');
+  private readonly sentinelEl = viewChild<ElementRef<HTMLElement>>('sentinel');
   private readonly sheetDialog = viewChild<ElementRef<HTMLDialogElement>>('sheetDialog');
+
+  /** The time grid from `md` up, the now/next list below: a grid is unreadable at phone width. */
+  readonly isGrid = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   readonly windowStart = signal(this.roundToHalfHour(new Date()));
   readonly rows = signal<GuideRow[]>([]);
@@ -125,6 +135,14 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
     }));
   });
 
+  /** Grid rows in the DOM: only the window around the scrollport, the rest is spacer. */
+  readonly windowFirst = signal(0);
+  readonly windowSize = signal(4 * WINDOW_STEP_ROWS);
+  readonly rowPx = signal(DEFAULT_ROW_PX);
+  readonly windowRows = computed(() =>
+    this.rows().slice(this.windowFirst(), this.windowFirst() + this.windowSize()),
+  );
+
   readonly selectedSheet = signal<{ channel: LiveChannel; program: LiveProgram } | null>(null);
 
   private page = 1;
@@ -147,6 +165,50 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
     const el = this.scrollEl()?.nativeElement;
     if (el) el.scrollLeft = MARGIN_HOURS * 60 * PX_PER_MINUTE;
   });
+
+  /** A passive listener, not a template binding: only a window step re-renders the guide. */
+  private readonly windowEffect = effect((onCleanup) => {
+    const el = this.scrollEl()?.nativeElement;
+    if (!el) return;
+    let raf: number | null = null;
+    const onScroll = () => {
+      raf ??= requestAnimationFrame(() => {
+        raf = null;
+        this.updateWindow(el);
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    untracked(() => this.updateWindow(el));
+    onCleanup(() => {
+      el.removeEventListener('scroll', onScroll);
+      if (raf !== null) cancelAnimationFrame(raf);
+    });
+  });
+
+  /** Re-armed on every page: a sentinel still in range after a load gets no new entry. */
+  private readonly sentinelEffect = effect((onCleanup) => {
+    this.rows();
+    const target = this.sentinelEl()?.nativeElement;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void this.loadWindow(false);
+      },
+      { root: this.scrollEl()?.nativeElement ?? null, rootMargin: `0px 0px ${LOAD_MORE_THRESHOLD_PX}px 0px` },
+    );
+    io.observe(target);
+    onCleanup(() => io.disconnect());
+  });
+
+  /** Moves the rendered rows to the scroll offset, in whole steps so a scroll re-renders once per step. */
+  updateWindow(el: HTMLElement): void {
+    const row = el.querySelector<HTMLElement>('[data-guide-row]')?.getBoundingClientRect().height;
+    if (row && row !== this.rowPx()) this.rowPx.set(row);
+    const rowPx = this.rowPx();
+    const step = Math.floor(el.scrollTop / rowPx / WINDOW_STEP_ROWS);
+    this.windowFirst.set(Math.max(0, (step - 1) * WINDOW_STEP_ROWS));
+    this.windowSize.set((Math.ceil(el.clientHeight / rowPx / WINDOW_STEP_ROWS) + 3) * WINDOW_STEP_ROWS);
+  }
 
   private roundToHalfHour(d: Date): Date {
     const rounded = new Date(d);
@@ -201,13 +263,6 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       if (seq === this.loadSeq) this.loadError.set(true);
     } finally {
       if (seq === this.loadSeq) (reset ? this.loading : this.loadingMore).set(false);
-    }
-  }
-
-  onScroll(event: Event): void {
-    const el = event.target as HTMLElement;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < LOAD_MORE_THRESHOLD_PX) {
-      void this.loadWindow(false);
     }
   }
 

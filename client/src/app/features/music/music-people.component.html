@@ -7,11 +7,24 @@
       <p class="text-center py-12 text-base-content/50">{{ (role() === 'artist' ? 'music.no_artists' : 'music.no_composers') | translate }}</p>
     }
   } @else {
-    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 tv:gap-8 p-1">
-      @for (p of list.rows(); track p.id) {
-        <app-person-avatar-card [link]="link(p)" [name]="p.name" [avatarUrl]="p.avatarUrl" [posterName]="'person-avatar-' + p.id" [state]="{ person: { id: p.id, name: p.name, avatarUrl: p.avatarUrl } }" [subtitle]="'music.album_count' | translatePlural: p.albumCount" data-testid="person" />
-      }
-    </div>
+    <cdk-virtual-scroll-viewport
+      scrollWindow
+      [itemSize]="grid.rowHeight()"
+      [minBufferPx]="grid.rowHeight() * 2"
+      [maxBufferPx]="grid.rowHeight() * 4"
+      class="library-viewport"
+    >
+      <div
+        *cdkVirtualFor="let row of grid.rows(); trackBy: grid.trackRow"
+        #personRow
+        class="grid content-start grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4 tv:gap-8 px-1"
+        [style.height.px]="grid.rowHeight()"
+      >
+        @for (p of row.items; track p.id) {
+          <app-person-avatar-card [link]="link(p)" [name]="p.name" [avatarUrl]="p.avatarUrl" [posterName]="'person-avatar-' + p.id" [state]="{ person: { id: p.id, name: p.name, avatarUrl: p.avatarUrl } }" [subtitle]="'music.album_count' | translatePlural: p.albumCount" data-testid="person" />
+        }
+      </div>
+    </cdk-virtual-scroll-viewport>
     @if (list.more()) {
       <button type="button" class="btn btn-ghost self-center" [disabled]="list.loading()" (click)="list.loadMore()">{{ 'common.show_more' | translate }}</button>
     }
