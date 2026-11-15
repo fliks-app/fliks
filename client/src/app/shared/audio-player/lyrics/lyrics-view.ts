@@ -9,6 +9,7 @@ import { singerStyle } from '../../../core/services/karaoke/singer-style';
 import { activeIndices, cueFills, cuesEnd, cueSegments, toRows } from './lyrics-logic';
 
 const MANUAL_SCROLL_MS = 3000;
+const sameList = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 /** Lyric lines that follow the player clock; a click on a timed line seeks to it. */
 @Component({
@@ -40,25 +41,17 @@ export class LyricsViewComponent {
   protected readonly bgAgents = computed(() => new Set((this.doc().agents ?? []).filter((a) => a.role === 'bg').map((a) => a.id)));
 
   /** Interpolated player position in ms, advanced every frame while playing. */
+  private pos = 0;
+  /** The position the template shows: written only when the active lines or a word's state change. */
   private readonly clock = signal(0);
-  private readonly actives = computed(() => (this.timed() ? activeIndices(this.rows(), this.clock(), this.doc().offset) : []), {
-    equal: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
-  });
+  private readonly actives = computed(() => this.activesAt(this.clock()), { equal: sameList });
   protected readonly activeSet = computed(() => new Set(this.actives()));
   /** The view follows the first active line only. */
   private readonly first = computed(() => this.actives().reduce((m, i) => Math.min(m, i), Infinity));
   /** Cue span of each row, measured once per document. */
   private readonly spans = computed(() => this.rows().map((r) => (r.cues?.length ? { lo: Math.min(...r.cues.map((c) => c.start)), hi: cuesEnd(r.cues), full: r.cues.map(() => 100) } : null)));
-  /** Only a row being sung needs its fills computed; the others are all empty or all full. */
-  protected readonly fills = computed(() => {
-    const t = this.clock() + this.doc().offset;
-    const spans = this.spans();
-    return this.rows().map((r, i) => {
-      const sp = spans[i];
-      if (!r.cues || !sp || t <= sp.lo) return [];
-      return t >= sp.hi ? sp.full : cueFills(r.cues, t, 0);
-    });
-  });
+  /** Fill of each cue, 0 or 100, or -1 while it is sung: the frame loop paints those. */
+  protected readonly fills = computed(() => this.fillsAt(this.clock()));
 
   private anchor = { pos: 0, at: 0 };
   private frame = 0;
@@ -71,7 +64,7 @@ export class LyricsViewComponent {
     effect(() => {
       this.audio.playing();
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
-      untracked(() => this.clock.set(this.anchor.pos));
+      untracked(() => this.sync(this.anchor.pos));
     });
     effect(() => {
       const run = this.audio.playing() && this.timed();
@@ -90,6 +83,7 @@ export class LyricsViewComponent {
       this.doc();
       untracked(() => {
         this.manualUntil = 0;
+        this.sync(this.pos);
         const box = this.scroller()?.nativeElement;
         if (box) box.scrollTop = 0;
       });
@@ -104,8 +98,37 @@ export class LyricsViewComponent {
   }
 
   private tick(): void {
-    this.clock.set(this.anchor.pos + (performance.now() - this.anchor.at) * this.audio.rate());
+    this.sync(this.anchor.pos + (performance.now() - this.anchor.at) * this.audio.rate());
     this.frame = requestAnimationFrame(() => this.tick());
+  }
+
+  private activesAt(pos: number): number[] {
+    return this.timed() ? activeIndices(this.rows(), pos, this.doc().offset) : [];
+  }
+
+  /** Only a row being sung needs its fills computed; the others are all empty or all full. */
+  private fillsAt(pos: number): number[][] {
+    const t = pos + this.doc().offset;
+    const spans = this.spans();
+    return this.rows().map((r, i) => {
+      const sp = spans[i];
+      if (!r.cues || !sp || t <= sp.lo) return [];
+      return t >= sp.hi ? sp.full : cueFills(r.cues, t, 0).map((f) => (f > 0 && f < 100 ? -1 : f));
+    });
+  }
+
+  /** Change detection runs only when the template changes; the words being sung are painted here. */
+  private sync(pos: number): void {
+    this.pos = pos;
+    const shown = this.fills();
+    const same = this.fillsAt(pos).every((r, i) => r === shown[i] || sameList(r, shown[i]));
+    if (!same || !sameList(this.activesAt(pos), this.actives())) this.clock.set(pos);
+    const box = this.scroller()?.nativeElement;
+    this.fills().forEach((r, i) =>
+      r.forEach((f, k) => {
+        if (f < 0) box?.querySelector<HTMLElement>(`[data-line="${i}"] [data-cue="${k}"]`)?.style.setProperty('clip-path', this.wipe(i, k));
+      }),
+    );
   }
 
   protected onManualScroll(): void {
@@ -123,9 +146,16 @@ export class LyricsViewComponent {
     return this.fills()[i]?.[k] ?? 0;
   }
 
+  /** Clip of a cue's lit copy; a cue being sung is clipped at the live position. */
+  protected wipe(i: number, k: number): string {
+    const f = this.fill(i, k);
+    return `inset(0 ${100 - (f < 0 ? cueFills([this.rows()[i].cues![k]], this.pos, this.doc().offset)[0] : f)}% 0 0)`;
+  }
+
   /** The text between two words is lit once the word before it is, and a leading one with the first word. */
   protected gapLit(i: number, prev: number): boolean {
-    return this.fill(i, Math.max(prev, 0)) >= (prev < 0 ? 1 : 100);
+    const f = this.fill(i, Math.max(prev, 0));
+    return prev < 0 ? f !== 0 : f >= 100;
   }
 
   protected readonly duet = computed(() => sides(this.doc()).length > 1);
