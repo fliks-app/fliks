@@ -195,7 +195,13 @@
               "provider:musicbrainz:album"
             ],
             "description": "Album, release and artist metadata from MusicBrainz, with cover art from the Cover Art Archive and optional ListenBrainz popularity.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Album-, Veröffentlichungs- und Künstler-Metadaten von MusicBrainz, mit Covern aus dem Cover Art Archive und optional der Beliebtheit von ListenBrainz.",
+              "es": "Metadatos de álbumes, ediciones y artistas de MusicBrainz, con portadas del Cover Art Archive y, opcionalmente, la popularidad de ListenBrainz.",
+              "fr": "Métadonnées d'albums, de parutions et d'artistes depuis MusicBrainz, avec les pochettes du Cover Art Archive et, en option, la popularité ListenBrainz.",
+              "it": "Metadati di album, pubblicazioni e artisti da MusicBrainz, con le copertine del Cover Art Archive e, facoltativamente, la popolarità di ListenBrainz.",
+              "pt": "Metadados de álbuns, lançamentos e artistas do MusicBrainz, com capas do Cover Art Archive e, opcionalmente, a popularidade do ListenBrainz."
+            },
             "enabled": true,
             "homepage": "https://musicbrainz.org",
             "kind": "process",
