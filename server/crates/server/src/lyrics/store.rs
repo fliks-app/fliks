@@ -71,6 +71,20 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
     .await
 }
 
+/// Replaces the document of a row still holding `old` and unreviewed, and zeroes its offset (already
+/// folded into the times).
+pub async fn retime(db: &PgPool, id: i32, old: &Doc, new: &Doc) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE lyrics SET doc = $3, "offsetMs" = 0 WHERE id = $1 AND NOT reviewed AND doc = $2"#,
+    )
+    .bind(id)
+    .bind(Json(old))
+    .bind(Json(new))
+    .execute(db)
+    .await
+    .map(drop)
+}
+
 pub async fn list(db: &PgPool, item: i32) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM lyrics WHERE \"itemId\" = $1"

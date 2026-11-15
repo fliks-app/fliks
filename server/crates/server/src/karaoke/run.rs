@@ -18,6 +18,8 @@ use std::{
 /// The engine's own limits for an `Align` request (`docs/spec/karaoke.md` section 4).
 const MAX_ALIGN_LINES: usize = 3000;
 const MAX_ALIGN_WORDS: usize = 6000;
+/// A line found at this share of its words gives its start to the source row.
+const SNAP_MATCHED: f64 = 0.8;
 const MAX_MELODY_SPANS: usize = 100_000;
 
 #[derive(Clone, Copy)]
@@ -625,6 +627,25 @@ async fn align(
     }
     if a.matched < MIN_MATCHED {
         return Err(Failure::low_match(a.matched));
+    }
+    // A line-synced source follows the audio: lines the engine found take its time, the others the fit.
+    if src.sync == "line" && !src.reviewed {
+        let fitted = match a.lrc_fit {
+            Some(f) => kd::retimed(&src.doc.0, f.offset_ms, f.scale),
+            None => src.doc.0.clone(),
+        };
+        let found: Vec<_> = a
+            .lines
+            .iter()
+            .filter(|l| l.repeat == 0 && l.matched >= SNAP_MATCHED)
+            .map(|l| (l.line as usize, i64::from(l.start_ms)))
+            .collect();
+        let doc = kd::snapped(&fitted, &request, &found);
+        if doc != src.doc.0 {
+            lstore::retime(&st.db, src.id, &src.doc.0, &doc)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
     }
     let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
     if let Some(why) = &a.fallback {
