@@ -4,7 +4,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteCommand, RemoteState, SseService, type WireQueue } from './sse.service';
+import { RemoteCommand, RemoteState, SseService, whenIdle, type WireQueue } from './sse.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -421,9 +421,15 @@ export class RemoteService {
 
     // A reconnect remints the connection id, so a list built from live
     // connections is stale: refetch on our own reconnect too.
+    let firstConnection = true;
     effect(() => {
       if (!this.sse.connectionId()) return;
-      untracked(() => void this.refreshTargets());
+      untracked(() => {
+        // The boot listing only feeds the device picker: it waits for the first paint.
+        if (firstConnection) whenIdle(() => void this.refreshTargets());
+        else void this.refreshTargets();
+        firstConnection = false;
+      });
     });
 
     // Driven off the router, not a component effect, so every entry path (grid, search, deep link) mirrors.

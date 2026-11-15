@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { Component, afterNextRender, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { RecentlyPlayedRowComponent } from '../music/recently-played-row.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -447,9 +447,6 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
-    // Profile names for the request cards are resolved client-side (same as
-    // the requests page); load them once for users who can have requests.
-    if (this.requestsAllowed) void this.loadRequestProfiles();
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
     const cold = this.coldStart();
@@ -457,6 +454,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (cold) this.skeletonLayout.set(this.readLayout());
     const freshSince = Date.now();
     await this.loadAllSections({ known: true });
+    // Profile names only label the request cards (`#id` until then): not worth delaying the first rows for.
+    if (this.requestsAllowed) {
+      afterNextRender(() => void this.loadRequestProfiles(), { injector: this.injector });
+    }
     if (cold) {
       this.skeletonFadingOut.set(true);
       this.loadingFirstPass.set(false);

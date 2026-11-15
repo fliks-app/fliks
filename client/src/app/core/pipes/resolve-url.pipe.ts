@@ -12,12 +12,18 @@ const AUTHED_IMAGE_PATHS = [LIVETV_LOGO_PATH, '/api/imports/orphans/cover'];
 
 /** TMDB serves its own sizes: an `original` backdrop is up to 3840 px wide. */
 const TMDB_ORIGINAL = /^(https:\/\/image\.tmdb\.org\/t\/p\/)original\//;
-const TMDB_WIDTH: Record<ImageSize, string> = { thumb: 'w780', medium: 'w1280', full: 'original' };
+const TMDB_WIDTH: Record<ImageSize, string> = { thumb: 'w500', medium: 'w1280', full: 'original' };
+
+/** A card is 150 to 200 CSS px wide: w342 covers it up to a 1.5 pixel ratio. */
+function tmdbWidth(size: ImageSize): string {
+  if (size === 'thumb' && (globalThis.devicePixelRatio ?? 1) <= 1.5) return 'w342';
+  return TMDB_WIDTH[size];
+}
 
 /** Append the pre-generated variant to a local image URL, or pick TMDB's own
  *  size. Other remote URLs (manual override) are left untouched. */
 export function imageUrlWithSize(url: string, size: ImageSize): string {
-  if (TMDB_ORIGINAL.test(url)) return url.replace(TMDB_ORIGINAL, `$1${TMDB_WIDTH[size]}/`);
+  if (TMDB_ORIGINAL.test(url)) return url.replace(TMDB_ORIGINAL, `$1${tmdbWidth(size)}/`);
   if (!url.startsWith('/api/images/') && !url.startsWith(LIVETV_LOGO_PATH)) return url;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}size=${size}`;

@@ -8,7 +8,7 @@ import { DownloadProgressService } from './download-progress.service';
 import { NetworkService } from './network.service';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
-import { invalidatePrefix } from '../interceptors/cache.interceptor';
+import { invalidatePrefix, invalidateResource } from '../interceptors/cache.interceptor';
 import { getOrCreateDeviceId } from '../utils/device-info';
 import { parseDeviceLabel } from '../utils/format-device-label';
 import { DeviceService } from './device.service';
@@ -18,6 +18,14 @@ import { holdTabNonce } from './tab-nonce';
 import type {
   PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyProposal, PartySignalKind, PartySwitches, PartyUser,
 } from './api/party-api.service';
+
+/** Runs work the first paint must not wait on. Safari has no `requestIdleCallback`; the timeout keeps a busy thread from starving it. */
+export function whenIdle(run: () => void): void {
+  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
+    .requestIdleCallback;
+  if (ric) ric(run, { timeout: 2000 });
+  else setTimeout(run, 500);
+}
 
 /** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
 const UNREACHABLE_DEBOUNCE_MS = 5000;
@@ -411,12 +419,15 @@ export class SseService implements OnDestroy {
           if (typeof id === 'string' && id) {
             this.connectionId.set(id);
           }
-          // Changes missed while disconnected are not replayed: reread the current state.
-          this.downloadProgress.reset();
-          void this.downloadProgress.hydrate();
+          // Changes missed while disconnected are not replayed: reread the current state, once the page has painted.
+          whenIdle(() => {
+            this.downloadProgress.reset();
+            void this.downloadProgress.hydrate();
+          });
           this.activeProgress.set(new Map());
           // A reconnect means we don't know what we missed while disconnected.
-          void invalidatePrefix('/api/media');
+          void invalidateResource('/api/media');
+          void invalidateResource('/api/likes');
           this.optimizeEvents.next(data);
           this.karaokeEvents.next(data);
           return;
@@ -434,6 +445,7 @@ export class SseService implements OnDestroy {
           return;
         }
         if (data.type === 'likes.changed') {
+          void invalidateResource('/api/likes');
           this.likeEvents.next(data as unknown as LikesChangedEvent);
           return;
         }
@@ -602,7 +614,7 @@ export class SseService implements OnDestroy {
         );
         // A file landed with no client mutation behind it, so the cached media
         // body still says the episode has none.
-        void invalidatePrefix('/api/media');
+        void invalidateResource('/api/media');
         // Import always finishes unattended (completion is polled by
         // a scheduler) — no toast, just retire the live progress above.
         break;

@@ -46,6 +46,7 @@ import {
 } from '../../../core/utils/player.utils';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 import { hasProviderId } from '../../../core/utils/media-identity';
+import { loadPlayer } from '../../../features/player/load-player';
 import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import type { CoreMediaActionId, MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
@@ -472,6 +473,11 @@ export class DetailHeroComponent {
   });
 
   // ── Actions: play, watched, audio, subtitle ──
+
+  /** Fetches the player chunk before the click, so Play does not wait on it. */
+  warmPlayer(): void {
+    void loadPlayer();
+  }
 
   async play(fromStart: boolean) {
     // Series resume: use resume episode context if available

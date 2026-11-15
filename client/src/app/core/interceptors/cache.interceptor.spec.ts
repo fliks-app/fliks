@@ -8,6 +8,7 @@ import {
   cacheInterceptor,
   clearRequestCache,
   invalidatePrefix,
+  invalidateResource,
   isCacheable,
   readPlan,
 } from './cache.interceptor';
@@ -32,6 +33,20 @@ describe('cache.interceptor — what may be cached', () => {
     expect(isCacheable('/api/metadata/search/movie?q=foo')).toBe(false);
     expect(isCacheable('/api/metadata/tmdb/movie/123')).toBe(true);
     expect(isCacheable('/api/metadata/genres/movie')).toBe(true);
+  });
+
+  it('caches the music, book, person and playlist pages, not their provider reads or exports', () => {
+    expect(isCacheable('/api/persons/7/works?role=author')).toBe(true);
+    expect(isCacheable('/api/tracks?libraryId=3')).toBe(true);
+    expect(isCacheable('/api/collections/4')).toBe(true);
+    expect(isCacheable('/api/playlists/2/items')).toBe(true);
+    expect(isCacheable('/api/likes')).toBe(true);
+    expect(isCacheable('/api/persons/7/discography')).toBe(false);
+    expect(isCacheable('/api/persons/7/provider-credits')).toBe(false);
+    expect(isCacheable('/api/persons/7/bibliography')).toBe(false);
+    expect(isCacheable('/api/playlists/2/export.m3u')).toBe(false);
+    expect(isCacheable('/api/requests')).toBe(false);
+    expect(isCacheable('/api/counts')).toBe(false);
   });
 
   it('refuses auth, streams and live subtitle searches', () => {
@@ -87,6 +102,16 @@ describe('cache.interceptor — read plan', () => {
     expect(readPlan(other, false)).toBe('cached');
   });
 
+  it('marks stale the rows that embed what a mutation changed', () => {
+    const tracks = entry('/api/tracks?libraryId=3', 1_000);
+    const playlist = entry('/api/playlists/2/items', 1_000);
+    void invalidateResource('/api/likes');
+    expect(readPlan(tracks, false)).toBe('network');
+    expect(readPlan(playlist, false)).toBe('cached');
+    void invalidateResource('/api/playback');
+    expect(readPlan(playlist, false)).toBe('network');
+  });
+
   it('treats a body fetched after the invalidation as fresh', () => {
     void invalidatePrefix('/api/media');
     expect(readPlan(entry('/api/media/12', -1), false)).toBe('cached');
@@ -98,7 +123,7 @@ describe('cache.interceptor — read plan', () => {
 });
 
 describe('cache.interceptor — requests in flight', () => {
-  const get = new HttpRequest('GET', '/api/playlists');
+  const get = new HttpRequest('GET', '/api/counts');
 
   beforeEach(async () => {
     vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
@@ -124,7 +149,7 @@ describe('cache.interceptor — requests in flight', () => {
   it('never hands a read sent before a change to a read sent after it', () => {
     const next = vi.fn(() => new Subject<HttpResponse<unknown>>());
     cacheInterceptor(get, next).subscribe();
-    void invalidatePrefix('/api/playlists');
+    void invalidatePrefix('/api/counts');
     cacheInterceptor(get, next).subscribe();
     expect(next).toHaveBeenCalledTimes(2);
   });
@@ -211,7 +236,7 @@ describe('cache.interceptor: connection', () => {
     await clearRequestCache();
     await invalidatePrefix('/api/media');
 
-    const get = new HttpRequest('GET', '/api/playlists');
+    const get = new HttpRequest('GET', '/api/counts');
     const next = vi.fn(() => new Subject<HttpResponse<unknown>>());
     cacheInterceptor(get, next).subscribe();
     db.onversionchange?.();

@@ -1,6 +1,6 @@
 import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { Injector, inject } from '@angular/core';
-import { catchError, filter, throwError, timeout, TimeoutError } from 'rxjs';
+import { catchError, filter, retry, throwError, timeout, timer, TimeoutError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
 import { NetworkService } from '../services/network.service';
@@ -14,6 +14,9 @@ export const SKIP_ERROR_TOAST = new HttpContextToken(() => false);
 /** A black-holed link (VPN up, no route) never fails a request on its own. */
 export const API_TIMEOUT_MS = new HttpContextToken(() => 15_000);
 
+const GET_RETRIES = 2;
+const GET_RETRY_BACKOFF_MS = 300;
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const translate = inject(TranslateService);
@@ -24,6 +27,14 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
     (req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/')) || req.context.has(API_TIMEOUT_MS);
 
   return next(req).pipe(
+    // Only a GET that never reached the server is safe to resend; a timeout is downstream, so never retried.
+    retry({
+      count: req.method === 'GET' ? GET_RETRIES : 0,
+      delay: (err: unknown, attempt) =>
+        err instanceof HttpErrorResponse && err.status === 0 && network.isOnline()
+          ? timer(attempt * GET_RETRY_BACKOFF_MS)
+          : throwError(() => err),
+    }),
     // `Sent` fires at once; the deadline covers the wait for the answer.
     filter((e) => !bounded || e.type !== HttpEventType.Sent),
     bounded ? timeout(req.context.get(API_TIMEOUT_MS)) : (src) => src,

@@ -387,6 +387,25 @@ describe('MediaCardComponent — card action handlers do what their row promises
     expect(await press({ link: ['/people', '7'] })).not.toHaveBeenCalled();
   });
 
+  it('warms the media read on TV once the focus holds, not when it moves on', async () => {
+    const h = await createFixture(TV_VIEWER, { link: ['/movies', '7'] });
+    const getOne = vi.spyOn(TestBed.inject(MediaService), 'getOne').mockResolvedValue(makeMedia());
+    const figure = (h.fixture.nativeElement as HTMLElement).querySelector('figure')!;
+    vi.useFakeTimers();
+    try {
+      figure.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      figure.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      vi.advanceTimersByTime(400);
+      expect(getOne).not.toHaveBeenCalled();
+      figure.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      vi.advanceTimersByTime(400);
+      expect(getOne).toHaveBeenCalledWith(7);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a feed-row card hands the fanart over beside the poster', async () => {
     const h = await createFixture(FULL_MEMBER, {
       link: ['/movies', '7'],

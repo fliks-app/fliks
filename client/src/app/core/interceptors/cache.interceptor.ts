@@ -23,7 +23,19 @@ const CACHEABLE_PREFIXES = [
   '/api/profiles/language',
   // Title details barely change and the request-poster fallback re-fetches them cold; provider reads only (see EXCLUDED_PATTERNS).
   '/api/metadata',
+  '/api/persons',
+  '/api/tracks',
+  '/api/collections',
+  '/api/playlists',
+  '/api/likes',
 ];
+
+/** Rows under these prefixes embed media, watch state or likes, which mutations under the key change. */
+const DERIVED_PREFIXES: Record<string, string[]> = {
+  '/api/media': ['/api/persons', '/api/tracks', '/api/collections', '/api/playlists'],
+  '/api/playback': ['/api/tracks', '/api/collections', '/api/playlists'],
+  '/api/likes': ['/api/tracks'],
+};
 
 const EXCLUDED_PREFIXES = [
   '/api/auth',
@@ -39,6 +51,8 @@ const EXCLUDED_PATTERNS = [
   /\/api\/media\/\d+\/subtitles\/search/,
   // These carry existingMediaId (library state): caching pins a title to "not in the library" after it was added.
   /^\/api\/metadata\/(search|trending|popular|upcoming|discover)\//,
+  /^\/api\/persons\/\d+\/(provider-credits|bibliography|discography)/,
+  /^\/api\/playlists\/\d+\/export\.m3u/,
 ];
 
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
@@ -265,6 +279,11 @@ export async function invalidatePrefix(prefix: string): Promise<void> {
   } catch { /* ignore */ }
 }
 
+/** {@link invalidatePrefix} plus the prefixes whose rows embed what changed under it. */
+export async function invalidateResource(prefix: string): Promise<void> {
+  await Promise.all([prefix, ...(DERIVED_PREFIXES[prefix] ?? [])].map(invalidatePrefix));
+}
+
 // ── Interceptor ──
 
 /** GETs on the wire, by URL: a refresh's paint-first and revalidate passes share one request. */
@@ -351,7 +370,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     if (!req.url.startsWith('/api/')) return next(req);
     return next(req).pipe(
       tap((event) => {
-        if (event instanceof HttpResponse) void invalidatePrefix(resourcePrefix(req.url));
+        if (event instanceof HttpResponse) void invalidateResource(resourcePrefix(req.url));
       }),
     );
   }

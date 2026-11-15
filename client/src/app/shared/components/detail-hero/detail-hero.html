@@ -72,7 +72,7 @@
   <ng-container ngProjectAs="[heroActions]">
       <ng-content select="[heroActions]" />
       @if (selectedFileId() || resumeMediaFileId()) {
-        <button class="btn btn-primary" [class]="desktop ? 'gap-1' : 'flex-1 gap-2'" [attr.autofocus]="desktop ? '' : null" (click)="play(false)">
+        <button class="btn btn-primary" [class]="desktop ? 'gap-1' : 'flex-1 gap-2'" [attr.autofocus]="desktop ? '' : null" (pointerenter)="warmPlayer()" (focus)="warmPlayer()" (click)="play(false)">
           <svg lucidePlay [class]="desktop ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor"></svg>
           @if (resumeLabel()) {
             {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}

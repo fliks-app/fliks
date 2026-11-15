@@ -1,4 +1,4 @@
-import { Component, booleanAttribute, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
+import { Component, booleanAttribute, DestroyRef, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -45,6 +45,9 @@ import { PROVIDER_SEGMENTS_PATTERN, kindFromSegment, mediaDetailLink } from '../
 /** Provided by the search page so its cards keep the type badge under the 'search' setting. */
 export const SEARCH_CARD_CONTEXT = new InjectionToken<boolean>('SEARCH_CARD_CONTEXT');
 
+/** Long enough that a D-pad run through a row warms only the card it stops on. */
+const FOCUS_WARM_MS = 400;
+
 export type MediaCardAspect = 'portrait' | 'landscape';
 
 export type BarStatus =
@@ -73,7 +76,11 @@ export interface CardDownloadState {
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
-  host: { '[attr.data-card-link]': '_link()?.toString()' },
+  host: {
+    '[attr.data-card-link]': '_link()?.toString()',
+    '(focusin)': 'warmOnFocus()',
+    '(focusout)': 'cancelFocusWarm()',
+  },
 })
 export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
@@ -398,6 +405,20 @@ export class MediaCardComponent {
     if (!link || this.clickIntent() === 'play' || !kindFromSegment(link[0].slice(1))) return;
     const id = Number(link[1]);
     if (id > 0) void this.mediaApi.getOne(id).catch(() => undefined);
+  }
+
+  private focusWarm: ReturnType<typeof setTimeout> | undefined;
+  private readonly clearFocusWarm = inject(DestroyRef).onDestroy(() => this.cancelFocusWarm());
+
+  /** A D-pad press has no pointerdown: a card that holds the focus is the one about to open. */
+  protected warmOnFocus(): void {
+    if (!this.tv.isTv()) return;
+    clearTimeout(this.focusWarm);
+    this.focusWarm = setTimeout(() => this.warmDetail(), FOCUS_WARM_MS);
+  }
+
+  protected cancelFocusWarm(): void {
+    clearTimeout(this.focusWarm);
   }
 
   private prefetch(url: string | null | undefined) {

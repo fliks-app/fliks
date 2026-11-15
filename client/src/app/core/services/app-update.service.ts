@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
 import { ServerVersionService, isNewer } from './server-version.service';
+import { whenIdle } from './sse.service';
 import {
   desktopUpdaterOrNull,
   type DesktopUpdateStatus,
@@ -121,7 +122,7 @@ export class AppUpdateService {
     effect(() => {
       if (this.mode() === 'server' && !this.serverChecked) {
         this.serverChecked = true;
-        void this.checkServer();
+        whenIdle(() => void this.checkServer());
       }
     });
   }
