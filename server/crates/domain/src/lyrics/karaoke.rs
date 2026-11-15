@@ -41,6 +41,42 @@ pub fn align_request(doc: &Doc) -> Vec<Request> {
         .collect()
 }
 
+/// `doc` with every line time mapped onto the audio: `audio = offset_ms + scale * time`.
+pub fn retimed(doc: &Doc, offset_ms: f64, scale: f64) -> Doc {
+    let map = |t: i64| (offset_ms + scale * t as f64).round().max(0.0) as i64;
+    let lines = doc
+        .lines
+        .iter()
+        .map(|l| {
+            let start = l.start.map(map);
+            Line {
+                start,
+                end: l.end.map(map).zip(start).map(|(e, s)| e.max(s)),
+                ..l.clone()
+            }
+        })
+        .collect();
+    Doc {
+        lines,
+        ..doc.clone()
+    }
+}
+
+/// `doc` with the start of each `(request line, start)` moved to the aligned time, its duration kept.
+pub fn snapped(doc: &Doc, req: &[Request], starts: &[(usize, i64)]) -> Doc {
+    let mut out = doc.clone();
+    for (i, start) in starts {
+        let Some(l) = req.get(*i).and_then(|r| out.lines.get_mut(r.source_line)) else {
+            continue;
+        };
+        if let Some(old) = l.start {
+            l.end = l.end.map(|e| start + (e - old).max(0));
+            l.start = Some(*start);
+        }
+    }
+    out
+}
+
 /// The word-synced document of an alignment. Cues keep ascending, char-aligned, non-overlapping byte
 /// ranges inside their text (`to_lrc` slices on them): a word that breaks that is dropped.
 pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
@@ -163,6 +199,23 @@ pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retimed_maps_line_times_and_leaves_text() {
+        let r = retimed(&doc(), 500.0, 1.1);
+        assert_eq!(r.lines[0].start, Some(1600));
+        assert_eq!(r.lines[0].end, Some(3800));
+        assert_eq!(r.lines[1].end, None);
+        assert_eq!(r.lines[2].text, "lo");
+    }
+
+    #[test]
+    fn snapped_moves_a_start_and_keeps_its_duration() {
+        let req = align_request(&doc());
+        let r = snapped(&doc(), &req, &[(0, 1500), (9, 7)]);
+        assert_eq!((r.lines[0].start, r.lines[0].end), (Some(1500), Some(3500)));
+        assert_eq!(r.lines[2].start, Some(4000));
+    }
 
     fn doc() -> Doc {
         Doc {

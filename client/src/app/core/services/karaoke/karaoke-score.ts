@@ -14,6 +14,8 @@ export const MAX_SCORE = 10000;
 export interface PitchFrame {
   t: number;
   midi: number | null;
+  /** The key in force when the frame was sung; `scoreSinger` falls back to its `keyShift`. */
+  key?: number;
 }
 
 /** Distance in semitones between two notes, octave-insensitive (0..6). */
@@ -87,7 +89,7 @@ export function scoreSinger(
       for (let i = lo; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
         seen++;
         const m = sorted[i].midi;
-        if (m !== null && foldedDistance(m, c.pitch + keyShift) <= tol) hit++;
+        if (m !== null && foldedDistance(m, c.pitch + (sorted[i].key ?? keyShift)) <= tol) hit++;
       }
       const w = c.worth;
       max += w;

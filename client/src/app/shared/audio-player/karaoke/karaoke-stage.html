@@ -1,5 +1,5 @@
-<div class="flex h-full min-h-0 flex-col gap-3" data-testid="karaoke-stage">
-  <div class="scroll-ring-safe flex flex-wrap items-center gap-2" appTvSection data-testid="karaoke-controls">
+<div class="scroll-ring-safe flex h-full min-h-0 flex-col gap-3 overflow-y-auto" data-testid="karaoke-stage">
+  <div class="scroll-ring-safe flex shrink-0 flex-wrap items-center gap-2 max-sm:flex-nowrap max-sm:overflow-x-auto" appTvSection data-testid="karaoke-controls">
     @if (canSing) {
       <button type="button" class="btn btn-sm" [class.btn-primary]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
         @if (karaoke.singing()) {
@@ -79,9 +79,9 @@
     <app-karaoke-queue />
   }
 
-  <canvas #lane class="w-full shrink-0 text-base-content" [class.h-40]="!tv()" [class.h-56]="tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
+  <canvas #lane class="w-full shrink-0 text-base-content" [class.h-24]="!tv()" [class.sm:h-40]="!tv()" [class.h-56]="tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
 
-  <div class="min-h-0 flex-1">
+  <div class="min-h-52 flex-1">
     <app-lyrics-view [doc]="doc()" [large]="true" />
   </div>
 

@@ -22,10 +22,11 @@ const take = (midi: number | null) => Array.from({ length: 50 }, (_, i) => ({ t:
 function setup() {
   const received = new Subject<{ userId: number; frames: { t: number; midi: number | null }[] }>();
   const track = signal<{ itemId: number } | null>({ itemId: 1 });
+  const pitch = signal(0);
   TestBed.configureTestingModule({
     providers: [
       KaraokeService,
-      { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1), pitch: signal(0) } },
+      { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1), pitch } },
       { provide: KaraokeRelayService, useValue: { received, open: vi.fn(), close: vi.fn(), send: vi.fn() } },
       { provide: DeviceService, useValue: { isTv: () => true } },
       { provide: PartyService, useValue: { party: signal(null), members: signal([{ userId: 5, username: 'Ana' }]) } },
@@ -33,10 +34,18 @@ function setup() {
       { provide: TranslateService, useValue: { instant: (k: string, p: { n: number }) => `${k}${p?.n ?? ''}` } },
     ],
   });
-  return { karaoke: TestBed.inject(KaraokeService), received, track };
+  return { karaoke: TestBed.inject(KaraokeService), received, track, pitch };
 }
 
 describe('KaraokeService', () => {
+  it('scores a frame against the key it was sung in, not the key now', () => {
+    const { karaoke, received, pitch } = setup();
+    pitch.set(2);
+    received.next({ userId: 5, frames: take(62) });
+    pitch.set(0);
+    expect(karaoke.results(doc)[0].score).toBe(10000);
+  });
+
   it('scores the frames a peer sends over the channel, under that member', () => {
     const { karaoke, received } = setup();
     received.next({ userId: 5, frames: take(60) });
