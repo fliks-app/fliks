@@ -190,8 +190,17 @@ pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
                 start = cut;
             }
         }
-        for cue in &mut line.cues {
+        let nexts: Vec<i64> = line.cues.iter().skip(1).map(|c| c.start).collect();
+        let nexts = nexts.into_iter().chain([i64::MAX]);
+        for (cue, next) in line.cues.iter_mut().zip(nexts) {
+            // The aligner ends a held vowel where its level drops; the pitch knows it is still sung.
+            if let Some(e) = cue.notes.iter().map(|n| n.end).max() {
+                cue.end = cue.end.max(e.min(next));
+            }
             cue.pitch = main_pitch(&cue.notes);
+        }
+        if let Some(e) = line.cues.iter().map(|c| c.end).max() {
+            line.end = line.end.map(|l| l.max(e));
         }
     }
 }
@@ -397,6 +406,26 @@ mod tests {
         assert_eq!((c[0].notes[0].start, c[0].notes[0].end), (0, 300));
         assert_eq!((c[1].notes[0].start, c[1].notes[0].end), (300, 1000));
         assert_eq!((c[0].pitch, c[1].pitch), (Some(60.0), Some(60.0)));
+    }
+
+    #[test]
+    fn a_held_word_ends_with_its_note_and_never_past_the_next_word() {
+        let mut d = two_cues();
+        d.lines[0].cues[0].end = 200;
+        d.lines[0].cues[1].end = 600;
+        apply_pitch(&mut d, &[vec![(0, 290, 60.0), (300, 1400, 62.0)]]);
+        let c = &d.lines[0].cues;
+        assert_eq!(
+            (c[0].end, c[1].end, d.lines[0].end),
+            (290, 1400, Some(1400))
+        );
+        let mut d = two_cues();
+        d.lines[0].cues[0].end = 200;
+        apply_pitch(&mut d, &[vec![(0, 350, 60.0)]]);
+        assert_eq!(d.lines[0].cues[0].end, 300);
+        let spans = line_spans(&d);
+        apply_pitch(&mut d, &[vec![(0, 350, 60.0)]]);
+        assert_eq!((line_spans(&d), d.lines[0].cues[0].end), (spans, 300));
     }
 
     #[test]
