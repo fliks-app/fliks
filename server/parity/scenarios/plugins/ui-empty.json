@@ -243,6 +243,9 @@
               }
             ],
             "i18n": {
+              "de": {
+                "musicbrainz.description": "Album-, Veröffentlichungs- und Künstler-Metadaten von MusicBrainz, mit Covern aus dem Cover Art Archive und optional der Beliebtheit von ListenBrainz."
+              },
               "en": {
                 "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "Base URL",
@@ -252,6 +255,9 @@
                 "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               },
+              "es": {
+                "musicbrainz.description": "Metadatos de álbumes, ediciones y artistas de MusicBrainz, con portadas del Cover Art Archive y, opcionalmente, la popularidad de ListenBrainz."
+              },
               "fr": {
                 "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "URL de base",
@@ -259,7 +265,14 @@
                 "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
                 "musicbrainz.config.listenbrainzToken_hint": "Facultatif. À créer sur https://listenbrainz.org/settings/. Il relève seulement la limite de requêtes de ListenBrainz pour la popularité des albums et des titres; sans lui, les appels sont anonymes.",
                 "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
-                "musicbrainz.config.title": "MusicBrainz"
+                "musicbrainz.config.title": "MusicBrainz",
+                "musicbrainz.description": "Métadonnées d'albums, de parutions et d'artistes depuis MusicBrainz, avec les pochettes du Cover Art Archive et, en option, la popularité ListenBrainz."
+              },
+              "it": {
+                "musicbrainz.description": "Metadati di album, pubblicazioni e artisti da MusicBrainz, con le copertine del Cover Art Archive e, facoltativamente, la popolarità di ListenBrainz."
+              },
+              "pt": {
+                "musicbrainz.description": "Metadados de álbuns, lançamentos e artistas do MusicBrainz, com capas do Cover Art Archive e, opcionalmente, a popularidade do ListenBrainz."
               }
             },
             "name": "MusicBrainz",
@@ -602,6 +615,9 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "musicbrainz.description": "Album-, Veröffentlichungs- und Künstler-Metadaten von MusicBrainz, mit Covern aus dem Cover Art Archive und optional der Beliebtheit von ListenBrainz."
+              },
               "en": {
                 "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "Base URL",
@@ -611,6 +627,9 @@
                 "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
                 "musicbrainz.config.title": "MusicBrainz"
               },
+              "es": {
+                "musicbrainz.description": "Metadatos de álbumes, ediciones y artistas de MusicBrainz, con portadas del Cover Art Archive y, opcionalmente, la popularidad de ListenBrainz."
+              },
               "fr": {
                 "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org).",
                 "musicbrainz.config.baseUrl": "URL de base",
@@ -618,7 +637,14 @@
                 "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
                 "musicbrainz.config.listenbrainzToken_hint": "Facultatif. À créer sur https://listenbrainz.org/settings/. Il relève seulement la limite de requêtes de ListenBrainz pour la popularité des albums et des titres; sans lui, les appels sont anonymes.",
                 "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
-                "musicbrainz.config.title": "MusicBrainz"
+                "musicbrainz.config.title": "MusicBrainz",
+                "musicbrainz.description": "Métadonnées d'albums, de parutions et d'artistes depuis MusicBrainz, avec les pochettes du Cover Art Archive et, en option, la popularité ListenBrainz."
+              },
+              "it": {
+                "musicbrainz.description": "Metadati di album, pubblicazioni e artisti da MusicBrainz, con le copertine del Cover Art Archive e, facoltativamente, la popolarità di ListenBrainz."
+              },
+              "pt": {
+                "musicbrainz.description": "Metadados de álbuns, lançamentos e artistas do MusicBrainz, com capas do Cover Art Archive e, opcionalmente, a popularidade do ListenBrainz."
               }
             },
             "name": "MusicBrainz",
