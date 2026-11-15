@@ -61,6 +61,7 @@ export class KaraokeService {
       });
     });
     effect(() => {
+      this.audio.playing();
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
     });
   }

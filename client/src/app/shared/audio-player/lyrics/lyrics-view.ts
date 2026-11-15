@@ -69,6 +69,7 @@ export class LyricsViewComponent {
   constructor() {
     inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.frame));
     effect(() => {
+      this.audio.playing();
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
       untracked(() => this.clock.set(this.anchor.pos));
     });
@@ -84,6 +85,14 @@ export class LyricsViewComponent {
     effect(() => {
       const i = this.first();
       if (this.placed) this.scrollToLine(i, 'smooth');
+    });
+    effect(() => {
+      this.doc();
+      untracked(() => {
+        this.manualUntil = 0;
+        const box = this.scroller()?.nativeElement;
+        if (box) box.scrollTop = 0;
+      });
     });
   }
 
