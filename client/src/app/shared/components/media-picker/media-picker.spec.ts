@@ -167,7 +167,7 @@ describe('MediaPickerComponent', () => {
     }
     expect(getAll).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(300);
-    expect(getAll).toHaveBeenCalledExactlyOnceWith({ q: 'dune', limit: 24 });
+    expect(getAll).toHaveBeenCalledExactlyOnceWith({ q: 'dune', limit: 24, withTotal: false });
   });
 
   it('ignores a search answered after the dialog was reopened', async () => {
@@ -228,7 +228,7 @@ describe('MediaPickerComponent', () => {
     await flush();
     await click(Array.from(root.querySelectorAll<HTMLElement>('.badge')).find((b) => b.textContent!.trim() === 'Drama'));
     await vi.advanceTimersByTimeAsync(300);
-    expect(getAll).toHaveBeenCalledWith({ q: '', limit: 24, genres: ['Drama'] });
+    expect(getAll).toHaveBeenCalledWith({ q: '', limit: 24, withTotal: false, genres: ['Drama'] });
   });
 
   it('leaves out a movie with no file and keeps a series', async () => {

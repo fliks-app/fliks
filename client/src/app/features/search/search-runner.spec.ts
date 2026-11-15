@@ -92,7 +92,7 @@ describe('SearchRunner', () => {
     const { runner, getAll } = setup();
     runner.run('matrix', 'movie', { external: false, people: false, mediaParams: { type: 'movie', yearMin: 1999 } });
     expect(getAll).toHaveBeenCalledTimes(1);
-    expect(getAll.mock.calls[0]!.slice(0, 2)).toEqual([{ type: 'movie', yearMin: 1999, q: 'matrix', limit: 20 }, { force: true }]);
+    expect(getAll.mock.calls[0]!.slice(0, 2)).toEqual([{ type: 'movie', yearMin: 1999, q: 'matrix', limit: 20, withTotal: false }, { force: true }]);
   });
 
   it('marks a failed source and keeps the others', async () => {

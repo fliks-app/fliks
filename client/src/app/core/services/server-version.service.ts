@@ -33,6 +33,7 @@ export const SERVER_SINCE = {
   grabBest: '6.1.0',
   playlistM3u: '6.1.0',
   playlistPreview: '6.1.0',
+  listWithoutTotal: '6.1.0',
 } as const;
 
 /** A failed version read is retried this many times, each after twice the previous delay. */

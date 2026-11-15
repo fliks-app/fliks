@@ -24,7 +24,9 @@ export class MusicApiService {
   private readonly http = inject(HttpClient);
   private readonly serverVersion = inject(ServerVersionService);
 
-  tracks(q: TracksQuery = {}, signal?: AbortSignal): Promise<TrackRow[]> {
+  /** `after`: the last track of the previous title-sorted page, which a server without the cursor pages by `page`. */
+  async tracks(q: TracksQuery & { after?: number } = {}, signal?: AbortSignal): Promise<TrackRow[]> {
+    if (q.after !== undefined && !(await this.serverVersion.supportsWhenKnown('6.1.0'))) q = { ...q, after: undefined };
     let params = new HttpParams();
     for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== false) params = params.set(k, String(v));
     return abortable(this.http.get<TrackRow[]>('/api/tracks', { params }), signal);

@@ -116,6 +116,13 @@ pub async fn songs(
         SongOrder::Title => "lower(COALESCE(i.title, td.label, '')), i.id",
         SongOrder::Starred => r#"starred DESC, i.id"#,
     };
+    // One ILIKE per word, so the trigram index on the stored text serves each.
+    let search: String = match &f.patterns {
+        Some(p) => (1..=p.len())
+            .map(|n| format!(r#" AND td."searchText" ILIKE ($8::text[])[{n}]"#))
+            .collect(),
+        None => " AND $8::text[] IS NULL".to_owned(),
+    };
     let sql = format!(
         r#"SELECT i.id AS item_id, m.id AS album_id, COALESCE(i.title, td.label) AS title, m.title AS album, m.year,
   m.genres, m."posterUrl" IS NOT NULL AS has_cover, td."discNumber" AS disc, td."trackNumber" AS track,
@@ -135,7 +142,7 @@ JOIN LATERAL (SELECT mf.id, mf.size, mf."relativePath", mf."streamInfo" FROM ite
 WHERE m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
   AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
   AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
-  AND ($8::text[] IS NULL OR (COALESCE(i.title, td.label, '') || ' ' || m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL ($8))
+  {search}
   AND ($9::int[] IS NULL OR i.id = ANY($9))
   AND ($10::int IS NULL OR m.id = $10)
   AND (NOT $11 OR EXISTS (SELECT 1 FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id))
@@ -858,5 +865,61 @@ mod tests {
         );
         assert_eq!(partial_date("1999"), json!({"year": 1999}));
         assert_eq!(type_label("live"), "Live");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn song_search_follows_renamed_titles_and_artists(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["album"]');
+            INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (10, 'Alpha', 'album', 1, 'a');
+            INSERT INTO persons (id, name) VALUES (1, 'Ana');
+            INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (10, 1, 'artist', 0);
+            INSERT INTO editions (id, "mediaId", family) VALUES (1, 10, 'audio');
+            INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 10, 1, 'One'), (2, 10, 1, 'Two');
+            INSERT INTO track_details ("itemId", "mediaId", position) VALUES (1, 10, 1), (2, 10, 2);
+            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+              VALUES (1, 10, 1, '1.flac', 1, 'FLAC'), (2, 10, 1, '2.flac', 1, 'FLAC');
+            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (1, 1, 10, 0, 0), (2, 2, 10, 0, 0);
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let found = |q: &'static str| {
+            let pool = pool.clone();
+            async move {
+                let f = Filter {
+                    patterns: search_patterns(q),
+                    limit: 50,
+                    ..Default::default()
+                };
+                let rows = songs(&pool, 1, &[1], &f, SongOrder::Title).await.unwrap();
+                rows.iter().map(|r| r.item_id).collect::<Vec<_>>()
+            }
+        };
+        let run = |sql: &'static str| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query(sql).execute(&pool).await.unwrap();
+            }
+        };
+        assert_eq!(found("ana one").await, [1]);
+        assert_eq!(found("alpha").await, [1, 2]);
+        run("UPDATE persons SET name = 'Bea' WHERE id = 1").await;
+        assert_eq!(
+            (found("ana").await, found("bea two").await),
+            (vec![], vec![2])
+        );
+        run("UPDATE items SET title = 'Three' WHERE id = 2").await;
+        assert_eq!(found("three").await, [2]);
+        run("UPDATE media SET title = 'Omega' WHERE id = 10").await;
+        assert_eq!(found("omega").await, [1, 2]);
+        run("DELETE FROM media_credits").await;
+        assert_eq!(found("bea").await, Vec::<i32>::new());
+        run(r#"INSERT INTO media_credits ("mediaId", "personId", role, position) VALUES (10, 1, 'artist', 0)"#).await;
+        assert_eq!(found("bea").await, [1, 2]);
     }
 }
