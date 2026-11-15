@@ -68,6 +68,7 @@
           "configurations": {
             "production": {
               "serviceWorker": "ngsw-config.json",
+              "index": { "input": "src/index.html", "preloadInitial": true },
               "budgets": [
                 {
                   "type": "initial",

@@ -66,8 +66,10 @@ import {
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { canMarkWatched, mediaDetailLink, kindOf } from '../../core/media-kinds';
+import { isAbort } from '../../core/utils/abortable';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const SEARCH_DEBOUNCE_MS = 250;
 
 /** Top-bar tab — `all` is the existing library grid (label = library name),
  *  `suggestions` / `genres` are placeholders for upcoming views. */
@@ -506,6 +508,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Bumped on every `load()` so a stale background revalidation kicked off
    *  for the previous library can't overwrite the current view. */
   private loadGen = 0;
+  /** Cancels the grid requests of the load a newer one replaced. */
+  private loadCtl: AbortController | null = null;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit() {
     this.bindLetterScroll();
@@ -652,7 +657,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.unbindLetterScroll();
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
-
+    clearTimeout(this.searchTimer);
+    this.loadCtl?.abort();
     this.queryParamSub?.unsubscribe();
   }
 
@@ -677,8 +683,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Live measurements of the `all` grid for windowing, read together so a webOS `zoom` scales them consistently; null until laid out. */
   onSearch(query: string) {
     this.searchQuery.set(query);
-    this.syncQueryParams();
-    this.load(this.library()?.id);
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.syncQueryParams();
+      void this.load(this.library()?.id);
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   dismissKeyboard(input: HTMLInputElement) {
@@ -1030,15 +1039,21 @@ export class LibraryComponent implements OnInit, OnDestroy {
       view: 'grid',
     };
     const gen = ++this.loadGen;
+    this.loadCtl?.abort();
+    const { signal } = (this.loadCtl = new AbortController());
+    const freshSince = Date.now();
     try {
       const [res, watchedIds] = await Promise.all([
-        this.mediaService.getAll(params, { known: true }),
+        this.mediaService.getAll(params, { known: true }, signal),
         this.streamingApi.getWatchedMediaIds({ known: true }).catch(() => [] as number[]),
       ]);
       // A slower answer to an earlier query must not replace a later one.
       if (gen !== this.loadGen) return;
       this.list.setItems(res.data, (m) => m.title);
       this.watchedIds.set(new Set(watchedIds));
+    } catch (e) {
+      if (isAbort(e)) return;
+      throw e;
     } finally {
       if (gen === this.loadGen) this.loading.set(false);
     }
@@ -1046,8 +1061,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       // Known lists paint instantly, however old; this pass brings in what changed. The generation check drops stale results.
       if (gen !== this.loadGen) return;
       void Promise.all([
-        this.mediaService.getAll(params, { force: true }).catch(() => null),
-        this.streamingApi.getWatchedMediaIds({ force: true }).catch(() => null),
+        this.mediaService.getAll(params, { force: true, freshSince }, signal).catch(() => null),
+        this.streamingApi.getWatchedMediaIds({ force: true, freshSince }).catch(() => null),
       ]).then(([res, watchedIds]) => {
         if (gen !== this.loadGen) return;
         if (res) this.list.setItems(res.data, (m) => m.title);
@@ -1065,30 +1080,45 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return this.likesList().some((l) => l.mediaId === mediaId && !l.seasonId && !l.episodeId);
   }
 
+  /** Flips the likes list first from the card's media; a failed request restores it. */
   async toggleLike(m: Media, liked: boolean) {
+    const prev = this.likesList();
+    const others = prev.filter((l) => !(l.mediaId === m.id && !l.seasonId && !l.episodeId));
+    const item: LikedItem = {
+      mediaId: m.id,
+      mediaType: m.type,
+      title: m.title,
+      posterUrl: m.posterUrl,
+      fanartUrl: m.fanartUrl,
+      seasonId: null,
+      episodeId: null,
+      label: null,
+      stillUrl: null,
+    };
+    this.likesList.set(liked ? [item, ...others] : others);
     try {
       await (liked ? this.likesApi.like({ mediaId: m.id }) : this.likesApi.unlike({ mediaId: m.id }));
-      await this.loadLikes();
-    } catch { /* interceptor surfaces errors */ }
+    } catch {
+      this.likesList.set(prev);
+    }
   }
 
+  /** The `watchedIds` set drives the card's badge: flipped first, restored if the request fails. */
   async toggleMediaWatched(m: Media, watched: boolean) {
+    const fileId = m.files?.[0]?.id;
+    const hasSeasons = kindOf(m.type).hasSeasons;
+    if (!hasSeasons && !fileId) return;
+    const prev = this.watchedIds();
+    const next = new Set(prev);
+    if (watched) next.add(m.id);
+    else next.delete(m.id);
+    this.watchedIds.set(next);
     try {
-      if (kindOf(m.type).hasSeasons) {
-        await this.streamingApi.toggleSeriesWatched(m.id, watched);
-      } else {
-        const fileId = m.files?.[0]?.id;
-        if (!fileId) return;
-        await this.streamingApi.toggleWatched(m.id, fileId);
-      }
-      // Reflect new state on the visible card without a full refetch —
-      // the parent's `watchedIds` set drives the `'watched'` status badge.
-      this.watchedIds.update((set) => {
-        const next = new Set(set);
-        if (watched) next.add(m.id);
-        else next.delete(m.id);
-        return next;
-      });
-    } catch { /* global error toast */ }
+      await (hasSeasons
+        ? this.streamingApi.toggleSeriesWatched(m.id, watched)
+        : this.streamingApi.toggleWatched(m.id, fileId!));
+    } catch {
+      this.watchedIds.set(prev);
+    }
   }
 }

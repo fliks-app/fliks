@@ -1,6 +1,7 @@
 import { Directive, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { MediaService, type Media, type MediaCastEntry, type MediaCrewEntry, type Season } from '../../core/services/api/media.service';
+import type { CacheRead } from '../../core/interceptors/cache.interceptor';
 import { StreamingApiService, type MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { SpoilerService } from '../../core/services/spoiler.service';
@@ -26,6 +27,13 @@ import { WatchedController } from './watched-controller';
 import { MEDIA_DETAIL_HOST } from './media-detail-host';
 
 type PendingDownload = DownloadTarget & { watched: boolean };
+
+/** What the uncacheable /api/playback routes say of a title; a kind with episodes adds their state. */
+export interface TitlePlaybackState {
+  resume: MediaResumeInfo | null;
+  watchedIds?: number[];
+  progress?: Record<number, number>;
+}
 
 /** What the movie and series pages share: the title's files and playback state, cast, downloads, subtitles and the hero's menu.
  *  A page template must carry the hero, the subtitles modal and the two download modals (`#downloadModal`, `#downloadDetailModal`). */
@@ -118,9 +126,15 @@ export abstract class VideoWorkBase {
   private readonly loadEffect = effect(() => {
     this.mediaId();
     if (!this.host.fullLoaded()) return;
+    untracked(() => void this.loadPlaybackState());
+  });
+
+  /** Needs the id alone, so it runs beside the media request rather than after it. */
+  private readonly idEffect = effect(() => {
+    const id = this.mediaId();
     untracked(() => {
-      void this.loadPlaybackState(this.media());
       this.requestCastAndCrew();
+      void this.playbackFor(id);
     });
   });
 
@@ -128,11 +142,24 @@ export abstract class VideoWorkBase {
     const id = this.mediaId();
     this.cast.set([]);
     this.crew.set([]);
-    // Provider-derived sections have nothing to fetch for an unidentified title.
-    if (!this.identified()) return;
-    this.mediaService.getCast(id).then((c) => this.mediaId() === id && this.cast.set(c)).catch(() => {});
-    this.mediaService.getCrew(id).then((c) => this.mediaId() === id && this.crew.set(c)).catch(() => {});
+    // Provider-derived sections have nothing to fetch for an unidentified title; a handover stub can't tell yet.
+    if (this.host.fullLoaded() && !this.identified()) return;
+    this.paintThenRefresh((opts) =>
+      Promise.all([
+        this.mediaService.getCast(id, opts).then((c) => this.mediaId() === id && this.cast.set(c)),
+        this.mediaService.getCrew(id, opts).then((c) => this.mediaId() === id && this.crew.set(c)),
+      ]),
+    );
     this.loadRelated(id);
+  }
+
+  /** Paints what the cache holds, then refreshes from the network what that pass did not just fetch. */
+  protected paintThenRefresh(read: (opts: CacheRead) => Promise<unknown>): void {
+    const freshSince = Date.now();
+    void read({ known: true })
+      .catch(() => undefined)
+      .then(() => read({ force: true, freshSince }))
+      .catch(() => undefined);
   }
 
   /** Rails a kind adds below the cast. */
@@ -148,7 +175,7 @@ export abstract class VideoWorkBase {
     if (n === this.lastReturn) return;
     this.lastReturn = n;
     untracked(() => {
-      void this.loadPlaybackState(this.media());
+      void this.loadPlaybackState(true);
       this.hero()?.reloadPlaybackState();
     });
   });
@@ -160,10 +187,30 @@ export abstract class VideoWorkBase {
     refresh: () => void this.refreshMetadata(),
   });
 
-  /** Resume position, watched episodes and progress from uncacheable /api/playback routes,
-   *  kept off the render path and re-run when the page returns on screen. */
-  protected async loadPlaybackState(m: Media): Promise<void> {
-    this.applyResume(m, await this.streamingApi.getMediaResumeInfo(m.id).catch(() => null));
+  /** The playback state read with the route id; applied, then dropped, once the full media is in. */
+  private playback: { id: number; state: Promise<TitlePlaybackState> } | null = null;
+
+  private playbackFor(id: number): Promise<TitlePlaybackState> {
+    if (this.playback?.id !== id) this.playback = { id, state: this.fetchPlaybackState(id) };
+    return this.playback.state;
+  }
+
+  /** Kept off the render path; `fresh` reads it again when the page returns on screen. */
+  private async loadPlaybackState(fresh = false): Promise<void> {
+    const id = this.mediaId();
+    if (fresh) this.playback = null;
+    const pending = this.playbackFor(id);
+    const state = await pending;
+    if (this.playback?.state === pending) this.playback = null;
+    if (this.mediaId() === id) this.applyPlaybackState(this.media(), state);
+  }
+
+  protected async fetchPlaybackState(id: number): Promise<TitlePlaybackState> {
+    return { resume: await this.streamingApi.getMediaResumeInfo(id).catch(() => null) };
+  }
+
+  protected applyPlaybackState(m: Media, state: TitlePlaybackState): void {
+    this.applyResume(m, state.resume);
   }
 
   /** Pre-select the last-played file if available. */

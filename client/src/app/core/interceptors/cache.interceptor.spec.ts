@@ -1,8 +1,10 @@
-import { HttpRequest, HttpResponse } from '@angular/common/http';
+import { HttpHandlerFn, HttpHeaders, HttpRequest, HttpResponse } from '@angular/common/http';
 import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import {
   CacheEntry,
+  CacheRead,
+  cacheHeaders,
   cacheInterceptor,
   clearRequestCache,
   invalidatePrefix,
@@ -125,6 +127,38 @@ describe('cache.interceptor — requests in flight', () => {
     void invalidatePrefix('/api/playlists');
     cacheInterceptor(get, next).subscribe();
     expect(next).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cache.interceptor: paint then revalidate', () => {
+  // No IndexedDB: only the body awaiting its idle write can answer from cache.
+  beforeEach(async () => {
+    vi.stubGlobal('indexedDB', { open: vi.fn(() => { throw new Error('unavailable'); }) });
+    await clearRequestCache();
+  });
+
+  const read = (opts: CacheRead, next: HttpHandlerFn) =>
+    new Promise<unknown>((resolve) => {
+      const req = new HttpRequest('GET', '/api/libraries/mine', { headers: new HttpHeaders(cacheHeaders(opts)) });
+      cacheInterceptor(req, next).subscribe((e) => resolve((e as HttpResponse<unknown>).body));
+    });
+
+  it('skips the network for what the known pass just fetched, not for an older body', async () => {
+    const next = vi.fn(() => of(new HttpResponse({ status: 200, body: [1] })));
+    const since = Date.now();
+    expect(await read({ known: true }, next)).toEqual([1]);
+    expect(await read({ force: true, freshSince: since }, next)).toEqual([1]);
+    expect(next).toHaveBeenCalledTimes(1);
+
+    await read({ force: true, freshSince: Date.now() + 1 }, next);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('serves a body fetched a moment ago to a default read, before its idle write lands', async () => {
+    const next = vi.fn(() => of(new HttpResponse({ status: 200, body: [1] })));
+    await read({}, next);
+    expect(await read({}, next)).toEqual([1]);
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });
 

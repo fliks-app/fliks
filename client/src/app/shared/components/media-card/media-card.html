@@ -19,6 +19,7 @@
     [actionsImageUrl]="_img()"
     [actionsImageAspect]="aspect()"
     [actionsSubtitle]="_subtitle() ?? ''"
+    (pointerdown)="warmDetail()"
     (click)="onCardClick()"
     (keydown.enter)="onCardClick()"
     (keydown.space)="onCardClick(); $event.preventDefault()"

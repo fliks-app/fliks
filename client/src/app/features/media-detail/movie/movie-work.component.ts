@@ -50,7 +50,11 @@ export class MovieWorkComponent extends VideoWorkBase {
   }
 
   protected override loadRelated(id: number): void {
-    this.mediaService.getSimilar(id).then((s) => this.media().id === id && this.similar.set(s)).catch(() => {});
-    this.mediaService.getCollection(id).then((c) => this.media().id === id && this.collection.set(c)).catch(() => {});
+    this.paintThenRefresh((opts) =>
+      Promise.all([
+        this.mediaService.getSimilar(id, opts).then((s) => this.media().id === id && this.similar.set(s)),
+        this.mediaService.getCollection(id, opts).then((c) => this.media().id === id && this.collection.set(c)),
+      ]),
+    );
   }
 }

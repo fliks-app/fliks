@@ -4,6 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import type { PluginUiEntry } from './plugin-ui-response';
+import { SessionStoreService } from '../services/session-store.service';
 import type { UiContribution } from '@fliks/plugin-ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
@@ -202,5 +203,56 @@ describe('PluginUiRegistryService', () => {
 
     // Ordered by plugin id and first-declared wins, so install order cannot change it.
     expect(registry.i18nFor('en')).toEqual({ shared: 'from alpha', own: 'a' });
+  });
+});
+
+describe('PluginUiRegistryService boot', () => {
+  let http: HttpTestingController;
+  let registry: PluginUiRegistryService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: SessionStoreService, useValue: { active: () => ({ user: { id: 7 } }) } },
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+    registry = TestBed.inject(PluginUiRegistryService);
+  });
+
+  afterEach(() => {
+    http.verify();
+    localStorage.clear();
+  });
+
+  it('waits on the network with nothing stored, then serves the stored registry at once and revalidates it', async () => {
+    const first = registry.boot();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [contribution('a', 100)])]);
+    await first;
+
+    const next = TestBed.runInInjectionContext(() => new PluginUiRegistryService());
+    await next.boot();
+    expect(next.hasPlugin('fliks.a')).toBe(true);
+
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.b', [contribution('b', 100)])]);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(next.hasPlugin('fliks.b')).toBe(true);
+    expect(next.hasPlugin('fliks.a')).toBe(false);
+  });
+
+  it('keeps the stored registry when the revalidation fails', async () => {
+    const first = registry.boot();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [contribution('a', 100)])]);
+    await first;
+
+    const next = TestBed.runInInjectionContext(() => new PluginUiRegistryService());
+    await next.boot();
+    http.expectOne('/api/plugins/ui').flush('down', { status: 503, statusText: 'Unavailable' });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(next.hasPlugin('fliks.a')).toBe(true);
   });
 });

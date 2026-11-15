@@ -14,7 +14,8 @@ export interface QualityProfileBrief {
   name: string;
   cutoff: number;
   upgradeAllowed: boolean;
-  items: {
+  /** Absent on grid and recently-added items. */
+  items?: {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
     sortOrder: number;
@@ -448,24 +449,24 @@ export class MediaService {
     );
   }
 
-  getCast(id: number) {
-    return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`));
+  getCast(id: number, opts: CacheRead = {}) {
+    return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`, { headers: cacheHeaders(opts) }));
   }
 
-  getSimilar(id: number) {
+  getSimilar(id: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<RelatedMedia[]>(`/api/media/${id}/similar`),
+      this.http.get<RelatedMedia[]>(`/api/media/${id}/similar`, { headers: cacheHeaders(opts) }),
     );
   }
 
-  getCollection(id: number) {
+  getCollection(id: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<MediaCollection | null>(`/api/media/${id}/collection`),
+      this.http.get<MediaCollection | null>(`/api/media/${id}/collection`, { headers: cacheHeaders(opts) }),
     );
   }
 
-  getCrew(id: number) {
-    return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`));
+  getCrew(id: number, opts: CacheRead = {}) {
+    return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`, { headers: cacheHeaders(opts) }));
   }
 
   getAppQualities(family: Family = 'video') {

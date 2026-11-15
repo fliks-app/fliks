@@ -392,6 +392,14 @@ export class MediaCardComponent {
     this.prefetch(url);
   }
 
+  /** Starts the detail page's media read on touch, so the page joins it instead of waiting for the click. */
+  protected warmDetail(): void {
+    const link = this._link();
+    if (!link || this.clickIntent() === 'play' || !kindFromSegment(link[0].slice(1))) return;
+    const id = Number(link[1]);
+    if (id > 0) void this.mediaApi.getOne(id).catch(() => undefined);
+  }
+
   private prefetch(url: string | null | undefined) {
     if (!url) return;
     const img = new Image();

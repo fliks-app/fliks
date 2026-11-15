@@ -1,23 +1,40 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal, untracked } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import type { ConfigPage, SlotId, UiContribution } from '@fliks/plugin-ui';
 import type { AcquisitionProvider, PluginUiEntry } from './plugin-ui-response';
+import { ServerConfigService } from '../services/server-config.service';
+import { SessionStoreService, sessionKey } from '../services/session-store.service';
+import { readStored, writeStored } from '../services/party/local-flag';
 
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */
 const FETCH_TIMEOUT_MS = 3000;
+const STORAGE_PREFIX = 'fliks.pluginUi::';
 
 /** Fetches `GET /api/plugins/ui` once at app init and caches it; any error, timeout or malformed payload fails open to an empty registry. */
 @Injectable({ providedIn: 'root' })
 export class PluginUiRegistryService {
   private readonly http = inject(HttpClient);
+  private readonly serverConfig = inject(ServerConfigService);
+  private readonly sessions = inject(SessionStoreService);
   /** A signal, so a reload after an install or a toggle re-runs every consumer's `computed`
    *  instead of waiting for the next full page load. */
   private readonly entriesSignal = signal<PluginUiEntry[]>([]);
 
+  /** Boot read: the registry stored for this server and account applies at once and is revalidated in the background;
+   *  only a first boot with nothing stored waits on the network. */
+  async boot(): Promise<void> {
+    const key = this.storageKey();
+    const stored = key ? readEntries(key) : null;
+    if (!stored) return this.load();
+    this.entriesSignal.set(stored);
+    void this.load(true);
+  }
+
   /** `keep`: a failed refresh leaves the known entries instead of emptying the registry. */
   async load(keep = false): Promise<void> {
+    const key = this.storageKey();
     const entries = await firstValueFrom(
       this.http.get<PluginUiEntry[]>('/api/plugins/ui').pipe(
         timeout(FETCH_TIMEOUT_MS),
@@ -26,6 +43,13 @@ export class PluginUiRegistryService {
     );
     if (entries === null && keep) return;
     this.entriesSignal.set(Array.isArray(entries) ? entries : []);
+    if (key && Array.isArray(entries)) writeStored(key, JSON.stringify(entries));
+  }
+
+  /** Per server and account: the payload follows the account's permissions. Null when signed out. */
+  private storageKey(): string | null {
+    const user = untracked(this.sessions.active)?.user;
+    return user ? STORAGE_PREFIX + sessionKey(untracked(this.serverConfig.serverUrl), user.id) : null;
   }
 
   private get entries(): PluginUiEntry[] {
@@ -110,5 +134,14 @@ export class PluginUiRegistryService {
       }
     }
     return merged;
+  }
+}
+
+function readEntries(key: string): PluginUiEntry[] | null {
+  try {
+    const parsed: unknown = JSON.parse(readStored(key) ?? 'null');
+    return Array.isArray(parsed) ? (parsed as PluginUiEntry[]) : null;
+  } catch {
+    return null;
   }
 }

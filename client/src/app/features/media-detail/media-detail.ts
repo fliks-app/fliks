@@ -373,7 +373,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     }
 
     try {
-      const m = await this.mediaService.getOne(id);
+      // Paint whatever the cache holds, stale or not; the forced pass below brings it up to date.
+      const freshSince = Date.now();
+      const m = await this.mediaService.getOne(id, { known: true });
       if (this.loadedId !== id) return;
       if (m.type !== kind) {
         void this.router.navigate(mediaDetailLink(m.type, m.id));
@@ -391,7 +393,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       queueMicrotask(() => {
         void this.mediaService
-          .getOne(id, { force: true })
+          .getOne(id, { force: true, freshSince })
           .then((fresh) => {
             if (fresh.type === kind && this.loadedId === id) this.media.set(fresh);
           })

@@ -1,5 +1,5 @@
 import { HttpEvent, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
-import { finalize, Observable, of, share, tap } from 'rxjs';
+import { finalize, Observable, of, share, Subscription, tap } from 'rxjs';
 
 /** IndexedDB cache ("fliks-api-cache") of the last known body of each GET /api/*. Invalidation marks
  *  entries stale and never deletes them: the body stays the offline fallback and the paint-first read. */
@@ -75,6 +75,8 @@ let cacheGeneration = 0;
 /** Mirrors INVALIDATIONS_STORE so a read sees an invalidation before its write commits. */
 let invalidations = new Map<string, number>();
 let pruned = false;
+/** Bodies waiting for their idle write, so a read right after a fetch sees it. */
+const pendingWrites = new Map<string, CacheEntry>();
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
@@ -131,6 +133,7 @@ function forgetState(): void {
   cacheGeneration++;
   invalidations = new Map();
   inFlight.clear();
+  pendingWrites.clear();
   pruned = false;
 }
 
@@ -210,6 +213,8 @@ export function clearRequestCache(): Promise<void> {
 }
 
 async function getCached(url: string): Promise<CacheEntry | null> {
+  const pending = pendingWrites.get(url);
+  if (pending) return pending;
   try {
     const db = await openDb();
     return new Promise((resolve) => {
@@ -223,20 +228,24 @@ async function getCached(url: string): Promise<CacheEntry | null> {
 
 /** Defer the write past render: `store.put` structured-clones the body on the main thread (a 700-item list stutters the spinner). */
 function putCacheWhenIdle(url: string, body: any, sentAt: number, generation: number): void {
-  const write = () => void putCache(url, body, sentAt, generation);
+  const entry: CacheEntry = { url, body, timestamp: sentAt };
+  pendingWrites.set(url, entry);
+  const write = () => void putCache(entry, generation);
   const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
     .requestIdleCallback;
   if (ric) ric(write, { timeout: 2000 });
   else setTimeout(write, 0);
 }
 
-async function putCache(url: string, body: any, sentAt: number, generation: number): Promise<void> {
-  if (generation !== cacheGeneration) return;
+async function putCache(entry: CacheEntry, generation: number): Promise<void> {
   try {
+    if (generation !== cacheGeneration) return;
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put({ url, body, timestamp: sentAt } satisfies CacheEntry);
-  } catch { /* ignore */ }
+    tx.objectStore(STORE_NAME).put(entry);
+  } catch { /* ignore */ } finally {
+    if (pendingWrites.get(entry.url) === entry) pendingWrites.delete(entry.url);
+  }
 }
 
 /** Marks every entry under `prefix` stale: the next default read goes to the network. */
@@ -285,9 +294,15 @@ function isInvalidated(entry: CacheEntry): boolean {
   return false;
 }
 
-/** `revalidate` serves the entry and refreshes it in background; `network` keeps it as the offline fallback. */
-export function readPlan(entry: CacheEntry | null, known: boolean): 'cached' | 'revalidate' | 'network' {
+/** `revalidate` serves the entry and refreshes it in background; `network` keeps it as the offline fallback.
+ *  `freshSince` (a forced read) serves only a body requested from the network at or after that time. */
+export function readPlan(
+  entry: CacheEntry | null,
+  known: boolean,
+  freshSince?: number,
+): 'cached' | 'revalidate' | 'network' {
   if (!entry) return 'network';
+  if (freshSince != null) return entry.timestamp >= freshSince && !isInvalidated(entry) ? 'cached' : 'network';
   if (known) return 'cached';
   if (isInvalidated(entry)) return 'network';
   const ttl = DETAIL_PATTERN.test(entry.url) ? TTL_DETAIL : TTL_LIST;
@@ -304,15 +319,23 @@ export const CACHE_BYPASS_HEADER = 'X-Cache-Bypass';
 /** Opt-in: answer with the last known body whatever its age or invalidation, with no network
  *  call; for a caller that paints first and then revalidates with CACHE_BYPASS_HEADER. */
 export const CACHE_KNOWN_HEADER = 'X-Cache-Known';
+/** With CACHE_BYPASS_HEADER: the time from which a body fetched from the network counts as fresh. */
+export const CACHE_FRESH_SINCE_HEADER = 'X-Cache-Fresh-Since';
 
 /** How a read may use the cache: `force` goes to the network, `known` paints whatever is cached. */
 export interface CacheRead {
   force?: boolean;
   known?: boolean;
+  /** With `force`: when the `known` pass it revalidates started, so it skips what that pass fetched from the network. */
+  freshSince?: number;
 }
 
 export function cacheHeaders(opts: CacheRead): Record<string, string> | undefined {
-  if (opts.force) return { [CACHE_BYPASS_HEADER]: '1' };
+  if (opts.force) {
+    return opts.freshSince == null
+      ? { [CACHE_BYPASS_HEADER]: '1' }
+      : { [CACHE_BYPASS_HEADER]: '1', [CACHE_FRESH_SINCE_HEADER]: String(opts.freshSince) };
+  }
   if (opts.known) return { [CACHE_KNOWN_HEADER]: '1' };
   return undefined;
 }
@@ -335,8 +358,12 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
 
   const known = req.headers.has(CACHE_KNOWN_HEADER);
   const bypass = req.headers.has(CACHE_BYPASS_HEADER);
+  const since = req.headers.get(CACHE_FRESH_SINCE_HEADER);
+  const freshSince = bypass && since ? Number(since) : undefined;
   if (known || bypass) {
-    req = req.clone({ headers: req.headers.delete(CACHE_KNOWN_HEADER).delete(CACHE_BYPASS_HEADER) });
+    req = req.clone({
+      headers: req.headers.delete(CACHE_KNOWN_HEADER).delete(CACHE_BYPASS_HEADER).delete(CACHE_FRESH_SINCE_HEADER),
+    });
   }
 
   const key = `${url} ${req.responseType}`;
@@ -350,11 +377,14 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
 
   // Force-refresh path: skip the cache READ but still PUT the network
   // response so future cache-first callers get the refreshed value.
-  if (bypass) return sharedGet(key, () => next(req).pipe(store));
+  if (bypass && freshSince == null) return sharedGet(key, () => next(req).pipe(store));
 
   return new Observable((subscriber) => {
+    // Unsubscribing cancels a network read (an aborted caller); a background revalidation runs on.
+    const wire = new Subscription();
     getCached(url).then((entry) => {
-      const plan = readPlan(entry, known);
+      if (subscriber.closed) return;
+      const plan = readPlan(entry, known, freshSince);
       const cached = entry ? new HttpResponse({ status: 200, body: entry.body }) : null;
       if (plan === 'cached') {
         subscriber.next(cached!);
@@ -364,7 +394,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
       const revalidating = plan === 'revalidate';
       if (revalidating) subscriber.next(cached!);
 
-      sharedGet(key, () => next(req).pipe(store)).subscribe({
+      const sub = sharedGet(key, () => next(req).pipe(store)).subscribe({
         next: (event) => { if (!revalidating) subscriber.next(event); },
         error: (err) => {
           if (revalidating) subscriber.complete();
@@ -374,9 +404,11 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
         },
         complete: () => subscriber.complete(),
       });
+      if (!revalidating) wire.add(sub);
     }).catch(() => {
       // IndexedDB unavailable → pass through.
-      next(req).subscribe(subscriber);
+      wire.add(next(req).subscribe(subscriber));
     });
+    return wire;
   });
 };
