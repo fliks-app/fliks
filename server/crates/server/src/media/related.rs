@@ -260,7 +260,7 @@ pub async fn cast(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
         r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
   'character', mc.character, 'order', mc.position,
   'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl",
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"
@@ -277,7 +277,7 @@ pub async fn crew(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
         r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
   'job', mc.job, 'department', mc.department,
   'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl",
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"

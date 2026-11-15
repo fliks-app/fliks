@@ -9,7 +9,6 @@
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-01-22T00:00:00.000Z",
             "digitalRelease": null,
             "fanartUrl": null,
@@ -31,20 +30,6 @@
                   "video": []
                 },
                 "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
-                "createdAt": "2026-02-03T04:00:00.000Z",
-                "episodeId": null,
-                "id": 56,
-                "language": null,
-                "mediaId": 21,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "Bluray-720p",
-                "relativePath": "alpha test (2020)/alpha test (2020).720.mkv",
-                "size": 1000056,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
             "folderName": "alpha test (2020)",
@@ -57,22 +42,9 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#3b82f6",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": 1,
-              "defaultQualityProfileId": 1,
-              "icon": "film",
               "id": 1,
-              "label": null,
-              "mediaTypes": [
-                "movie"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
               "name": "Movies",
-              "path": "/tmp/fliks-parity/media/movies",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "path": "/tmp/fliks-parity/media/movies"
             },
             "libraryId": 1,
             "logoUrl": null,
@@ -86,15 +58,8 @@
             "posterUrl": "/api/images/21/poster",
             "preferredProvider": null,
             "qualityProfile": {
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "cutoff": 18,
               "id": 1,
-              "items": [],
-              "minCustomFormatScore": 0,
-              "name": "Parity HD",
-              "resolutionUpgradeOnly": false,
-              "updatedAt": "2026-01-01T00:00:00.000Z",
-              "upgradeAllowed": false
+              "name": "Parity HD"
             },
             "qualityProfileId": 1,
             "rating": 6,
@@ -109,12 +74,12 @@
             "tvdbId": null,
             "type": "movie",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2015
+            "year": 2015,
+            "fileCount": 2
           },
           {
             "addedById": null,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-02-15T00:00:00.000Z",
             "digitalRelease": null,
             "episodeStats": {
@@ -136,24 +101,6 @@
                 "size": 1000059,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
-                "createdAt": "2026-02-05T03:00:00.000Z",
-                "episodeId": 24,
-                "id": 60,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Series Half Watched (2020)/Season 01/e24.mkv",
-                "size": 1000060,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
             "folderName": "Series Half Watched (2020)",
@@ -164,22 +111,9 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#10b981",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": null,
-              "defaultQualityProfileId": null,
-              "icon": "tv",
               "id": 2,
-              "label": null,
-              "mediaTypes": [
-                "series"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
               "name": "Series",
-              "path": "/tmp/fliks-parity/media/series",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "path": "/tmp/fliks-parity/media/series"
             },
             "libraryId": 2,
             "logoUrl": null,
@@ -206,7 +140,8 @@
             "tvdbId": null,
             "type": "series",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2023
+            "year": 2023,
+            "fileCount": 2
           }
         ],
         "status": 200

@@ -10,7 +10,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [
                   {
@@ -59,22 +58,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#8b5cf6",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "book",
                 "id": 3,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Books",
-                "path": "/tmp/fliks-parity/media/books",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/books"
               },
               "libraryId": 3,
               "logoUrl": null,
@@ -108,7 +94,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [
                   {
@@ -170,22 +155,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#8b5cf6",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "book",
                 "id": 3,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Books",
-                "path": "/tmp/fliks-parity/media/books",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/books"
               },
               "libraryId": 3,
               "logoUrl": null,
@@ -219,7 +191,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [
                   {
@@ -245,22 +216,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#8b5cf6",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "book",
                 "id": 3,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Books",
-                "path": "/tmp/fliks-parity/media/books",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/books"
               },
               "libraryId": 3,
               "logoUrl": null,
@@ -294,7 +252,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [],
                 "formats": [],
@@ -314,22 +271,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#8b5cf6",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "book",
                 "id": 3,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Books",
-                "path": "/tmp/fliks-parity/media/books",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/books"
               },
               "libraryId": 3,
               "logoUrl": null,
@@ -363,7 +307,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [
                   {
@@ -413,22 +356,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#8b5cf6",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "book",
                 "id": 3,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Books",
-                "path": "/tmp/fliks-parity/media/books",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/books"
               },
               "libraryId": 3,
               "logoUrl": null,
@@ -462,7 +392,6 @@
             {
               "addedById": null,
               "additionalFanartUrls": [],
-              "alternativeTitles": [],
               "book": {
                 "authors": [
                   {
@@ -493,22 +422,9 @@
               "languageProfile": null,
               "languageProfileId": null,
               "library": {
-                "color": "#f59e0b",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "defaultLanguageProfileId": null,
-                "defaultQualityProfileId": null,
-                "icon": "headphones",
                 "id": 4,
-                "label": null,
-                "mediaTypes": [
-                  "book"
-                ],
-                "metadataLanguage": null,
-                "metadataRegion": null,
                 "name": "Audiobooks",
-                "path": "/tmp/fliks-parity/media/audiobooks",
-                "preferredProvider": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "path": "/tmp/fliks-parity/media/audiobooks"
               },
               "libraryId": 4,
               "logoUrl": null,

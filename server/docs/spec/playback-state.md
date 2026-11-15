@@ -147,7 +147,7 @@ WITH st AS (
   JOIN items i ON i.id = ps."itemId"
   JOIN editions ed ON ed.id = i."editionId"
   LEFT JOIN item_groups g ON g.id = i."groupId"
-  WHERE ps."userId" = $1
+  WHERE ps."userId" = $1 AND (i."groupId" IS NOT NULL OR ed.family = 'video')
 ),
 user_series AS (
   SELECT "mediaId", max("lastPlayedAt") AS "lastPlayedAt"

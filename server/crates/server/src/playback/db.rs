@@ -335,7 +335,8 @@ pub async fn continue_watching(
              JOIN items i ON i.id = ps."itemId"
              JOIN editions ed ON ed.id = i."editionId"
              LEFT JOIN item_groups g ON g.id = i."groupId"
-             WHERE ps."userId" = $1
+             -- Only the rows `picked` can keep: grouped items and ungrouped video.
+             WHERE ps."userId" = $1 AND (i."groupId" IS NOT NULL OR ed.family = 'video')
            ),
            user_series AS (
              SELECT "mediaId", max("lastPlayedAt") AS "lastPlayedAt"

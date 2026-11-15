@@ -276,9 +276,12 @@ fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" OR media.title ILIKE ").push_bind(like.clone());
     qb.push(" OR media.\"originalTitle\" ILIKE ")
         .push_bind(like);
-    qb.push(" OR similarity(media.title, ")
+    // `%` (threshold 0.3) lets the trigram index serve the branch; the 0.8 cut stays exact.
+    qb.push(" OR (media.title % ")
         .push_bind(q.to_owned())
-        .push(") > 0.8)");
+        .push(" AND similarity(media.title, ")
+        .push_bind(q.to_owned())
+        .push(") > 0.8))");
 }
 
 /// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); a kind without seasons compares
@@ -492,7 +495,7 @@ pub async fn recently_added(
     });
     qb.push(", media.id ASC LIMIT ").push_bind(p.limit);
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, false, Some(ids)).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, true, Some(ids)).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
     comics::attach_list_info(db, &mut data, uid, ids).await?;
     music::attach_list_info(db, &mut data, uid, ids).await?;

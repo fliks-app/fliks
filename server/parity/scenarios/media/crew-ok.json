@@ -13,7 +13,6 @@
             "job": "Writer",
             "person": {
               "avatarUrl": "/api/persons/1/avatar",
-              "biography": "Biography of Alice",
               "birthday": "1980-02-03",
               "createdAt": "2026-01-01T00:00:00.000Z",
               "deathday": null,
@@ -38,7 +37,6 @@
             "job": "Director",
             "person": {
               "avatarUrl": null,
-              "biography": null,
               "birthday": "1970-07-08",
               "createdAt": "2026-01-01T00:00:00.000Z",
               "deathday": "2020-01-02",

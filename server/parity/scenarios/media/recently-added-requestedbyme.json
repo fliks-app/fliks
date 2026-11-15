@@ -9,7 +9,6 @@
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-01-22T00:00:00.000Z",
             "digitalRelease": null,
             "fanartUrl": null,
@@ -31,20 +30,6 @@
                   "video": []
                 },
                 "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
-                "createdAt": "2026-02-03T04:00:00.000Z",
-                "episodeId": null,
-                "id": 56,
-                "language": null,
-                "mediaId": 21,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "Bluray-720p",
-                "relativePath": "alpha test (2020)/alpha test (2020).720.mkv",
-                "size": 1000056,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
             "folderName": "alpha test (2020)",
@@ -57,21 +42,8 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#3b82f6",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": 1,
-              "defaultQualityProfileId": 1,
-              "icon": "film",
               "id": 1,
-              "label": null,
-              "mediaTypes": [
-                "movie"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
-              "name": "Movies",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "name": "Movies"
             },
             "libraryId": 1,
             "logoUrl": null,
@@ -84,15 +56,8 @@
             "posterUrl": "/api/images/21/poster",
             "preferredProvider": null,
             "qualityProfile": {
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "cutoff": 18,
               "id": 1,
-              "items": [],
-              "minCustomFormatScore": 0,
-              "name": "Parity HD",
-              "resolutionUpgradeOnly": false,
-              "updatedAt": "2026-01-01T00:00:00.000Z",
-              "upgradeAllowed": false
+              "name": "Parity HD"
             },
             "qualityProfileId": 1,
             "rating": 6,
@@ -107,12 +72,12 @@
             "tvdbId": null,
             "type": "movie",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2015
+            "year": 2015,
+            "fileCount": 2
           },
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-02-17T00:00:00.000Z",
             "digitalRelease": null,
             "episodeStats": {
@@ -134,20 +99,6 @@
                 "size": 1000061,
                 "streamInfo": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
-              },
-              {
-                "createdAt": "2026-02-04T00:00:00.000Z",
-                "episodeId": 29,
-                "id": 62,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
-                "quality": "WEBDL-1080p",
-                "relativePath": "Series Calendar (2020)/Season 01/e29.mkv",
-                "size": 1000062,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
               }
             ],
             "folderName": "Series Calendar (2020)",
@@ -160,21 +111,8 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#10b981",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": null,
-              "defaultQualityProfileId": null,
-              "icon": "tv",
               "id": 2,
-              "label": null,
-              "mediaTypes": [
-                "series"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
-              "name": "Series",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "name": "Series"
             },
             "libraryId": 2,
             "logoUrl": null,
@@ -200,12 +138,12 @@
             "tvdbId": null,
             "type": "series",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2026
+            "year": 2026,
+            "fileCount": 2
           },
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-02-18T00:00:00.000Z",
             "digitalRelease": "2026-03-20",
             "fanartUrl": null,
@@ -233,21 +171,8 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#3b82f6",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": 1,
-              "defaultQualityProfileId": 1,
-              "icon": "film",
               "id": 1,
-              "label": null,
-              "mediaTypes": [
-                "movie"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
-              "name": "Movies",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "name": "Movies"
             },
             "libraryId": 1,
             "logoUrl": null,
@@ -273,12 +198,12 @@
             "tvdbId": null,
             "type": "movie",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2026
+            "year": 2026,
+            "fileCount": 1
           },
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-01-23T00:00:00.000Z",
             "digitalRelease": null,
             "fanartUrl": null,
@@ -308,21 +233,8 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#3b82f6",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": 1,
-              "defaultQualityProfileId": 1,
-              "icon": "film",
               "id": 1,
-              "label": null,
-              "mediaTypes": [
-                "movie"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
-              "name": "Movies",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "name": "Movies"
             },
             "libraryId": 1,
             "logoUrl": null,
@@ -348,12 +260,12 @@
             "tvdbId": null,
             "type": "movie",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 1957
+            "year": 1957,
+            "fileCount": 1
           },
           {
             "addedById": 2,
             "additionalFanartUrls": [],
-            "alternativeTitles": [],
             "createdAt": "2026-02-06T00:00:00.000Z",
             "digitalRelease": null,
             "fanartUrl": null,
@@ -381,21 +293,8 @@
             "languageProfile": null,
             "languageProfileId": null,
             "library": {
-              "color": "#3b82f6",
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "defaultLanguageProfileId": 1,
-              "defaultQualityProfileId": 1,
-              "icon": "film",
               "id": 1,
-              "label": null,
-              "mediaTypes": [
-                "movie"
-              ],
-              "metadataLanguage": null,
-              "metadataRegion": null,
-              "name": "Movies",
-              "preferredProvider": null,
-              "updatedAt": "2026-01-01T00:00:00.000Z"
+              "name": "Movies"
             },
             "libraryId": 1,
             "logoUrl": null,
@@ -408,15 +307,8 @@
             "posterUrl": null,
             "preferredProvider": null,
             "qualityProfile": {
-              "createdAt": "2026-01-01T00:00:00.000Z",
-              "cutoff": 18,
               "id": 1,
-              "items": [],
-              "minCustomFormatScore": 0,
-              "name": "Parity HD",
-              "resolutionUpgradeOnly": false,
-              "updatedAt": "2026-01-01T00:00:00.000Z",
-              "upgradeAllowed": false
+              "name": "Parity HD"
             },
             "qualityProfileId": 1,
             "rating": null,
@@ -431,7 +323,8 @@
             "tvdbId": null,
             "type": "movie",
             "updatedAt": "2026-01-01T00:00:00.000Z",
-            "year": 2020
+            "year": 2020,
+            "fileCount": 1
           }
         ],
         "status": 200
