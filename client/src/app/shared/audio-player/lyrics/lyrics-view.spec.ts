@@ -77,4 +77,19 @@ describe('LyricsViewComponent', () => {
     f.detectChanges();
     expect((f.nativeElement as HTMLElement).querySelector('button')!.textContent!.replace(/\s+/g, ' ')).toContain('lala, lala');
   });
+
+  it('scrolls back to the top when the document changes', () => {
+    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    const mk = (id: number) => ({ id, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 5000, value: 'a' }, { start: 6000, value: 'b' }] }) as StructuredLyrics;
+    f.componentRef.setInput('doc', mk(1));
+    f.detectChanges();
+    const box = (f.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="lyrics-lines"]')!;
+    const top = vi.fn();
+    Object.defineProperty(box, 'scrollTop', { set: top, get: () => 40 });
+    f.componentRef.setInput('doc', mk(2));
+    f.detectChanges();
+    expect(top).toHaveBeenCalledWith(0);
+  });
 });
