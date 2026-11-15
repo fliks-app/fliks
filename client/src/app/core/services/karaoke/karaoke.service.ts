@@ -76,7 +76,8 @@ export class KaraokeService {
 
   private ingest(userId: number, frames: readonly PitchFrame[]): void {
     if (!frames.length) return;
-    this.store.add(userId, frames);
+    const key = this.audio.pitch();
+    this.store.add(userId, frames.map((f) => ({ ...f, key })));
     this.frameCount.update((n) => n + frames.length);
   }
 
@@ -132,7 +133,6 @@ export class KaraokeService {
     return true;
   }
 
-  // Frames carry no key: the key in force now scores the whole take.
   results(doc: StructuredLyrics): BoardRow[] {
     return scoreAll(doc, this.store, this.difficulty(), this.latencyMs(), undefined, this.audio.pitch()).map((r) => ({ ...r, name: this.nameOf(r.userId) }));
   }
