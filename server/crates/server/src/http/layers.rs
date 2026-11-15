@@ -1,19 +1,21 @@
 use axum::Router;
-use axum::body::{Body, to_bytes};
+use axum::body::{Body, HttpBody, to_bytes};
 use axum::extract::{Request, State};
 use axum::http::header::{
     ACCEPT_RANGES, ACCESS_CONTROL_REQUEST_METHOD, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE,
-    CONTENT_TYPE, ETAG, HeaderValue,
+    CONTENT_TYPE, ETAG, HeaderValue, IF_NONE_MATCH,
 };
 use axum::http::{Method, StatusCode};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
+use sha1::{Digest, Sha1};
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::cors::{AllowHeaders, AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use super::error::AppError;
+use super::static_files::matches_etag;
 
 const WEB_DEFAULT: [&str; 2] = ["http://localhost:4200", "http://localhost:4500"];
 const NATIVE: [&str; 3] = [
@@ -51,6 +53,56 @@ async fn no_store_on_error(req: Request, next: Next) -> Response {
         );
     }
     res
+}
+
+/// Weak ETag from the body of an in-memory `GET /api` JSON 200, and its `If-None-Match` 304.
+async fn json_etag(req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    if req.method() != Method::GET || (path != "/api" && !path.starts_with("/api/")) {
+        return next.run(req).await;
+    }
+    let inm = req.headers().get(IF_NONE_MATCH).cloned();
+    let res = next.run(req).await;
+    let json = res
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|ct| {
+            let essence = ct.split(';').next().unwrap_or_default().trim();
+            essence.eq_ignore_ascii_case("application/json")
+        });
+    // A streamed body (SSE, exports) has no exact size and is never buffered.
+    if res.status() != StatusCode::OK
+        || !json
+        || res.headers().contains_key(ETAG)
+        || res.body().size_hint().exact().is_none()
+    {
+        return res;
+    }
+    let (mut parts, body) = res.into_parts();
+    let Ok(bytes) = to_bytes(body, usize::MAX).await else {
+        return AppError::plain(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+            .into_response();
+    };
+    let hex: String = Sha1::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let etag = format!("W/\"{hex}\"");
+    parts
+        .headers
+        .insert(ETAG, HeaderValue::from_str(&etag).expect("ascii etag"));
+    parts
+        .headers
+        .entry(CACHE_CONTROL)
+        .or_insert(HeaderValue::from_static("private, no-cache"));
+    if inm.is_some_and(|v| matches_etag(v.to_str().unwrap_or_default(), &etag)) {
+        parts.status = StatusCode::NOT_MODIFIED;
+        parts.headers.remove(CONTENT_TYPE);
+        parts.headers.remove(CONTENT_LENGTH);
+        return Response::from_parts(parts, Body::empty());
+    }
+    Response::from_parts(parts, Body::from(bytes))
 }
 
 /// A path whose handler reads and bounds its own body.
@@ -140,6 +192,7 @@ pub fn apply(
         .and(NotForContentType::const_new("application/epub"));
     router
         .layer(from_fn_with_state((body_limit_bytes, exempt), body_limit))
+        .layer(from_fn(json_etag))
         .layer(from_fn(no_store_on_error))
         .layer(cors)
         .layer(from_fn(preflight_204))
@@ -222,6 +275,49 @@ mod tests {
         let epub = app(None).oneshot(get("/epub")).await.unwrap();
         assert!(epub.headers().get("content-encoding").is_none());
         assert_eq!(epub.headers()["content-length"], "4096");
+    }
+
+    #[tokio::test]
+    async fn api_json_gets_a_body_etag_and_304() {
+        let r = Router::new()
+            .route("/api/list", get(|| async { axum::Json(vec!["title"; 64]) }))
+            .route(
+                "/api/kept",
+                get(|| async { ([(CACHE_CONTROL, "no-store")], axum::Json(1)) }),
+            )
+            .route(
+                "/api/stream",
+                get(|| async {
+                    let chunks = [Ok::<_, std::io::Error>("[]")];
+                    let body = Body::from_stream(futures_util::stream::iter(chunks));
+                    ([(CONTENT_TYPE, "application/json")], body)
+                }),
+            );
+        let app = apply(r, None, 1024, |_| false);
+        let send = |path: &'static str, inm: Option<String>| {
+            let mut b = Request::get(path);
+            if let Some(t) = inm {
+                b = b.header("if-none-match", t);
+            }
+            app.clone().oneshot(b.body(Body::empty()).unwrap())
+        };
+        let first = send("/api/list", None).await.unwrap();
+        assert_eq!(first.headers()[CACHE_CONTROL], "private, no-cache");
+        let etag = first.headers()[ETAG].to_str().unwrap().to_owned();
+        assert!(etag.starts_with("W/\""));
+        let hit = send("/api/list", Some(etag)).await.unwrap();
+        assert_eq!(hit.status(), 304);
+        assert!(
+            to_bytes(hit.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let kept = send("/api/kept", None).await.unwrap();
+        assert_eq!(kept.headers()[CACHE_CONTROL], "no-store");
+        assert!(kept.headers().contains_key(ETAG));
+        let stream = send("/api/stream", None).await.unwrap();
+        assert!(stream.headers().get(ETAG).is_none());
     }
 
     #[test]

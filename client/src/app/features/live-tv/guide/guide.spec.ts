@@ -117,6 +117,33 @@ describe('LiveTvGuideComponent — loadWindow sequencing', () => {
   });
 });
 
+describe('LiveTvGuideComponent: row window', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('renders only the rows around the scroll offset, with a step of margin on each side', async () => {
+    TestBed.configureTestingModule({ providers: testProviders() });
+    const http = TestBed.inject(HttpTestingController);
+    const component = TestBed.createComponent(LiveTvGuideComponent).componentInstance;
+    await tick();
+    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([]);
+    http.expectOne((r) => r.url === '/api/livetv/guide').flush(guidePage(0));
+    await tick();
+
+    const channel = (id: number): LiveChannel => ({
+      id, name: `ch-${id}`, number: id, logoPath: null, groupName: null, favorite: false, hidden: false, guideChannelId: null,
+    });
+    component.rows.set(Array.from({ length: 200 }, (_, i) => ({ channel: channel(i), programs: [] })));
+    // Rows 100 to 110 fill the scrollport.
+    const el = { scrollTop: 64 * 100, clientHeight: 64 * 10, querySelector: () => null } as unknown as HTMLElement;
+    component.updateWindow(el);
+
+    const ids = component.windowRows().map((r) => r.channel.id);
+    expect(ids[0]).toBeLessThanOrEqual(92);
+    expect(ids[ids.length - 1]).toBeGreaterThanOrEqual(118);
+    expect(ids.length).toBeLessThanOrEqual(40);
+  });
+});
+
 /**
  * `nowProgram`/`nextProgram` used to be baked into each row at fetch time (guide.ts pre-fix),
  * so a program that ended between fetches stayed "now" until the next reload. They're now

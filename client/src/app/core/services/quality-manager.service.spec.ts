@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlayerSettingsService } from './player-settings.service';
+import { ServerConfigService } from './server-config.service';
 import { BEST_QUALITY_ID, highestRungId, QualityManagerService, type QualityOption } from './quality-manager.service';
 
 const opt = (id: string, height: number): QualityOption => ({ id, label: id, height });
@@ -113,5 +114,45 @@ describe('QualityManagerService preference', () => {
     localStorage.setItem('player.qualityId', JSON.stringify({ id: '1080p' }));
     qm.restorePreference();
     expect(qm.activeQualityId()).toBe('1080p');
+  });
+});
+
+describe('QualityManagerService start bandwidth estimate', () => {
+  let server = 'https://a.example';
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: PlayerSettingsService, useValue: { get: () => ({ showEcoQualities: true }) } },
+        { provide: ServerConfigService, useValue: { serverUrl: () => server } },
+      ],
+    });
+    return TestBed.inject(QualityManagerService);
+  }
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    localStorage.clear();
+    server = 'https://a.example';
+  });
+
+  it('seeds 100 Mbps until a measurement is stored, then the measurement, per server', () => {
+    const qm = setup();
+    expect(qm.startBandwidthEstimate()).toBe(100_000_000);
+    qm.rememberBandwidth(2_000_000);
+    qm.rememberBandwidth(null);
+    qm.rememberBandwidth(Number.NaN);
+    expect(qm.startBandwidthEstimate()).toBe(2_000_000);
+    server = 'https://b.example';
+    expect(qm.startBandwidthEstimate()).toBe(100_000_000);
+  });
+
+  it('passes the stored estimate to the engine on auto', () => {
+    const qm = setup();
+    qm.rememberBandwidth(3_000_000);
+    const configure = vi.fn();
+    qm.selectQuality({ id: 'auto', label: 'Auto', height: 0 }, { configure } as never, 'transcode', true);
+    expect(configure.mock.calls[0][0].abr.defaultBandwidthEstimate).toBe(3_000_000);
   });
 });

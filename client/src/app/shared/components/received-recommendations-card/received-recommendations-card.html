@@ -1,5 +1,5 @@
 @if (!tv.isTv() && items().length > 0) {
-  <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+  <section class="card bg-base-200/60 backdrop-blur-sm reduced-effects:bg-base-200/90 reduced-effects:backdrop-filter-none shadow-sm">
     <div class="card-body p-4 sm:p-5 gap-4">
       @for (group of grouped(); track group.senderId) {
         <div class="flex flex-col gap-2">

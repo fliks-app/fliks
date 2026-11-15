@@ -8,6 +8,12 @@ import {
   ElementRef,
   ViewChild,
 } from '@angular/core';
+import {
+  CdkVirtualScrollViewport,
+  CdkFixedSizeVirtualScroll,
+  CdkVirtualForOf,
+  CdkVirtualScrollableWindow,
+} from '@angular/cdk/scrolling';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
@@ -25,7 +31,19 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [TranslatePluralPipe, TvSelectDirective, FormsModule, TranslatePipe, PersonAvatarCardComponent, LucideSearch, LucideUsers],
+  imports: [
+    TranslatePluralPipe,
+    TvSelectDirective,
+    FormsModule,
+    TranslatePipe,
+    PersonAvatarCardComponent,
+    LucideSearch,
+    LucideUsers,
+    CdkVirtualScrollViewport,
+    CdkFixedSizeVirtualScroll,
+    CdkVirtualForOf,
+    CdkVirtualScrollableWindow,
+  ],
   templateUrl: './persons.html',
 })
 export class PersonsComponent implements OnInit, OnDestroy {
@@ -59,9 +77,16 @@ export class PersonsComponent implements OnInit, OnDestroy {
 
   private readonly storageKey = 'fliks.filters.persons';
 
-  @ViewChild('sentinel') set sentinelRef(ref: ElementRef<HTMLElement> | undefined) {
-    this.list.observeSentinel(ref);
+  @ViewChild(CdkVirtualScrollViewport) set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
+    this.list.bindViewport(ref);
   }
+
+  @ViewChild('personRow') set personRowRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.list.grid.bindRow(ref?.nativeElement);
+  }
+
+  /** A resize can change the column count, which re-chunks the rows. */
+  private readonly onResize = () => this.list.grid.measure();
 
   ngOnInit() {
     const qp = this.route.snapshot.queryParamMap;
@@ -69,7 +94,8 @@ export class PersonsComponent implements OnInit, OnDestroy {
     this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
 
     this.scrollMemory.activate(this.scrollKey);
-    this.list.trackScroll('person');
+    this.list.trackScroll();
+    window.addEventListener('resize', this.onResize, { passive: true });
     this.syncQueryParams();
     this.load().then(() =>
       this.scrollMemory.restore(this.scrollKey, this.injector),
@@ -80,10 +106,11 @@ export class PersonsComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.scrollMemory.deactivateIf(this.scrollKey);
     this.list.destroy();
+    window.removeEventListener('resize', this.onResize);
   }
 
   scrollToLetter(letter: string) {
-    this.list.scrollToLetter(letter, (p) => p.name, 'person');
+    this.list.scrollToLetter(letter, (p) => p.name);
   }
 
   onSearch(query: string) {

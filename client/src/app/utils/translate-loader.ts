@@ -3,6 +3,7 @@ import type { TranslationObject } from '@ngx-translate/core';
 import { TranslateLoader } from '@ngx-translate/core';
 import { Observable, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 /** Charge les JSON i18n via HttpBackend, hors interceptors, pour éviter la dépendance circulaire TranslateService ↔ errorInterceptor. */
 export function translateBrowserLoaderFactory(
@@ -12,9 +13,9 @@ export function translateBrowserLoaderFactory(
   return {
     getTranslation(lang: string): Observable<TranslationObject> {
       // Relative to <base href>: a leading "/" resolves to the filesystem root on TV (file://) and 404s.
-      // A missing locale file degrades to empty so ngx-translate falls back instead of blanking the UI.
+      // `v` keys the service worker's cache to the release; a missing file degrades to {} so the fallback language shows.
       return http
-        .get<TranslationObject>(`i18n/${lang}.json?v=${Date.now()}`)
+        .get<TranslationObject>(`i18n/${lang}.json?v=${environment.version}`)
         .pipe(catchError(() => of<TranslationObject>({})));
     },
   };

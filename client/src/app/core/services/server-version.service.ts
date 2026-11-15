@@ -5,6 +5,8 @@ import { Capacitor } from '@capacitor/core';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
 import { DeviceService } from './device.service';
+import { ServerConfigService } from './server-config.service';
+import { readStored, writeStored } from './party/local-flag';
 
 /** Numeric x.y.z compare, pre-release/build suffix dropped. */
 export function isNewer(a: string, b: string): boolean {
@@ -31,10 +33,12 @@ export const SERVER_SINCE = {
   grabBest: '6.1.0',
   playlistM3u: '6.1.0',
   playlistPreview: '6.1.0',
+  listWithoutTotal: '6.1.0',
 } as const;
 
 /** A failed version read is retried this many times, each after twice the previous delay. */
 const RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 24_000, 48_000];
+const STORAGE_PREFIX = 'fliks.serverVersion::';
 
 /** Version of the connected server: an installed app can update before its server, so a feature added
  *  after the oldest supported server is gated with `supports('<release that added it>')`. */
@@ -43,6 +47,7 @@ export class ServerVersionService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly device = inject(DeviceService);
+  private readonly serverConfig = inject(ServerConfigService);
   /** A browser runs the build its server serves, so it never needs a gate. */
   private readonly web = !Capacitor.isNativePlatform() && !this.device.isTv() && !this.device.isDesktopNative();
   readonly version = signal<string | null>(null);
@@ -51,7 +56,11 @@ export class ServerVersionService {
   private attempt = 0;
 
   private readonly onUser = effect(() => {
-    if (this.auth.user()) untracked(() => void this.refresh());
+    if (this.auth.user())
+      untracked(() => {
+        this.version.set(this.stored());
+        void this.refresh();
+      });
     else {
       this.version.set(null);
       this.stopRetrying();
@@ -59,6 +68,7 @@ export class ServerVersionService {
   });
 
   refresh(): Promise<void> {
+    const key = this.storageKey();
     return (this.inflight ??= firstValueFrom(
       this.http.get<{ version: string }>('/api/system/version', {
         context: new HttpContext().set(SKIP_ERROR_TOAST, true),
@@ -66,12 +76,11 @@ export class ServerVersionService {
     ).then(
       ({ version }) => {
         this.version.set(version);
+        writeStored(key, version);
         this.stopRetrying();
       },
-      () => {
-        this.version.set(null);
-        this.retryLater();
-      },
+      // The last known version stays: the link is down, not the server replaced.
+      () => this.retryLater(),
     ).finally(() => (this.inflight = null)));
   }
 
@@ -97,7 +106,23 @@ export class ServerVersionService {
 
   /** `supports` for a call that can run before the first version request has answered. */
   async supportsWhenKnown(since: string): Promise<boolean> {
-    if (!this.web && !this.version()) await this.refresh();
+    if (!this.web && !this.version()) {
+      const known = this.stored();
+      if (!known) await this.refresh();
+      else {
+        this.version.set(known);
+        void this.refresh();
+      }
+    }
     return this.supports(since);
+  }
+
+  /** Last version this server answered, so a cold start gates without a round trip. */
+  private stored(): string | null {
+    return readStored(this.storageKey());
+  }
+
+  private storageKey(): string {
+    return STORAGE_PREFIX + untracked(this.serverConfig.serverUrl);
   }
 }

@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { Component, afterNextRender, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { RecentlyPlayedRowComponent } from '../music/recently-played-row.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -56,6 +56,7 @@ import { armPageSlide } from '../../shared/utils/page-slide';
 import { CacheRead } from '../../core/interceptors/cache.interceptor';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 import { canMarkWatched, mediaDetailLink, kindOf } from '../../core/media-kinds';
+import type { MediaType } from '../../core/enums/media-type.enum';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
@@ -113,8 +114,9 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  repaints and a forced pass brings in what changed elsewhere. */
   private readonly routeFresh = keepRouteFresh({
     refresh: () => {
+      const freshSince = Date.now();
       void this.loadAllSections({ known: true });
-      queueMicrotask(() => void this.loadAllSections({ force: true }));
+      queueMicrotask(() => void this.loadAllSections({ force: true, freshSince }));
     },
     // On resume the sections are already rendered, so a cache-first pass would
     // repaint nothing.
@@ -338,13 +340,51 @@ export class HomeComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Refetches the row: a new like needs the title/artwork only the server has. */
-  async toggleLike(target: LikeTarget, liked: boolean) {
+  /** Flips the row first from what the card shows; a failed request restores it. */
+  async toggleLike(item: LikedItem, liked: boolean) {
+    const prev = this.likes();
+    const others = prev.filter(
+      (l) => !(l.mediaId === item.mediaId && l.seasonId === item.seasonId && l.episodeId === item.episodeId),
+    );
+    this.likes.set(liked ? [item, ...others] : others);
+    const target: LikeTarget = {
+      mediaId: item.mediaId,
+      seasonId: item.seasonId ?? undefined,
+      episodeId: item.episodeId ?? undefined,
+    };
     try {
       await (liked ? this.likesApi.like(target) : this.likesApi.unlike(target));
-      const likes = await this.likesApi.mine(undefined, { force: true });
-      this.likes.set(likes);
-    } catch { /* interceptor surfaces errors */ }
+    } catch {
+      this.likes.set(prev);
+    }
+  }
+
+  protected mediaLike(m: { id: number; type: MediaType; title: string; posterUrl: string | null; fanartUrl: string | null }): LikedItem {
+    return {
+      mediaId: m.id,
+      mediaType: m.type,
+      title: m.title,
+      posterUrl: m.posterUrl,
+      fanartUrl: m.fanartUrl,
+      seasonId: null,
+      episodeId: null,
+      label: null,
+      stillUrl: null,
+    };
+  }
+
+  protected continueWatchingLike(item: ContinueWatchingItem): LikedItem {
+    const { mediaId: id, mediaType: type, mediaTitle: title, posterUrl, fanartUrl } = item;
+    return {
+      ...this.mediaLike({ id, type, title, posterUrl, fanartUrl }),
+      episodeId: item.episodeId,
+      label: item.episodeLabel,
+      stillUrl: item.stillUrl,
+    };
+  }
+
+  protected calendarLike(entry: CalendarEntry): LikedItem {
+    return this.mediaLike({ ...entry, id: entry.mediaId });
   }
 
   /** Route to a liked item: the episode page when it targets an episode,
@@ -407,15 +447,17 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
-    // Profile names for the request cards are resolved client-side (same as
-    // the requests page); load them once for users who can have requests.
-    if (this.requestsAllowed) void this.loadRequestProfiles();
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
     const cold = this.coldStart();
     HomeComponent.skeletonShown = true;
     if (cold) this.skeletonLayout.set(this.readLayout());
+    const freshSince = Date.now();
     await this.loadAllSections({ known: true });
+    // Profile names only label the request cards (`#id` until then): not worth delaying the first rows for.
+    if (this.requestsAllowed) {
+      afterNextRender(() => void this.loadRequestProfiles(), { injector: this.injector });
+    }
     if (cold) {
       this.skeletonFadingOut.set(true);
       this.loadingFirstPass.set(false);
@@ -427,7 +469,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
     this.captureLayout();
     // App-open SWR: pass 1 rendered from cache; force a network refresh that overwrites signals in place.
-    queueMicrotask(() => void this.loadAllSections({ force: true }));
+    queueMicrotask(() => void this.loadAllSections({ force: true, freshSince }));
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
   }
 
@@ -437,8 +479,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /** Fetches every section in parallel, keeping existing values visible until each response lands.
-   * `known` paints whatever is cached; `force` always hits the network (the SWR refresh after first paint). */
+   * `known` paints whatever is cached; `force` refreshes from the network what the `known` pass did not fetch. */
   private async loadAllSections(opts: CacheRead = {}): Promise<void> {
+    let globalRows: Promise<void> | undefined;
     try {
       // Uncached rows paint on arrival: awaiting them holds the skeleton over
       // cached rows for as long as a dead link takes to fail.
@@ -452,6 +495,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       void this.likesApi.mine(undefined, opts).then((likes) => this.likes.set(likes), () => undefined);
       this.loadRecentRequests(opts);
       this.loadParties();
+      globalRows = this.loadGlobalRows(opts);
       const [libs, cw, recs] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
@@ -461,7 +505,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (cw) this.continueWatchingRaw.set(cw);
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }
-    await this.loadFilteredSections(opts);
+    // The per-library rows read which libraries are visible, so they wait for the list.
+    await Promise.all([globalRows, this.loadLibraryRows(opts)]);
   }
 
   /** Uncached: sent before any await, so a refresh's two passes overlap and share one request. */
@@ -472,9 +517,12 @@ export class HomeComponent implements OnInit, OnDestroy {
       .then((r) => this.recentRequests.set(r.data), () => undefined);
   }
 
-  private async loadFilteredSections(opts: CacheRead = {}) {
+  private async loadFilteredSections(opts: CacheRead = {}): Promise<void> {
+    await Promise.all([this.loadGlobalRows(opts), this.loadLibraryRows(opts)]);
+  }
+
+  private async loadGlobalRows(opts: CacheRead): Promise<void> {
     const mine = this.displaySettings.settings().onlyMyRequests;
-    const mode = this.home.settings().recentlyAddedMode;
     const today = new Date();
     const threeDaysAgo = new Date(today);
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
@@ -483,16 +531,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     const startStr = threeDaysAgo.toISOString().slice(0, 10);
     const in30dStr = in30d.toISOString().slice(0, 10);
 
-    // Only fetch per-library rows the user has actually enabled (opt-in).
-    const libSections = this.visibleSections().filter(
-      (s) => s.type === 'library-recent' && s.libraryId != null,
-    );
-
+    void this.mediaService.getLeavingSoon(opts).then((l) => this.leavingSoon.set(l), () => undefined);
     try {
-      const [recent, calendar, libEntries] = await Promise.all([
+      const [recent, calendar] = await Promise.all([
         this.mediaService.getRecentlyAdded(
           {
-            mode,
+            mode: this.home.settings().recentlyAddedMode,
             limit: 20,
             excludeWatched: true,
             requestedByMe: mine || undefined,
@@ -500,27 +544,8 @@ export class HomeComponent implements OnInit, OnDestroy {
           opts,
         ),
         this.mediaService.getCalendar(startStr, in30dStr, true, mine, opts).catch(() => []),
-        Promise.all(
-          libSections.map((s) =>
-            this.mediaService
-              .getRecentlyAdded(
-                {
-                  libraryId: s.libraryId,
-                  mode,
-                  limit: 20,
-                  excludeWatched: true,
-                  requestedByMe: mine || undefined,
-                },
-                opts,
-              )
-              .then((items) => [s.libraryId as number, items] as const)
-              .catch(() => [s.libraryId as number, [] as Media[]] as const),
-          ),
-        ),
       ]);
       this.recentMedia.set(recent);
-      void this.mediaService.getLeavingSoon(opts).then((l) => this.leavingSoon.set(l), () => undefined);
-      this.libraryRecent.set(new Map(libEntries));
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -533,6 +558,33 @@ export class HomeComponent implements OnInit, OnDestroy {
         }),
       );
     } catch { /* ignore */ }
+  }
+
+  /** Only the per-library rows the user has enabled (opt-in). */
+  private async loadLibraryRows(opts: CacheRead): Promise<void> {
+    const mine = this.displaySettings.settings().onlyMyRequests;
+    const mode = this.home.settings().recentlyAddedMode;
+    const libSections = this.visibleSections().filter(
+      (s) => s.type === 'library-recent' && s.libraryId != null,
+    );
+    const libEntries = await Promise.all(
+      libSections.map((s) =>
+        this.mediaService
+          .getRecentlyAdded(
+            {
+              libraryId: s.libraryId,
+              mode,
+              limit: 20,
+              excludeWatched: true,
+              requestedByMe: mine || undefined,
+            },
+            opts,
+          )
+          .then((items) => [s.libraryId as number, items] as const)
+          .catch(() => [s.libraryId as number, [] as Media[]] as const),
+      ),
+    );
+    this.libraryRecent.set(new Map(libEntries));
   }
 
   private async loadRequestProfiles() {

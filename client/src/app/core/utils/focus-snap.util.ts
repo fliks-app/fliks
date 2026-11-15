@@ -1,3 +1,6 @@
+/** The element whose focus is snapping its row this task: spatial nav then leaves the page scroll to the snap. */
+let snapping: Element | null = null;
+
 /** Pulls a card row to the top of the viewport when focus enters it from outside (spatial-nav's instant `focus()` scroll leaves the user mid-row);
  *  shared by `app-horizontal-scroller` and `[appTvRowSnap]`. */
 export function snapRowOnFocus(
@@ -12,24 +15,40 @@ export function snapRowOnFocus(
     const target = event.target as HTMLElement | null;
     if (target && !target.matches(':focus-visible')) return;
   } catch {
-    // No :focus-visible support — fall through and snap.
+    // No :focus-visible support: fall through and snap.
   }
-  queueMicrotask(() => snapToTop(host, topOffset));
+  if (snapTarget(host, topOffset) === null) return;
+  snapping = event.target as Element | null;
+  queueMicrotask(() => {
+    snapping = null;
+    const top = snapTarget(host, topOffset);
+    if (top !== null) scrollPageTo(top);
+  });
 }
 
-function snapToTop(host: HTMLElement, topOffset: number): void {
-  if (typeof window === 'undefined') return;
+/** Whether focusing `el`, in this task, snapped its row (the page scroll is then the snap's). */
+export function rowSnapPending(el: Element): boolean {
+  return snapping === el;
+}
+
+/** The page offset that puts `host` at `topOffset`, or null when it is already in view. */
+function snapTarget(host: HTMLElement, topOffset: number): number | null {
+  if (typeof window === 'undefined') return null;
   const scrollEl = document.scrollingElement ?? document.documentElement;
   const rect = host.getBoundingClientRect();
   const currentTop = scrollEl.scrollTop ?? 0;
   // Already fully visible: the user is walking between visible rows.
-  if (rect.top >= topOffset && rect.bottom <= window.innerHeight) return;
+  if (rect.top >= topOffset && rect.bottom <= window.innerHeight) return null;
   const targetTop = Math.max(0, currentTop + rect.top - topOffset);
-  if (Math.abs(targetTop - currentTop) < 4) return;
+  return Math.abs(targetTop - currentTop) < 4 ? null : targetTop;
+}
+
+function scrollPageTo(top: number): void {
+  const scrollEl = document.scrollingElement ?? document.documentElement;
   try {
-    scrollEl.scrollTo({ top: targetTop, left: 0, behavior: 'smooth' });
+    scrollEl.scrollTo({ top, left: 0, behavior: 'smooth' });
   } catch {
-    scrollEl.scrollTo(0, targetTop);
+    scrollEl.scrollTo(0, top);
   }
 }
 

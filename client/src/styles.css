@@ -1,5 +1,8 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  /* No template uses a calendar widget. */
+  exclude: calendar;
+}
 
 @import "./styles/foundations.css";
 @import "./styles/tv.css";

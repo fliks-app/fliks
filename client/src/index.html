@@ -20,11 +20,9 @@
     html, body { margin: 0; }
     :where(html) { background-color: #1d232a; }
   </style>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <!-- Request art falls back to the TMDB CDN for rows without stored local
        images — pre-open the connection so that first fetch skips DNS+TLS. -->
   <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
-  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
 </head>
 <body>
   <!-- Tizen AVPlay surface: the runtime binds `webapis.avplay` to the first `<object type="application/avplayer">` at parse time, and it must be 100%×100% then.

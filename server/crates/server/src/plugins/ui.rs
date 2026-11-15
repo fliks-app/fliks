@@ -2,9 +2,28 @@
 use super::Plugins;
 use super::registry::Registered;
 use super::runtime::State;
-use fliks_domain::acl::Permissions;
+use fliks_domain::acl::{Action, Permissions, Subject};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
+
+/// The client's `fallbackLang`: a `lang` cut always keeps it.
+const FALLBACK_LANG: &str = "en";
+
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+pub struct UiQuery {
+    /// Keeps each plugin's `i18n` to this locale and the fallback one; every locale without it.
+    pub lang: Option<String>,
+}
+
+fn i18n_in(i18n: Option<&Value>, lang: Option<&str>) -> Value {
+    let kept = i18n
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(l, _)| lang.is_none_or(|lang| *l == lang || *l == FALLBACK_LANG))
+        .map(|(l, d)| (l.clone(), d.clone()));
+    Value::Object(kept.collect())
+}
 
 fn i18n_keys(r: &Registered) -> BTreeSet<String> {
     r.manifest["i18n"]
@@ -88,7 +107,8 @@ impl Plugins {
     fn may_read(&self, id: &str, page: &Value, perms: &Permissions) -> bool {
         let kind = page["kind"].as_str();
         if kind != Some("table") && kind != Some("providers") {
-            return true;
+            // A form page edits settings, which only the admin area (`settings.access`) shows.
+            return perms.can(Action::Manage, &Subject::Settings);
         }
         let list = page["list"].as_str().unwrap_or_default();
         self.registry
@@ -96,7 +116,7 @@ impl Plugins {
             .is_some_and(|r| self.registry.allows(id, &r.route.policy, perms))
     }
 
-    pub fn ui(&self, perms: &Permissions) -> Vec<Value> {
+    pub fn ui(&self, perms: &Permissions, lang: Option<&str>) -> Vec<Value> {
         let active: Vec<Registered> = self
             .registry
             .list()
@@ -143,10 +163,7 @@ impl Plugins {
                 e.insert("name".into(), p.manifest["name"].clone());
                 e.insert("contributions".into(), Value::Array(contributions));
                 e.insert("configPages".into(), Value::Array(pages));
-                e.insert(
-                    "i18n".into(),
-                    p.manifest.get("i18n").cloned().unwrap_or(json!({})),
-                );
+                e.insert("i18n".into(), i18n_in(p.manifest.get("i18n"), lang));
                 if let Some(block) = p.manifest.get("provider") {
                     let names: Vec<_> = block["namespaces"]
                         .as_array()
@@ -202,6 +219,21 @@ impl Plugins {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lang_keeps_that_locale_and_the_fallback_one() {
+        let i18n = json!({"en": {"a.b": "B"}, "fr": {"a.b": "Bé"}, "de": {"a.b": "Be"}});
+        assert_eq!(i18n_in(Some(&i18n), None), i18n);
+        assert_eq!(
+            i18n_in(Some(&i18n), Some("fr")),
+            json!({"en": {"a.b": "B"}, "fr": {"a.b": "Bé"}})
+        );
+        assert_eq!(
+            i18n_in(Some(&i18n), Some("it")),
+            json!({"en": {"a.b": "B"}})
+        );
+        assert_eq!(i18n_in(None, Some("fr")), json!({}));
+    }
 
     #[test]
     fn marking_adds_a_flag_and_no_value() {

@@ -78,8 +78,15 @@ export class ControlsVisibilityService {
    *  a touch screen sends a move before every tap, and a D-pad drifts. */
   onPointerMove(): void {
     if (this.device.isTouch() || this.device.isDpad()) return;
+    if (this.visible() && !this.seekOsd() && !this.reactionsOnly()) {
+      // The countdown reads this instead of an `activity` bump, so a steady move writes no signal.
+      this.lastPointerMove = Date.now();
+      return;
+    }
     this.show();
   }
+
+  private lastPointerMove = 0;
 
   /** A webOS Magic Remote sends wheel and click, never keydown, so those
    *  discrete gestures wake the bar even though pointer moves do not. */
@@ -97,7 +104,12 @@ export class ControlsVisibilityService {
     if (this.holding() || (!reactions && (!this.visible() || this.pinned() || this.panelOpen()))) return;
     this.activity();
     const delay = this.device.isTv() ? HIDE_DELAY_TV_MS : HIDE_DELAY_MS;
-    const id = setTimeout(() => this.hide(), delay);
+    const fire = () => {
+      const wait = this.lastPointerMove + delay - Date.now();
+      if (wait > 0) id = setTimeout(fire, wait);
+      else this.hide();
+    };
+    let id = setTimeout(fire, delay);
     onCleanup(() => clearTimeout(id));
   });
 

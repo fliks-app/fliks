@@ -76,6 +76,7 @@ function createComponent() {
           tvPlatform: () => null,
           desktopPlatform: () => null,
           isTv: () => false,
+          reducedEffects: () => false,
           isDesktop: () => false,
         },
       },

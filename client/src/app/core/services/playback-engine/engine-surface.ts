@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackEngine } from './playback-engine';
-import { isTizenAvplayAvailable } from './tizen-engine';
+import { isTizenAvplayAvailable } from './tizen-avplay';
 
 export type EngineSurfaceKind = 'shaka' | 'webos' | 'tizen' | 'native' | 'desktop';
 
@@ -58,6 +58,21 @@ export function releaseEngineSurface(): void {
   document.documentElement.classList.remove('native-player-active');
 }
 
+let shakaChunk: Promise<typeof import('./shaka-engine')> | null = null;
+
+/** A failed fetch is not kept, so the next launch retries the chunk. */
+function shakaModule(): Promise<typeof import('./shaka-engine')> {
+  return (shakaChunk ??= import('./shaka-engine').catch((e) => {
+    shakaChunk = null;
+    throw e;
+  }));
+}
+
+/** Starts the Shaka chunk download early; a failure surfaces in {@link createEngineSurface}. */
+export function preloadShakaEngine(): void {
+  shakaModule().catch(() => {});
+}
+
 /** Loaded on demand: Shaka is ~780 KB that no native or TV engine needs. */
 async function engineFor(kind: EngineSurfaceKind): Promise<PlaybackEngine> {
   switch (kind) {
@@ -70,7 +85,7 @@ async function engineFor(kind: EngineSurfaceKind): Promise<PlaybackEngine> {
     case 'desktop':
       return new (await import('./desktop-engine')).DesktopEngine();
     default:
-      return new (await import('./shaka-engine')).ShakaEngine();
+      return new (await shakaModule()).ShakaEngine();
   }
 }
 

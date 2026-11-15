@@ -7,14 +7,15 @@ import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { abortable } from '../../utils/abortable';
 import { saveFile } from '../../plugins/save-file.plugin';
-import { ServerVersionService } from '../server-version.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 
 export interface QualityProfileBrief {
   id: number;
   name: string;
   cutoff: number;
   upgradeAllowed: boolean;
-  items: {
+  /** Absent on grid and recently-added items. */
+  items?: {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
     sortOrder: number;
@@ -283,6 +284,8 @@ export interface SearchParams {
   requestedByMe?: boolean;
   /** `grid`: `files` keeps only the first file and `fileCount` carries the total. */
   view?: 'grid';
+  /** `false`: the server skips the count and answers `total: null`, for a caller that never reads it. */
+  withTotal?: false;
 }
 
 export interface VideoStreamInfo {
@@ -386,6 +389,7 @@ export class MediaService {
   async getAll(params: SearchParams = {}, opts: CacheRead = {}, signal?: AbortSignal): Promise<MediaPage> {
     if (params.view && !(await this.serverVersion.supportsWhenKnown('5.2.0'))) params = { ...params, view: undefined };
     if (Array.isArray(params.type) && params.type.length > 1 && !(await this.serverVersion.supportsWhenKnown('6.1.0'))) params = { ...params, type: undefined };
+    if (params.withTotal === false && !(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.listWithoutTotal))) params = { ...params, withTotal: undefined };
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === null || value === '') continue;
@@ -448,24 +452,24 @@ export class MediaService {
     );
   }
 
-  getCast(id: number) {
-    return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`));
+  getCast(id: number, opts: CacheRead = {}) {
+    return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`, { headers: cacheHeaders(opts) }));
   }
 
-  getSimilar(id: number) {
+  getSimilar(id: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<RelatedMedia[]>(`/api/media/${id}/similar`),
+      this.http.get<RelatedMedia[]>(`/api/media/${id}/similar`, { headers: cacheHeaders(opts) }),
     );
   }
 
-  getCollection(id: number) {
+  getCollection(id: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<MediaCollection | null>(`/api/media/${id}/collection`),
+      this.http.get<MediaCollection | null>(`/api/media/${id}/collection`, { headers: cacheHeaders(opts) }),
     );
   }
 
-  getCrew(id: number) {
-    return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`));
+  getCrew(id: number, opts: CacheRead = {}) {
+    return firstValueFrom(this.http.get<MediaCrewEntry[]>(`/api/media/${id}/crew`, { headers: cacheHeaders(opts) }));
   }
 
   getAppQualities(family: Family = 'video') {

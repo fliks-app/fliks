@@ -86,6 +86,44 @@ describe('errorInterceptor', () => {
     }
   });
 
+  it('retries a GET that never reached the server twice, then gives up', () => {
+    vi.useFakeTimers();
+    try {
+      let status: number | undefined;
+      client.get('/api/media').subscribe({ error: (e) => (status = e.status) });
+      http.expectOne('/api/media').error(new ProgressEvent('error'));
+      vi.advanceTimersByTime(300);
+      http.expectOne('/api/media').error(new ProgressEvent('error'));
+      vi.advanceTimersByTime(600);
+      http.expectOne('/api/media').error(new ProgressEvent('error'));
+      expect(status).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('serves a GET whose retry reaches the server', () => {
+    vi.useFakeTimers();
+    try {
+      let body: unknown;
+      client.get('/api/media').subscribe((b) => (body = b));
+      http.expectOne('/api/media').error(new ProgressEvent('error'));
+      vi.advanceTimersByTime(300);
+      http.expectOne('/api/media').flush({ ok: true });
+      expect(body).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never retries after an HTTP status or on a mutation', () => {
+    fireAndFlush('/api/whatever', null, { status: 502 });
+    client.post('/api/a', {}).subscribe({ error: () => {} });
+    http.expectOne('/api/a').error(new ProgressEvent('error'));
+    http.expectNone('/api/whatever');
+    http.expectNone('/api/a');
+  });
+
   it('bounds a POST only when it asks for a deadline', () => {
     vi.useFakeTimers();
     try {

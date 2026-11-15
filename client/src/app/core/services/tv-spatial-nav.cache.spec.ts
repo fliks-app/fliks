@@ -1,0 +1,51 @@
+import { TestBed } from '@angular/core/testing';
+import { afterEach, describe, expect, it } from 'vitest';
+import { TvSpatialNavService, nearestDelta } from './tv-spatial-nav.service';
+
+function button(parent: HTMLElement, x: number): HTMLButtonElement {
+  const el = document.createElement('button');
+  Object.defineProperty(el, 'offsetParent', { get: () => parent });
+  el.getBoundingClientRect = () => ({ left: x, top: 0, width: 40, height: 40, right: x + 40, bottom: 40, x, y: 0, toJSON: () => ({}) });
+  parent.append(el);
+  return el;
+}
+
+const flush = () => new Promise((r) => setTimeout(r));
+
+describe('TvSpatialNavService focusable cache', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('keeps a grid list across a cosmetic change elsewhere and drops it when the grid gains a child', async () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as { focusablesIn(root: ParentNode): HTMLElement[] };
+    const grid = document.body.appendChild(document.createElement('div'));
+    const other = document.body.appendChild(document.createElement('div'));
+    button(grid, 0);
+    await flush();
+
+    const first = nav.focusablesIn(grid);
+    expect(first).toHaveLength(1);
+    other.style.color = 'red';
+    await flush();
+    expect(nav.focusablesIn(grid)).toBe(first);
+
+    button(grid, 50);
+    await flush();
+    expect(nav.focusablesIn(grid)).toHaveLength(2);
+  });
+});
+
+describe('nearestDelta', () => {
+  it('scrolls like block: nearest', () => {
+    // Inside the view, or spanning it: no scroll.
+    expect(nearestDelta(100, 200, 0, 500)).toBe(0);
+    expect(nearestDelta(-100, 600, 0, 500)).toBe(0);
+    // Above the view: its top meets the view's top; below: its bottom meets the view's bottom.
+    expect(nearestDelta(-50, 50, 0, 500)).toBe(-50);
+    expect(nearestDelta(450, 550, 0, 500)).toBe(50);
+    // Taller than the view: the other edge aligns.
+    expect(nearestDelta(-50, 600, 0, 500)).toBe(0);
+    expect(nearestDelta(100, 700, 0, 500)).toBe(100);
+  });
+});

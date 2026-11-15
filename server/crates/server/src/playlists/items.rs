@@ -172,7 +172,7 @@ pub async fn items(
            )
            SELECT pi.id AS "item_id!", pi."itemId" AS "track_item!", (m.type = 'album') AS "is_track!",
                   pi.position AS "position!", pi."addedById" AS added_by_id,
-                  (to_jsonb(m) - 'searchVector' - 'sortCreator') || jsonb_build_object(
+                  (to_jsonb(m) - 'searchVector' - 'sortCreator' - 'lastFileAddedAt') || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,

@@ -318,3 +318,19 @@ fn workers_lists_only_live_instances() {
     let keys: Vec<String> = q.workers().into_iter().map(|(k, ..)| k).collect();
     assert_eq!(keys, ["new"]);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_lease_wakes_the_job_watcher(pool: PgPool) {
+    use futures_util::FutureExt;
+    crate::db::migrate(&pool).await.unwrap();
+    let hevc = vec!["hevc".to_string()];
+    job(&pool, Some("hevc"), "/m/a.mkv").await;
+    let woken = super::watch::CHANGED.notified();
+    tokio::pin!(woken);
+    woken.as_mut().enable();
+    store::take(&pool, &want("w1", &hevc))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(woken.as_mut().now_or_never().is_some());
+}

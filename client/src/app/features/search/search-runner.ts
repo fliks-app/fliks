@@ -60,7 +60,7 @@ export class SearchRunner {
     this.dropOthers([...local, ...provider]);
 
     const jobs: [SearchSource, (() => Promise<void>)][] = [
-      ['media', async () => s.localResults.set((await media.getAll({ ...opts.mediaParams, q, limit: 20 }, { force: true }, mediaSignal)).data)],
+      ['media', async () => s.localResults.set((await media.getAll({ ...opts.mediaParams, q, limit: 20, withTotal: false }, { force: true }, mediaSignal)).data)],
       ['tracks', async () => s.localTracks.set(await music.tracks({ q, limit: 12 }, signal))],
       ['artists', async () => s.localArtists.set(await music.people('artist', { q, limit: 12 }, signal))],
       ['authors', async () => s.localAuthors.set(await books.persons({ role: 'author', q, limit: 12 }, signal))],
@@ -86,7 +86,7 @@ export class SearchRunner {
     s.pending.update((p) => new Set(p).add('media'));
     void this.settle(
       'media',
-      async () => s.localResults.set((await this.d.media.getAll({ ...mediaParams, q, limit: 20 }, { force: true }, signal)).data),
+      async () => s.localResults.set((await this.d.media.getAll({ ...mediaParams, q, limit: 20, withTotal: false }, { force: true }, signal)).data),
       signal,
     );
   }

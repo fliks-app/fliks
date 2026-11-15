@@ -81,6 +81,8 @@ interface Fixture {
   /** The selected output holds no session. */
   idleOutput?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
+  /** Overrides the SSE `connectionId` signal, to drive connects and reconnects. */
+  connectionId?: ReturnType<typeof signal<string | null>>;
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
   /** Defaults to granting only `livetv.read`, so a fixture that denies it still
    *  exercises the real gate instead of a mock that grants everything. */
@@ -134,13 +136,13 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
               })),
         },
       },
-      { provide: ServerConfigService, useValue: {} },
+      { provide: ServerConfigService, useValue: { serverUrl: () => '' } },
       {
         provide: SseService,
         useValue: {
           lastEvent: f.sseLastEvent ?? (() => null),
           pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
-          connectionId: () => null,
+          connectionId: f.connectionId ?? (() => null),
           connect: () => {},
           serverUnreachable: () => false, unreachableChip: () => false, connected: () => true,
         },
@@ -195,6 +197,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           isTablet: () => !!f.device.isTablet,
           isPhone: () => !!f.device.isPhone,
           isTv: () => !!f.device.isTv,
+          reducedEffects: () => !!f.device.isTv,
           isTouch: () => !!f.device.isTouch,
           isDesktopNative: () => false,
           formFactor: () =>
@@ -558,6 +561,25 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('skips the first SSE connection after the boot fetch and refetches on a reconnect', async () => {
+    const connectionId = signal<string | null>(null);
+    const get = vi.fn(() =>
+      Promise.resolve({ mediaByLibrary: {}, badgeCounts: {}, pendingRequests: 0 }),
+    );
+    const fixture = await createFixture({ ...NON_ADMIN_NO_LIBRARIES, connectionId, countsGet: get });
+    get.mockClear();
+
+    connectionId.set('a');
+    fixture.detectChanges();
+    expect(get).toHaveBeenCalledTimes(0);
+
+    connectionId.set(null);
+    fixture.detectChanges();
+    connectionId.set('b');
+    fixture.detectChanges();
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });
 

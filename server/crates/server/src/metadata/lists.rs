@@ -7,6 +7,10 @@ use fliks_domain::{
     metadata::{language::Resolved, limiter::Priority},
 };
 use serde_json::Value;
+use std::time::{Duration, SystemTime};
+
+/// A stored list younger than this answers without calling the provider.
+const FRESH: Duration = Duration::from_secs(3600);
 
 impl Metadata {
     /// The first available provider of the kind's order that serves lists.
@@ -14,7 +18,8 @@ impl Metadata {
         self.pick(None, self.order(kind), |p| p.has_lists(kind))
     }
 
-    /// `name` of `id` for `kind`; the last good copy answers when the live call fails, except for `discover`.
+    /// `name` of `id` for `kind`, except `discover`: a copy younger than [`FRESH`] answers without a call,
+    /// and the last good copy answers when the live call fails.
     pub async fn list(
         &self,
         id: Namespace,
@@ -24,9 +29,12 @@ impl Metadata {
         lang: &Resolved,
         p: Priority,
     ) -> Result<Value, (Namespace, Upstream)> {
-        let live = self.of(id).list(kind, name, params, lang, p).await;
         if name == "discover" {
-            return live.map_err(|e| (id, e));
+            return self
+                .of(id)
+                .list(kind, name, params, lang, p)
+                .await
+                .map_err(|e| (id, e));
         }
         let key = format!(
             "{}:{name}:{}:{params:?}:{}:{}",
@@ -35,13 +43,26 @@ impl Metadata {
             lang.tmdb_locale,
             lang.region
         );
-        match live {
+        // Off with the search cache, so a parity run counts every provider call.
+        let fresh = super::search_cache::enabled()
+            .then(|| {
+                let stale = self.stale.lock_clean();
+                let (at, v) = stale.get(&key)?;
+                at.elapsed().is_ok_and(|age| age < FRESH).then(|| v.clone())
+            })
+            .flatten();
+        if let Some(v) = fresh {
+            return Ok(v);
+        }
+        match self.of(id).list(kind, name, params, lang, p).await {
             Ok(v) => {
-                self.stale.lock_clean().insert(key, v.clone());
+                self.stale
+                    .lock_clean()
+                    .insert(key, (SystemTime::now(), v.clone()));
                 Ok(v)
             }
             Err(e) => match self.stale.lock_clean().get(&key) {
-                Some(v) => {
+                Some((_, v)) => {
                     tracing::warn!("{key} unavailable, serving last cached copy");
                     Ok(v.clone())
                 }
@@ -58,11 +79,11 @@ mod tests {
     use fliks_domain::metadata::limiter::Limits;
     use std::sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
 
-    /// A TMDB-keyed provider whose lists fail on demand.
-    struct Lists(AtomicBool);
+    /// A TMDB-keyed provider whose lists fail on demand, counting its calls.
+    struct Lists(AtomicBool, AtomicUsize);
 
     impl MetadataProvider for Lists {
         fn id(&self) -> Namespace {
@@ -94,6 +115,7 @@ mod tests {
             _: Priority,
         ) -> Call<'a, Value> {
             Box::pin(async move {
+                self.1.fetch_add(1, Ordering::SeqCst);
                 if self.0.load(Ordering::SeqCst) {
                     Err(Upstream::new(Some(503), "down"))
                 } else {
@@ -165,10 +187,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_failed_list_serves_its_last_copy_but_discover_never() {
+    async fn a_fresh_list_skips_the_provider_and_a_failed_one_serves_its_last_copy() {
         let pool = sqlx::PgPool::connect_lazy("postgres://unused").unwrap();
         let md = Metadata::new(pool);
-        let down = Arc::new(Lists(AtomicBool::new(false)));
+        let down = Arc::new(Lists(AtomicBool::new(false), AtomicUsize::new(0)));
         md.add_plugin(down.clone());
         let lang = fliks_domain::metadata::language::resolve(None, None);
         let ask = |name: &'static str, params: Vec<(String, String)>| {
@@ -187,8 +209,15 @@ mod tests {
         };
         let day = vec![("window".to_owned(), "day".to_owned())];
         ask("trending", day.clone()).await.unwrap();
+        ask("trending", day.clone()).await.unwrap();
+        assert_eq!(down.1.load(Ordering::SeqCst), 1, "the fresh copy answered");
         ask("discover", vec![]).await.unwrap();
+        ask("discover", vec![]).await.unwrap();
+        assert_eq!(down.1.load(Ordering::SeqCst), 3, "discover is never stored");
         down.0.store(true, Ordering::SeqCst);
+        for (at, _) in md.stale.lock_clean().values_mut() {
+            *at -= FRESH;
+        }
         assert_eq!(ask("trending", day).await.unwrap()[0]["title"], "trending");
         let week = vec![("window".to_owned(), "week".to_owned())];
         assert!(ask("trending", week).await.is_err(), "another key is cold");

@@ -26,7 +26,7 @@ import { MediaDetailSeasonsComponent } from '../components/media-detail-seasons/
 import { MediaCastComponent } from '../components/media-cast/media-cast.component';
 import { EpisodeViewController } from '../episode-view-controller';
 import { filterSeasonEpisodesOnDisk, seasonsVisibleWithDiskFilter } from '../media-detail.utils';
-import { VideoWorkBase } from '../video-work';
+import { VideoWorkBase, type TitlePlaybackState } from '../video-work';
 import type { MediaResumeInfo } from '../../../core/services/api/streaming-api.service';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
@@ -297,12 +297,16 @@ export class SeriesWorkComponent extends VideoWorkBase {
 
   // ── Playback state ──
 
-  protected override async loadPlaybackState(m: Media): Promise<void> {
-    const [resumeInfo, watchedIds, progress] = await Promise.all([
-      this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
-      this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[]),
-      this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>),
+  protected override async fetchPlaybackState(id: number): Promise<TitlePlaybackState> {
+    const [resume, watchedIds, progress] = await Promise.all([
+      this.streamingApi.getMediaResumeInfo(id).catch(() => null),
+      this.streamingApi.getWatchedEpisodeIds(id).catch(() => [] as number[]),
+      this.streamingApi.getEpisodeProgress(id).catch(() => ({}) as Record<number, number>),
     ]);
+    return { resume, watchedIds, progress };
+  }
+
+  protected override applyPlaybackState(m: Media, { resume: resumeInfo, watchedIds = [], progress = {} }: TitlePlaybackState): void {
     this.playbackLoaded = true;
     this.applyResume(m, resumeInfo);
     const watchedSet = new Set(watchedIds);

@@ -80,7 +80,7 @@ describe('MediaDetailReleasePickerService', () => {
         provideHttpClientTesting(),
         { provide: SseService, useValue: { grabBestEvents } },
         { provide: ToastService, useValue: toast },
-        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => null, fallbackLang: () => null, onLangChange: new Subject() } },
       ],
     });
     toast.error.mockClear();

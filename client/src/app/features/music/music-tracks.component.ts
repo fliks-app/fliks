@@ -33,7 +33,7 @@ export class MusicTracksComponent {
   protected readonly sorts: Sort[] = ['title', 'album', 'added', 'played'];
   protected readonly fmt = formatDuration;
   protected readonly line = artistLine;
-  protected readonly list = new PagedList<TrackRow>((page) => {
+  protected readonly list: PagedList<TrackRow> = new PagedList<TrackRow>((page) => {
     const sortBy = this.sortBy();
     return this.api.tracks({
       libraryId: this.libraryId(),
@@ -42,6 +42,7 @@ export class MusicTracksComponent {
       sortBy,
       sortOrder: sortBy === 'title' || sortBy === 'album' ? 'asc' : 'desc',
       page,
+      after: page > 1 && sortBy === 'title' ? this.list.rows().at(-1)?.itemId : undefined,
       limit: PAGE,
     });
   }, PAGE);

@@ -67,6 +67,7 @@ volumes/*
 !/scripts/with-test-postgres.sh
 !/scripts/embedded-postgres.conf
 !/scripts/fetch-reaction-emoji.py
+!/scripts/precompress-client.mjs
 !/scripts/e2e-session/
 logos/
 plans/

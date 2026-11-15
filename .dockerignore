@@ -17,6 +17,7 @@ docs
 macos
 plan
 scripts
+!scripts/precompress-client.mjs
 store
 tools
 windows

@@ -58,6 +58,7 @@ pub async fn tracks(
             "sortOrder",
             "page",
             "limit",
+            "after",
         ],
     );
     let (library, text) = (r.int("libraryId"), r.string("q"));
@@ -66,6 +67,10 @@ pub async fn tracks(
     let sort = r.one_of("sortBy", &["title", "album", "added", "played"]);
     let order = r.one_of("sortOrder", &["asc", "desc", "ASC", "DESC"]);
     let (page, limit) = (r.number("page"), r.number("limit"));
+    let after = r.int("after");
+    if after.is_some() && sort.as_deref().is_some_and(|s| s != "title") {
+        r.errors.push("after requires sortBy=title".to_owned());
+    }
     r.finish()?;
     let (limit, offset) =
         paging_of(page, Some(limit.unwrap_or(50.0).min(200.0)), 50.0)?.unwrap_or((50, 0));
@@ -77,6 +82,19 @@ pub async fn tracks(
             track_rows(&st.db, uid, &acl, &ids).await?,
         )));
     }
+    let cursor = match after {
+        Some(id) => {
+            let key = sqlx::query_scalar!(
+                r#"SELECT lower(title) AS "key?" FROM items WHERE id = $1"#,
+                id
+            )
+            .fetch_optional(&st.db)
+            .await?
+            .ok_or_else(|| AppError::bad_request(vec!["after must be an item id".to_owned()]))?;
+            Some((id, key))
+        }
+        None => None,
+    };
     let dir = if order.is_some_and(|o| o.eq_ignore_ascii_case("desc")) {
         "DESC"
     } else {
@@ -118,6 +136,9 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
             .push_bind(uid)
             .push(r#" AND l."itemId" = i.id)"#);
     }
+    if let Some((id, key)) = cursor {
+        push_after(&mut qb, dir, id, key);
+    }
     qb.push(" ORDER BY ").push(match sort.as_deref() {
         Some("album") => {
             format!(r#"lower(m.title) {dir}, td."discNumber" {dir}, td.position {dir}"#)
@@ -129,11 +150,37 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
     qb.push(", i.id LIMIT ")
         .push_bind(limit)
         .push(" OFFSET ")
-        .push_bind(offset);
+        .push_bind(if after.is_some() { 0 } else { offset });
     let ids: Vec<i32> = qb.build_query_scalar().fetch_all(&st.db).await?;
     Ok(Json(Value::Array(
         track_rows(&st.db, uid, &acl, &ids).await?,
     )))
+}
+
+/// The rows after the track `id` (title key `key`) in `ORDER BY lower(i.title) {dir}, i.id`, whose nulls sort last
+/// ascending and first descending.
+fn push_after(qb: &mut QueryBuilder<Postgres>, dir: &str, id: i32, key: Option<String>) {
+    match (dir, key) {
+        ("ASC", Some(k)) => qb
+            .push(" AND ((lower(i.title), i.id) > (")
+            .push_bind(k)
+            .push(", ")
+            .push_bind(id)
+            .push(") OR i.title IS NULL)"),
+        ("ASC", None) => qb.push(" AND i.title IS NULL AND i.id > ").push_bind(id),
+        (_, Some(k)) => qb
+            .push(" AND (lower(i.title) < ")
+            .push_bind(k.clone())
+            .push(" OR (lower(i.title) = ")
+            .push_bind(k)
+            .push(" AND i.id > ")
+            .push_bind(id)
+            .push("))"),
+        (_, None) => qb
+            .push(" AND (i.title IS NOT NULL OR i.id > ")
+            .push_bind(id)
+            .push(")"),
+    };
 }
 
 /// `ids=1,2,3`: at most `IDS_MAX` positive integers.
@@ -322,4 +369,77 @@ pub async fn recently_played(
         hydrate::items_view(&st.db, &ids, paths_visible(&a.perms), false, Some(&acl)).await?;
     attach_list_info(&st.db, &mut data, a.user.id, &acl).await?;
     Ok(Json(Value::Array(data)))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{auth::testing, config::Config, state::AppState};
+    use axum::{body::Body, http::Request};
+    use serde_json::Value;
+    use sqlx::PgPool;
+    use tower::ServiceExt;
+
+    #[sqlx::test(migrations = false)]
+    async fn after_walks_the_title_sort_like_one_page(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let st = AppState::new(
+            pool.clone(),
+            Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL);
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["album"]');
+            INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+            INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES (10, 'Alpha', 1973, 'album', 1, 'a');
+            INSERT INTO editions (id, "mediaId", family) VALUES (1, 10, 'audio');
+            INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 10, 1, 'b'), (2, 10, 1, 'A'), (3, 10, 1, NULL), (4, 10, 1, 'a');
+            INSERT INTO track_details ("itemId", "mediaId", position) VALUES (1, 10, 1), (2, 10, 2), (3, 10, 3), (4, 10, 4);
+            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+              SELECT n, 10, 1, n || '.flac', 1, 'FLAC' FROM generate_series(1, 4) n;
+            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position)
+              SELECT n, n, 10, 0, 0 FROM generate_series(1, 4) n;
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let t = testing::token(&st, 1, "admin").await;
+        let app = super::router().with_state(st);
+        let get = |uri: String| {
+            let (app, t) = (app.clone(), t.clone());
+            async move {
+                let req = Request::get(uri)
+                    .header("authorization", format!("Bearer {t}"))
+                    .body(Body::empty())
+                    .unwrap();
+                let res = app.oneshot(req).await.unwrap();
+                let status = res.status().as_u16();
+                let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+                let ids: Vec<i64> = body
+                    .as_array()
+                    .map(|a| a.iter().map(|r| r["itemId"].as_i64().unwrap()).collect())
+                    .unwrap_or_default();
+                (status, ids)
+            }
+        };
+        for (order, want) in [("asc", vec![2, 4, 1, 3]), ("desc", vec![3, 1, 2, 4])] {
+            assert_eq!(get(format!("/api/tracks?sortOrder={order}")).await.1, want);
+            let mut walked = vec![];
+            let mut uri = format!("/api/tracks?sortOrder={order}&limit=1");
+            while let (200, page) = get(uri.clone()).await {
+                let Some(&last) = page.last() else { break };
+                walked.extend(page);
+                assert!(walked.len() <= want.len(), "{order}: {walked:?}");
+                uri = format!("/api/tracks?sortOrder={order}&limit=1&after={last}");
+            }
+            assert_eq!(walked, want, "{order}");
+        }
+        assert_eq!(get("/api/tracks?sortBy=added&after=1".into()).await.0, 400);
+        assert_eq!(get("/api/tracks?after=999".into()).await.0, 400);
+    }
 }

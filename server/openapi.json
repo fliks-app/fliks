@@ -4696,6 +4696,20 @@
       "get": {
         "tags": [],
         "operationId": "ui",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "path",
+            "description": "Keeps each plugin's `i18n` to this locale and the fallback one; every locale without it.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {}
         }

@@ -369,8 +369,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   // The shell is instantiated once, so ngOnInit's boot fetch never repeats: a
   // reconnect after backgrounding is the only later signal that counts may be stale.
+  private firstConnectionSeen = false;
   private readonly reconnectCountsEffect = effect(() => {
     if (!this.sse.connectionId()) return;
+    // The first connection follows the boot fetch.
+    if (!this.firstConnectionSeen) {
+      this.firstConnectionSeen = true;
+      return;
+    }
     untracked(() => void this.refreshCounts());
   });
 

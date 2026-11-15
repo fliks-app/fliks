@@ -22,7 +22,8 @@ pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Valu
     items_view(db, ids, see_paths, false, None).await
 }
 
-/// `items`, or with `grid` the library grid shape: `files` holds only the first file, plus `fileCount`.
+/// `items`, or with `grid` the card shape (`media-query.md` rule 14a): first file only plus `fileCount`, briefer
+/// `library` and `qualityProfile`, no `alternativeTitles`.
 /// With `acl` (the caller's readable libraries) the files of a book's hidden editions are left out (`books.md` rule 22).
 pub async fn items_view(
     db: &PgPool,
@@ -52,13 +53,15 @@ pub async fn items_view(
     'libraryId', media."libraryId", 'qualityProfileId', w."qualityProfileId",
     'languageProfileId', media."languageProfileId", 'addedById', media."addedById")
   || jsonb_build_object(
-    'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb ELSE
+    'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb
+      WHEN $2 THEN jsonb_build_object('id', l.id, 'name', l.name, 'path', df.path) ELSE
       jsonb_build_object('id', l.id, 'createdAt', iso_ms(l."createdAt"), 'updatedAt', iso_ms(l."updatedAt"),
         'name', l.name, 'icon', l.icon, 'color', l.color, 'mediaTypes', l."mediaTypes",
         'preferredProvider', l."preferredProvider", 'path', df.path, 'label', NULL,
         'metadataLanguage', l."metadataLanguage", 'metadataRegion', l."metadataRegion",
         'defaultQualityProfileId', l."defaultQualityProfileId", 'defaultLanguageProfileId', l."defaultLanguageProfileId") END,
-    'qualityProfile', CASE WHEN qp.id IS NULL THEN 'null'::jsonb ELSE
+    'qualityProfile', CASE WHEN qp.id IS NULL THEN 'null'::jsonb
+      WHEN $2 THEN jsonb_build_object('id', qp.id, 'name', qp.name) ELSE
       jsonb_build_object('id', qp.id, 'createdAt', iso_ms(qp."createdAt"), 'updatedAt', iso_ms(qp."updatedAt"),
         'name', qp.name, 'cutoff', qp.cutoff, 'items', qp.items, 'upgradeAllowed', qp."upgradeAllowed",
         'resolutionUpgradeOnly', qp."resolutionUpgradeOnly", 'minCustomFormatScore', qp."minCustomFormatScore") END,
@@ -131,6 +134,9 @@ WHERE media.id = ANY($1)"#
             let Some(obj) = v.as_object_mut() else {
                 return v;
             };
+            if grid {
+                obj.remove("alternativeTitles");
+            }
             for f in obj
                 .get_mut("files")
                 .and_then(Value::as_array_mut)

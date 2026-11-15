@@ -50,6 +50,7 @@ const providers = (getForMedia: () => Promise<SubtitleFileRow[]>) => [
       useValue: {
         canSaveFiles: () => false,
         isDesktopNative: () => false,
+        reducedEffects: () => false,
         isTv: () => false,
         canPickFiles: () => true,
         filePickerAccept: (a: string) => a,

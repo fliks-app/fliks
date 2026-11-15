@@ -12,6 +12,9 @@ COPY client/package.json client/package-lock.json ./
 RUN npm ci
 COPY client/ .
 RUN npx ng build --configuration=production
+# Only this image ships the siblings: desktop, Capacitor and TV bundles keep plain files.
+COPY scripts/precompress-client.mjs /tmp/precompress-client.mjs
+RUN node /tmp/precompress-client.mjs dist/client/browser
 
 # --- Stage 2: Build fliks-server (Rust) ---
 # Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,

@@ -179,6 +179,8 @@ pub struct Search {
     pub narrator_id: Option<i32>,
     pub series_id: Option<i32>,
     pub in_progress: bool,
+    /// `withTotal=false`: no `COUNT(*)`, `total` is null (rule 28).
+    pub skip_total: bool,
 }
 
 /// Query keys that only mean something for a book (`books-api.md` A1).
@@ -193,7 +195,7 @@ const BOOK_KEYS: [&str; 6] = [
 
 impl Search {
     pub fn parse(pairs: &Pairs) -> Result<Self, AppError> {
-        const KEYS: [&str; 32] = [
+        const KEYS: [&str; 33] = [
             "q",
             "type",
             "status",
@@ -226,6 +228,7 @@ impl Search {
             "narratorId",
             "seriesId",
             "inProgress",
+            "withTotal",
         ];
         let mut r = Reader::new(pairs, &KEYS);
         let families: Vec<&str> = MediaKind::Book
@@ -280,6 +283,7 @@ impl Search {
             narrator_id: r.int("narratorId"),
             series_id: r.int("seriesId"),
             in_progress: r.flag("inProgress") == Some(true),
+            skip_total: r.all("withTotal") == ["false"],
         };
         if s.media_types != [MediaKind::Book] {
             let present: Vec<_> = BOOK_KEYS

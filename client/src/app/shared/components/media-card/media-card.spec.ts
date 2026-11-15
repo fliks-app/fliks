@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { MediaCardComponent } from './media-card';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
-import { Media } from '../../../core/services/api/media.service';
+import { Media, MediaService } from '../../../core/services/api/media.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
 import { TvService } from '../../../core/services/tv.service';
@@ -373,6 +373,37 @@ describe('MediaCardComponent — card action handlers do what their row promises
         },
       }),
     );
+  });
+
+  it('warms the media read on press, only for a detail link it opens', async () => {
+    const press = async (inputs: Record<string, unknown>) => {
+      const h = await createFixture(FULL_MEMBER, inputs);
+      const getOne = vi.spyOn(TestBed.inject(MediaService), 'getOne').mockResolvedValue(makeMedia());
+      (h.fixture.nativeElement as HTMLElement).querySelector('figure')!.dispatchEvent(new Event('pointerdown'));
+      return getOne;
+    };
+    expect(await press({ link: ['/series', '5', 'episode', '42'] })).toHaveBeenCalledWith(5);
+    expect(await press({ link: ['/movies', '7'], clickIntent: 'play' })).not.toHaveBeenCalled();
+    expect(await press({ link: ['/people', '7'] })).not.toHaveBeenCalled();
+  });
+
+  it('warms the media read on TV once the focus holds, not when it moves on', async () => {
+    const h = await createFixture(TV_VIEWER, { link: ['/movies', '7'] });
+    const getOne = vi.spyOn(TestBed.inject(MediaService), 'getOne').mockResolvedValue(makeMedia());
+    const figure = (h.fixture.nativeElement as HTMLElement).querySelector('figure')!;
+    vi.useFakeTimers();
+    try {
+      figure.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      vi.advanceTimersByTime(300);
+      figure.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      vi.advanceTimersByTime(400);
+      expect(getOne).not.toHaveBeenCalled();
+      figure.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      vi.advanceTimersByTime(400);
+      expect(getOne).toHaveBeenCalledWith(7);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a feed-row card hands the fanart over beside the poster', async () => {

@@ -72,7 +72,7 @@ import {
 } from './shared/utils/page-slide';
 
 /** Reads the persisted server URL, sessions and credentials before bootstrap; resolves even on storage failure or the splash never ends.
- * The plugin UI registry loads last (needs the session) and fails open within its own short timeout. */
+ * The plugin UI registry loads last (needs the session): from storage when known, else from the network within its short timeout. */
 export function loadPersistedState(): Promise<unknown> {
   const serverConfig = inject(ServerConfigService);
   const sessions = inject(SessionStoreService);
@@ -82,7 +82,7 @@ export function loadPersistedState(): Promise<unknown> {
   const imageCache = inject(ImageCacheService);
   return Promise.all([serverConfig.load(), sessions.load(), imageCache.warm()])
     .then(() => void auth.loadPersistedSession())
-    .then(() => pluginUi.load())
+    .then(() => pluginUi.boot())
     .then(() => pluginI18n.init())
     .catch(() => undefined);
 }

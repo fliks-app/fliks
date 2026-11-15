@@ -1,9 +1,12 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { TranslateService } from '@ngx-translate/core';
+import { Subject } from 'rxjs';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import type { PluginUiEntry } from './plugin-ui-response';
+import { SessionStoreService } from '../services/session-store.service';
 import type { UiContribution } from '@fliks/plugin-ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
@@ -14,6 +17,14 @@ const contribution = (id: string, weight: number, overrides: Partial<UiContribut
   action: { kind: 'route', path: `/plugins/x/${id}` },
   ...overrides,
 });
+
+const lang = signal<string | null>(null);
+let langChanges: Subject<{ lang: string }>;
+// A fresh subject per test: a registry of an earlier TestBed must not hear the switches.
+const translateStub = () => {
+  langChanges = new Subject();
+  return { provide: TranslateService, useValue: { currentLang: lang, fallbackLang: () => null, onLangChange: langChanges } };
+};
 
 const entry = (pluginId: string, contributions: UiContribution[], extra: Partial<PluginUiEntry> = {}): PluginUiEntry => ({
   pluginId,
@@ -27,11 +38,13 @@ describe('PluginUiRegistryService', () => {
   let registry: PluginUiRegistryService;
 
   beforeEach(() => {
+    lang.set(null);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        translateStub(),
       ],
     });
     http = TestBed.inject(HttpTestingController);
@@ -202,5 +215,101 @@ describe('PluginUiRegistryService', () => {
 
     // Ordered by plugin id and first-declared wins, so install order cannot change it.
     expect(registry.i18nFor('en')).toEqual({ shared: 'from alpha', own: 'a' });
+  });
+
+  it('asks for the active language and fetches again only when it changes', async () => {
+    lang.set('fr');
+    const first = registry.load();
+    http.expectOne('/api/plugins/ui?lang=fr').flush([entry('fliks.a', [], { i18n: { fr: { 'a.x': 'X' } } })]);
+    await first;
+
+    langChanges.next({ lang: 'fr' });
+    lang.set('de');
+    langChanges.next({ lang: 'de' });
+    http.expectOne('/api/plugins/ui?lang=de').flush([entry('fliks.a', [], { i18n: { de: { 'a.x': 'Y' } } })]);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(registry.i18nFor('de')).toEqual({ 'a.x': 'Y' });
+  });
+
+  it('drops the answer of a language switched away from during the request', async () => {
+    lang.set('fr');
+    const stale = registry.load();
+    const fr = http.expectOne('/api/plugins/ui?lang=fr');
+    lang.set('de');
+    langChanges.next({ lang: 'de' });
+    http.expectOne('/api/plugins/ui?lang=de').flush([entry('fliks.de', [])]);
+    fr.flush([entry('fliks.fr', [])]);
+    await stale;
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(registry.hasPlugin('fliks.de')).toBe(true);
+    expect(registry.hasPlugin('fliks.fr')).toBe(false);
+  });
+});
+
+describe('PluginUiRegistryService boot', () => {
+  let http: HttpTestingController;
+  let registry: PluginUiRegistryService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    lang.set(null);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        translateStub(),
+        { provide: SessionStoreService, useValue: { active: () => ({ user: { id: 7 } }) } },
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+    registry = TestBed.inject(PluginUiRegistryService);
+  });
+
+  afterEach(() => {
+    http.verify();
+    localStorage.clear();
+  });
+
+  it('waits on the network with nothing stored, then serves the stored registry at once and revalidates it', async () => {
+    const first = registry.boot();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [contribution('a', 100)])]);
+    await first;
+
+    const next = TestBed.runInInjectionContext(() => new PluginUiRegistryService());
+    await next.boot();
+    expect(next.hasPlugin('fliks.a')).toBe(true);
+
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.b', [contribution('b', 100)])]);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(next.hasPlugin('fliks.b')).toBe(true);
+    expect(next.hasPlugin('fliks.a')).toBe(false);
+  });
+
+  it('stores the registry per language, so another language waits on the network', async () => {
+    lang.set('fr');
+    const first = registry.boot();
+    http.expectOne('/api/plugins/ui?lang=fr').flush([entry('fliks.a', [contribution('a', 100)])]);
+    await first;
+
+    lang.set('de');
+    const next = TestBed.runInInjectionContext(() => new PluginUiRegistryService());
+    const booted = next.boot();
+    expect(next.hasPlugin('fliks.a')).toBe(false);
+    http.expectOne('/api/plugins/ui?lang=de').flush([entry('fliks.b', [contribution('b', 100)])]);
+    await booted;
+    expect(next.hasPlugin('fliks.b')).toBe(true);
+  });
+
+  it('keeps the stored registry when the revalidation fails', async () => {
+    const first = registry.boot();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [contribution('a', 100)])]);
+    await first;
+
+    const next = TestBed.runInInjectionContext(() => new PluginUiRegistryService());
+    await next.boot();
+    http.expectOne('/api/plugins/ui').flush('down', { status: 503, statusText: 'Unavailable' });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(next.hasPlugin('fliks.a')).toBe(true);
   });
 });

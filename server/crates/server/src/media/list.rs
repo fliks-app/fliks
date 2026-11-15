@@ -276,9 +276,12 @@ fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" OR media.title ILIKE ").push_bind(like.clone());
     qb.push(" OR media.\"originalTitle\" ILIKE ")
         .push_bind(like);
-    qb.push(" OR similarity(media.title, ")
+    // `%` (threshold 0.3) lets the trigram index serve the branch; the 0.8 cut stays exact.
+    qb.push(" OR (media.title % ")
         .push_bind(q.to_owned())
-        .push(") > 0.8)");
+        .push(" AND similarity(media.title, ")
+        .push_bind(q.to_owned())
+        .push(") > 0.8))");
 }
 
 /// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); a kind without seasons compares
@@ -333,7 +336,7 @@ fn order_sql(p: &Search, dir: &str) -> String {
 
 pub struct Page {
     pub data: Vec<Value>,
-    pub total: i64,
+    pub total: Option<i64>,
 }
 
 pub async fn find_all(
@@ -344,7 +347,7 @@ pub async fn find_all(
     uid: i32,
     see_paths: bool,
 ) -> Result<Page, sqlx::Error> {
-    let (page_ids, total) = find_ids(db, p, ids, kinds, uid).await?;
+    let (page_ids, total) = select_ids(db, p, ids, kinds, uid, !p.skip_total).await?;
     let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
@@ -361,8 +364,21 @@ pub(crate) async fn find_ids(
     kinds: &Kinds,
     uid: i32,
 ) -> Result<(Vec<i32>, i64), sqlx::Error> {
+    let (page_ids, total) = select_ids(db, p, ids, kinds, uid, true).await?;
+    Ok((page_ids, total.unwrap_or_default()))
+}
+
+/// `find_ids`, the total only `with_total`.
+async fn select_ids(
+    db: &PgPool,
+    p: &Search,
+    ids: &[i32],
+    kinds: &Kinds,
+    uid: i32,
+    with_total: bool,
+) -> Result<(Vec<i32>, Option<i64>), sqlx::Error> {
     if ids.is_empty() {
-        return Ok((vec![], 0));
+        return Ok((vec![], with_total.then_some(0)));
     }
     let today = Utc::now().date_naive();
     let map = if p.cutoff_unmet {
@@ -398,12 +414,14 @@ pub(crate) async fn find_ids(
     }
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
 
-    let total = if paging.is_none() {
-        page_ids.len() as i64
+    let total = if !with_total {
+        None
+    } else if paging.is_none() {
+        Some(page_ids.len() as i64)
     } else {
         let mut qb = QueryBuilder::new("SELECT COUNT(*)");
         push_scope(&mut qb, p, ids, kinds, uid, map.as_ref(), today);
-        qb.build_query_scalar().fetch_one(db).await?
+        Some(qb.build_query_scalar().fetch_one(db).await?)
     };
 
     Ok((page_ids, total))
@@ -448,6 +466,17 @@ pub(crate) async fn watched_map(
         .collect())
 }
 
+/// Whether a book of the readable libraries `ids` has an edition outside them, whose files `push_not_hidden` drops.
+async fn hides_book_files(db: &PgPool, ids: &[i32]) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM editions e JOIN media m ON m.id = e."mediaId"
+             WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND NOT e."libraryId" = ANY($1)) AS "hides!""#,
+        ids
+    )
+    .fetch_one(db)
+    .await
+}
+
 /// Rule 33, Q-R: newest additions by media, by file, or both; `id ASC` breaks ties.
 pub async fn recently_added(
     db: &PgPool,
@@ -461,11 +490,17 @@ pub async fn recently_added(
         return Ok(vec![]);
     }
     let mut qb = QueryBuilder::new("SELECT media.id FROM media");
-    if p.mode != "media" {
-        qb.push(" LEFT JOIN LATERAL (SELECT MAX(mf.\"createdAt\") AS added FROM media_files mf WHERE mf.\"mediaId\" = media.id AND");
+    let added = if p.mode != "media"
+        && kinds.has(MediaKind::Book)
+        && hides_book_files(db, ids).await?
+    {
+        qb.push(" LEFT JOIN LATERAL (SELECT CASE WHEN media.type = 'book' THEN (SELECT MAX(mf.\"createdAt\") FROM media_files mf WHERE mf.\"mediaId\" = media.id AND");
         push_not_hidden(&mut qb, ids, "mf");
-        qb.push(") lf ON true");
-    }
+        qb.push(") ELSE media.\"lastFileAddedAt\" END AS added) lf ON true");
+        "lf.added"
+    } else {
+        "media.\"lastFileAddedAt\""
+    };
     qb.push(" WHERE media.\"libraryId\" = ANY(")
         .push_bind(ids.to_vec())
         .push(") AND media.type = ANY(")
@@ -484,17 +519,98 @@ pub async fn recently_added(
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
     }
     qb.push(match p.mode.as_str() {
-        "file" => " AND lf.added IS NOT NULL ORDER BY lf.added DESC",
-        "media" => " ORDER BY media.\"createdAt\" DESC",
-        _ => {
-            " ORDER BY GREATEST(media.\"createdAt\", COALESCE(lf.added, media.\"createdAt\")) DESC"
-        }
+        "file" => format!(" AND {added} IS NOT NULL ORDER BY {added} DESC"),
+        "media" => " ORDER BY media.\"createdAt\" DESC".to_owned(),
+        _ => format!(
+            " ORDER BY GREATEST(media.\"createdAt\", COALESCE({added}, media.\"createdAt\")) DESC"
+        ),
     });
     qb.push(", media.id ASC LIMIT ").push_bind(p.limit);
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, false, Some(ids)).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, true, Some(ids)).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
     comics::attach_list_info(db, &mut data, uid, ids).await?;
     music::attach_list_info(db, &mut data, uid, ids).await?;
     Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+
+    async fn added(pool: &PgPool) -> Vec<(i32, Option<String>)> {
+        sqlx::query_as(
+            r#"SELECT id, to_char("lastFileAddedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM media ORDER BY id"#,
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn last_file_added_follows_the_files_and_leaves_updated_at(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["movie"]');
+            INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+            INSERT INTO media (id, title, type, "libraryId", "folderName", "updatedAt")
+              VALUES (1, 'One', 'movie', 1, 'one', '2020-01-01Z'), (2, 'Two', 'movie', 1, 'two', '2020-01-01Z');
+            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "createdAt") VALUES
+              (1, 1, 1, 'one/a.mkv', 1, 'WEBDL-1080p', '2024-01-01Z'), (2, 1, 1, 'one/b.mkv', 1, 'WEBDL-1080p', '2024-03-01Z');
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let day = |s: &str| Some(s.to_owned());
+        assert_eq!(added(&pool).await, [(1, day("2024-03-01")), (2, None)]);
+        sqlx::query("DELETE FROM media_files WHERE id = 2")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(added(&pool).await, [(1, day("2024-01-01")), (2, None)]);
+        sqlx::query(r#"UPDATE media_files SET "mediaId" = 2 WHERE id = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(added(&pool).await, [(1, None), (2, day("2024-01-01"))]);
+        let bumped: i64 =
+            sqlx::query_scalar(r#"SELECT count(*) FROM media WHERE "updatedAt" <> '2020-01-01Z'"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(bumped, 0);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn without_total_the_page_stays_and_the_count_is_skipped(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["movie"]');
+            INSERT INTO media (id, title, type, "libraryId", "folderName")
+              VALUES (1, 'One', 'movie', 1, 'one'), (2, 'Two', 'movie', 1, 'two');
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let page = |skip_total| {
+            let pool = pool.clone();
+            async move {
+                let p = super::Search {
+                    limit: Some(1.0),
+                    skip_total,
+                    ..Default::default()
+                };
+                let page = super::find_all(&pool, &p, &[1], &super::Kinds::all(), 1, false)
+                    .await
+                    .unwrap();
+                (page.data.len(), page.total)
+            }
+        };
+        assert_eq!(page(false).await, (1, Some(2)));
+        assert_eq!(page(true).await, (1, None));
+    }
 }

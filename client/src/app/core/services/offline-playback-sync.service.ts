@@ -4,7 +4,7 @@ import { NetworkService } from './network.service';
 import { StorageScopeService } from './storage-scope.service';
 import { AppResumeService } from './app-resume.service';
 import { AutoDownloadService } from './auto-download.service';
-import { invalidatePrefix } from '../interceptors/cache.interceptor';
+import { invalidateResource } from '../interceptors/cache.interceptor';
 
 export interface PendingUpdate {
   mediaId: number;
@@ -211,7 +211,7 @@ export class OfflinePlaybackSyncService {
 
     // Continue-watching and the resume points come out of the SWR cache, which
     // still holds the positions we just superseded.
-    await invalidatePrefix('/api/playback');
+    await invalidateResource('/api/playback');
     // Lazy so the sync service does not instantiate auto-download at startup.
     void this.injector.get(AutoDownloadService).reconcile('offline-sync');
   }

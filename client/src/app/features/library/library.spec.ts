@@ -198,6 +198,28 @@ describe('LibraryComponent — grid request', () => {
     const getAll = TestBed.inject(MediaService).getAll as ReturnType<typeof vi.fn>;
     expect(getAll.mock.calls[0][0]).toMatchObject({ limit: 0, view: 'grid' });
   });
+
+  it('searches once the typing pauses, aborting the load a newer one replaces', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { component } = createHarness();
+      component.library.set(library(['movie']));
+      const getAll = TestBed.inject(MediaService).getAll as ReturnType<typeof vi.fn>;
+      component.onSearch('a');
+      component.onSearch('ab');
+      expect(getAll).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(300);
+      expect([...new Set(getAll.mock.calls.map((c) => c[0].q))]).toEqual(['ab']);
+
+      getAll.mockClear();
+      void load(component, false);
+      void load(component, false);
+      expect((getAll.mock.calls[0][2] as AbortSignal).aborted).toBe(true);
+      expect((getAll.mock.calls[1][2] as AbortSignal).aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('LibraryComponent — page scroll', () => {

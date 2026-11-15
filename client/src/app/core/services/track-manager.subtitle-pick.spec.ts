@@ -241,12 +241,15 @@ describe('TrackManagerService.loadSubtitles: bitmap delivery', () => {
     id, mediaFileId: 1, language: 'eng', codec, ...extra,
   });
 
-  async function load(rows: unknown[]) {
+  const getForMedia = vi.fn();
+
+  function load(rows: unknown[], media: Parameters<TrackManagerService['loadSubtitles']>[3] = null) {
+    getForMedia.mockReset().mockResolvedValue(rows);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         { provide: PlayerSettingsService, useValue: {} },
-        { provide: SubtitlesApiService, useValue: { getForMedia: async () => rows } },
+        { provide: SubtitlesApiService, useValue: { getForMedia } },
         { provide: AppSettingsService, useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => false } },
         { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
       ],
@@ -255,8 +258,16 @@ describe('TrackManagerService.loadSubtitles: bitmap delivery', () => {
       getSubtitleUrl: (_f: number, id: number) => `/ext/${id}`,
       getEmbeddedSubtitleUrl: (_f: number, i: number) => `/emb/${i}`,
     };
-    return TestBed.inject(TrackManagerService).loadSubtitles(1, 1, streamingApi as never, null);
+    return TestBed.inject(TrackManagerService).loadSubtitles(1, 1, streamingApi as never, media);
   }
+
+  it('asks for the list before the media resolves, then merges its streamInfo tracks', async () => {
+    let resolveMedia!: (m: { files: { id: number; streamInfo: unknown }[] }) => void;
+    const options = load([], new Promise((r) => (resolveMedia = r)));
+    expect(getForMedia).toHaveBeenCalledWith(1);
+    resolveMedia({ files: [{ id: 1, streamInfo: { subtitles: [{ streamIndex: 2, codec: 'subrip', language: 'eng' }] } }] });
+    expect((await options).map((o) => o.id)).toEqual(['emb-2']);
+  });
 
   it('flags every bitmap subtitle, embedded or sidecar, as a burn-in candidate, and no text one', async () => {
     const options = await load([

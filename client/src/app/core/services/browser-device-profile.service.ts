@@ -12,7 +12,7 @@ import { webosAudioCodecs, webosDevice, webosMkvProfile, webosVideo, type WebOsD
 import { detectDolbyVisionProfiles, detectSampleEntries, detectWebVideo, webVideoMimes, type TypeProbe } from './device-capabilities/web-video';
 import { detectHdrTransfers, undecodableVideoMimes, type HdrTransfers } from './device-capabilities/media-capabilities';
 import { mpvAudioCodecs, mpvVideo } from './device-capabilities/desktop-mpv';
-import { isTizenCropSupported } from './playback-engine/tizen-engine';
+import { isTizenCropSupported } from './playback-engine/tizen-avplay';
 import { getDeviceName, getOrCreateDeviceId } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';

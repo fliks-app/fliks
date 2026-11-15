@@ -123,7 +123,7 @@
                 [dismissable]="true"
                 [interactiveWatched]="true"
                 [liked]="isLiked(item.mediaId, item.episodeId)"
-                (likeToggled)="toggleLike({ mediaId: item.mediaId, episodeId: item.episodeId ?? undefined }, $event)"
+                (likeToggled)="toggleLike(continueWatchingLike(item), $event)"
                 [clickIntent]="'play'"
                 (clicked)="playContinueWatching(item)"
                 (dismissed)="removeContinueWatching(item)"
@@ -151,7 +151,7 @@
                 [link]="(rec.media.type | mediaLink: rec.media.id)"
                 [playlistMediaId]="rec.media.id"
                 [liked]="isLiked(rec.media.id)"
-                (likeToggled)="toggleLike({ mediaId: rec.media.id }, $event)"
+                (likeToggled)="toggleLike(mediaLike(rec.media), $event)"
                 [status]="rec.media.available ? null : 'missing'"
                 [playable]="rec.media.available"
                 [dismissable]="true"
@@ -181,7 +181,7 @@
                 [playlistMediaId]="item.mediaId"
                 [playlistEpisodeId]="item.episodeId"
                 [liked]="true"
-                (likeToggled)="toggleLike({ mediaId: item.mediaId, seasonId: item.seasonId ?? undefined, episodeId: item.episodeId ?? undefined }, $event)"
+                (likeToggled)="toggleLike(item, $event)"
               />
             }
           </app-horizontal-scroller>
@@ -202,7 +202,7 @@
                 [interactiveWatched]="canMarkMediaWatched(m)"
                 (watchedToggled)="toggleRecentMediaWatched(m, $event)"
                 [liked]="isLiked(m.id)"
-                (likeToggled)="toggleLike({ mediaId: m.id }, $event)"
+                (likeToggled)="toggleLike(mediaLike(m), $event)"
               />
             }
           </app-horizontal-scroller>
@@ -244,7 +244,7 @@
                 [link]="(entry.type | mediaLink: entry.mediaId)"
                 [playlistMediaId]="entry.mediaId"
                 [liked]="isLiked(entry.mediaId)"
-                (likeToggled)="toggleLike({ mediaId: entry.mediaId }, $event)"
+                (likeToggled)="toggleLike(calendarLike(entry), $event)"
               />
             }
           </app-horizontal-scroller>
@@ -286,7 +286,7 @@
                 [interactiveWatched]="canMarkMediaWatched(m)"
                 (watchedToggled)="toggleLibraryRecentWatched(section.libraryId!, m, $event)"
                 [liked]="isLiked(m.id)"
-                (likeToggled)="toggleLike({ mediaId: m.id }, $event)"
+                (likeToggled)="toggleLike(mediaLike(m), $event)"
               />
             }
           </app-horizontal-scroller>

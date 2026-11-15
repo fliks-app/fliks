@@ -340,3 +340,24 @@ describe('CastService receiver state updates', () => {
     expect(svc.duration()).toBe(90);
   });
 });
+
+describe('CastService web sender script', () => {
+  const sender = () => document.head.querySelectorAll('script[src*="cast_sender.js"]');
+  beforeEach(() => sender().forEach((s) => s.remove()));
+  afterEach(() => {
+    sender().forEach((s) => s.remove());
+    localStorage.removeItem('fliks.deviceOverride');
+    TestBed.resetTestingModule();
+  });
+
+  it('loads the Cast sender in a browser', () => {
+    make(null);
+    expect(sender().length).toBe(1);
+  });
+
+  it('never loads it on a TV', () => {
+    localStorage.setItem('fliks.deviceOverride', 'tv');
+    make(null);
+    expect(sender().length).toBe(0);
+  });
+});

@@ -34,7 +34,7 @@
     <div class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
-  } @else if (list.visible().length === 0) {
+  } @else if (list.total() === 0) {
     <div class="text-center py-12 text-base-content/50">
       <svg lucideUsers class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'persons.empty' | translate }}</p>
@@ -42,18 +42,31 @@
     </div>
   } @else {
     <div class="flex gap-2">
-      <div class="flex-1 min-w-0 pr-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4">
-        @for (person of list.visible(); track person.id) {
-          <app-person-avatar-card
-            [id]="'person-' + person.id"
-            [link]="'/persons/' + person.id"
-            [queryParams]="bookRole ? { role: bookRole } : null"
-            [name]="person.name"
-            [avatarUrl]="person.avatarUrl"
-            [subtitle]="bookRole ? ('books_search.work_count' | translatePlural: (workCounts.get(person.id) ?? 0)) : person.departments.join(', ')"
-          />
-        }
-      </div>
+      <cdk-virtual-scroll-viewport
+        scrollWindow
+        [itemSize]="list.grid.rowHeight()"
+        [minBufferPx]="list.grid.rowHeight() * 2"
+        [maxBufferPx]="list.grid.rowHeight() * 4"
+        class="flex-1 min-w-0 library-viewport"
+      >
+        <div
+          *cdkVirtualFor="let row of list.grid.rows(); trackBy: list.grid.trackRow"
+          #personRow
+          class="pr-6 grid content-start grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 sm:gap-4"
+          [style.height.px]="list.grid.rowHeight()"
+        >
+          @for (person of row.items; track person.id) {
+            <app-person-avatar-card
+              [id]="'person-' + person.id"
+              [link]="'/persons/' + person.id"
+              [queryParams]="bookRole ? { role: bookRole } : null"
+              [name]="person.name"
+              [avatarUrl]="person.avatarUrl"
+              [subtitle]="bookRole ? ('books_search.work_count' | translatePlural: (workCounts.get(person.id) ?? 0)) : person.departments.join(', ')"
+            />
+          }
+        </div>
+      </cdk-virtual-scroll-viewport>
 
       <!-- Alphabet sidebar -->
       <nav data-alpha-index class="fixed inset-y-0 right-3 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
@@ -75,12 +88,6 @@
       </nav>
     </div>
 
-    <!-- Sentinel for infinite scroll -->
-    @if (list.hasMore()) {
-      <div #sentinel class="flex justify-center py-4">
-        <span class="loading loading-spinner loading-sm"></span>
-      </div>
-    }
   }
 
   @if (list.total() > 0) {

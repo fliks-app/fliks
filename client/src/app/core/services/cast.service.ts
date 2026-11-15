@@ -8,6 +8,7 @@ import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
 import { Subject } from 'rxjs';
 import { normalizeLangCode } from '../utils/language.utils';
 import type { QoeSample } from './playback-engine';
+import { detectDevice } from './device.service';
 
 /** Custom Cast message namespace; keep in sync with `cast-receiver/receiver.js`. */
 const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
@@ -381,12 +382,19 @@ export class CastService implements OnDestroy {
   }
 
   private initWeb() {
+    // A TV never shows the Cast entry points.
+    if (detectDevice().formFactor === 'tv') return;
     const w = window as any;
     w['__onGCastApiAvailable'] = (isAvailable: boolean) => {
       if (isAvailable) this.initWebCast();
     };
     if (w.cast?.framework) {
       this.initWebCast();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+      script.async = true;
+      document.head.appendChild(script);
     }
     // Fallback poll
     const pollTimer = setInterval(() => {

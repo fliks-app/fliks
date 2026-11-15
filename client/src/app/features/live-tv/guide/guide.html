@@ -61,13 +61,8 @@
     </div>
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/50">{{ 'liveTv.guide.empty' | translate }}</p>
-  } @else {
-    <!-- Grid: hidden below md, a time grid is unreadable at phone width. -->
-    <div
-      #scrollArea
-      class="hidden md:block overflow-auto rounded-lg border border-base-200 max-h-[70vh]"
-      (scroll)="onScroll($event)"
-    >
+  } @else if (isGrid()) {
+    <div #scrollArea class="overflow-auto rounded-lg border border-base-200 max-h-[70vh]">
       <div class="relative" [style.width.px]="176 + timelineWidthPx()">
         <!-- Time ruler -->
         <div class="sticky top-0 z-20 flex h-8 bg-base-200 border-b border-base-300">
@@ -84,10 +79,15 @@
           </div>
         </div>
 
-        <!-- Rows -->
-        <div appTvSection class="flex flex-col divide-y divide-base-200">
-          @for (row of rows(); track row.channel.id) {
-            <div class="flex h-16" style="content-visibility:auto;contain-intrinsic-size:0 64px">
+        <!-- Rows: the spacer height and top padding stand in for the rows outside the window. -->
+        <div
+          appTvSection
+          class="flex flex-col divide-y divide-base-200"
+          [style.height.px]="rows().length * rowPx()"
+          [style.padding-top.px]="windowFirst() * rowPx()"
+        >
+          @for (row of windowRows(); track row.channel.id) {
+            <div data-guide-row class="flex h-16 shrink-0">
               <div class="sticky left-0 z-10 w-44 shrink-0 flex items-center gap-2 px-2 bg-base-100 border-r border-base-200">
                 <span class="badge badge-ghost badge-sm">{{ row.channel.number }}</span>
                 <span class="truncate text-sm font-medium">{{ row.channel.name }}</span>
@@ -112,15 +112,19 @@
           }
         </div>
       </div>
+      @if (hasMore()) {
+        <!-- Sticky so a guide scrolled sideways keeps it inside the scrollport. -->
+        <div #sentinel class="sticky left-0 h-px w-px"></div>
+      }
       @if (loadingMore()) {
         <div class="flex justify-center py-2">
           <span class="loading loading-spinner loading-sm"></span>
         </div>
       }
     </div>
-
-    <!-- Mobile: vertical "now and next" list per channel. -->
-    <div class="md:hidden flex flex-col gap-2">
+  } @else {
+    <!-- Phone width: vertical "now and next" list per channel. -->
+    <div class="flex flex-col gap-2">
       @for (row of displayRows(); track row.channel.id) {
         <div class="flex items-center gap-3 p-2 rounded-lg border border-base-200">
           <span class="badge badge-ghost badge-sm shrink-0">{{ row.channel.number }}</span>

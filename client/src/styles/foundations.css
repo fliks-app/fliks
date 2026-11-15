@@ -1,6 +1,8 @@
 /* `tv:` variant (body.tv): a 1080p TV reports innerWidth=960 (DPR 2), so width breakpoints would pack tablet columns. */
 @custom-variant tv (body.tv &);
 @custom-variant short (@media (max-height: 32rem));
+/* `reduced-effects:` variant (body.reduced-effects, set by DeviceService on TV and low-memory devices). */
+@custom-variant reduced-effects (body.reduced-effects &);
 
 /* Touch browsers paint a box over every tapped link or button; the app draws its own pressed states. */
 html {
@@ -145,6 +147,11 @@ body.tv .app-sidebar-veil {
 }
 body.tv .app-navbar-veil {
   background-color: transparent;
+}
+/* Reduced effects drop the backdrop blur, so the fill alone keeps the menu text readable. */
+body.reduced-effects .app-sidebar-veil,
+body.reduced-effects:not(.tv) .app-navbar-veil {
+  background-color: rgba(29, 35, 42, 0.9);
 }
 
 /* Native app (Capacitor): offset content from system bars */

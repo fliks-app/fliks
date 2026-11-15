@@ -19,9 +19,10 @@
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"
-      [class.bg-base-100/70]="!navbarTransparent() && !background.url() && !tv.isTv()"
+      [class.bg-base-100/70]="!navbarTransparent() && !background.url() && !tv.isTv() && !device.reducedEffects()"
+      [class.bg-base-100/95]="!navbarTransparent() && !background.url() && !tv.isTv() && device.reducedEffects()"
       [class.app-navbar-veil]="!navbarTransparent() && !!background.url()"
-      [class.backdrop-blur-sm]="!navbarTransparent() && !tv.isTv()"
+      [class.backdrop-blur-sm]="!navbarTransparent() && !device.reducedEffects()"
       [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.bg-transparent]="navbarTransparent()"
       [class.border-b]="!navbarTransparent() && !tv.isTv()"
@@ -214,7 +215,7 @@
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (navbar.phoneDock() && !keyboardOpen()) {
-      <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm">
+      <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
              [state]="{ rootEntry: true }">
@@ -334,7 +335,7 @@
     <aside class="app-chrome-side w-64 min-h-full flex flex-col"
            [class.bg-base-100]="!background.url()"
            [class.app-sidebar-veil]="!!background.url()"
-           [class.backdrop-blur-sm]="!!background.url()"
+           [class.backdrop-blur-sm]="!!background.url() && !device.reducedEffects()"
            style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200 flex items-center gap-2">
         <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-2xl font-bold flex-1 min-w-0">

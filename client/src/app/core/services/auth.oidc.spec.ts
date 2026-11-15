@@ -46,7 +46,7 @@ describe('AuthService OpenID Connect', () => {
           lang: 'en',
           loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
         }),
-        { provide: DeviceService, useValue: { isTv: tv, tvPlatform: signal('none') } },
+        { provide: DeviceService, useValue: { isTv: tv, reducedEffects: tv, tvPlatform: signal('none') } },
       ],
     });
     auth = TestBed.inject(AuthService);

@@ -9,6 +9,7 @@ import { desktopGuard } from './core/guards/desktop.guard';
 import { pluginViewGuard } from './core/guards/plugin-view.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { ProfileContextService } from './features/profile/profile-context.service';
+import { loadPlayer } from './features/player/load-player';
 
 export const routes: Routes = [
   {
@@ -64,8 +65,7 @@ export const routes: Routes = [
   {
     path: 'watch/:mediaFileId',
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
-    loadComponent: () =>
-      import('./features/player/player').then((m) => m.PlayerComponent),
+    loadComponent: () => loadPlayer().then((m) => m.PlayerComponent),
   },
   {
     path: 'read/:mediaId/:itemId',

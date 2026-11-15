@@ -31,7 +31,7 @@ pub async fn staged(pool: &PgPool) {
 }
 
 async fn run(pool: &PgPool) -> sqlx::Result<()> {
-    sqlx::query(
+    let stale = sqlx::query(
         r#"UPDATE jobs SET state = 'failed', "finishedAt" = now(), "updatedAt" = now(),
              error = '{"class":"stale","message":"staged output never committed"}'::jsonb
            WHERE state = 'staged' AND "updatedAt" < now() - make_interval(days => $1)"#,
@@ -39,6 +39,9 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
     .bind(STAGED_MAX_DAYS as i32)
     .execute(pool)
     .await?;
+    if stale.rows_affected() > 0 {
+        super::watch::changed();
+    }
     let rows = sqlx::query(
         r#"SELECT id, "stagedPath" FROM jobs
            WHERE "stagedPath" IS NOT NULL AND state IN ('queued', 'done', 'failed', 'skipped', 'cancelled')"#,

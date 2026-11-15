@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Media } from '../../../core/services/api/media.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { BASE_MOVIE, fakeHost, videoSpecProviders } from '../video-work-test-setup';
 import { MovieWorkComponent } from './movie-work.component';
 
@@ -31,18 +32,44 @@ describe('MovieWorkComponent', () => {
     it('fetches similar titles for an identified movie', () => {
       const getSimilar = vi.fn(async () => []);
       render(BASE_MOVIE, { media: { getSimilar } });
-      expect(getSimilar).toHaveBeenCalledWith(BASE_MOVIE.id);
+      expect(getSimilar).toHaveBeenCalledWith(BASE_MOVIE.id, { known: true });
     });
 
-    it('waits for the full title: a list handover carries no cast to fetch', () => {
+    it('reads the cast beside the media request, painting the cache before the network', async () => {
       const getCast = vi.fn(async () => []);
       const host = fakeHost({ fullLoaded: signal(false) });
       TestBed.configureTestingModule({ providers: videoSpecProviders(host, { media: { getCast } }) });
       TestBed.overrideComponent(MovieWorkComponent, { set: { template: '', imports: [] } });
       const fixture = TestBed.createComponent(MovieWorkComponent);
+      fixture.componentRef.setInput('media', { ...BASE_MOVIE, tmdbId: null });
+      fixture.detectChanges();
+      expect(getCast).toHaveBeenCalledWith(BASE_MOVIE.id, { known: true });
+      await vi.waitFor(() =>
+        expect(getCast).toHaveBeenCalledWith(BASE_MOVIE.id, { force: true, freshSince: expect.any(Number) }),
+      );
+    });
+  });
+
+  describe('playback state', () => {
+    it('is requested with the id, and applied only once the full title is in', async () => {
+      const fullLoaded = signal(false);
+      TestBed.configureTestingModule({ providers: videoSpecProviders(fakeHost({ fullLoaded })) });
+      TestBed.overrideComponent(MovieWorkComponent, { set: { template: '', imports: [] } });
+      const resume = TestBed.inject(StreamingApiService).getMediaResumeInfo as ReturnType<typeof vi.fn>;
+      resume.mockResolvedValue({ mediaFileId: FILE.id, episodeId: null, positionSeconds: 1, durationSeconds: 2 });
+      const fixture = TestBed.createComponent(MovieWorkComponent);
       fixture.componentRef.setInput('media', BASE_MOVIE);
       fixture.detectChanges();
-      expect(getCast).not.toHaveBeenCalled();
+      expect(resume).toHaveBeenCalledWith(BASE_MOVIE.id);
+      await Promise.resolve();
+      const c = fixture.componentInstance as unknown as { resumeInfo(): unknown };
+      expect(c.resumeInfo()).toBeNull();
+
+      fixture.componentRef.setInput('media', { ...BASE_MOVIE, files: [FILE] });
+      fullLoaded.set(true);
+      fixture.detectChanges();
+      await vi.waitFor(() => expect(c.resumeInfo()).not.toBeNull());
+      expect(resume).toHaveBeenCalledTimes(1);
     });
   });
 

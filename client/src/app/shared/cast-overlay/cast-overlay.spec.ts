@@ -105,7 +105,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: NowPlayingMetadataService, useValue: { track: () => signal(over.trackMeta ?? null) } },
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
-      { provide: DeviceService, useValue: { isTv: () => !!over.tv } },
+      { provide: DeviceService, useValue: { isTv: () => !!over.tv, reducedEffects: () => false } },
       { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },

@@ -8,6 +8,7 @@ import {
   isRendered,
   wantsFocusRestore,
 } from './focusable.constants';
+import { rowSnapPending } from '../utils/focus-snap.util';
 
 /** Spatial navigation for D-pad and keyboard arrows: container tree (`[appTvSection]`/`[appTvRow]`) first,
  *  rect fallback outside any container. Keys are caught in capture phase to pre-empt native consumers. */
@@ -41,8 +42,8 @@ export class TvSpatialNavService {
   private lastNavAt = 0;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
-  /** Whole-document focusable list, cleared by the observer below; rescanning hundreds of cards per D-pad press stalls the main thread. */
-  private focusableCache: HTMLElement[] | null = null;
+  /** Focusables per root (the document, a grid, a modal, a scroller): rescanning hundreds of cards per D-pad press stalls the main thread. */
+  private readonly focusableCache = new Map<ParentNode, HTMLElement[]>();
   private focusObserver?: MutationObserver;
   /** The focused element, its parent and spot, to hand the focus on when a click swaps or disables it. */
   private lastFocus: { el: HTMLElement; parent: HTMLElement | null; rect: DOMRect } | null = null;
@@ -72,10 +73,10 @@ export class TvSpatialNavService {
     };
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
-    // Clear the cache on DOM changes that affect focusability; attribute filter avoids cosmetic churn.
+    // Drop the lists a DOM change can affect; attribute filter avoids cosmetic churn.
     if (typeof MutationObserver !== 'undefined') {
-      this.focusObserver = new MutationObserver(() => {
-        this.focusableCache = null;
+      this.focusObserver = new MutationObserver((records) => {
+        this.dropStaleFocusables(records);
         this.rescueFocus();
       });
       this.focusObserver.observe(document.body, {
@@ -86,6 +87,10 @@ export class TvSpatialNavService {
       });
       this.destroyRef.onDestroy(() => this.focusObserver?.disconnect());
     }
+    // A breakpoint can show or hide focusables without any mutation.
+    const resizeHandler = () => this.focusableCache.clear();
+    window.addEventListener('resize', resizeHandler, { passive: true });
+    this.destroyRef.onDestroy(() => window.removeEventListener('resize', resizeHandler));
     // Android TV WebView may leave the body unfocused, sending D-pad events to the native View.
     // Desktop opts out: stealing focus on bootstrap is hostile.
     if (this.tv.isTv()) {
@@ -146,9 +151,33 @@ export class TvSpatialNavService {
     }
   }
 
-  /** Whole-document focusables, cached between DOM mutations (see focusableCache). */
-  private getFocusables(): HTMLElement[] {
-    return (this.focusableCache ??= collectFocusables());
+  /** Focusables under `root`, cached until a mutation can change them (see dropStaleFocusables). */
+  private focusablesIn(root: ParentNode = document): HTMLElement[] {
+    let list = this.focusableCache.get(root);
+    if (!list) this.focusableCache.set(root, (list = collectFocusables(root)));
+    return list;
+  }
+
+  /** Nodes added or removed inside a root, or a relevant attribute on, inside or above it, stale its list;
+   *  a class or style change on a node holding no focusable changes no list. */
+  private dropStaleFocusables(records: MutationRecord[]): void {
+    if (!this.focusableCache.size) return;
+    const added: Node[] = [];
+    const attributes: Node[] = [];
+    for (const r of records) {
+      if (r.type === 'childList') added.push(r.target);
+      else if ((r.attributeName !== 'class' && r.attributeName !== 'style') || holdsFocusable(r.target)) attributes.push(r.target);
+    }
+    if (!added.length && !attributes.length) return;
+    for (const root of this.focusableCache.keys()) {
+      const node = root as Node;
+      const stale =
+        node === document ||
+        !node.isConnected ||
+        added.some((t) => node.contains(t)) ||
+        attributes.some((t) => node.contains(t) || t.contains(node));
+      if (stale) this.focusableCache.delete(root);
+    }
   }
 
   private rememberFocus(): void {
@@ -193,7 +222,7 @@ export class TvSpatialNavService {
     if (document.activeElement && document.activeElement !== document.body) return;
     // Same choice as the cold-load branch of findNeighbor: the page's declared
     // default beats the first document focusable, which is the topbar.
-    const target = this.defaultFocus.currentTarget() ?? this.getFocusables()[0];
+    const target = this.defaultFocus.currentTarget() ?? this.focusablesIn()[0];
     target?.focus({ preventScroll: true });
   }
 
@@ -258,16 +287,12 @@ export class TvSpatialNavService {
     if (next) {
       // A held key stays in the current zone (row/grid) so leaning on the D-pad can't overshoot out of it.
       if (!crossZones && this.exitsZone(active, next)) return;
-      // preventScroll skips the instant auto-scroll; smooth scrollIntoView then animates, horizontal-scroller owns row-top alignment.
+      // preventScroll skips the instant auto-scroll; scrollToFocus then animates, horizontal-scroller owns row-top alignment.
       next.focus({ preventScroll: true });
       // Positioned targets (modal close, fixed FABs, sticky headers) are already on screen; scrolling would displace them.
-      const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
-      if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
-        next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-        this.scrollEdgeToFocus(next);
-        // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
-        this.scrollRowToFocus(next);
-      }
+      const style = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next) : null;
+      const pos = style?.position ?? 'static';
+      if (style && pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') this.scrollToFocus(next, style);
       return;
     }
     // No focusable neighbour: scroll the page so the user can reach info content
@@ -278,13 +303,41 @@ export class TvSpatialNavService {
     }
   }
 
+  /** One smooth scroll per scroller: the row snap or a page reveal moves the page, the card row and inner
+   *  vertical scrollers scroll themselves; two animations on one scroller judder. */
+  private scrollToFocus(el: HTMLElement, style: CSSStyleDeclaration): void {
+    const scrollers = verticalScrollers(el);
+    const row = el.closest<HTMLElement>('[data-scroller]');
+    if (scrollers.length) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    else if (!rowSnapPending(el)) {
+      if (row) this.revealInPage(el, style);
+      else el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
+    this.scrollEdgeToFocus(el, scrollers);
+    // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
+    if (row) this.scrollRowToFocus(el, row);
+  }
+
+  /** The vertical half of `nearest` on the page, for a card whose row scrolls itself sideways. */
+  private revealInPage(el: HTMLElement, style: CSSStyleDeclaration): void {
+    const page = getComputedStyle(document.documentElement);
+    const r = el.getBoundingClientRect();
+    const delta = nearestDelta(
+      r.top - (parseFloat(style.scrollMarginTop) || 0),
+      r.bottom + (parseFloat(style.scrollMarginBottom) || 0),
+      parseFloat(page.scrollPaddingTop) || 0,
+      document.documentElement.clientHeight - (parseFloat(page.scrollPaddingBottom) || 0),
+    );
+    if (delta) window.scrollBy({ top: delta, behavior: 'smooth' });
+  }
+
   /** A vertical scroller's first or last row scrolls it to that edge: `nearest` stops at the item's box,
    *  short of the padding, a heading or a badge beside it, and clips the ring. */
-  private scrollEdgeToFocus(el: HTMLElement): void {
-    for (let s = el.parentElement; s && s !== document.body; s = s.parentElement) {
-      if (s.scrollHeight <= s.clientHeight || !/auto|scroll/.test(getComputedStyle(s).overflowY)) continue;
-      const r = el.getBoundingClientRect();
-      const others = collectFocusables(s).map((o) => o.getBoundingClientRect());
+  private scrollEdgeToFocus(el: HTMLElement, scrollers: HTMLElement[]): void {
+    if (!scrollers.length) return;
+    const r = el.getBoundingClientRect();
+    for (const s of scrollers) {
+      const others = this.focusablesIn(s).map((o) => o.getBoundingClientRect());
       if (!others.some((o) => o.bottom <= r.top)) s.scrollTo({ top: 0, behavior: 'smooth' });
       else if (!others.some((o) => o.top >= r.bottom)) s.scrollTo({ top: s.scrollHeight, behavior: 'smooth' });
     }
@@ -292,9 +345,7 @@ export class TvSpatialNavService {
 
   /** Bring `el` inside its card row's scrollport, honouring the row's
    *  scroll-padding — the horizontal half of `inline: 'nearest'`. */
-  private scrollRowToFocus(el: HTMLElement): void {
-    const row = el.closest<HTMLElement>('[data-scroller]');
-    if (!row) return;
+  private scrollRowToFocus(el: HTMLElement, row: HTMLElement): void {
     const style = getComputedStyle(row);
     const padStart = parseFloat(style.scrollPaddingLeft) || 0;
     const padEnd = parseFloat(style.scrollPaddingRight) || 0;
@@ -371,7 +422,7 @@ export class TvSpatialNavService {
       const tree = this.findNeighborInTree(active, dir);
       if (tree && (!openModal || openModal.contains(tree))) return tree;
     }
-    const all = openModal ? collectFocusables(openModal) : this.getFocusables();
+    const all = this.focusablesIn(openModal ?? document);
     if (!all.length) return null;
 
     if (!active || active === document.body) {
@@ -467,7 +518,7 @@ export class TvSpatialNavService {
       topMost = cur;
       // A grid moves by geometry inside itself; only its edge hands the step to the enclosing container.
       if (cur.orientation === 'grid') {
-        const inGrid = nearestInDirection(collectFocusables(cur.el), active, dir);
+        const inGrid = nearestInDirection(this.focusablesIn(cur.el), active, dir);
         if (inGrid) return inGrid;
         cur = cur.parent;
         continue;
@@ -609,6 +660,8 @@ export function nearestInDirection(candidates: HTMLElement[], from: HTMLElement,
   for (const el of candidates) {
     if (el === from) continue;
     const r = el.getBoundingClientRect();
+    // A cached list can hold an element hidden since by a stylesheet alone.
+    if (r.width === 0 || r.height === 0) continue;
     const dx = r.left + r.width / 2 - fx;
     const dy = r.top + r.height / 2 - fy;
     const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy;
@@ -629,6 +682,29 @@ export function sharesBand(r: DOMRect, from: DOMRect, horizontal: boolean): bool
 
 function matchesFocusable(el: HTMLElement): boolean {
   return el.matches?.(FOCUSABLE_SELECTOR) ?? false;
+}
+
+/** `node` is a focusable or holds one, so a class or style change on it can change a focusable list. */
+function holdsFocusable(node: Node): boolean {
+  return node instanceof Element && (node.matches(FOCUSABLE_SELECTOR) || node.querySelector(FOCUSABLE_SELECTOR) !== null);
+}
+
+/** Scrollers between `el` and `<body>` that scroll vertically, innermost first; the page itself is not one. */
+function verticalScrollers(el: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (let s = el.parentElement; s && s !== document.body; s = s.parentElement) {
+    if (s.scrollHeight > s.clientHeight && /auto|scroll/.test(getComputedStyle(s).overflowY)) out.push(s);
+  }
+  return out;
+}
+
+/** Scroll that `block: 'nearest'` applies to a box spanning `top`..`bottom` in a view spanning `viewTop`..`viewBottom`. */
+export function nearestDelta(top: number, bottom: number, viewTop: number, viewBottom: number): number {
+  const before = top < viewTop;
+  const after = bottom > viewBottom;
+  if (before === after) return 0;
+  const taller = bottom - top > viewBottom - viewTop;
+  return before !== taller ? top - viewTop : bottom - viewBottom;
 }
 
 const ARROW_TO_DIR: Record<string, 'left' | 'right' | 'up' | 'down' | undefined> = {

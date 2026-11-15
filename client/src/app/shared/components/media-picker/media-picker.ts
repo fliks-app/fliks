@@ -200,7 +200,7 @@ export class MediaPickerComponent implements OnDestroy {
         this.loading.set(false);
         return;
       }
-      this.timer = setTimeout(() => void this.search({ q, limit: 24, ...params }), SEARCH_DEBOUNCE_MS);
+      this.timer = setTimeout(() => void this.search({ q, limit: 24, withTotal: false, ...params }), SEARCH_DEBOUNCE_MS);
     });
   });
 

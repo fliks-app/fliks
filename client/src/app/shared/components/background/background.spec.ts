@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { BackgroundService } from '../../../core/services/background.service';
-import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundComponent } from './background';
 
 describe('BackgroundComponent', () => {
@@ -13,7 +13,7 @@ describe('BackgroundComponent', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: BackgroundService, useValue: { url, blur } },
-        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
       ],
     });
     const fixture = TestBed.createComponent(BackgroundComponent);

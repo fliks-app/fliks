@@ -13,37 +13,42 @@ fn seasonal_array() -> String {
 /// Seasonal: every on-disk item of its groups above 0 is completed; a comic: every on-disk issue is completed;
 /// any other: one item is completed.
 /// `uid` is a user id, a bound parameter or a column, never user text; `m` aliases the media row.
+/// Only media holding one of the user's completed items are checked: the set hashes once per query.
 pub(crate) fn predicate(uid: impl Display, m: &str) -> String {
     let seasonal = seasonal_array();
     let comic = MediaKind::Comic.as_str();
     format!(
-        r#"CASE WHEN {m}.type = ANY({seasonal}) THEN
+        r#"{m}.id IN (
+  SELECT wm.id FROM media wm
+  WHERE wm.id IN (
+      SELECT wi."mediaId" FROM playback_states wps JOIN items wi ON wi.id = wps."itemId"
+      WHERE wps."userId" = {uid} AND wps.completed = true
+    )
+    AND CASE WHEN wm.type = ANY({seasonal}) THEN
     EXISTS (
       SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-      WHERE s."mediaId" = {m}.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+      WHERE s."mediaId" = wm.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
     )
     AND NOT EXISTS (
       SELECT 1 FROM item_groups s JOIN items e ON e."groupId" = s.id
-      WHERE s."mediaId" = {m}.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
+      WHERE s."mediaId" = wm.id AND s."number" > 0 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)
         AND NOT EXISTS (
           SELECT 1 FROM playback_states ps2
           WHERE ps2."userId" = {uid} AND ps2."itemId" = e.id AND ps2.completed = true
         )
     )
-  WHEN {m}.type = '{comic}' THEN
-    EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = {m}.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))
+  WHEN wm.type = '{comic}' THEN
+    EXISTS (SELECT 1 FROM items i WHERE i."mediaId" = wm.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id))
     AND NOT EXISTS (
-      SELECT 1 FROM items i WHERE i."mediaId" = {m}.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
+      SELECT 1 FROM items i WHERE i."mediaId" = wm.id AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
         AND NOT EXISTS (
           SELECT 1 FROM playback_states ps2
           WHERE ps2."userId" = {uid} AND ps2."itemId" = i.id AND ps2.completed = true
         )
     )
-  ELSE EXISTS (
-      SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
-      WHERE ps."userId" = {uid} AND i."mediaId" = {m}.id AND ps.completed = true
-    )
-  END"#
+  ELSE true
+  END
+)"#
     )
 }
 
@@ -74,7 +79,7 @@ mod tests {
         let p = progress("$1", "m");
         assert!(p.contains("ELSE COALESCE(") && p.contains("), 0) END"));
         assert!(
-            p.contains("type IN ('book', 'comic') AND (CASE WHEN") && p.contains("THEN 100 ELSE")
+            p.contains("type IN ('book', 'comic') AND (m.id IN (") && p.contains("THEN 100 ELSE")
         );
         assert!(p.contains("LEAST(1, ps.progression)"));
         assert!(!p.contains("'movie'") && !predicate(1, "m").contains("'movie'"));

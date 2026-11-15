@@ -1,5 +1,5 @@
 import { Component, effect, inject, signal } from '@angular/core';
-import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -21,10 +21,9 @@ interface Layer {
 export class BackgroundComponent {
   private readonly bg = inject(BackgroundService);
 
-  private readonly tv = inject(TvService);
-
-  /** Blur radius in px; smaller on TV where the large blur costs too much to composite. */
-  readonly radius = this.tv.isTv() ? 16 : 40;
+  /** Reduced effects swap images without the crossfade and draw the cover fallback unblurred. */
+  readonly reduced = inject(DeviceService).reducedEffects();
+  private readonly fade = this.reduced ? '' : ' transition-opacity duration-1500';
   readonly layers = signal<readonly Layer[]>(Array<Layer>(LAYERS).fill({ url: null, blur: false }));
   /** Layer fading in on top; `null` while the backdrop fades out to nothing. */
   readonly active = signal<number | null>(null);
@@ -72,9 +71,9 @@ export class BackgroundComponent {
 
   layerClass(index: number): string {
     const active = this.active();
-    if (index === active) return 'opacity-100 z-20 transition-opacity duration-1500';
+    if (index === active) return 'opacity-100 z-20' + this.fade;
     if (index !== this.previous()) return 'opacity-0';
-    return active === null ? 'opacity-0 transition-opacity duration-1500' : 'opacity-100 z-10';
+    return active === null ? 'opacity-0' + this.fade : 'opacity-100 z-10';
   }
 
   private show(index: number | null): void {
