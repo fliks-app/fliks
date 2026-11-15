@@ -34,7 +34,7 @@
                 } @else {
                   <span class="relative inline-block whitespace-pre">
                     <span class="opacity-40">{{ s.text }}</span>
-                    <span class="absolute inset-y-0 right-0 left-0 whitespace-pre" aria-hidden="true" [attr.data-cue]="s.cue" [style.clip-path]="wipe(i, s.cue)">{{ s.text }}</span>
+                    <span class="absolute inset-y-0 right-0 left-0 whitespace-pre" [class.text-primary]="large() && !style(r.agentId)?.colour" aria-hidden="true" [attr.data-cue]="s.cue" [style.clip-path]="wipe(i, s.cue)">{{ s.text }}</span>
                   </span>
                 }
               }

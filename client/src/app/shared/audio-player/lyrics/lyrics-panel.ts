@@ -2,33 +2,31 @@ import { Component, computed, effect, inject, input, output, signal, untracked }
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideMicVocal } from '@lucide/angular';
+import { LucideCheck, LucideMic, LucideMicVocal } from '@lucide/angular';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeFailure, KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import type { KaraokeFailure, KaraokeItemState, KaraokeStage, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { failureText } from '../../../core/services/karaoke/karaoke-failure';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import type { StemMode } from '../../../core/services/audio-player/stem-mix';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { SseService } from '../../../core/services/sse.service';
-import { DropdownMenuComponent } from '../../components/dropdown-menu';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
-const STEM_MODES: StemMode[] = ['original', 'guide', 'instrumental'];
+const PREP_STEPS: KaraokeStage[] = ['separate', 'align', 'melody'];
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
 const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttml: 'ttml', xml: 'ttml', srt: 'srt', txt: 'plain' };
 
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, DropdownMenuComponent, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideMicVocal],
+  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideCheck, LucideMic, LucideMicVocal],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
@@ -93,7 +91,7 @@ export class LyricsPanelComponent {
   protected readonly kStatus = signal<KaraokeStatus | null>(null);
   protected readonly kState = signal<KaraokeItemState | null>(null);
   protected readonly kBusy = signal(false);
-  protected readonly stemModes = STEM_MODES;
+  protected readonly prepSteps = PREP_STEPS;
   /** Karaoke controls apply to the track that is playing, in a library with the feature ready. */
   protected readonly karaokeOn = computed(
     () => !this.output() && !!this.kStatus()?.ready && this.audio.musicMode() && this.audio.track()?.itemId === this.itemId(),
@@ -146,6 +144,17 @@ export class LyricsPanelComponent {
       return;
     }
     this.kState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
+  }
+
+  protected prepStep(stage: KaraokeStage | undefined): number {
+    return PREP_STEPS.indexOf(stage ?? 'separate');
+  }
+
+  /** Karaoke replaces the lyrics; leaving it returns to the plain lyrics and the original mix. */
+  protected toggleKaraoke(): void {
+    const on = !this.stage();
+    this.stage.set(on);
+    if (!on) this.audio.setStemMode('original');
   }
 
   protected prepare(): Promise<void> {

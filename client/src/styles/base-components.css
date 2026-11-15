@@ -652,3 +652,8 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   .player-box .player-cover-col,
   .player-box .player-cover { transition-duration: 1ms; }
 }
+
+/* `.tooltip` sets inline-block, which would drop a button's flex centring. */
+.btn.tooltip {
+  display: inline-flex;
+}

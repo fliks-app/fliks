@@ -1,8 +1,9 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
-import { TranslatePipe } from '@ngx-translate/core';
-import { LucideMic, LucideMicOff, LucideMinus, LucidePlus } from '@lucide/angular';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { GUIDE_VOCAL_LEVEL, type StemMode } from '../../../core/services/audio-player/stem-mix';
 import { DeviceService } from '../../../core/services/device.service';
 import { KaraokeRelayService } from '../../../core/services/karaoke/karaoke-relay.service';
 import { KaraokeService, type BoardRow } from '../../../core/services/karaoke/karaoke.service';
@@ -18,32 +19,57 @@ const BEHIND_MS = 2000;
 const AHEAD_MS = 6000;
 const RESULTS_MS = 500;
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
+const MODES: StemMode[] = ['instrumental', 'guide', 'original'];
 
-/** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores and the singers' controls. */
+/** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores, the mix bar and the settings. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMicOff, LucideMinus, LucidePlus],
+  imports: [TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
   protected readonly karaoke = inject(KaraokeService);
   protected readonly audio = inject(AudioPlayerService);
-  protected readonly tv = inject(DeviceService).isTv;
+  private readonly device = inject(DeviceService);
+  protected readonly tv = this.device.isTv;
+  /** Settings open as a bottom sheet on touch and TV, a side panel elsewhere. */
+  protected readonly sheet = computed(() => this.device.isTouch() || this.device.isTv());
+  private readonly translate = inject(TranslateService);
   private readonly relay = inject(KaraokeRelayService);
   private readonly party = inject(PartyService);
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('lane');
+  private readonly primary = viewChild.required<ElementRef<HTMLElement>>('primary');
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('board');
+  private readonly settings = viewChild.required<ElementRef<HTMLDialogElement>>('settings');
 
   readonly doc = input.required<StructuredLyrics>();
   readonly title = input('');
+  /** Shows the recompute actions (with `media.edit`). */
+  readonly canEdit = input(false);
+  readonly busy = input(false);
+  /** A failed lyrics step of the preparation, already worded. */
+  readonly error = input('');
+  readonly recompute = output<'sync' | 'melody'>();
 
   protected readonly difficulties = DIFFICULTIES;
+  protected readonly modes = MODES;
+  /** The last guide level, kept while another preset plays so the slider keeps its slot. */
+  protected readonly guideLevel = signal(this.guideStart());
   protected readonly rows = signal<BoardRow[]>([]);
   protected readonly calibrated = signal<boolean | null>(null);
   private readonly range = computed(() => laneRange(this.doc(), this.audio.pitch()));
   protected readonly hasMelody = computed(() => (this.doc().cueLine ?? []).some((l) => l.cue.some((c) => c.pitch !== undefined)));
   protected readonly canSing = this.karaoke.canSing;
   protected readonly inParty = this.party.active;
+
+  protected readonly status = computed(() => {
+    const issue = this.karaoke.micIssue();
+    if (issue) return { error: true, text: this.translate.instant(`karaoke.mic_${issue}`) };
+    if (this.error()) return { error: true, text: this.error() };
+    if (!this.hasMelody()) return { error: false, text: this.translate.instant('karaoke.no_melody') };
+    if (!this.canSing && this.rows().length === 0) return { error: false, text: this.translate.instant('karaoke.phones_hint') };
+    return null;
+  });
 
   private frame = 0;
 
@@ -77,6 +103,31 @@ export class KaraokeStageComponent {
     this.rows.set(this.karaoke.results(this.doc()));
     const dur = this.audio.duration();
     if (dur > 0 && this.audio.position() >= dur - 1.5) this.karaoke.finish(this.doc(), this.title());
+  }
+
+  private guideStart(): number {
+    const v = this.audio.vocalLevel();
+    return v > 0 && v < 1 ? v : GUIDE_VOCAL_LEVEL;
+  }
+
+  protected setMode(mode: StemMode): void {
+    this.audio.setStemMode(mode);
+    if (mode === 'guide') this.audio.setVocalLevel(this.guideLevel());
+  }
+
+  /** Moving the slider selects Guide at that level. */
+  protected setGuide(level: number): void {
+    this.guideLevel.set(level);
+    this.audio.setStemMode('guide');
+    this.audio.setVocalLevel(level);
+  }
+
+  protected openSettings(): void {
+    this.settings().nativeElement.showModal();
+  }
+
+  protected closeSettings(): void {
+    this.settings().nativeElement.close();
   }
 
   protected toggleSinging(): void {
@@ -114,12 +165,12 @@ export class KaraokeStageComponent {
     const ctx = cv.getContext('2d');
     if (ctx && w > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.paint(ctx, w, h, getComputedStyle(cv).color);
+      this.paint(ctx, w, h, getComputedStyle(cv).color, getComputedStyle(this.primary().nativeElement).color);
     }
     this.frame = requestAnimationFrame(() => this.draw());
   }
 
-  private paint(ctx: CanvasRenderingContext2D, w: number, h: number, ink: string): void {
+  private paint(ctx: CanvasRenderingContext2D, w: number, h: number, ink: string, primary: string): void {
     const doc = this.doc();
     const now = this.karaoke.mediaMs();
     const lyricNow = now + doc.offset;
@@ -136,7 +187,7 @@ export class KaraokeStageComponent {
     const notes = laneNotes(doc, lyricNow - BEHIND_MS, lyricNow + AHEAD_MS, this.range(), this.audio.pitch());
     for (const n of notes) {
       const st = singerStyle(doc, n.agentId);
-      const colour = st?.colour ?? ink;
+      const colour = st?.colour ?? (n.start <= lyricNow && lyricNow < n.end ? primary : ink);
       const [bx, by, bw, bh] = [x(n.start), y(n.midi) - bar * 0.35, Math.max(2, (n.end - n.start) * px), bar * 0.7];
       ctx.fillStyle = colour;
       ctx.strokeStyle = colour;

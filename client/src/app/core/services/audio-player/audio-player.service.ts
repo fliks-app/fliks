@@ -1479,8 +1479,10 @@ export class AudioPlayerService {
     this.reportVolume();
   }
 
+  /** At level 0 the button restores a level instead of toggling a mute nobody hears. */
   toggleMute(): void {
-    this.setLevel(this.volume(), !this._muted());
+    if (this.volume() === 0) this.setLevel(0.5, false);
+    else this.setLevel(this.volume(), !this._muted());
     this.reportVolume();
   }
 
