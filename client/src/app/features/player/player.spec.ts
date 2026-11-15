@@ -320,6 +320,7 @@ function createHarness(opts: {
         provide: DeviceService,
         useValue: {
           isTv: () => false,
+          isAndroidNative: () => false,
           reducedEffects: () => false,
           isTouch: () => false,
           isDpad: () => false,

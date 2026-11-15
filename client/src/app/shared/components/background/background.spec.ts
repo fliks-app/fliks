@@ -13,7 +13,7 @@ describe('BackgroundComponent', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: BackgroundService, useValue: { url, blur } },
-        { provide: DeviceService, useValue: { reducedEffects: () => false } },
+        { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
       ],
     });
     const fixture = TestBed.createComponent(BackgroundComponent);
