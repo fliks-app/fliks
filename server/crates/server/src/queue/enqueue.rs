@@ -237,7 +237,7 @@ pub async fn queue_new_cached(st: &AppState, id: i32, cache: &mut Cache) -> sqlx
 /// A `skipped` marker of a class, once per file: `shared` files are looked at again by the review
 /// pass, `ocr_pending` ones are queued when their OCR ends.
 async fn record_marker(st: &AppState, id: i32, class: &str) -> sqlx::Result<()> {
-    sqlx::query(
+    let r = sqlx::query(
         r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state, error, "finishedAt")
            SELECT 'optimize', $1, '{}'::jsonb, $2, 'skipped', jsonb_build_object('class', $2::text), now()
            WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE "mediaFileId" = $1 AND state = 'skipped'
@@ -247,6 +247,9 @@ async fn record_marker(st: &AppState, id: i32, class: &str) -> sqlx::Result<()> 
     .bind(class)
     .execute(&st.db)
     .await?;
+    if r.rows_affected() > 0 {
+        super::watch::changed();
+    }
     Ok(())
 }
 
@@ -411,6 +414,9 @@ pub(super) async fn insert_job(
     .bind(min_age_days as i32)
     .fetch_optional(&st.db)
     .await?;
+    if job.is_some() {
+        super::watch::changed();
+    }
     Ok(match job {
         Some(j) => Queued {
             media_file_id: id,
@@ -461,6 +467,7 @@ pub async fn retry(st: &AppState, id: i64) -> sqlx::Result<Option<()>> {
     match res {
         Ok(r) if r.rows_affected() > 0 => {
             st.queue.wake.notify_waiters();
+            super::watch::changed();
             Ok(Some(()))
         }
         Ok(_) => Ok(None),

@@ -521,49 +521,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "hasDefault": true,
-                    "hint": "fanarttv.config.apiKey_hint",
-                    "key": "apiKey",
-                    "labelKey": "fanarttv.config.apiKey",
-                    "requiredByProvider": true,
-                    "secret": true,
-                    "type": "text"
-                  },
-                  {
-                    "hasDefault": false,
-                    "hint": "fanarttv.config.clientKey_hint",
-                    "key": "clientKey",
-                    "labelKey": "fanarttv.config.clientKey",
-                    "requiredByProvider": false,
-                    "secret": true,
-                    "type": "text"
-                  },
-                  {
-                    "kind": "caption",
-                    "textKey": "fanarttv.config.attribution"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "fanarttv.config.title",
-                "subtitleKey": "fanarttv.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.fanarttv/general"
-                },
-                "id": "fliks-fanarttv.settings.general",
-                "labelKey": "fanarttv.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "fanarttv.config.apiKey": "API key",
@@ -613,31 +572,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "kind": "caption",
-                    "textKey": "lrclib.config.attribution"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "lrclib.config.title",
-                "subtitleKey": "lrclib.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.lrclib/general"
-                },
-                "id": "fliks-lrclib.settings.general",
-                "labelKey": "lrclib.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net).",
@@ -663,48 +599,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "hasDefault": false,
-                    "hint": "musicbrainz.config.baseUrl_hint",
-                    "key": "baseUrl",
-                    "labelKey": "musicbrainz.config.baseUrl",
-                    "requiredByProvider": false,
-                    "type": "text"
-                  },
-                  {
-                    "hasDefault": false,
-                    "hint": "musicbrainz.config.listenbrainzToken_hint",
-                    "key": "listenbrainzToken",
-                    "labelKey": "musicbrainz.config.listenbrainzToken",
-                    "requiredByProvider": false,
-                    "secret": true,
-                    "type": "text"
-                  },
-                  {
-                    "kind": "caption",
-                    "textKey": "musicbrainz.config.attribution"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "musicbrainz.config.title",
-                "subtitleKey": "musicbrainz.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.musicbrainz/general"
-                },
-                "id": "fliks-musicbrainz.settings.general",
-                "labelKey": "musicbrainz.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org).",
@@ -754,35 +650,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "hasDefault": false,
-                    "hint": "thexem.config.baseUrl_hint",
-                    "key": "baseUrl",
-                    "labelKey": "thexem.config.baseUrl",
-                    "requiredByProvider": false,
-                    "type": "text"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "thexem.config.title",
-                "subtitleKey": "thexem.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.thexem/general"
-                },
-                "id": "fliks-thexem.settings.general",
-                "labelKey": "thexem.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "thexem.config.baseUrl": "Base URL",
@@ -810,36 +679,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "hasDefault": true,
-                    "hint": "tmdb.config.apiKey_hint",
-                    "key": "apiKey",
-                    "labelKey": "tmdb.config.apiKey",
-                    "requiredByProvider": true,
-                    "secret": true,
-                    "type": "text"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "tmdb.config.title",
-                "subtitleKey": "tmdb.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.tmdb/general"
-                },
-                "id": "fliks-tmdb.settings.general",
-                "labelKey": "tmdb.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "tmdb.config.apiKey": "API key",
@@ -868,36 +709,8 @@
             }
           },
           {
-            "configPages": [
-              {
-                "fields": [
-                  {
-                    "hasDefault": true,
-                    "hint": "tvdb.config.apiKey_hint",
-                    "key": "apiKey",
-                    "labelKey": "tvdb.config.apiKey",
-                    "requiredByProvider": true,
-                    "secret": true,
-                    "type": "text"
-                  }
-                ],
-                "id": "general",
-                "labelKey": "tvdb.config.title",
-                "subtitleKey": "tvdb.config.subtitle"
-              }
-            ],
-            "contributions": [
-              {
-                "action": {
-                  "kind": "route",
-                  "path": "/admin/settings/plugins/fliks.tvdb/general"
-                },
-                "id": "fliks-tvdb.settings.general",
-                "labelKey": "tvdb.config.title",
-                "slot": "settings.page",
-                "weight": 100
-              }
-            ],
+            "configPages": [],
+            "contributions": [],
             "i18n": {
               "en": {
                 "tvdb.config.apiKey": "API key",

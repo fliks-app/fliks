@@ -142,7 +142,7 @@ describe('PluginsSettingsComponent: enable/disable', () => {
     http.expectOne({ url: '/api/plugins/fliks.acme/disable', method: 'POST' }).flush({ ...ROW, enabled: true, statusReason: 'server-said-so' });
     await settle(fixture);
     // Contributions are re-read so the nav and the settings sidebar follow the switch.
-    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    http.expectOne((r) => r.method === 'GET' && r.url === '/api/plugins/ui').flush([]);
     await settle(fixture);
 
     expect(state.rows()[0]).toEqual(expect.objectContaining({ enabled: true, statusReason: 'server-said-so' }));
@@ -156,7 +156,7 @@ describe('PluginsSettingsComponent: enable/disable', () => {
     await settle(fixture);
     http.expectOne({ url: '/api/plugins/fliks.acme/enable', method: 'POST' }).flush(ROW);
     await settle(fixture);
-    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    http.expectOne((r) => r.method === 'GET' && r.url === '/api/plugins/ui').flush([]);
     await settle(fixture);
 
     expect(state.rows()[0].enabled).toBe(true);
@@ -176,7 +176,7 @@ describe('PluginsSettingsComponent: uninstall', () => {
     await flushReload(fixture, http, []);
 
     // Without this the pages stay linked in the admin sidebar until a full page load.
-    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    http.expectOne((r) => r.method === 'GET' && r.url === '/api/plugins/ui').flush([]);
     await settle(fixture);
   });
 
@@ -192,7 +192,7 @@ describe('PluginsSettingsComponent: uninstall', () => {
     http.expectOne({ url: '/api/plugins/fliks.acme?deleteData=true', method: 'DELETE' }).flush({});
     await settle(fixture);
     await flushReload(fixture, http, []);
-    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    http.expectOne((r) => r.method === 'GET' && r.url === '/api/plugins/ui').flush([]);
     await settle(fixture);
   });
 
@@ -287,9 +287,10 @@ describe('PluginsSettingsComponent: cards', () => {
   });
 
   it('the description follows the UI language, else the manifest one', async () => {
-    const { state } = await createComponent([{ ...ROW, description: 'Data', descriptions: { en: 'Data (en)', fr: 'Données' } }]);
+    const { state, http } = await createComponent([{ ...ROW, description: 'Data', descriptions: { en: 'Data (en)', fr: 'Données' } }]);
     expect(state.descriptionFor(state.installed()[0])).toBe('Data (en)');
     TestBed.inject(TranslateService).use('de');
+    http.expectOne('/api/plugins/ui?lang=de').flush([]);
     expect(state.descriptionFor(state.installed()[0])).toBe('Data');
   });
 

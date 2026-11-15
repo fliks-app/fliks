@@ -193,9 +193,9 @@ pub async fn metrics(State(st): State<AppState>, a: Authed) -> Res {
     Ok(Json(out).into_response())
 }
 
-#[utoipa::path(get, path = "/api/plugins/ui", responses((status = 200)))]
-pub async fn ui(State(st): State<AppState>, a: Authed) -> Res {
-    Ok(Json(st.plugins.ui(&a.perms)).into_response())
+#[utoipa::path(get, path = "/api/plugins/ui", params(super::ui::UiQuery), responses((status = 200)))]
+pub async fn ui(State(st): State<AppState>, a: Authed, Query(q): Query<super::ui::UiQuery>) -> Res {
+    Ok(Json(st.plugins.ui(&a.perms, q.lang.as_deref())).into_response())
 }
 
 fn multer(e: axum::extract::multipart::MultipartError) -> Bail {

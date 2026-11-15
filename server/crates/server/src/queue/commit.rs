@@ -147,6 +147,9 @@ pub async fn settle(st: &AppState, id: i64, end: &End) {
             .bind(BUSY_DELAY_S)
             .execute(&st.db)
             .await;
+            if r.as_ref().is_ok_and(|r| r.rows_affected() > 0) {
+                super::watch::changed();
+            }
             tracing::info!(job = id, "commit postponed: {m}");
             if let Err(e) = r {
                 tracing::warn!(job = id, "commit postponement not stored: {e}");
@@ -165,6 +168,9 @@ pub async fn settle(st: &AppState, id: i64, end: &End) {
     .bind(json!({"class": class, "message": msg}))
     .execute(&st.db)
     .await;
+    if r.as_ref().is_ok_and(|r| r.rows_affected() > 0) {
+        super::watch::changed();
+    }
     if let Err(e) = r {
         tracing::warn!(job = id, "commit end not stored: {e}");
     }
@@ -331,7 +337,7 @@ pub async fn commit(st: &AppState, j: &Job) -> End {
     .execute(&st.db)
     .await;
     match wrote {
-        Ok(r) if r.rows_affected() == 1 => {}
+        Ok(r) if r.rows_affected() == 1 => super::watch::changed(),
         Ok(_) => return End::Pending,
         Err(e) => return End::Busy(format!("journal: {e}")),
     }
@@ -463,8 +469,9 @@ pub async fn mark_done(st: &AppState, id: i64, j: &Journal) -> sqlx::Result<()> 
     .bind(id)
     .bind(extra)
     .execute(&st.db)
-    .await
-    .map(drop)
+    .await?;
+    super::watch::changed();
+    Ok(())
 }
 
 /// The database half, idempotent: path, forced rescan path, subtitle rows, event, revoke, sprites.

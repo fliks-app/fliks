@@ -11,7 +11,7 @@ import { loadPersistedState } from './app.config';
  *  instead of assuming it is already in flight. */
 async function flushPluginUiRequest(http: HttpTestingController): Promise<void> {
   for (let i = 0; i < 50; i++) {
-    const [req] = http.match('/api/plugins/ui');
+    const [req] = http.match((r) => r.url === '/api/plugins/ui');
     if (req) {
       req.flush([]);
       return;

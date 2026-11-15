@@ -3,9 +3,16 @@ use crate::{events::SseEvent, notifications, state::AppState};
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 use sqlx::Row;
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
+use tokio::sync::Notify;
 
-const TICK: Duration = Duration::from_secs(3);
+// Only this process writes `jobs`, so the writes that move a state are the only wake-ups needed.
+pub(super) static CHANGED: Notify = Notify::const_new();
+
+/// A job was created or changed state: the watcher sweeps.
+pub(super) fn changed() {
+    CHANGED.notify_waiters();
+}
 
 pub fn spawn(st: &AppState) {
     let st = st.clone();
@@ -19,14 +26,17 @@ pub fn spawn(st: &AppState) {
         };
         // ponytail: grows with the jobs touched since boot; prune finished ids if that ever matters.
         let mut seen: HashMap<i64, String> = HashMap::new();
-        let mut tick = tokio::time::interval(TICK);
         loop {
-            tick.tick().await;
+            let next = CHANGED.notified();
+            tokio::pin!(next);
+            // Armed before the sweep, so a change committed during it wakes the next one.
+            next.as_mut().enable();
             match sweep(&st, since, &mut seen).await {
                 Ok(Some(latest)) => since = latest,
                 Ok(None) => {}
                 Err(e) => tracing::warn!("job watch failed: {e}"),
             }
+            next.await;
         }
     });
 }

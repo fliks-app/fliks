@@ -36,6 +36,9 @@ pub async fn expire(pool: &PgPool) -> sqlx::Result<u64> {
     )
     .execute(pool)
     .await?;
+    if r.rows_affected() > 0 {
+        super::watch::changed();
+    }
     Ok(r.rows_affected())
 }
 
@@ -48,6 +51,9 @@ pub async fn release_token(pool: &PgPool, token_id: i32) -> sqlx::Result<u64> {
     )
     .execute(pool)
     .await?;
+    if r.rows_affected() > 0 {
+        super::watch::changed();
+    }
     Ok(r.rows_affected())
 }
 
@@ -238,6 +244,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    super::watch::changed();
     Ok(Some(Taken {
         id,
         attempt,
@@ -286,6 +293,9 @@ pub async fn hello(pool: &PgPool, key: &str, held: &[(i64, i32)]) -> sqlx::Resul
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    if !drop_ids.is_empty() {
+        super::watch::changed();
+    }
     Ok(held
         .iter()
         .filter(|j| !leased.contains(j))
@@ -443,6 +453,7 @@ pub async fn succeed(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    super::watch::changed();
     Ok(Settled::Done)
 }
 
@@ -470,6 +481,7 @@ pub async fn skip_nothing(
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        super::watch::changed();
     }
     Ok(Settled::Done)
 }
@@ -517,6 +529,7 @@ pub async fn fail(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    super::watch::changed();
     Ok(Settled::Done)
 }
 
@@ -553,6 +566,9 @@ pub async fn cancel(pool: &PgPool, id: i64) -> sqlx::Result<bool> {
     .execute(pool)
     .await?
     .rows_affected();
+    if n > 0 {
+        super::watch::changed();
+    }
     Ok(n > 0)
 }
 

@@ -215,19 +215,24 @@ async fn proxy_routes_and_lifecycle() {
     let (_, list) = h.call("GET", "/api/plugins", Some(&h.admin), None).await;
     assert_eq!(list[0]["status"], "active");
     assert_eq!(list[0]["signature"], "unsigned");
+    let pages = |ui: &serde_json::Value| -> Vec<String> {
+        ui[0]["configPages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
     let (_, ui) = h.call("GET", "/api/plugins/ui", Some(&h.user), None).await;
-    let pages: Vec<&str> = ui[0]["configPages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|p| p["id"].as_str().unwrap())
-        .collect();
     assert_eq!(
-        pages,
-        ["general"],
-        "the table page needs the plugin permission"
+        pages(&ui),
+        Vec::<String>::new(),
+        "the table page needs the plugin permission, the form page settings.access"
     );
-    assert_eq!(ui[0]["contributions"].as_array().unwrap().len(), 1);
+    assert_eq!(ui[0]["contributions"].as_array().unwrap().len(), 0);
+    let (_, ui) = h.call("GET", "/api/plugins/ui", Some(&h.admin), None).await;
+    assert_eq!(pages(&ui), ["queue", "general"]);
+    assert_eq!(ui[0]["contributions"].as_array().unwrap().len(), 2);
     let oid = s.oid().await;
     let role = format!("fp_{oid}_fliks_fixture");
     assert_eq!(
