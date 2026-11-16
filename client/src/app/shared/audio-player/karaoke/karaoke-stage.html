@@ -1,4 +1,4 @@
-<div class="scroll-ring-safe flex h-full min-h-0 flex-col gap-3 overflow-y-auto" data-testid="karaoke-stage">
+<div class="scroll-ring-safe flex h-full min-h-0 flex-col gap-2 overflow-y-auto sm:gap-3" data-testid="karaoke-stage">
   @if (inParty()) {
     <app-karaoke-queue />
   }
@@ -7,10 +7,11 @@
   <span #primary class="hidden text-primary" aria-hidden="true"></span>
 
   <div class="min-h-52 flex-1">
-    <app-lyrics-view [doc]="doc()" [large]="true" />
+    <app-lyrics-view [doc]="doc()" [large]="true" [output]="output()" />
   </div>
 
-  <ul class="flex min-h-10 shrink-0 flex-wrap items-center justify-center gap-3" [class.invisible]="!rows().length" data-testid="karaoke-scores">
+  <div class="grid min-h-10 shrink-0 place-items-center">
+  <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3" [class.invisible]="!rows().length" data-testid="karaoke-scores">
     @for (r of rows(); track r.userId; let i = $index) {
       <li class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-1" [class.text-xl]="tv()" [class.text-base]="!tv()">
         @let s = singer(r.agentId, i);
@@ -28,9 +29,12 @@
     }
   </ul>
 
-  <p class="min-h-5 shrink-0 text-center text-sm" [class]="status()?.error ? 'text-error' : 'text-base-content/60'" [attr.role]="status()?.error ? 'alert' : null" data-testid="karaoke-status">
-    {{ status()?.text }}
-  </p>
+  @if (!rows().length) {
+    <p class="col-start-1 row-start-1 text-center text-sm" [class]="status()?.error ? 'text-error' : 'text-base-content/60'" [attr.role]="status()?.error ? 'alert' : null" data-testid="karaoke-status">
+      {{ status()?.text }}
+    </p>
+  }
+  </div>
 
   <div class="scroll-ring-safe flex shrink-0 flex-wrap items-center justify-center gap-2 px-1 py-1" appTvSection data-testid="karaoke-controls">
     <div class="flex min-w-0 items-center gap-2 rounded-full bg-base-200 p-1 max-sm:w-full" role="group" [attr.aria-label]="'karaoke.mix' | translate">
@@ -39,9 +43,9 @@
           <button
             type="button"
             class="btn btn-xs sm:btn-sm join-item"
-            [class.btn-primary]="audio.stemMode() === m"
-            [attr.aria-pressed]="audio.stemMode() === m"
-            [disabled]="m !== 'original' && !audio.stemsAvailable()"
+            [class.btn-primary]="stemMode() === m"
+            [attr.aria-pressed]="stemMode() === m"
+            [disabled]="m !== 'original' && !stemsAvailable()"
             (click)="setMode(m)"
             [attr.data-testid]="'karaoke-mode-' + m"
           >
@@ -52,32 +56,24 @@
       <input
         type="range"
         class="range range-primary range-xs min-w-0 flex-1 transition-opacity sm:w-36 sm:flex-none"
-        [class.opacity-40]="audio.stemMode() !== 'guide'"
-        min="5"
-        max="95"
+        [class.opacity-40]="stemMode() !== 'guide'"
+        min="0"
+        max="100"
         step="5"
         data-testid="karaoke-vocal-level"
         [attr.aria-label]="'karaoke.vocal_level' | translate"
-        [value]="guideLevel() * 100"
-        [disabled]="!audio.stemsAvailable()"
+        [value]="sliderValue()"
+        [disabled]="!stemsAvailable()"
         (input)="setGuide(+$any($event.target).value / 100)"
       />
     </div>
-    <div class="flex items-center gap-1 rounded-full bg-base-200 p-1">
-      @if (canSing) {
-        <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
-          <svg lucideMic class="h-4 w-4"></svg>
-          {{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}
-        </button>
-      }
-      <button type="button" class="btn btn-ghost btn-sm btn-circle tooltip tooltip-left" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" [attr.data-tip]="'karaoke.settings' | translate" data-testid="karaoke-settings">
-        <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
-      </button>
-    </div>
+    @if (!phone()) {
+      <ng-container [ngTemplateOutlet]="actions" />
+    }
   </div>
 
   <dialog #settings class="modal" [class.modal-bottom]="sheet()" [class.modal-end]="!sheet()" data-testid="karaoke-settings-sheet">
-    <div class="modal-box flex flex-col gap-4" [class]="sheet() ? '' : 'h-full max-h-none w-80 rounded-none'">
+    <div class="modal-box flex flex-col gap-4" [class.w-[360px]]="!sheet()">
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-lg font-bold">{{ 'karaoke.settings' | translate }}</h3>
         <button type="button" class="btn btn-ghost btn-circle btn-sm" autofocus (click)="closeSettings()" [attr.aria-label]="'karaoke.close' | translate">
@@ -98,18 +94,18 @@
         <div class="flex items-center justify-between gap-3">
           <span class="text-sm font-semibold">{{ 'karaoke.key' | translate }}</span>
           <div class="join items-center" role="group" [attr.aria-label]="'karaoke.key' | translate">
-            <button type="button" class="btn btn-sm join-item" [disabled]="audio.pitch() <= -12" (click)="setPitch(-1)" [attr.aria-label]="'karaoke.key_down' | translate">
+            <button type="button" class="btn btn-sm join-item" [disabled]="pitch() <= -12" (click)="setPitch(-1)" [attr.aria-label]="'karaoke.key_down' | translate">
               <svg lucideMinus class="h-4 w-4"></svg>
             </button>
-            <button type="button" class="btn btn-sm join-item min-w-14 tabular-nums text-primary" [disabled]="audio.pitch() === 0" (click)="setPitch(0)" data-testid="karaoke-key">
-              {{ audio.pitch() > 0 ? '+' : '' }}{{ audio.pitch() }}
+            <button type="button" class="btn btn-sm join-item min-w-14 tabular-nums text-primary" [disabled]="pitch() === 0" (click)="setPitch(0)" data-testid="karaoke-key">
+              {{ pitch() > 0 ? '+' : '' }}{{ pitch() }}
             </button>
-            <button type="button" class="btn btn-sm join-item" [disabled]="audio.pitch() >= 12" (click)="setPitch(1)" [attr.aria-label]="'karaoke.key_up' | translate">
+            <button type="button" class="btn btn-sm join-item" [disabled]="pitch() >= 12" (click)="setPitch(1)" [attr.aria-label]="'karaoke.key_up' | translate">
               <svg lucidePlus class="h-4 w-4"></svg>
             </button>
           </div>
         </div>
-        <p class="min-h-4 text-xs text-base-content/60" [class.invisible]="audio.pitch() === 0">{{ 'karaoke.key_stems_off' | translate }}</p>
+        <p class="min-h-4 text-xs text-base-content/60" [class.invisible]="pitch() === 0">{{ 'karaoke.key_stems_off' | translate }}</p>
         @if (canSing) {
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold">
@@ -158,3 +154,17 @@
     </div>
   </dialog>
 </div>
+
+<ng-template #actions>
+<div class="flex items-center gap-1 rounded-full bg-base-200 p-1">
+  @if (canSing) {
+    <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
+      <svg lucideMic class="h-4 w-4"></svg>
+      {{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}
+    </button>
+  }
+  <button type="button" class="btn btn-ghost btn-sm btn-circle tooltip tooltip-left" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" [attr.data-tip]="'karaoke.settings' | translate" data-testid="karaoke-settings">
+    <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+  </button>
+</div>
+</ng-template>

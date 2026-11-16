@@ -1,6 +1,8 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, DestroyRef, ElementRef, TemplateRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
+import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { GUIDE_VOCAL_LEVEL, type StemMode } from '../../../core/services/audio-player/stem-mix';
@@ -20,16 +22,34 @@ const AHEAD_MS = 6000;
 const RESULTS_MS = 500;
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 const MODES: StemMode[] = ['instrumental', 'guide', 'original'];
+/** Guide never reaches the ends: 0 is Instrumental and 1 is Original. */
+const GUIDE_MIN = 0.05;
+const MIX_KEY = 'fliks.karaoke.mix';
+
+interface SavedMix {
+  mode: StemMode;
+  guide: number;
+}
+
+function readMix(): SavedMix | null {
+  try {
+    const m = JSON.parse(localStorage.getItem(MIX_KEY) ?? 'null') as Partial<SavedMix> | null;
+    const ok = !!m && MODES.includes(m.mode as StemMode) && typeof m.guide === 'number' && m.guide >= GUIDE_MIN && m.guide <= 1 - GUIDE_MIN;
+    return ok ? (m as SavedMix) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores, the mix bar and the settings. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
+  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
   protected readonly karaoke = inject(KaraokeService);
-  protected readonly audio = inject(AudioPlayerService);
+  private readonly local = inject(AudioPlayerService);
   private readonly device = inject(DeviceService);
   protected readonly tv = this.device.isTv;
   /** Settings open as a bottom sheet on touch and TV, a side panel elsewhere. */
@@ -41,8 +61,14 @@ export class KaraokeStageComponent {
   private readonly primary = viewChild.required<ElementRef<HTMLElement>>('primary');
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('board');
   private readonly settings = viewChild.required<ElementRef<HTMLDialogElement>>('settings');
+  private readonly actions = viewChild.required<TemplateRef<unknown>>('actions');
+  /** On a phone the Sing and Settings buttons live in the panel header, next to the Karaoke toggle. */
+  protected readonly phone = this.device.isPhone;
+  readonly actionsReady = output<TemplateRef<unknown> | null>();
 
   readonly doc = input.required<StructuredLyrics>();
+  /** Another device's session the stage follows; the local player when absent. */
+  readonly output = input<AudioOutput | null>(null);
   readonly title = input('');
   /** Shows the recompute actions (with `media.edit`). */
   readonly canEdit = input(false);
@@ -51,13 +77,26 @@ export class KaraokeStageComponent {
   readonly error = input('');
   readonly recompute = output<'sync' | 'melody'>();
 
+  protected get audio(): AudioOutput {
+    return this.output() ?? this.local;
+  }
+  protected readonly stemMode = computed(() => this.audio.stemMode?.() ?? 'original');
+  protected readonly stemsAvailable = computed(() => this.audio.stemsAvailable?.() ?? false);
+  protected readonly pitch = computed(() => this.audio.pitch?.() ?? 0);
+
   protected readonly difficulties = DIFFICULTIES;
   protected readonly modes = MODES;
-  /** The last guide level, kept while another preset plays so the slider keeps its slot. */
-  protected readonly guideLevel = signal(this.guideStart());
+  /** The last guide level, restored when Guide is selected again. */
+  private readonly saved = readMix();
+  protected readonly guideLevel = signal(this.saved?.guide ?? this.guideStart());
+  /** The slider rests at 0 on Instrumental and 100 on Original, and shows the guide level on Guide. */
+  protected readonly sliderValue = computed(() => {
+    const mode = this.stemMode();
+    return mode === 'instrumental' ? 0 : mode === 'original' ? 100 : this.guideLevel() * 100;
+  });
   protected readonly rows = signal<BoardRow[]>([]);
   protected readonly calibrated = signal<boolean | null>(null);
-  private readonly range = computed(() => laneRange(this.doc(), this.audio.pitch()));
+  private readonly range = computed(() => laneRange(this.doc(), this.pitch()));
   protected readonly hasMelody = computed(() => (this.doc().cueLine ?? []).some((l) => l.cue.some((c) => c.pitch !== undefined)));
   protected readonly canSing = this.karaoke.canSing;
   protected readonly inParty = this.party.active;
@@ -76,7 +115,15 @@ export class KaraokeStageComponent {
   constructor() {
     const destroyRef = inject(DestroyRef);
     const timer = setInterval(() => this.refresh(), RESULTS_MS);
+    let restored = !this.saved;
+    effect(() => {
+      if (restored || !this.stemsAvailable()) return;
+      restored = true;
+      untracked(() => this.setMode(this.saved!.mode));
+    });
+    effect(() => this.actionsReady.emit(this.phone() ? this.actions() : null));
     destroyRef.onDestroy(() => {
+      this.actionsReady.emit(null);
       clearInterval(timer);
       cancelAnimationFrame(this.frame);
       this.karaoke.stopSinging();
@@ -106,20 +153,32 @@ export class KaraokeStageComponent {
   }
 
   private guideStart(): number {
-    const v = this.audio.vocalLevel();
+    const v = this.audio.vocalLevel?.() ?? 0;
     return v > 0 && v < 1 ? v : GUIDE_VOCAL_LEVEL;
   }
 
   protected setMode(mode: StemMode): void {
-    this.audio.setStemMode(mode);
-    if (mode === 'guide') this.audio.setVocalLevel(this.guideLevel());
+    this.audio.setStemMode?.(mode);
+    if (mode === 'guide') this.audio.setVocalLevel?.(this.guideLevel());
+    this.remember(mode);
+  }
+
+  /** The preset lives in this browser, so the next track and the next visit start on it. */
+  private remember(mode: StemMode): void {
+    try {
+      localStorage.setItem(MIX_KEY, JSON.stringify({ mode, guide: this.guideLevel() } satisfies SavedMix));
+    } catch {
+      /* storage unavailable: the choice lasts for the session */
+    }
   }
 
   /** Moving the slider selects Guide at that level. */
   protected setGuide(level: number): void {
-    this.guideLevel.set(level);
-    this.audio.setStemMode('guide');
-    this.audio.setVocalLevel(level);
+    const guide = Math.min(Math.max(level, GUIDE_MIN), 1 - GUIDE_MIN);
+    this.guideLevel.set(guide);
+    this.audio.setStemMode?.('guide');
+    this.audio.setVocalLevel?.(guide);
+    this.remember('guide');
   }
 
   protected openSettings(): void {
@@ -140,7 +199,7 @@ export class KaraokeStageComponent {
   }
 
   protected setPitch(delta: number): void {
-    void this.audio.setPitch(delta === 0 ? 0 : this.audio.pitch() + delta);
+    void this.audio.setPitch?.(delta === 0 ? 0 : this.pitch() + delta);
   }
 
   protected closeBoard(): void {
@@ -184,7 +243,7 @@ export class KaraokeStageComponent {
     ctx.fillStyle = ink;
     ctx.fillRect(BEHIND_MS * px - 1, 0, 2, h);
     ctx.globalAlpha = 0.7;
-    const notes = laneNotes(doc, lyricNow - BEHIND_MS, lyricNow + AHEAD_MS, this.range(), this.audio.pitch());
+    const notes = laneNotes(doc, lyricNow - BEHIND_MS, lyricNow + AHEAD_MS, this.range(), this.pitch());
     for (const n of notes) {
       const st = singerStyle(doc, n.agentId);
       const colour = st?.colour ?? (n.start <= lyricNow && lyricNow < n.end ? primary : ink);

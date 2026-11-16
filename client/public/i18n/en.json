@@ -935,7 +935,9 @@
     "scope_track": "This track",
     "scope_pick": "Pick",
     "scope_album": "Whole album",
-    "scope_track_hint": "Only this track is wanted.",
+    "add_music": "Add music",
+    "request_music": "Request music",
+    "scope_track_hint": "1 track requested.",
     "scope_pick_hint": "{{n}} of {{total}} tracks.",
     "scope_album_hint": "Every track of the album.",
     "request_one_track": "Request 1 track",
@@ -5441,11 +5443,7 @@
     "tap_sync": "Tap to sync",
     "tap_hint": "Press Stamp as each line starts to sing; Back undoes the last one.",
     "tap_stamp": "Stamp line",
-    "tap_back": "Back",
-    "source_user": "Added by hand",
-    "source_sidecar": "Lyrics file",
-    "source_embedded": "In the audio file",
-    "source_generated": "Word by word"
+    "tap_back": "Back"
   },
   "karaoke": {
     "title": "Karaoke",
@@ -5472,6 +5470,8 @@
     },
     "progress": "Preparation progress",
     "mix": "Sound mix",
+    "remote": "Karaoke runs on the device that plays the music.",
+    "unavailable": "Karaoke is not ready. Turn it on in the settings and install a voice model.",
     "native_hint": "Karaoke needs the web or desktop player.",
     "mode_original": "Original",
     "mode_guide": "Guide",

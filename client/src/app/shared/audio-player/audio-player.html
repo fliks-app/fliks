@@ -255,7 +255,7 @@
 
         <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="lyricsShown()" [class.flex-1]="lyricsShown()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
           @if (audio.musicMode() && lyricsShown()) {
-            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" (found)="hasLyrics.set($event)" />
+            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" [(stage)]="karaokeStage" (found)="hasLyrics.set($event)" />
           } @else if (audio.musicMode()) {
             @if (!asSheet()) {
               <section animate.enter="fade-up-in" class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">
@@ -362,21 +362,17 @@
       }
 
       <div class="flex flex-col gap-1">
-        <input
-          type="range"
-          class="range range-primary range-xs w-full"
-          min="0"
-          max="1000"
-          [value]="scrub() ?? percent() * 10"
-          (input)="scrub.set(+$any($event.target).value)"
-          (change)="onSeek($event)"
-          (blur)="scrub.set(null)"
+        <app-seekbar
+          variant="cast"
+          [currentTime]="audio.position()"
+          [duration]="audio.duration()"
+          [showBuffered]="false"
           [disabled]="!controllable()"
-          [attr.aria-label]="'audio_player.seek' | translate"
+          (seek)="audio.seek($event)"
         />
         <div class="flex justify-between text-sm tabular-nums text-base-content/60">
-          <span>{{ clock(shown()) }}</span>
-          <span>-{{ clock(audio.duration() - shown()) }}</span>
+          <span>{{ clock(audio.position()) }}</span>
+          <span>-{{ clock(audio.duration() - audio.position()) }}</span>
         </div>
       </div>
 

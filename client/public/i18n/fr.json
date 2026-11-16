@@ -935,7 +935,9 @@
     "scope_track": "Ce titre",
     "scope_pick": "Choisir",
     "scope_album": "Album entier",
-    "scope_track_hint": "Seul ce titre est voulu.",
+    "add_music": "Ajouter une musique",
+    "request_music": "Demander une musique",
+    "scope_track_hint": "1 titre demandé.",
     "scope_pick_hint": "{{n}} titres sur {{total}}.",
     "scope_album_hint": "Tous les titres de l'album.",
     "request_one_track": "Demander 1 titre",
@@ -5441,11 +5443,7 @@
     "tap_sync": "Synchroniser au tap",
     "tap_hint": "Appuyez sur Marquer au début de chaque ligne chantée ; Retour annule la dernière.",
     "tap_stamp": "Marquer la ligne",
-    "tap_back": "Retour",
-    "source_user": "Ajoutées à la main",
-    "source_sidecar": "Fichier de paroles",
-    "source_embedded": "Dans le fichier audio",
-    "source_generated": "Synchro au mot"
+    "tap_back": "Retour"
   },
   "karaoke": {
     "title": "Karaoké",
@@ -5472,6 +5470,8 @@
     },
     "progress": "Progression de la préparation",
     "mix": "Mixage du son",
+    "remote": "Le karaoké se lance depuis l'appareil qui joue la musique.",
+    "unavailable": "Le karaoké n'est pas prêt. Activez-le dans les réglages et installez un modèle de voix.",
     "native_hint": "Le karaoké demande le lecteur web ou bureau.",
     "mode_original": "Original",
     "mode_guide": "Guide",

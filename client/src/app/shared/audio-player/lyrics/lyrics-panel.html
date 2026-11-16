@@ -1,25 +1,23 @@
 <section class="flex h-full min-h-0 flex-col gap-3" data-testid="lyrics-panel">
-  @if (mains().length > 1 || layers().length || karaokeOn()) {
-    <div class="flex items-start gap-2" appTvSection>
+  @if (layers().length || karaokeShown()) {
+    <div class="flex items-center gap-2" appTvSection>
+      @if (stage() && stageActions(); as actions) {
+        <ng-container [ngTemplateOutlet]="actions" />
+      }
       <div class="scroll-ring-safe flex min-w-0 flex-1 flex-wrap gap-2">
-        @for (d of mains(); track d.id) {
-          @if (mains().length > 1) {
-            <button type="button" class="btn btn-sm" [class.btn-primary]="d.id === main()?.id" [attr.aria-pressed]="d.id === main()?.id" (click)="pick(d.id)">
-              {{ label(d) }}
-            </button>
-          }
-        }
         @for (d of layers(); track d.id) {
           <button type="button" class="btn btn-sm" [class.btn-primary]="d.id === layerId()" [attr.aria-pressed]="d.id === layerId()" (click)="toggleLayer(d.id)">
             {{ 'lyrics.kind_' + d.kind | translate }} {{ d.lang === 'und' ? '' : d.lang }}
           </button>
         }
       </div>
-      @if (karaokeOn()) {
-        <button type="button" class="btn btn-sm shrink-0 gap-1" [class.btn-primary]="stage()" [attr.aria-pressed]="stage()" (click)="toggleKaraoke()" data-testid="karaoke-toggle">
-          <svg lucideMicVocal class="h-4 w-4"></svg>
-          {{ 'karaoke.title' | translate }}
-        </button>
+      @if (karaokeShown()) {
+        <span class="tooltip tooltip-left shrink-0" [attr.data-tip]="karaokeWhy() ? (karaokeWhy()! | translate) : null">
+          <button type="button" class="btn btn-sm gap-1" [class.btn-primary]="stage() && karaokeOn()" [attr.aria-pressed]="stage() && karaokeOn()" [disabled]="!karaokeOn()" (click)="toggleKaraoke()" data-testid="karaoke-toggle">
+            <svg lucideMicVocal class="h-4 w-4"></svg>
+            {{ 'karaoke.title' | translate }}
+          </button>
+        </span>
       }
     </div>
   }
@@ -31,7 +29,7 @@
   <div class="min-h-24 flex-1">
     @if (mode() === 'view') {
       @if (stage() && karaokeOn()) {
-        @if (audio.stemsNative) {
+        @if (stemsNative()) {
           <p class="text-sm text-base-content/60" data-testid="karaoke-native">{{ 'karaoke.native_hint' | translate }}</p>
         } @else if (kState(); as k) {
           @switch (k.state) {
@@ -39,11 +37,13 @@
               @if (shown(); as d) {
                 <app-karaoke-stage
                   [doc]="d"
+                  [output]="output()"
                   [title]="audio.track()?.title ?? ''"
                   [canEdit]="canEdit"
                   [busy]="kBusy()"
                   [error]="k.lyricsError ? ('karaoke.lyrics_failed' | translate) + ' ' + failure(k.lyricsError) : ''"
                   (recompute)="recompute($event)"
+                  (actionsReady)="stageActions.set($event)"
                 />
               } @else if (!loading()) {
                 <p class="text-base text-base-content/60" data-testid="lyrics-empty">{{ 'lyrics.none' | translate }}</p>

@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, TemplateRef, computed, effect, inject, input, model, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -11,7 +12,6 @@ import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from 
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { localizeLanguage } from '../../../core/utils/language.utils';
 import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
@@ -26,23 +26,27 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideCheck, LucideMic, LucideMicVocal],
+  imports: [NgTemplateOutlet, FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent, LucideCheck, LucideMic, LucideMicVocal],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
   private readonly karaoke = inject(KaraokeApiService);
   private readonly translate = inject(TranslateService);
-  protected readonly audio = inject(AudioPlayerService);
+  private readonly local = inject(AudioPlayerService);
   protected readonly failure = (f: KaraokeFailure) => failureText(this.translate, f);
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
   readonly itemId = input.required<number>();
   /** Shows the offset, import and fetch tools (with `media.edit`). */
   readonly edit = input(false);
-  /** Another device's session: the lines follow it, and karaoke (local stems) is off. */
+  /** Another device's session: the lines and the karaoke stage follow it. */
   readonly output = input<AudioOutput | null>(null);
   readonly seekable = input(true);
+
+  protected get audio(): AudioOutput {
+    return this.output() ?? this.local;
+  }
   /** Whether the track has lyrics, after each load. */
   readonly found = output<boolean>();
 
@@ -52,21 +56,21 @@ export class LyricsPanelComponent {
   protected readonly busy = signal(false);
   protected readonly mode = signal<'view' | 'import' | 'tap'>('view');
   /** The karaoke view (pitch lane, scores) in place of the plain lyrics. */
-  protected readonly stage = signal(false);
+  /** Owned by the player, so Karaoke stays on when the lyrics are hidden and shown again. */
+  readonly stage = model(false);
+  /** The Sing and Settings buttons of the stage when it hands them to this header (phones). */
+  protected readonly stageActions = signal<TemplateRef<unknown> | null>(null);
 
-  private readonly mainId = signal<number | null>(null);
   protected readonly layerId = signal<number | null>(null);
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
   protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   protected readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  /** The karaoke view defaults to the first word-synced document: the only kind with a fill and a melody. */
-  protected readonly main = computed(
-    () =>
-      this.mains().find((d) => d.id === this.mainId()) ??
-      (this.stage() ? this.mains().find((d) => d.cueLine?.length) : undefined) ??
-      this.mains()[0] ??
-      null,
-  );
+  /** The karaoke view shows the word-synced text (the only kind with a fill and a melody), the plain view the other text; either falls back to what exists. */
+  protected readonly main = computed(() => {
+    const wordSynced = this.mains().find((d) => d.cueLine?.length);
+    const plain = this.mains().find((d) => !d.cueLine?.length);
+    return (this.stage() ? wordSynced ?? plain : plain ?? wordSynced) ?? null;
+  });
   private readonly layer = computed(() => this.layers().find((d) => d.id === this.layerId()) ?? null);
   /** An aligned layer goes under each main line; any other replaces the main text. */
   protected readonly under = computed(() => {
@@ -92,10 +96,18 @@ export class LyricsPanelComponent {
   protected readonly kState = signal<KaraokeItemState | null>(null);
   protected readonly kBusy = signal(false);
   protected readonly prepSteps = PREP_STEPS;
-  /** Karaoke controls apply to the track that is playing, in a library with the feature ready. */
+  /** The Karaoke toggle is always offered next to music lyrics; it is greyed out, with the reason, when it cannot work. */
+  protected readonly karaokeShown = computed(() => (this.output() ?? this.audio).musicMode());
+  /** Karaoke controls drive the displayed track, in a library with the feature ready and, in remote view, on a device that applies stems. */
   protected readonly karaokeOn = computed(
-    () => !this.output() && !!this.kStatus()?.ready && this.audio.musicMode() && this.audio.track()?.itemId === this.itemId(),
+    () =>
+      (!this.output() || !!this.output()!.supports?.('karaoke')) &&
+      !!this.kStatus()?.ready &&
+      this.audio.musicMode() &&
+      this.audio.track()?.itemId === this.itemId(),
   );
+  protected readonly stemsNative = computed(() => !this.output() && this.local.stemsNative);
+  protected readonly karaokeWhy = computed(() => (this.karaokeOn() ? null : this.output() && !this.output()!.supports?.('karaoke') ? 'karaoke.remote' : 'karaoke.unavailable'));
 
   private anchor = { pos: 0, at: 0 };
 
@@ -138,7 +150,7 @@ export class LyricsPanelComponent {
     if (j.state === 'ready' || j.state === 'failed') {
       await this.loadKaraoke(j.itemId);
       if (j.state === 'ready') {
-        void this.audio.refreshStems();
+        void this.local.refreshStems();
         void this.reload();
       }
       return;
@@ -154,7 +166,7 @@ export class LyricsPanelComponent {
   protected toggleKaraoke(): void {
     const on = !this.stage();
     this.stage.set(on);
-    if (!on) this.audio.setStemMode('original');
+    if (!on) this.audio.setStemMode?.('original');
   }
 
   protected prepare(): Promise<void> {
@@ -171,7 +183,7 @@ export class LyricsPanelComponent {
     try {
       const s = await this.karaoke.prepare(this.itemId(), body);
       this.kState.set(s);
-      if (s.state === 'ready') void this.audio.refreshStems();
+      if (s.state === 'ready') void this.local.refreshStems();
     } catch {
       // The interceptor toasts the reason.
     } finally {
@@ -187,7 +199,6 @@ export class LyricsPanelComponent {
       if (this.itemId() !== id) return;
       this.res.set(r);
       this.found.emit(r.structuredLyrics.length > 0);
-      this.mainId.set(null);
       this.layerId.set(null);
     } catch {
       if (this.itemId() === id) {
@@ -231,10 +242,6 @@ export class LyricsPanelComponent {
       await this.api.remove(d.id);
       await this.reload();
     });
-  }
-
-  protected pick(id: number): void {
-    this.mainId.set(id);
   }
 
   protected toggleLayer(id: number): void {
@@ -290,12 +297,5 @@ export class LyricsPanelComponent {
       this.mode.set('view');
       await this.reload();
     });
-  }
-
-  protected label(d: StructuredLyrics): string {
-    const source = d.source.startsWith('provider:')
-      ? (d.sourceLabel ?? d.source.slice(d.source.lastIndexOf(':') + 1))
-      : this.translate.instant(`lyrics.source_${d.source}`);
-    return d.lang === 'und' ? source : `${localizeLanguage(d.lang, this.translate)} · ${source}`;
   }
 }
