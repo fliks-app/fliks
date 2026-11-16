@@ -29,6 +29,8 @@ export interface LyricsCue {
   /** Every note sung on the cue; absent means `pitch` over the whole cue. */
   notes?: LyricsNote[];
   golden?: boolean;
+  /** The alignment did not find the word: its times are interpolated. */
+  guessed?: boolean;
 }
 
 export interface LyricsCueLine {

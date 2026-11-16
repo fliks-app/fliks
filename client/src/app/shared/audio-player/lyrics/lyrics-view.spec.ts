@@ -113,4 +113,19 @@ describe('LyricsViewComponent', () => {
     f.detectChanges();
     expect(top).toHaveBeenCalledWith(0);
   });
+
+  it('dims a guessed word in parentheses and sweeps the others', () => {
+    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    const cue = (value: string, byteStart: number, guessed?: boolean) => ({ start: 0, end: 4000, value, byteStart, byteEnd: byteStart + value.length, ...(guessed ? { guessed } : {}) });
+    f.componentRef.setInput('doc', {
+      id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'go (so)' }],
+      cueLine: [{ index: 0, start: 0, end: 4000, value: 'go (so)', cue: [cue('go', 0, true), cue('(so)', 3, true)] }],
+    });
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('[data-testid="lyrics-sweep"]').length).toBe(1);
+    expect(el.querySelector('[data-testid="lyrics-guessed"]')?.textContent).toBe('(so)');
+  });
 });

@@ -118,6 +118,9 @@ fn cue_line(index: usize, l: &lyrics::Line) -> Value {
                 if c.golden {
                     v["golden"] = json!(true);
                 }
+                if c.guessed {
+                    v["guessed"] = json!(true);
+                }
                 v
             })
             .collect()
