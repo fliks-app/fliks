@@ -140,7 +140,10 @@ async fn check_profile(st: &AppState, group: &str, library: Option<u32>) -> Resu
 
 fn refused(e: Refused) -> HostError {
     match e {
-        Refused::NoTrack => host_err("ERR_NOT_FOUND", "the album has no track of that recording"),
+        Refused::NotOnAlbum(_) => host_err(
+            "ERR_NOT_FOUND",
+            "no release of the album holds that recording",
+        ),
         Refused::Unavailable => {
             host_err("unavailable", "the album's releases are not available yet")
         }

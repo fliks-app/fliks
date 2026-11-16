@@ -6475,6 +6475,62 @@ mod music_ingest {
             1
         );
     }
+
+    fn timed(title: &str, number: u32, seconds: f64) -> crate::engine::testkit::Answer {
+        ok(
+            json!({"ok": true, "info": {"video": [], "audio": [{"streamIndex": 0, "codec": "flac", "language": "und"}],
+            "subtitles": [], "durationSeconds": seconds,
+            "tags": {"title": title, "album": "Alpha", "artist": "Ana", "albumArtist": "Ana", "track": number, "disc": 1}}}),
+        )
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_release_less_file_fills_the_wanted_edition_whose_track_has_its_length(pool: PgPool) {
+        use crate::metadata::music::want::{self, Recording, tests as fixture};
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Ana/Alpha").await;
+        sqlx::query(
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ($1, 'album', 'musicbrainz', $2)"#,
+        )
+        .bind(m)
+        .bind(GROUP)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        want::want_many(&c.st, m, &[Recording::Mbid(fixture::LIVE)], false)
+            .await
+            .unwrap();
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Song", 3, 306.0)]);
+        let live = place(&c, &["Ana/Alpha/03 - Song.flac"]);
+        music::register(&c.st, m, &live).await.unwrap();
+        let filed: Vec<(String, i64)> = sqlx::query_as(
+            r#"SELECT x.value, count(*) FROM item_parts p JOIN items i ON i.id = p."itemId"
+                 JOIN edition_external_ids x ON x."editionId" = i."editionId" GROUP BY x.value"#,
+        )
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            filed,
+            [(fixture::PLUS.to_owned(), 1)],
+            "the live file is on the 4-track release, not the studio track of the target"
+        );
+        let studio = place(&c, &["Ana/Alpha/03 - Song (studio).flac"]);
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Song", 3, 237.0)]);
+        music::register(&c.st, m, &studio).await.unwrap();
+        assert_eq!(
+            count(&c, "SELECT count(DISTINCT i.\"editionId\") FROM item_parts p JOIN items i ON i.id = p.\"itemId\"").await,
+            2,
+            "the studio take fills the target's own track"
+        );
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM items i WHERE monitored AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) AND \"mediaId\" = {m}")).await,
+            0
+        );
+    }
 }
 
 mod album_acquisition;
