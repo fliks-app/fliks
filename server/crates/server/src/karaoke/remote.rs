@@ -58,20 +58,31 @@ pub async fn eligible_workers(st: &AppState) -> usize {
     n
 }
 
+/// `(model id, version)` of the main engine's installed separation model, the one stems must come from.
+pub async fn current_model(st: &AppState) -> Option<(String, String)> {
+    let models = st.engine.models().await.ok()?;
+    let sep = run::installed_model(&models.models, ModelKind::Separation)?;
+    Some((sep.id.clone(), sep.version.clone()))
+}
+
+pub fn profile_of(model: &(String, String)) -> String {
+    format!("karaoke:{}:{}", model.0, model.1)
+}
+
 /// Queues the separation of a track's first file; `false` when a job of that file is already active.
 pub async fn enqueue(st: &AppState, item: i32) -> Result<bool, String> {
     let t = run::track(st, item).await?;
     let info = t.info.clone().ok_or("the file was not probed")?;
-    let models = st.engine.models().await.map_err(|e| e.to_string())?;
-    let sep = run::installed_model(&models.models, ModelKind::Separation)
+    let sep = current_model(st)
+        .await
         .ok_or("no separation model is installed")?;
     let snap = snapshot(t.path.clone())
         .await
         .ok_or("the file is not readable")?;
     let payload = json!({
         "info": info,
-        "model": sep.id,
-        "modelVersion": sep.version,
+        "model": sep.0,
+        "modelVersion": sep.1,
         "providers": verified_providers(st).await,
     });
     let job: Option<i64> = sqlx::query_scalar(
@@ -84,7 +95,7 @@ pub async fn enqueue(st: &AppState, item: i32) -> Result<bool, String> {
     )
     .bind(t.file)
     .bind(payload)
-    .bind(format!("karaoke:{}:{}", sep.id, sep.version))
+    .bind(profile_of(&sep))
     .bind(&snap.path)
     .bind(snap.size)
     .bind(snap.mtime_ms)
@@ -130,6 +141,18 @@ pub async fn result(
     id: i64,
     req: JobResultRequest,
 ) -> Result<Json<Value>, AppError> {
+    let current = current_model(st).await;
+    result_for(st, key, id, req, current.as_ref()).await
+}
+
+/// [`result`] against a known main-engine model (`None`: unknown, every job counts as current).
+pub async fn result_for(
+    st: &AppState,
+    key: &str,
+    id: i64,
+    req: JobResultRequest,
+    current: Option<&(String, String)>,
+) -> Result<Json<Value>, AppError> {
     let attempt = req.attempt as i32;
     let conflict = || AppError::bare(axum::http::StatusCode::CONFLICT);
     let file: Option<i32> = sqlx::query_scalar(
@@ -149,17 +172,57 @@ pub async fn result(
         (true, _, None) => error(JobErrorClass::Engine, "separate result without stems"),
         (true, _, Some(out)) => match verify(st, id, attempt, &out).await {
             Some(e) => e,
-            None => return commit(st, key, (id, attempt), file, out).await,
+            None => return commit(st, key, (id, attempt), file, out, current).await,
         },
     };
-    if e.class == JobErrorClass::Model {
-        st.queue.block_karaoke(key);
+    if e.class == JobErrorClass::Model && !is_current(st, id, current).await {
+        // The job names a version the main engine no longer has: no worker can serve it.
+        drop_job(st, key, id, attempt).await.map_err(db)?;
+        st.queue.wake.notify_waiters();
+        return Ok(Json(json!({})));
     }
     if jobs::fail(&st.db, id, key, attempt, &e).await.map_err(db)? == jobs::Settled::Stale {
         return Err(conflict());
     }
+    if e.class == JobErrorClass::Model {
+        st.queue.block_karaoke(key);
+    }
     after_failure(st, id, file).await;
     Ok(Json(json!({})))
+}
+
+/// Whether the job's model version is the main engine's installed one.
+async fn is_current(st: &AppState, id: i64, current: Option<&(String, String)>) -> bool {
+    let Some(cur) = current else {
+        return true;
+    };
+    let hash: Option<String> =
+        sqlx::query_scalar(r#"SELECT "profileHash" FROM jobs WHERE id = $1"#)
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten();
+    hash.is_none_or(|h| h == profile_of(cur))
+}
+
+/// Deletes the leased job (fenced) and its uploads; whether the fence held.
+async fn drop_job(st: &AppState, key: &str, id: i64, attempt: i32) -> sqlx::Result<bool> {
+    let n = sqlx::query(
+        r#"DELETE FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased'"#,
+    )
+    .bind(id)
+    .bind(key)
+    .bind(attempt)
+    .execute(&st.db)
+    .await?
+    .rows_affected();
+    for name in STEM_NAMES {
+        let _ = tokio::fs::remove_file(upload_path(id, attempt, name)).await;
+    }
+    crate::queue::remote::sweep(st).await;
+    watch::changed();
+    Ok(n > 0)
 }
 
 /// A job that landed `failed` leaves its item out of the pass until a restart, like a local failure.
@@ -220,40 +283,74 @@ async fn commit(
     (id, attempt): (i64, i32),
     file: Option<i32>,
     out: fliks_engine_core::api::SeparateOutput,
+    current: Option<&(String, String)>,
 ) -> Result<Json<Value>, AppError> {
+    let conflict = || AppError::bare(axum::http::StatusCode::CONFLICT);
     let item = match file {
         Some(f) => item_of(st, f).await.map_err(db)?.map(|i| (f, i)),
         None => None,
     };
+    // Stems of another version than the main engine's would be invalidated at once.
+    let wanted = current.is_none_or(|m| *m == (out.model.clone(), out.model_version.clone()));
+    let moved = match item {
+        Some((f, _)) if wanted => match move_stems(st, f, id, attempt, &out).await {
+            Ok(m) => m,
+            Err(e) => {
+                let e = error(JobErrorClass::Io, e);
+                if jobs::fail(&st.db, id, key, attempt, &e).await.map_err(db)?
+                    == jobs::Settled::Stale
+                {
+                    return Err(conflict());
+                }
+                after_failure(st, id, file).await;
+                return Ok(Json(json!({})));
+            }
+        },
+        _ => vec![],
+    };
+    let mut tx = st.db.begin().await.map_err(db)?;
+    let mut old = vec![];
+    let mut stored = Ok(());
+    for (to, n) in &moved {
+        match store::put_in(&mut tx, &n.as_new(to)).await {
+            Ok(o) => old.extend(o),
+            Err(e) => {
+                stored = Err(e);
+                break;
+            }
+        }
+    }
+    let held = match stored {
+        Ok(()) => sqlx::query(
+            r#"DELETE FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased'"#,
+        )
+        .bind(id)
+        .bind(key)
+        .bind(attempt)
+        .execute(&mut *tx)
+        .await
+        .map(|r| r.rows_affected() > 0),
+        Err(e) => Err(e),
+    };
+    let committed = match held {
+        Ok(true) => tx.commit().await.map(|()| true),
+        other => other,
+    };
+    if !matches!(committed, Ok(true)) {
+        for (to, _) in &moved {
+            let _ = tokio::fs::remove_file(to).await;
+        }
+        for name in STEM_NAMES {
+            let _ = tokio::fs::remove_file(upload_path(id, attempt, name)).await;
+        }
+        return Err(committed.map_err(db).err().unwrap_or_else(conflict));
+    }
+    for o in old {
+        let _ = tokio::fs::remove_file(o).await;
+    }
     if out.provider == "cpu" && !flag(st, "karaoke.background_cpu", false).await {
         st.queue.block_karaoke(key);
     }
-    let mut tx = st.db.begin().await.map_err(db)?;
-    let held: Option<i64> = sqlx::query_scalar(
-        r#"DELETE FROM jobs WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased'
-           RETURNING id"#,
-    )
-    .bind(id)
-    .bind(key)
-    .bind(attempt)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(db)?;
-    if held.is_none() {
-        return Err(AppError::bare(axum::http::StatusCode::CONFLICT));
-    }
-    let stored = match item {
-        Some((f, _)) => put_stems(st, f, id, attempt, &out).await,
-        None => Ok(()),
-    };
-    if let Err(e) = stored {
-        drop(tx);
-        let e = error(JobErrorClass::Io, e);
-        jobs::fail(&st.db, id, key, attempt, &e).await.map_err(db)?;
-        after_failure(st, id, file).await;
-        return Ok(Json(json!({})));
-    }
-    tx.commit().await.map_err(db)?;
     for name in STEM_NAMES {
         let _ = tokio::fs::remove_file(upload_path(id, attempt, name)).await;
     }
@@ -262,7 +359,7 @@ async fn commit(
     run::evict(st).await;
     st.karaoke.kick.notify_one();
     queue::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
-    if let Some((_, item)) = item {
+    if let Some((_, item)) = item.filter(|_| wanted) {
         let opts = run::Opts {
             align: true,
             melody: true,
@@ -278,25 +375,52 @@ async fn commit(
     Ok(Json(json!({})))
 }
 
-/// Moves the uploads next to the stems of the file and records them, unless the stems are already valid.
-async fn put_stems(
+/// One stem moved next to the others of its file, to be recorded.
+pub struct Moved {
+    kind: &'static str,
+    size: i64,
+    model: String,
+    model_version: String,
+    provider: String,
+    duration_ms: i32,
+    file: i32,
+}
+
+impl Moved {
+    fn as_new<'a>(&'a self, path: &'a str) -> store::New<'a> {
+        store::New {
+            file: self.file,
+            kind: self.kind,
+            model: &self.model,
+            model_version: &self.model_version,
+            provider: &self.provider,
+            path,
+            size: self.size,
+            duration_ms: self.duration_ms,
+        }
+    }
+}
+
+/// Moves the uploads next to the stems of the file, unless the stems are already valid (nothing moves).
+async fn move_stems(
     st: &AppState,
     file: i32,
     id: i64,
     attempt: i32,
     out: &fliks_engine_core::api::SeparateOutput,
-) -> Result<(), String> {
+) -> Result<Vec<(String, Moved)>, String> {
     if store::valid(&st.db, file, &out.model, &out.model_version)
         .await
         .map_err(|e| e.to_string())?
     {
-        return Ok(());
+        return Ok(vec![]);
     }
     let dir = store::file_dir(file);
     tokio::fs::create_dir_all(&dir)
         .await
         .map_err(|e| e.to_string())?;
     let tag = crate::config::random_hex(4);
+    let mut moved: Vec<(String, Moved)> = vec![];
     for name in STEM_NAMES {
         let stem = out
             .stems
@@ -304,26 +428,26 @@ async fn put_stems(
             .find(|s| s.name == name)
             .ok_or("stem missing")?;
         let to = dir.join(format!("{name}-{tag}.opus"));
-        tokio::fs::rename(upload_path(id, attempt, name), &to)
-            .await
-            .map_err(|e| e.to_string())?;
-        store::put(
-            &st.db,
-            &store::New {
-                file,
+        if let Err(e) = tokio::fs::rename(upload_path(id, attempt, name), &to).await {
+            for (p, _) in &moved {
+                let _ = tokio::fs::remove_file(p).await;
+            }
+            return Err(e.to_string());
+        }
+        moved.push((
+            to.to_string_lossy().into_owned(),
+            Moved {
                 kind: name,
-                model: &out.model,
-                model_version: &out.model_version,
-                provider: &out.provider,
-                path: &to.to_string_lossy(),
                 size: stem.size as i64,
+                model: out.model.clone(),
+                model_version: out.model_version.clone(),
+                provider: out.provider.clone(),
                 duration_ms: (out.duration_seconds * 1000.0).round() as i32,
+                file,
             },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        ));
     }
-    Ok(())
+    Ok(moved)
 }
 
 #[cfg(test)]

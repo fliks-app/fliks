@@ -543,23 +543,31 @@ async fn second_track(st: &AppState) {
 async fn the_background_pass_skips_a_track_with_both_imported_stems(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
     second_track(&st).await;
-    assert_eq!(store::unprepared(&st.db, &[], 20).await.unwrap(), [2, 1]);
+    assert_eq!(
+        store::unprepared(&st.db, &[], 20, "").await.unwrap(),
+        [2, 1]
+    );
     import_row(&st, 1, "vocals", "import").await;
     assert_eq!(
-        store::unprepared(&st.db, &[], 20).await.unwrap(),
+        store::unprepared(&st.db, &[], 20, "").await.unwrap(),
         [2, 1],
         "one import is not enough"
     );
     import_row(&st, 1, "instrumental", "import").await;
-    assert_eq!(store::unprepared(&st.db, &[], 20).await.unwrap(), [2]);
+    assert_eq!(store::unprepared(&st.db, &[], 20, "").await.unwrap(), [2]);
     assert_eq!(
-        store::unprepared(&st.db, &[2], 20).await.unwrap(),
+        store::unprepared(&st.db, &[2], 20, "").await.unwrap(),
         Vec::<i32>::new()
     );
     for kind in store::KINDS {
         import_row(&st, 2, kind, "cpu").await;
     }
-    assert!(store::unprepared(&st.db, &[], 20).await.unwrap().is_empty());
+    assert!(
+        store::unprepared(&st.db, &[], 20, "")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -632,7 +640,7 @@ async fn a_failed_copy_keeps_the_imported_stem_the_header_still_names(pool: PgPo
 }
 
 use fliks_engine_core::api::{JobResultRequest, SeparateOutput, StemUpload};
-use fliks_server::karaoke::remote::{result, upload_path};
+use fliks_server::karaoke::remote::{result, result_for, upload_path};
 
 async fn separate_lease(st: &AppState) -> i64 {
     sqlx::query_scalar(
@@ -762,13 +770,113 @@ async fn a_track_already_valid_discards_the_uploads(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn a_track_with_a_queued_or_leased_separation_is_not_unprepared(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
-    assert_eq!(store::unprepared(&st.db, &[], 10).await.unwrap(), [1]);
+    assert_eq!(store::unprepared(&st.db, &[], 10, "").await.unwrap(), [1]);
     let job = separate_lease(&st).await;
-    assert!(store::unprepared(&st.db, &[], 10).await.unwrap().is_empty());
+    assert!(
+        store::unprepared(&st.db, &[], 10, "")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     sqlx::query("UPDATE jobs SET state = 'failed' WHERE id = $1")
         .bind(job)
         .execute(&st.db)
         .await
         .unwrap();
-    assert_eq!(store::unprepared(&st.db, &[], 10).await.unwrap(), [1]);
+    assert_eq!(store::unprepared(&st.db, &[], 10, "").await.unwrap(), [1]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_commit_of_another_model_version_stores_nothing_and_deletes_the_job(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let job = separate_lease(&st).await;
+    let current = ("m".to_owned(), "2".to_owned());
+    let _ = result_for(&st, "k", job, uploaded(job, None), Some(&current))
+        .await
+        .unwrap();
+    assert!(store::rows(&st.db, 1).await.unwrap().is_empty());
+    assert!(!upload_path(job, 1, "vocals").exists());
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM jobs WHERE id = $1")
+        .bind(job)
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    assert!(!st.queue.karaoke_blocked("k"));
+}
+
+fn model_failure(job: i64) -> JobResultRequest {
+    let mut r = uploaded(job, None);
+    r.ok = false;
+    r.separate = None;
+    r.error = Some(fliks_engine_core::api::JobError {
+        class: fliks_engine_core::api::JobErrorClass::Model,
+        message: "x".into(),
+        stderr_tail: None,
+    });
+    r
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_model_failure_on_a_stale_job_deletes_it_without_blocking_the_worker(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let job = separate_lease(&st).await;
+    let current = ("m".to_owned(), "2".to_owned());
+    let _ = result_for(&st, "k", job, model_failure(job), Some(&current))
+        .await
+        .unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM jobs WHERE id = $1")
+        .bind(job)
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert_eq!((left, st.queue.karaoke_blocked("k")), (0, false));
+    // A job of the current version fails as usual and blocks the worker.
+    let job = separate_lease(&st).await;
+    sqlx::query(r#"UPDATE jobs SET "profileHash" = 'karaoke:m:2' WHERE id = $1"#)
+        .bind(job)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    let _ = result_for(&st, "k", job, model_failure(job), Some(&current))
+        .await
+        .unwrap();
+    assert!(st.queue.karaoke_blocked("k"));
+    for name in ["vocals", "instrumental", "guide"] {
+        let _ = std::fs::remove_file(upload_path(job, 1, name));
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_cancelled_separation_sticks_and_a_stale_queued_one_is_dropped(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let job = separate_lease(&st).await;
+    sqlx::query(
+        r#"UPDATE jobs SET state = 'cancelled', "profileHash" = 'karaoke:m:2' WHERE id = $1"#,
+    )
+    .bind(job)
+    .execute(&st.db)
+    .await
+    .unwrap();
+    assert!(
+        store::unprepared(&st.db, &[], 10, "karaoke:m:2")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        store::unprepared(&st.db, &[], 10, "karaoke:m:3")
+            .await
+            .unwrap(),
+        [1]
+    );
+    sqlx::query("UPDATE jobs SET state = 'queued' WHERE id = $1")
+        .bind(job)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    let n = fliks_server::karaoke::drop_stale_separations(&st.db, "karaoke:m:3")
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
 }

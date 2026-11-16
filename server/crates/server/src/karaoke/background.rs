@@ -111,15 +111,36 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
     }
 }
 
+/// Deletes queued `separate` jobs of another profile than `profile`; how many.
+pub async fn drop_stale_separations(db: &sqlx::PgPool, profile: &str) -> sqlx::Result<u64> {
+    let n = sqlx::query(
+        r#"DELETE FROM jobs WHERE kind = 'separate' AND state = 'queued' AND "profileHash" <> $1"#,
+    )
+    .bind(profile)
+    .execute(db)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        crate::queue::watch::changed();
+    }
+    Ok(n)
+}
+
 /// Queues the tracks for the workers, keeping at most `PER_WAKE` separation jobs active.
 async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
+    let Some(current) = super::remote::current_model(st).await else {
+        return Ok(());
+    };
+    let profile = super::remote::profile_of(&current);
+    // A job of an older model version would fail `model` on every up-to-date worker.
+    drop_stale_separations(&st.db, &profile).await?;
     let budget = super::budget_bytes(st).await;
     let mut active: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM jobs WHERE kind = 'separate' AND state IN ('queued', 'leased')",
     )
     .fetch_one(&st.db)
     .await?;
-    for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE).await? {
+    for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE, &profile).await? {
         if active >= PER_WAKE || store::total(&st.db).await? >= budget / 10 * 9 {
             break;
         }
@@ -141,7 +162,11 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
 async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
     let budget = super::budget_bytes(st).await;
     let failed: Vec<i32> = fail_list(&st.karaoke);
-    let tracks = store::unprepared(&st.db, &failed, PER_WAKE).await?;
+    let profile = super::remote::current_model(st)
+        .await
+        .map(|m| super::remote::profile_of(&m))
+        .unwrap_or_default();
+    let tracks = store::unprepared(&st.db, &failed, PER_WAKE, &profile).await?;
     for item in tracks {
         if store::total(&st.db).await? >= budget / 10 * 9 || route(st).await != Some(Route::Local) {
             break;

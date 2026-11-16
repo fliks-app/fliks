@@ -40,7 +40,7 @@ use tokio::sync::{Notify, Semaphore};
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
-pub use background::spawn;
+pub use background::{drop_stale_separations, spawn};
 
 /// Tracks prepared at once (rule 13).
 const SLOTS: usize = 2;

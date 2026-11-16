@@ -262,6 +262,7 @@ pub async fn put_output(
         return Err(bad("unknown stem name"));
     }
     let key = who.owner_key(worker);
+    st.queue.touch(&key);
     // The fence also renews the lease: a chunk may take longer than the lease on a slow uplink.
     let (staged, in_size): (Option<String>, Option<i64>) = sqlx::query_as(
         r#"UPDATE jobs SET "leaseUntil" = now() + make_interval(secs => $4), "updatedAt" = now()

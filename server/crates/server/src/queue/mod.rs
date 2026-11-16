@@ -87,6 +87,13 @@ impl Shared {
         Some(w)
     }
 
+    /// A request of the instance that is not a hello or a lease: still a sign of life.
+    pub fn touch(&self, key: &str) {
+        self.seen
+            .lock_clean()
+            .insert(key.to_owned(), Instant::now());
+    }
+
     pub fn register(&self, key: String, w: Worker) {
         self.karaoke_blocked.lock_clean().remove(&key);
         self.seen.lock_clean().insert(key.clone(), Instant::now());

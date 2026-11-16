@@ -388,3 +388,22 @@ async fn a_model_failure_requeues_without_counting(pool: PgPool) {
             .unwrap();
     assert_eq!((state.as_str(), failures), ("queued", 0));
 }
+
+#[test]
+fn a_touch_keeps_a_busy_worker_live() {
+    let q = super::Shared::default();
+    q.register(
+        "w".into(),
+        super::Worker {
+            principal: super::Principal::Local,
+            engine_version: "1".into(),
+            devices: vec![],
+            features: vec![],
+        },
+    );
+    let stale = std::time::Instant::now() - super::LIVE - std::time::Duration::from_secs(1);
+    q.seen.lock().unwrap().insert("w".into(), stale);
+    assert!(q.workers().is_empty());
+    q.touch("w");
+    assert_eq!(q.workers().len(), 1);
+}

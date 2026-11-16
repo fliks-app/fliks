@@ -270,6 +270,7 @@ pub async fn heartbeat(
     ValidJson(req): ValidJson<JobHeartbeatRequest>,
 ) -> Result<Json<JobHeartbeatResponse>, AppError> {
     let key = who.owner_key(&req.worker_id);
+    st.queue.touch(&key);
     let beat = store::heartbeat(
         &st.db,
         id,
@@ -307,6 +308,7 @@ pub async fn result(
     ValidJson(req): ValidJson<JobResultRequest>,
 ) -> Result<Json<Value>, AppError> {
     let key = who.owner_key(&req.worker_id);
+    st.queue.touch(&key);
     let attempt = req.attempt as i32;
     let out_size = req.out_size as i64;
     let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM jobs WHERE id = $1")
