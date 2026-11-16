@@ -377,6 +377,16 @@ leaves an unsigned plugin already installed running, uninstall it instead.
 `verify` runs that inspector, the size budget and the world check. An unsigned archive installs
 only when `plugins.allow_unsigned` is on; `--key <hex seed file>` adds a dev signature.
 
+### Running a local build on the dev stack
+
+`scripts/dev-plugin.sh <plugin repo> [<plugin folder>]` packages the plugin (`cargo xtask package`
+under `fliks-heavy`, target dir `~/.cache/fliks-targets/dev-plugin`: delete it afterwards), logs in
+and imports it through `/api/plugins/import/{inspect,confirm}`. `FLIKS_URL`, `FLIKS_USER` and
+`FLIKS_PASSWORD` default to the dev stack; a non-local URL needs `FLIKS_ALLOW_REMOTE=1`. Needs
+`plugins.allow_unsigned`. A plugin installed with an official signature refuses the unsigned build
+(`PLUGIN_SIGNER_CHANGED`) until it is uninstalled with data deletion. A metadata plugin's cached
+provider responses are dropped on install, so no manual cache clearing is needed.
+
 A `process` archive carries `plugin.json`, `plugin.wasm` (starting with the component preamble), the
 logo and the signature; `plugin.wasm` is capped at 32 MiB and the uncompressed entries at 48 MiB in
 all. There is no `installed/` tree: the host hashes the archive it stored at every load and compiles
