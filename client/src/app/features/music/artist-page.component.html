@@ -51,13 +51,20 @@
                 <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: p.title }" (click)="play(p)">
                   <ng-container *ngTemplateOutlet="line; context: { $implicit: p }" />
                 </button>
+                <span class="size-8 shrink-0"></span>
               } @else {
-                <div class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                <div class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 opacity-50">
                   <ng-container *ngTemplateOutlet="line; context: { $implicit: p }" />
                 </div>
-                @if (p.albumExternalId && (canAdd() || canRequest())) {
-                  <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="want(p)" data-testid="add-track">{{ (canAdd() ? 'discover.add_to_library' : 'discover.request') | translate }}</button>
-                }
+                <span class="flex size-8 shrink-0 items-center justify-center" data-testid="track-state">
+                  @if (isAsked(p)) {
+                    <svg lucideClock class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+                  } @else if (p.albumExternalId && (canAdd() || canRequest())) {
+                    <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="want(p)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="add-track">
+                      <svg lucidePlus class="size-5"></svg>
+                    </button>
+                  }
+                </span>
               }
             </li>
           }
@@ -127,4 +134,4 @@
   </app-track-line>
 </ng-template>
 
-<app-add-dialog />
+<app-add-dialog (done)="onAdded()" />

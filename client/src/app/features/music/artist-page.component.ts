@@ -1,15 +1,16 @@
 import { DestroyRef, ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { LucideChevronLeft, LucideMusic } from '@lucide/angular';
+import { LucideChevronLeft, LucideClock, LucideMusic, LucidePlus } from '@lucide/angular';
 import { NgTemplateOutlet } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
-import type { ArtistAlbum, Discography, PopularTrack } from '../../core/services/api/music.models';
+import type { ArtistAlbumGroup, Discography, PopularTrack } from '../../core/services/api/music.models';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
@@ -33,7 +34,7 @@ export interface HandedPerson {
 /** An artist: biography, follow, the most listened tracks, and the discography by release type, owned and missing albums together. */
 @Component({
   selector: 'app-artist-page',
-  imports: [NgTemplateOutlet, TranslatePipe, LucideChevronLeft, LucideMusic, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
+  imports: [NgTemplateOutlet, TranslatePipe, LucideChevronLeft, LucideClock, LucideMusic, LucidePlus, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
   templateUrl: './artist-page.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -67,8 +68,10 @@ export class ArtistPageComponent {
     return p && this.filled().includes(p) ? p : (this.filled()[0] ?? null);
   });
   protected readonly albums = computed(() => (this.tab() ? this.tabs()[this.tab()!] : []));
-  protected albumLabel(a: ArtistAlbum): string | undefined {
-    return albumSubtitle(a.year, a.disambiguation);
+  private readonly translate = inject(TranslateService);
+  /** The year, then the version count of a grouped card, else the release's own label. */
+  protected albumLabel(a: ArtistAlbumGroup): string | undefined {
+    return albumSubtitle(a.year, a.versions > 1 ? translatePlural(this.translate, 'music.version_count', a.versions) : a.disambiguation);
   }
   protected readonly popularShown = signal(5);
   protected readonly popular = computed(() => (this.data()?.popular ?? []).slice(0, this.popularShown()));
@@ -107,8 +110,19 @@ export class ArtistPageComponent {
     void this.player.playTracks(owned.map(trackRowRequest), start);
   }
 
+  private readonly asked = signal<ReadonlySet<string>>(new Set());
+  private pending: string | null = null;
+  protected isAsked(row: PopularTrack): boolean {
+    return this.asked().has(row.recordingId);
+  }
+  protected onAdded(): void {
+    if (this.pending) this.asked.update((s) => new Set([...s, this.pending!]));
+    this.pending = null;
+  }
+
   protected want(row: PopularTrack): void {
     if (!row.albumExternalId) return;
+    this.pending = row.recordingId;
     void this.addDialog()?.add({
       kind: 'album',
       provider: 'musicbrainz',

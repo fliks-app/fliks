@@ -232,6 +232,38 @@ async fn album_reads_tracks_favourites_and_works(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_track_row_carries_the_last_closed_attempt_that_covers_it(pool: PgPool) {
+    let (app, t) = ctx(&pool).await;
+    let last = |d: &Value| {
+        d["album"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["lastAttempt"].clone())
+            .collect::<Vec<_>>()
+    };
+    let (_, d) = call(&app, &t, "GET", "/api/media/10", None).await;
+    assert_eq!(last(&d), [Value::Null, Value::Null]);
+    sqlx::raw_sql(
+        r#"INSERT INTO acquisition_queue ("pluginId", ref, "mediaId", "itemIds", "sourceId", "sourceName", title,
+             quality, method, state, "finishedAt", "deletedAt")
+           VALUES ('p', 'a', 10, NULL, 's', 'S', 't', 'q', 'auto', 'imported', now() - interval '3 min', NULL),
+                  ('p', 'b', 10, '{2}', 's', 'S', 't', 'q', 'auto', 'failed', now() - interval '2 min', NULL),
+                  ('p', 'c', 10, '{1}', 's', 'S', 't', 'q', 'auto', 'removed', now() - interval '1 min', now()),
+                  ('p', 'd', 10, '{1}', 's', 'S', 't', 'q', 'auto', 'active', NULL, NULL)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, d) = call(&app, &t, "GET", "/api/media/10", None).await;
+    assert_eq!(
+        last(&d),
+        [json!("imported"), json!("failed")],
+        "a deleted or open row does not count; a whole-media row covers every track"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_like_change_is_announced_to_its_user(pool: PgPool) {
     use fliks_server::events::Bus;
     let (app, t, st) = ctx_with_state(&pool).await;

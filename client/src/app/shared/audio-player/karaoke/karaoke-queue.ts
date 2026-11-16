@@ -6,6 +6,7 @@ import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { TrackRow } from '../../../core/services/api/music.models';
 import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { singerName } from '../../../core/services/karaoke/singer-name';
 import { PartyService } from '../../../core/services/party/party.service';
 import { runBusy } from '../../../features/party/party-busy';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
@@ -36,9 +37,7 @@ export class KaraokeQueueComponent {
   private searched = 0;
 
   protected name(userId: number): string {
-    const p = this.party.party();
-    const found = this.party.members().find((m) => m.userId === userId) ?? p?.guests.find((g) => g.userId === userId) ?? (p?.host.userId === userId ? p.host : null);
-    return found?.username ?? '';
+    return singerName(this.party, userId);
   }
 
   protected mine(p: PartyProposal): boolean {

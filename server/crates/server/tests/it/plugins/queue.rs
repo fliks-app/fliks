@@ -338,6 +338,58 @@ async fn deleted_history_stays_deleted_and_a_returning_transfer_reuses_its_row()
     s.finish().await;
 }
 
+/// The `itemIds` of the first download of `media` in `GET /api/acquisition/progress`.
+async fn progress_items(h: &H, media: i32) -> Value {
+    let (s, v) = h
+        .call("GET", "/api/acquisition/progress", Some(&h.admin), None)
+        .await;
+    assert_eq!(s, 200, "{v}");
+    let m = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["mediaId"] == media)
+        .unwrap();
+    m["downloads"][0]["itemIds"].clone()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_per_track_grab_reports_its_items_and_a_reused_row_drops_the_old_ones() {
+    let Some(s) = Scratch::create("queue_items").await else {
+        return;
+    };
+    let h = harness(&s, "queue_items", |_| {}).await;
+    let media = 720_040;
+    add_media(&h, media, "movie").await;
+    let set = |refs: &'static [&'static str]| queue_set(&h, "items.plugin", media as u32, refs);
+    queue::claim("items.plugin", media, vec![11, 12]);
+    set(&["x"]).await;
+    assert_eq!(progress_items(&h, media).await, json!([11, 12]));
+
+    // The transfer leaves the snapshot, then returns for a grab of another track.
+    set(&[]).await;
+    queue::claim("items.plugin", media, vec![13]);
+    set(&["x"]).await;
+    assert_eq!(
+        progress_items(&h, media).await,
+        json!([13]),
+        "the new grab's tracks"
+    );
+
+    // Back again with no claim: a whole-media grab, so no stale tracks.
+    set(&[]).await;
+    set(&["x"]).await;
+    assert_eq!(progress_items(&h, media).await, Value::Null);
+    let rows: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM acquisition_queue WHERE "ref" = 'x'"#)
+            .fetch_one(&h.st.db)
+            .await
+            .unwrap();
+    assert_eq!(rows, 1, "one row throughout");
+    h.finish().await;
+    s.finish().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_queue_lists_only_open_libraries_and_its_actions_need_queue_manage() {
     let Some((m, w)) = fixture() else { return };

@@ -15,8 +15,49 @@ const MAX_TEXT: usize = 500;
 const MAX_REF: usize = 256;
 const MAX_PATCH: usize = 100;
 
+/// A per-track grab holds its items for this long while the provider's first queue entry is awaited.
+const CLAIM_TTL: std::time::Duration = std::time::Duration::from_secs(600);
+
+type Claims = HashMap<(String, i32), (Vec<i32>, std::time::Instant)>;
+
+fn claims() -> std::sync::MutexGuard<'static, Claims> {
+    use crate::sync::MutexExt;
+    static C: std::sync::LazyLock<std::sync::Mutex<Claims>> =
+        std::sync::LazyLock::new(Default::default);
+    C.lock_clean()
+}
+
+/// Holds the tracks `plugin` is about to grab on `media`, for the queue row that follows.
+pub fn claim(plugin: &str, media: i32, items: Vec<i32>) {
+    claims().insert(
+        (plugin.to_owned(), media),
+        (items, std::time::Instant::now()),
+    );
+}
+
+/// Drops a claim whose grab did not happen.
+pub fn unclaim(plugin: &str, media: i32) {
+    claims().remove(&(plugin.to_owned(), media));
+}
+
+/// The tracks held for `plugin` on `media`, as the wire carries them.
+pub fn claimed(plugin: &str, media: i32) -> Vec<i64> {
+    let held = claims();
+    match held.get(&(plugin.to_owned(), media)) {
+        Some((items, at)) if at.elapsed() < CLAIM_TTL => {
+            items.iter().map(|i| i64::from(*i)).collect()
+        }
+        _ => vec![],
+    }
+}
+
+fn take_claim(plugin: &str, media: i32) -> Option<Vec<i32>> {
+    let (items, at) = claims().remove(&(plugin.to_owned(), media))?;
+    (at.elapsed() < CLAIM_TTL).then_some(items)
+}
+
 /// The states in which a transfer counts as in flight (`import_failed` waits for an action).
-pub(super) const IN_FLIGHT: [&str; 5] = ["queued", "active", "stalled", "paused", "importing"];
+pub(crate) const IN_FLIGHT: [&str; 5] = ["queued", "active", "stalled", "paused", "importing"];
 
 #[derive(Debug, Clone, PartialEq, FromRow)]
 struct Fields {
@@ -184,9 +225,10 @@ async fn insert(tx: &mut sqlx::PgConnection, plugin: &str, e: &Entry) -> Result<
     let f = &e.f;
     sqlx::query(
         r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", season, episode, "sourceId", "sourceName",
-             title, quality, method, "infoUrl", state, progress, size, "bytesPerSecond", eta, error, "finishedAt")
+             title, quality, method, "infoUrl", state, progress, size, "bytesPerSecond", eta, error, "finishedAt",
+             "itemIds")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-             CASE WHEN $18 THEN now() END)"#,
+             CASE WHEN $18 THEN now() END, $19)"#,
     )
     .bind(plugin)
     .bind(&e.r#ref)
@@ -206,6 +248,7 @@ async fn insert(tx: &mut sqlx::PgConnection, plugin: &str, e: &Entry) -> Result<
     .bind(f.eta)
     .bind(&f.error)
     .bind(f.terminal())
+    .bind(take_claim(plugin, f.media))
     .execute(tx)
     .await?;
     Ok(())
@@ -239,6 +282,22 @@ async fn update(tx: &mut sqlx::PgConnection, id: i32, f: &Fields) -> Result<(), 
     .bind(f.terminal())
     .execute(tx)
     .await?;
+    Ok(())
+}
+
+/// A removed row that returns: its fields and the tracks of its new grab replace the old ones.
+async fn reopen(
+    tx: &mut sqlx::PgConnection,
+    plugin: &str,
+    id: i32,
+    f: &Fields,
+) -> Result<(), sqlx::Error> {
+    update(tx, id, f).await?;
+    sqlx::query(r#"UPDATE acquisition_queue SET "itemIds" = $2 WHERE id = $1"#)
+        .bind(id)
+        .bind(take_claim(plugin, f.media))
+        .execute(tx)
+        .await?;
     Ok(())
 }
 
@@ -362,7 +421,7 @@ async fn reconcile(
                     }
                 }
                 match removed {
-                    Some(id) => update(&mut tx, id, &e.f).await?,
+                    Some(id) => reopen(&mut tx, plugin, id, &e.f).await?,
                     None => insert(&mut tx, plugin, &e).await?,
                 }
                 changes.touch(e.f.media, true);
@@ -504,11 +563,12 @@ fn download_state(s: &str) -> Option<DownloadState> {
     })
 }
 
-/// `(ref, season, episode, progress, speed, eta, state)` of an open row.
+/// `(ref, season, episode, items, progress, speed, eta, state)` of an open row.
 type Progress7 = (
     String,
     Option<i32>,
     Option<i32>,
+    Option<Vec<i32>>,
     f64,
     Option<f64>,
     Option<f64>,
@@ -519,7 +579,7 @@ type Progress7 = (
 pub async fn downloads(db: &PgPool, media: i32) -> Vec<Download> {
     let rows: Vec<Progress7> =
         sqlx::query_as(
-            r#"SELECT "ref", season, episode, progress, "bytesPerSecond", eta, state FROM acquisition_queue
+            r#"SELECT "ref", season, episode, "itemIds", progress, "bytesPerSecond", eta, state FROM acquisition_queue
                WHERE "mediaId" = $1 AND "finishedAt" IS NULL AND state = ANY($2) ORDER BY "pluginId", id"#,
         )
         .bind(media)
@@ -528,17 +588,24 @@ pub async fn downloads(db: &PgPool, media: i32) -> Vec<Download> {
         .await
         .unwrap_or_default();
     rows.into_iter()
-        .filter_map(|(r#ref, season, episode, progress, speed, eta, state)| {
-            Some(Download {
-                r#ref,
-                season_number: season.map(i64::from),
-                episode_number: episode.map(i64::from),
-                progress: Num(progress),
-                dlspeed: Num(speed.unwrap_or(0.0)),
-                eta: Num(eta.unwrap_or(0.0)),
-                state: download_state(&state)?,
-            })
-        })
+        .filter_map(
+            |(r#ref, season, episode, items, progress, speed, eta, state)| {
+                Some(Download {
+                    r#ref,
+                    season_number: season.map(i64::from),
+                    episode_number: episode.map(i64::from),
+                    item_ids: items
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(i64::from)
+                        .collect(),
+                    progress: Num(progress),
+                    dlspeed: Num(speed.unwrap_or(0.0)),
+                    eta: Num(eta.unwrap_or(0.0)),
+                    state: download_state(&state)?,
+                })
+            },
+        )
         .collect()
 }
 

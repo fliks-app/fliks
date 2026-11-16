@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { kindOf } from '../../media-kinds';
 import type { WantSpec } from './wants-api.service';
@@ -180,8 +181,10 @@ export function requestAddLink(r: FliksRequestRow): (string | number)[] {
 export class RequestsService {
   private readonly http = inject(HttpClient);
 
-  create(body: CreateRequestBody) {
-    return firstValueFrom(this.http.post<FliksRequestRow>('/api/requests', body));
+  /** `skipToast`: the caller reports the failure itself (a 409 is not one). */
+  create(body: CreateRequestBody, skipToast = false) {
+    const context = skipToast ? new HttpContext().set(SKIP_ERROR_TOAST, true) : undefined;
+    return firstValueFrom(this.http.post<FliksRequestRow>('/api/requests', body, { context }));
   }
 
   update(id: number, body: UpdateRequestBody) {

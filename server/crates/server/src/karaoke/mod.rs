@@ -386,6 +386,21 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     Ok(out)
 }
 
+/// Sets `karaoke` on each track of an album detail: the state, stage and progress of its running job, else null.
+pub(crate) fn tag_tracks(st: &AppState, album: &mut Value) {
+    let runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+    for t in album["tracks"].as_array_mut().into_iter().flatten() {
+        let job = t["itemId"]
+            .as_i64()
+            .and_then(|i| runs.get(&(i as i32)))
+            .filter(|r| r.active());
+        t["karaoke"] = job.map_or(
+            Value::Null,
+            |r| json!({"state": r.state, "stage": r.stage, "progress": r.progress}),
+        );
+    }
+}
+
 #[utoipa::path(get, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 404)))]
 pub async fn item_state(
     State(st): State<AppState>,
@@ -647,6 +662,38 @@ mod tests {
         assert_eq!(run::admit(&runs, 1, Some(8)), run::Admit::Join);
         runs.insert(2, run(Some(7), "failed"));
         assert_eq!(run::admit(&runs, 3, Some(7)), run::Admit::Go);
+    }
+
+    #[tokio::test]
+    async fn an_album_detail_tags_each_track_with_its_active_job_or_null() {
+        let pool = sqlx::PgPool::connect_lazy("postgres://unused@localhost/unused").unwrap();
+        let st = AppState::new(
+            pool,
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        let mut running = run(None, "running");
+        running.progress = Some(0.4);
+        running.stage = Some("align");
+        {
+            let mut runs = st.karaoke.runs.lock().unwrap();
+            runs.insert(1, run(None, "queued"));
+            runs.insert(2, running);
+            runs.insert(3, run(None, "failed"));
+        }
+        let mut album =
+            json!({"tracks": [{"itemId": 1}, {"itemId": 2}, {"itemId": 3}, {"itemId": 4}]});
+        tag_tracks(&st, &mut album);
+        let tag = |i: usize| album["tracks"][i]["karaoke"].clone();
+        assert_eq!(
+            tag(0),
+            json!({"state": "queued", "stage": null, "progress": null})
+        );
+        assert_eq!(
+            tag(1),
+            json!({"state": "running", "stage": "align", "progress": 0.4})
+        );
+        assert_eq!((tag(2), tag(3)), (Value::Null, Value::Null));
     }
 
     fn model(

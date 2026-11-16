@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal, viewChild } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, ElementRef, OnInit, afterRenderEffect, computed, inject, input, signal, viewChild } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
 import { translatePlural } from '../../../../core/pipes/translate-plural.pipe';
@@ -12,7 +12,7 @@ import type { AddResult } from '../../../../shared/components/add-dialog/add-pla
 import { HeroBaseComponent, type HeroChip } from '../../../../shared/components/hero-base/hero-base';
 import { previewPosterName } from '../../../../shared/utils/view-transition';
 import { TrackLineComponent } from '../../../music/track-line.component';
-import { formatDuration } from '../../../music/music-utils';
+import { flashTrack, formatDuration } from '../../../music/music-utils';
 import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 
 /** The add page of an album: the hit's title and cover at once, then its artists and tracklist, and Add, or Request for a user who cannot add. */
@@ -29,6 +29,15 @@ export class AlbumPreviewComponent implements OnInit {
   private readonly music = inject(MusicApiService);
   private readonly translate = inject(TranslateService);
   private readonly addDialog = viewChild(AddDialogComponent);
+  private readonly focusTrack = inject(ActivatedRoute).snapshot.queryParamMap.get('track');
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    let focused = !this.focusTrack;
+    afterRenderEffect(() => {
+      if (!focused && this.album()) focused = flashTrack(this.el.nativeElement, this.focusTrack!);
+    });
+  }
 
   readonly provider = input.required<string>();
   readonly externalId = input.required<string>();

@@ -69,6 +69,12 @@ describe('DownloadProgressService', () => {
     expect(svc.progress().get(1)?.percent).toBe(50);
   });
 
+  it('keeps the items each download of a flat media covers', () => {
+    const svc = make();
+    movie(svc, [{ ...download({ progress: 0.5 }), itemIds: [4, 5] }, download({ ref: 'b' })]);
+    expect(svc.progress().get(1)?.leaves?.map((l) => [l.percent, l.itemIds])).toEqual([[50, [4, 5]], [expect.any(Number), undefined]]);
+  });
+
   it('drops everything on reset, for the SSE connect replay to re-state', () => {
     const svc = make();
     movie(svc, [download()]);

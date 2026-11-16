@@ -278,7 +278,20 @@ impl Plugins {
                 "language": tg.language,
                 "method": if manual { "manual" } else { "auto" },
             });
-            match self.sweep_call(&id, "POST", grab, vec![], body).await {
+            // A one-track album target is held for the queue row the grab leads to.
+            let items: Vec<i32> = match tg.scope.as_slice() {
+                [u] if tg.kind == "album" => u.item_id.map(|i| i as i32).into_iter().collect(),
+                _ => vec![],
+            };
+            let media = tg.media_id as i32;
+            if !items.is_empty() {
+                super::queue::claim(&id, media, items.clone());
+            }
+            let grabbed = self.sweep_call(&id, "POST", grab, vec![], body).await;
+            if !items.is_empty() && !matches!(grabbed, Ok(_) | Err(RouteError::TimedOut)) {
+                super::queue::unclaim(&id, media);
+            }
+            match grabbed {
                 Ok(_) => {
                     tracing::info!("acquisition: \"{}\" grabbed at \"{id}\"", tg.title);
                     return Outcome::Grabbed(id);

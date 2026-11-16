@@ -21,6 +21,8 @@ export interface DownloadLeaf {
   /** This download's own speed and ETA, per leaf because concurrent episodes tick independently. */
   dlspeed?: number;
   eta?: number;
+  /** The items this download covers (album tracks); absent means the whole media. */
+  itemIds?: number[];
 }
 
 export interface SeasonProgress {
@@ -37,6 +39,8 @@ export interface MediaDownloadProgress {
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
+  /** A flat media (movie, album): its downloads, to place each on the items it covers. */
+  leaves?: DownloadLeaf[];
 }
 
 /** One download inside a `download.progress` snapshot. */
@@ -48,6 +52,7 @@ export interface DownloadProgressItem {
   dlspeed: number;
   eta: number;
   state: DownloadProgressState;
+  itemIds?: number[];
 }
 
 /** Payload of `download.progress`: every download in flight for one media, as a replacement, never a delta.
@@ -101,6 +106,7 @@ function toLeaf(d: DownloadProgressItem): DownloadLeaf {
     episodeNumber: d.episodeNumber,
     dlspeed: d.dlspeed,
     eta: d.eta,
+    ...(d.itemIds ? { itemIds: d.itemIds } : {}),
   };
 }
 
@@ -109,8 +115,10 @@ function toEntry(e: DownloadProgressEvent): MediaDownloadProgress | null {
   if (!e.downloads.length) return null;
 
   if (!kindOf(e.mediaType).hasSeasons) {
-    const f = foldLeaves(e.downloads.map(toLeaf));
+    const leaves = e.downloads.map(toLeaf);
+    const f = foldLeaves(leaves);
     return {
+      leaves,
       mediaId: e.mediaId,
       mediaType: e.mediaType,
       percent: f.percent,

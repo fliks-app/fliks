@@ -40,7 +40,10 @@
         </button>
         <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" [showLabel]="true" buttonClass="btn btn-outline" iconClass="size-4" />
       }
+      <ng-container *ngTemplateOutlet="addAll; context: { compact: false }" />
+      <ng-container *ngTemplateOutlet="bar" />
     } @else {
+      <div class="flex w-full flex-col gap-1">
       <div class="flex w-full items-center gap-1">
         <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="like.focusedLiked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="like.focusedLiked()" (click)="like.toggle()" data-testid="like">
           <svg lucideHeart class="size-6" [attr.fill]="like.focusedLiked() ? 'currentColor' : 'none'"></svg>
@@ -51,6 +54,7 @@
         @if (playable().length) {
           <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" buttonClass="flex size-11 shrink-0 cursor-pointer items-center justify-center" iconClass="size-6" />
         }
+        <ng-container *ngTemplateOutlet="addAll; context: { compact: true }" />
         <span class="flex-1"></span>
         @if (playable().length) {
           <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [class.text-primary]="player.shuffle()" [attr.aria-label]="'music.shuffle' | translate" [attr.aria-pressed]="player.shuffle()" (click)="player.setShuffle(!player.shuffle())" data-testid="shuffle">
@@ -65,9 +69,30 @@
           </button>
         }
       </div>
+      <ng-container *ngTemplateOutlet="bar" />
+      </div>
     }
   </ng-container>
 </app-detail-hero>
+
+<ng-template #addAll let-compact="compact">
+  @if ((canAdd() || canRequest()) && hasUnwanted()) {
+    <button type="button" [class]="compact ? 'flex size-11 shrink-0 cursor-pointer items-center justify-center' : 'btn btn-outline'" [disabled]="!unwantedCount()" [attr.aria-label]="(canAdd() ? 'music.add_all' : 'music.request_album') | translate" (click)="canAdd() ? wantAll() : requestAlbum()" data-testid="want-all">
+      <svg lucidePlus [class]="compact ? 'size-6' : 'size-4'"></svg>
+      @if (!compact) {
+        {{ (canAdd() ? 'music.add_all' : 'music.request_album') | translate }}
+      }
+    </button>
+  }
+</ng-template>
+
+<ng-template #bar>
+  <div class="h-0.5 w-full basis-full" data-testid="album-progress">
+    @if (albumProgress() !== undefined) {
+      <progress class="progress progress-primary block h-0.5 w-full" [attr.value]="albumProgress()" max="100" [attr.aria-label]="(albumProgress() == null ? 'downloads.downloading' : 'music.download_percent') | translate: { percent: albumProgress() }"></progress>
+    }
+  </div>
+</ng-template>
 
 @if (candidates(); as list) {
   <app-detail-section [heading]="'music.candidates' | translate" [collapsible]="false">
@@ -92,56 +117,63 @@
 
 @if (a) {
   <ng-template #row let-t>
-    <li class="flex items-center gap-1 rounded-lg pe-1 hover:bg-base-200" data-testid="track">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [class.opacity-50]="unwanted(t)" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
-        <app-track-line [title]="t.title" [itemId]="t.itemId" [active]="t.itemId === playingItemId()" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
-          <span lead class="hidden w-8 shrink-0 text-right md:block tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
-          @if (!t.hasFile && !canRequest() && !unwanted(t)) {
-            <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
+    @let st = rowState().get(t.itemId)!;
+    <li class="group flex items-center gap-1 rounded-lg pe-1 transition-colors duration-500 hover:bg-base-200" [attr.data-track-id]="t.itemId" data-testid="track" [attr.data-state]="st.kind">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [class.opacity-50]="st.kind !== 'owned'" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
+        <span class="hidden h-5 w-8 shrink-0 items-center justify-end tabular-nums text-base-content/60 md:flex" [class.text-primary]="t.itemId === playingItemId()">
+          @if (t.itemId === playingItemId() && player.playing()) {
+            <span class="flex h-4 items-end gap-0.5 motion-safe:*:animate-pulse" aria-hidden="true" data-testid="equalizer"><i class="block h-2 w-0.5 bg-current"></i><i class="block h-4 w-0.5 bg-current [animation-delay:150ms]"></i><i class="block h-3 w-0.5 bg-current [animation-delay:300ms]"></i></span>
+          } @else {
+            {{ t.position }}
           }
-        </app-track-line>
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate font-medium" [class.text-primary]="t.itemId === playingItemId()">{{ t.title }}@if (t.explicit) { <span class="badge badge-ghost badge-sm ml-2">{{ 'music.explicit' | translate }}</span> }</span>
+          <span class="flex items-center gap-1.5 text-sm text-base-content/60">
+            <app-track-download-glyph [itemId]="t.itemId" />
+            <span class="truncate">{{ t.artists.length ? line(t.artists) : '' }}</span>
+          </span>
+        </span>
       </button>
-      @if (canRequest()) {
-        <span class="flex w-28 shrink-0 items-center justify-end" data-testid="track-status">
-          @switch (status(t)) {
-            @case ('available') {
-              <span class="badge badge-success badge-soft badge-sm">{{ 'music.status_available' | translate }}</span>
+      <span class="flex size-8 shrink-0 items-center justify-center" data-testid="track-state">
+        @switch (st.kind) {
+          @case ('owned') {
+            @if (st.karaoke; as k) {
+              <span class="radial-progress text-primary" [style.--value]="k.progress ?? 0" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-label]="'karaoke.preparing_pct' | translate: { pct: k.progress ?? 0 }" data-testid="track-karaoke"></span>
             }
-            @case ('requested') {
-              <span class="badge badge-warning badge-soft badge-sm" data-testid="track-requested">{{ 'music.status_requested' | translate }}</span>
+          }
+          @case ('downloading') {
+            @if (st.percent != null) {
+              <span class="radial-progress text-primary" [style.--value]="st.percent" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="st.percent" [attr.aria-label]="'downloads.downloading' | translate" data-testid="track-downloading"></span>
+            } @else {
+              <span class="loading loading-spinner loading-xs text-primary" role="progressbar" [attr.aria-label]="'downloads.downloading' | translate" data-testid="track-downloading"></span>
             }
-            @case ('request') {
-              <button type="button" class="btn btn-ghost btn-xs btn-circle" (click)="addTrack(t)" [attr.aria-label]="'music.request_track' | translate" data-testid="track-request">
-                <svg lucidePlus class="size-4"></svg>
+          }
+          @case ('wanted') {
+            <svg lucideClock class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+          }
+          @case ('failed') {
+            <svg lucideCircleAlert class="size-5 text-error" role="img" [attr.aria-label]="'music.status_failed' | translate" data-testid="track-failed"></svg>
+          }
+          @default {
+            @if ((canAdd() || canRequest()) && t.recordingId) {
+              <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="addTrack(t)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="track-add">
+                <svg lucidePlus class="size-5"></svg>
               </button>
             }
           }
-        </span>
-      } @else if (canAdd() && hasUnwanted()) {
-        <span class="flex size-10 shrink-0 items-center justify-center">
-          @if (unwanted(t)) {
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="addTrack(t)" [attr.aria-label]="'music.add_track' | translate" data-testid="track-add">
-              <svg lucidePlus class="size-5"></svg>
-            </button>
-          }
-        </span>
-      }
-      <button type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="t.favourite" [class.text-white]="!t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
+        }
+      </span>
+      <button type="button" class="hidden size-10 shrink-0 cursor-pointer items-center justify-center md:flex" [class]="t.favourite ? 'text-error' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
         <svg lucideHeart class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
       </button>
+      <span class="hidden w-12 shrink-0 text-right text-sm tabular-nums text-base-content/60 md:block">{{ formatTime(t.durationSeconds) }}</span>
       <button #more type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" (click)="openTrackMenu(t, more)" data-testid="track-menu">
         <svg lucideEllipsisVertical class="size-5"></svg>
       </button>
     </li>
   </ng-template>
 
-  @if (canAdd() && hasUnwanted()) {
-    <div class="mt-4 flex items-center gap-3">
-      <button type="button" class="btn btn-outline btn-sm" [disabled]="!unwantedCount()" (click)="wantAll()" data-testid="want-all">
-        <svg lucideDownload class="size-4"></svg>{{ 'music.download_album' | translate }}
-      </button>
-    </div>
-  }
   @for (d of discs(); track d.disc.discNumber) {
     <section class="mt-4">
       @if (discs().length > 1 || d.disc.title) {
@@ -161,20 +193,22 @@
       </ul>
     </section>
   }
+  @if (orphanFiles().length) {
+    <section class="mt-6" data-testid="orphan-files">
+      <h2 class="mb-2 text-lg font-bold">{{ 'music.orphan_files' | translate }}</h2>
+      <ul class="flex flex-col gap-1">
+        @for (t of orphanFiles(); track t.itemId) {
+          <ng-container *ngTemplateOutlet="row; context: { $implicit: t }" />
+        }
+      </ul>
+    </section>
+  }
   @if (otherVersions().length) {
     <app-detail-section [heading]="'music.other_versions' | translate" [collapsible]="false">
-      <ul class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 scroll-ring-safe" data-testid="versions">
-        @for (v of otherVersions(); track v.releaseId) {
-          <li>
-            <a class="flex items-center gap-3 rounded-lg border border-base-300 px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="versionLink(v)" data-testid="version-link">
-              <span class="min-w-0 flex-1">
-                <span class="block truncate font-medium">{{ v.disambiguation ?? v.title }}</span>
-                <span class="block truncate text-sm text-base-content/60">{{ versionText(v) }}</span>
-              </span>
-              <span class="badge badge-sm shrink-0" [class.badge-success]="v.mediaId != null" [class.badge-soft]="v.mediaId != null" [class.badge-ghost]="v.mediaId == null">
-                {{ (v.mediaId != null ? 'music.version_held' : 'music.version_missing') | translate }}
-              </span>
-            </a>
+      <ul class="flex gap-3 overflow-x-auto scroll-ring-safe" data-testid="versions">
+        @for (v of otherVersions(); track v.id) {
+          <li class="w-36 shrink-0" data-testid="version-link-item">
+            <app-media-card [square]="true" widthClass="w-36" [title]="v.title" [subtitle]="v.subtitle" [badge]="v.missing ? 'missing' : null" [hideStatusBar]="true" [link]="v.link" />
           </li>
         }
       </ul>

@@ -146,6 +146,10 @@ pub(crate) async fn track_rows(
   'position', td.position, 'trackNumber', td."trackNumber", 'recordingId', td."recordingMbid", 'label', td.label, 'title', COALESCE(i.title, ''),
   'durationSeconds', COALESCE(td."durationMs"::float8 / 1000, pf.dur), 'explicit', td.explicit,
   'gain', td.gain, 'peak', td.peak,
+  'lastAttempt', (SELECT q.state FROM acquisition_queue q
+      WHERE q."mediaId" = m.id AND q."finishedAt" IS NOT NULL AND q."deletedAt" IS NULL
+        AND (q."itemIds" IS NULL OR i.id = ANY(q."itemIds"))
+      ORDER BY q."finishedAt" DESC, q.id DESC LIMIT 1),
   'artists', COALESCE(
     (SELECT jsonb_agg(jsonb_build_object('id', c."personId", 'name', p.name, 'creditedName', c."creditedName",
         'joinPhrase', c."joinPhrase") ORDER BY c.position)

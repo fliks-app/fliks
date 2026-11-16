@@ -77,6 +77,9 @@ pub struct Download {
     pub season_number: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub episode_number: Option<i64>,
+    /// The tracks a per-track grab targets; empty for the whole media.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_ids: Vec<i64>,
     pub progress: Num,
     pub dlspeed: Num,
     pub eta: Num,

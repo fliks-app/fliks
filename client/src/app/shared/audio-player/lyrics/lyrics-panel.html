@@ -1,26 +1,11 @@
-<section class="flex h-full min-h-0 flex-col gap-3" data-testid="lyrics-panel">
-  @if (layers().length || karaokeShown()) {
-    <div class="flex items-center gap-2" appTvSection>
-      @if (stage() && stageActions(); as actions) {
-        <ng-container [ngTemplateOutlet]="actions" />
-      }
-      <div class="scroll-ring-safe flex min-w-0 flex-1 flex-wrap gap-2">
-        @for (d of layers(); track d.id) {
-          <button type="button" class="btn btn-sm" [class.btn-primary]="d.id === layerId()" [attr.aria-pressed]="d.id === layerId()" (click)="toggleLayer(d.id)">
-            {{ 'lyrics.kind_' + d.kind | translate }} {{ d.lang === 'und' ? '' : d.lang }}
-          </button>
-        }
-      </div>
-      @if (karaokeShown()) {
-        <span class="tooltip tooltip-left shrink-0" [attr.data-tip]="karaokeWhy() ? (karaokeWhy()! | translate) : null">
-          <button type="button" class="btn btn-sm gap-1" [class.btn-primary]="stage() && karaokeOn()" [attr.aria-pressed]="stage() && karaokeOn()" [disabled]="!karaokeOn()" (click)="toggleKaraoke()" data-testid="karaoke-toggle">
-            <svg lucideMicVocal class="h-4 w-4"></svg>
-            {{ 'karaoke.title' | translate }}
-          </button>
-        </span>
-      }
-    </div>
-  }
+<section class="relative flex h-full min-h-0 flex-col gap-3" data-testid="lyrics-panel">
+  <div class="pointer-events-none absolute inset-x-0 top-1 z-10 flex justify-center" aria-live="polite" data-testid="karaoke-bubble">
+    @if (singKind() === 'queued' || singKind() === 'running') {
+      <span class="rounded-full bg-base-300 px-3 py-1 text-sm shadow">{{ 'karaoke.preparing_pct' | translate: { pct: prepPct() } }}</span>
+    } @else if (readyBubble()) {
+      <button type="button" class="btn btn-primary btn-sm pointer-events-auto rounded-full shadow" (click)="enter()" data-testid="karaoke-ready">{{ 'karaoke.ready_tap' | translate }}</button>
+    }
+  </div>
 
   @if (failed()) {
     <p class="text-sm text-error" role="alert">{{ 'lyrics.error' | translate }}</p>
@@ -28,70 +13,16 @@
 
   <div class="min-h-24 flex-1">
     @if (mode() === 'view') {
-      @if (stage() && karaokeOn()) {
-        @if (stemsNative()) {
-          <p class="text-sm text-base-content/60" data-testid="karaoke-native">{{ 'karaoke.native_hint' | translate }}</p>
-        } @else if (kState(); as k) {
-          @switch (k.state) {
-            @case ('ready') {
-              @if (shown(); as d) {
-                <app-karaoke-stage
-                  [doc]="d"
-                  [output]="output()"
-                  [title]="audio.track()?.title ?? ''"
-                  [canEdit]="canEdit"
-                  [busy]="kBusy()"
-                  [error]="k.lyricsError ? ('karaoke.lyrics_failed' | translate) + ' ' + failure(k.lyricsError) : ''"
-                  (recompute)="recompute($event)"
-                  (actionsReady)="stageActions.set($event)"
-                />
-              } @else if (!loading()) {
-                <p class="text-base text-base-content/60" data-testid="lyrics-empty">{{ 'lyrics.none' | translate }}</p>
-              }
-            }
-            @case ('none') {
-              <div class="flex h-full flex-col items-center justify-center gap-3 text-center" data-testid="karaoke-block">
-                <span class="flex size-16 items-center justify-center rounded-full bg-primary/15 text-primary"><svg lucideMic class="h-8 w-8"></svg></span>
-                <p class="text-lg font-semibold">{{ 'karaoke.not_ready' | translate }}</p>
-                <p class="max-w-xs text-sm text-base-content/60">{{ 'karaoke.not_ready_hint' | translate }}</p>
-                <button type="button" class="btn btn-primary" [disabled]="kBusy()" (click)="prepare()" data-testid="karaoke-prepare">{{ 'karaoke.prepare_track' | translate }}</button>
-                <p class="text-xs text-base-content/60">{{ 'karaoke.keeps_playing' | translate }}</p>
-              </div>
-            }
-            @case ('failed') {
-              <div class="flex h-full flex-col items-center justify-center gap-3 text-center" data-testid="karaoke-block">
-                <p class="text-sm text-error" role="alert">{{ 'karaoke.failed' | translate }}{{ k.error ? ' ' + failure(k.error) : '' }}</p>
-                <button type="button" class="btn btn-primary" [disabled]="kBusy()" (click)="prepare()" data-testid="karaoke-retry">{{ 'karaoke.retry' | translate }}</button>
-              </div>
-            }
-            @default {
-              <div class="flex h-full flex-col items-center justify-center gap-3 text-center" data-testid="karaoke-block">
-                <p class="text-lg font-semibold">{{ 'karaoke.preparing' | translate }}</p>
-                @if (k.state === 'queued') {
-                  <p class="text-sm text-base-content/60" role="status">{{ 'karaoke.queued' | translate }}</p>
-                } @else {
-                  <ol class="flex w-full max-w-xs flex-col gap-3 text-left text-sm">
-                    @for (st of prepSteps; track st; let i = $index) {
-                      @let cur = prepStep(k.stage);
-                      <li class="flex items-start gap-2" [class]="i > cur ? 'text-base-content/60' : i === cur ? 'font-semibold' : ''" [attr.aria-current]="i === cur ? 'step' : null">
-                        <span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2" [class]="i < cur ? 'border-success bg-success text-success-content' : i === cur ? 'border-primary' : 'border-base-content/30'">
-                          @if (i < cur) {
-                            <svg lucideCheck class="h-3 w-3"></svg>
-                          }
-                        </span>
-                        <span class="flex min-w-0 flex-1 flex-col gap-1">
-                          <span role="status">{{ 'karaoke.stage_' + st | translate }}</span>
-                          <progress class="progress progress-primary w-full" [class.invisible]="i !== cur" [attr.value]="k.progress ?? null" max="100" [attr.aria-label]="'karaoke.progress' | translate"></progress>
-                        </span>
-                      </li>
-                    }
-                  </ol>
-                }
-                <p class="text-xs text-base-content/60">{{ 'karaoke.keeps_playing' | translate }}</p>
-              </div>
-            }
-          }
-        }
+      @if (stageDoc(); as d) {
+        <app-karaoke-stage
+          [doc]="d"
+          [output]="output()"
+          [title]="audio.track()?.title ?? ''"
+          [canEdit]="canEdit"
+          [busy]="kBusy()"
+          [error]="kState()?.lyricsError ? ('karaoke.lyrics_failed' | translate) + ' ' + failure(kState()!.lyricsError!) : ''"
+          (recompute)="recompute($event)"
+        />
       } @else {
         @if (kState(); as k) {
           @if (k.cdg) {
@@ -101,7 +32,7 @@
         @if (loading() && !res()) {
           <!-- Nothing until the lyrics land, so "no lyrics" never flashes. -->
         } @else if (shown(); as d) {
-          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable()" />
+          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
         } @else if (res()?.instrumental) {
           <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
         } @else {

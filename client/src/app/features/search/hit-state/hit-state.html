@@ -1,0 +1,27 @@
+@switch (state()) {
+  @case ('add') {
+    @if (canAct()) {
+      <button type="button" class="btn btn-ghost btn-circle size-11 min-h-0 p-0" data-card-link data-testid="hit-add" [attr.aria-label]="(admin() ? 'search.state_add' : 'search.state_request') | translate" (click)="add.emit()">
+        <svg lucidePlus class="size-5"></svg>
+      </button>
+    }
+  }
+  @case ('pending') {
+    <svg lucideClock class="size-5 text-base-content/60" role="img" data-testid="hit-pending" [attr.aria-label]="'search.state_pending' | translate"></svg>
+  }
+  @case ('downloading') {
+    <span class="loading loading-ring loading-sm text-primary" role="img" data-testid="hit-downloading" [attr.aria-label]="'search.state_downloading' | translate"></span>
+  }
+  @case ('failed') {
+    @if (canAct()) {
+      <button type="button" class="btn btn-ghost btn-circle size-11 min-h-0 p-0 text-error" data-card-link data-testid="hit-failed" [attr.aria-label]="'search.state_failed' | translate" (click)="add.emit()">
+        <svg lucideCircleAlert class="size-5"></svg>
+      </button>
+    } @else {
+      <svg lucideCircleAlert class="size-5 text-error" role="img" [attr.aria-label]="'search.state_failed' | translate"></svg>
+    }
+  }
+  @case ('owned') {
+    <svg lucideCheck class="size-5 text-success" role="img" data-testid="hit-owned" [attr.aria-label]="'search.state_owned' | translate"></svg>
+  }
+}

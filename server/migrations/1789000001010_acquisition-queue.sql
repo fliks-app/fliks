@@ -9,6 +9,7 @@ CREATE TABLE "acquisition_queue" (
   "mediaId" integer NOT NULL REFERENCES "media"("id") ON DELETE CASCADE,
   "season" integer,
   "episode" integer,
+  "itemIds" integer[],
   "sourceId" text NOT NULL,
   "sourceName" text NOT NULL,
   "title" text NOT NULL,

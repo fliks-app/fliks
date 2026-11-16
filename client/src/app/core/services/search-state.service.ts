@@ -139,23 +139,6 @@ export class SearchStateService {
   readonly videoHeld = computed(() => this.externalResults().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
   readonly booksToAdd = computed(() => this.applyPanelFilters(this.bookHits().filter((r) => r.existingMediaId == null)));
   readonly booksHeld = computed(() => this.bookHits().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
-  readonly albumsToAdd = computed(() => this.albumHits().filter((r) => r.existingMediaId == null));
-  readonly albumsHeld = computed(() => this.albumHits().filter((r) => r.existingMediaId != null && !this.localMediaIds().has(r.existingMediaId)));
-  readonly artistsToAdd = computed(() => {
-    const local = new Set(this.localArtists().map((a) => a.id));
-    return this.artistHits().filter((a) => a.personId == null || !local.has(a.personId));
-  });
-  /** Tracks the library does not hold at all. */
-  readonly recordingsToAdd = computed(() => this.recordingHits().filter((r) => r.existingMediaId == null));
-  /** Tracks the library holds that the local track list does not show. */
-  readonly recordingsHeld = computed(() => {
-    const local = this.localTracks();
-    return this.recordingHits().filter(
-      (r) =>
-        r.existingMediaId != null &&
-        !local.some((t) => t.itemId === r.trackId || (t.mediaId === r.existingMediaId && t.title.toLowerCase() === r.title.toLowerCase())),
-    );
-  });
 
   /** Sorts only on a rating/recency pick (default keeps provider relevance); genre matches by TMDB id with a name fallback. */
   applyPanelFilters<T extends SearchHit>(rows: T[]): T[] {

@@ -1,15 +1,57 @@
 <div class="scroll-ring-safe flex h-full min-h-0 flex-col gap-2 overflow-y-auto sm:gap-3" data-testid="karaoke-stage">
-  @if (inParty()) {
-    <app-karaoke-queue />
+  <div class="scroll-ring-safe flex shrink-0 items-center justify-center gap-2 px-1 py-1" appTvSection data-testid="karaoke-controls">
+    @if (tv()) {
+      <div class="join items-center" role="group" [attr.aria-label]="'karaoke.vocal_level' | translate">
+        <button type="button" class="btn join-item" [disabled]="!stemsAvailable() || level() <= 0" (click)="setLevel(level() - step)" [attr.aria-label]="'karaoke.vocal_less' | translate" data-testid="karaoke-vocal-less">
+          <svg lucideMinus class="h-5 w-5"></svg>
+        </button>
+        <span class="join-item flex min-w-20 items-center justify-center bg-base-200 px-3 tabular-nums" aria-live="polite" data-testid="karaoke-vocal-level">{{ level() }} %</span>
+        <button type="button" class="btn join-item" [disabled]="!stemsAvailable() || level() >= 100" (click)="setLevel(level() + step)" [attr.aria-label]="'karaoke.vocal_more' | translate" data-testid="karaoke-vocal-more">
+          <svg lucidePlus class="h-5 w-5"></svg>
+        </button>
+      </div>
+    } @else {
+      <input
+        type="range"
+        class="range range-primary range-xs min-w-0 flex-1 sm:max-w-60"
+        min="0"
+        max="100"
+        step="5"
+        data-testid="karaoke-vocal-level"
+        [attr.aria-label]="'karaoke.vocal_level' | translate"
+        [value]="level()"
+        [disabled]="!stemsAvailable()"
+        (input)="setLevel(+$any($event.target).value)"
+      />
+    }
+    @if (canSing) {
+      <button type="button" class="btn btn-circle" [class.btn-ghost]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" [attr.aria-label]="(karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate" (click)="toggleSinging()" data-testid="karaoke-sing">
+        <svg lucideMic class="h-5 w-5"></svg>
+      </button>
+    }
+    <button type="button" class="btn btn-ghost btn-circle" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" data-testid="karaoke-settings">
+      <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+    </button>
+    @if (inParty()) {
+      <button type="button" class="btn btn-ghost btn-circle" (click)="openQueue()" [attr.aria-label]="'karaoke.queue_title' | translate" data-testid="karaoke-queue-open">
+        <svg lucideListMusic class="h-5 w-5"></svg>
+      </button>
+    }
+  </div>
+  @if (inParty() && next(); as n) {
+    <p class="truncate text-center text-sm text-base-content/70" [class.text-xl]="tv()" data-testid="karaoke-queue-next-line">
+      {{ 'karaoke.queue_next' | translate: { name: name(n.proposedBy), title: n.item.title } }}
+    </p>
   }
 
-  <canvas #lane class="w-full shrink-0 text-base-content" [class.h-24]="!tv()" [class.sm:h-40]="!tv()" [class.h-56]="tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
+  <canvas #lane class="w-full shrink-0 text-base-content" [class.hidden]="!karaoke.singing() && !rows().length" [class.h-24]="!tv()" [class.sm:h-40]="!tv()" [class.h-56]="tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
   <span #primary class="hidden text-primary" aria-hidden="true"></span>
 
   <div class="min-h-52 flex-1">
-    <app-lyrics-view [doc]="doc()" [large]="true" [output]="output()" />
+    <app-lyrics-view [doc]="doc()" [large]="true" [output]="output()" [seekable]="!tv()" />
   </div>
 
+  @if (karaoke.singing() || rows().length || status()) {
   <div class="grid min-h-10 shrink-0 place-items-center">
   <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3" [class.invisible]="!rows().length" data-testid="karaoke-scores">
     @for (r of rows(); track r.userId; let i = $index) {
@@ -35,42 +77,7 @@
     </p>
   }
   </div>
-
-  <div class="scroll-ring-safe flex shrink-0 flex-wrap items-center justify-center gap-2 px-1 py-1" appTvSection data-testid="karaoke-controls">
-    <div class="flex min-w-0 items-center gap-2 rounded-full bg-base-200 p-1 max-sm:w-full" role="group" [attr.aria-label]="'karaoke.mix' | translate">
-      <div class="join shrink-0">
-        @for (m of modes; track m) {
-          <button
-            type="button"
-            class="btn btn-xs sm:btn-sm join-item"
-            [class.btn-primary]="stemMode() === m"
-            [attr.aria-pressed]="stemMode() === m"
-            [disabled]="m !== 'original' && !stemsAvailable()"
-            (click)="setMode(m)"
-            [attr.data-testid]="'karaoke-mode-' + m"
-          >
-            {{ 'karaoke.mode_' + m | translate }}
-          </button>
-        }
-      </div>
-      <input
-        type="range"
-        class="range range-primary range-xs min-w-0 flex-1 transition-opacity sm:w-36 sm:flex-none"
-        [class.opacity-40]="stemMode() !== 'guide'"
-        min="0"
-        max="100"
-        step="5"
-        data-testid="karaoke-vocal-level"
-        [attr.aria-label]="'karaoke.vocal_level' | translate"
-        [value]="sliderValue()"
-        [disabled]="!stemsAvailable()"
-        (input)="setGuide(+$any($event.target).value / 100)"
-      />
-    </div>
-    @if (!phone()) {
-      <ng-container [ngTemplateOutlet]="actions" />
-    }
-  </div>
+  }
 
   <dialog #settings class="modal" [class.modal-bottom]="sheet()" [class.modal-end]="!sheet()" data-testid="karaoke-settings-sheet">
     <div class="modal-box flex flex-col gap-4" [class.w-[360px]]="!sheet()">
@@ -153,18 +160,16 @@
       </div>
     </div>
   </dialog>
-</div>
 
-<ng-template #actions>
-<div class="flex items-center gap-1 rounded-full bg-base-200 p-1">
-  @if (canSing) {
-    <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
-      <svg lucideMic class="h-4 w-4"></svg>
-      {{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}
-    </button>
+  @if (inParty()) {
+  <dialog #queueSheet class="modal" [class.modal-bottom]="sheet()" data-testid="karaoke-queue-sheet">
+    <div class="modal-box flex flex-col gap-3">
+      <app-karaoke-queue />
+      <div class="modal-action mt-0" appTvSection>
+        <button type="button" class="btn" autofocus (click)="closeQueue()">{{ 'karaoke.close' | translate }}</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">{{ 'karaoke.close' | translate }}</button></form>
+  </dialog>
   }
-  <button type="button" class="btn btn-ghost btn-sm btn-circle tooltip tooltip-left" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" [attr.data-tip]="'karaoke.settings' | translate" data-testid="karaoke-settings">
-    <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
-  </button>
 </div>
-</ng-template>

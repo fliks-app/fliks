@@ -1,5 +1,7 @@
 // Wire contract: the F4 section of the music plan (tracks are named by `itemId`)
 
+import type { KaraokeStage } from './karaoke.models';
+
 export interface MusicPerson {
   id: number;
   name: string;
@@ -95,6 +97,10 @@ export interface Track {
   /** Wanted: an unwanted track of the release stays listed, greyed. */
   monitored: boolean;
   orphaned: boolean;
+  /** The newest finished acquisition covering the track (queue state). */
+  lastAttempt?: 'imported' | 'failed' | 'import_failed' | 'removed' | null;
+  /** The karaoke prep under way, when any; follows `karaoke.job_changed`. */
+  karaoke?: { state: 'queued' | 'running'; stage?: KaraokeStage; progress: number | null } | null;
   discNumber: number;
   discTitle: string | null;
   position: number;
@@ -168,6 +174,11 @@ export interface ArtistAlbum {
   monitored: boolean;
   trackCount: number;
   ownedTrackCount: number;
+}
+
+/** One discography card: the releases of a release group folded into its most owned one. */
+export interface ArtistAlbumGroup extends ArtistAlbum {
+  versions: number;
 }
 
 // GET /api/persons/:id/discography
