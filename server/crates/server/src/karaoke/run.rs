@@ -223,6 +223,17 @@ fn update(st: &AppState, item: i32, f: impl FnOnce(&mut RunState)) {
     st.hub.emit_to_users(&viewers, ev);
 }
 
+/// Tells the viewers of a track that its stems are done and nothing is left to run.
+pub async fn announce_ready(st: &AppState, item: i32) {
+    let ev = SseEvent::KaraokeJobChanged {
+        item_id: i64::from(item),
+        state: "ready".to_owned(),
+        stage: None,
+        progress: None,
+    };
+    st.hub.emit_to_users(&viewers(st, item).await, ev);
+}
+
 fn stage(st: &AppState, item: i32, stage: &'static str) {
     update(st, item, |r| {
         r.state = "running";
@@ -478,6 +489,8 @@ async fn separate(
             guide_vocals_gain: None,
             bitrate_kbps: None,
             providers: Some(providers),
+            model_version: None,
+            input_token: None,
         },
         media: MediaRef {
             media_file_id: t.file as u32,

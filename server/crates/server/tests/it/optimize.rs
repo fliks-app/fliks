@@ -37,6 +37,7 @@ async fn ctx(pool: &PgPool) -> Ctx {
                 max_jobs: 1,
                 pause: fliks_engine_core::api::PauseMode::Suspend,
             }],
+            features: vec![],
         },
     );
     Ctx {

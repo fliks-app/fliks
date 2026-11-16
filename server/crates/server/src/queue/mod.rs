@@ -6,18 +6,18 @@ mod auto;
 mod cleanup;
 pub mod commit;
 pub(crate) mod control;
-mod enqueue;
+pub(crate) mod enqueue;
 mod estimate;
 pub mod ocr;
 pub mod recover;
 pub(crate) mod remote;
 pub(crate) mod routes;
 pub mod settings;
-mod store;
+pub(crate) mod store;
 mod swap;
 mod tokens;
 mod trash;
-mod watch;
+pub(crate) mod watch;
 mod words;
 
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
 };
 use fliks_engine_core::api::WorkerDevice;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -47,6 +47,8 @@ pub struct Worker {
     pub principal: Principal,
     pub engine_version: String,
     pub devices: Vec<WorkerDevice>,
+    /// The engine's `hello.features`; empty from an older worker.
+    pub features: Vec<String>,
 }
 
 #[derive(Default)]
@@ -60,7 +62,10 @@ pub struct Shared {
     pub recover: Notify,
     downloads: Mutex<HashMap<i32, Instant>>,
     grants: Mutex<HashMap<String, remote::Grant>>,
-    uploads: Mutex<HashMap<(i64, i32), remote::Slot>>,
+    /// Slots by `(job, attempt, stem name)`; `""` is the output of an optimize job.
+    uploads: Mutex<HashMap<(i64, i32, String), remote::Slot>>,
+    /// Instances that failed a `Separate` with the `model` class, until their next hello.
+    karaoke_blocked: Mutex<HashSet<String>>,
     /// Files whose OCR just ended; their queueing runs in the queue's own task.
     ocr_ended: Mutex<Vec<i32>>,
     ocr_wake: Notify,
@@ -83,8 +88,17 @@ impl Shared {
     }
 
     pub fn register(&self, key: String, w: Worker) {
+        self.karaoke_blocked.lock_clean().remove(&key);
         self.seen.lock_clean().insert(key.clone(), Instant::now());
         self.workers.lock_clean().insert(key, w);
+    }
+
+    pub fn block_karaoke(&self, key: &str) {
+        self.karaoke_blocked.lock_clean().insert(key.to_owned());
+    }
+
+    pub fn karaoke_blocked(&self, key: &str) -> bool {
+        self.karaoke_blocked.lock_clean().contains(key)
     }
 
     /// The local instances seen recently: the only ones that get jobs.

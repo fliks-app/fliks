@@ -266,6 +266,8 @@ pub async fn unprepared(db: &PgPool, failed: &[i32], limit: i64) -> sqlx::Result
            WHERE (SELECT count(*) FROM derived_audio d WHERE d."mediaFileId" = ip."mediaFileId") < 3
              AND (SELECT count(DISTINCT d.kind) FROM derived_audio d
                   WHERE d."mediaFileId" = ip."mediaFileId" AND d.provider = 'import') < 2
+             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
+                             AND j.kind = 'separate' AND j.state IN ('queued', 'leased'))
              AND i.id <> ALL($1)
            ORDER BY i.id DESC LIMIT $2"#,
     )

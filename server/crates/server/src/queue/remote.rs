@@ -4,17 +4,21 @@ use crate::{http::AppError, state::AppState, sync::MutexExt};
 use axum::{
     Json,
     body::Bytes,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use fliks_engine_core::api::{
     HEADER_ATTEMPT, HEADER_UPLOAD_COMPLETE, HEADER_UPLOAD_OFFSET, HEADER_WORKER_ID, JobError,
-    JobErrorClass, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse, UploadAck,
+    JobErrorClass, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse, STEM_NAMES,
+    UploadAck,
 };
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use subtle::ConstantTimeEq;
 use tokio::{
     fs::OpenOptions,
@@ -93,10 +97,11 @@ impl super::Shared {
         token
     }
 
-    fn upload(&self, job: i64, attempt: i32) -> Slot {
+    /// `name` is `""` for the output of an optimize job.
+    fn upload(&self, job: i64, attempt: i32, name: &str) -> Slot {
         self.uploads
             .lock_clean()
-            .entry((job, attempt))
+            .entry((job, attempt, name.to_owned()))
             .or_insert_with(|| {
                 Arc::new(Mutex::new(Upload {
                     len: 0,
@@ -173,10 +178,10 @@ pub async fn sweep(st: &AppState) {
             st.engine.revoke_credential(&token).await;
         }
     }
-    let held: Vec<(i64, i32)> = st.queue.uploads.lock_clean().keys().copied().collect();
-    for (id, attempt) in held {
-        if leased(st, id, attempt).await == Some(false) {
-            st.queue.uploads.lock_clean().remove(&(id, attempt));
+    let held: Vec<(i64, i32, String)> = st.queue.uploads.lock_clean().keys().cloned().collect();
+    for key in held {
+        if leased(st, key.0, key.1).await == Some(false) {
+            st.queue.uploads.lock_clean().remove(&key);
         }
     }
 }
@@ -222,12 +227,26 @@ fn ack(len: u64) -> Json<UploadAck> {
     })
 }
 
-/// `PUT /engine/jobs/{id}/output`: one chunk at `Upload-Offset`, which must equal the length held.
-#[utoipa::path(put, path = "/engine/jobs/{id}/output", responses((status = 200), (status = 409)))]
+#[derive(serde::Deserialize)]
+pub struct OutputQuery {
+    /// A stem of a `Separate` job; absent: the output of an optimize job.
+    name: Option<String>,
+}
+
+/// Where a leased `Separate` stages one stem, beside the stems (same filesystem, the commit renames it).
+pub fn upload_path(id: i64, attempt: i32, name: &str) -> PathBuf {
+    crate::karaoke::store::dir()
+        .join(".uploads")
+        .join(format!("{id}-{attempt}-{name}.part"))
+}
+
+/// `PUT /engine/jobs/{id}/output[?name=<stem>]`: one chunk at `Upload-Offset`, which must equal the length held.
+#[utoipa::path(put, path = "/engine/jobs/{id}/output", responses((status = 200), (status = 400), (status = 409)))]
 pub async fn put_output(
     State(st): State<AppState>,
     WorkerAuth(who): WorkerAuth,
     crate::http::validate::PathParams(id): crate::http::validate::PathParams<i64>,
+    Query(q): Query<OutputQuery>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
@@ -238,28 +257,43 @@ pub async fn put_output(
         header(&headers, HEADER_WORKER_ID).ok_or_else(|| bad("X-Fliks-Worker-Id is required"))?;
     let complete = header(&headers, HEADER_UPLOAD_COMPLETE) == Some("?1");
     let conflict = || AppError::bare(StatusCode::CONFLICT);
+    let name = q.name.as_deref().unwrap_or("");
+    if !name.is_empty() && !STEM_NAMES.contains(&name) {
+        return Err(bad("unknown stem name"));
+    }
     let key = who.owner_key(worker);
     // The fence also renews the lease: a chunk may take longer than the lease on a slow uplink.
     let (staged, in_size): (Option<String>, Option<i64>) = sqlx::query_as(
         r#"UPDATE jobs SET "leaseUntil" = now() + make_interval(secs => $4), "updatedAt" = now()
-           WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased' AND kind = 'optimize'
+           WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state = 'leased' AND kind = $5
            RETURNING "stagedPath", "inSize""#,
     )
     .bind(id)
     .bind(&key)
     .bind(attempt)
     .bind(f64::from(store::LEASE_S))
+    .bind(if name.is_empty() {
+        "optimize"
+    } else {
+        "separate"
+    })
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(conflict)?;
-    let staged = staged.ok_or_else(|| AppError::internal("remote job without a staging path"))?;
+    let staged = if name.is_empty() {
+        staged.ok_or_else(|| AppError::internal("remote job without a staging path"))?
+    } else {
+        upload_path(id, attempt, name)
+            .to_string_lossy()
+            .into_owned()
+    };
     let path = Path::new(&staged);
     // An output is about the size of its source; far above that is not an encode.
     let cap = in_size.unwrap_or(0).max(0) as u64 * 2 + MAX_EXTRA;
     if offset.saturating_add(body.len() as u64) > cap {
         return Err(AppError::bare(StatusCode::PAYLOAD_TOO_LARGE));
     }
-    let slot = st.queue.upload(id, attempt);
+    let slot = st.queue.upload(id, attempt, name);
     let mut up = slot.lock().await;
     up.load(path)
         .await
@@ -270,6 +304,14 @@ pub async fn put_output(
     // A requeue may have removed this attempt's file since the fence: never recreate it then.
     if offset == 0 && leased(&st, id, attempt).await != Some(true) {
         return Err(conflict());
+    }
+    if offset == 0
+        && !name.is_empty()
+        && let Some(dir) = path.parent()
+    {
+        tokio::fs::create_dir_all(dir)
+            .await
+            .map_err(|e| AppError::internal(format!("{}: {e}", dir.display())))?;
     }
     let mut f = match OpenOptions::new()
         .write(true)
@@ -305,11 +347,12 @@ pub async fn put_output(
     Ok(ack(up.len).into_response())
 }
 
-/// The error of a remote output that does not match what the worker reported, or is missing.
+/// The error of a remote upload (`name` `""`: the optimize output) that does not match what the worker
+/// reported, or is missing; `path` is where it was staged.
 pub async fn output_error(
     st: &AppState,
-    id: i64,
-    attempt: i32,
+    (id, attempt, name): (i64, i32, &str),
+    path: &str,
     size: i64,
     sha: &str,
 ) -> Option<JobError> {
@@ -318,15 +361,12 @@ pub async fn output_error(
         message: m,
         stderr_tail: None,
     };
-    let slot = st.queue.upload(id, attempt);
+    let slot = st.queue.upload(id, attempt, name);
     let mut up = slot.lock().await;
-    let Some(path) = store::staged_of(&st.db, id).await.ok().flatten() else {
-        return Some(net("the staged output of the job is unknown".into()));
-    };
-    if let Err(e) = up.load(Path::new(&path)).await {
+    if let Err(e) = up.load(Path::new(path)).await {
         return Some(net(format!("{path}: {e}")));
     }
-    let on_disk = tokio::fs::metadata(&path).await.map(|m| m.len()).ok();
+    let on_disk = tokio::fs::metadata(path).await.map(|m| m.len()).ok();
     let got = crate::device_tokens::hex(&up.hasher.clone().finalize());
     (on_disk != Some(up.len) || up.len as i64 != size || !got.eq_ignore_ascii_case(sha)).then(
         || {

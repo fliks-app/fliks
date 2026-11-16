@@ -26,6 +26,7 @@ fn want<'a>(key: &'a str, codecs: &'a [String]) -> Want<'a> {
         fallback: codecs,
         max_jobs: 1,
         local: false,
+        karaoke: false,
     }
 }
 
@@ -308,6 +309,7 @@ fn workers_lists_only_live_instances() {
         principal: super::Principal::Local,
         engine_version: "1".into(),
         devices: vec![],
+        features: vec![],
     };
     q.register("old".into(), w());
     q.register("new".into(), w());
@@ -333,4 +335,56 @@ async fn a_lease_wakes_the_job_watcher(pool: PgPool) {
         .unwrap()
         .unwrap();
     assert!(woken.as_mut().now_or_never().is_some());
+}
+
+async fn separate_job(pool: &PgPool) -> i64 {
+    sqlx::query_scalar(
+        r#"INSERT INTO jobs (kind, payload, "profileHash", priority, "inPath", "inSize")
+           VALUES ('separate', '{"info":{"video":[],"audio":[],"subtitles":[]}}', 'h', -1, '/m/a.flac', 1)
+           RETURNING id"#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_separate_job_goes_only_to_a_karaoke_worker_on_its_cpu_device(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    separate_job(&pool).await;
+    let on = |device: &'static str| Want {
+        device,
+        karaoke: true,
+        ..want("w1", &[])
+    };
+    assert!(
+        store::take(&pool, &want("w1", &[]))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(store::take(&pool, &on("gpu0")).await.unwrap().is_none());
+    let t = store::take(&pool, &on("cpu")).await.unwrap().unwrap();
+    assert_eq!((t.kind.as_str(), t.staged_path), ("separate", None));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_model_failure_requeues_without_counting(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    let id = separate_job(&pool).await;
+    let w = Want {
+        karaoke: true,
+        ..want("w1", &[])
+    };
+    store::take(&pool, &w).await.unwrap().unwrap();
+    store::fail(&pool, id, "w1", 1, &err(JobErrorClass::Model))
+        .await
+        .unwrap();
+    let (state, failures): (String, i32) =
+        sqlx::query_as("SELECT state, failures FROM jobs WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((state.as_str(), failures), ("queued", 0));
 }

@@ -7,18 +7,32 @@ use std::{sync::atomic::Ordering, time::Duration};
 const WAKE_EVERY: Duration = Duration::from_secs(600);
 const PER_WAKE: i64 = 20;
 
-/// Rule 16, minus the budget: the pass may run now.
-pub async fn allowed(st: &AppState) -> bool {
+/// Where the pass sends `Separate`: to the optimization workers when one takes it, else to the main engine.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Route {
+    Workers,
+    Local,
+}
+
+/// Rule 16, minus the budget: where the pass runs now, `None` when it must not.
+pub async fn route(st: &AppState) -> Option<Route> {
     if !flag(st, "karaoke.enabled", false).await
         || !flag(st, "karaoke.background", true).await
-        || st.karaoke.stopped.load(Ordering::Relaxed)
+        || !super::caps(st).await.separate
     {
-        return false;
+        return None;
+    }
+    if super::remote::eligible_workers(st).await > 0 {
+        return Some(Route::Workers);
     }
     let features = st.engine.engine_features();
-    (flag(st, "karaoke.background_cpu", false).await
-        || gpu_provider(&features, &verified_providers(st).await).is_some())
-        && super::caps(st).await.separate
+    let local = flag(st, "karaoke.background_cpu", false).await
+        || gpu_provider(&features, &verified_providers(st).await).is_some();
+    (local && !st.karaoke.stopped.load(Ordering::Relaxed)).then_some(Route::Local)
+}
+
+pub async fn allowed(st: &AppState) -> bool {
+    route(st).await.is_some()
 }
 
 pub fn spawn(st: &AppState) {
@@ -72,6 +86,7 @@ async fn pass_loop(st: AppState) {
             () = st.karaoke.wake.notified() => {
                 st.karaoke.stopped.store(false, Ordering::Relaxed);
             }
+            () = st.karaoke.kick.notified() => {}
         }
         aligner::auto_download(&st).await;
         if let Err(e) = pass(&st).await {
@@ -82,14 +97,53 @@ async fn pass_loop(st: AppState) {
 
 /// Rules 16 and 17: up to 20 tracks without stems, newest first, until a run reports an unwanted CPU.
 async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
-    if !allowed(st).await {
-        return Ok(());
+    match route(st).await {
+        None => Ok(()),
+        Some(Route::Workers) => pass_workers(st).await,
+        Some(Route::Local) => {
+            // A job no worker took runs here now.
+            sqlx::query("DELETE FROM jobs WHERE kind = 'separate' AND state = 'queued'")
+                .execute(&st.db)
+                .await?;
+            crate::queue::watch::changed();
+            pass_local(st).await
+        }
     }
+}
+
+/// Queues the tracks for the workers, keeping at most `PER_WAKE` separation jobs active.
+async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
+    let budget = super::budget_bytes(st).await;
+    let mut active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM jobs WHERE kind = 'separate' AND state IN ('queued', 'leased')",
+    )
+    .fetch_one(&st.db)
+    .await?;
+    for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE).await? {
+        if active >= PER_WAKE || store::total(&st.db).await? >= budget / 10 * 9 {
+            break;
+        }
+        match super::remote::enqueue(st, item).await {
+            Ok(queued) => active += i64::from(queued),
+            Err(e) => {
+                tracing::warn!("karaoke separation of item #{item} not queued: {e}");
+                st.karaoke
+                    .failed
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(item);
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
     let budget = super::budget_bytes(st).await;
     let failed: Vec<i32> = fail_list(&st.karaoke);
     let tracks = store::unprepared(&st.db, &failed, PER_WAKE).await?;
     for item in tracks {
-        if store::total(&st.db).await? >= budget / 10 * 9 || !allowed(st).await {
+        if store::total(&st.db).await? >= budget / 10 * 9 || route(st).await != Some(Route::Local) {
             break;
         }
         let opts = run::Opts {

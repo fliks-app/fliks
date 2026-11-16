@@ -160,7 +160,10 @@ pub async fn list_jobs(
     let rows = sqlx::query(
         r#"SELECT j.id, j.kind, j."mediaFileId", j.state, j.priority, j.attempt, j.failures, j.progress, j.paused,
              j."workerId", j."deviceId", j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
-             m.title, m."libraryId" AS library_id, j.payload #>> '{plan,level}' AS level,
+             CASE WHEN j.kind = 'separate' THEN COALESCE((SELECT i.title FROM item_parts ip
+               JOIN items i ON i.id = ip."itemId" WHERE ip."mediaFileId" = j."mediaFileId"
+               ORDER BY ip.version, i.id LIMIT 1), m.title) ELSE m.title END AS title,
+             m."libraryId" AS library_id, j.payload #>> '{plan,level}' AS level,
              j.payload #>> '{plan,codec}' AS codec,
              (j.payload #>> '{info,durationSeconds}')::float8 AS duration,
              (j.kind = 'optimize' AND j.state = 'done' AND j.result #>> '{journal,backup}' IS NOT NULL
@@ -274,6 +277,8 @@ pub struct WorkerRow {
     engine_version: String,
     token_id: Option<i32>,
     devices: Vec<fliks_engine_core::api::WorkerDevice>,
+    /// The worker takes karaoke separation jobs now.
+    karaoke: bool,
     #[serde(with = "iso_ms")]
     last_seen_at: DateTime<Utc>,
 }
@@ -285,22 +290,21 @@ pub async fn list_workers(
     authed: Authed,
 ) -> Result<Json<Vec<WorkerRow>>, AppError> {
     manage_settings(&authed)?;
-    Ok(Json(
-        st.queue
-            .workers()
-            .into_iter()
-            .map(|(key, w, silent)| WorkerRow {
-                last_seen_at: Utc::now() - silent,
-                instance: key,
-                engine_version: w.engine_version,
-                token_id: match w.principal {
-                    super::Principal::Token(id) => Some(id),
-                    super::Principal::Local => None,
-                },
-                devices: w.devices,
-            })
-            .collect(),
-    ))
+    let mut rows = Vec::new();
+    for (key, w, silent) in st.queue.workers() {
+        rows.push(WorkerRow {
+            last_seen_at: Utc::now() - silent,
+            karaoke: crate::karaoke::remote::eligible(&st, &key, &w).await,
+            instance: key,
+            engine_version: w.engine_version,
+            token_id: match w.principal {
+                super::Principal::Token(id) => Some(id),
+                super::Principal::Local => None,
+            },
+            devices: w.devices,
+        });
+    }
+    Ok(Json(rows))
 }
 
 #[utoipa::path(get, path = "/api/optimize/workers/tokens", responses((status = 200)))]

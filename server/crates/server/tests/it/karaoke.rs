@@ -630,3 +630,145 @@ async fn a_failed_copy_keeps_the_imported_stem_the_header_still_names(pool: PgPo
     assert!(store::valid(&st.db, 1, "m", "1").await.unwrap());
     let _ = std::fs::remove_dir_all(store::file_dir(1));
 }
+
+use fliks_engine_core::api::{JobResultRequest, SeparateOutput, StemUpload};
+use fliks_server::karaoke::remote::{result, upload_path};
+
+async fn separate_lease(st: &AppState) -> i64 {
+    sqlx::query_scalar(
+        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", priority, state, attempt,
+             "workerId", "leaseUntil")
+           VALUES ('separate', 1, '{}', 'h', -1, 'leased', 1, 'k', now() + interval '1 minute')
+           RETURNING id"#,
+    )
+    .fetch_one(&st.db)
+    .await
+    .unwrap()
+}
+
+fn sha_of(b: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
+}
+
+/// Writes the three uploads of attempt 1 and the worker's result for them.
+fn uploaded(job: i64, sha_vocals: Option<&str>) -> JobResultRequest {
+    let dir = upload_path(job, 1, "vocals")
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    std::fs::create_dir_all(dir).unwrap();
+    let mut stems = vec![];
+    for name in ["vocals", "instrumental", "guide"] {
+        let body = format!("stem-{name}");
+        std::fs::write(upload_path(job, 1, name), &body).unwrap();
+        let sha = match (name, sha_vocals) {
+            ("vocals", Some(s)) => s.to_owned(),
+            _ => sha_of(body.as_bytes()),
+        };
+        stems.push(StemUpload {
+            name: name.into(),
+            size: body.len() as f64,
+            sha256: sha,
+        });
+    }
+    JobResultRequest {
+        worker_id: "w".into(),
+        attempt: 1,
+        ok: true,
+        out_size: 0.0,
+        out_sha256: None,
+        out_info: None,
+        error: None,
+        level: None,
+        copy_reason: None,
+        cpu_fallback: None,
+        nothing_to_do: false,
+        separate: Some(SeparateOutput {
+            model: "m".into(),
+            model_version: "1".into(),
+            provider: "cuda".into(),
+            duration_seconds: 12.3456,
+            stems,
+        }),
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_worker_result_stores_the_three_stems_and_leaves_no_job(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let job = separate_lease(&st).await;
+    let _ = result(&st, "k", job, uploaded(job, None)).await.unwrap();
+    let rows = store::rows(&st.db, 1).await.unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter()
+            .all(|r| r.provider == "cuda" && r.duration_ms == 12346)
+    );
+    assert!(rows.iter().all(|r| std::path::Path::new(&r.path).is_file()));
+    assert!(!upload_path(job, 1, "vocals").exists());
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM jobs WHERE id = $1")
+        .bind(job)
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    store::invalidate_files(&st.db, &[1]).await.unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_mismatched_stem_hash_stores_nothing_and_requeues_as_network(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let job = separate_lease(&st).await;
+    let _ = result(&st, "k", job, uploaded(job, Some("00")))
+        .await
+        .unwrap();
+    assert!(store::rows(&st.db, 1).await.unwrap().is_empty());
+    let (state, failures, class): (String, i32, String) =
+        sqlx::query_as("SELECT state, failures, error->>'class' FROM jobs WHERE id = $1")
+            .bind(job)
+            .fetch_one(&st.db)
+            .await
+            .unwrap();
+    assert_eq!(
+        (state.as_str(), failures, class.as_str()),
+        ("queued", 1, "network")
+    );
+    for name in ["vocals", "instrumental", "guide"] {
+        let _ = std::fs::remove_file(upload_path(job, 1, name));
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_track_already_valid_discards_the_uploads(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    let dir = Dir::new();
+    for kind in ["vocals", "instrumental", "guide"] {
+        stem(&st, dir.path(), 1, kind, "m").await;
+    }
+    let job = separate_lease(&st).await;
+    let _ = result(&st, "k", job, uploaded(job, None)).await.unwrap();
+    let rows = store::rows(&st.db, 1).await.unwrap();
+    assert!(
+        rows.iter().all(|r| r.provider == "cpu"),
+        "the earlier stems stay"
+    );
+    assert!(!upload_path(job, 1, "guide").exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_track_with_a_queued_or_leased_separation_is_not_unprepared(pool: PgPool) {
+    let (_app, st, _t) = ctx(&pool).await;
+    assert_eq!(store::unprepared(&st.db, &[], 10).await.unwrap(), [1]);
+    let job = separate_lease(&st).await;
+    assert!(store::unprepared(&st.db, &[], 10).await.unwrap().is_empty());
+    sqlx::query("UPDATE jobs SET state = 'failed' WHERE id = $1")
+        .bind(job)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    assert_eq!(store::unprepared(&st.db, &[], 10).await.unwrap(), [1]);
+}

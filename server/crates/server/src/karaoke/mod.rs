@@ -2,6 +2,7 @@
 pub mod aligner;
 mod background;
 pub mod cdg;
+pub mod remote;
 pub mod run;
 pub mod store;
 
@@ -69,6 +70,8 @@ pub struct Shared {
     /// Tracks the pass failed on, left alone until the process restarts.
     pub(crate) failed: Mutex<HashSet<i32>>,
     pub(crate) wake: Notify,
+    /// A karaoke-capable worker connected: the pass runs, `stopped` stays as it is.
+    pub(crate) kick: Notify,
     /// A re-alignment is running (rule 41).
     pub(crate) realigning: AtomicBool,
     /// Tracks of the running re-alignment, and how many are finished.
@@ -85,6 +88,7 @@ impl Default for Shared {
             stopped: AtomicBool::new(false),
             failed: Mutex::default(),
             wake: Notify::new(),
+            kick: Notify::new(),
             realigning: AtomicBool::new(false),
             realign_total: AtomicUsize::new(0),
             realign_done: AtomicUsize::new(0),
@@ -218,6 +222,7 @@ pub async fn status(State(st): State<AppState>, _a: Authed) -> Json<Value> {
         "ready": enabled && c.separate,
         "gpu": gpu,
         "background": background::allowed(&st).await,
+        "workers": remote::eligible_workers(&st).await,
     }))
 }
 
