@@ -5490,7 +5490,16 @@
       "enabled": "Ativar o karaoke",
       "enabled_hint": "As faixas podem ser preparadas assim que um modelo de separação de voz estiver instalado.",
       "background": "Preparar em segundo plano",
-      "background_hint": "Prepara as faixas das bibliotecas de álbuns quando a máquina está livre. Precisa de uma aceleração verificada.",
+      "background_hint": "Prepara as faixas das bibliotecas de álbuns com prioridade baixa.",
+      "background_cpu": "Preparar também no processador",
+      "background_cpu_hint": "Sem aceleração verificada, as faixas são preparadas no processador: muito mais lento, e a máquina fica ocupada.",
+      "background_state": {
+        "active": "Ativo.",
+        "active_cpu": "Ativo, no processador.",
+        "no_model": "Inativo: nenhum modelo de separação de voz instalado.",
+        "no_gpu": "Inativo: nenhuma aceleração verificada neste motor.",
+        "stopped": "Em pausa: a última faixa foi preparada no processador. Retoma no próximo arranque do motor ou alteração de definições."
+      },
       "budget": "Orçamento de disco (MB)",
       "budget_hint": "As pistas mais antigas são apagadas acima disto. Pelo menos {{min}}.",
       "budget_invalid": "O orçamento deve ser de pelo menos {{min}} MB.",

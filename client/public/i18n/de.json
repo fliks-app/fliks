@@ -5490,7 +5490,16 @@
       "enabled": "Karaoke aktivieren",
       "enabled_hint": "Titel lassen sich vorbereiten, sobald ein Modell zur Stimmentrennung installiert ist.",
       "background": "Im Hintergrund vorbereiten",
-      "background_hint": "Bereitet Titel von Album-Bibliotheken vor, wenn der Rechner im Leerlauf ist. Braucht eine geprüfte Beschleunigung.",
+      "background_hint": "Bereitet Titel von Album-Bibliotheken mit niedriger Priorität vor.",
+      "background_cpu": "Auch auf dem Prozessor vorbereiten",
+      "background_cpu_hint": "Ohne geprüfte Beschleunigung werden Titel auf dem Prozessor vorbereitet: viel langsamer, und der Rechner bleibt ausgelastet.",
+      "background_state": {
+        "active": "Aktiv.",
+        "active_cpu": "Aktiv, auf dem Prozessor.",
+        "no_model": "Inaktiv: kein Modell zur Stimmtrennung installiert.",
+        "no_gpu": "Inaktiv: keine geprüfte Beschleunigung auf dieser Engine.",
+        "stopped": "Pausiert: der letzte Titel lief auf dem Prozessor. Läuft beim nächsten Engine-Start oder bei einer Einstellungsänderung weiter."
+      },
       "budget": "Speicherbudget (MB)",
       "budget_hint": "Die ältesten Spuren werden darüber hinaus gelöscht. Mindestens {{min}}.",
       "budget_invalid": "Das Budget muss mindestens {{min}} MB betragen.",

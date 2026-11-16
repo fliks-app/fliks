@@ -5490,7 +5490,16 @@
       "enabled": "Attiva il karaoke",
       "enabled_hint": "I brani si possono preparare appena è installato un modello di separazione della voce.",
       "background": "Prepara in background",
-      "background_hint": "Prepara i brani delle librerie di album quando la macchina è a riposo. Richiede un'accelerazione verificata.",
+      "background_hint": "Prepara i brani delle librerie di album con priorità bassa.",
+      "background_cpu": "Prepara anche sul processore",
+      "background_cpu_hint": "Senza un'accelerazione verificata, i brani vengono preparati sul processore: molto più lento, e la macchina resta occupata.",
+      "background_state": {
+        "active": "Attivo.",
+        "active_cpu": "Attivo, sul processore.",
+        "no_model": "Inattivo: nessun modello di separazione della voce installato.",
+        "no_gpu": "Inattivo: nessuna accelerazione verificata su questo motore.",
+        "stopped": "In pausa: l'ultimo brano è stato preparato sul processore. Riprende al prossimo avvio del motore o cambio di impostazioni."
+      },
       "budget": "Budget disco (MB)",
       "budget_hint": "Le tracce più vecchie vengono eliminate oltre questo limite. Almeno {{min}}.",
       "budget_invalid": "Il budget deve essere di almeno {{min}} MB.",

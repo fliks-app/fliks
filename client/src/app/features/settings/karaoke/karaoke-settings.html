@@ -11,6 +11,12 @@
       <div class="card-body gap-4">
         <app-toggle-field [label]="'karaoke.admin.enabled' | translate" [hint]="'karaoke.admin.enabled_hint' | translate" [value]="enabled()" (valueChange)="enabled.set($event)" />
         <app-toggle-field [label]="'karaoke.admin.background' | translate" [hint]="'karaoke.admin.background_hint' | translate" [value]="background()" (valueChange)="background.set($event)" />
+        @if (background()) {
+          @if (backgroundStatus(); as state) {
+            <p class="-mt-2 text-sm text-base-content/60" data-testid="karaoke-background-state">{{ 'karaoke.admin.background_state.' + state | translate }}</p>
+          }
+          <app-toggle-field [label]="'karaoke.admin.background_cpu' | translate" [hint]="'karaoke.admin.background_cpu_hint' | translate" [value]="backgroundCpu()" (valueChange)="backgroundCpu.set($event)" />
+        }
         <app-toggle-field [label]="'karaoke.admin.auto_download' | translate" [hint]="'karaoke.admin.auto_download_hint' | translate" [value]="autoDownload()" (valueChange)="autoDownload.set($event)" />
         <div>
           <app-select-field [label]="'karaoke.admin.aligner_mode' | translate" [hint]="'karaoke.admin.aligner_mode_hint' | translate" [value]="aligner()" (valueChange)="aligner.set($event)">

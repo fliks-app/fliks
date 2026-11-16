@@ -5532,7 +5532,16 @@
       "enabled": "Enable karaoke",
       "enabled_hint": "Tracks can be prepared once a voice separation model is installed.",
       "background": "Prepare in the background",
-      "background_hint": "Prepare tracks of album libraries when the machine is idle. Needs a verified acceleration.",
+      "background_hint": "Prepares tracks of album libraries at low priority.",
+      "background_cpu": "Also prepare on the processor",
+      "background_cpu_hint": "Without a verified acceleration, tracks are prepared on the processor: much slower, and the machine stays busy.",
+      "background_state": {
+        "active": "Active.",
+        "active_cpu": "Active, on the processor.",
+        "no_model": "Inactive: no voice separation model installed.",
+        "no_gpu": "Inactive: no verified acceleration on this engine.",
+        "stopped": "Paused: the last track ran on the processor. Resumes at the next engine start or settings change."
+      },
       "budget": "Disk budget (MB)",
       "budget_hint": "Oldest stems are removed past this size. At least {{min}}.",
       "budget_invalid": "The budget must be at least {{min}} MB.",
