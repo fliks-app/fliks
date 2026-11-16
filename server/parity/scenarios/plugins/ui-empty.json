@@ -12,7 +12,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "audible.description": "Hörbuch-Metadaten aus dem inoffiziellen Audible-Katalog: Suche und Ausgaben nach ASIN."
+              },
+              "es": {
+                "audible.description": "Metadatos de audiolibros del catálogo no oficial de Audible: búsqueda y ediciones por ASIN."
+              },
+              "fr": {
+                "audible.description": "Métadonnées de livres audio depuis le catalogue Audible non officiel : recherche et éditions par ASIN."
+              },
+              "it": {
+                "audible.description": "Metadati di audiolibri dal catalogo Audible non ufficiale: ricerca ed edizioni per ASIN."
+              },
+              "pt": {
+                "audible.description": "Metadados de audiolivros do catálogo não oficial da Audible: pesquisa e edições por ASIN."
+              }
+            },
             "name": "Audible",
             "pluginId": "fliks.audible",
             "provider": {
@@ -28,7 +44,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "audnexus.description": "Hörbuch-Metadaten und Kapitel von Audnexus, nach ASIN."
+              },
+              "es": {
+                "audnexus.description": "Metadatos y capítulos de audiolibros de Audnexus, por ASIN."
+              },
+              "fr": {
+                "audnexus.description": "Métadonnées et chapitres de livres audio depuis Audnexus, par ASIN."
+              },
+              "it": {
+                "audnexus.description": "Metadati e capitoli di audiolibri da Audnexus, per ASIN."
+              },
+              "pt": {
+                "audnexus.description": "Metadados e capítulos de audiolivros do Audnexus, por ASIN."
+              }
+            },
             "name": "Audnexus",
             "pluginId": "fliks.audnexus",
             "provider": {
@@ -44,7 +76,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "bnf.description": "Buch-Metadaten aus dem Gesamtkatalog der BnF: Suche und Ausgaben nach ISBN oder Datensatznummer."
+              },
+              "es": {
+                "bnf.description": "Metadatos de libros del catálogo general de la BnF: búsqueda y ediciones por ISBN o número de registro."
+              },
+              "fr": {
+                "bnf.description": "Métadonnées de livres depuis le catalogue général de la BnF : recherche et éditions par ISBN ou numéro de notice."
+              },
+              "it": {
+                "bnf.description": "Metadati di libri dal catalogo generale della BnF: ricerca ed edizioni per ISBN o numero di scheda."
+              },
+              "pt": {
+                "bnf.description": "Metadados de livros do catálogo geral da BnF: pesquisa e edições por ISBN ou número de registro."
+              }
+            },
             "name": "BnF",
             "pluginId": "fliks.bnf",
             "provider": {
@@ -102,6 +150,9 @@
               }
             ],
             "i18n": {
+              "de": {
+                "fanarttv.description": "Künstlerbilder und Albumcover von Fanart.tv, anhand von MusicBrainz-IDs."
+              },
               "en": {
                 "fanarttv.config.apiKey": "API key",
                 "fanarttv.config.apiKey_hint": "Fliks ships a project key. Type your own to use it instead.",
@@ -111,6 +162,9 @@
                 "fanarttv.config.subtitle": "Artist images and album covers from Fanart.tv.",
                 "fanarttv.config.title": "Fanart.tv"
               },
+              "es": {
+                "fanarttv.description": "Imágenes de artistas y portadas de álbumes de Fanart.tv, por identificadores de MusicBrainz."
+              },
               "fr": {
                 "fanarttv.config.apiKey": "Clé d'API",
                 "fanarttv.config.apiKey_hint": "Fliks fournit une clé de projet. Saisissez la vôtre pour l'utiliser à la place.",
@@ -118,7 +172,14 @@
                 "fanarttv.config.clientKey": "Clé personnelle",
                 "fanarttv.config.clientKey_hint": "Facultatif. Votre clé d'API personnelle Fanart.tv, envoyée avec chaque requête.",
                 "fanarttv.config.subtitle": "Images d'artistes et pochettes d'albums de Fanart.tv.",
-                "fanarttv.config.title": "Fanart.tv"
+                "fanarttv.config.title": "Fanart.tv",
+                "fanarttv.description": "Images d'artistes et pochettes d'albums depuis Fanart.tv, par identifiants MusicBrainz."
+              },
+              "it": {
+                "fanarttv.description": "Immagini di artisti e copertine di album da Fanart.tv, tramite gli identificativi MusicBrainz."
+              },
+              "pt": {
+                "fanarttv.description": "Imagens de artistas e capas de álbuns do Fanart.tv, por identificadores do MusicBrainz."
               }
             },
             "name": "Fanart.tv",
@@ -136,7 +197,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "googlebooks.description": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID."
+              },
+              "es": {
+                "googlebooks.description": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen."
+              },
+              "fr": {
+                "googlebooks.description": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume."
+              },
+              "it": {
+                "googlebooks.description": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume."
+              },
+              "pt": {
+                "googlebooks.description": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume."
+              }
+            },
             "name": "Google Books",
             "pluginId": "fliks.googlebooks",
             "provider": {
@@ -176,15 +253,28 @@
               }
             ],
             "i18n": {
+              "de": {
+                "lrclib.description": "Synchronisierte und einfache Liedtexte von LRCLIB, zugeordnet über Titel, Künstler, Album und Dauer."
+              },
               "en": {
                 "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net).",
                 "lrclib.config.subtitle": "Synced and plain lyrics from LRCLIB. No account or key needed.",
                 "lrclib.config.title": "LRCLIB"
               },
+              "es": {
+                "lrclib.description": "Letras sincronizadas y simples de LRCLIB, emparejadas por título, artista, álbum y duración."
+              },
               "fr": {
                 "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net).",
                 "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
-                "lrclib.config.title": "LRCLIB"
+                "lrclib.config.title": "LRCLIB",
+                "lrclib.description": "Paroles synchronisées et simples depuis LRCLIB, associées par titre, artiste, album et durée."
+              },
+              "it": {
+                "lrclib.description": "Testi sincronizzati e semplici da LRCLIB, abbinati per titolo, artista, album e durata."
+              },
+              "pt": {
+                "lrclib.description": "Letras sincronizadas e simples do LRCLIB, associadas por título, artista, álbum e duração."
               }
             },
             "name": "LRCLIB",
@@ -290,7 +380,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "openlibrary.description": "Buch-Metadaten von OpenLibrary: Suche, Werke und ihre Ausgaben."
+              },
+              "es": {
+                "openlibrary.description": "Metadatos de libros de OpenLibrary: búsqueda, obras y sus ediciones."
+              },
+              "fr": {
+                "openlibrary.description": "Métadonnées de livres depuis OpenLibrary : recherche, œuvres et leurs éditions."
+              },
+              "it": {
+                "openlibrary.description": "Metadati di libri da OpenLibrary: ricerca, opere e relative edizioni."
+              },
+              "pt": {
+                "openlibrary.description": "Metadados de livros do OpenLibrary: pesquisa, obras e as suas edições."
+              }
+            },
             "name": "OpenLibrary",
             "pluginId": "fliks.openlibrary",
             "provider": {
@@ -334,17 +440,30 @@
               }
             ],
             "i18n": {
+              "de": {
+                "thexem.description": "Ordnet die Staffel- und Episodennummern von Release-Namen den ausgestrahlten zu, für Serien mit abweichender Nummerierung, über TheXEM."
+              },
               "en": {
                 "thexem.config.baseUrl": "Base URL",
                 "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info.",
                 "thexem.config.subtitle": "Scene numbering of series released under another numbering than the library's.",
                 "thexem.config.title": "TheXEM"
               },
+              "es": {
+                "thexem.description": "Asocia los números de temporada y episodio de los nombres de lanzamiento con los de emisión, para series publicadas con otra numeración, desde TheXEM."
+              },
               "fr": {
                 "thexem.config.baseUrl": "URL de base",
                 "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info.",
                 "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
-                "thexem.config.title": "TheXEM"
+                "thexem.config.title": "TheXEM",
+                "thexem.description": "Fait correspondre les numéros de saison et d'épisode des noms de releases aux numéros de diffusion, pour les séries publiées sous une autre numérotation, depuis TheXEM."
+              },
+              "it": {
+                "thexem.description": "Associa i numeri di stagione ed episodio dei nomi delle release a quelli di messa in onda, per le serie pubblicate con un'altra numerazione, tramite TheXEM."
+              },
+              "pt": {
+                "thexem.description": "Associa os números de temporada e episódio dos nomes de lançamento aos de exibição, para séries publicadas com outra numeração, a partir do TheXEM."
               }
             },
             "name": "TheXEM scene numbering",
@@ -391,17 +510,30 @@
               }
             ],
             "i18n": {
+              "de": {
+                "tmdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Listen von The Movie Database."
+              },
               "en": {
                 "tmdb.config.apiKey": "API key",
                 "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with.",
                 "tmdb.config.subtitle": "Movie and series metadata from The Movie Database.",
                 "tmdb.config.title": "TMDB"
               },
+              "es": {
+                "tmdb.description": "Metadatos de películas y series, imágenes, personas y listas de The Movie Database."
+              },
               "fr": {
                 "tmdb.config.apiKey": "Clé d'API",
                 "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
                 "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
-                "tmdb.config.title": "TMDB"
+                "tmdb.config.title": "TMDB",
+                "tmdb.description": "Métadonnées de films et de séries, images, personnes et listes depuis The Movie Database."
+              },
+              "it": {
+                "tmdb.description": "Metadati di film e serie, immagini, persone e liste da The Movie Database."
+              },
+              "pt": {
+                "tmdb.description": "Metadados de filmes e séries, imagens, pessoas e listas do The Movie Database."
               }
             },
             "name": "TMDB",
@@ -449,17 +581,30 @@
               }
             ],
             "i18n": {
+              "de": {
+                "tvdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Mitwirkende von TheTVDB."
+              },
               "en": {
                 "tvdb.config.apiKey": "API key",
                 "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with.",
                 "tvdb.config.subtitle": "Movie and series metadata from TheTVDB.",
                 "tvdb.config.title": "TheTVDB"
               },
+              "es": {
+                "tvdb.description": "Metadatos de películas y series, imágenes, personas y créditos de TheTVDB."
+              },
               "fr": {
                 "tvdb.config.apiKey": "Clé d'API",
                 "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
                 "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
-                "tvdb.config.title": "TheTVDB"
+                "tvdb.config.title": "TheTVDB",
+                "tvdb.description": "Métadonnées de films et de séries, images, personnes et génériques depuis TheTVDB."
+              },
+              "it": {
+                "tvdb.description": "Metadati di film e serie, immagini, persone e crediti da TheTVDB."
+              },
+              "pt": {
+                "tvdb.description": "Metadados de filmes e séries, imagens, pessoas e créditos do TheTVDB."
               }
             },
             "name": "TheTVDB",
@@ -488,7 +633,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "audible.description": "Hörbuch-Metadaten aus dem inoffiziellen Audible-Katalog: Suche und Ausgaben nach ASIN."
+              },
+              "es": {
+                "audible.description": "Metadatos de audiolibros del catálogo no oficial de Audible: búsqueda y ediciones por ASIN."
+              },
+              "fr": {
+                "audible.description": "Métadonnées de livres audio depuis le catalogue Audible non officiel : recherche et éditions par ASIN."
+              },
+              "it": {
+                "audible.description": "Metadati di audiolibri dal catalogo Audible non ufficiale: ricerca ed edizioni per ASIN."
+              },
+              "pt": {
+                "audible.description": "Metadados de audiolivros do catálogo não oficial da Audible: pesquisa e edições por ASIN."
+              }
+            },
             "name": "Audible",
             "pluginId": "fliks.audible",
             "provider": {
@@ -504,7 +665,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "audnexus.description": "Hörbuch-Metadaten und Kapitel von Audnexus, nach ASIN."
+              },
+              "es": {
+                "audnexus.description": "Metadatos y capítulos de audiolibros de Audnexus, por ASIN."
+              },
+              "fr": {
+                "audnexus.description": "Métadonnées et chapitres de livres audio depuis Audnexus, par ASIN."
+              },
+              "it": {
+                "audnexus.description": "Metadati e capitoli di audiolibri da Audnexus, per ASIN."
+              },
+              "pt": {
+                "audnexus.description": "Metadados e capítulos de audiolivros do Audnexus, por ASIN."
+              }
+            },
             "name": "Audnexus",
             "pluginId": "fliks.audnexus",
             "provider": {
@@ -520,7 +697,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "bnf.description": "Buch-Metadaten aus dem Gesamtkatalog der BnF: Suche und Ausgaben nach ISBN oder Datensatznummer."
+              },
+              "es": {
+                "bnf.description": "Metadatos de libros del catálogo general de la BnF: búsqueda y ediciones por ISBN o número de registro."
+              },
+              "fr": {
+                "bnf.description": "Métadonnées de livres depuis le catalogue général de la BnF : recherche et éditions par ISBN ou numéro de notice."
+              },
+              "it": {
+                "bnf.description": "Metadati di libri dal catalogo generale della BnF: ricerca ed edizioni per ISBN o numero di scheda."
+              },
+              "pt": {
+                "bnf.description": "Metadados de livros do catálogo geral da BnF: pesquisa e edições por ISBN ou número de registro."
+              }
+            },
             "name": "BnF",
             "pluginId": "fliks.bnf",
             "provider": {
@@ -537,6 +730,9 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "fanarttv.description": "Künstlerbilder und Albumcover von Fanart.tv, anhand von MusicBrainz-IDs."
+              },
               "en": {
                 "fanarttv.config.apiKey": "API key",
                 "fanarttv.config.apiKey_hint": "Fliks ships a project key. Type your own to use it instead.",
@@ -546,6 +742,9 @@
                 "fanarttv.config.subtitle": "Artist images and album covers from Fanart.tv.",
                 "fanarttv.config.title": "Fanart.tv"
               },
+              "es": {
+                "fanarttv.description": "Imágenes de artistas y portadas de álbumes de Fanart.tv, por identificadores de MusicBrainz."
+              },
               "fr": {
                 "fanarttv.config.apiKey": "Clé d'API",
                 "fanarttv.config.apiKey_hint": "Fliks fournit une clé de projet. Saisissez la vôtre pour l'utiliser à la place.",
@@ -553,7 +752,14 @@
                 "fanarttv.config.clientKey": "Clé personnelle",
                 "fanarttv.config.clientKey_hint": "Facultatif. Votre clé d'API personnelle Fanart.tv, envoyée avec chaque requête.",
                 "fanarttv.config.subtitle": "Images d'artistes et pochettes d'albums de Fanart.tv.",
-                "fanarttv.config.title": "Fanart.tv"
+                "fanarttv.config.title": "Fanart.tv",
+                "fanarttv.description": "Images d'artistes et pochettes d'albums depuis Fanart.tv, par identifiants MusicBrainz."
+              },
+              "it": {
+                "fanarttv.description": "Immagini di artisti e copertine di album da Fanart.tv, tramite gli identificativi MusicBrainz."
+              },
+              "pt": {
+                "fanarttv.description": "Imagens de artistas e capas de álbuns do Fanart.tv, por identificadores do MusicBrainz."
               }
             },
             "name": "Fanart.tv",
@@ -571,7 +777,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "googlebooks.description": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID."
+              },
+              "es": {
+                "googlebooks.description": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen."
+              },
+              "fr": {
+                "googlebooks.description": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume."
+              },
+              "it": {
+                "googlebooks.description": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume."
+              },
+              "pt": {
+                "googlebooks.description": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume."
+              }
+            },
             "name": "Google Books",
             "pluginId": "fliks.googlebooks",
             "provider": {
@@ -588,15 +810,28 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "lrclib.description": "Synchronisierte und einfache Liedtexte von LRCLIB, zugeordnet über Titel, Künstler, Album und Dauer."
+              },
               "en": {
                 "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net).",
                 "lrclib.config.subtitle": "Synced and plain lyrics from LRCLIB. No account or key needed.",
                 "lrclib.config.title": "LRCLIB"
               },
+              "es": {
+                "lrclib.description": "Letras sincronizadas y simples de LRCLIB, emparejadas por título, artista, álbum y duración."
+              },
               "fr": {
                 "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net).",
                 "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
-                "lrclib.config.title": "LRCLIB"
+                "lrclib.config.title": "LRCLIB",
+                "lrclib.description": "Paroles synchronisées et simples depuis LRCLIB, associées par titre, artiste, album et durée."
+              },
+              "it": {
+                "lrclib.description": "Testi sincronizzati e semplici da LRCLIB, abbinati per titolo, artista, album e durata."
+              },
+              "pt": {
+                "lrclib.description": "Letras sincronizadas e simples do LRCLIB, associadas por título, artista, álbum e duração."
               }
             },
             "name": "LRCLIB",
@@ -662,7 +897,23 @@
           {
             "configPages": [],
             "contributions": [],
-            "i18n": {},
+            "i18n": {
+              "de": {
+                "openlibrary.description": "Buch-Metadaten von OpenLibrary: Suche, Werke und ihre Ausgaben."
+              },
+              "es": {
+                "openlibrary.description": "Metadatos de libros de OpenLibrary: búsqueda, obras y sus ediciones."
+              },
+              "fr": {
+                "openlibrary.description": "Métadonnées de livres depuis OpenLibrary : recherche, œuvres et leurs éditions."
+              },
+              "it": {
+                "openlibrary.description": "Metadati di libri da OpenLibrary: ricerca, opere e relative edizioni."
+              },
+              "pt": {
+                "openlibrary.description": "Metadados de livros do OpenLibrary: pesquisa, obras e as suas edições."
+              }
+            },
             "name": "OpenLibrary",
             "pluginId": "fliks.openlibrary",
             "provider": {
@@ -679,17 +930,30 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "thexem.description": "Ordnet die Staffel- und Episodennummern von Release-Namen den ausgestrahlten zu, für Serien mit abweichender Nummerierung, über TheXEM."
+              },
               "en": {
                 "thexem.config.baseUrl": "Base URL",
                 "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info.",
                 "thexem.config.subtitle": "Scene numbering of series released under another numbering than the library's.",
                 "thexem.config.title": "TheXEM"
               },
+              "es": {
+                "thexem.description": "Asocia los números de temporada y episodio de los nombres de lanzamiento con los de emisión, para series publicadas con otra numeración, desde TheXEM."
+              },
               "fr": {
                 "thexem.config.baseUrl": "URL de base",
                 "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info.",
                 "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
-                "thexem.config.title": "TheXEM"
+                "thexem.config.title": "TheXEM",
+                "thexem.description": "Fait correspondre les numéros de saison et d'épisode des noms de releases aux numéros de diffusion, pour les séries publiées sous une autre numérotation, depuis TheXEM."
+              },
+              "it": {
+                "thexem.description": "Associa i numeri di stagione ed episodio dei nomi delle release a quelli di messa in onda, per le serie pubblicate con un'altra numerazione, tramite TheXEM."
+              },
+              "pt": {
+                "thexem.description": "Associa os números de temporada e episódio dos nomes de lançamento aos de exibição, para séries publicadas com outra numeração, a partir do TheXEM."
               }
             },
             "name": "TheXEM scene numbering",
@@ -708,17 +972,30 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "tmdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Listen von The Movie Database."
+              },
               "en": {
                 "tmdb.config.apiKey": "API key",
                 "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with.",
                 "tmdb.config.subtitle": "Movie and series metadata from The Movie Database.",
                 "tmdb.config.title": "TMDB"
               },
+              "es": {
+                "tmdb.description": "Metadatos de películas y series, imágenes, personas y listas de The Movie Database."
+              },
               "fr": {
                 "tmdb.config.apiKey": "Clé d'API",
                 "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
                 "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
-                "tmdb.config.title": "TMDB"
+                "tmdb.config.title": "TMDB",
+                "tmdb.description": "Métadonnées de films et de séries, images, personnes et listes depuis The Movie Database."
+              },
+              "it": {
+                "tmdb.description": "Metadati di film e serie, immagini, persone e liste da The Movie Database."
+              },
+              "pt": {
+                "tmdb.description": "Metadados de filmes e séries, imagens, pessoas e listas do The Movie Database."
               }
             },
             "name": "TMDB",
@@ -738,17 +1015,30 @@
             "configPages": [],
             "contributions": [],
             "i18n": {
+              "de": {
+                "tvdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Mitwirkende von TheTVDB."
+              },
               "en": {
                 "tvdb.config.apiKey": "API key",
                 "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with.",
                 "tvdb.config.subtitle": "Movie and series metadata from TheTVDB.",
                 "tvdb.config.title": "TheTVDB"
               },
+              "es": {
+                "tvdb.description": "Metadatos de películas y series, imágenes, personas y créditos de TheTVDB."
+              },
               "fr": {
                 "tvdb.config.apiKey": "Clé d'API",
                 "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks.",
                 "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
-                "tvdb.config.title": "TheTVDB"
+                "tvdb.config.title": "TheTVDB",
+                "tvdb.description": "Métadonnées de films et de séries, images, personnes et génériques depuis TheTVDB."
+              },
+              "it": {
+                "tvdb.description": "Metadati di film e serie, immagini, persone e crediti da TheTVDB."
+              },
+              "pt": {
+                "tvdb.description": "Metadados de filmes e séries, imagens, pessoas e créditos do TheTVDB."
               }
             },
             "name": "TheTVDB",

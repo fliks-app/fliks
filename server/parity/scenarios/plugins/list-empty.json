@@ -19,7 +19,13 @@
               "provider:tmdb:series"
             ],
             "description": "Movie and series metadata, images, people and lists from The Movie Database.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Film- und Serien-Metadaten, Bilder, Personen und Listen von The Movie Database.",
+              "es": "Metadatos de películas y series, imágenes, personas y listas de The Movie Database.",
+              "fr": "Métadonnées de films et de séries, images, personnes et listes depuis The Movie Database.",
+              "it": "Metadati di film e serie, immagini, persone e liste da The Movie Database.",
+              "pt": "Metadados de filmes e séries, imagens, pessoas e listas do The Movie Database."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -43,7 +49,13 @@
               "provider:tvdb:series"
             ],
             "description": "Movie and series metadata, images, people and credits from TheTVDB.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Film- und Serien-Metadaten, Bilder, Personen und Mitwirkende von TheTVDB.",
+              "es": "Metadatos de películas y series, imágenes, personas y créditos de TheTVDB.",
+              "fr": "Métadonnées de films et de séries, images, personnes et génériques depuis TheTVDB.",
+              "it": "Metadati di film e serie, immagini, persone e crediti da TheTVDB.",
+              "pt": "Metadados de filmes e séries, imagens, pessoas e créditos do TheTVDB."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -64,7 +76,13 @@
               "provider:openlibrary:book"
             ],
             "description": "Book metadata from OpenLibrary: search, works and their editions.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Buch-Metadaten von OpenLibrary: Suche, Werke und ihre Ausgaben.",
+              "es": "Metadatos de libros de OpenLibrary: búsqueda, obras y sus ediciones.",
+              "fr": "Métadonnées de livres depuis OpenLibrary : recherche, œuvres et leurs éditions.",
+              "it": "Metadati di libri da OpenLibrary: ricerca, opere e relative edizioni.",
+              "pt": "Metadados de livros do OpenLibrary: pesquisa, obras e as suas edições."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -85,7 +103,13 @@
               "provider:bnf:book"
             ],
             "description": "Book metadata from the BnF general catalogue: search and editions by ISBN or notice id.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Buch-Metadaten aus dem Gesamtkatalog der BnF: Suche und Ausgaben nach ISBN oder Datensatznummer.",
+              "es": "Metadatos de libros del catálogo general de la BnF: búsqueda y ediciones por ISBN o número de registro.",
+              "fr": "Métadonnées de livres depuis le catalogue général de la BnF : recherche et éditions par ISBN ou numéro de notice.",
+              "it": "Metadati di libri dal catalogo generale della BnF: ricerca ed edizioni per ISBN o numero di scheda.",
+              "pt": "Metadados de livros do catálogo geral da BnF: pesquisa e edições por ISBN ou número de registro."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -106,7 +130,13 @@
               "provider:googlebooks:book"
             ],
             "description": "Book metadata from Google Books: search and editions by ISBN or volume id.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID.",
+              "es": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen.",
+              "fr": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume.",
+              "it": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume.",
+              "pt": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -127,7 +157,13 @@
               "provider:audible:book"
             ],
             "description": "Audiobook metadata from the unofficial Audible catalog: search and editions by ASIN.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Hörbuch-Metadaten aus dem inoffiziellen Audible-Katalog: Suche und Ausgaben nach ASIN.",
+              "es": "Metadatos de audiolibros del catálogo no oficial de Audible: búsqueda y ediciones por ASIN.",
+              "fr": "Métadonnées de livres audio depuis le catalogue Audible non officiel : recherche et éditions par ASIN.",
+              "it": "Metadati di audiolibri dal catalogo Audible non ufficiale: ricerca ed edizioni per ASIN.",
+              "pt": "Metadados de audiolivros do catálogo não oficial da Audible: pesquisa e edições por ASIN."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -148,7 +184,13 @@
               "provider:audnexus:book"
             ],
             "description": "Audiobook metadata and chapters from Audnexus, by ASIN.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Hörbuch-Metadaten und Kapitel von Audnexus, nach ASIN.",
+              "es": "Metadatos y capítulos de audiolibros de Audnexus, por ASIN.",
+              "fr": "Métadonnées et chapitres de livres audio depuis Audnexus, par ASIN.",
+              "it": "Metadati e capitoli di audiolibri da Audnexus, per ASIN.",
+              "pt": "Metadados e capítulos de audiolivros do Audnexus, por ASIN."
+            },
             "enabled": true,
             "homepage": null,
             "kind": "process",
@@ -171,7 +213,13 @@
               "provider:fliks.thexem:xem:series"
             ],
             "description": "Maps the season and episode numbers of release names to the aired ones for series released under another numbering, from TheXEM.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Ordnet die Staffel- und Episodennummern von Release-Namen den ausgestrahlten zu, für Serien mit abweichender Nummerierung, über TheXEM.",
+              "es": "Asocia los números de temporada y episodio de los nombres de lanzamiento con los de emisión, para series publicadas con otra numeración, desde TheXEM.",
+              "fr": "Fait correspondre les numéros de saison et d'épisode des noms de releases aux numéros de diffusion, pour les séries publiées sous une autre numérotation, depuis TheXEM.",
+              "it": "Associa i numeri di stagione ed episodio dei nomi delle release a quelli di messa in onda, per le serie pubblicate con un'altra numerazione, tramite TheXEM.",
+              "pt": "Associa os números de temporada e episódio dos nomes de lançamento aos de exibição, para séries publicadas com outra numeração, a partir do TheXEM."
+            },
             "enabled": true,
             "homepage": "https://thexem.info",
             "kind": "process",
@@ -224,7 +272,13 @@
               "provider:fanarttv:album"
             ],
             "description": "Artist images and album covers from Fanart.tv, keyed by MusicBrainz ids.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Künstlerbilder und Albumcover von Fanart.tv, anhand von MusicBrainz-IDs.",
+              "es": "Imágenes de artistas y portadas de álbumes de Fanart.tv, por identificadores de MusicBrainz.",
+              "fr": "Images d'artistes et pochettes d'albums depuis Fanart.tv, par identifiants MusicBrainz.",
+              "it": "Immagini di artisti e copertine di album da Fanart.tv, tramite gli identificativi MusicBrainz.",
+              "pt": "Imagens de artistas e capas de álbuns do Fanart.tv, por identificadores do MusicBrainz."
+            },
             "enabled": true,
             "homepage": "https://fanart.tv",
             "kind": "process",
@@ -247,7 +301,13 @@
               "provider:fliks.lrclib:lrclib:album"
             ],
             "description": "Synced and plain lyrics from LRCLIB, matched on title, artist, album and duration.",
-            "descriptions": {},
+            "descriptions": {
+              "de": "Synchronisierte und einfache Liedtexte von LRCLIB, zugeordnet über Titel, Künstler, Album und Dauer.",
+              "es": "Letras sincronizadas y simples de LRCLIB, emparejadas por título, artista, álbum y duración.",
+              "fr": "Paroles synchronisées et simples depuis LRCLIB, associées par titre, artiste, album et durée.",
+              "it": "Testi sincronizzati e semplici da LRCLIB, abbinati per titolo, artista, album e durata.",
+              "pt": "Letras sincronizadas e simples do LRCLIB, associadas por título, artista, álbum e duração."
+            },
             "enabled": true,
             "homepage": "https://lrclib.net",
             "kind": "process",
