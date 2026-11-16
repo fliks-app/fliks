@@ -311,12 +311,12 @@ async fn a_direct_import_searches_once_with_the_media_added_reason(pool: PgPool)
     for (uri, body, library) in [
         (
             "/api/media/import/tmdb",
-            json!({"type": "movie", "tmdbId": 41, "libraryId": MOVIES}),
+            json!({"type": "movie", "tmdbId": 41, "libraryId": MOVIES, "qualityProfileId": 1}),
             MOVIES,
         ),
         (
             "/api/media/import",
-            json!({"type": "series", "externalId": "42", "provider": "tmdb", "libraryId": SERIES}),
+            json!({"type": "series", "externalId": "42", "provider": "tmdb", "libraryId": SERIES, "qualityProfileId": 1}),
             SERIES,
         ),
     ] {
@@ -349,7 +349,7 @@ async fn an_add_with_nothing_wanted_asks_no_search(pool: PgPool) {
         "POST",
         "/api/media/import/tmdb",
         &c.admin,
-        json!({"type": "movie", "tmdbId": 43, "libraryId": MOVIES}),
+        json!({"type": "movie", "tmdbId": 43, "libraryId": MOVIES, "qualityProfileId": 1}),
     )
     .await;
     assert_eq!(s, 201, "{r}");

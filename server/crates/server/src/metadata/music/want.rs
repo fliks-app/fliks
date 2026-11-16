@@ -753,6 +753,10 @@ pub(crate) mod tests {
         use axum::{body::Body, http::Request};
         use tower::ServiceExt;
         let st = state(db, fake()).await;
+        sqlx::query(r#"INSERT INTO wants ("mediaId", family) VALUES (1, 'audio')"#)
+            .execute(db)
+            .await
+            .unwrap();
         if drop_album {
             sqlx::query("DELETE FROM media WHERE id = 1")
                 .execute(db)
