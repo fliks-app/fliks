@@ -1,7 +1,7 @@
 //! `POST /api/media/import` for a comic volume (`docs/spec/comics.md` rule 41).
 use super::{
     body::Body,
-    identified::{Creation, Row, TAKEN, announce, discard, insert_row},
+    identified::{Creation, Row, TAKEN, announce, discard, insert_row, search_added},
     import::{creation_folder, resolve_target},
 };
 use crate::{
@@ -57,6 +57,7 @@ pub(super) async fn import_comic(
         },
     )
     .await?;
+    search_added(st, media).await;
     let acl = accessible_library_ids(&st.db, a).await?;
     let mut out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
         .await?

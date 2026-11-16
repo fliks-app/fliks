@@ -306,6 +306,65 @@ async fn status_of(c: &Ctx, id: i64) -> (String, Option<i64>) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_direct_import_searches_once_with_the_media_added_reason(pool: PgPool) {
+    let mut c = ctx(pool).await;
+    for (uri, body, library) in [
+        (
+            "/api/media/import/tmdb",
+            json!({"type": "movie", "tmdbId": 41, "libraryId": MOVIES, "qualityProfileId": 1}),
+            MOVIES,
+        ),
+        (
+            "/api/media/import",
+            json!({"type": "series", "externalId": "42", "provider": "tmdb", "libraryId": SERIES, "qualityProfileId": 1}),
+            SERIES,
+        ),
+    ] {
+        let _ = domain(&mut c);
+        let (s, r) = call(&c, "POST", uri, &c.admin, body).await;
+        assert_eq!(s, 201, "{uri}: {r}");
+        let id = r["id"].as_i64().unwrap();
+        let asked: Vec<(Vec<i64>, String)> = domain(&mut c)
+            .into_iter()
+            .filter_map(|e| match e {
+                DomainEvent::MediaAcquisitionRequested { media_ids, reason } => {
+                    Some((media_ids, reason))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            asked,
+            [(vec![id], "media-added".to_owned())],
+            "library {library}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_add_with_nothing_wanted_asks_no_search(pool: PgPool) {
+    let mut c = ctx(pool.clone()).await;
+    let (s, r) = call(
+        &c,
+        "POST",
+        "/api/media/import/tmdb",
+        &c.admin,
+        json!({"type": "movie", "tmdbId": 43, "libraryId": MOVIES, "qualityProfileId": 1}),
+    )
+    .await;
+    assert_eq!(s, 201, "{r}");
+    let id = r["id"].as_i64().unwrap() as i32;
+    sqlx::query("DELETE FROM wants WHERE \"mediaId\" = $1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let _ = domain(&mut c);
+    fliks_server::media::write::search_added(&c.st, id).await;
+    assert!(domain(&mut c).is_empty());
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_book_is_not_a_tmdb_title(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let book = json!({"mediaType": "book", "tmdbId": 10, "title": "b"});

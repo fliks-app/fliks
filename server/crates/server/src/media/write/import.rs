@@ -3,7 +3,7 @@
 use super::{
     body::Body,
     entity_or_404, fields,
-    identified::{Creation, TAKEN, create_identified},
+    identified::{Creation, TAKEN, create_identified, search_added},
     metadata, resolve_profile,
 };
 use crate::media::{
@@ -572,6 +572,7 @@ pub async fn import_tmdb(
         },
     )
     .await?;
+    search_added(&st, id).await;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
@@ -675,6 +676,7 @@ pub async fn import_media(
         },
     )
     .await?;
+    search_added(&st, id).await;
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
