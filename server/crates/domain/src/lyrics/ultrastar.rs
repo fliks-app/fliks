@@ -143,6 +143,7 @@ pub(super) fn parse(text: &str) -> Result<Parsed, String> {
                     pitch,
                     notes: vec![],
                     golden: kind == '*' || kind == 'G',
+                    guessed: false,
                 });
             }
             _ => {}

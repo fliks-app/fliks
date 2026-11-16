@@ -25,6 +25,8 @@ export interface CueSegment {
   cue: number | null;
   /** Index of the cue before this text, -1 for none. */
   prev: number;
+  /** A guessed word inside parentheses: shown dimmed, never swept. */
+  dim?: boolean;
 }
 
 /** A line cut at its cues' UTF-8 byte ranges: the cues and the text between them, so no word is glued to the next. */
@@ -33,11 +35,22 @@ export function cueSegments(text: string, cues: readonly LyricsCue[]): CueSegmen
   const slice = (a: number, b: number) => new TextDecoder().decode(bytes.slice(a, b));
   const out: CueSegment[] = [];
   let at = 0;
+  let depth = 0;
+  const nest = (t: string) => {
+    for (const ch of t) depth = Math.max(0, depth + (ch === '(' ? 1 : ch === ')' ? -1 : 0));
+  };
   cues.forEach((c, k) => {
     const from = Math.min(Math.max(c.byteStart, at), bytes.length);
     const to = Math.min(Math.max(c.byteEnd, from), bytes.length);
-    if (from > at) out.push({ text: slice(at, from), cue: null, prev: k - 1 });
-    out.push({ text: slice(from, to), cue: k, prev: k - 1 });
+    if (from > at) {
+      const gap = slice(at, from);
+      nest(gap);
+      out.push({ text: gap, cue: null, prev: k - 1 });
+    }
+    const word = slice(from, to);
+    const dim = !!c.guessed && (depth > 0 || word.includes('('));
+    nest(word);
+    out.push({ text: word, cue: k, prev: k - 1, ...(dim ? { dim } : {}) });
     at = to;
   });
   if (at < bytes.length) out.push({ text: slice(at, bytes.length), cue: null, prev: cues.length - 1 });

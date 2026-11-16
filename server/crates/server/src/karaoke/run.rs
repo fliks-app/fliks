@@ -617,6 +617,7 @@ async fn align(
                     byte_end: w.byte_end as usize,
                     start: i64::from(w.start_ms),
                     end: i64::from(w.end_ms),
+                    guessed: w.guessed,
                 })
                 .collect(),
         })

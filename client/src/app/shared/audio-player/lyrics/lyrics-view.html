@@ -29,6 +29,8 @@
               @for (s of segs; track $index) {
                 @if (s.cue === null) {
                   <span class="whitespace-pre-wrap" [class.opacity-40]="!staged(r) && !gapLit(i, s.prev)">{{ s.text }}</span>
+                } @else if (s.dim) {
+                  <span class="opacity-40" data-testid="lyrics-guessed" [attr.data-cue]="s.cue">{{ s.text }}</span>
                 } @else {
                   <span [class]="sweepOf(i, r)" data-testid="lyrics-sweep" [attr.data-cue]="s.cue" [style.--p]="wipe(i, s.cue)">{{ s.text }}</span>
                 }

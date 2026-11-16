@@ -7,6 +7,7 @@ pub struct Word {
     pub byte_end: usize,
     pub start: i64,
     pub end: i64,
+    pub guessed: bool,
 }
 
 /// A line the engine placed: `line` indexes the request lines.
@@ -109,6 +110,7 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
                     pitch: None,
                     notes: vec![],
                     golden: false,
+                    guessed: w.guessed,
                 })
                 .collect();
             (!cues.is_empty()).then(|| Line {
@@ -262,6 +264,7 @@ mod tests {
             pitch: None,
             notes: vec![],
             golden: false,
+            guessed: false,
         };
         let line = |start, cues| Line {
             start: Some(start),
@@ -307,13 +310,20 @@ mod tests {
             byte_end: b,
             start: s,
             end: e,
+            guessed: false,
         };
         let placed = vec![
             Placed {
                 line: 0,
                 start: 1000,
                 end: 2000,
-                words: vec![w(0, 2, 1000, 1400), w(3, 5, 1500, 2000)],
+                words: vec![
+                    w(0, 2, 1000, 1400),
+                    Word {
+                        guessed: true,
+                        ..w(3, 5, 1500, 2000)
+                    },
+                ],
             },
             Placed {
                 line: 0,
@@ -330,6 +340,10 @@ mod tests {
         ];
         let d = from_alignment(&src, &req, &placed);
         assert_eq!(d.lines.len(), 3);
+        assert_eq!(
+            (d.lines[0].cues[0].guessed, d.lines[0].cues[1].guessed),
+            (false, true)
+        );
         assert_eq!(d.lines[1].cues.len(), 1, "the out-of-range word is dropped");
         assert_eq!(d.lines[2].text, "lo");
         assert_eq!(super::super::sync_of(&d), super::super::Sync::Word);
@@ -350,12 +364,14 @@ mod tests {
                         byte_end: 2,
                         start: 0,
                         end: 5,
+                        guessed: false,
                     },
                     Word {
                         byte_start: 3,
                         byte_end: 5,
                         start: 5,
                         end: 10,
+                        guessed: false,
                     },
                 ],
             }],
@@ -384,6 +400,7 @@ mod tests {
             pitch: None,
             notes: vec![],
             golden: false,
+            guessed: false,
         };
         Doc {
             agents: vec![main_agent()],

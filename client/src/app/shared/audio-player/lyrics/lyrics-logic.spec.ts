@@ -86,6 +86,16 @@ describe('lyrics logic', () => {
     expect(segs.map((s) => [s.text, s.cue])).toEqual([['caf\u00e9', 0], [', ', null], ['noir', 1], ['!', null]]);
   });
 
+  it('dims only the guessed words inside parentheses', () => {
+    const text = 'go (so low) now';
+    const at = (w: string) => text.indexOf(w);
+    const cue = (w: string, guessed: boolean) => ({ start: 0, end: 1, value: w, byteStart: at(w), byteEnd: at(w) + w.length, guessed });
+    const segs = cueSegments(text, [cue('go', true), cue('(so', true), cue('low)', false), cue('now', true)]);
+    expect(segs.filter((s) => s.cue !== null).map((s) => !!s.dim)).toEqual([false, true, false, false]);
+    const mid = cueSegments(text, [cue('(so', false), cue('low)', true)]);
+    expect(mid.filter((s) => s.cue !== null).map((s) => !!s.dim)).toEqual([false, true]);
+  });
+
   it('aligns a layer only on equal line counts', () => {
     expect(layerAligned(doc({ line: [{ value: 'a' }] }), doc({ line: [{ value: 'b' }] }))).toBe(true);
     expect(layerAligned(doc({ line: [{ value: 'a' }] }), doc({ line: [] }))).toBe(false);

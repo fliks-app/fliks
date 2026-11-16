@@ -71,6 +71,9 @@ pub struct Cue {
     pub notes: Vec<CueNote>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub golden: bool,
+    /// The alignment did not find the word: its times are interpolated.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub guessed: bool,
 }
 
 /// A note sung inside a cue: times in milliseconds, `pitch` a MIDI note.

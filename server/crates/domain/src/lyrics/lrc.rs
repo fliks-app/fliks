@@ -60,6 +60,7 @@ fn words(rest: &str) -> (String, Vec<Cue>) {
                     pitch: None,
                     notes: vec![],
                     golden: false,
+                    guessed: false,
                 });
             }
         }

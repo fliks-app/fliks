@@ -143,6 +143,7 @@ pub(super) fn parse(xml: &str) -> Result<Parsed, String> {
                                     pitch: None,
                                     notes: vec![],
                                     golden: false,
+                                    guessed: false,
                                 });
                             }
                         }
