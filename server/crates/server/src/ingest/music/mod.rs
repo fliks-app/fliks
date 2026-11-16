@@ -419,11 +419,42 @@ impl Free {
         };
         near && ((t.track.is_some() && self.number == t.track && self.disc == t.disc_number())
             || t.title.as_ref().is_some_and(|n| {
-                self.title
-                    .as_ref()
-                    .is_some_and(|m| m.trim().to_lowercase() == n.trim().to_lowercase())
+                self.title.as_ref().is_some_and(|m| {
+                    let (m, n) = (plain_title(m), plain_title(n));
+                    !m.is_empty() && m == n
+                })
             }))
     }
+}
+
+/// A title as the pairing compares it: lowercase letters and digits, parenthesised parts dropped.
+fn plain_title(s: &str) -> String {
+    let mut depth = 0;
+    s.chars()
+        .filter(|c| match c {
+            '(' | '[' => {
+                depth += 1;
+                false
+            }
+            ')' | ']' => {
+                depth = (depth - 1).max(0);
+                false
+            }
+            _ => depth == 0 && c.is_alphanumeric(),
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The fileless tracks of `media` that an open or finished queue row targets by item.
+async fn targeted(c: &mut PgConnection, media: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT unnest("itemIds") FROM acquisition_queue
+           WHERE "mediaId" = $1 AND "itemIds" IS NOT NULL AND state NOT IN ('failed', 'removed')"#,
+    )
+    .bind(media)
+    .fetch_all(&mut *c)
+    .await
 }
 
 /// The album's audio edition, when it has one.
@@ -581,14 +612,23 @@ async fn describe(c: &mut PgConnection, item: i32, t: &TrackTags) -> sqlx::Resul
     Ok(())
 }
 
-async fn write_details(c: &mut PgConnection, item: i32, t: &TrackTags) -> sqlx::Result<()> {
+/// A track of a provider-linked album keeps its disc and number: the provider is authoritative.
+async fn write_details(
+    c: &mut PgConnection,
+    item: i32,
+    t: &TrackTags,
+    linked: bool,
+) -> sqlx::Result<()> {
     sqlx::query(r#"UPDATE items SET title = COALESCE($2, title) WHERE id = $1"#)
         .bind(item)
         .bind(&t.title)
         .execute(&mut *c)
         .await?;
     sqlx::query(
-        r#"UPDATE track_details SET "discNumber" = $2, "discTitle" = $3, "trackNumber" = $4,
+        r#"UPDATE track_details SET
+             "discNumber" = CASE WHEN $11 THEN "discNumber" ELSE $2 END,
+             "discTitle" = CASE WHEN $11 THEN "discTitle" ELSE $3 END,
+             "trackNumber" = CASE WHEN $11 THEN "trackNumber" ELSE $4 END,
              "recordingMbid" = COALESCE($5::uuid, "recordingMbid"),
              "releaseTrackMbid" = COALESCE($6::uuid, "releaseTrackMbid"), isrc = COALESCE($7, isrc),
              "durationMs" = $8, gain = $9, peak = $10
@@ -604,6 +644,7 @@ async fn write_details(c: &mut PgConnection, item: i32, t: &TrackTags) -> sqlx::
     .bind(t.duration_ms)
     .bind(t.gain.filter(|g| g.abs() <= 100.0).map(|g| g as f32))
     .bind(t.peak.filter(|p| *p > 0.0 && *p <= 100.0).map(|p| p as f32))
+    .bind(linked)
     .execute(&mut *c)
     .await?;
     Ok(())
@@ -656,6 +697,14 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             r.rel.to_lowercase(),
         )
     });
+    let linked: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM album_details WHERE "mediaId" = $1 AND "releaseGroupMbid" IS NOT NULL)"#,
+    )
+    .bind(media)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    let targets = targeted(&mut tx, media).await.map_err(|e| e.to_string())?;
     let mut free: HashMap<i32, Vec<Free>> = HashMap::new();
     let mut next: HashMap<i32, i32> = HashMap::new();
     let mut editions = None;
@@ -671,7 +720,7 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
                 .map_err(|e| e.to_string())?;
                 if let Some(item) = item {
                     if force {
-                        write_details(&mut tx, item, t)
+                        write_details(&mut tx, item, t, linked)
                             .await
                             .map_err(|e| e.to_string())?;
                         describe(&mut tx, item, t)
@@ -702,7 +751,19 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             .await
             .map_err(|e| e.to_string())?;
         let heirs = free.entry(edition).or_default();
-        let heir = heirs.iter().position(|f| f.pairs(t));
+        // The one track a queue row targets takes the file no other free track claims; else the tags decide.
+        let mut aimed = heirs.iter().filter(|f| targets.contains(&f.item));
+        let aimed = match (aimed.next(), aimed.next()) {
+            (Some(f), None) if !heirs.iter().any(|o| o.item != f.item && o.pairs(t)) => {
+                Some(f.item)
+            }
+            _ => None,
+        };
+        let heir = match aimed {
+            Some(item) => heirs.iter().position(|f| f.item == item),
+            None => heirs.iter().position(|f| f.pairs(t)),
+        };
+        let paired = heir.is_some();
         let item = match heir {
             Some(i) => heirs.remove(i).item,
             None => {
@@ -719,18 +780,20 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
                 let position = next.entry(edition).or_default();
                 *position += 1;
                 sqlx::query(
-                    r#"INSERT INTO track_details ("itemId", "mediaId", position) VALUES ($1, $2, $3)"#,
+                    r#"INSERT INTO track_details ("itemId", "mediaId", position, "orphanedAt")
+                       VALUES ($1, $2, $3, CASE WHEN $4 THEN now() END)"#,
                 )
                 .bind(item)
                 .bind(media)
                 .bind(*position)
+                .bind(linked)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| e.to_string())?;
                 item
             }
         };
-        write_details(&mut tx, item, t)
+        write_details(&mut tx, item, t, linked && paired)
             .await
             .map_err(|e| e.to_string())?;
         describe(&mut tx, item, t)
@@ -997,7 +1060,7 @@ mod tests {
         .await
         .unwrap();
         let mut c = db.acquire().await.unwrap();
-        write_details(&mut c, 1, &TrackTags::default())
+        write_details(&mut c, 1, &TrackTags::default(), false)
             .await
             .unwrap();
         let row: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(

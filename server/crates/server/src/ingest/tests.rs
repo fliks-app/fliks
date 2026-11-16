@@ -6567,6 +6567,86 @@ mod music_ingest {
             0
         );
     }
+
+    async fn wanted_live_track(c: &Ctx) -> (i32, i32) {
+        use crate::metadata::music::want::tests as fixture;
+        let l = album_lib(c).await;
+        let body = json!({"provider": "musicbrainz", "externalId": fixture::LIVE,
+                          "albumExternalId": GROUP, "libraryId": l});
+        let (s, b) = call(c, "POST", "/api/music/want-recording", &c.admin, body).await;
+        assert_eq!(s, 201, "{b}");
+        (
+            b["mediaId"].as_i64().unwrap() as i32,
+            b["itemId"].as_i64().unwrap() as i32,
+        )
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_mistagged_file_lands_on_the_track_its_queue_row_targets(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (m, item) = wanted_live_track(&c).await;
+        sqlx::query(
+            r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "itemIds", "sourceId", "sourceName",
+                 title, quality, method, state)
+               VALUES ('p', 'r', $1, ARRAY[$2], 's', 'S', 't', 'FLAC', 'manual', 'importing')"#,
+        )
+        .bind(m)
+        .bind(item)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let items = count(&c, "SELECT count(*) FROM items").await;
+        let before: (i32, Option<i32>) = sqlx::query_as(
+            r#"SELECT "discNumber", "trackNumber" FROM track_details WHERE "itemId" = $1"#,
+        )
+        .bind(item)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Mislabelled", 9, 100.0)]);
+        let file = place(&c, &["Ana/Alpha/09 - Mislabelled.flac"]);
+        music::register(&c.st, m, &file).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, items);
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM item_parts WHERE "itemId" = {item}"#)
+            )
+            .await,
+            1
+        );
+        let after: (i32, Option<i32>) = sqlx::query_as(
+            r#"SELECT "discNumber", "trackNumber" FROM track_details WHERE "itemId" = $1"#,
+        )
+        .bind(item)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(after, before, "the tags never move a linked track");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_unpaired_file_of_a_linked_album_is_an_orphan_track(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (m, _) = wanted_live_track(&c).await;
+        let items = count(&c, "SELECT count(*) FROM items").await;
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Mislabelled", 9, 100.0)]);
+        let file = place(&c, &["Ana/Alpha/09 - Mislabelled.flac"]);
+        music::register(&c.st, m, &file).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, items + 1);
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM track_details WHERE "orphanedAt" IS NOT NULL"#
+            )
+            .await,
+            1
+        );
+    }
 }
 
 mod album_acquisition;
