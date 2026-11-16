@@ -12,7 +12,7 @@ pub(crate) mod tests;
 pub mod want;
 pub mod works;
 
-pub use apply::{Written, refresh, write_album, write_edition};
+pub use apply::{Create, Written, refresh, write_album, write_edition};
 
 use super::{MetaError, Upstream, fail, unavailable};
 use crate::{http::AppError, state::AppState};

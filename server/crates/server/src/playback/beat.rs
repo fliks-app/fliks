@@ -167,6 +167,16 @@ fn presence_beat(
         volume: nullable(b, "volume", Value::as_f64),
         muted: nullable(b, "muted", Value::as_bool),
         playback_rate: playback_rate(b),
+        stem_mode: nullable(b, "stemMode", |v| serde_json::from_value(v.clone()).ok()),
+        vocal_level: nullable(b, "vocalLevel", |v| {
+            v.as_f64().filter(|n| (0.0..=1.0).contains(n))
+        }),
+        pitch: nullable(b, "pitch", |v| {
+            v.as_i64()
+                .filter(|p| (-12..=12).contains(p))
+                .and_then(|p| i32::try_from(p).ok())
+        }),
+        stems_available: nullable(b, "stemsAvailable", Value::as_bool),
     }
 }
 
@@ -283,6 +293,10 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         volume: s.volume.map(Num),
         muted: s.muted,
         playback_rate: Some(Num(s.playback_rate)),
+        stem_mode: s.stem_mode,
+        vocal_level: s.vocal_level.map(Num),
+        pitch: s.pitch.map(i64::from),
+        stems_available: s.stems_available,
         supports_volume: s.supports_volume,
         subtitle_id: s.subtitle_id.clone(),
         quality: s.quality.clone(),
@@ -705,6 +719,7 @@ pub async fn heartbeat(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::event::StemMode;
 
     fn live() -> LiveSession {
         LiveSession {
@@ -741,6 +756,10 @@ mod tests {
             volume: None,
             muted: None,
             playback_rate: 1.0,
+            stem_mode: None,
+            vocal_level: None,
+            pitch: None,
+            stems_available: None,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,
@@ -758,6 +777,52 @@ mod tests {
         assert_eq!(rate(json!(0.01)), Some(0.5));
         assert_eq!(rate(json!(0)), None);
         assert_eq!(rate(json!(-1)), None);
+    }
+
+    #[test]
+    fn the_karaoke_report_keeps_valid_values_and_a_null_clears() {
+        let b = |v: Value| presence_beat(&v, None, None, None);
+        let ok = b(json!({"stemMode":"guide","vocalLevel":0.5,"pitch":-3,"stemsAvailable":true}));
+        assert_eq!(
+            (ok.stem_mode, ok.vocal_level, ok.pitch, ok.stems_available),
+            (
+                Some(Some(StemMode::Guide)),
+                Some(Some(0.5)),
+                Some(Some(-3)),
+                Some(Some(true))
+            )
+        );
+        let bad = b(json!({"stemMode":"vocals","vocalLevel":2,"pitch":13,"stemsAvailable":"y"}));
+        assert_eq!(
+            (
+                bad.stem_mode,
+                bad.vocal_level,
+                bad.pitch,
+                bad.stems_available
+            ),
+            (None, None, None, None)
+        );
+        assert_eq!(b(json!({"pitch":1.5})).pitch, None);
+        assert_eq!(b(json!({"pitch":null})).pitch, Some(None));
+        let s = LiveSession {
+            stem_mode: Some(StemMode::Instrumental),
+            vocal_level: Some(0.2),
+            pitch: Some(2),
+            stems_available: Some(true),
+            ..live()
+        };
+        let e = serde_json::to_value(remote_state("t".into(), &s, 7, &json!({}))).unwrap();
+        assert_eq!(
+            (
+                e["stemMode"].clone(),
+                e["vocalLevel"].clone(),
+                e["pitch"].clone(),
+                e["stemsAvailable"].clone()
+            ),
+            (json!("instrumental"), json!(0.2), json!(2), json!(true))
+        );
+        let e = serde_json::to_value(remote_state("t".into(), &live(), 7, &json!({}))).unwrap();
+        assert!(e.get("stemMode").is_none() && e.get("pitch").is_none());
     }
 
     #[test]

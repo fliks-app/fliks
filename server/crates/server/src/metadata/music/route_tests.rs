@@ -39,6 +39,7 @@ async fn ctx(pool: &PgPool, fake: MusicFake) -> (Router, String) {
     let t = session::token(&st, 1, "admin").await;
     let app = crate::metadata::router()
         .merge(crate::persons::router())
+        .merge(crate::music::router())
         .with_state(st);
     (app, t)
 }
@@ -147,4 +148,20 @@ async fn without_top_recordings_the_owned_tracks_by_popularity_stand_in(pool: Pg
     let p = v["popular"].as_array().unwrap();
     assert_eq!((p.len(), p[0]["title"].as_str()), (1, Some("One")));
     assert_eq!(p[0]["track"]["itemId"], 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_picker_takes_recording_ids_and_answers_for_the_wanted_release(pool: PgPool) {
+    let (app, t) = ctx(&pool, fake()).await;
+    let base =
+        format!("/api/music/albums/tracks?provider=musicbrainz&externalId={GROUP}&libraryId=1");
+    let (s, v) = get(&app, &t, &format!("{base}&recordingId=nope")).await;
+    assert_eq!(s, 400, "{v}");
+    let (s, v) = get(&app, &t, &format!("{base}&recordingId={OTHER},{OWNED}")).await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v.as_array().unwrap().len(), 2);
+    assert_eq!(v[1]["recordingId"], OTHER);
+    let missing = "33333333-3333-4333-8333-333333333333";
+    let (s, _) = get(&app, &t, &format!("{base}&recordingIds={missing}")).await;
+    assert_eq!(s, 404, "no release holds it");
 }

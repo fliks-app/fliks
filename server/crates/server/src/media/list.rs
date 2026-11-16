@@ -272,7 +272,10 @@ fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
 fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" AND (media.\"searchVector\" @@ ");
     push_tsquery(qb, q);
-    let like = format!("%{q}%");
+    let like = format!(
+        "%{}%",
+        q.replace(fliks_domain::media::search::APOSTROPHES, "_")
+    );
     qb.push(" OR media.title ILIKE ").push_bind(like.clone());
     qb.push(" OR media.\"originalTitle\" ILIKE ")
         .push_bind(like);

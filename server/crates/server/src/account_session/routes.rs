@@ -231,6 +231,8 @@ pub async fn transfer(
         kind: Some(row.kind),
         item_ids: None,
         position: None,
+        stem_mode: None,
+        pitch: None,
     };
     ensure_supported(&st, a.user.id, owner, &conn, &cmd).await?;
     st.account_sessions

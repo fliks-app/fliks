@@ -191,6 +191,7 @@ async fn a_reclaimed_namespace_ignores_the_requests_of_the_earlier_claim(pool: s
         poster_url: None,
         fanart_url: None,
         wants: Some(&wants),
+        recordings: None,
     };
     sqlx::query("INSERT INTO users (id, username, \"isAdmin\") VALUES (1, 'u', true)")
         .execute(&pool)

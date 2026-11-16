@@ -408,16 +408,25 @@ async fn write_track(tx: &mut sqlx::PgConnection, item: i32, t: &Track) -> Resul
     Ok(())
 }
 
+/// Which of a release's tracks that the edition lacks `write_edition` creates.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Create {
+    No,
+    /// Monitored as the album is (the target edition of a wanted album).
+    AsAlbum,
+    /// Unmonitored: an edition kept for the recordings wanted on it.
+    Unmonitored,
+}
+
 /// Writes the release `ed` to the edition `edition` of `media`: its facts, and its tracklist onto the tracks
-/// the files made (matched by id, then by distance). A track the files do not have is created only when
-/// `create_missing` (the target edition of a wanted album); a track of the edition that the release does not
-/// list is flagged. The caller holds the media's lock.
+/// the files made (matched by id, then by distance). A track the files do not have is created as `create`
+/// says; a track of the edition that the release does not list is flagged. The caller holds the media's lock.
 pub async fn write_edition(
     st: &AppState,
     media: i32,
     edition: i32,
     ed: &Edition,
-    create_missing: bool,
+    create: Create,
 ) -> Result<usize, AppError> {
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
@@ -538,7 +547,7 @@ pub async fn write_edition(
         }
     }
     let mut created = 0;
-    if create_missing {
+    if create != Create::No {
         for t in ed
             .tracks
             .iter()
@@ -549,7 +558,7 @@ pub async fn write_edition(
             let item: i32 = sqlx::query_scalar(
                 // Monitored as the album is, unless a track was left out on purpose (one owned elsewhere aside).
                 r#"INSERT INTO items ("mediaId", "editionId", monitored, title)
-                   VALUES ($1, $2, (SELECT monitored FROM media WHERE id = $1) AND NOT EXISTS (
+                   VALUES ($1, $2, $4 AND (SELECT monitored FROM media WHERE id = $1) AND NOT EXISTS (
                      SELECT 1 FROM items x LEFT JOIN track_details xd ON xd."itemId" = x.id
                       WHERE x."editionId" = $2 AND NOT x.monitored AND NOT EXISTS (
                         SELECT 1 FROM track_details o JOIN item_parts op ON op."itemId" = o."itemId"
@@ -558,6 +567,7 @@ pub async fn write_edition(
             .bind(media)
             .bind(edition)
             .bind(&t.title)
+            .bind(create == Create::AsAlbum)
             .fetch_one(&mut *tx)
             .await?;
             sqlx::query(
@@ -574,6 +584,14 @@ pub async fn write_edition(
     }
     tx.commit().await?;
     Ok(created)
+}
+
+fn create(as_album: bool) -> Create {
+    if as_album {
+        Create::AsAlbum
+    } else {
+        Create::No
+    }
 }
 
 /// The id the album is linked to, if any.
@@ -665,9 +683,14 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
     for (edition, ed) in read {
         match ed {
             Some(ed) => {
-                created +=
-                    write_edition(st, media, edition, &ed, target == Some(edition) && !filed)
-                        .await?;
+                created += write_edition(
+                    st,
+                    media,
+                    edition,
+                    &ed,
+                    create(target == Some(edition) && !filed),
+                )
+                .await?;
             }
             None => {
                 sqlx::query(

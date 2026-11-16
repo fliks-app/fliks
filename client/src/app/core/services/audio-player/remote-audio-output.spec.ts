@@ -51,7 +51,13 @@ async function setup(account: AccountSession | null, live = true) {
   };
   const primeTracks = vi.fn();
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
-  const remote = { observedTargetId: signal<string | null>('pc#1'), send: vi.fn(), targetState: signal<{ playbackRate?: number } | null>(null) };
+  const remote = {
+    observedTargetId: signal<string | null>('pc#1'),
+    send: vi.fn(),
+    sendCoalesced: vi.fn(),
+    observedCan: vi.fn(() => true),
+    targetState: signal<{ playbackRate?: number; stemMode?: 'guide'; vocalLevel?: number; pitch?: number; stemsAvailable?: boolean } | null>(null),
+  };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -192,6 +198,22 @@ describe('RemoteAudioOutput', () => {
     sync.session.set(null);
     TestBed.tick();
     expect(out.expanded()).toBe(false);
+  });
+
+  it('reads the stem mix and key of the owner and sends them as karaoke commands', async () => {
+    const { out, remote } = await setup(session());
+    expect([out.stemMode(), out.vocalLevel(), out.pitch(), out.stemsAvailable()]).toEqual(['original', 0, 0, false]);
+    remote.targetState.set({ stemMode: 'guide', vocalLevel: 0.4, pitch: -2, stemsAvailable: true });
+    expect([out.stemMode(), out.vocalLevel(), out.pitch(), out.stemsAvailable()]).toEqual(['guide', 0.4, -2, true]);
+    out.setStemMode('instrumental');
+    out.setPitch(20);
+    out.setVocalLevel(0.6);
+    expect(remote.send).toHaveBeenNthCalledWith(1, 'pc#1', { action: 'karaoke', stemMode: 'instrumental' });
+    expect(remote.send).toHaveBeenNthCalledWith(2, 'pc#1', { action: 'karaoke', pitch: 12 });
+    expect(remote.sendCoalesced).toHaveBeenCalledWith('pc#1', { action: 'karaoke', level: 0.6 });
+    expect(out.supports('karaoke')).toBe(true);
+    remote.observedCan.mockReturnValue(false);
+    expect(out.supports('karaoke')).toBe(false);
   });
 
   it('reads the playback rate of the owner while it reports', async () => {

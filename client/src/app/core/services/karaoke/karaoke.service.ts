@@ -1,7 +1,9 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { StructuredLyrics } from '../api/lyrics.models';
+import type { AudioOutput } from '../audio-player/audio-output';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
@@ -29,7 +31,8 @@ export interface Board {
 /** Karaoke of the current party or device: this device's mic out as pitch frames over the party relay, the singers' frames in, scores. */
 @Injectable({ providedIn: 'root' })
 export class KaraokeService {
-  private readonly audio = inject(AudioPlayerService);
+  private readonly local = inject(AudioPlayerService);
+  private readonly remoteOut = inject(RemoteAudioOutput);
   private readonly relay = inject(KaraokeRelayService);
   private readonly party = inject(PartyService);
   private readonly auth = inject(AuthService);
@@ -50,6 +53,11 @@ export class KaraokeService {
   private pending: PitchFrame[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private anchor = { pos: 0, at: 0 };
+
+  /** What the full player shows: another device's session in remote view, else the local player. */
+  private get audio(): AudioOutput {
+    return this.remoteOut.expanded() ? this.remoteOut : this.local;
+  }
 
   constructor() {
     this.relay.received.subscribe(({ userId, frames }) => this.ingest(userId, frames));
@@ -77,7 +85,7 @@ export class KaraokeService {
 
   private ingest(userId: number, frames: readonly PitchFrame[]): void {
     if (!frames.length) return;
-    const key = this.audio.pitch();
+    const key = this.audio.pitch?.() ?? 0;
     this.store.add(userId, frames.map((f) => ({ ...f, key })));
     this.frameCount.update((n) => n + frames.length);
   }
@@ -135,7 +143,7 @@ export class KaraokeService {
   }
 
   results(doc: StructuredLyrics): BoardRow[] {
-    return scoreAll(doc, this.store, this.difficulty(), this.latencyMs(), undefined, this.audio.pitch()).map((r) => ({ ...r, name: this.nameOf(r.userId) }));
+    return scoreAll(doc, this.store, this.difficulty(), this.latencyMs(), undefined, this.audio.pitch?.() ?? 0).map((r) => ({ ...r, name: this.nameOf(r.userId) }));
   }
 
   /** Ends the song for the scoreboard: nothing is shown when nobody sang. */

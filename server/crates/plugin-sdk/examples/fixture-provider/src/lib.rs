@@ -104,6 +104,19 @@ impl MetadataProvider for Fixture {
             _ => Err(ProviderError::Unsupported),
         }
     }
+    fn recording_releases(recording: ExternalId) -> Result<Vec<ExternalId>, ProviderError> {
+        let id = |provider: &str, value: &str| ExternalId {
+            provider: provider.into(),
+            value: value.into(),
+        };
+        const A: &str = "9bd4a9bd-0000-4000-8000-000000000001";
+        match recording.value.as_str() {
+            "good" => Ok(vec![id("tmdb", A), id("tmdb", &A.to_uppercase())]),
+            "not-uuid" => Ok(vec![id("tmdb", "9bd4a9bd")]),
+            "foreign" => Ok(vec![id("other", A)]),
+            _ => Err(ProviderError::NotFound),
+        }
+    }
     fn find_by(
         source: ExternalId,
         _lang: Lang,

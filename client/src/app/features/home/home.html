@@ -264,6 +264,7 @@
                 [languageProfileName]="languageProfileDisplay(req.languageProfileId)"
                 [busy]="requestActionBusyId() === req.id"
                 (approve)="approveRequest($event)"
+                (approveAlbum)="approveRequest($event, true)"
                 (decline)="decline.open($event)"
                 (badgeClick)="onBadgeClick(req)"
               />

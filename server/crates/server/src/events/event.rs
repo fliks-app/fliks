@@ -112,7 +112,17 @@ pub enum RemoteAction {
     Audio,
     Subtitle,
     Quality,
+    Karaoke,
     Browse,
+}
+
+/// The stem mix of a `karaoke` command and report (`remote.md` rule 35b).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StemMode {
+    Original,
+    Guide,
+    Instrumental,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -457,6 +467,10 @@ pub enum SseEvent {
         item_ids: Option<Vec<i64>>,
         #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
         position: Option<EnqueueAt>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stem_mode: Option<StemMode>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pitch: Option<i64>,
     },
     #[serde(rename = "remote.state")]
     RemoteState {
@@ -481,6 +495,14 @@ pub enum SseEvent {
         muted: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         playback_rate: Option<Num>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stem_mode: Option<StemMode>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        vocal_level: Option<Num>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pitch: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stems_available: Option<bool>,
         supports_volume: Option<bool>,
         subtitle_id: Option<String>,
         quality: Option<String>,

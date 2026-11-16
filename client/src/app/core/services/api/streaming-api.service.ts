@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import type { StemMode } from '../audio-player/stem-mix';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
@@ -672,6 +673,10 @@ export class StreamingApiService {
       volume?: number;
       muted?: boolean;
       playbackRate?: number;
+      stemMode?: StemMode;
+      vocalLevel?: number;
+      pitch?: number;
+      stemsAvailable?: boolean;
       hasNext?: boolean;
       lastCmdId?: string;
       /** An audio playback's queue, sent when it changes and on the first beat. */

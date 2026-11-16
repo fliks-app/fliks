@@ -97,6 +97,12 @@ pub trait MetadataProvider {
     ) -> Result<Option<String>, ProviderError> {
         Err(ProviderError::Unsupported)
     }
+    /// The releases holding a recording (a `musicbrainz` or `isrc` id).
+    fn recording_releases(
+        _recording: fliks_plugin_sdk::ExternalId,
+    ) -> Result<Vec<fliks_plugin_sdk::ExternalId>, ProviderError> {
+        Err(ProviderError::Unsupported)
+    }
     fn fetch_chapters(
         _edition: fliks_plugin_sdk::ExternalId,
         _lang: Lang,
@@ -190,6 +196,11 @@ macro_rules! export_provider {
             ) -> Result<Option<String>, $crate::ProviderError> {
                 <$t as $crate::MetadataProvider>::fetch_edition(edition, lang)
             }
+            fn recording_releases(
+                recording: $crate::sdk::ExternalId,
+            ) -> Result<Vec<$crate::sdk::ExternalId>, $crate::ProviderError> {
+                <$t as $crate::MetadataProvider>::recording_releases(recording)
+            }
             fn fetch_chapters(
                 edition: $crate::sdk::ExternalId,
                 lang: $crate::Lang,
@@ -262,6 +273,7 @@ macro_rules! export_provider {
                 <__FliksProvider as P>::child_stubs,
                 <__FliksProvider as P>::find_by,
                 <__FliksProvider as P>::fetch_edition,
+                <__FliksProvider as P>::recording_releases,
                 <__FliksProvider as P>::fetch_chapters,
                 <__FliksProvider as P>::fetch_person,
                 <__FliksProvider as P>::person_credits,

@@ -1,6 +1,8 @@
 import type { Signal } from '@angular/core';
 import type { AudioRequest } from './audio-player.service';
+import type { RemoteAction } from '../remote.service';
 import type { MusicTrackRequest, Repeat } from './music-queue';
+import type { StemMode } from './stem-mix';
 
 /** What the full-screen audio player reads and drives: the local player, or an audio session played on another device. */
 export interface AudioOutput {
@@ -38,4 +40,17 @@ export interface AudioOutput {
   expand(): void;
   collapse(): void;
   close(): Promise<void> | void;
+  /** Karaoke mix and key, on an output that can apply stems. */
+  readonly stemMode?: Signal<StemMode>;
+  /** Guide vocal level, 0 to 1. */
+  readonly vocalLevel?: Signal<number>;
+  /** Key change in semitones. */
+  readonly pitch?: Signal<number>;
+  /** The playing track has stems ready and the output can mix them. */
+  readonly stemsAvailable?: Signal<boolean>;
+  setStemMode?(mode: StemMode): void;
+  setVocalLevel?(level: number): void;
+  setPitch?(semitones: number): Promise<void> | void;
+  /** Whether the driven device applies `action`; absent on the local player. */
+  supports?(action: RemoteAction): boolean;
 }

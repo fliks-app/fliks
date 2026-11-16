@@ -153,6 +153,9 @@ async fn assert_no_active_duplicate(
     if existing.is_empty() {
         return Ok(());
     }
+    if dto.media_type == MediaKind::Album {
+        return assert_album_unclaimed(dto, &existing);
+    }
     if let Some(wants) = &dto.wants {
         let overlap = overlapping_wants(&existing, wants);
         if overlap.is_empty() {
@@ -187,6 +190,58 @@ async fn assert_no_active_duplicate(
         "Season(s) {} have already been requested",
         overlap.join(", ")
     )))
+}
+
+/// Rule 52: a track request clashes with a whole-album request and with the tracks another one holds; a whole
+/// album clashes with another whole-album request only, so it can widen the tracks already requested.
+fn assert_album_unclaimed(dto: &CreateRequest, existing: &[db::Req]) -> Res<()> {
+    let Some(asked) = &dto.recordings else {
+        let whole: Vec<db::Req> = existing
+            .iter()
+            .filter(|e| e.recordings.is_none())
+            .cloned()
+            .collect();
+        let overlap = overlapping_wants(&whole, dto.wants.as_deref().unwrap_or_default());
+        return if overlap.is_empty() {
+            Ok(())
+        } else {
+            Err(already_requested(&overlap))
+        };
+    };
+    if existing.iter().any(|e| e.recordings.is_none()) {
+        return Err(AppError::conflict(
+            "The whole album has already been requested",
+        ));
+    }
+    let overlap: Vec<&str> = asked
+        .iter()
+        .filter(|r| {
+            existing
+                .iter()
+                .any(|e| e.recordings.iter().flatten().any(|t| t == *r))
+        })
+        .map(String::as_str)
+        .collect();
+    if overlap.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::conflict(format!(
+        "Track(s) {} have already been requested",
+        overlap.join(", ")
+    )))
+}
+
+/// Rule 52: every requested track is already in the library or wanted, so there is nothing to request.
+async fn assert_tracks_unclaimed(st: &AppState, key: &TitleKey, recordings: &[String]) -> Res<()> {
+    let Some(media) = db::media_by_ref(&st.db, key).await? else {
+        return Ok(());
+    };
+    if db::tracks_claimed(&st.db, media.id, recordings).await? == recordings.len() as i64 {
+        return Err(AppError::conflict(
+            "Every requested track is already wanted or in the library",
+        ));
+    }
+    Ok(())
 }
 
 /// The labels of `wants` that an active request already holds.
@@ -285,6 +340,18 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
             .collect();
         state["requested"] = json!(!wants.is_empty());
         state["requestedWants"] = json!(wants);
+        if key.media_type == MediaKind::Album {
+            let mut tracks: Vec<&String> = active
+                .iter()
+                .flat_map(|r| r.recordings.iter().flatten())
+                .collect();
+            tracks.sort_unstable();
+            tracks.dedup();
+            let whole = active.iter().any(|r| r.recordings.is_none());
+            state["requested"] = json!(whole);
+            state["wholeAlbumRequested"] = json!(whole);
+            state["requestedRecordings"] = json!(tracks);
+        }
     }
     Ok(state)
 }
@@ -316,6 +383,15 @@ pub async fn ensure_media(
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
 ) -> Res<Option<i32>> {
+    let held = spec.title.media_type == MediaKind::Album
+        && crate::media::external_ids::find(
+            &st.db,
+            MediaKind::Album,
+            spec.title.provider,
+            &spec.title.external_id,
+        )
+        .await?
+        .is_some();
     let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
         Ok(id) => id,
         Err(e) if e.status != 409 || super::is_work(spec.title.media_type) => {
@@ -351,17 +427,33 @@ pub async fn ensure_media(
         .as_deref()
         .filter(|_| spec.title.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
-    if spec.title.media_type == MediaKind::Album
-        && let Err(e) = crate::metadata::music::target::want_all(
-            st,
-            media_id,
-            fliks_domain::metadata::limiter::Priority::Interactive,
-        )
-        .await
-    {
-        tracing::warn!("album #{media_id}: not wanted as a whole yet: {}", e.text());
+    if spec.title.media_type == MediaKind::Album {
+        match spec.recordings.as_deref() {
+            Some(recordings) => want_tracks(st, media_id, recordings, held).await?,
+            None => {
+                if let Err(e) = crate::metadata::music::target::want_all(
+                    st,
+                    media_id,
+                    fliks_domain::metadata::limiter::Priority::Interactive,
+                )
+                .await
+                {
+                    tracing::warn!("album #{media_id}: not wanted as a whole yet: {}", e.text());
+                }
+            }
+        }
     }
     Ok(Some(media_id))
+}
+
+/// Wants the requested tracks of an album; a recording no release of the album holds is an error, never dropped.
+async fn want_tracks(st: &AppState, media: i32, recordings: &[String], held: bool) -> Res<()> {
+    use crate::metadata::music::want::{self, Recording, Refused};
+    let refs: Vec<Recording> = recordings.iter().map(|r| Recording::Mbid(r)).collect();
+    want::want_many(st, media, &refs, held)
+        .await
+        .map(drop)
+        .map_err(Refused::app_error)
 }
 
 fn notify(st: &AppState, event: &'static str, payload: Value) {
@@ -585,6 +677,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         crate::media::wants::check_profiles(&st.db, w).await?;
         assert_wants_unsatisfied(st, &key, w).await?;
     }
+    if let Some(r) = &dto.recordings {
+        assert_tracks_unclaimed(st, &key, r).await?;
+    }
 
     let auto = candidates.approves(a, &dto, library_id);
     let id = db::insert(
@@ -605,12 +700,16 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             poster_url: None,
             fanart_url: None,
             wants: dto.wants.as_deref(),
+            recordings: dto.recordings.as_deref(),
         },
     )
     .await
     .map_err(|e| lock_err(e, false))?;
     tx.commit().await?;
     drop(turn);
+    if dto.recordings.is_some() {
+        remember_track_count(st, id, &key, library_id).await;
+    }
 
     let spec = auto.then(|| ImportSpec {
         title: key.clone(),
@@ -620,6 +719,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         folder_id: dto.folder_id,
         seasons: dto.seasons.clone(),
         wants: dto.wants.clone(),
+        recordings: dto.recordings.clone(),
     });
     let added = Added {
         id,
@@ -647,6 +747,28 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     put(&mut row, "posterUrl", json!(art.poster));
     put(&mut row, "fanartUrl", json!(art.fanart));
     Ok(Value::Object(row))
+}
+
+/// The size of the edition the album would target, kept on the request so a list can say "2 of 12".
+async fn remember_track_count(st: &AppState, id: i32, key: &TitleKey, library: i32) {
+    use fliks_domain::metadata::limiter::Priority;
+    let tracks = crate::metadata::music::target::preview(
+        st,
+        &key.external_id,
+        library,
+        &[],
+        Priority::Interactive,
+    )
+    .await;
+    match tracks {
+        Ok(t) if !t.is_empty() => {
+            if let Err(e) = db::set_track_count(&st.db, id, t.len() as i32).await {
+                tracing::warn!("Request #{id}: track count not kept: {e}");
+            }
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("Request #{id}: track count not read: {}", e.text()),
+    }
 }
 
 /// Rule 16: at most 5 s on the art; the download goes on in the background after that.
@@ -708,6 +830,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
             poster_url: media.poster_url.as_deref(),
             fanart_url: media.fanart_url.as_deref(),
             wants: None,
+            recordings: None,
         },
     )
     .await?;
@@ -875,16 +998,29 @@ async fn pending_row(st: &AppState, a: &Authed, id: i32) -> Res<db::Req> {
     Ok(row)
 }
 
-pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
+/// `whole` widens a track request of an album to the whole album (rule 52).
+pub async fn approve(st: &AppState, a: &Authed, id: i32, whole: bool) -> Res<Value> {
     let row = pending_row(st, a, id).await?;
     if row.kind == "delete" {
         return approve_delete(st, a, &row).await;
     }
-    settled(tokio::spawn(approve_add(st.clone(), a.user.id, id, row))).await
+    if whole && row.media_type != MediaKind::Album {
+        return Err(AppError::bad_request(
+            "wholeAlbum applies to an album request",
+        ));
+    }
+    settled(tokio::spawn(approve_add(
+        st.clone(),
+        a.user.id,
+        id,
+        row,
+        whole,
+    )))
+    .await
 }
 
 /// Rule 23 steps 5-11: the title lock covers the claim only, not the import. In a task so a client that leaves cannot strand the claimed row.
-async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value> {
+async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bool) -> Res<Value> {
     let st = &st;
     let key = row.key();
     let mut lock = st.db.begin().await?;
@@ -901,6 +1037,9 @@ async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value>
     if !db::claim_approval(&st.db, id, by, None).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
+    if whole && row.recordings.take().is_some() {
+        db::widen(&st.db, id).await?;
+    }
     lock.commit().await?;
     let spec = ImportSpec {
         title: key.clone(),
@@ -910,6 +1049,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, row: db::Req) -> Res<Value>
         folder_id: row.folder_id,
         seasons: row.seasons.as_ref().map(|s| s.0.clone()),
         wants: row.wants.as_ref().map(|w| w.0.clone()),
+        recordings: row.recordings.clone(),
     };
     let media = match ensure_media(st, spec, (row.user_id, by)).await {
         Ok(m) => m,

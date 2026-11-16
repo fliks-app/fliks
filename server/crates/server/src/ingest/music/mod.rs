@@ -327,6 +327,64 @@ pub async fn refresh(
     Ok(changed.len() as i64)
 }
 
+/// The setting `music.unrequested_tracks`: `skip` keeps the tracks nobody asked for out of the library.
+pub async fn skips_unrequested(st: &AppState) -> bool {
+    setting_value(&st.db, "music.unrequested_tracks")
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|v| v == "skip")
+}
+
+/// The `files` that would land on an unmonitored track of an album that has a monitored one.
+pub async fn unrequested(
+    st: &AppState,
+    media: i32,
+    files: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let mut c = st.db.acquire().await.map_err(|e| e.to_string())?;
+    let wanted: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM items WHERE "mediaId" = $1 AND monitored)"#,
+    )
+    .bind(media)
+    .fetch_one(&mut *c)
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(edition) = target_edition(&mut c, media)
+        .await
+        .map_err(|e| e.to_string())?
+        .filter(|_| wanted)
+    else {
+        return Ok(vec![]);
+    };
+    let (mut free, mut next) = Default::default();
+    let editions = wanted_editions(&mut c, media, edition)
+        .await
+        .map_err(|e| e.to_string())?;
+    for e in &editions {
+        load_free(&mut c, *e, &mut free, &mut next)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    let free: Vec<&Free> = editions.iter().flat_map(|e| &free[e]).collect();
+    let seps = separators_of(st).await;
+    let mut out = vec![];
+    for path in files {
+        let Ok(p) = probe(st, path, false).await else {
+            continue;
+        };
+        let name = file_name(path);
+        let tags =
+            TrackTags::read(&p.info, &seps, stem(&name)).with_folder_disc(&path.to_string_lossy());
+        if free.iter().any(|f| !f.monitored && f.pairs(&tags))
+            && !free.iter().any(|f| f.monitored && f.pairs(&tags))
+        {
+            out.push(path.clone());
+        }
+    }
+    Ok(out)
+}
+
 struct FileRow {
     id: i32,
     rel: String,
@@ -340,22 +398,51 @@ struct Free {
     disc: i32,
     number: Option<i32>,
     recording: Option<String>,
+    isrc: Option<String>,
+    duration_ms: Option<i32>,
     title: Option<String>,
+    monitored: bool,
 }
 
+/// How far a file's length may be from its track's for a pairing by position or title (rule 32).
+const DURATION_TOLERANCE_MS: i32 = 3000;
+
 impl Free {
-    /// A file's track: its recording id, else its disc and track number, else its title.
+    /// A file's track: its recording id, else its ISRC, else its disc and track number, else its title; the
+    /// last two only when both lengths are known and within the tolerance.
     fn pairs(&self, t: &TrackTags) -> bool {
-        t.recording
-            .as_ref()
-            .is_some_and(|r| self.recording.as_ref() == Some(r))
-            || (t.track.is_some() && self.number == t.track && self.disc == t.disc_number())
+        let same = |a: &Option<String>, b: &Option<String>| {
+            a.as_ref()
+                .zip(b.as_ref())
+                .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))
+        };
+        if same(&t.recording, &self.recording) || same(&t.isrc, &self.isrc) {
+            return true;
+        }
+        let near = match (self.duration_ms, t.duration_ms) {
+            (Some(a), Some(b)) => (a - b).abs() <= DURATION_TOLERANCE_MS,
+            _ => true,
+        };
+        near && ((t.track.is_some() && self.number == t.track && self.disc == t.disc_number())
             || t.title.as_ref().is_some_and(|n| {
                 self.title
                     .as_ref()
                     .is_some_and(|m| m.trim().to_lowercase() == n.trim().to_lowercase())
-            })
+            }))
     }
+}
+
+/// The audio editions a release-less file may join: the target, then the others holding a wanted track.
+async fn wanted_editions(c: &mut PgConnection, media: i32, target: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = 'audio'
+             AND (e.id = $2 OR EXISTS (SELECT 1 FROM items i WHERE i."editionId" = e.id AND i.monitored))
+           ORDER BY (e.id = $2) DESC, e.id"#,
+    )
+    .bind(media)
+    .bind(target)
+    .fetch_all(&mut *c)
+    .await
 }
 
 async fn target_edition(c: &mut PgConnection, media: i32) -> sqlx::Result<Option<i32>> {
@@ -378,9 +465,19 @@ async fn load_free(
     let std::collections::hash_map::Entry::Vacant(slot) = free.entry(edition) else {
         return Ok(());
     };
-    type Row = (i32, i32, Option<i32>, Option<String>, Option<String>);
+    type Row = (
+        i32,
+        i32,
+        Option<i32>,
+        Option<String>,
+        Option<String>,
+        Option<i32>,
+        Option<String>,
+        bool,
+    );
     let list: Vec<Row> = sqlx::query_as(
-        r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, i.title
+        r#"SELECT i.id, td."discNumber", td."trackNumber", td."recordingMbid"::text, td.isrc, td."durationMs",
+                  i.title, i.monitored
            FROM items i JOIN track_details td ON td."itemId" = i.id
            WHERE i."editionId" = $1
              AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id)
@@ -391,13 +488,18 @@ async fn load_free(
     .await?;
     slot.insert(
         list.into_iter()
-            .map(|(item, disc, number, recording, title)| Free {
-                item,
-                disc,
-                number,
-                recording,
-                title,
-            })
+            .map(
+                |(item, disc, number, recording, isrc, duration_ms, title, monitored)| Free {
+                    item,
+                    disc,
+                    number,
+                    recording,
+                    isrc,
+                    duration_ms,
+                    title,
+                    monitored,
+                },
+            )
             .collect(),
     );
     let max: i32 = sqlx::query_scalar(
@@ -651,20 +753,26 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             }
             continue;
         }
-        let target = if t.release.is_none() {
-            target_edition(&mut tx, media)
+        let target = target_edition(&mut tx, media)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut joined = None;
+        if let Some(target) = target.filter(|_| t.release.is_none()) {
+            // A release-less file joins a wanted edition only where it pairs with one of its free tracks.
+            for e in wanted_editions(&mut tx, media, target)
                 .await
                 .map_err(|e| e.to_string())?
-        } else {
-            None
-        };
-        if let Some(target) = target {
-            load_free(&mut tx, target, &mut free, &mut next)
-                .await
-                .map_err(|e| e.to_string())?;
+            {
+                load_free(&mut tx, e, &mut free, &mut next)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if free[&e].iter().any(|f| f.pairs(t)) {
+                    joined = Some(e);
+                    break;
+                }
+            }
         }
-        // A release-less file joins the target edition only where it pairs with one of its free tracks.
-        let edition = match target.filter(|e| free[e].iter().any(|f| f.pairs(t))) {
+        let edition = match joined {
             Some(e) => e,
             None => edition_for(&mut tx, st, media, t)
                 .await
@@ -682,11 +790,12 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             Some(i) => heirs.remove(i).item,
             None => {
                 let item: i32 = sqlx::query_scalar(
-                    r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, true, $3)
+                    r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, $3, $4)
                        RETURNING id"#,
                 )
                 .bind(media)
                 .bind(edition)
+                .bind(target.is_none_or(|e| e == edition))
                 .bind(&t.title)
                 .fetch_one(&mut *tx)
                 .await
@@ -938,5 +1047,45 @@ mod tests {
         assert_eq!(r["year"], 1999);
         assert_eq!(r["genres"], json!(["Rock", "Pop"]));
         assert!(album_record(&[]).is_empty());
+    }
+
+    fn free(title: &str, number: i32, ms: Option<i32>) -> Free {
+        Free {
+            item: 1,
+            disc: 1,
+            number: Some(number),
+            recording: None,
+            isrc: None,
+            duration_ms: ms,
+            title: Some(title.into()),
+            monitored: true,
+        }
+    }
+
+    #[test]
+    fn a_file_of_another_length_does_not_pair_by_position_or_title() {
+        let studio = free("Song", 3, Some(237_000));
+        let live = |ms| TrackTags {
+            title: Some("Song".into()),
+            track: Some(3),
+            duration_ms: Some(ms),
+            ..Default::default()
+        };
+        assert!(!studio.pairs(&live(306_000)));
+        assert!(studio.pairs(&live(239_500)));
+        assert!(free("Song", 3, None).pairs(&live(306_000)));
+    }
+
+    #[test]
+    fn an_isrc_pairs_whatever_the_title_and_the_length() {
+        let mut t = free("Song", 3, Some(237_000));
+        t.isrc = Some("QZAAA2100001".into());
+        let file = TrackTags {
+            title: Some("Other".into()),
+            isrc: Some("qzaaa2100001".into()),
+            duration_ms: Some(10_000),
+            ..Default::default()
+        };
+        assert!(t.pairs(&file));
     }
 }

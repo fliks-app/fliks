@@ -1358,6 +1358,8 @@ mod tests {
             kind: None,
             item_ids: None,
             position: None,
+            stem_mode: None,
+            pitch: None,
         };
         assert!(hub.emit_to_connection(1, &face, cmd(now_ms() + 60_000)));
         assert!(hub.emit_to_connection(1, &face, cmd(now_ms() - 1)));
@@ -1392,6 +1394,8 @@ mod tests {
             kind: None,
             item_ids: None,
             position: None,
+            stem_mode: None,
+            pitch: None,
         };
         assert_eq!(
             park_deadline(&cmd(RemoteAction::Load), at),

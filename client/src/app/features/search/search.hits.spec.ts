@@ -93,4 +93,15 @@ describe('SearchComponent hits', () => {
     expect(view.visible(rows, 'albums')).toHaveLength(30);
     expect(view.visible(rows, 'books')).toHaveLength(12);
   });
+
+  it('shows a track as requested when its album is, or after it was asked alone', () => {
+    const { c } = setup(['requests.create']);
+    const view = c as unknown as { trackRequested(r: unknown): boolean; requestedTracks: { set(s: Set<string>): void } };
+    const rec = (status: string | null, id = 'r1') => ({ externalId: id, album: hit({ requestStatus: status } as Partial<SearchHit>) });
+    expect(view.trackRequested(rec(null))).toBe(false);
+    expect(view.trackRequested(rec('pending'))).toBe(true);
+    view.requestedTracks.set(new Set(['r1']));
+    expect(view.trackRequested(rec(null))).toBe(true);
+    expect(view.trackRequested(rec(null, 'r2'))).toBe(false);
+  });
 });

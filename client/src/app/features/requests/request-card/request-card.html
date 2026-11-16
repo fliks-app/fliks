@@ -47,6 +47,12 @@
       <app-request-wants [wants]="request().wants!" />
     }
 
+    @if (trackRequest()) {
+      <p class="text-sm text-base-content/70 m-0" data-testid="request-tracks">
+        {{ (request().trackCount ? 'requests.tracks_of' : 'requests.tracks_count') | translatePlural: request().recordings!.length : { total: request().trackCount } }}
+      </p>
+    }
+
     @if (canManage()) {
       <p class="text-sm text-base-content/70 m-0">
         <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
@@ -72,7 +78,7 @@
     </div>
 
     @if (canManage() && request().status === 'pending') {
-      <div class="mt-auto pt-2 flex gap-2">
+      <div class="mt-auto pt-2 flex flex-wrap gap-2">
         <button
           type="button"
           class="btn btn-success btn-sm flex-1"
@@ -91,6 +97,18 @@
         >
           {{ 'requests.decline' | translate }}
         </button>
+        @if (trackRequest()) {
+          <button
+            type="button"
+            class="btn btn-success btn-outline btn-sm w-full"
+            [disabled]="busy()"
+            tabindex="-1"
+            (click)="$event.stopPropagation(); approveAlbum.emit(request().id)"
+            data-testid="approve-album"
+          >
+            {{ 'requests.approve_album' | translate }}
+          </button>
+        }
       </div>
     }
   </div>

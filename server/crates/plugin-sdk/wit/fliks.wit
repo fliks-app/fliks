@@ -52,6 +52,9 @@ interface types {
     air-date: option<string>,
     /// The items of the group.
     unit-count: option<u32>,
+    /// A track's ISRC and length, for an acquisition provider to pair it.
+    isrc: option<string>,
+    duration-ms: option<u32>,
   }
 
   enum want-decision { missing, upgrade, skip }
@@ -373,6 +376,8 @@ interface metadata-provider {
   child-stubs: func(kind: kind, id: external-id, lang: lang) -> result<json, provider-error>;
   find-by: func(source: external-id, lang: lang) -> result<option<tuple<external-id, kind>>, provider-error>;
   fetch-edition: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;
+  /// The releases (edition namespace) holding a recording, named by a `musicbrainz` or `isrc` id; `not-found` when unknown.
+  recording-releases: func(recording: external-id) -> result<list<external-id>, provider-error>;
   fetch-chapters: func(edition: external-id, lang: lang) -> result<option<json>, provider-error>;
   fetch-person: func(id: external-id, lang: lang) -> result<json, provider-error>;
   person-credits: func(id: external-id, lang: lang) -> result<json, provider-error>;

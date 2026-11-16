@@ -141,7 +141,7 @@
   @if (audio.uiTrack(); as t) {
     <div class="flex min-h-0 flex-1 flex-col gap-4" data-testid="audio-full">
       <div class="flex items-center gap-1">
-        <button type="button" class="btn btn-ghost btn-circle" (click)="audio.collapse()" [attr.aria-label]="'audio_player.collapse' | translate">
+        <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-bottom" (click)="audio.collapse()" [attr.aria-label]="'audio_player.collapse' | translate" [attr.data-tip]="'audio_player.collapse' | translate">
           <svg lucideChevronDown class="h-6 w-6"></svg>
         </button>
         <div class="min-w-0 flex-1 text-center">
@@ -160,7 +160,7 @@
           }
         </div>
         @if (!asSheet()) {
-          <button type="button" class="btn btn-ghost btn-circle max-lg:hidden" (click)="fullscreen.set(!fullscreen())" [attr.aria-pressed]="fullscreen()" [attr.aria-label]="(fullscreen() ? 'player.exit_fullscreen' : 'player.fullscreen') | translate" data-testid="audio-fullscreen">
+          <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-bottom max-lg:hidden" (click)="fullscreen.set(!fullscreen())" [attr.aria-pressed]="fullscreen()" [attr.aria-label]="(fullscreen() ? 'player.exit_fullscreen' : 'player.fullscreen') | translate" [attr.data-tip]="(fullscreen() ? 'player.exit_fullscreen' : 'player.fullscreen') | translate" data-testid="audio-fullscreen">
             @if (fullscreen()) {
               <svg lucideMinimize class="h-5 w-5"></svg>
             } @else {
@@ -171,7 +171,7 @@
         @if (remoteView() && !parkedView()) {
           <span class="w-12 shrink-0"></span>
         } @else {
-          <button #menuBtn type="button" class="btn btn-ghost btn-circle" (click)="menuOpen.set(true)" [attr.aria-label]="'common.more' | translate" [attr.aria-expanded]="menuOpen()" data-testid="audio-menu">
+          <button #menuBtn type="button" class="btn btn-ghost btn-circle tooltip tooltip-bottom" (click)="menuOpen.set(true)" [attr.aria-label]="'common.more' | translate" [attr.data-tip]="'common.more' | translate" [attr.aria-expanded]="menuOpen()" data-testid="audio-menu">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           </button>
           <app-popover-menu [open]="menuOpen()" [anchor]="menuBtn" placement="bottom-end" (closed)="closeMenu()">
@@ -255,7 +255,7 @@
 
         <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="lyricsShown()" [class.flex-1]="lyricsShown()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
           @if (audio.musicMode() && lyricsShown()) {
-            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" (found)="hasLyrics.set($event)" />
+            <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" [(stage)]="karaokeStage" (found)="hasLyrics.set($event)" />
           } @else if (audio.musicMode()) {
             @if (!asSheet()) {
               <section animate.enter="fade-up-in" class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">
@@ -343,16 +343,17 @@
             }
           </div>
           <div class="flex shrink-0 items-center" appTvRow>
-            <button type="button" class="btn btn-ghost btn-circle" (click)="addToPlaylist()" [attr.aria-label]="'playlists.add_to_playlist_title' | translate" data-testid="audio-add-to-playlist">
+            <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-top" (click)="addToPlaylist()" [attr.aria-label]="'playlists.add_to_playlist_title' | translate" [attr.data-tip]="'playlists.add_to_playlist_title' | translate" data-testid="audio-add-to-playlist">
               <svg lucideListPlus class="h-6 w-6"></svg>
             </button>
             <button
               type="button"
-              class="btn btn-ghost btn-circle"
+              class="btn btn-ghost btn-circle tooltip tooltip-left"
               [class.text-error]="fav()"
               [attr.aria-pressed]="fav()"
               (click)="toggleFavourite()"
               [attr.aria-label]="'music_player.favourite' | translate"
+              [attr.data-tip]="'music_player.favourite' | translate"
             >
               <svg lucideHeart class="h-6 w-6" [attr.fill]="fav() ? 'currentColor' : 'none'"></svg>
             </button>
@@ -361,57 +362,55 @@
       }
 
       <div class="flex flex-col gap-1">
-        <input
-          type="range"
-          class="range range-primary range-xs w-full"
-          min="0"
-          max="1000"
-          [value]="scrub() ?? percent() * 10"
-          (input)="scrub.set(+$any($event.target).value)"
-          (change)="onSeek($event)"
-          (blur)="scrub.set(null)"
+        <app-seekbar
+          variant="cast"
+          [currentTime]="audio.position()"
+          [duration]="audio.duration()"
+          [showBuffered]="false"
           [disabled]="!controllable()"
-          [attr.aria-label]="'audio_player.seek' | translate"
+          (seek)="audio.seek($event)"
         />
         <div class="flex justify-between text-sm tabular-nums text-base-content/60">
-          <span>{{ clock(shown()) }}</span>
-          <span>-{{ clock(audio.duration() - shown()) }}</span>
+          <span>{{ clock(audio.position()) }}</span>
+          <span>-{{ clock(audio.duration() - audio.position()) }}</span>
         </div>
       </div>
 
       @if (audio.musicMode()) {
-      <div class="flex items-center justify-between sm:mx-auto sm:w-full sm:max-w-sm" appTvRow>
+      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" appTvRow>
         <button
           type="button"
-          class="btn btn-ghost btn-circle [--size:2.5rem]"
+          class="btn btn-ghost btn-circle tooltip tooltip-top [--size:2.5rem]"
           [class.text-primary]="audio.shuffle()"
           [attr.aria-pressed]="audio.shuffle()"
           [disabled]="!canShuffle()"
           (click)="audio.setShuffle(!audio.shuffle())"
           [attr.aria-label]="'music_player.shuffle' | translate"
+          [attr.data-tip]="'music_player.shuffle' | translate"
         >
           <svg lucideShuffle class="h-5 w-5"></svg>
         </button>
-        <button type="button" class="btn btn-ghost btn-circle" [disabled]="!controllable()" (click)="audio.previous()" [attr.aria-label]="'music_player.previous' | translate">
+        <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-top" [disabled]="!controllable()" (click)="audio.previous()" [attr.aria-label]="'music_player.previous' | translate" [attr.data-tip]="'music_player.previous' | translate">
           <svg lucideSkipBack class="h-6 w-6"></svg>
         </button>
-        <button type="button" class="btn btn-primary btn-circle btn-lg [--size:4.25rem]" [disabled]="!canToggle()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+        <button type="button" class="btn btn-primary btn-circle btn-lg tooltip tooltip-top [--size:4.25rem]" [disabled]="!canToggle()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate" [attr.data-tip]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
           @if (audio.uiPlaying()) {
             <svg lucidePause class="h-7 w-7"></svg>
           } @else {
             <svg lucidePlay class="h-7 w-7"></svg>
           }
         </button>
-        <button type="button" class="btn btn-ghost btn-circle" [disabled]="!controllable()" (click)="audio.next()" [attr.aria-label]="'music_player.next' | translate">
+        <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-top" [disabled]="!controllable()" (click)="audio.next()" [attr.aria-label]="'music_player.next' | translate" [attr.data-tip]="'music_player.next' | translate">
           <svg lucideSkipForward class="h-6 w-6"></svg>
         </button>
         <button
           type="button"
-          class="btn btn-ghost btn-circle [--size:2.5rem]"
+          class="btn btn-ghost btn-circle tooltip tooltip-left [--size:2.5rem]"
           [class.text-primary]="audio.repeat() !== 'off'"
           [disabled]="!canRepeat()"
           (click)="audio.cycleRepeat()"
           [attr.aria-label]="('music_player.repeat_' + audio.repeat()) | translate"
+          [attr.data-tip]="('music_player.repeat_' + audio.repeat()) | translate"
         >
           @if (audio.repeat() === 'one') {
             <svg lucideRepeat1 class="h-5 w-5"></svg>
@@ -428,7 +427,7 @@
           </app-dropdown-menu>
         }
         @if (showVolume()) {
-          <button type="button" class="btn btn-ghost btn-circle" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" data-testid="audio-mute">
+          <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-top" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" [attr.data-tip]="'player.volume' | translate" data-testid="audio-mute">
             @if (audio.muted() || audio.volume() === 0) {
               <svg lucideVolumeX class="h-5 w-5"></svg>
             } @else {
@@ -451,18 +450,19 @@
         @if (hasLyrics()) {
           <button
             type="button"
-            class="btn btn-ghost btn-circle"
+            class="btn btn-ghost btn-circle tooltip tooltip-top"
             [class.text-primary]="lyricsShown()"
             [attr.aria-pressed]="lyricsShown()"
             (click)="toggleLyrics()"
             [attr.aria-label]="'lyrics.title' | translate"
+            [attr.data-tip]="'lyrics.title' | translate"
             data-testid="lyrics-toggle"
           >
-            <svg lucideMicVocal class="h-5 w-5"></svg>
+            <svg lucideMic class="h-5 w-5"></svg>
           </button>
         }
         @if (asSheet()) {
-          <button type="button" class="btn btn-ghost btn-circle" (click)="queueOpen.set(true)" [attr.aria-label]="'music_player.queue' | translate" data-testid="audio-queue-open">
+          <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-left" (click)="queueOpen.set(true)" [attr.aria-label]="'music_player.queue' | translate" [attr.data-tip]="'music_player.queue' | translate" data-testid="audio-queue-open">
             <svg lucideListMusic class="h-5 w-5"></svg>
           </button>
         }

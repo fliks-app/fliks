@@ -600,10 +600,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  async approveRequest(id: number) {
+  async approveRequest(id: number, wholeAlbum = false) {
     this.requestActionBusyId.set(id);
     try {
-      this.patchRequest(await this.requestsService.approve(id));
+      this.patchRequest(await this.requestsService.approve(id, wholeAlbum));
     } catch {
       /* global error toast */
     } finally {

@@ -1,3 +1,4 @@
+import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 import { DeviceChipComponent } from '../device-chip/device-chip';
@@ -17,7 +18,7 @@ import {
   LucideGauge,
   LucideHeart,
   LucideListMusic,
-  LucideMicVocal,
+  LucideMic,
   LucideRepeat,
   LucideRepeat1,
   LucideShuffle,
@@ -79,10 +80,30 @@ import { TvSectionDirective } from '../directives/tv-section.directive';
 const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 
 /** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. The full player shows the local player, or the audio session of another device while that one is opened. */
+const FULLSCREEN_KEY = 'fliks.audioPlayer.fullscreen';
+const LYRICS_KEY = 'fliks.audioPlayer.lyrics';
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    localStorage.setItem(key, String(on));
+  } catch {
+    /* storage unavailable: the choice lasts for the session */
+  }
+}
+
 @Component({
   selector: 'app-audio-player',
   imports: [
     CdkDrag,
+    SeekbarComponent,
     CdkDragHandle,
     CdkDropList,
     DropListSettleDirective,
@@ -112,7 +133,7 @@ const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
     LucideGauge,
     LucideHeart,
     LucideListMusic,
-      LucideMicVocal,
+    LucideMic,
     LucideRepeat,
     LucideRepeat1,
     LucideShuffle,
@@ -195,14 +216,7 @@ export class AudioPlayerComponent {
   protected readonly asSheet = computed(() => this.device.isTouch() || this.device.isTv());
 
   protected readonly clock = formatTime;
-  protected readonly percent = computed(() => percentOf(this.audio));
   protected readonly miniPercent = computed(() => percentOf(this.mini() ?? this.audio));
-  /** The slider value while the user drags, so `timeupdate` doesn't snap the thumb back. */
-  protected readonly scrub = signal<number | null>(null);
-  protected readonly shown = computed(() => {
-    const s = this.scrub();
-    return s === null ? this.audio.position() : (s / 1000) * this.audio.duration();
-  });
   protected readonly chapter = computed(() => this.local.chapters()[this.local.chapterIndex()] ?? null);
   protected readonly sleepLabel = computed(() => {
     const s = this.local.sleep();
@@ -210,17 +224,20 @@ export class AudioPlayerComponent {
   });
 
   /** The viewer's choice; `lyricsShown` is what is shown, since a track without lyrics has no panel. */
-  protected readonly lyricsOn = signal(false);
+  /** The Lyrics toggle, remembered across tracks and visits. */
+  protected readonly lyricsOn = signal(readFlag(LYRICS_KEY));
   /** Whether the playing track has lyrics; null until known. */
   protected readonly hasLyrics = signal<boolean | null>(null);
   /** The edit tools of the lyrics panel, opened from the menu. */
   protected readonly lyricsEdit = signal(false);
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
+  /** The Karaoke toggle of the lyrics panel, kept across Lyrics being hidden and shown. */
+  protected readonly karaokeStage = signal(false);
   protected readonly queueOpen = signal(false);
   protected readonly queueEditing = signal(false);
   protected readonly selected = signal<ReadonlySet<MusicTrackRequest>>(new Set());
-  /** The desktop dialog fills the viewport instead of its centred box. */
-  protected readonly fullscreen = signal(false);
+  /** The desktop dialog fills the viewport instead of its centred box; remembered across openings. */
+  protected readonly fullscreen = signal(readFlag(FULLSCREEN_KEY));
   protected readonly menuOpen = signal(false);
   protected readonly levelOpen = signal(false);
   protected readonly fav = signal(false);
@@ -253,13 +270,9 @@ export class AudioPlayerComponent {
       if (!el) return;
       if (this.audio.expanded() && !el.open) el.showModal();
       else if (!this.audio.expanded() && el.open) el.close();
-      if (!this.audio.expanded()) untracked(() => this.fullscreen.set(false));
     });
-  }
-
-  protected onSeek(e: Event): void {
-    void this.audio.seek((Number((e.target as HTMLInputElement).value) / 1000) * this.audio.duration());
-    this.scrub.set(null);
+    effect(() => writeFlag(FULLSCREEN_KEY, this.fullscreen()));
+    effect(() => writeFlag(LYRICS_KEY, this.lyricsOn()));
   }
 
   protected toggleLyrics(): void {

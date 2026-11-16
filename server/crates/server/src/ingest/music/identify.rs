@@ -9,7 +9,9 @@ use crate::{
     media::external_ids::{self, Link},
     metadata::{
         Search,
-        music::{Fetched, Written, aliases, fetch, fetch_edition, write_album, write_edition},
+        music::{
+            Create, Fetched, Written, aliases, fetch, fetch_edition, write_album, write_edition,
+        },
         walk,
     },
     settings::setting_value,
@@ -368,7 +370,7 @@ async fn apply(
     .fetch_optional(&st.db)
     .await?;
     if let Some(edition) = edition {
-        write_edition(st, media, edition, &found.edition, false).await?;
+        write_edition(st, media, edition, &found.edition, Create::No).await?;
     }
     Ok(true)
 }

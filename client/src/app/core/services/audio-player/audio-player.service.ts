@@ -1456,6 +1456,9 @@ export class AudioPlayerService {
       case 'queue':
         if (music && cmd.queue) await this.replaceQueue(cmd.queue, cmd.shuffle ?? this.mq.shuffle);
         break;
+      case 'karaoke':
+        if (music) await this.applyKaraoke(cmd);
+        break;
       default:
         return;
     }
@@ -1463,6 +1466,13 @@ export class AudioPlayerService {
     // A real play or pause beats on the element's event, carrying this ack; a beat now reports the old state.
     const flips = cmd.action === 'playpause' || (cmd.action === 'play' && !wasPlaying) || (cmd.action === 'pause' && wasPlaying);
     if (!flips) this.beat();
+  }
+
+  /** Pitch first: it reopens the track and resets the mix, so a mix sent with it applies after. */
+  private async applyKaraoke(cmd: RemoteCommand): Promise<void> {
+    if (cmd.pitch !== undefined) await this.setPitch(cmd.pitch);
+    if (cmd.stemMode !== undefined) this.setStemMode(cmd.stemMode);
+    if (cmd.level !== undefined) this.setVocalLevel(cmd.level);
   }
 
   private setLevel(level: number, muted: boolean): void {
@@ -1479,8 +1489,10 @@ export class AudioPlayerService {
     this.reportVolume();
   }
 
+  /** At level 0 the button restores a level instead of toggling a mute nobody hears. */
   toggleMute(): void {
-    this.setLevel(this.volume(), !this._muted());
+    if (this.volume() === 0) this.setLevel(0.5, false);
+    else this.setLevel(this.volume(), !this._muted());
     this.reportVolume();
   }
 
@@ -1562,6 +1574,7 @@ export class AudioPlayerService {
         state: this.uiPlaying() ? ('playing' as const) : ('paused' as const),
         hasNext: this._musicMode() && this.neighbour(1) !== null,
         playbackRate: this.effectiveRate(),
+        ...(this._musicMode() && { stemMode: this._stemMode(), vocalLevel: this._vocalLevel(), pitch: this._pitch(), stemsAvailable: this._stemsAvailable() }),
         ...this.volumeReport(),
       } satisfies BeatBody,
     } as { mediaId: number; payload: BeatBody };

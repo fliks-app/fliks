@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import type { LyricsCue, StructuredLyrics } from '../api/lyrics.models';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
 import { AuthService } from '../auth.service';
 import { PartyService } from '../party/party.service';
 import { DeviceService } from '../device.service';
@@ -23,10 +24,13 @@ function setup() {
   const received = new Subject<{ userId: number; frames: { t: number; midi: number | null }[] }>();
   const track = signal<{ itemId: number } | null>({ itemId: 1 });
   const pitch = signal(0);
+  const remoteView = signal(false);
+  const remote = { expanded: remoteView, track: signal({ itemId: 1 }), position: signal(90), playing: signal(true), rate: signal(1), pitch: signal(5) };
   TestBed.configureTestingModule({
     providers: [
       KaraokeService,
       { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1), pitch } },
+      { provide: RemoteAudioOutput, useValue: remote },
       { provide: KaraokeRelayService, useValue: { received, open: vi.fn(), close: vi.fn(), send: vi.fn() } },
       { provide: DeviceService, useValue: { isTv: () => true } },
       { provide: PartyService, useValue: { party: signal(null), members: signal([{ userId: 5, username: 'Ana' }]) } },
@@ -34,10 +38,20 @@ function setup() {
       { provide: TranslateService, useValue: { instant: (k: string, p: { n: number }) => `${k}${p?.n ?? ''}` } },
     ],
   });
-  return { karaoke: TestBed.inject(KaraokeService), received, track, pitch };
+  return { karaoke: TestBed.inject(KaraokeService), received, track, pitch, remoteView };
 }
 
 describe('KaraokeService', () => {
+  it('follows the displayed output for the media time and the key', () => {
+    const { karaoke, received, remoteView } = setup();
+    remoteView.set(true);
+    TestBed.tick();
+    expect(Math.round(karaoke.mediaMs() / 1000)).toBe(90);
+    received.next({ userId: 5, frames: take(65) });
+    remoteView.set(false);
+    expect(karaoke.results(doc)[0].score).toBe(10000);
+  });
+
   it('scores a frame against the key it was sung in, not the key now', () => {
     const { karaoke, received, pitch } = setup();
     pitch.set(2);

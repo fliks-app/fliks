@@ -1,6 +1,6 @@
 //! The target edition of a monitored album (`docs/spec/music.md` rule 9): the release that best fits the
 //! library, its tracks made wanted, a track already owned through another album left alone.
-use super::{Fetched, fetch, fetch_edition, write_edition};
+use super::{Create, Fetched, fetch, fetch_edition, write_edition};
 use crate::{http::AppError, ingest::music::identify, libraries, state::AppState};
 use fliks_domain::{
     external_id::Namespace,
@@ -12,15 +12,15 @@ use sqlx::PgPool;
 const NS: Namespace = Namespace::MUSICBRAINZ;
 
 #[derive(sqlx::FromRow)]
-struct Album {
+pub(super) struct Album {
     monitored: bool,
-    library: Option<i32>,
-    id: Option<String>,
+    pub(super) library: Option<i32>,
+    pub(super) id: Option<String>,
     target: Option<i32>,
     parts: bool,
 }
 
-async fn album(db: &PgPool, media: i32) -> sqlx::Result<Option<Album>> {
+pub(super) async fn album(db: &PgPool, media: i32) -> sqlx::Result<Option<Album>> {
     sqlx::query_as(
         r#"SELECT m.monitored, m."libraryId" AS library,
              (SELECT x.value FROM media_external_ids x
@@ -51,7 +51,7 @@ pub(super) async fn leave_owned(db: &PgPool, media: i32, edition: i32) -> sqlx::
 }
 
 /// The edition holding the musicbrainz release `release`, created bare when the album has none.
-async fn edition_of(db: &PgPool, media: i32, release: &str) -> sqlx::Result<i32> {
+pub(super) async fn edition_of(db: &PgPool, media: i32, release: &str) -> sqlx::Result<i32> {
     let mut tx = db.begin().await?;
     sqlx::query("SELECT id FROM media WHERE id = $1 FOR UPDATE")
         .bind(media)
@@ -136,12 +136,12 @@ async fn pick(st: &AppState, media: i32, a: Album, prio: Priority) -> Result<boo
     let fetched = fetch(st, NS, &id, &lang, prio).await?;
     let profile = libraries::metadata_profile(&st.db, library).await?;
     let cfg = identify::config(st).await;
-    let Some(release) = pick_target(&fetched.releases, &profile, &cfg) else {
+    let Some(release) = pick_target(&fetched.releases, &profile, &cfg, None) else {
         return Ok(false);
     };
     let edition_data = fetch_edition(st, NS, &release.external_id, &lang, prio).await?;
     let edition = edition_of(&st.db, media, &release.external_id).await?;
-    write_edition(st, media, edition, &edition_data, true).await?;
+    write_edition(st, media, edition, &edition_data, Create::AsAlbum).await?;
     leave_owned(&st.db, media, edition).await?;
     set_target(&st.db, media, edition).await?;
     Ok(true)
@@ -157,15 +157,30 @@ pub async fn main_release(
 ) -> Result<(Fetched, Option<Edition>), AppError> {
     let fetched = fetch(st, NS, group, lang, prio).await?;
     let cfg = identify::config(st).await;
-    let Some(release) = pick_target(&fetched.releases, profile, &cfg) else {
+    let Some(release) = pick_target(&fetched.releases, profile, &cfg, None) else {
         return Ok((fetched, None));
     };
     let edition = fetch_edition(st, NS, &release.external_id, lang, prio).await?;
     Ok((fetched, Some(edition)))
 }
 
-/// The tracklist of the release a new album of the library would target.
+/// The tracklist of the release a new album of the library would target, or with `recordings` the one
+/// wanting them would put the first on (`want::tracklist`).
 pub async fn preview(
+    st: &AppState,
+    group: &str,
+    library: i32,
+    recordings: &[super::want::Recording<'_>],
+    prio: Priority,
+) -> Result<Vec<fliks_domain::music::provider::Track>, AppError> {
+    if !recordings.is_empty() {
+        return super::want::tracklist(st, group, library, recordings, prio).await;
+    }
+    main_tracks(st, group, library, prio).await
+}
+
+/// The tracklist of the release a new album of the library would target.
+pub(super) async fn main_tracks(
     st: &AppState,
     group: &str,
     library: i32,
@@ -195,21 +210,6 @@ pub async fn monitor_unfiled(db: &PgPool, media: i32) -> sqlx::Result<()> {
         .execute(db)
         .await?;
     leave_owned(db, media, edition).await
-}
-
-/// Keeps monitored only the tracks of the target edition whose recording is in `recordings`.
-pub async fn select_recordings(db: &PgPool, media: i32, recordings: &[String]) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"UPDATE items i SET monitored = false FROM track_details td
-           WHERE td."itemId" = i.id AND td."recordingMbid" IS NOT NULL AND i.monitored
-             AND i."editionId" = (SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1)
-             AND NOT (td."recordingMbid"::text = ANY($2))"#,
-    )
-    .bind(media)
-    .bind(recordings)
-    .execute(db)
-    .await
-    .map(drop)
 }
 
 /// An album asked for as a whole (a request): its target picked when it has none, then every track of the
@@ -357,27 +357,6 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(wanted, [false, true]);
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn a_picked_selection_leaves_the_other_recordings_unmonitored(db: PgPool) {
-        two_albums(&db).await;
-        let edition: i32 = sqlx::query_scalar(r#"SELECT id FROM editions WHERE "mediaId" = 2"#)
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        set_target(&db, 2, edition).await.unwrap();
-        select_recordings(&db, 2, &["44444444-4444-4444-4444-444444444444".to_owned()])
-            .await
-            .unwrap();
-        let monitored: Vec<bool> = sqlx::query_scalar(
-            r#"SELECT i.monitored FROM items i WHERE i."mediaId" = 2 ORDER BY i.id"#,
-        )
-        .fetch_all(&db)
-        .await
-        .unwrap();
-        // the recording outside the selection is dropped, the track with no recording id stays
-        assert_eq!(monitored, [false, true]);
     }
 
     #[sqlx::test(migrations = false)]

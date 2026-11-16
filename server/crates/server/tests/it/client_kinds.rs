@@ -30,7 +30,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         INSERT INTO playback_states ("userId", "itemId", completed, "playedAt") SELECT 1, id, true, now() FROM items;
         INSERT INTO likes ("userId", "mediaId") SELECT 1, id FROM media;
         INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, status, wants)
-          SELECT 1, 'add', type, 'tmdb', id::text, title, 'pending', CASE WHEN type = 'book' THEN '[]'::jsonb END
+          SELECT 1, 'add', type, 'tmdb', id::text, title, 'pending', CASE WHEN type IN ('book', 'album') THEN '[]'::jsonb END
           FROM media;
         "#,
     )

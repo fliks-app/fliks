@@ -225,9 +225,8 @@ export class SeekbarComponent {
   /** Track height + tint: `h-1` baseline, `h-2.5` while dragging, hovering or focused. Hover uses a signal, not `group-hover:`
    *  (sticky after a tap on mobile); classes are built here since `[class.h-1]` can't express a dot. */
   readonly trackClass = computed(() => {
-    if (this.variant() === 'cast') return 'h-1 bg-base-300';
     const thick = this.dragging() || this.hovering();
-    const base = 'bg-white/20 group-focus-visible:h-2.5';
+    const base = `${this.variant() === 'cast' ? 'bg-base-300' : 'bg-white/20'} group-focus-visible:h-2.5`;
     return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
   });
 

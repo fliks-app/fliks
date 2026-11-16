@@ -36,8 +36,8 @@ describe('LyricsViewComponent', () => {
     const el = f.nativeElement as HTMLElement;
     expect([...el.querySelectorAll('button')].map((b) => b.getAttribute('aria-current'))).toEqual(['true', 'true', null]);
     expect([...el.querySelectorAll('[data-testid="lyrics-mark"]')].map((m) => m.textContent)).toEqual(['●', '▲', '●']);
-    const clips = [...el.querySelectorAll<HTMLElement>('[data-cue]')].map((e) => e.style.getPropertyValue('clip-path'));
-    expect(clips).toEqual(['inset(0px 50% 0px 0px)', 'inset(0px 50% 0px 0px)', 'inset(0px 100% 0px 0px)']);
+    const widths = [...el.querySelectorAll<HTMLElement>('[data-testid="lyrics-sweep"]')].map((e) => e.style.getPropertyValue('--p'));
+    expect(widths).toEqual(['50%', '50%', '0%']);
   });
 
   it('paints the words being sung without touching the template until a word ends', () => {
@@ -51,14 +51,14 @@ describe('LyricsViewComponent', () => {
     });
     f.detectChanges();
     const c = f.componentInstance as unknown as { sync(pos: number): void; clock(): number };
-    const clips = () => [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-cue]')].map((e) => e.style.getPropertyValue('clip-path'));
+    const fills = () => [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-cue]')].map((e) => e.style.getPropertyValue('--p'));
     c.sync(2500);
     expect(c.clock()).toBe(2000);
-    expect(clips()).toEqual(['inset(0px 37.5% 0px 0px)', 'inset(0px 25% 0px 0px)']);
+    expect(fills()).toEqual(['62.5%', '75%']);
     c.sync(3500);
     expect(c.clock()).toBe(3500);
     f.detectChanges();
-    expect(clips()).toEqual(['inset(0px 12.5% 0px 0px)', 'inset(0px 0% 0px 0px)']);
+    expect(fills()).toEqual(['87.5%', '100%']);
   });
 
   it('shows no mark on a duet line nobody tagged, and keeps the text column', () => {
@@ -96,7 +96,7 @@ describe('LyricsViewComponent', () => {
       cueLine: [{ index: 0, start: 0, end: 2000, value: 'la, la', cue: [cue(0, 1000, 0, 2, 'la'), cue(1000, 2000, 4, 6, 'la')] }],
     });
     f.detectChanges();
-    expect((f.nativeElement as HTMLElement).querySelector('button')!.textContent!.replace(/\s+/g, ' ')).toContain('lala, lala');
+    expect((f.nativeElement as HTMLElement).querySelector('button')!.textContent!.replace(/\s+/g, ' ')).toContain('la, la');
   });
 
   it('scrolls back to the top when the document changes', () => {

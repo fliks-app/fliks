@@ -14,11 +14,13 @@ fn usual_tracks(releases: &[&Release]) -> Option<i32> {
 }
 
 /// A release the profile allows (every release when it allows none), the best by status, country, medium,
-/// closeness to the usual track count, then the earliest date; the id breaks a tie.
+/// closeness to the usual track count (over the whole pool), then the earliest date; the id breaks a tie.
+/// `among` limits the choice to those release ids; a profile-allowed one wins, else any of them.
 pub fn pick_target<'a>(
     releases: &'a [Release],
     profile: &MetadataProfile,
     prefs: &Config,
+    among: Option<&[String]>,
 ) -> Option<&'a Release> {
     let allowed: Vec<&Release> = releases
         .iter()
@@ -30,7 +32,12 @@ pub fn pick_target<'a>(
         allowed
     };
     let usual = usual_tracks(&pool);
-    pool.into_iter().min_by_key(|r| {
+    let listed = |r: &&Release| among.is_none_or(|a| a.contains(&r.external_id));
+    let mut candidates: Vec<&Release> = pool.into_iter().filter(listed).collect();
+    if candidates.is_empty() {
+        candidates = releases.iter().filter(listed).collect();
+    }
+    candidates.into_iter().min_by_key(|r| {
         (
             rank(&profile.statuses, r.status.or(Some("unknown"))),
             rank(&prefs.countries, r.country.as_deref()),
@@ -42,6 +49,44 @@ pub fn pick_target<'a>(
             r.external_id.clone(),
         )
     })
+}
+
+/// The fewest releases that hold every recording: `holders[i]` are the release ids holding recording `i`
+/// (none empty). Each round takes the release holding most of the rest, ties by `pick_target` preference;
+/// the result pairs a release with the indices it takes.
+pub fn cover<'a>(
+    releases: &'a [Release],
+    profile: &MetadataProfile,
+    prefs: &Config,
+    holders: &[Vec<String>],
+) -> Vec<(&'a Release, Vec<usize>)> {
+    let mut rest: Vec<usize> = (0..holders.len()).collect();
+    let mut out = vec![];
+    while !rest.is_empty() {
+        let count = |id: &String| rest.iter().filter(|i| holders[**i].contains(id)).count();
+        let best = releases
+            .iter()
+            .map(|r| count(&r.external_id))
+            .max()
+            .unwrap_or(0);
+        if best == 0 {
+            break;
+        }
+        let among: Vec<String> = releases
+            .iter()
+            .filter(|r| count(&r.external_id) == best)
+            .map(|r| r.external_id.clone())
+            .collect();
+        let Some(chosen) = pick_target(releases, profile, prefs, Some(&among)) else {
+            break;
+        };
+        let (took, left) = rest
+            .into_iter()
+            .partition(|i| holders[*i].contains(&chosen.external_id));
+        rest = left;
+        out.push((chosen, took));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -72,7 +117,7 @@ mod tests {
             rel("std-a", "GB", "cd", 12, 2019),
             rel("std-b", "GB", "digital", 12, 2020),
         ];
-        let p = pick_target(&rs, &MetadataProfile::default(), &Config::default());
+        let p = pick_target(&rs, &MetadataProfile::default(), &Config::default(), None);
         assert_eq!(p.unwrap().external_id, "std-a");
     }
 
@@ -84,7 +129,7 @@ mod tests {
         ];
         let cfg = Config::from_percent(90.0, 80.0, vec!["fr".into()], vec![]);
         assert_eq!(
-            pick_target(&rs, &MetadataProfile::default(), &cfg)
+            pick_target(&rs, &MetadataProfile::default(), &cfg, None)
                 .unwrap()
                 .external_id,
             "fr"
@@ -99,17 +144,81 @@ mod tests {
         let both = [bootleg.clone(), official];
         let p = MetadataProfile::default();
         assert_eq!(
-            pick_target(&both, &p, &Config::default())
+            pick_target(&both, &p, &Config::default(), None)
                 .unwrap()
                 .external_id,
             "o"
         );
         assert_eq!(
-            pick_target(&[bootleg], &p, &Config::default())
+            pick_target(&[bootleg], &p, &Config::default(), None)
                 .unwrap()
                 .external_id,
             "b"
         );
-        assert!(pick_target(&[], &p, &Config::default()).is_none());
+        assert!(pick_target(&[], &p, &Config::default(), None).is_none());
+    }
+
+    #[test]
+    fn a_listed_holder_wins_whatever_the_standard_edition() {
+        let rs = [
+            rel("std-a", "GB", "cd", 13, 2019),
+            rel("std-b", "GB", "cd", 13, 2020),
+            rel("bonus", "XW", "digital", 15, 2021),
+        ];
+        let among = ["bonus".to_owned()];
+        let p = pick_target(
+            &rs,
+            &MetadataProfile::default(),
+            &Config::default(),
+            Some(&among),
+        );
+        assert_eq!(p.unwrap().external_id, "bonus");
+        assert!(
+            pick_target(
+                &rs,
+                &MetadataProfile::default(),
+                &Config::default(),
+                Some(&[])
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn among_holders_the_closest_to_the_usual_count_wins() {
+        let rs = [
+            rel("std-a", "GB", "cd", 13, 2019),
+            rel("std-b", "GB", "cd", 13, 2019),
+            rel("std-c", "GB", "cd", 13, 2019),
+            rel("deluxe", "GB", "cd", 25, 2019),
+            rel("plus", "GB", "cd", 15, 2020),
+        ];
+        let among = ["deluxe".to_owned(), "plus".to_owned()];
+        let p = pick_target(
+            &rs,
+            &MetadataProfile::default(),
+            &Config::default(),
+            Some(&among),
+        );
+        assert_eq!(p.unwrap().external_id, "plus");
+    }
+
+    #[test]
+    fn two_recordings_on_one_release_take_one_release() {
+        let rs = [
+            rel("a", "GB", "cd", 13, 2019),
+            rel("b", "GB", "cd", 15, 2019),
+            rel("c", "GB", "cd", 15, 2020),
+        ];
+        let ids = |l: &[&str]| l.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let (p, c) = (MetadataProfile::default(), Config::default());
+        let one = cover(&rs, &p, &c, &[ids(&["b", "c"]), ids(&["b"])]);
+        assert_eq!(one.len(), 1);
+        assert_eq!(
+            (one[0].0.external_id.as_str(), one[0].1.clone()),
+            ("b", vec![0, 1])
+        );
+        let two = cover(&rs, &p, &c, &[ids(&["a"]), ids(&["c"])]);
+        assert_eq!(two.len(), 2);
     }
 }

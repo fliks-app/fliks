@@ -95,6 +95,8 @@ pub(super) fn group_unit(id: i32, number: i32, count: i64) -> t::Unit {
         title: None,
         air_date: None,
         unit_count: Some(count as u32),
+        isrc: None,
+        duration_ms: None,
     }
 }
 

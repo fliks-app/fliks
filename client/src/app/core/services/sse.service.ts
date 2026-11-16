@@ -6,6 +6,7 @@ import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { DownloadProgressService } from './download-progress.service';
 import { NetworkService } from './network.service';
+import type { StemMode } from './audio-player/stem-mix';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix, invalidateResource } from '../interceptors/cache.interceptor';
@@ -52,7 +53,7 @@ export interface RemoteCommand {
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
     | 'seek' | 'volume' | 'mute' | 'next' | 'prev' | 'shuffle' | 'repeat' | 'queue' | 'enqueue'
-    | 'audio' | 'subtitle' | 'quality' | 'browse';
+    | 'audio' | 'subtitle' | 'quality' | 'browse' | 'karaoke';
   mediaId?: number;
   mediaType?: MediaType;
   mediaFileId?: number;
@@ -73,6 +74,9 @@ export interface RemoteCommand {
   /** An `enqueue`: the tracks to add and where. */
   itemIds?: number[];
   where?: 'next' | 'last';
+  /** A `karaoke`: the stem mix and key, `level` being the guide vocal level; at least one field. */
+  stemMode?: StemMode;
+  pitch?: number;
 }
 
 /** An audio playback's queue on the wire: item ids in play order and the current index. */
@@ -101,6 +105,11 @@ export interface RemoteState {
   muted: boolean | null;
   /** Absent from an older server: 1. */
   playbackRate?: number;
+  /** The playing device's stem mix and key; absent from a device that cannot apply stems. */
+  stemMode?: StemMode;
+  vocalLevel?: number;
+  pitch?: number;
+  stemsAvailable?: boolean;
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;

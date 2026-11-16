@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, effect, inject, output, signal, untracked, viewChild, Injector } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -25,6 +26,7 @@ import {
   type AddMode,
   type AddRequest,
   type AddResult,
+  type AddScope,
   type Choices,
   type Profile,
   askNothing,
@@ -53,6 +55,18 @@ export class AddDialogComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly picker = viewChild<ElementRef<HTMLElement>>('picker');
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    // The wanted track can sit far down a long tracklist: bring the first ticked row into view.
+    effect(() => {
+      const box = this.picker()?.nativeElement;
+      this.scope();
+      this.tracks();
+      if (box) untracked(() => afterNextRender(() => box.querySelector('[data-ticked]')?.scrollIntoView({ block: 'nearest' }), { injector: this.injector }));
+    });
+  }
 
   readonly done = output<AddResult>();
 
@@ -76,11 +90,24 @@ export class AddDialogComponent {
   protected readonly selectedTracks = signal<Set<string>>(new Set());
   protected readonly tracksLoading = signal(false);
   protected readonly tracksFailed = signal(false);
+  protected readonly tracksMissing = signal(false);
   private tracksSeq = 0;
   protected readonly formatDuration = formatDuration;
 
-  /** An album added whole lets the tracks to monitor be picked; a single wanted track or a request does not. */
-  protected readonly picksTracks = computed(() => this.kind() === 'album' && this.mode() === 'import' && !this.req()?.recording);
+  protected readonly scope = signal<AddScope>('album');
+  protected readonly scopes = computed<AddScope[]>(() => (this.req()?.recording ? ['track', 'pick', 'album'] : ['pick', 'album']));
+  /** An album shows its tracks in either mode, ticked by the scope. */
+  protected readonly showsTracks = computed(() => this.kind() === 'album');
+  protected readonly trackCount = computed(() => {
+    switch (this.scope()) {
+      case 'track':
+        return 1;
+      case 'pick':
+        return this.selectedTracks().size;
+      default:
+        return this.tracks().length;
+    }
+  });
   protected readonly kind = computed<MediaType>(() => this.req()?.kind ?? 'movie');
   protected readonly hasSeasons = computed(() => kindOf(this.kind()).hasSeasons);
   protected readonly isVideo = computed(() => this.kind() === 'movie' || this.kind() === 'series');
@@ -96,18 +123,25 @@ export class AddDialogComponent {
     if (this.busy() || this.loading() || this.noLibrary() || this.seasonsLoading() || this.nothingPicked()) return false;
     if (this.isVideo()) return this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
-    if (this.picksTracks() && (this.tracksLoading() || (this.selectedTracks().size === 0 && this.tracks().length > 0))) return false;
+    if (this.kind() === 'album' && this.scope() === 'track' && this.tracksMissing()) return false;
+    if (this.kind() === 'album' && this.scope() === 'pick' && (this.tracksLoading() || this.tracksFailed() || this.selectedTracks().size === 0)) return false;
     return this.mode() === 'import' || this.audioQualityId() != null;
   });
   protected readonly titleKey = computed(() => {
     const r = this.req();
     if (!r) return 'discover.add_to_library';
+    if (this.kind() === 'album') return this.mode() === 'import' ? 'discover.add_music' : 'discover.request_music';
     if (this.mode() === 'import') return 'discover.add_to_library';
     return this.hasSeasons() ? 'discover.request_series_title' : this.isVideo() ? 'discover.request_movie_title' : 'discover.request';
   });
-  protected readonly confirmKey = computed(() =>
-    this.mode() === 'import' ? 'discover.add_to_library' : this.hasSeasons() ? 'discover.select_seasons' : 'discover.request',
-  );
+  protected readonly confirmKey = computed(() => {
+    if (this.mode() === 'import') return 'discover.add_to_library';
+    if (this.hasSeasons()) return 'discover.select_seasons';
+    if (this.kind() !== 'album') return 'discover.request';
+    if (this.scope() === 'album') return 'discover.request_album';
+    return this.trackCount() === 1 ? 'discover.request_one_track' : 'discover.request_tracks';
+  });
+  protected readonly scopeHint = computed(() => `discover.scope_${this.scope()}_hint`);
 
   /** Adds the hit without a question when one library takes it, else opens the dialog. */
   async add(req: AddRequest): Promise<void> {
@@ -133,11 +167,13 @@ export class AddDialogComponent {
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
+    this.scope.set(req.scope ?? (req.recording ? 'track' : 'album'));
     this.tracksSeq++;
     this.tracks.set([]);
     this.selectedTracks.set(new Set());
     this.tracksLoading.set(false);
     this.tracksFailed.set(false);
+    this.tracksMissing.set(false);
     this.wants.set([{ family: 'text', language: null }]);
   }
 
@@ -145,7 +181,7 @@ export class AddDialogComponent {
     const r = this.req()!;
     this.dialogEl()?.nativeElement.showModal();
     if (this.hasSeasons()) this.loadSeasons(r);
-    if (this.picksTracks()) void this.loadTracks(r);
+    if (this.showsTracks()) void this.loadTracks(r);
   }
 
   /** Libraries and the profiles the kind needs; false when they did not load. */
@@ -191,7 +227,7 @@ export class AddDialogComponent {
   protected selectLibrary(id: number | null) {
     this.pick(this.libraries().find((l) => l.id === id) ?? null);
     const r = this.req();
-    if (r && this.picksTracks()) void this.loadTracks(r);
+    if (r && this.showsTracks()) void this.loadTracks(r);
   }
 
   /** The tracks of the release the library would target, all ticked. */
@@ -203,16 +239,45 @@ export class AddDialogComponent {
     this.selectedTracks.set(new Set());
     this.tracksLoading.set(true);
     this.tracksFailed.set(false);
+    this.tracksMissing.set(false);
     try {
       const seen = new Set<string>();
-      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
+      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library, r.recording ? [r.recording.externalId] : undefined)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
       if (seq !== this.tracksSeq) return;
       this.tracks.set(tracks);
-      this.selectedTracks.set(new Set(tracks.map((t) => t.recordingId!)));
-    } catch {
-      if (seq === this.tracksSeq) this.tracksFailed.set(true);
+      this.selectedTracks.set(this.initialPick(tracks));
+    } catch (e) {
+      if (seq === this.tracksSeq) {
+        this.tracksFailed.set(true);
+        this.tracksMissing.set(e instanceof HttpErrorResponse && e.status === 404);
+      }
     } finally {
       if (seq === this.tracksSeq) this.tracksLoading.set(false);
+    }
+  }
+
+  protected readonly wantedId = computed(() => this.req()?.recording?.externalId ?? null);
+
+  /** The wanted track alone when the pick starts from one, else every track. */
+  private initialPick(tracks: AlbumPreviewTrack[]): Set<string> {
+    const want = this.wantedId();
+    return want && this.scope() === 'pick' ? new Set([want]) : new Set(tracks.map((t) => t.recordingId!));
+  }
+
+  protected setScope(scope: AddScope) {
+    this.scope.set(scope);
+    if (scope === 'pick' && this.selectedTracks().size === this.tracks().length) this.selectedTracks.set(this.initialPick(this.tracks()));
+  }
+
+  /** Whether the scope covers this track: locked ticks outside the pick scope. */
+  protected ticked(t: AlbumPreviewTrack): boolean {
+    switch (this.scope()) {
+      case 'track':
+        return t.recordingId === this.wantedId();
+      case 'pick':
+        return this.selectedTracks().has(t.recordingId!);
+      default:
+        return true;
     }
   }
 
@@ -272,10 +337,11 @@ export class AddDialogComponent {
     this.busy.set(true);
     try {
       const mediaId = this.mode() === 'import' ? await this.importIt(r) : await this.requestIt(r);
+      const recordings = this.mode() === 'request' && r.kind === 'album' ? this.recordings(r).recordings : undefined;
       rememberLibrary(r.kind, this.libraryId());
       this.toast.success(this.translate.instant(this.mode() === 'import' ? 'discover.import_success' : 'discover.request_success'));
       this.close();
-      this.done.emit({ mode: this.mode(), mediaId });
+      this.done.emit({ mode: this.mode(), mediaId, ...(recordings ? { recordings } : {}) });
     } catch {
       // The global HTTP interceptor toasts the failure.
     } finally {
@@ -299,11 +365,11 @@ export class AddDialogComponent {
         return saved.id;
       }
       case 'album': {
-        if (r.recording) {
+        if (this.scope() === 'track' && r.recording) {
           const w = await this.music.wantRecording({ provider: r.provider, externalId: r.recording.externalId, albumExternalId: r.externalId, wants: this.audioWants(), ...place });
           return w.mediaId;
         }
-        const picked = this.selectedTracks().size < this.tracks().length ? [...this.selectedTracks()] : undefined;
+        const picked = this.scope() === 'pick' && this.selectedTracks().size < this.tracks().length ? [...this.selectedTracks()] : undefined;
         return (await this.music.importAlbum({ provider: r.provider, externalId: r.externalId, wants: this.audioWants(), monitoredRecordings: picked, ...place })).id;
       }
       default: {
@@ -334,13 +400,18 @@ export class AddDialogComponent {
     });
   }
 
+  private recordings(r: AddRequest): { recordings?: string[] } {
+    if (this.scope() === 'track' && r.recording) return { recordings: [r.recording.externalId] };
+    return this.scope() === 'pick' ? { recordings: [...this.selectedTracks()] } : {};
+  }
+
   private async requestIt(r: AddRequest): Promise<number | null> {
     const place = this.place();
     let body: CreateRequestBody;
     if (r.kind === 'book') {
       body = { mediaType: 'book', externalId: r.externalId, title: r.title, wants: this.readyWants(), ...place };
     } else if (r.kind === 'album') {
-      body = { mediaType: 'album', externalId: r.externalId, title: r.title, wants: [{ family: 'audio', language: null, qualityProfileId: this.audioQualityId() }], ...place };
+      body = { mediaType: 'album', externalId: r.externalId, title: r.title, wants: [{ family: 'audio', language: null, qualityProfileId: this.audioQualityId() }], ...this.recordings(r), ...place };
     } else {
       body = {
         mediaType: r.kind as 'movie' | 'series',

@@ -34,6 +34,8 @@ pub struct Req {
     pub folder_id: Option<i32>,
     pub media_id: Option<i32>,
     pub wants: Option<Json<Vec<WantSpec>>>,
+    /// The recording ids an album request is scoped to; `None` is the whole album.
+    pub recordings: Option<Vec<String>>,
 }
 
 /// `Req` as the database returns it, before `media_type` is decoded.
@@ -53,6 +55,7 @@ struct RawReq {
     folder_id: Option<i32>,
     media_id: Option<i32>,
     wants: Option<Json<Vec<WantSpec>>>,
+    recordings: Option<Vec<String>>,
 }
 
 impl TryFrom<RawReq> for Req {
@@ -77,6 +80,7 @@ impl TryFrom<RawReq> for Req {
             folder_id: r.folder_id,
             media_id: r.media_id,
             wants: r.wants,
+            recordings: r.recordings,
         })
     }
 }
@@ -106,7 +110,7 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>"
+        wants AS "wants: Json<Vec<WantSpec>>", recordings
         FROM requests WHERE id = $1"#,
         id
     )
@@ -124,7 +128,7 @@ pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>"
+        wants AS "wants: Json<Vec<WantSpec>>", recordings
         FROM requests
         WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
         AND "namespaceGeneration" IS NOT DISTINCT FROM
@@ -410,15 +414,16 @@ pub struct New<'a> {
     pub poster_url: Option<&'a str>,
     pub fanart_url: Option<&'a str>,
     pub wants: Option<&'a [WantSpec]>,
+    pub recordings: Option<&'a [String]>,
 }
 
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
         "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl", wants,
-        "namespaceGeneration")
+        recordings, "namespaceGeneration")
         VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
-        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
         (SELECT generation FROM provider_namespaces WHERE name = $4)) RETURNING id"#,
         n.user_id,
         n.kind,
@@ -436,10 +441,53 @@ pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
         n.media_id,
         n.poster_url,
         n.fanart_url,
-        n.wants.map(|w| Json(w.to_vec())) as Option<Json<Vec<WantSpec>>>
+        n.wants.map(|w| Json(w.to_vec())) as Option<Json<Vec<WantSpec>>>,
+        n.recordings
     )
     .fetch_one(db)
     .await
+}
+
+/// How many of `recordings` the album already holds as a file or wants as a monitored track.
+pub async fn tracks_claimed(
+    db: &PgPool,
+    media_id: i32,
+    recordings: &[String],
+) -> sqlx::Result<i64> {
+    sqlx::query_scalar(
+        r#"SELECT count(DISTINCT td."recordingMbid") FROM track_details td
+           JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = td."mediaId"
+           WHERE td."mediaId" = $1 AND td."recordingMbid"::text = ANY($2)
+             AND ((i.monitored AND m.monitored)
+                  OR EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id))"#,
+    )
+    .bind(media_id)
+    .bind(recordings)
+    .fetch_one(db)
+    .await
+}
+
+/// The size of the target edition an album request was asked against.
+pub async fn set_track_count(db: &PgPool, id: i32, count: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET "trackCount" = $2 WHERE id = $1"#,
+        id,
+        count
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Widens a pending album request to the whole album (an approval with `wholeAlbum`).
+pub async fn widen(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET recordings = NULL, "trackCount" = NULL WHERE id = $1"#,
+        id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 pub async fn set_art(
@@ -604,7 +652,7 @@ pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>"
+        wants AS "wants: Json<Vec<WantSpec>>", recordings
         FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e
           WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
           AND e.value = r."externalId")
@@ -632,7 +680,7 @@ pub async fn linked(
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>"
+        wants AS "wants: Json<Vec<WantSpec>>", recordings
         FROM requests WHERE "mediaId" = $1 AND ($2::text IS NULL OR kind::text = $2)
         AND status::text = ANY($3) ORDER BY id"#,
         media_id,
@@ -900,7 +948,9 @@ pub async fn rows(
       'languageProfileId', m."languageProfileId", 'addedById', m."addedById", 'path', NULL) END,
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
 ) || jsonb_build_object('provider', r.provider, 'externalId', r."externalId")
-|| CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('wants', r.wants) ELSE '{}'::jsonb END AS "json!: Value"
+|| CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('wants', r.wants) ELSE '{}'::jsonb END
+|| CASE WHEN r."mediaType" = 'album' THEN
+  jsonb_build_object('recordings', r.recordings, 'trackCount', r."trackCount") ELSE '{}'::jsonb END AS "json!: Value"
 FROM requests r
 LEFT JOIN users u ON u.id = r."userId"
 LEFT JOIN users ab ON ab.id = r."approvedById"

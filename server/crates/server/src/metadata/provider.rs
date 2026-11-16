@@ -185,6 +185,24 @@ pub trait MetadataProvider: Send + Sync {
     ) -> Call<'a, Vec<Value>> {
         Box::pin(async { Err(Upstream::new(Some(404), "the provider has no such search")) })
     }
+    /// Whether `recording_releases` is answered (the `recordingReleases` capability under `album`).
+    fn has_recording_releases(&self) -> bool {
+        false
+    }
+    /// The releases holding the recording `id` of `source` (`musicbrainz` or `isrc`), in this provider's namespace.
+    fn recording_releases<'a>(
+        &'a self,
+        _source: Namespace,
+        _id: &'a str,
+        _p: Priority,
+    ) -> Call<'a, Vec<String>> {
+        Box::pin(async {
+            Err(Upstream::new(
+                Some(404),
+                "the provider has no recording releases",
+            ))
+        })
+    }
     /// Whether `list` is answered for `kind`.
     fn has_lists(&self, _kind: MediaKind) -> bool {
         false

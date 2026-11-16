@@ -112,14 +112,11 @@ pub(super) async fn import_album(
     )
     .await?;
     if let Some(r) = recordings {
-        if !want::has_target(&st.db, media).await? {
+        let refs: Vec<Recording> = r.iter().map(|id| Recording::Mbid(id)).collect();
+        if let Err(refused) = want::want_many(st, media, &refs, false).await {
             discard(st, media, MediaKind::Album).await;
-            return Err(AppError::with_message(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "The track list is unavailable, try again later",
-            ));
+            return Err(refused.app_error());
         }
-        target::select_recordings(&st.db, media, &r).await?;
     }
     let acl = accessible_library_ids(&st.db, a).await?;
     let out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
@@ -395,14 +392,7 @@ pub(crate) async fn want_recording(
     };
     let item = want::want(st, media, Recording::Mbid(&recording), !created)
         .await
-        .map_err(|e| match e {
-            Refused::NoTrack => AppError::not_found("The album has no track of that recording"),
-            Refused::Unavailable => AppError::with_message(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "The album's releases are not available yet",
-            ),
-            Refused::Db(e) => e.into(),
-        })?;
+        .map_err(Refused::app_error)?;
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({"mediaId": media, "itemId": item})),

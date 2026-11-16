@@ -99,9 +99,12 @@ pub async fn approve(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<String>,
+    req: Request,
 ) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Approve, Subject::FliksRequest)?;
-    Ok(created(flow::approve(&st, &a, int_param(&id)?).await?))
+    let id = int_param(&id)?;
+    let whole = dto::approve(body(req).await?)?;
+    Ok(created(flow::approve(&st, &a, id, whole).await?))
 }
 
 #[utoipa::path(post, path = "/api/requests/{id}/decline", responses((status = 201)))]

@@ -33,3 +33,13 @@ describe('MusicApiService.recentlyPlayed', () => {
     http.expectNone('/api/playback/recently-played');
   });
 });
+
+describe('MusicApiService.albumTracks', () => {
+  it('sends the recording ids comma-separated, at most 50', async () => {
+    const { api, http } = setup(true);
+    const ids = Array.from({ length: 60 }, (_, i) => `r${i}`);
+    const rows = api.albumTracks('musicbrainz', 'g1', 2, ids);
+    http.expectOne((r) => r.url === '/api/music/albums/tracks' && r.params.get('recordingId') === ids.slice(0, 50).join(',')).flush([]);
+    expect(await rows).toEqual([]);
+  });
+});

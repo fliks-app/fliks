@@ -36,19 +36,6 @@ pub fn not_found(id: i32) -> AppError {
     AppError::not_found(format!("Live TV channel #{id} not found"))
 }
 
-/// `%` and `_` of a user's text are literal.
-pub fn like_pattern(q: &str) -> String {
-    let mut out = String::from("%");
-    for c in q.chars() {
-        if matches!(c, '\\' | '%' | '_') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out.push('%');
-    out
-}
-
 /// The denied-group predicate, both sides folded in SQL so every route agrees; `$2` is the raw denied list.
 fn not_denied(alias: &str) -> String {
     format!(
@@ -100,7 +87,10 @@ impl<'a> Visible<'a> {
         page: Option<(i64, i64)>,
     ) -> sqlx::Result<(Vec<ChannelItem>, i64)> {
         let (offset, limit) = page.map_or((0, i64::MAX), |(p, s)| ((p - 1).saturating_mul(s), s));
-        let query = self.query.filter(|q| !q.is_empty()).map(like_pattern);
+        let query = self
+            .query
+            .filter(|q| !q.is_empty())
+            .map(fliks_domain::media::search::contains_pattern);
         let group = self.group.filter(|g| !g.is_empty());
         let items = sqlx::query_as::<_, ChannelItem>(sqlx::AssertSqlSafe(format!(
             r#"SELECT channel.id, channel.name, channel.number,
@@ -126,7 +116,10 @@ impl<'a> Visible<'a> {
     }
 
     pub async fn count(&self, db: &PgPool) -> sqlx::Result<i64> {
-        let query = self.query.filter(|q| !q.is_empty()).map(like_pattern);
+        let query = self
+            .query
+            .filter(|q| !q.is_empty())
+            .map(fliks_domain::media::search::contains_pattern);
         sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT count(*) {VISIBLE_JOIN} {}",
             self.where_clause()

@@ -154,6 +154,40 @@ impl Metadata {
         })
     }
 
+    /// The releases of `p` holding the recording `id` of `source`, from its snapshot or the provider.
+    pub async fn recording_releases(
+        &self,
+        p: Namespace,
+        source: Namespace,
+        id: &str,
+        lang: &Resolved,
+        prio: Priority,
+    ) -> Result<Vec<String>, MetaError> {
+        let provider = self.of(p);
+        let ttl = provider.snapshot_ttl("recording");
+        let id_owned = id.to_owned();
+        let call = move || {
+            async move {
+                let all = provider.recording_releases(source, &id_owned, prio).await?;
+                Ok(Value::Array(all.into_iter().map(Value::String).collect()))
+            }
+            .boxed()
+        };
+        let key_id = if source == p {
+            id.to_owned()
+        } else {
+            format!("{source}:{id}")
+        };
+        let key = self.key(p, "recording", MediaKind::Album, &key_id, lang);
+        Ok(match self.snapshot(key, prio, ttl, call).await? {
+            Value::Array(all) => all
+                .into_iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+            _ => vec![],
+        })
+    }
+
     /// The discography of the artist `id` as `p` lists it, from its snapshot or the provider.
     pub async fn albums(
         &self,

@@ -464,6 +464,25 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
+/* A side drawer spans the full height with square edges and the slide of `.panel-slide-in`; the safe area moves inside its box. */
+.modal-end,
+.modal-start {
+  padding-block: 0;
+}
+.modal-end > .modal-box,
+.modal-start > .modal-box {
+  --modal-tl: 0;
+  --modal-tr: 0;
+  --modal-bl: 0;
+  --modal-br: 0;
+  height: 100dvh;
+  max-height: none;
+  transition-duration: 250ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* CDK drag and drop: siblings slide out of the way, and a dropped item glides into its slot. */
 .cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder),
 .cdk-drag-animating {
@@ -651,4 +670,9 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   .player-box,
   .player-box .player-cover-col,
   .player-box .player-cover { transition-duration: 1ms; }
+}
+
+/* `.tooltip` sets inline-block, which would drop a button's flex centring. */
+.btn.tooltip {
+  display: inline-flex;
 }

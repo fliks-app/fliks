@@ -240,7 +240,7 @@ async fn an_album_kind_follows_quotas_requests_and_follows(pool: PgPool) {
     for ok in [
         r#"INSERT INTO user_quotas ("userId", kind, "limit") VALUES (1, 'album', 3)"#.to_owned(),
         format!(
-            r#"INSERT INTO requests ("mediaType", provider, "externalId", title, "userId") VALUES ('album', 'musicbrainz', '{MB}', 'A', 1)"#
+            r#"INSERT INTO requests ("mediaType", provider, "externalId", title, "userId", wants) VALUES ('album', 'musicbrainz', '{MB}', 'A', 1, '[]')"#
         ),
         r#"INSERT INTO person_follows ("userId", "personId", role, "libraryId", wants) VALUES (1, 1, 'artist', 1, '[]')"#.to_owned(),
         r#"INSERT INTO cleanup_rules (name, levels, criteria) VALUES ('r', '{album}', '{}')"#.to_owned(),
