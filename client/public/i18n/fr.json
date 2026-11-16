@@ -5532,7 +5532,16 @@
       "enabled": "Activer le karaoké",
       "enabled_hint": "Les titres peuvent être préparés dès qu'un modèle de séparation de la voix est installé.",
       "background": "Préparer en arrière-plan",
-      "background_hint": "Prépare les titres des bibliothèques d'albums quand la machine est au repos. Demande une accélération vérifiée.",
+      "background_hint": "Prépare les titres des bibliothèques d'albums en priorité basse.",
+      "background_cpu": "Préparer aussi sur le processeur",
+      "background_cpu_hint": "Sans accélération vérifiée, les titres sont préparés sur le processeur : bien plus lent, et la machine reste occupée.",
+      "background_state": {
+        "active": "Actif.",
+        "active_cpu": "Actif, sur le processeur.",
+        "no_model": "Inactif : aucun modèle de séparation de la voix installé.",
+        "no_gpu": "Inactif : aucune accélération vérifiée sur ce moteur.",
+        "stopped": "En pause : le dernier titre a été préparé sur le processeur. Reprend au prochain démarrage du moteur ou changement de réglage."
+      },
       "budget": "Budget disque (Mo)",
       "budget_hint": "Les plus anciennes pistes sont supprimées au-delà. Au moins {{min}}.",
       "budget_invalid": "Le budget doit être d'au moins {{min}} Mo.",

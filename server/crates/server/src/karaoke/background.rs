@@ -16,7 +16,8 @@ pub async fn allowed(st: &AppState) -> bool {
         return false;
     }
     let features = st.engine.engine_features();
-    gpu_provider(&features, &verified_providers(st).await).is_some()
+    (flag(st, "karaoke.background_cpu", false).await
+        || gpu_provider(&features, &verified_providers(st).await).is_some())
         && super::caps(st).await.separate
 }
 
@@ -79,7 +80,7 @@ async fn pass_loop(st: AppState) {
     }
 }
 
-/// Rules 16 and 17: up to 20 tracks without stems, newest first, until a run reports the CPU.
+/// Rules 16 and 17: up to 20 tracks without stems, newest first, until a run reports an unwanted CPU.
 async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
     if !allowed(st).await {
         return Ok(());
@@ -101,7 +102,10 @@ async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
             continue;
         };
         match handle.await {
-            Ok(Ok(out)) if out.provider.as_deref() == Some("cpu") => {
+            Ok(Ok(out))
+                if out.provider.as_deref() == Some("cpu")
+                    && !flag(st, "karaoke.background_cpu", false).await =>
+            {
                 st.karaoke.stopped.store(true, Ordering::Relaxed);
                 tracing::info!("karaoke background pass stopped: the engine ran on the CPU");
             }

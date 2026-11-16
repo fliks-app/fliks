@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeModel, KaraokeModels } from '../../../core/services/api/karaoke.models';
+import type { KaraokeModel, KaraokeModels, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -54,6 +54,9 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly saving = signal(false);
   protected readonly enabled = signal(false);
   protected readonly background = signal(true);
+  protected readonly backgroundCpu = signal(false);
+  protected readonly status = signal<KaraokeStatus | null>(null);
+  protected readonly backgroundStatus = computed(() => backgroundState(this.status()));
   protected readonly autoDownload = signal(false);
   protected readonly aligner = signal<'standard' | 'quality'>('standard');
   protected readonly budget = signal('4096');
@@ -83,6 +86,7 @@ export class KaraokeSettingsComponent implements OnInit {
       const all = await this.settingsApi.getAll();
       this.enabled.set(all['karaoke.enabled'] === 'true');
       this.background.set(all['karaoke.background'] !== 'false');
+      this.backgroundCpu.set(all['karaoke.background_cpu'] === 'true');
       this.autoDownload.set(all['karaoke.auto_download'] === 'true');
       this.aligner.set(all['karaoke.aligner'] === 'quality' ? 'quality' : 'standard');
       this.budget.set(all['karaoke.disk_budget_mb'] ?? '4096');
@@ -92,7 +96,7 @@ export class KaraokeSettingsComponent implements OnInit {
     } catch {
       // The interceptor toasts the reason; the defaults stay.
     }
-    await this.loadModels();
+    await Promise.all([this.loadModels(), this.loadStatus()]);
     this.loading.set(false);
   }
 
@@ -104,6 +108,14 @@ export class KaraokeSettingsComponent implements OnInit {
       if (!(e instanceof HttpErrorResponse) || e.status !== 503) this.toast.error(this.translate.instant('karaoke.admin.models_failed'));
       this.catalogue.set(null);
       this.unavailable.set(true);
+    }
+  }
+
+  private async loadStatus(): Promise<void> {
+    try {
+      this.status.set(await this.api.status());
+    } catch {
+      this.status.set(null);
     }
   }
 
@@ -130,6 +142,7 @@ export class KaraokeSettingsComponent implements OnInit {
       await this.settingsApi.setBulk({
         'karaoke.enabled': String(this.enabled()),
         'karaoke.background': String(this.background()),
+        'karaoke.background_cpu': String(this.backgroundCpu()),
         'karaoke.auto_download': String(this.autoDownload()),
         'karaoke.aligner': this.aligner(),
         'karaoke.disk_budget_mb': String(Math.round(Number(this.budget()))),
@@ -137,6 +150,7 @@ export class KaraokeSettingsComponent implements OnInit {
         'karaoke.verified_providers': JSON.stringify(VERIFIABLE_PROVIDERS.filter((p) => this.verified().includes(p))),
       });
       this.toast.success(this.translate.instant('karaoke.admin.saved'));
+      await this.loadStatus();
     } catch {
       // The interceptor toasts the reason.
     } finally {
@@ -158,4 +172,14 @@ function parseProviders(raw: string | null | undefined): string[] {
 /** What the quality aligner needs: its model installed on the engine. */
 export function qualityModelReady(model: KaraokeModel | undefined): boolean {
   return model?.state === 'installed';
+}
+
+export type BackgroundState = 'active' | 'active_cpu' | 'no_model' | 'no_gpu' | 'stopped';
+
+/** Why the saved background pass runs or not; `null` while karaoke is off or the status is unknown. */
+export function backgroundState(s: KaraokeStatus | null): BackgroundState | null {
+  if (!s?.enabled) return null;
+  if (s.background) return s.gpu ? 'active' : 'active_cpu';
+  if (!s.separate) return 'no_model';
+  return s.gpu ? 'stopped' : 'no_gpu';
 }
