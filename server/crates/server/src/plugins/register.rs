@@ -183,7 +183,8 @@ impl Plugins {
         }
         self.registry.install_declarations(id, m, &declared);
         if let Some(block) = m.get("provider") {
-            let official = pkg.verified_by_key_id.is_some();
+            let signer = pkg.verified_by_key_id.as_deref();
+            let official = signer.is_some() || self.unsigned_ok(signer).await;
             provider::check_namespaces(id, block, official, |n| {
                 ExternalProvider::parse(n).is_some()
             })

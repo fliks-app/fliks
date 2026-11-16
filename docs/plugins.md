@@ -367,7 +367,8 @@ catalogue key verifies: there is no registry of third-party signing keys, so an 
 anyone else is `unverified` and reaches an operator behind the consent sheet's acknowledgement. A
 `process` plugin must be `official` (`PLUGIN_UNSIGNED` otherwise) unless the admin setting
 `plugins.allow_unsigned` is on, which exists for local development only. The setting gates installs, not loads: switching it back off
-leaves an unsigned plugin already installed running, uninstall it instead.
+leaves an unsigned plugin already installed running (one that holds a core provider namespace fails
+registration), uninstall it instead.
 
 ### Packaging
 
@@ -384,7 +385,7 @@ under `fliks-heavy`, target dir `~/.cache/fliks-targets/dev-plugin`: delete it a
 and imports it through `/api/plugins/import/{inspect,confirm}`. `FLIKS_URL`, `FLIKS_USER` and
 `FLIKS_PASSWORD` default to the dev stack; a non-local URL needs `FLIKS_ALLOW_REMOTE=1`. Needs
 `plugins.allow_unsigned`, which also lets the unsigned build replace an installed official one,
-bundled or not; a restart keeps it until a newer embedded version ships. A metadata plugin's cached
+bundled or not, and hold a core provider namespace; a restart keeps it until a newer embedded version ships. A metadata plugin's cached
 provider responses are dropped on install, so no manual cache clearing is needed.
 
 A `process` archive carries `plugin.json`, `plugin.wasm` (starting with the component preamble), the
