@@ -36,8 +36,29 @@ describe('LyricsViewComponent', () => {
     const el = f.nativeElement as HTMLElement;
     expect([...el.querySelectorAll('button')].map((b) => b.getAttribute('aria-current'))).toEqual(['true', 'true', null]);
     expect([...el.querySelectorAll('[data-testid="lyrics-mark"]')].map((m) => m.textContent)).toEqual(['●', '▲', '●']);
-    const widths = [...el.querySelectorAll<HTMLElement>('[aria-hidden="true"][style*="width"]')].map((e) => e.style.width);
-    expect(widths).toEqual(['50%', '50%', '0%']);
+    const clips = [...el.querySelectorAll<HTMLElement>('[data-cue]')].map((e) => e.style.getPropertyValue('clip-path'));
+    expect(clips).toEqual(['inset(0px 50% 0px 0px)', 'inset(0px 50% 0px 0px)', 'inset(0px 100% 0px 0px)']);
+  });
+
+  it('paints the words being sung without touching the template until a word ends', () => {
+    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    const cl = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: [{ start, end, value: 'x', byteStart: 0, byteEnd: 1 }] });
+    f.componentRef.setInput('doc', {
+      id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'x' }, { start: 1000, value: 'x' }],
+      cueLine: [cl(0, 0, 4000), cl(1, 1000, 3000)],
+    });
+    f.detectChanges();
+    const c = f.componentInstance as unknown as { sync(pos: number): void; clock(): number };
+    const clips = () => [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-cue]')].map((e) => e.style.getPropertyValue('clip-path'));
+    c.sync(2500);
+    expect(c.clock()).toBe(2000);
+    expect(clips()).toEqual(['inset(0px 37.5% 0px 0px)', 'inset(0px 25% 0px 0px)']);
+    c.sync(3500);
+    expect(c.clock()).toBe(3500);
+    f.detectChanges();
+    expect(clips()).toEqual(['inset(0px 12.5% 0px 0px)', 'inset(0px 0% 0px 0px)']);
   });
 
   it('shows no mark on a duet line nobody tagged, and keeps the text column', () => {
