@@ -58,8 +58,8 @@ impl Tmdb {
         let facts = self.facts.lock().unwrap().clone().unwrap_or_default();
         let series = parts[1] == "series";
         let mut body = json!({
-            "tmdbId": id, "overview": "o", "genres": facts.genre_ids.iter().map(|g| format!("g{g}")).collect::<Vec<_>>(),
-            "genreIds": facts.genre_ids, "posterUrl": "http://image.tmdb.org/t/p/w500/p.jpg",
+            "tmdbId": id, "overview": "o", "genres": facts.genre_ids.iter().flatten().map(|g| format!("g{g}")).collect::<Vec<_>>(),
+            "genreIds": facts.genre_ids.unwrap_or_default(), "posterUrl": "http://image.tmdb.org/t/p/w500/p.jpg",
             "status": "released", "runtime": 100, "year": facts.year.unwrap_or(2020),
             "title": format!("{} {id}", if series { "Series" } else { "Movie" }),
         });
@@ -550,7 +550,7 @@ async fn a_metadata_rule_fails_closed_when_tmdb_is_unavailable(pool: PgPool) {
         "a failed lookup cannot match a genre criterion"
     );
     *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
-        genre_ids: vec![16, 18],
+        genre_ids: Some(vec![16, 18]),
         year: Some(2010),
         season_count: Some(2),
     });
@@ -579,7 +579,7 @@ async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({"mediaType": "series", "maxSeasons": 2})).await;
     *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
-        genre_ids: vec![],
+        genre_ids: Some(vec![]),
         year: None,
         season_count: Some(5),
     });

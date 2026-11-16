@@ -30,7 +30,8 @@ pub struct Ctx {
     pub role_id: Option<i32>,
     pub media_type: MediaKind,
     pub library_id: Option<i32>,
-    pub genre_ids: Vec<i64>,
+    /// `None` when the title's genres are unknown.
+    pub genre_ids: Option<Vec<i64>>,
     pub year: Option<i64>,
     pub season_count: Option<i64>,
     /// The editions a book request asks for; empty for a video title.
@@ -93,8 +94,17 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
     {
         return false;
     }
+    let has_any = |ids: &[i64]| {
+        ctx.genre_ids
+            .as_ref()
+            .map(|t| ids.iter().any(|g| t.contains(g)))
+    };
     let genres = ints(c, "genreIds");
-    if !genres.is_empty() && !genres.iter().any(|g| ctx.genre_ids.contains(g)) {
+    if !genres.is_empty() && has_any(&genres) != Some(true) {
+        return false;
+    }
+    let excluded = ints(c, "excludedGenreIds");
+    if !excluded.is_empty() && has_any(&excluded) != Some(false) {
         return false;
     }
     if let Some(max) = c["maxSeasons"].as_i64()
@@ -118,6 +128,7 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
 
 pub(super) fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
     !ints(c, "genreIds").is_empty()
+        || !ints(c, "excludedGenreIds").is_empty()
         || c["yearFrom"].as_i64().is_some()
         || c["yearTo"].as_i64().is_some()
         || (c["maxSeasons"].as_i64().is_some() && !has_seasons)
@@ -179,8 +190,8 @@ impl Candidates {
             media_type: dto.media_type,
             library_id: Some(library_id),
             genre_ids: facts
-                .map(|f| f.genre_ids.iter().map(|g| i64::from(*g)).collect())
-                .unwrap_or_default(),
+                .and_then(|f| f.genre_ids.as_ref())
+                .map(|g| g.iter().map(|&g| i64::from(g)).collect()),
             year: facts.and_then(|f| f.year).map(i64::from),
             season_count: scoped
                 .map(|s| s.len() as i64)

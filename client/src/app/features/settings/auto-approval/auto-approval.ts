@@ -1,12 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  computed,
-  signal,
-  inject,
-  OnInit,
-  viewChild,
-} from '@angular/core';
+import { Component, ElementRef, computed, signal, inject, OnInit, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -40,7 +32,8 @@ const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
 
 @Component({
   selector: 'app-auto-approval',
-  imports: [TvSelectDirective,
+  imports: [
+    TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
     MultiSelectComponent,
@@ -93,6 +86,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   });
   readonly formLibraryIds = signal<number[]>([]);
   readonly formGenreIds = signal<number[]>([]);
+  readonly formExcludedGenreIds = signal<number[]>([]);
   readonly formMaxSeasons = signal<number | null>(null);
   readonly formYearFrom = signal<number | null>(null);
   readonly formYearTo = signal<number | null>(null);
@@ -136,12 +130,47 @@ export class AutoApprovalSettingsComponent implements OnInit {
       this.formMediaType() === '' &&
       this.formLibraryIds().length === 0 &&
       this.formGenreIds().length === 0 &&
+      this.formExcludedGenreIds().length === 0 &&
       this.formMaxSeasons() == null &&
       this.formYearFrom() == null &&
       this.formYearTo() == null &&
       this.formFamilies().length === 0 &&
       this.formLanguages().length === 0,
   );
+
+  /** The rule read as one sentence, so the editor states what it will approve. */
+  readonly recap = computed(() => {
+    const t = (key: string, params?: object) =>
+      this.translate.instant(`settings.auto_approval.recap_${key}`, params);
+    const pick = <T extends string | number>(ids: T[], options: MultiSelectOption<T>[]) => {
+      const labels = new Map(options.map((o) => [o.value, o.label]));
+      return ids.map((id) => labels.get(id) ?? `#${id}`);
+    };
+    const type = this.formMediaType();
+    const who = [
+      ...pick(this.formUserIds(), this.userOptions()),
+      ...pick(this.formRoleIds(), this.roleOptions()),
+    ];
+    const parts = [
+      t(type ? `type_${type}` : 'type_any'),
+      who.length ? t('who', { names: who.join(', ') }) : t('who_any'),
+    ];
+    const add = (key: string, names: string[]) => {
+      if (names.length) parts.push(t(key, { names: names.join(', ') }));
+    };
+    add('libraries', pick(this.formLibraryIds(), this.libraryOptions()));
+    add('genres', pick(this.formGenreIds(), this.genreOptions()));
+    add('families', pick(this.formFamilies(), this.familyOptions()));
+    add('languages', pick(this.formLanguages(), this.languageOptions()));
+    const max = this.formMaxSeasons();
+    if (max != null && this.showMaxSeasons()) parts.push(t('max_seasons', { count: max }));
+    const [from, to] = [this.formYearFrom(), this.formYearTo()];
+    if (from != null && to != null) parts.push(t('years', { from, to }));
+    else if (from != null) parts.push(t('year_from', { from }));
+    else if (to != null) parts.push(t('year_to', { to }));
+    add('except', pick(this.formExcludedGenreIds(), this.genreOptions()));
+    return t('sentence', { parts: parts.join(', ') });
+  });
 
   ngOnInit() {
     void this.reload();
@@ -214,6 +243,16 @@ export class AutoApprovalSettingsComponent implements OnInit {
     return chips;
   }
 
+  /** The excluded genres, shown apart so a list row never reads them as approved. */
+  exceptChips(rule: AutoApprovalRule): string[] {
+    const byId = new Map(this.genresById());
+    return (rule.criteria.excludedGenreIds ?? []).map((id) =>
+      this.translate.instant('settings.auto_approval.summary_except', {
+        name: byId.get(id) ?? `#${id}`,
+      }),
+    );
+  }
+
   private genresById(): [number, string][] {
     return [...this.movieGenres(), ...this.tvGenres()].map((g) => [g.id, g.name]);
   }
@@ -240,6 +279,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     this.formMediaType.set(c.mediaType ?? '');
     this.formLibraryIds.set([...(c.libraryIds ?? [])]);
     this.formGenreIds.set([...(c.genreIds ?? [])]);
+    this.formExcludedGenreIds.set([...(c.excludedGenreIds ?? [])]);
     this.formMaxSeasons.set(c.maxSeasons ?? null);
     this.formYearFrom.set(c.yearFrom ?? null);
     this.formYearTo.set(c.yearTo ?? null);
@@ -261,6 +301,17 @@ export class AutoApprovalSettingsComponent implements OnInit {
     // Genre ids are type-scoped: drop any that the new list no longer offers.
     const allowed = new Set(this.genres().map((g) => g.id));
     this.formGenreIds.update((ids) => ids.filter((id) => allowed.has(id)));
+    this.formExcludedGenreIds.update((ids) => ids.filter((id) => allowed.has(id)));
+  }
+
+  /** A genre is either included or excluded: picking it on one side drops it from the other. */
+  setGenres(side: 'included' | 'excluded', ids: number[]) {
+    const [mine, other] =
+      side === 'included'
+        ? [this.formGenreIds, this.formExcludedGenreIds]
+        : [this.formExcludedGenreIds, this.formGenreIds];
+    mine.set(ids);
+    other.update((list) => list.filter((id) => !ids.includes(id)));
   }
 
   setNumber(which: 'maxSeasons' | 'yearFrom' | 'yearTo', raw: string) {
@@ -283,6 +334,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
     if (this.formMediaType()) criteria.mediaType = this.formMediaType() as MediaType;
     if (this.formLibraryIds().length) criteria.libraryIds = this.formLibraryIds();
     if (this.formGenreIds().length) criteria.genreIds = this.formGenreIds();
+    if (this.formExcludedGenreIds().length) criteria.excludedGenreIds = this.formExcludedGenreIds();
     if (this.formMaxSeasons() != null) criteria.maxSeasons = this.formMaxSeasons()!;
     if (this.formYearFrom() != null) criteria.yearFrom = this.formYearFrom()!;
     if (this.formYearTo() != null) criteria.yearTo = this.formYearTo()!;

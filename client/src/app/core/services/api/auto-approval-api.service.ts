@@ -11,6 +11,8 @@ export interface AutoApprovalCriteria {
   mediaType?: MediaType;
   libraryIds?: number[];
   genreIds?: number[];
+  /** A title with any of these genres, or with unknown genres, fails the rule. */
+  excludedGenreIds?: number[];
   maxSeasons?: number;
   yearFrom?: number;
   yearTo?: number;

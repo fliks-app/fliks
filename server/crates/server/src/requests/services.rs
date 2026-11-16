@@ -58,16 +58,12 @@ pub async fn title_facts(st: &AppState, key: &TitleKey) -> Result<TitleFacts, St
             .and_then(|n| i32::try_from(n).ok())
     };
     Ok(TitleFacts {
-        genre_ids: d
-            .get("genreIds")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_i64)
-                    .filter_map(|n| i32::try_from(n).ok())
-                    .collect()
-            })
-            .unwrap_or_default(),
+        genre_ids: d.get("genreIds").and_then(Value::as_array).map(|a| {
+            a.iter()
+                .filter_map(Value::as_i64)
+                .filter_map(|n| i32::try_from(n).ok())
+                .collect()
+        }),
         year: n("year"),
         season_count: n("seasonCount"),
     })

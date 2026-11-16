@@ -47,6 +47,9 @@
                   @for (chip of summary(rule); track $index) {
                     <span class="badge badge-sm badge-ghost">{{ chip }}</span>
                   }
+                  @for (chip of exceptChips(rule); track $index) {
+                    <span class="badge badge-sm badge-error badge-outline">{{ chip }}</span>
+                  }
                 </div>
               </td>
               <td class="text-center">
@@ -75,7 +78,7 @@
 </div>
 
 <dialog #editorDialog class="modal">
-  <div class="modal-box max-w-2xl">
+  <div class="modal-box max-w-4xl">
     <app-modal-header
       [title]="
         (editingId() != null
@@ -106,8 +109,8 @@
         </label>
       </div>
 
-      <p class="text-sm text-base-content/60">
-        {{ 'settings.auto_approval.logic_hint' | translate }}
+      <p class="text-sm rounded-box border border-base-300 bg-base-200/60 px-3 py-2">
+        {{ recap() }}
       </p>
 
       @if (matchesEverything()) {
@@ -204,7 +207,8 @@
             <app-multi-select
               class="mt-1"
               [options]="genreOptions()"
-              [(value)]="formGenreIds"
+              [value]="formGenreIds()"
+              (valueChange)="setGenres('included', $event)"
               [placeholder]="'settings.auto_approval.any_genre' | translate"
             />
           </div>
@@ -283,6 +287,25 @@
           </p>
         </section>
       </div>
+
+      <section class="flex flex-col gap-3 rounded-box border border-error/40 bg-error/5 p-4">
+        <div>
+          <h3 class="font-semibold text-error">{{ 'settings.auto_approval.except' | translate }}</h3>
+          <p class="text-xs leading-tight text-base-content/50">
+            {{ 'settings.auto_approval.except_hint' | translate }}
+          </p>
+        </div>
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.auto_approval.excluded_genres' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="genreOptions()"
+            [value]="formExcludedGenreIds()"
+            (valueChange)="setGenres('excluded', $event)"
+            [placeholder]="'settings.auto_approval.no_excluded_genre' | translate"
+          />
+        </div>
+      </section>
 
       <app-modal-footer>
         <button type="button" class="btn btn-ghost" (click)="closeEditor()">

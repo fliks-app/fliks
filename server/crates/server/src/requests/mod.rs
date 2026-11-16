@@ -63,7 +63,8 @@ impl TitleKey {
 /// The TMDB facts auto-approval reads (rule 29).
 #[derive(Debug, Clone, Default)]
 pub struct TitleFacts {
-    pub genre_ids: Vec<i32>,
+    /// `None` when the provider serves no genres.
+    pub genre_ids: Option<Vec<i32>>,
     pub year: Option<i32>,
     pub season_count: Option<i32>,
 }
