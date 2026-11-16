@@ -386,6 +386,21 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     Ok(out)
 }
 
+/// Sets `karaoke` on each track of an album detail: the state and progress of its running job, else null.
+pub(crate) fn tag_tracks(st: &AppState, album: &mut Value) {
+    let runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+    for t in album["tracks"].as_array_mut().into_iter().flatten() {
+        let job = t["itemId"]
+            .as_i64()
+            .and_then(|i| runs.get(&(i as i32)))
+            .filter(|r| r.active());
+        t["karaoke"] = job.map_or(
+            Value::Null,
+            |r| json!({"state": r.state, "progress": r.progress}),
+        );
+    }
+}
+
 #[utoipa::path(get, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 404)))]
 pub async fn item_state(
     State(st): State<AppState>,
