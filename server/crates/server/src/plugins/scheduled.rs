@@ -139,6 +139,28 @@ pub async fn release(core: &PgPool, plugin: &str, key: &str, version: i64) -> sq
     .map(drop)
 }
 
+/// A guest `Err`: due again after a backoff that doubles with the attempt (5 s up to 5 min), not at the lease end.
+pub async fn retry(
+    core: &PgPool,
+    plugin: &str,
+    key: &str,
+    version: i64,
+    attempt: i32,
+) -> sqlx::Result<()> {
+    let secs = (5u64 << (attempt - 1).clamp(0, 6)).min(300);
+    sqlx::query(
+        r#"UPDATE plugin_scheduled_calls SET "runAt" = now() + $4 * interval '1 second'
+           WHERE "pluginId" = $1 AND key = $2 AND version = $3"#,
+    )
+    .bind(plugin)
+    .bind(key)
+    .bind(version)
+    .bind(secs as f64)
+    .execute(core)
+    .await
+    .map(drop)
+}
+
 pub async fn next_due(
     core: &PgPool,
     plugins: &[String],

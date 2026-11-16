@@ -1327,7 +1327,12 @@ async fn an_album_search_targets_artists_and_recordings(pool: PgPool) {
            INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES (50, 50, 1, '{REC}');
            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
              SELECT 50, 50, id, 's.flac', 1, 'FLAC' FROM library_folders WHERE "libraryId" = 3;
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (50, 50, 50, 0, 0)"#
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (50, 50, 50, 0, 0);
+           INSERT INTO media (id, title, type, "libraryId", "folderName", monitored) VALUES (51, 'Beta', 'album', 3, 'b', true);
+           INSERT INTO editions (id, "mediaId", family) VALUES (51, 51, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", title, monitored) VALUES (51, 51, 51, 'Other', true);
+           INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid")
+             VALUES (51, 51, 1, '9e8ce4d3-45d6-4c3f-8d70-3f2c9fb05b44')"#
     )))
     .execute(&pool)
     .await
@@ -1348,6 +1353,15 @@ async fn an_album_search_targets_artists_and_recordings(pool: PgPool) {
     assert_eq!(
         (v[0]["trackId"].clone(), v[1]["trackId"].clone()),
         (json!(50), Value::Null)
+    );
+    assert_eq!(
+        (v[0]["existingMediaId"].clone(), v[0]["state"].clone()),
+        (json!(50), json!("owned"))
+    );
+    assert_eq!(
+        (v[1]["existingMediaId"].clone(), v[1]["state"].clone()),
+        (json!(51), json!("wanted")),
+        "a fileless monitored track is held"
     );
     assert_eq!(v[0]["album"]["existingMediaId"], 50);
     assert_eq!(v[0]["album"]["state"], "owned");

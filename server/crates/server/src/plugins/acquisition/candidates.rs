@@ -421,6 +421,11 @@ pub(super) async fn media_batch(
     .await
 }
 
+/// The open targets of one album: one per open track of every edition, or the album itself.
+pub async fn album_targets(db: &PgPool, id: i32) -> sqlx::Result<Vec<t::Target>> {
+    super::album::targets(db, &[id], Utc::now().date_naive()).await
+}
+
 /// The ungrouped items, group packs and grouped items wanted among `ids`, and the wants of books.
 pub(super) async fn targets_for(
     db: &PgPool,

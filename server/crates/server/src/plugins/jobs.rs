@@ -113,12 +113,31 @@ pub fn spawn_claimer(st: &AppState) {
                                 let _ = scheduled::release(&st.db, &id, &c.key, c.version).await;
                                 return;
                             };
-                            if rt
+                            match rt
                                 .scheduled(c.key.clone(), c.payload, c.attempt as u32)
                                 .await
-                                .is_ok()
                             {
-                                let _ = scheduled::done(&st.db, &id, &c.key, c.version).await;
+                                Ok(()) => {
+                                    let _ = scheduled::done(&st.db, &id, &c.key, c.version).await;
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "plugin \"{id}\" scheduled call {} failed: {e:?}",
+                                        c.key
+                                    );
+                                    let _ = match e {
+                                        CallError::Guest(_) => {
+                                            scheduled::retry(
+                                                &st.db, &id, &c.key, c.version, c.attempt,
+                                            )
+                                            .await
+                                        }
+                                        CallError::Busy | CallError::Unavailable(_) => {
+                                            scheduled::release(&st.db, &id, &c.key, c.version).await
+                                        }
+                                        _ => Ok(()),
+                                    };
+                                }
                             }
                             drop(claim);
                             rt.sh.env.wake.notify_one();

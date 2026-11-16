@@ -543,8 +543,8 @@ async fn mark_artists(db: &PgPool, hits: &mut [Value]) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Marks the release group of each recording hit like an album hit, and sets `trackId`: the lowest track
-/// with a part of that recording in a readable library.
+/// Marks the release group of each recording hit like an album hit, and the track a readable library holds
+/// of it: `existingMediaId` (its album), `state` and, once it has a part, `trackId`.
 async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<(), AppError> {
     let mut albums: Vec<Value> = hits.iter_mut().map(|h| h["album"].take()).collect();
     mark_existing(db, a, MediaKind::Album, &mut albums).await?;
@@ -555,18 +555,23 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         .iter()
         .filter_map(|h| h["externalId"].as_str())
         .collect();
-    let held: Vec<(i32, String)> = if ids.is_empty() {
+    let held: Vec<(i32, i32, String, bool, bool)> = if ids.is_empty() {
         vec![]
     } else {
         let libs = accessible_library_ids(db, a).await?;
         sqlx::query_as(
-            r#"SELECT min(i.id), td."recordingMbid"::text FROM track_details td
+            r#"SELECT DISTINCT ON (td."recordingMbid") i.id, i."mediaId", td."recordingMbid"::text,
+                      EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id),
+                      i.monitored AND m.monitored
+               FROM track_details td
                JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
                JOIN media m ON m.id = i."mediaId"
+               JOIN album_details ad ON ad."mediaId" = m.id
                WHERE td."recordingMbid" = ANY($1::text[]::uuid[]) AND m."libraryId" = ANY($2)
                  AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-                 AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-               GROUP BY td."recordingMbid""#,
+               ORDER BY td."recordingMbid",
+                        EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) DESC,
+                        (i."editionId" = ad."targetEditionId") DESC, i.id"#,
         )
         .bind(&ids)
         .bind(&libs)
@@ -575,10 +580,17 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
     };
     for h in hits {
         let id = h["externalId"].as_str();
-        h["trackId"] = held
-            .iter()
-            .find(|(_, r)| Some(r.as_str()) == id)
-            .map_or(Value::Null, |(t, _)| (*t).into());
+        let row = held.iter().find(|r| Some(r.2.as_str()) == id);
+        h["existingMediaId"] = row.map_or(Value::Null, |r| r.1.into());
+        h["trackId"] = row.filter(|r| r.3).map_or(Value::Null, |r| r.0.into());
+        h["state"] = row.map_or(Value::Null, |r| {
+            match (r.3, r.4) {
+                (true, _) => "owned",
+                (false, true) => "wanted",
+                (false, false) => "missing",
+            }
+            .into()
+        });
     }
     Ok(())
 }

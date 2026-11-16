@@ -727,29 +727,49 @@ pub async fn grab_best(
         ),
     };
     let language = v["language"].as_str().map(str::to_owned);
-    let target = crate::plugins::acquisition::context(
-        &st,
-        id as u32,
-        family,
-        language,
-        num("groupId"),
-        num("itemId"),
-    )
-    .await
-    .map_err(|e| AppError::bad_request(e.message))?
-    .ok_or_else(|| AppError::not_found("nothing to acquire for this target"))?;
+    let is_album: bool = sqlx::query_scalar("SELECT type = 'album' FROM media WHERE id = $1")
+        .bind(id)
+        .fetch_one(&st.db)
+        .await?;
+    let targets = if is_album && num("itemId").is_none() && num("groupId").is_none() {
+        crate::plugins::acquisition::album_targets(&st.db, id).await?
+    } else {
+        crate::plugins::acquisition::context(
+            &st,
+            id as u32,
+            family,
+            language,
+            num("groupId"),
+            num("itemId"),
+        )
+        .await
+        .map_err(|e| AppError::bad_request(e.message))?
+        .into_iter()
+        .collect()
+    };
+    if targets.is_empty() {
+        return Err(AppError::not_found("nothing to acquire for this target"));
+    }
     let user = a.user.id;
     // The request's own scope, echoed so the client matches the outcome to its call.
     let scope = json!({"mediaId": id, "family": v["family"], "groupId": num("groupId"), "itemId": num("itemId")});
     tokio::spawn(async move {
-        let (outcome, detail) = match st.plugins.acquire(&target, true).await {
-            Outcome::Grabbed(p) => ("grabbed", p),
-            Outcome::NoRelease => ("none", String::new()),
-            Outcome::Skipped(why) => ("skipped", why.to_owned()),
-            Outcome::Busy => ("busy", String::new()),
-            Outcome::Error(m) => ("error", m),
-            Outcome::TimedOut(p) => ("timeout", p),
-        };
+        // One outcome for the call: a grab wins, then the most actionable failure.
+        let mut best = (0, "skipped", String::new());
+        for target in &targets {
+            let (rank, outcome, detail) = match st.plugins.acquire(target, true).await {
+                Outcome::Grabbed(p) => (6, "grabbed", p),
+                Outcome::Error(m) => (5, "error", m),
+                Outcome::Busy => (4, "busy", String::new()),
+                Outcome::TimedOut(p) => (3, "timeout", p),
+                Outcome::NoRelease => (2, "none", String::new()),
+                Outcome::Skipped(why) => (1, "skipped", why.to_owned()),
+            };
+            if rank > best.0 {
+                best = (rank, outcome, detail);
+            }
+        }
+        let (_, outcome, detail) = best;
         st.hub.emit_raw(
             "acquisition.grab-best",
             json!({"scope": scope, "outcome": outcome, "detail": detail}),

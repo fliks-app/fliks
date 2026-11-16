@@ -649,8 +649,9 @@ async fn write_details(c: &mut PgConnection, item: i32, t: &TrackTags) -> sqlx::
         .await?;
     sqlx::query(
         r#"UPDATE track_details SET "discNumber" = $2, "discTitle" = $3, "trackNumber" = $4,
-             "recordingMbid" = $5::uuid, "releaseTrackMbid" = $6::uuid, isrc = $7, "durationMs" = $8,
-             gain = $9, peak = $10
+             "recordingMbid" = COALESCE($5::uuid, "recordingMbid"),
+             "releaseTrackMbid" = COALESCE($6::uuid, "releaseTrackMbid"), isrc = COALESCE($7, isrc),
+             "durationMs" = $8, gain = $9, peak = $10
            WHERE "itemId" = $1"#,
     )
     .bind(item)
@@ -1060,6 +1061,44 @@ mod tests {
             title: Some(title.into()),
             monitored: true,
         }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_without_musicbrainz_tags_keeps_the_ids_of_its_track(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let (rec, rt) = (
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+        );
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'M', '["album"]');
+               INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'A', 'album', 1, 'a');
+               INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'audio');
+               INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 1, 1, 'One');
+               INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid", "releaseTrackMbid", isrc)
+                 VALUES (1, 1, 1, '{rec}', '{rt}', 'FRABC2400001')"#
+        )))
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut c = db.acquire().await.unwrap();
+        write_details(&mut c, 1, &TrackTags::default())
+            .await
+            .unwrap();
+        let row: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            r#"SELECT "recordingMbid"::text, "releaseTrackMbid"::text, isrc FROM track_details"#,
+        )
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
+        assert_eq!(
+            row,
+            (
+                Some(rec.into()),
+                Some(rt.into()),
+                Some("FRABC2400001".into())
+            )
+        );
     }
 
     #[test]

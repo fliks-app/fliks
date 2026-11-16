@@ -26,11 +26,20 @@ describe('the two zones of the search state', () => {
     s.albumHits.set([hit('a', { mediaType: 'album', existingMediaId: 9 }), hit('b', { mediaType: 'album' })]);
     s.localArtists.set([{ id: 3 } as never]);
     s.artistHits.set([{ externalId: 'x', personId: 3 } as ArtistHit, { externalId: 'y', personId: null } as ArtistHit]);
-    s.recordingHits.set([{ externalId: 'r1', trackId: 4 } as RecordingHit, { externalId: 'r2', trackId: null } as RecordingHit]);
+    s.recordingHits.set([{ externalId: 'r1', existingMediaId: 9, trackId: 4 } as RecordingHit, { externalId: 'r2', existingMediaId: null, trackId: null } as RecordingHit]);
     expect(s.albumsToAdd().map((h) => h.externalId)).toEqual(['b']);
     expect(s.albumsHeld()).toEqual([]);
     expect(s.artistsToAdd().map((a) => a.externalId)).toEqual(['y']);
     expect(s.recordingsToAdd().map((r) => r.externalId)).toEqual(['r2']);
+  });
+
+  it('lists a held track the local list does not show, wanted or owned, out of the provider zone', () => {
+    s.localTracks.set([{ itemId: 4, mediaId: 9, title: 'One' } as never]);
+    const rec = (externalId: string, title: string, existingMediaId: number | null, trackId: number | null) =>
+      ({ externalId, title, existingMediaId, trackId }) as RecordingHit;
+    s.recordingHits.set([rec('a', 'One', 9, 4), rec('b', 'Two', 12, null), rec('c', 'Three', null, null)]);
+    expect(s.recordingsHeld().map((r) => r.externalId)).toEqual(['b']);
+    expect(s.recordingsToAdd().map((r) => r.externalId)).toEqual(['c']);
   });
 
   it('merges movies and series best rated first', () => {

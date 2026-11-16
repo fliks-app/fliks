@@ -285,6 +285,14 @@ async fn a_released_call_is_not_due_again_at_once() {
         .unwrap()
         .unwrap();
     assert!(due > chrono::Utc::now() + chrono::Duration::seconds(3));
+    let attempt: i32 = sqlx::query_scalar(
+        "SELECT attempt FROM plugin_scheduled_calls WHERE \"pluginId\" = $1 AND key = 'busy'",
+    )
+    .bind(ID)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(attempt, 0, "a released claim does not count as an attempt");
     done(s, h).await;
 }
 
@@ -292,7 +300,7 @@ async fn a_released_call_is_not_due_again_at_once() {
 async fn scheduled_calls() {
     let Some((s, h)) = setup("sched", |c| {
         c.deadlines.scheduled = Duration::from_secs(2);
-        c.lease_extra = Duration::from_millis(500);
+        c.lease_extra = Duration::from_secs(60);
     })
     .await
     else {
@@ -354,9 +362,11 @@ async fn scheduled_calls() {
         "ERR_VALIDATION"
     );
     call("fail:x", "0", "1").await;
-    until("a lease redelivery", Duration::from_secs(15), async || {
-        logs("scheduled fail:x attempt 2") >= 1
-    })
+    until(
+        "a retry after the backoff, not the lease",
+        Duration::from_secs(15),
+        async || logs("scheduled fail:x attempt 2") >= 1,
+    )
     .await;
     call("persist", "1500", "\"p\"").await;
     let (st, _) = h
