@@ -1,4 +1,4 @@
-//! The albums of rule 31: the wanted tracks of the target edition as targets, matches and scores.
+//! The albums of rule 31: the wanted tracks of every edition as targets, matches and scores.
 use super::book::{
     Extras, WantRow, extras, pick, sizes, target as book_target, want_sql, wants, wit_scored,
 };
@@ -9,13 +9,16 @@ use fliks_domain::release::scoring::{
     BookScoreOptions, MusicExpectation, score_and_sort_music_releases,
 };
 
-/// A track of the target edition with what a target reads of it.
+/// A track of the album with what a target reads of it.
 #[derive(FromRow, Clone)]
 struct TrackRow {
     item_id: i32,
+    edition_id: i32,
     disc: i32,
     number: Option<i32>,
     title: Option<String>,
+    isrc: Option<String>,
+    duration_ms: Option<i32>,
     monitored: bool,
     has_file: bool,
 }
@@ -36,19 +39,36 @@ impl TrackRow {
             title: self.title.clone(),
             air_date: None,
             unit_count: None,
+            isrc: self.isrc.clone(),
+            duration_ms: self.duration_ms.and_then(|d| u32::try_from(d).ok()),
         }
     }
 }
 
-const TRACKS: &str = r#"SELECT i.id AS item_id, td."discNumber" AS disc, td."trackNumber" AS number, i.title, i.monitored,
-    EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id) AS has_file
+/// A track has its file when it holds a part or the album holds one for the same recording.
+const TRACKS: &str = r#"SELECT i.id AS item_id, i."editionId" AS edition_id, td."discNumber" AS disc, td."trackNumber" AS number, i.title, td.isrc, td."durationMs" AS duration_ms, i.monitored,
+    (EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id)
+     OR EXISTS (SELECT 1 FROM track_details od JOIN item_parts op ON op."itemId" = od."itemId"
+                 WHERE od."mediaId" = i."mediaId" AND od."recordingMbid" = td."recordingMbid")) AS has_file
   FROM items i JOIN track_details td ON td."itemId" = i.id"#;
 
-/// The target edition of an album: its tracks, in order, and the ids a search names it by.
+/// The tracks of an album: the target edition's in order, the others' as they are, and the ids a search
+/// names each edition by.
 struct Wished {
+    target: Option<i32>,
     tracks: Vec<TrackRow>,
-    edition_ids: Vec<t::ExternalId>,
+    others: Vec<TrackRow>,
+    edition_ids: HashMap<i32, Vec<t::ExternalId>>,
     released: Option<NaiveDate>,
+}
+
+impl Wished {
+    fn ids_of(&self, edition: Option<i32>) -> Vec<t::ExternalId> {
+        edition
+            .and_then(|e| self.edition_ids.get(&e))
+            .cloned()
+            .unwrap_or_default()
+    }
 }
 
 async fn wished(db: &PgPool, media: i32) -> sqlx::Result<Wished> {
@@ -58,37 +78,54 @@ async fn wished(db: &PgPool, media: i32) -> sqlx::Result<Wished> {
     .bind(media)
     .fetch_optional(db)
     .await?;
-    let (edition, released) = row.unwrap_or_default();
-    let Some(edition) = edition else {
+    let (target, released) = row.unwrap_or_default();
+    let Some(target) = target else {
         return Ok(Wished {
+            target: None,
             tracks: vec![],
-            edition_ids: vec![],
+            others: vec![],
+            edition_ids: HashMap::new(),
             released,
         });
     };
     let tracks = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"{TRACKS} WHERE i."editionId" = $1 ORDER BY td.position"#
     )))
-    .bind(edition)
+    .bind(target)
     .fetch_all(db)
     .await?;
-    let ids: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT provider, value FROM edition_external_ids WHERE "editionId" = $1 ORDER BY provider, value"#,
+    let others = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"{TRACKS} WHERE i."mediaId" = $1 AND i."editionId" <> $2 AND i.monitored
+           ORDER BY i."editionId", td.position"#
+    )))
+    .bind(media)
+    .bind(target)
+    .fetch_all(db)
+    .await?;
+    let ids: Vec<(i32, String, String)> = sqlx::query_as(
+        r#"SELECT "editionId", provider, value FROM edition_external_ids WHERE "mediaId" = $1
+           ORDER BY "editionId", provider, value"#,
     )
-    .bind(edition)
+    .bind(media)
     .fetch_all(db)
     .await?;
+    let mut edition_ids: HashMap<i32, Vec<t::ExternalId>> = HashMap::new();
+    for (edition, provider, value) in ids {
+        edition_ids
+            .entry(edition)
+            .or_default()
+            .push(t::ExternalId { provider, value });
+    }
     Ok(Wished {
+        target: Some(target),
         tracks,
-        edition_ids: ids
-            .into_iter()
-            .map(|(provider, value)| t::ExternalId { provider, value })
-            .collect(),
+        others,
+        edition_ids,
         released,
     })
 }
 
-/// A target of the album, or of one of its tracks when `track` is given.
+/// A target of the album, or of one of its tracks when `track` is given, with the ids of its own edition.
 fn target(
     m: &MediaRow,
     w: &WantRow,
@@ -97,7 +134,7 @@ fn target(
     track: Option<&TrackRow>,
 ) -> Option<t::Target> {
     let mut tg = book_target(m, w, x)?;
-    tg.edition_ids = wish.edition_ids.clone();
+    tg.edition_ids = wish.ids_of(track.map(|t| t.edition_id).or(wish.target));
     if let Some(tr) = track {
         tg.scope = vec![tr.unit()];
         tg.search_units = vec![tr.unit().ref_];
@@ -147,7 +184,8 @@ pub(super) async fn context(
 }
 
 /// The monitored albums among `ids` that are released by `on` and lack a wanted track: the album itself
-/// when every track of the target edition is monitored, else one target per wanted track.
+/// when every track of the target edition is monitored, else one target per wanted track; the open tracks
+/// of the other editions are one target each.
 pub(super) async fn targets(
     db: &PgPool,
     ids: &[i32],
@@ -181,17 +219,26 @@ pub(super) async fn targets(
         if wish.released.is_some_and(|d| d > on) {
             continue;
         }
+        let open = |t: &&TrackRow| t.monitored && !t.has_file;
         let all_monitored = wish.tracks.iter().all(|t| t.monitored);
         if all_monitored {
-            out.extend(target(m, w, &x, &wish, None));
+            if wish.tracks.iter().any(|t| !t.has_file) {
+                out.extend(target(m, w, &x, &wish, None));
+            }
         } else {
             out.extend(
                 wish.tracks
                     .iter()
-                    .filter(|t| t.monitored && !t.has_file)
+                    .filter(open)
                     .filter_map(|t| target(m, w, &x, &wish, Some(t))),
             );
         }
+        out.extend(
+            wish.others
+                .iter()
+                .filter(open)
+                .filter_map(|t| target(m, w, &x, &wish, Some(t))),
+        );
     }
     Ok(out)
 }
@@ -597,5 +644,65 @@ mod tests {
         };
         assert!(codes(score(None).await.unwrap()).contains(&"TITLE_MISMATCH".to_owned()));
         assert!(!codes(score(Some(track)).await.unwrap()).contains(&"TITLE_MISMATCH".to_owned()));
+    }
+
+    /// A second edition holding one monitored track with an ISRC and a duration, no file.
+    async fn bonus_edition(db: &PgPool) {
+        sqlx::raw_sql(
+            r#"INSERT INTO editions ("mediaId", family) VALUES (1, 'audio');
+               INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
+                 SELECT max(id), 1, 'musicbrainz', '22222222-2222-2222-2222-222222222222' FROM editions;
+               INSERT INTO items ("mediaId", "editionId", monitored, title)
+                 SELECT 1, max(id), true, 'Bonus' FROM editions;
+               INSERT INTO track_details ("itemId", "mediaId", "discNumber", position, "trackNumber", isrc, "durationMs")
+                 SELECT max(id), 1, 1, 4, 4, 'QZAAA2100001', 306000 FROM items"#,
+        )
+        .execute(db)
+        .await
+        .unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_wanted_track_of_a_second_edition_is_a_target_with_its_own_ids(db: PgPool) {
+        album(&db).await;
+        bonus_edition(&db).await;
+        let on = NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let page = candidates(&db, query(), on).await.unwrap();
+        let units: Vec<_> = page
+            .items
+            .iter()
+            .map(|tg| (tg.scope.len(), tg.edition_ids[0].value.clone()))
+            .collect();
+        assert_eq!(
+            units,
+            [
+                (0, "11111111-1111-1111-1111-111111111111".to_owned()),
+                (1, "22222222-2222-2222-2222-222222222222".to_owned())
+            ],
+            "the album of the target edition, then the track of the other"
+        );
+        let unit = &page.items[1].scope[0];
+        assert_eq!(unit.isrc.as_deref(), Some("QZAAA2100001"));
+        assert_eq!(unit.duration_ms, Some(306_000));
+        // Once the target's tracks have files only the other edition's track stays open.
+        sqlx::query(r#"UPDATE items SET monitored = false WHERE title IN ('T2', 'T3')"#)
+            .execute(&db)
+            .await
+            .unwrap();
+        let page = candidates(&db, query(), on).await.unwrap();
+        let [tg] = &page.items[..] else {
+            panic!("one target")
+        };
+        assert_eq!(tg.scope[0].title.as_deref(), Some("Bonus"));
+        let st = state(&db);
+        let item = tg.scope[0].item_id;
+        let again = context(&st, 1, None, None, None, item)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            again.edition_ids[0].value,
+            "22222222-2222-2222-2222-222222222222"
+        );
     }
 }

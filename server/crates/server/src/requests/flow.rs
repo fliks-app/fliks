@@ -446,23 +446,14 @@ pub async fn ensure_media(
     Ok(Some(media_id))
 }
 
-/// Wants the requested tracks of an album; a recording the album has no track of is an error, never dropped.
+/// Wants the requested tracks of an album; a recording no release of the album holds is an error, never dropped.
 async fn want_tracks(st: &AppState, media: i32, recordings: &[String], held: bool) -> Res<()> {
     use crate::metadata::music::want::{self, Recording, Refused};
     let refs: Vec<Recording> = recordings.iter().map(|r| Recording::Mbid(r)).collect();
     want::want_many(st, media, &refs, held)
         .await
         .map(drop)
-        .map_err(|e| match e {
-            Refused::NoTrack => {
-                AppError::not_found("The album has no track of a requested recording")
-            }
-            Refused::Unavailable => AppError::with_message(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "The album's releases are not available yet",
-            ),
-            Refused::Db(e) => e.into(),
-        })
+        .map_err(Refused::app_error)
 }
 
 fn notify(st: &AppState, event: &'static str, payload: Value) {
@@ -765,6 +756,7 @@ async fn remember_track_count(st: &AppState, id: i32, key: &TitleKey, library: i
         st,
         &key.external_id,
         library,
+        &[],
         Priority::Interactive,
     )
     .await;

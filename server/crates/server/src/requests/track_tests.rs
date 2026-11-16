@@ -10,6 +10,9 @@ use tower::ServiceExt;
 
 const ONE: &str = "11111111-1111-4111-8111-111111111111";
 const TWO: &str = "22222222-2222-4222-8222-222222222222";
+const THREE: &str = "33333333-3333-4333-8333-333333333333";
+const LOST: &str = "44444444-4444-4444-8444-444444444444";
+const BONUS_RELEASE: &str = "55555555-5555-4555-8555-555555555555";
 
 struct Ctx {
     app: Router,
@@ -33,8 +36,23 @@ async fn ctx(pool: PgPool) -> Ctx {
     );
     fake.children.lock().unwrap().insert(
         GROUP.into(),
-        vec![json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2})],
+        vec![
+            json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2}),
+            json!({"externalId": BONUS_RELEASE, "title": "Alpha", "country": "XW", "status": "official", "trackCount": 3}),
+        ],
     );
+    fake.editions.lock().unwrap().insert(
+        BONUS_RELEASE.into(),
+        json!({"externalId": BONUS_RELEASE, "title": "Alpha", "country": "XW", "status": "official", "media": "cd",
+               "trackCount": 3, "tracks": [
+            {"title": "One", "discNumber": 1, "position": 1, "number": 1, "durationMs": 100000, "recordingId": ONE},
+            {"title": "Two", "discNumber": 1, "position": 2, "number": 2, "durationMs": 50000, "recordingId": TWO},
+            {"title": "Three", "discNumber": 1, "position": 3, "number": 3, "durationMs": 70000, "recordingId": THREE}]}),
+    );
+    fake.holders
+        .lock()
+        .unwrap()
+        .insert(THREE.into(), vec![BONUS_RELEASE.into()]);
     fake.editions.lock().unwrap().insert(
         RELEASE.into(),
         json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "media": "cd",
@@ -192,4 +210,64 @@ async fn a_whole_album_blocks_its_tracks_and_a_track_does_not_block_the_album(po
         )
         .await;
     assert_eq!(state["wholeAlbumRequested"], json!(true));
+}
+
+async fn approve(c: &Ctx, id: i64) -> (u16, Value) {
+    let uri = format!("/api/requests/{id}/approve");
+    c.call(&c.admin, "POST", &uri, json!({})).await
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_recording_no_release_holds_refuses_the_whole_approval(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c.ask(&c.user, Some(json!([THREE, LOST]))).await;
+    let (s, r) = approve(&c, r["id"].as_i64().unwrap()).await;
+    assert_eq!(s, 404, "{r}");
+    let (album, editions): (bool, i64) = sqlx::query_as(
+        "SELECT (SELECT bool_or(monitored) FROM media WHERE type = 'album'), (SELECT count(*) FROM editions)",
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!((album, editions), (false, 1), "all or nothing");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_track_only_another_release_holds_is_wanted_on_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, r) = c.ask(&c.user, Some(json!([THREE]))).await;
+    assert_eq!(s, 201, "{r}");
+    let (s, r) = approve(&c, r["id"].as_i64().unwrap()).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(c.monitored().await, [THREE]);
+    let target: String = sqlx::query_scalar(
+        r#"SELECT x.value FROM album_details ad JOIN edition_external_ids x ON x."editionId" = ad."targetEditionId""#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(target, RELEASE, "the target stays the standard release");
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_import_places_its_monitored_recordings_or_is_undone(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = |r: &str| {
+        json!({"type": "album", "provider": "musicbrainz", "externalId": GROUP, "libraryId": 1,
+               "monitoredRecordings": [r]})
+    };
+    let (s, r) = c
+        .call(&c.admin, "POST", "/api/media/import", body(LOST))
+        .await;
+    assert_eq!(s, 404, "{r}");
+    let albums: i64 = sqlx::query_scalar("SELECT count(*) FROM media WHERE type = 'album'")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(albums, 0, "the album is not created");
+    let (s, r) = c
+        .call(&c.admin, "POST", "/api/media/import", body(THREE))
+        .await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(c.monitored().await, [THREE]);
 }

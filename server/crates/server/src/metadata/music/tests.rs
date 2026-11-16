@@ -28,6 +28,8 @@ pub(crate) struct MusicFake {
     pub albums: Mutex<Vec<Value>>,
     /// The `topRecordings` `person_credits` answers.
     pub top: Mutex<Vec<Value>>,
+    /// The releases `recording_releases` answers per recording id.
+    pub holders: Mutex<HashMap<String, Vec<String>>>,
     pub calls: Mutex<Vec<String>>,
     /// What `fetch_lyrics` answers; none means the provider declares no lyrics.
     pub lyrics: Mutex<Option<Option<LyricsHit>>>,
@@ -76,6 +78,25 @@ impl MetadataProvider for MusicFake {
             }
             Ok(r)
         })
+    }
+    fn has_recording_releases(&self) -> bool {
+        true
+    }
+    fn recording_releases<'a>(
+        &'a self,
+        _: Namespace,
+        id: &'a str,
+        _: Priority,
+    ) -> Call<'a, Vec<String>> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("recording_releases {id}"));
+        let r = self.holders.lock().unwrap().get(id).cloned();
+        match r {
+            Some(v) => Box::pin(async move { Ok(v) }),
+            None => missing(),
+        }
     }
     fn limits(&self) -> Limits {
         Limits::new(100.0, 100)

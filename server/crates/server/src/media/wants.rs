@@ -51,8 +51,7 @@ pub fn satisfied_sql() -> String {
       THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id)
     ELSE NOT EXISTS (
       SELECT 1 FROM items ti JOIN track_details td ON td."itemId" = ti.id
-      WHERE ti."editionId" = (SELECT ad."targetEditionId" FROM album_details ad WHERE ad."mediaId" = m.id)
-        AND ti.monitored
+      WHERE ti."mediaId" = m.id AND ti.monitored
         AND NOT EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = ti.id)
         AND NOT EXISTS (SELECT 1 FROM track_details od JOIN item_parts op ON op."itemId" = od."itemId"
                         WHERE od."mediaId" = m.id AND od."recordingMbid" = td."recordingMbid"))
