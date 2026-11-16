@@ -10,6 +10,7 @@ import { SearchComponent } from './search';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import type { ArtistHit, RecordingHit, SearchHit } from '../../core/services/api/metadata.service';
+import { MusicDownloadsService } from '../../core/services/music-downloads.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { SearchStateService } from '../../core/services/search-state.service';
@@ -20,6 +21,8 @@ const hit = (extra: Partial<SearchHit> = {}): SearchHit =>
 function setup(perms: string[] = ['media.create']) {
   const navigate = vi.fn();
   const resolveArtist = vi.fn(async () => ({ id: 77 }));
+  const playTracks = vi.fn(async () => undefined);
+  const albumTracks = vi.fn(async () => [{ itemId: 3 }, { itemId: 4 }]);
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -31,12 +34,13 @@ function setup(perms: string[] = ['media.create']) {
       { provide: AuthService, useValue: { sharingDisabled: () => false, hasPermission: (p: string) => perms.includes(p) } },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), restore: vi.fn(), deactivateIf: vi.fn() } },
       { provide: MusicApiService, useValue: { resolveArtist } },
-      { provide: AudioPlayerService, useValue: {} },
+      { provide: AudioPlayerService, useValue: { playTracks } },
+      { provide: MusicDownloadsService, useValue: { albumTracks } },
     ],
   });
   TestBed.overrideComponent(SearchComponent, { set: { template: '', imports: [] } });
   const fixture = TestBed.createComponent(SearchComponent);
-  return { c: fixture.componentInstance, state: TestBed.inject(SearchStateService), navigate, resolveArtist };
+  return { c: fixture.componentInstance, state: TestBed.inject(SearchStateService), navigate, resolveArtist, playTracks, albumTracks };
 }
 
 describe('SearchComponent hits', () => {
@@ -72,45 +76,83 @@ describe('SearchComponent hits', () => {
     expect(c.externalLink(hit({ existingMediaId: 4, mediaType: 'book' }))).toEqual(['/books', '4']);
   });
 
+  const rec = (id: string, album: SearchHit, extra: Partial<RecordingHit> = {}) =>
+    ({ provider: 'musicbrainz', externalId: id, title: id, artists: ['A'], durationMs: null, album, existingMediaId: null, state: null, trackId: null, ...extra }) as RecordingHit;
+  type View = { music(): { tracks: { state: string; key: string }[] }; addItem(i: object): void; onAdded(r: object): void; onCancelled(): void; openItem(i: object): Promise<void> };
+
+  it('shows a track pending at once, then back to add when the add is cancelled', () => {
+    const { c, state } = setup();
+    state.query.set('x');
+    state.recordingHits.set([rec('r', hit({ mediaType: 'album' }))]);
+    const v = c as unknown as View;
+    expect(v.music().tracks[0]!.state).toBe('add');
+    v.addItem(v.music().tracks[0]!);
+    expect(v.music().tracks[0]!.state).toBe('pending');
+    v.onCancelled();
+    expect(v.music().tracks[0]!.state).toBe('add');
+  });
+
   it('flips a track to wanted once it is added', () => {
     const { c, state } = setup();
-    const rec = { externalId: 'r', title: 'T', album: hit({ mediaType: 'album' }), existingMediaId: null, state: null, trackId: null } as unknown as RecordingHit;
-    state.recordingHits.set([rec]);
-    const p = c as unknown as { addTrack(r: RecordingHit): void; onAdded(r: object): void };
-    p.addTrack(rec);
-    p.onAdded({ mode: 'import', mediaId: 31, recordings: ['r'] });
+    state.query.set('x');
+    state.recordingHits.set([rec('r', hit({ mediaType: 'album' }))]);
+    const v = c as unknown as View;
+    v.addItem(v.music().tracks[0]!);
+    v.onAdded({ mode: 'import', mediaId: 31, recordings: ['r'] });
     expect(state.recordingHits()[0]).toMatchObject({ existingMediaId: 31, state: 'wanted' });
-    expect(state.recordingsToAdd()).toEqual([]);
+    expect(v.music().tracks[0]!.state).toBe('pending');
+  });
+
+  it('marks a track requested for a caller who cannot add', () => {
+    const { c, state } = setup(['requests.create']);
+    state.query.set('x');
+    state.recordingHits.set([rec('r', hit({ mediaType: 'album' }))]);
+    const v = c as unknown as View;
+    v.addItem(v.music().tracks[0]!);
+    v.onAdded({ mode: 'request', mediaId: null, recordings: ['r'] });
+    expect(state.recordingHits()[0]!.requestStatus).toBe('pending');
   });
 
   it('flips every track of an album added as a whole', () => {
     const { c, state } = setup();
-    const album = hit({ mediaType: 'album' });
-    const recs = ['a', 'b'].map((id) => ({ externalId: id, title: id, album, existingMediaId: null, state: null, trackId: null }) as unknown as RecordingHit);
-    state.recordingHits.set(recs);
-    const p = c as unknown as { addAlbumOf(r: RecordingHit): void; onAdded(r: object): void };
-    p.addAlbumOf(recs[0]);
-    p.onAdded({ mode: 'import', mediaId: 32 });
+    state.query.set('x');
+    const album = hit({ mediaType: 'album', provider: 'musicbrainz', externalId: 'g' });
+    state.albumHits.set([album]);
+    state.recordingHits.set([rec('a', album), rec('b', album)]);
+    const v = c as unknown as View;
+    v.addItem(v.music().tracks[0]!);
+    v.onAdded({ mode: 'import', mediaId: 32 });
     expect(state.recordingHits().map((r) => r.existingMediaId)).toEqual([32, 32]);
-    expect(state.recordingsToAdd()).toEqual([]);
+    expect(state.albumHits()[0]).toMatchObject({ existingMediaId: 32, state: 'wanted' });
   });
 
-  it('opens the release a recording hit names, else its group', () => {
-    const { c } = setup();
-    const link = (rec: object) => (c as unknown as { releaseLink(r: object): string[] }).releaseLink(rec);
+  it('opens an owned track by playing its album from that track, else the album page or the add preview', async () => {
+    const { c, state, navigate, playTracks, albumTracks } = setup();
+    state.query.set('x');
     const album = hit({ mediaType: 'album', provider: 'musicbrainz', externalId: 'g' });
-    expect(link({ album, release: { externalId: 'rel', title: 'T' } })).toEqual(['/add/album', 'musicbrainz', 'rel']);
-    expect(link({ album, release: null })).toEqual(['/add/album', 'musicbrainz', 'g']);
+    state.recordingHits.set([
+      rec('o', album, { existingMediaId: 9, trackId: 4, state: 'owned' }),
+      rec('n', album, { release: { externalId: 'rel', title: 'T' } }),
+    ]);
+    const v = c as unknown as View;
+    await v.openItem(v.music().tracks[0]!);
+    expect(albumTracks).toHaveBeenCalledWith(9);
+    expect(playTracks).toHaveBeenCalledWith([{ itemId: 3 }, { itemId: 4 }], 1);
+    await v.openItem(v.music().tracks[1]!);
+    expect(navigate).toHaveBeenCalledWith(['/add/album', 'musicbrainz', 'rel'], { queryParams: { track: 'n' } });
   });
 
   it('opens a provider artist through the person it resolves, once, then straight for a known one', async () => {
-    const { c, navigate, resolveArtist } = setup();
-    const open = (a: ArtistHit) => (c as unknown as { openArtist(a: ArtistHit): Promise<void> }).openArtist(a);
+    const { c, state, navigate, resolveArtist } = setup();
+    state.query.set('x');
     const a = { provider: 'musicbrainz', externalId: 'x', name: 'N', sortName: null, personId: null } as ArtistHit;
-    await open(a);
+    state.artistHits.set([a, { ...a, externalId: 'z', personId: 5 }]);
+    const v = c as unknown as View & { music(): { artists: object[]; tracks: [] } };
+    const artists = (c as unknown as { music(): { artists: object[] } }).music().artists;
+    await v.openItem(artists[0]!);
     expect(resolveArtist).toHaveBeenCalledWith({ provider: 'musicbrainz', externalId: 'x' });
     expect(navigate).toHaveBeenCalledWith(['/artists', 77]);
-    await open({ ...a, personId: 5 });
+    await v.openItem(artists[1]!);
     expect(resolveArtist).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenLastCalledWith(['/artists', 5]);
   });
@@ -123,16 +165,5 @@ describe('SearchComponent hits', () => {
     view.showMore('albums');
     expect(view.visible(rows, 'albums')).toHaveLength(30);
     expect(view.visible(rows, 'books')).toHaveLength(12);
-  });
-
-  it('shows a track as requested when its album is, or after it was asked alone', () => {
-    const { c } = setup(['requests.create']);
-    const view = c as unknown as { trackRequested(r: unknown): boolean; requestedTracks: { set(s: Set<string>): void } };
-    const rec = (status: string | null, id = 'r1') => ({ externalId: id, album: hit({ requestStatus: status } as Partial<SearchHit>) });
-    expect(view.trackRequested(rec(null))).toBe(false);
-    expect(view.trackRequested(rec('pending'))).toBe(true);
-    view.requestedTracks.set(new Set(['r1']));
-    expect(view.trackRequested(rec(null))).toBe(true);
-    expect(view.trackRequested(rec(null, 'r2'))).toBe(false);
   });
 });

@@ -60,18 +60,8 @@
   } @else if (!state.hasQuery() && state.scope() === 'book') {
     <ng-container *ngTemplateOutlet="externalToggle" />
     <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
-  } @else if (!state.hasQuery() && isMusic()) {
-    <ng-container *ngTemplateOutlet="externalToggle" />
-    @if (state.externalEnabled() && (musicTracks().length || musicArtists().length || musicAlbums().length)) {
-      <section data-testid="music-trending" aria-labelledby="music-trending-title" class="flex flex-col gap-6">
-        <h2 id="music-trending-title" class="text-xl font-semibold">{{ 'search.discover_trending' | translate }}</h2>
-        <ng-container *ngTemplateOutlet="musicHits" />
-      </section>
-    } @else if (state.externalEnabled() && !state.musicTrending()) {
-      <ng-container *ngTemplateOutlet="skeletonRows" />
-    } @else {
-      <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
-    }
+  } @else if (isMusic()) {
+    <ng-container *ngTemplateOutlet="musicResults" />
   } @else if (!state.hasQuery()) {
     <!-- Discover / library browse: filter sidebar (desktop) + content -->
     <ng-container *ngTemplateOutlet="externalToggle" />
@@ -190,15 +180,7 @@
         <section data-testid="zone-library" aria-labelledby="zone-library-title" class="flex flex-col gap-6">
           <h2 id="zone-library-title" class="text-xl font-semibold">{{ 'search.zone_library' | translate }}</h2>
 
-          @if (isMusic()) {
-            <ng-container *ngTemplateOutlet="libTracks" />
-            <ng-container *ngTemplateOutlet="libArtists" />
-            <ng-container *ngTemplateOutlet="libGrid" />
-          } @else {
-            <ng-container *ngTemplateOutlet="libGrid" />
-            <ng-container *ngTemplateOutlet="libTracks" />
-            <ng-container *ngTemplateOutlet="libArtists" />
-          }
+          <ng-container *ngTemplateOutlet="libGrid" />
 
           @if (state.localAuthors().length) {
             <div>
@@ -231,7 +213,7 @@
             </div>
           }
 
-          @if (!state.localLoading() && libraryCount() === 0) {
+          @if (!state.localLoading() && libraryCount() === 0 && !(state.scope() === 'all' && !musicEmpty())) {
             <p class="text-base-content/50" data-testid="library-empty">{{ 'search.no_results' | translate }}</p>
           }
         </section>
@@ -271,8 +253,6 @@
             }
 
 
-            <ng-container *ngTemplateOutlet="musicHits" />
-
             @if (!state.externalLoading() && providerCount() === 0) {
               <p class="text-base-content/50" data-testid="provider-empty">{{ 'search.no_results' | translate }}</p>
             }
@@ -281,6 +261,13 @@
             }
           }
         </section>
+
+        @if (state.scope() === 'all' && !(musicEmpty() && !musicLoading())) {
+          <section data-testid="zone-music" aria-labelledby="zone-music-title" class="flex flex-col gap-6">
+            <h2 id="zone-music-title" class="text-xl font-semibold">{{ 'search.filter_music' | translate }}</h2>
+            <ng-container *ngTemplateOutlet="musicResults" />
+          </section>
+        }
 
         @if (state.scope() === 'all' && state.peopleResults().length) {
           <section data-testid="zone-people" aria-labelledby="zone-people-title" class="flex flex-col gap-3">
@@ -340,91 +327,104 @@
   />
 </ng-template>
 
-<!-- Reserved places while a source answers, so the sections below do not jump -->
-<ng-template #musicHits>
-  @if (musicTracks().length) {
-    <div>
-      <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
-      <ul class="flex flex-col gap-1 max-w-3xl">
-        @for (r of visible(musicTracks(), 'tracks'); track r.provider + ':' + r.externalId) {
-          <li class="flex flex-wrap items-center gap-1 rounded-lg px-3 py-2 hover:bg-base-200" data-testid="provider-track">
-            <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ') + ' · ' + r.album.title" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
-              <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
-            </app-track-line>
-            <span class="flex w-full shrink-0 justify-end gap-1 sm:w-64">
-              @if (trackRequested(r)) {
-                <span class="badge badge-warning badge-soft self-center" data-testid="track-requested">{{ 'discover.requested' | translate }}</span>
-              } @else if (canAdd() || canRequest()) {
-                <div class="join">
-                  <button type="button" class="btn btn-ghost btn-sm join-item" data-card-link (click)="addTrack(r)" data-testid="add-track">
-                    {{ (canAdd() ? 'discover.add_to_library' : 'discover.request_track') | translate }}
-                  </button>
-                  <app-dropdown-menu placement="bottom-end">
-                    <div trigger tabindex="0" role="button" data-card-link class="btn btn-ghost btn-sm btn-square join-item" [attr.aria-label]="'discover.more_choices' | translate" data-testid="track-more">
-                      <svg lucideChevronDown class="h-4 w-4"></svg>
-                    </div>
-                    <a class="dropdown-item" [routerLink]="releaseLink(r)" data-testid="open-release">{{ 'music.open_release' | translate }}</a>
-                    <button type="button" class="dropdown-item" (click)="pickTracks(r)" data-testid="pick-tracks">{{ 'discover.pick_tracks' | translate }}</button>
-                    <button type="button" class="dropdown-item" (click)="addAlbumOf(r)" data-testid="whole-album">{{ (canAdd() ? 'discover.add_album' : 'discover.request_album') | translate }}</button>
-                  </app-dropdown-menu>
-                </div>
-              }
-            </span>
-          </li>
-        }
-      </ul>
-      @if (musicTracks().length > cap && !more().has('tracks')) {
-        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('tracks')">{{ 'common.show_more' | translate }}</button>
+<!-- One list for a query and for the trends; each skeleton reserves its section's height until every source answered -->
+<ng-template #musicResults>
+  @if (!state.hasQuery() && !state.externalEnabled()) {
+    <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
+  } @else {
+    <div class="flex flex-col gap-6" data-testid="music-results">
+      @if (!state.hasQuery()) {
+        <h2 class="text-xl font-semibold">{{ 'search.discover_trending' | translate }}</h2>
       }
-    </div>
-  } @else if (state.pending().has('recording')) {
-    <ng-container *ngTemplateOutlet="skeletonRows" />
-  }
+      @if (musicEmpty()) {
+        <p class="text-base-content/50" data-testid="music-empty">{{ 'search.no_results' | translate }}</p>
+      }
 
-  @if (musicArtists().length) {
-    <div>
-      <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
-      <ul class="flex flex-col gap-1 max-w-xl">
-        @for (a of visible(musicArtists(), 'artists'); track a.provider + ':' + a.externalId) {
-          <li>
-            <button type="button" class="flex w-full items-center gap-3 p-2 rounded-lg text-left hover:bg-base-200 focus-visible:outline-2" data-card-link (click)="openArtist(a)">
-              <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: null, name: a.name }" />
+      @if (topItem(); as top) {
+        <section aria-labelledby="music-top-title" data-testid="music-top">
+          <h3 id="music-top-title" class="text-lg font-semibold mb-3">{{ 'search.top_result' | translate }}</h3>
+          <div class="flex max-w-xl items-center gap-1 rounded-lg bg-base-200/60" [class.opacity-70]="top.kind !== 'artist' && top.state !== 'owned'">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-4 rounded-lg p-3 text-left focus-visible:outline-2" data-card-link (click)="openItem(top)">
+              <ng-container *ngTemplateOutlet="cover; context: { $implicit: top.cover, cls: 'size-20', round: top.kind === 'artist', name: top.title }" />
               <span class="min-w-0 flex-1">
-                <span class="block truncate font-medium">{{ a.name }}</span>
-                @if (a.disambiguation) {
-                  <span class="block truncate text-sm text-base-content/60">{{ a.disambiguation }}</span>
+                <span class="block truncate text-lg font-semibold">{{ top.title }}</span>
+                @if (top.subtitle) {
+                  <span class="block truncate text-sm text-base-content/60">{{ top.subtitle }}</span>
                 }
               </span>
-              @if (a.country) {
-                <span class="badge badge-sm badge-ghost">{{ a.country }}</span>
-              }
             </button>
-          </li>
-        }
-      </ul>
-      @if (musicArtists().length > cap && !more().has('artists')) {
-        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('artists')">{{ 'common.show_more' | translate }}</button>
+            @if (top.kind !== 'artist') {
+              <app-hit-state [state]="top.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(top)" />
+            }
+          </div>
+        </section>
+      } @else if (musicLoading() && showTop()) {
+        <div class="h-26 max-w-xl rounded-lg bg-base-300/40 animate-pulse" aria-hidden="true"></div>
+      }
+
+      @if (titleRows().length) {
+        <section aria-labelledby="music-titles-title" data-testid="music-titles">
+          <h3 id="music-titles-title" class="text-lg font-semibold mb-3">{{ 'search.titles' | translate }}</h3>
+          <ul class="flex flex-col max-w-3xl">
+            @for (i of titleRows(); track i.key) {
+              <li class="flex min-h-12 items-center gap-1 rounded-lg hover:bg-base-200" [class.opacity-70]="i.state !== 'owned'" data-testid="music-track">
+                <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-1 text-left focus-visible:outline-2" data-card-link [attr.aria-label]="(i.state === 'owned' ? 'music.play_track' : 'music.open_album') | translate: { title: i.title }" (click)="openItem(i)">
+                  <app-track-line [title]="i.title" [subtitle]="i.subtitle" [durationSeconds]="i.durationSeconds">
+                    <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: i.cover }" />
+                  </app-track-line>
+                </button>
+                <app-hit-state [state]="i.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(i)" />
+              </li>
+            }
+          </ul>
+          @if (titlesMore() && state.scope() !== 'music-tracks') {
+            <button type="button" class="btn btn-ghost btn-sm mt-2" data-testid="see-all-titles" (click)="setScope('music-tracks')">{{ 'search.see_all' | translate }}</button>
+          } @else if (state.scope() === 'music-tracks' && music().tracks.length > cap && !more().has('tracks')) {
+            <button type="button" class="btn btn-ghost btn-sm mt-2" (click)="showMore('tracks')">{{ 'common.show_more' | translate }}</button>
+          }
+        </section>
+      } @else if (musicLoading() && asksTracks()) {
+        <div class="flex max-w-3xl flex-col" aria-hidden="true">
+          @for (n of [0, 1, 2, 3, 4]; track n) {
+            <div class="flex h-12 items-center px-3"><div class="h-8 w-full rounded bg-base-300/40 animate-pulse"></div></div>
+          }
+        </div>
+      }
+
+      @if (albumRows().length) {
+        <app-horizontal-scroller [title]="'music.section_albums' | translate" class="block min-h-60" data-testid="music-albums">
+          @for (i of albumRows(); track i.key) {
+            <div class="relative w-32 shrink-0 sm:w-36" [class.opacity-70]="i.state !== 'owned'">
+              <button type="button" class="block w-full text-left focus-visible:outline-2" data-card-link (click)="openItem(i)">
+                <ng-container *ngTemplateOutlet="cover; context: { $implicit: i.cover, cls: 'aspect-square w-full' }" />
+                <span class="mt-2 block truncate text-sm font-medium">{{ i.title }}</span>
+                <span class="block h-5 truncate text-xs text-base-content/60">{{ i.subtitle }}</span>
+              </button>
+              <app-hit-state class="absolute! bottom-14 right-1 rounded-full bg-base-100/80" [state]="i.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(i)" />
+            </div>
+          }
+        </app-horizontal-scroller>
+      } @else if (musicLoading() && asksAlbums()) {
+        <div class="h-60" aria-hidden="true"><div class="h-60 rounded-lg bg-base-300/40 animate-pulse"></div></div>
+      }
+
+      @if (artistRows().length) {
+        <app-horizontal-scroller [title]="'music.section_artists' | translate" class="block min-h-48" data-testid="music-artists">
+          @for (i of artistRows(); track i.key) {
+            <button type="button" class="flex w-28 shrink-0 flex-col items-center gap-2 rounded-lg p-1 text-center focus-visible:outline-2" data-card-link (click)="openItem(i)">
+              <ng-container *ngTemplateOutlet="cover; context: { $implicit: i.cover, cls: 'size-24', round: true, name: i.title }" />
+              <span class="w-full truncate text-sm font-medium">{{ i.title }}</span>
+            </button>
+          }
+        </app-horizontal-scroller>
+      } @else if (musicLoading() && asksArtists()) {
+        <div class="h-48" aria-hidden="true"><div class="h-48 rounded-lg bg-base-300/40 animate-pulse"></div></div>
+      }
+
+      @if (catalogDown()) {
+        <p class="text-sm text-base-content/50" data-testid="catalog-down">{{ 'search.catalog_unavailable' | translate }}</p>
       }
     </div>
-  } @else if (state.pending().has('artist')) {
-    <ng-container *ngTemplateOutlet="skeletonRows" />
-  }
-
-
-  @if (musicAlbums().length) {
-    <div>
-      <h3 class="text-lg font-semibold mb-3">{{ 'music.group_album' | translate }}</h3>
-      <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-        @for (row of visible(musicAlbums(), 'albums'); track row.provider + ':' + row.externalId) {
-          <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [link]="externalLink(row)" [extraActions]="hitActions(row)" />
-        }
-      </div>
-      @if (musicAlbums().length > cap && !more().has('albums')) {
-        <button type="button" class="btn btn-ghost btn-sm mt-3" (click)="showMore('albums')">{{ 'common.show_more' | translate }}</button>
-      }
-    </div>
-  } @else if (state.pending().has('album')) {
-    <ng-container *ngTemplateOutlet="skeletonGrid" />
   }
 </ng-template>
 
@@ -453,12 +453,12 @@
   </div>
 </ng-template>
 
-<app-add-dialog (done)="onAdded($event)" />
+<app-add-dialog (done)="onAdded($event)" (cancelled)="onCancelled()" />
 
 <ng-template #libGrid>
-  @if (state.localResults().length || videoHeld().length || booksHeld().length || albumsHeld().length) {
+  @if (libraryMedia().length || videoHeld().length || booksHeld().length) {
     <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
-      @for (media of state.localResults(); track media.id) {
+      @for (media of libraryMedia(); track media.id) {
         <app-media-card
           [media]="media"
           [status]="media.watched ? 'watched' : null"
@@ -474,86 +474,20 @@
       @for (row of booksHeld(); track row.provider + ':' + row.externalId) {
         <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="(row.authors ?? []).join(', ')" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? 'book' : null" [link]="externalLink(row)" />
       }
-      @for (row of albumsHeld(); track row.provider + ':' + row.externalId) {
-        <app-media-card [square]="true" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="albumSubtitle(row)" [badge]="cardStatus(row)" [mediaTypeBadge]="mixed() ? 'album' : null" [link]="externalLink(row)" />
-      }
     </div>
   } @else if (state.pending().has('media')) {
     <ng-container *ngTemplateOutlet="skeletonGrid" />
   }
 </ng-template>
 
-<ng-template #libTracks>
-  @if (state.localTracks().length || recordingsHeld().length) {
-    <div>
-      <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
-      <ul class="flex flex-col gap-1 max-w-3xl">
-        @for (r of state.localTracks(); track r.itemId; let i = $index) {
-          <li class="flex items-center gap-1" data-testid="local-track">
-            <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-base-200 focus-visible:outline-2 disabled:cursor-default" data-card-link [disabled]="!r.hasFile" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="playTrack(state.localTracks(), i)">
-              <app-track-line [title]="r.title" [itemId]="r.itemId" [subtitle]="artistLine(r.artists)" [explicit]="r.explicit" [durationSeconds]="r.durationSeconds">
-                <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.posterUrl }" />
-                @if (!r.hasFile) {
-                  <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
-                }
-                <span class="hidden sm:inline min-w-0 max-w-48 truncate text-sm text-base-content/60">{{ r.albumTitle }}</span>
-              </app-track-line>
-            </button>
-            <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
-          </li>
-        }
-        @for (r of recordingsHeld(); track r.externalId) {
-          <li class="flex items-center gap-1" data-testid="held-track">
-            <div class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2">
-              <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ')" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
-                <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
-                <span class="badge badge-sm" [class.badge-info]="r.state === 'wanted'" [class.badge-warning]="r.state !== 'wanted'">{{ (r.state === 'wanted' ? 'media_card.chip_wanted' : 'media_card.chip_missing') | translate }}</span>
-              </app-track-line>
-            </div>
-            <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="albumLink(r)">{{ 'music.open_album' | translate }}</a>
-          </li>
-        }
-      </ul>
-    </div>
-  } @else if (state.pending().has('tracks')) {
-    <ng-container *ngTemplateOutlet="skeletonRows" />
-  }
-</ng-template>
-
-<ng-template #libArtists>
-  @if (state.localArtists().length) {
-    <div>
-      <h3 class="text-lg font-semibold mb-3">{{ 'music.section_artists' | translate }}</h3>
-      <ul class="flex flex-col gap-1 max-w-xl">
-        @for (a of state.localArtists(); track a.id) {
-          <li>
-            <a class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/artists', a.id]">
-              <ng-container *ngTemplateOutlet="artistThumb; context: { $implicit: a.avatarUrl, name: a.name }" />
-              <span class="min-w-0 flex-1 truncate font-medium">{{ a.name }}</span>
-              <span class="badge badge-sm badge-ghost">{{ 'music.album_count' | translatePlural: a.albumCount }}</span>
-            </a>
-          </li>
-        }
-      </ul>
-    </div>
-  } @else if (state.pending().has('artists')) {
-    <ng-container *ngTemplateOutlet="skeletonRows" />
-  }
-</ng-template>
-
 <!-- The placeholder stays under the image: it shows while the image loads and when it fails. -->
-<ng-template #cover let-url>
-  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-base-300">
-    <svg lucideMusic class="size-4 text-base-content/40"></svg>
-    @if (url) {
-      <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
+<ng-template #cover let-url let-cls="cls" let-round="round" let-name="name">
+  <span class="relative flex shrink-0 items-center justify-center overflow-hidden bg-base-300 font-bold text-base-content/40" [class]="(cls ?? 'size-10') + (round ? ' rounded-full' : ' rounded')">
+    @if (round) {
+      {{ name.charAt(0) }}
+    } @else {
+      <svg lucideMusic class="size-1/3 max-w-8 text-base-content/40"></svg>
     }
-  </span>
-</ng-template>
-
-<ng-template #artistThumb let-url let-name="name">
-  <span class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-300 font-bold text-base-content/40">
-    {{ name.charAt(0) }}
     @if (url) {
       <img [cachedSrc]="url | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
     }

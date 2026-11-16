@@ -8,7 +8,7 @@ import { assertNever, kindOf } from '../../media-kinds';
 import { abortable } from '../../utils/abortable';
 import type { FliksRequestStatus } from './requests.service';
 
-export type HitState = 'owned' | 'wanted' | 'missing';
+export type HitState = 'owned' | 'wanted' | 'missing' | 'downloading';
 
 /** What every search answers (`/api/metadata/search/{kind}`), plus the extras of the hit's kind. */
 export interface SearchHit {
@@ -81,7 +81,9 @@ export interface RecordingHit {
   /** The release the hit is on, when the provider names one; the album above is its group. */
   release?: { externalId: string; title: string } | null;
   existingMediaId: number | null;
-  state: 'owned' | 'wanted' | 'missing' | null;
+  state: HitState | null;
+  /** The status of the caller's newest request covering this recording. */
+  requestStatus?: FliksRequestStatus | null;
   trackId: number | null;
 }
 

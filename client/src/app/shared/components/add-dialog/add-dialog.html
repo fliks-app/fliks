@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" (close)="dismissed()">
   <div class="modal-box max-w-2xl">
     <app-modal-header>
       <div>
@@ -35,45 +35,6 @@
         (seasonToggled)="toggleSeason($event)"
         (allToggled)="toggleAllSeasons()"
       />
-    }
-
-    @if (showsTracks()) {
-      <div class="join mt-4 w-full" role="group" [attr.aria-label]="'discover.scope' | translate" data-testid="scope">
-        @for (s of scopes(); track s) {
-          <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="scope() === s" [attr.aria-pressed]="scope() === s" [disabled]="s === 'pick' && tracksFailed()" (click)="setScope(s)">
-            {{ 'discover.scope_' + s | translate }}
-          </button>
-        }
-      </div>
-      @if (tracksFailed()) {
-        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ (tracksMissing() ? 'discover.tracks_no_edition' : 'discover.tracks_unavailable') | translate }}</div>
-      } @else if (tracksLoading()) {
-        <div class="flex h-24 items-center justify-center"><span class="loading loading-spinner loading-md"></span></div>
-      } @else if (tracks().length) {
-        <div #picker class="mt-4 overflow-x-auto rounded-lg border border-base-200 max-h-80 overflow-y-auto" data-testid="track-picker">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th class="w-12">
-                  <input type="checkbox" class="toggle toggle-sm toggle-primary" [checked]="selectedTracks().size === tracks().length" [disabled]="scope() !== 'pick'" (change)="toggleAllTracks()" />
-                </th>
-                <th colspan="2">{{ 'music.tracks' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (t of tracks(); track t.recordingId) {
-                @let on = ticked(t);
-                <tr class="hover" [class.opacity-50]="!on" [attr.data-ticked]="on && scope() !== 'album' ? '' : null">
-                  <td><input type="checkbox" class="toggle toggle-sm toggle-primary" [checked]="on" [disabled]="scope() !== 'pick'" (change)="toggleTrack(t.recordingId!)" /></td>
-                  <td class="font-medium">{{ t.title }}</td>
-                  <td class="text-base-content/60">{{ formatDuration(t.durationMs == null ? null : t.durationMs / 1000) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-      <p class="mt-2 min-h-5 text-sm text-base-content/60" data-testid="scope-hint">{{ scopeHint() | translate: { n: trackCount(), total: tracks().length } }}</p>
     }
 
     @if (kind() === 'book') {
@@ -146,7 +107,7 @@
         @if (busy()) {
           <span class="loading loading-spinner loading-xs"></span>
         }
-        {{ confirmKey() | translate: { n: trackCount() } }}
+        {{ confirmKey() | translate }}
       </button>
     </app-modal-footer>
   </div>

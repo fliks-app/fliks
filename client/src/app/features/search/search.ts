@@ -19,7 +19,6 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
-import type { TrackRow } from '../../core/services/api/music.models';
 import { BooksApiService } from '../../core/services/api/books-api.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import type { CardAction } from '../../core/services/card-actions.service';
@@ -27,7 +26,6 @@ import { StreamingApiService, RecommendationItem } from '../../core/services/api
 import {
   MetadataService,
   MetadataSearchResult,
-  ArtistHit,
   RecordingHit,
   SearchHit,
   DiscoverFilters,
@@ -45,17 +43,18 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
-import { LucideChevronDown, LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
-import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
-import type { AddRequest, AddResult, AddScope } from '../../shared/components/add-dialog/add-plan';
+import type { AddRequest, AddResult } from '../../shared/components/add-dialog/add-plan';
 import { TrackLineComponent } from '../music/track-line.component';
-import { artistLine, toTrackRequest } from '../music/music-utils';
+import { MusicDownloadsService } from '../../core/services/music-downloads.service';
+import { HitStateComponent } from './hit-state/hit-state';
+import { musicItems, topResult, type MusicItem, type MusicItems, type RowState } from './music-rows';
 import { SearchRunner, SOURCES } from './search-runner';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
@@ -70,7 +69,7 @@ const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, LucideChevronDown, DropdownMenuComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
+  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, HitStateComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -78,7 +77,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly booksApi = inject(BooksApiService);
-  private readonly music = inject(MusicApiService);
+  private readonly musicApi = inject(MusicApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly social = inject(SocialApiService);
@@ -92,12 +91,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
   private readonly player = inject(AudioPlayerService);
+  private readonly downloads = inject(MusicDownloadsService);
   private readonly addDialog = viewChild(AddDialogComponent);
   private readonly runner = new SearchRunner({
     state: this.state,
     media: this.mediaService,
     metadata: this.metadata,
-    music: this.music,
+    music: this.musicApi,
     books: this.booksApi,
     social: this.social,
   });
@@ -410,17 +410,56 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.musicTrendingLoading = false;
   }
 
-  /** The trends the music scope lists: one kind for a kind tab, all three for the music tab. */
-  private readonly trendingWant = computed(() => SOURCES[this.state.scope()].provider);
-  private readonly trendAlbums = computed(() => (this.trendingWant().includes('album') ? this.state.musicTrending()?.albums ?? [] : []));
-  private readonly trendArtists = computed(() => (this.trendingWant().includes('artist') ? this.state.musicTrending()?.artists ?? [] : []));
-  private readonly trendTracks = computed(() =>
-    this.trendingWant().includes('recording') ? (this.state.musicTrending()?.recordings ?? []).filter((r) => r.existingMediaId == null) : [],
-  );
-  /** The music rows: the provider hits of a query, else the trends. */
-  protected readonly musicTracks = computed(() => (this.state.hasQuery() ? this.recordingsToAdd() : this.trendTracks()));
-  protected readonly musicArtists = computed(() => (this.state.hasQuery() ? this.artistsToAdd() : this.trendArtists()));
-  protected readonly musicAlbums = computed(() => (this.state.hasQuery() ? this.albumsToAdd() : this.trendAlbums()));
+  /** What the scope asks, so a section it does not ask never shows a skeleton. */
+  private readonly asked = computed(() => SOURCES[this.state.scope()]);
+  protected readonly asksTracks = computed(() => this.asked().local.includes('tracks') || this.asked().provider.includes('recording'));
+  protected readonly asksAlbums = computed(() => this.asked().local.includes('media') || this.asked().provider.includes('album'));
+  protected readonly asksArtists = computed(() => this.asked().local.includes('artists') || this.asked().provider.includes('artist'));
+
+  /** Rows asked and not yet confirmed by the server show their state at once. */
+  private readonly optimistic = signal<ReadonlyMap<string, RowState>>(new Map());
+
+  /** The music results of a query, else the trends: one list of library entries and provider hits. */
+  protected readonly music = computed<MusicItems>(() => {
+    const st = this.state;
+    const none = { tracks: [], albums: [], artists: [] };
+    let items: MusicItems;
+    if (st.hasQuery()) {
+      items = musicItems({
+        localTracks: st.localTracks(), recordings: st.recordingHits(), localAlbums: st.localResults().filter((m) => m.type === 'album'),
+        albumHits: st.albumHits(), localArtists: st.localArtists(), artistHits: st.artistHits(),
+      });
+    } else {
+      const t = st.musicTrending();
+      if (!t) return none;
+      items = musicItems({
+        localTracks: [], recordings: this.asksTracks() ? t.recordings : [], localAlbums: [],
+        albumHits: this.asksAlbums() ? t.albums : [], localArtists: [], artistHits: this.asksArtists() ? t.artists : [],
+      });
+    }
+    const ov = this.optimistic();
+    if (!ov.size) return items;
+    const apply = (rows: MusicItem[]) => rows.map((i) => (ov.has(i.key) ? { ...i, state: ov.get(i.key)! } : i));
+    return { tracks: apply(items.tracks), albums: apply(items.albums), artists: apply(items.artists) };
+  });
+  protected readonly showTop = computed(() => this.state.hasQuery() && (this.state.scope() === 'music' || this.state.scope() === 'all'));
+  protected readonly topItem = computed(() => (this.showTop() ? topResult(this.state.query(), this.music()) : null));
+  /** The track rows below the top result; the music tab lists a first page, a kind tab all of them. */
+  protected readonly titleRows = computed(() => {
+    const rows = this.music().tracks.filter((i) => i.key !== this.topItem()?.key);
+    return this.state.scope() === 'music' || this.state.scope() === 'all' ? rows.slice(0, this.titlesCap) : this.visible(rows, 'tracks');
+  });
+  protected readonly titlesMore = computed(() => this.music().tracks.length - (this.topItem()?.kind === 'track' ? 1 : 0) > this.titlesCap);
+  protected readonly albumRows = computed(() => this.music().albums.filter((i) => i.key !== this.topItem()?.key));
+  protected readonly artistRows = computed(() => this.music().artists.filter((i) => i.key !== this.topItem()?.key));
+  protected readonly titlesCap = 5;
+  /** Sources asked and not answered yet; the trends until they load. */
+  protected readonly musicLoading = computed(() => (this.state.hasQuery() ? this.state.pending().size > 0 : this.state.musicTrending() == null));
+  protected readonly musicEmpty = computed(() => {
+    const m = this.music();
+    return !this.musicLoading() && !m.tracks.length && !m.albums.length && !m.artists.length;
+  });
+  protected readonly catalogDown = computed(() => (['album', 'artist', 'recording'] as const).some((k) => this.state.failed().has(k)));
 
   /** Map the viewer's most-recurring recommendation genres to TMDB genre ids. */
   private deriveTasteGenreIds(
@@ -673,29 +712,18 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly videoToAdd = this.state.videoToAdd;
   protected readonly booksHeld = this.state.booksHeld;
   protected readonly booksToAdd = this.state.booksToAdd;
-  protected readonly albumsHeld = this.state.albumsHeld;
-  protected readonly albumsToAdd = this.state.albumsToAdd;
-  protected readonly artistsToAdd = this.state.artistsToAdd;
-  protected readonly recordingsToAdd = this.state.recordingsToAdd;
-  protected readonly recordingsHeld = this.state.recordingsHeld;
+  /** Library titles of the grid: albums belong to the music results. */
+  protected readonly libraryMedia = computed(() => this.state.localResults().filter((m) => m.type !== 'album'));
+  private readonly musicCount = computed(() => {
+    const m = this.music();
+    return m.tracks.length + m.albums.length + m.artists.length;
+  });
   /** The filter panel (genre, year, rating, sort) narrows videos; books and music have none. */
   protected readonly showFilters = this.isVideo;
   protected readonly libraryCount = computed(
-    () =>
-      this.state.localResults().length + this.videoHeld().length + this.booksHeld().length + this.albumsHeld().length +
-      this.state.localArtists().length + this.state.localTracks().length + this.recordingsHeld().length + this.state.localAuthors().length + this.state.localSeries().length,
+    () => this.libraryMedia().length + this.videoHeld().length + this.booksHeld().length + this.state.localAuthors().length + this.state.localSeries().length,
   );
-  protected readonly providerCount = computed(
-    () => this.videoToAdd().length + this.booksToAdd().length + this.albumsToAdd().length + this.artistsToAdd().length + this.recordingsToAdd().length,
-  );
-
-  protected albumLink(r: RecordingHit): string[] {
-    return mediaDetailLink('album', r.existingMediaId!);
-  }
-
-  protected albumSubtitle(row: SearchHit): string {
-    return [row.artists?.join(', '), row.year].filter(Boolean).join(' \u00b7 ');
-  }
+  protected readonly providerCount = computed(() => this.videoToAdd().length + this.booksToAdd().length);
 
   /** What the card of a provider hit says: owned, wanted or missing in the library, else the caller's request. */
   cardStatus(row: SearchHit): CardBadge {
@@ -742,7 +770,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** `release` replaces the hit's id: a recording names its own release, which is the album to add. */
-  protected add(row: SearchHit, recording?: RecordingHit, scope?: AddScope, release?: string): void {
+  protected add(row: SearchHit, recording?: RecordingHit, release?: string): void {
     const externalId = release ?? row.externalId;
     const req: AddRequest = {
       kind: row.mediaType,
@@ -750,92 +778,109 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       externalId,
       title: row.title,
       ...(recording ? { recording: { externalId: recording.externalId, albumExternalId: externalId } } : {}),
-      ...(scope ? { scope, alwaysAsk: true } : {}),
     };
     this.pendingAdd = { row, recording };
     void this.addDialog()?.add(req);
   }
 
-  private pendingAdd: { row: SearchHit; recording?: RecordingHit } | null = null;
+  private pendingAdd: { row: SearchHit; recording?: RecordingHit; key?: string } | null = null;
 
-  /** The card flips to its new state without another search. */
+  /** The row flips to pending at once; a cancelled or failed add puts it back. */
+  protected addItem(i: MusicItem): void {
+    const row = i.recording?.album ?? i.album;
+    if (!row) return;
+    this.optimistic.update((m) => new Map(m).set(i.key, 'pending'));
+    this.add(row, i.recording, i.recording?.release?.externalId);
+    this.pendingAdd!.key = i.key;
+  }
+
+  protected onCancelled(): void {
+    const key = this.pendingAdd?.key;
+    this.pendingAdd = null;
+    if (key) this.optimistic.update((m) => new Map([...m].filter(([k]) => k !== key)));
+  }
+
+  /** The cards flip to their new state without another search. */
   protected onAdded(r: AddResult): void {
     const hit = this.pendingAdd;
     if (!hit) return;
     this.pendingAdd = null;
+    const patch = (albums: (rows: SearchHit[]) => SearchHit[], recs: (rows: RecordingHit[]) => RecordingHit[]) => {
+      this.state.albumHits.update(albums);
+      this.state.recordingHits.update(recs);
+      this.state.musicTrending.update((t) => t && { ...t, albums: albums(t.albums), recordings: recs(t.recordings) });
+    };
     if (r.recordings) {
       const asked = new Set(r.recordings);
-      if (r.mode === 'request') this.requestedTracks.update((s) => new Set([...s, ...asked]));
-      this.state.recordingHits.update((rows) =>
-        rows.map((x) => (asked.has(x.externalId) && x.existingMediaId == null ? { ...x, existingMediaId: r.mediaId, state: 'wanted' } : x)),
+      patch((rows) => rows, (rows) =>
+        rows.map((x) => {
+          if (!asked.has(x.externalId)) return x;
+          if (r.mode === 'request') return { ...x, requestStatus: 'pending' as const };
+          return x.existingMediaId == null ? { ...x, existingMediaId: r.mediaId, state: 'wanted' as const } : x;
+        }),
       );
-      return;
+    } else {
+      const next: SearchHit = {
+        ...hit.row,
+        existingMediaId: r.mediaId ?? hit.row.existingMediaId,
+        state: r.mode === 'import' ? 'wanted' : hit.row.state,
+        requestStatus: r.mode === 'request' ? 'pending' : hit.row.requestStatus,
+      };
+      const swap = (rows: SearchHit[]) => rows.map((x) => (x === hit.row ? next : x));
+      for (const list of [this.state.movieHits, this.state.seriesHits, this.state.bookHits]) list.update(swap);
+      const wanted = r.mode === 'import' && r.mediaId != null;
+      patch(swap, (rows) =>
+        rows.map((x) =>
+          x.album !== hit.row
+            ? x
+            : {
+                ...x,
+                album: next,
+                ...(r.mode === 'request' ? { requestStatus: 'pending' as const } : {}),
+                ...(wanted && x.existingMediaId == null ? { existingMediaId: r.mediaId, state: 'wanted' as const } : {}),
+              },
+        ),
+      );
     }
-    const next: SearchHit = {
-      ...hit.row,
-      existingMediaId: r.mediaId ?? hit.row.existingMediaId,
-      state: r.mode === 'import' ? 'wanted' : hit.row.state,
-      requestStatus: r.mode === 'request' ? 'pending' : hit.row.requestStatus,
-    };
-    const swap = (rows: SearchHit[]) => rows.map((x) => (x === hit.row ? next : x));
-    for (const list of [this.state.movieHits, this.state.seriesHits, this.state.bookHits, this.state.albumHits]) list.update(swap);
-    const wanted = r.mode === 'import' && r.mediaId != null;
-    this.state.recordingHits.update((rows) =>
-      rows.map((x) => (x.album === hit.row ? { ...x, album: next, ...(wanted && x.existingMediaId == null ? { existingMediaId: r.mediaId, state: 'wanted' as const } : {}) } : x)),
-    );
+    if (hit.key) this.optimistic.update((m) => new Map([...m].filter(([k]) => k !== hit.key)));
   }
 
-  /** Tracks asked for since the search, which the hit does not know yet. */
-  protected readonly requestedTracks = signal<ReadonlySet<string>>(new Set());
-
-  /** A request on the album, or on this track, already covers it. */
-  protected trackRequested(rec: RecordingHit): boolean {
-    const s = rec.album.requestStatus;
-    return this.requestedTracks().has(rec.externalId) || s === 'pending' || s === 'approved' || s === 'processing';
-  }
-
-  /** Wants or requests that one track, not the album. */
-  protected addTrack(rec: RecordingHit): void {
-    this.add(rec.album, rec, undefined, rec.release?.externalId);
-  }
-
-  protected pickTracks(rec: RecordingHit): void {
-    this.add(rec.album, rec, 'pick', rec.release?.externalId);
-  }
-
-  protected addAlbumOf(rec: RecordingHit): void {
-    this.add(rec.album, undefined, undefined, rec.release?.externalId);
-  }
-
-  /** The preview of the release the hit names, else of its group. */
-  protected releaseLink(rec: RecordingHit): string[] {
-    return ['/add/album', rec.album.provider, rec.release?.externalId ?? rec.album.externalId];
-  }
-
-  // ── Artists and tracks ──
+  // ── Artists, albums and tracks ──
 
   /** A provider artist opens through the library person holding it, created on the first click. */
-  protected async openArtist(a: ArtistHit): Promise<void> {
+  private async openArtist(i: MusicItem): Promise<void> {
     try {
-      const id = a.personId ?? (await this.music.resolveArtist({ provider: a.provider, externalId: a.externalId })).id;
+      const id = i.personId ?? (await this.musicApi.resolveArtist({ provider: i.artist!.provider, externalId: i.artist!.externalId })).id;
       void this.router.navigate(['/artists', id]);
     } catch {
       /* the global error toast says why */
     }
   }
 
-  protected readonly artistLine = artistLine;
+  /** An artist opens its page, an album its library page or add preview, a track the album queue from it when owned. */
+  protected async openItem(i: MusicItem): Promise<void> {
+    if (i.kind === 'artist') return this.openArtist(i);
+    if (i.kind === 'track' && i.state === 'owned' && i.mediaId != null && i.itemId != null) {
+      try {
+        const queue = await this.downloads.albumTracks(i.mediaId);
+        const at = queue.findIndex((t) => t.itemId === i.itemId);
+        if (at >= 0) return await this.player.playTracks(queue, at);
+      } catch {
+        return; // the global error toast says why
+      }
+    }
+    void this.openAlbum(i);
+  }
 
-  /** Plays the library tracks of the result from the tapped one. */
-  protected playTrack(rows: TrackRow[], index: number): Promise<void> {
-    const playable = rows.filter((r) => r.hasFile);
-    const start = Math.max(0, playable.indexOf(rows[index]!));
-    return this.player.playTracks(
-      playable.map((r) =>
-        toTrackRequest(r, { mediaId: r.mediaId, title: r.albumTitle, coverUrl: r.posterUrl, artists: '', albumGain: null, albumPeak: null }),
-      ),
-      start,
-    );
+  /** The album page scrolls to the track named in `track`: its library item id, else its provider recording id. */
+  private openAlbum(i: MusicItem): Promise<boolean> {
+    const hit = i.recording?.album ?? i.album;
+    const queryParams = i.kind === 'track' ? { track: i.itemId ?? i.recording?.externalId } : undefined;
+    const route =
+      i.mediaId != null
+        ? mediaDetailLink('album', i.mediaId)
+        : ['/add/album', hit!.provider, i.recording?.release?.externalId ?? hit!.externalId];
+    return this.router.navigate(route, { queryParams });
   }
 
   protected readonly placeholders = [0, 1, 2, 3, 4, 5];

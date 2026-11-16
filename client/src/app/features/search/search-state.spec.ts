@@ -2,12 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SearchStateService } from '../../core/services/search-state.service';
-import type { ArtistHit, RecordingHit, SearchHit } from '../../core/services/api/metadata.service';
+import type { SearchHit } from '../../core/services/api/metadata.service';
 
 const hit = (id: string, extra: Partial<SearchHit> = {}): SearchHit =>
   ({ provider: 'tmdb', externalId: id, mediaType: 'movie', title: id, year: null, posterUrl: null, existingMediaId: null, rating: 1, ...extra }) as SearchHit;
 
-describe('the two zones of the search state', () => {
+describe('the video zones of the search state', () => {
   let s: SearchStateService;
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
@@ -19,27 +19,6 @@ describe('the two zones of the search state', () => {
     s.movieHits.set([hit('1', { existingMediaId: 5 }), hit('2', { existingMediaId: 6 }), hit('3')]);
     expect(s.videoToAdd().map((h) => h.externalId)).toEqual(['3']);
     expect(s.videoHeld().map((h) => h.externalId)).toEqual(['2']);
-  });
-
-  it('keeps a held album and a held artist out of the provider zone, and an owned track out of its list', () => {
-    s.localResults.set([{ id: 9 } as never]);
-    s.albumHits.set([hit('a', { mediaType: 'album', existingMediaId: 9 }), hit('b', { mediaType: 'album' })]);
-    s.localArtists.set([{ id: 3 } as never]);
-    s.artistHits.set([{ externalId: 'x', personId: 3 } as ArtistHit, { externalId: 'y', personId: null } as ArtistHit]);
-    s.recordingHits.set([{ externalId: 'r1', existingMediaId: 9, trackId: 4 } as RecordingHit, { externalId: 'r2', existingMediaId: null, trackId: null } as RecordingHit]);
-    expect(s.albumsToAdd().map((h) => h.externalId)).toEqual(['b']);
-    expect(s.albumsHeld()).toEqual([]);
-    expect(s.artistsToAdd().map((a) => a.externalId)).toEqual(['y']);
-    expect(s.recordingsToAdd().map((r) => r.externalId)).toEqual(['r2']);
-  });
-
-  it('lists a held track the local list does not show, wanted or owned, out of the provider zone', () => {
-    s.localTracks.set([{ itemId: 4, mediaId: 9, title: 'One' } as never]);
-    const rec = (externalId: string, title: string, existingMediaId: number | null, trackId: number | null) =>
-      ({ externalId, title, existingMediaId, trackId }) as RecordingHit;
-    s.recordingHits.set([rec('a', 'One', 9, 4), rec('b', 'Two', 12, null), rec('c', 'Three', null, null)]);
-    expect(s.recordingsHeld().map((r) => r.externalId)).toEqual(['b']);
-    expect(s.recordingsToAdd().map((r) => r.externalId)).toEqual(['c']);
   });
 
   it('merges movies and series best rated first', () => {

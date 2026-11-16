@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
@@ -28,7 +27,7 @@ const lib = (id: number, types: string[], folders: number[] = [10], q: number | 
   }) as unknown as LibrarySummary;
 
 function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) {
-  const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [], tracks: [], tracksError: [] };
+  const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [], tracks: [] };
   const toast = { success: vi.fn(), error: vi.fn() };
   const show = vi.fn();
   HTMLDialogElement.prototype.showModal = show;
@@ -58,7 +57,6 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
         useValue: {
           albumTracks: async (...a: unknown[]) => {
             calls['tracks']!.push(a);
-            if (calls['tracksError']!.length) throw calls['tracksError']![0];
             return [
               { recordingId: 'r1', discNumber: 1, position: 1, number: 1, title: 'One', durationMs: 1000 },
               { recordingId: 'r2', discNumber: 1, position: 2, number: 2, title: 'Two', durationMs: 2000 },
@@ -157,21 +155,27 @@ describe('AddDialogComponent', () => {
     expect(show).toHaveBeenCalledOnce();
   });
 
-  it('asks for the profile and the tracks of an album, and monitors only the ticked ones', async () => {
+  it('adds an album without a question when one audio library takes it', async () => {
     const { cmp, calls, show, done } = setup([lib(1, ['album'])]);
-    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void; setScope(s: string): void };
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
-    expect(show).toHaveBeenCalledOnce();
-    await dialog.submit();
+    expect(show).not.toHaveBeenCalled();
     expect(calls['album']).toEqual([
       { provider: 'musicbrainz', externalId: 'g1', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
     ]);
-    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g2', title: 'B' });
-    dialog.setScope('pick');
-    dialog.toggleTrack('r2');
-    await dialog.submit();
-    expect((calls['album']![1] as { monitoredRecordings: string[] }).monitoredRecordings).toEqual(['r1']);
-    expect(done.map((d) => d.mediaId)).toEqual([43, 43]);
+    expect(done.map((d) => d.mediaId)).toEqual([43]);
+  });
+
+  it('asks for an album only with several libraries and none remembered', async () => {
+    const libs = [lib(1, ['album']), lib(2, ['album'])];
+    const first = setup(libs);
+    await first.cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    expect(first.show).toHaveBeenCalledOnce();
+    TestBed.resetTestingModule();
+    localStorage.setItem('fliks-add-library-album', '2');
+    const second = setup(libs);
+    await second.cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    expect(second.show).not.toHaveBeenCalled();
+    expect((second.calls['album']![0] as { libraryId: number }).libraryId).toBe(2);
   });
 
   it('wants one recording of an album straight away, with the default audio profile', async () => {
@@ -185,7 +189,6 @@ describe('AddDialogComponent', () => {
   it('requests an album with its audio want', async () => {
     const { cmp, calls } = setup([lib(1, ['album'])], ['requests.create']);
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
-    await (cmp as unknown as { submit(): Promise<void> }).submit();
     expect(calls['request']).toEqual([
       { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], libraryId: 1 },
     ]);
@@ -197,31 +200,5 @@ describe('AddDialogComponent', () => {
     expect(calls['request']).toEqual([
       { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], recordings: ['r1'], libraryId: 1 },
     ]);
-  });
-
-  it('requests the picked tracks, starting from the asked one', async () => {
-    const { cmp, calls } = setup([lib(1, ['album'])], ['requests.create']);
-    const dialog = cmp as unknown as { submit(): Promise<void>; toggleTrack(id: string): void };
-    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r1', albumExternalId: 'g1' }, scope: 'pick', alwaysAsk: true });
-    dialog.toggleTrack('r2');
-    await dialog.submit();
-    expect((calls['request']![0] as { recordings: string[] }).recordings).toEqual(['r1', 'r2']);
-  });
-
-  it('asks the server for the release holding the wanted recording', async () => {
-    const { cmp, calls } = setup([lib(1, ['album'])]);
-    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r2', albumExternalId: 'g1' }, alwaysAsk: true });
-    expect(calls['tracks']).toEqual([['musicbrainz', 'g1', 1]]);
-    const ticked = (cmp as unknown as { ticked(t: { recordingId: string }): boolean }).ticked;
-    expect([ticked.call(cmp, { recordingId: 'r1' }), ticked.call(cmp, { recordingId: 'r2' })]).toEqual([false, true]);
-  });
-
-  it('blocks the track scope when no edition holds the recording', async () => {
-    const { cmp, calls } = setup([lib(1, ['album'])]);
-    calls['tracksError'] = [new HttpErrorResponse({ status: 404 })];
-    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r9', albumExternalId: 'g1' }, alwaysAsk: true });
-    const d = cmp as unknown as { tracksMissing(): boolean; canSubmit(): boolean };
-    expect(d.tracksMissing()).toBe(true);
-    expect(d.canSubmit()).toBe(false);
   });
 });
