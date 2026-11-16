@@ -37,6 +37,26 @@ pub(crate) fn language_of(lang: &str, doc: &Doc) -> Option<String> {
     })
 }
 
+/// The opt-in model of the `quality` aligner: it times best on the full mix and is never picked by language.
+pub(crate) const QUALITY_MODEL: &str = "w2v-bert-music-ctc";
+
+/// `karaoke.aligner` is `quality`: the admin chose the quality model over the per-language choice.
+pub(crate) async fn quality(st: &AppState) -> bool {
+    setting_value(&st.db, "karaoke.aligner")
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("quality")
+}
+
+pub(crate) fn validate_mode(value: &str) -> Result<(), &'static str> {
+    ["standard", "quality"]
+        .contains(&value)
+        .then_some(())
+        .ok_or("karaoke.aligner must be one of the following values: standard, quality")
+}
+
 /// Alignment models that can place `language` (none: the any-language ones only).
 fn candidates<'a>(
     models: &'a [ModelInfo],
@@ -44,6 +64,7 @@ fn candidates<'a>(
 ) -> impl Iterator<Item = &'a ModelInfo> {
     models.iter().filter(move |m| {
         m.kind == ModelKind::Alignment
+            && m.id != QUALITY_MODEL
             && (m.languages.is_empty()
                 || language.is_some_and(|l| m.languages.iter().any(|x| x == l)))
     })
@@ -54,12 +75,18 @@ fn rank(m: &ModelInfo) -> (bool, bool) {
     (m.languages.is_empty(), m.default)
 }
 
-/// Rule 38.
+/// Rule 38. In quality mode the quality model, installed or not: the engine refuses it when absent.
 pub(crate) fn aligner<'a>(
     models: &'a [ModelInfo],
     language: Option<&'a str>,
     overrides: &HashMap<String, String>,
+    quality: bool,
 ) -> Option<&'a ModelInfo> {
+    if quality {
+        return models
+            .iter()
+            .find(|m| m.id == QUALITY_MODEL && m.kind == ModelKind::Alignment);
+    }
     let installed = |m: &&ModelInfo| m.state == ModelState::Installed;
     language
         .and_then(|l| overrides.get(l))
@@ -149,6 +176,7 @@ pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Val
     manage_settings(&a)?;
     let models = st.engine.models().await.map_err(engine_err)?.models;
     let chosen = overrides(&st).await;
+    let quality = quality(&st).await;
     let list: Vec<Value> = library_languages(&st)
         .await?
         .iter()
@@ -157,7 +185,7 @@ pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Val
             json!({
                 "language": l,
                 "tracks": tracks,
-                "aligner": aligner(&models, l, &chosen).map(|m| &m.id),
+                "aligner": aligner(&models, l, &chosen, quality).map(|m| &m.id),
                 "recommended": recommended(&models, l).map(|m| &m.id),
             })
         })
@@ -212,6 +240,7 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> 
     })
     .await?;
     let chosen = overrides(st).await;
+    let quality = quality(st).await;
     let results = st
         .karaoke
         .realign_results
@@ -220,7 +249,9 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> 
     Ok(languages
         .into_iter()
         .filter_map(|(item, language, source_ref, updated)| {
-            let current = aligner(models, language.as_deref(), &chosen)?.id.clone();
+            let current = aligner(models, language.as_deref(), &chosen, quality)?
+                .id
+                .clone();
             let model = source_ref.split('#').next().unwrap_or_default().to_owned();
             let blocked = results.get(&item).is_some_and(|r| {
                 r.status == "rejected" && r.aligner == current && r.lyrics_at == updated
@@ -428,7 +459,7 @@ mod tests {
             .iter()
             .map(|(l, m)| ((*l).into(), (*m).into()))
             .collect();
-        aligner(models, lang, &set).map(|m| m.id.clone())
+        aligner(models, lang, &set, false).map(|m| m.id.clone())
     }
 
     #[test]
@@ -443,6 +474,34 @@ mod tests {
             pick(&zoo("absent", "absent", "absent"), Some("fr"), &[]),
             None
         );
+    }
+
+    #[test]
+    fn the_quality_model_is_never_picked_by_language_and_always_in_quality_mode() {
+        let mut all = zoo("installed", "installed", "installed");
+        all.push(model(QUALITY_MODEL, &[], false, "absent"));
+        assert_eq!(pick(&all, Some("de"), &[]).as_deref(), Some("omni"));
+        assert_eq!(
+            recommended(&all, Some("it")).map(|m| m.id.as_str()),
+            Some("omni")
+        );
+        let q = aligner(&all, Some("fr"), &HashMap::new(), true).map(|m| m.id.as_str());
+        assert_eq!(q, Some(QUALITY_MODEL));
+        assert!(
+            aligner(
+                &zoo("installed", "installed", "installed"),
+                None,
+                &HashMap::new(),
+                true
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn the_mode_is_standard_or_quality() {
+        assert!(validate_mode("standard").is_ok() && validate_mode("quality").is_ok());
+        assert!(validate_mode("fast").is_err());
     }
 
     #[test]

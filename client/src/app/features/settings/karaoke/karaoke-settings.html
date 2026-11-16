@@ -13,6 +13,17 @@
         <app-toggle-field [label]="'karaoke.admin.background' | translate" [hint]="'karaoke.admin.background_hint' | translate" [value]="background()" (valueChange)="background.set($event)" />
         <app-toggle-field [label]="'karaoke.admin.auto_download' | translate" [hint]="'karaoke.admin.auto_download_hint' | translate" [value]="autoDownload()" (valueChange)="autoDownload.set($event)" />
         <div>
+          <app-select-field [label]="'karaoke.admin.aligner_mode' | translate" [hint]="'karaoke.admin.aligner_mode_hint' | translate" [value]="aligner()" (valueChange)="aligner.set($event)">
+            <option value="standard">{{ 'karaoke.admin.aligner_standard' | translate }}</option>
+            <option value="quality">{{ 'karaoke.admin.aligner_quality' | translate }}</option>
+          </app-select-field>
+          @if (aligner() === 'quality' && !unavailable()) {
+            <p class="mt-1 text-sm" [class.text-error]="!qualityReady()" data-testid="karaoke-quality-status">
+              {{ (qualityReady() ? 'karaoke.admin.aligner_quality_ready' : 'karaoke.admin.aligner_quality_missing') | translate }}
+            </p>
+          }
+        </div>
+        <div>
           <app-input-field type="number" [label]="'karaoke.admin.budget' | translate" [hint]="'karaoke.admin.budget_hint' | translate: { min: minBudget }" [value]="budget()" (valueChange)="budget.set($event)" />
           @if (!budgetValid()) {
             <p class="text-sm text-error" role="alert">{{ 'karaoke.admin.budget_invalid' | translate: { min: minBudget } }}</p>

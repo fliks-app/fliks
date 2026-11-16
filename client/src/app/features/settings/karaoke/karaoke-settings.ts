@@ -9,6 +9,7 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { InputFieldComponent } from '../../../shared/components/forms/input-field/input-field';
+import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { KaraokeModelsComponent, parseAligners } from './karaoke-models';
 
@@ -30,12 +31,14 @@ export function reportedProviders(reported: readonly string[]): string[] {
   return VERIFIABLE_PROVIDERS.filter((p) => reported.includes(p));
 }
 const MIN_BUDGET_MB = 256;
+/** The engine's opt-in alignment model that the `quality` aligner names. */
+export const QUALITY_MODEL_ID = 'w2v-bert-music-ctc';
 /** Microsoft's page of the Windows App SDK runtime installers, which hold the Windows ML runtime. */
 export const WINDOWS_ML_INSTALL_URL = 'https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads';
 
 @Component({
   selector: 'app-karaoke-settings',
-  imports: [FormsModule, TranslatePipe, InputFieldComponent, ToggleFieldComponent, KaraokeModelsComponent],
+  imports: [FormsModule, TranslatePipe, InputFieldComponent, SelectFieldComponent, ToggleFieldComponent, KaraokeModelsComponent],
   templateUrl: './karaoke-settings.html',
 })
 export class KaraokeSettingsComponent implements OnInit {
@@ -52,6 +55,7 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly enabled = signal(false);
   protected readonly background = signal(true);
   protected readonly autoDownload = signal(false);
+  protected readonly aligner = signal<'standard' | 'quality'>('standard');
   protected readonly budget = signal('4096');
   protected readonly queueCap = signal('2');
   protected readonly verified = signal<string[]>(['coreml']);
@@ -61,6 +65,8 @@ export class KaraokeSettingsComponent implements OnInit {
   /** The engine is absent or lacks the model routes. */
   protected readonly unavailable = signal(false);
   protected readonly providers = computed(() => reportedProviders(this.catalogue()?.runtime.providers ?? []));
+  protected readonly qualityModel = computed(() => this.catalogue()?.models.find((m) => m.id === QUALITY_MODEL_ID));
+  protected readonly qualityReady = computed(() => qualityModelReady(this.qualityModel()));
   protected readonly budgetValid = computed(() => Number(this.budget()) >= MIN_BUDGET_MB);
 
   constructor() {
@@ -78,6 +84,7 @@ export class KaraokeSettingsComponent implements OnInit {
       this.enabled.set(all['karaoke.enabled'] === 'true');
       this.background.set(all['karaoke.background'] !== 'false');
       this.autoDownload.set(all['karaoke.auto_download'] === 'true');
+      this.aligner.set(all['karaoke.aligner'] === 'quality' ? 'quality' : 'standard');
       this.budget.set(all['karaoke.disk_budget_mb'] ?? '4096');
       this.queueCap.set(all['karaoke.queue_cap'] ?? '2');
       this.verified.set(parseProviders(all['karaoke.verified_providers']));
@@ -124,6 +131,7 @@ export class KaraokeSettingsComponent implements OnInit {
         'karaoke.enabled': String(this.enabled()),
         'karaoke.background': String(this.background()),
         'karaoke.auto_download': String(this.autoDownload()),
+        'karaoke.aligner': this.aligner(),
         'karaoke.disk_budget_mb': String(Math.round(Number(this.budget()))),
         'karaoke.queue_cap': String(Math.min(20, Math.max(1, Math.round(Number(this.queueCap()))))),
         'karaoke.verified_providers': JSON.stringify(VERIFIABLE_PROVIDERS.filter((p) => this.verified().includes(p))),
@@ -145,4 +153,9 @@ function parseProviders(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+/** What the quality aligner needs: its model installed on the engine. */
+export function qualityModelReady(model: KaraokeModel | undefined): boolean {
+  return model?.state === 'installed';
 }

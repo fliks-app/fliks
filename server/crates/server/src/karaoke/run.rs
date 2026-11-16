@@ -10,7 +10,7 @@ use fliks_engine_core::api::{
 };
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -539,6 +539,11 @@ fn align_source(rows: &[lstore::Row], force: bool) -> Option<&lstore::Row> {
         .filter(|r| !done && !kd::align_request(&r.doc.0).is_empty())
 }
 
+/// The quality model times the full mix; the others the vocals stem.
+fn align_media<'a>(quality: bool, source: &'a Path, vocals: &'a Path) -> &'a Path {
+    if quality { source } else { vocals }
+}
+
 async fn align(
     st: &AppState,
     item: i32,
@@ -564,10 +569,16 @@ async fn align(
         return Err(Failure::LyricsTooLong);
     }
     let language = aligner::language_of(&src.lang, &src.doc.0);
-    let model = aligner::aligner(models, language.as_deref(), &aligner::overrides(st).await)
-        .ok_or("model_missing: no alignment model is installed")?
-        .id
-        .clone();
+    let quality = aligner::quality(st).await;
+    let model = aligner::aligner(
+        models,
+        language.as_deref(),
+        &aligner::overrides(st).await,
+        quality,
+    )
+    .ok_or("model_missing: no alignment model is installed")?
+    .id
+    .clone();
     stage(st, item, "align");
     let req = JobRequest {
         kind: JobKind::Align {
@@ -589,7 +600,9 @@ async fn align(
         },
         media: MediaRef {
             media_file_id: t.file as u32,
-            path: vocals.to_string_lossy().into_owned(),
+            path: align_media(quality, &t.path, vocals)
+                .to_string_lossy()
+                .into_owned(),
         },
         priority: Some(priority),
         force: false,
@@ -812,6 +825,13 @@ mod tests {
             reviewed,
             preferred: false,
         }
+    }
+
+    #[test]
+    fn the_quality_aligner_reads_the_source_audio_and_the_others_the_vocals() {
+        let (src, vocals) = (Path::new("/m/a.flac"), Path::new("/s/vocals.wav"));
+        assert_eq!(align_media(true, src, vocals), src);
+        assert_eq!(align_media(false, src, vocals), vocals);
     }
 
     fn caps() -> super::super::Caps {

@@ -164,6 +164,10 @@ fn validate(key: &str, value: &str) -> Result<(), AppError> {
         crate::karaoke::aligner::validate_overrides(value)
             .map_err(|m| AppError::bad_request(vec![m]))?;
     }
+    if key == "karaoke.aligner" {
+        crate::karaoke::aligner::validate_mode(value)
+            .map_err(|m| AppError::bad_request(vec![m]))?;
+    }
     crate::email::validate_setting(key, value).map_err(|m| AppError::bad_request(vec![m]))?;
     crate::engine::validate_streaming_setting(key, Some(value))
         .map_err(|m| AppError::bad_request(vec![m]))
