@@ -92,6 +92,10 @@ pub fn test_key() -> SigningKey {
     SigningKey::from_bytes(&TEST_KEY)
 }
 
+pub fn other_key() -> SigningKey {
+    SigningKey::from_bytes(&[8u8; 32])
+}
+
 pub struct Scratch {
     pub name: String,
     pub pool: PgPool,
@@ -187,6 +191,7 @@ pub fn options(
     let opts = s.pool.connect_options();
     let mut keys = fliks_server::plugins::trust::official_keys();
     keys.push(("test-key".into(), test_key().verifying_key().to_bytes()));
+    keys.push(("other-key".into(), other_key().verifying_key().to_bytes()));
     Options {
         version: "5.0.0".into(),
         runtime_dir: dir.to_path_buf(),

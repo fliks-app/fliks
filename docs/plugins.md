@@ -383,8 +383,8 @@ only when `plugins.allow_unsigned` is on; `--key <hex seed file>` adds a dev sig
 under `fliks-heavy`, target dir `~/.cache/fliks-targets/dev-plugin`: delete it afterwards), logs in
 and imports it through `/api/plugins/import/{inspect,confirm}`. `FLIKS_URL`, `FLIKS_USER` and
 `FLIKS_PASSWORD` default to the dev stack; a non-local URL needs `FLIKS_ALLOW_REMOTE=1`. Needs
-`plugins.allow_unsigned`. A plugin installed with an official signature refuses the unsigned build
-(`PLUGIN_SIGNER_CHANGED`) until it is uninstalled with data deletion. A metadata plugin's cached
+`plugins.allow_unsigned`, which also lets the unsigned build replace an installed official one,
+bundled or not; a restart keeps it until a newer embedded version ships. A metadata plugin's cached
 provider responses are dropped on install, so no manual cache clearing is needed.
 
 A `process` archive carries `plugin.json`, `plugin.wasm` (starting with the component preamble), the
