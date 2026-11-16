@@ -68,10 +68,6 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .fetch_all(&mut *c)
     .await?;
-    // The target edition of the duplicate would point at an edition that changes media.
-    sqlx::query!(r#"DELETE FROM album_details WHERE "mediaId" = $1"#, from)
-        .execute(&mut *c)
-        .await?;
     // One statement: the composite foreign keys on (id, "mediaId") are checked at its end.
     sqlx::query!(
         r#"WITH e AS (UPDATE editions SET "mediaId" = $2 WHERE "mediaId" = $1),
@@ -292,7 +288,7 @@ mod tests {
                INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
                  VALUES (1, 1, 1, 'a.flac', 1, 'flac');
                INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version) VALUES (1, 1, 1, 0);
-               INSERT INTO album_details ("mediaId", "targetEditionId") VALUES (1, 1), (2, 2);
+               INSERT INTO album_details ("mediaId") VALUES (1), (2);
                INSERT INTO media_credits ("mediaId", "editionId", "personId", role) VALUES (1, 1, 1, 'artist');
                INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (1, 1, 'release', '1999-01-01');
                INSERT INTO collection_entries ("collectionId", "mediaId", "itemId") VALUES (1, 1, 1);"#,
@@ -310,12 +306,16 @@ mod tests {
                       (SELECT count(*) FROM media_credits WHERE "mediaId" = 2 AND "editionId" IS NOT NULL),
                       (SELECT count(*) FROM media_release_dates WHERE "mediaId" = 2 AND "editionId" IS NOT NULL),
                       (SELECT count(*) FROM collection_entries WHERE "mediaId" = 2),
-                      (SELECT count(*) FROM album_details WHERE "targetEditionId" = 2)"#,
+                      (SELECT count(*) FROM album_details WHERE "mediaId" = 2)"#,
         )
         .fetch_one(&db)
         .await
         .unwrap();
-        assert_eq!(counts, (2, 2, 1, 1, 1, 1, 1));
+        assert_eq!(
+            counts,
+            (2, 2, 1, 1, 1, 1, 1),
+            "the survivor's details stay, the duplicate's go"
+        );
     }
 
     #[sqlx::test(migrations = false)]

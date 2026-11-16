@@ -184,6 +184,26 @@ pub(crate) async fn mark_existing(
         .fetch_all(db)
         .await?;
         if kind == MediaKind::Album {
+            // A release group names the lowest album of the library that is one of its releases.
+            let groups: Vec<&str> = ps
+                .iter()
+                .zip(&vs)
+                .filter(|(p, _)| **p == "musicbrainz")
+                .map(|(_, v)| *v)
+                .collect();
+            held.extend(
+                sqlx::query_as::<_, (i32, String, String)>(
+                    r#"SELECT min(m.id), 'musicbrainz', ad."releaseGroupMbid"::text FROM media m
+                       JOIN album_details ad ON ad."mediaId" = m.id
+                       WHERE m.type = 'album' AND m."libraryId" = ANY($1)
+                         AND ad."releaseGroupMbid"::text = ANY($2)
+                       GROUP BY ad."releaseGroupMbid""#,
+                )
+                .bind(&libs)
+                .bind(&groups)
+                .fetch_all(db)
+                .await?,
+            );
             // A merged id still names the album that absorbed it.
             held.extend(
                 sqlx::query_as::<_, (i32, String, String)>(
@@ -561,17 +581,15 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         let libs = accessible_library_ids(db, a).await?;
         sqlx::query_as(
             r#"SELECT DISTINCT ON (td."recordingMbid") i.id, i."mediaId", td."recordingMbid"::text,
-                      EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id),
-                      i.monitored AND m.monitored
+                      track_file(i.id) IS NOT NULL, i.monitored AND m.monitored
                FROM track_details td
                JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
                JOIN media m ON m.id = i."mediaId"
-               LEFT JOIN album_details ad ON ad."mediaId" = m.id
                WHERE td."recordingMbid" = ANY($1::text[]::uuid[]) AND m."libraryId" = ANY($2)
                  AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
                ORDER BY td."recordingMbid",
                         EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) DESC,
-                        COALESCE(i."editionId" = ad."targetEditionId", false) DESC, i.id"#,
+                        track_file(i.id) IS NOT NULL DESC, i.id"#,
         )
         .bind(&ids)
         .bind(&libs)

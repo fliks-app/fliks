@@ -1,5 +1,4 @@
 //! Track view, composers, recordings and recently played (`docs/spec/music.md` rules 44-49).
-use crate::metadata::music::want::Recording;
 use crate::{
     http::{
         AppError,
@@ -22,7 +21,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::{ExternalProvider, Namespace},
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -222,7 +221,7 @@ pub async fn want_recording(
     crate::media::write::album_import::want_recording(&st, &a, v).await
 }
 
-/// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get, of the release `recordingId` would be wanted on.
+/// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.
 #[utoipa::path(get, path = "/api/music/albums/tracks", responses((status = 200)))]
 pub async fn album_tracks(
     State(st): State<AppState>,
@@ -231,21 +230,6 @@ pub async fn album_tracks(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Create, Subject::Media)?;
     let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
-    let (asked, q): (Vec<_>, Vec<_>) = q
-        .into_iter()
-        .partition(|(k, _)| k == "recordingId" || k == "recordingIds");
-    let recordings: Vec<String> = asked
-        .iter()
-        .flat_map(|(_, v)| v.split(','))
-        .map(|v| {
-            ExternalProvider::MusicBrainz
-                .normalize(v.trim())
-                .ok_or_else(|| bad("recordingId is not a recording id"))
-        })
-        .collect::<Result<_, _>>()?;
-    if recordings.len() > 50 {
-        return Err(bad("at most 50 recording ids"));
-    }
     let mut r = Reader::new(&q, &["provider", "externalId", "libraryId"]);
     let (provider, external, library) = (
         r.string("provider"),
@@ -270,15 +254,8 @@ pub async fn album_tracks(
     if !accessible_library_ids(&st.db, &a).await?.contains(&library) {
         return Err(AppError::not_found(format!("Library #{library} not found")));
     }
-    let wanted: Vec<_> = recordings.iter().map(|r| Recording::Mbid(r)).collect();
-    let tracks = crate::metadata::music::target::preview(
-        &st,
-        &group,
-        library,
-        &wanted,
-        Priority::Interactive,
-    )
-    .await?;
+    let tracks =
+        crate::metadata::music::tracklist(&st, &group, library, Priority::Interactive).await?;
     Ok(Json(Value::Array(
         tracks
             .iter()

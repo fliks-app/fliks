@@ -1,4 +1,4 @@
-//! The target edition of an album: the release that best fits the library's profile and pressing preferences.
+//! The release a group is created as: the one that best fits the library's profile and pressing preferences.
 use super::{matcher::Config, profile::MetadataProfile, provider::Release};
 
 fn rank(list: &[String], v: Option<&str>) -> usize {
@@ -51,41 +51,39 @@ pub fn pick_target<'a>(
     })
 }
 
-/// The fewest releases that hold every recording: `holders[i]` are the release ids holding recording `i`
-/// (none empty). Each round takes the release holding most of the rest, ties by `pick_target` preference;
-/// the result pairs a release with the indices it takes.
-pub fn cover<'a>(
+/// What makes two releases of a group one version: the same title, track count and disambiguation.
+pub fn version_key(title: &str, tracks: Option<i32>, disambiguation: Option<&str>) -> String {
+    format!(
+        "{}\u{1f}{}\u{1f}{}",
+        title.trim().to_lowercase(),
+        tracks.unwrap_or(-1),
+        disambiguation.unwrap_or("").trim().to_lowercase()
+    )
+}
+
+/// The versions of a group: its releases collapsed by `version_key`, the best pressing of each by the
+/// preferences of `pick_target`, earliest first.
+pub fn versions<'a>(
     releases: &'a [Release],
     profile: &MetadataProfile,
     prefs: &Config,
-    holders: &[Vec<String>],
-) -> Vec<(&'a Release, Vec<usize>)> {
-    let mut rest: Vec<usize> = (0..holders.len()).collect();
-    let mut out = vec![];
-    while !rest.is_empty() {
-        let count = |id: &String| rest.iter().filter(|i| holders[**i].contains(id)).count();
-        let best = releases
-            .iter()
-            .map(|r| count(&r.external_id))
-            .max()
-            .unwrap_or(0);
-        if best == 0 {
-            break;
-        }
-        let among: Vec<String> = releases
-            .iter()
-            .filter(|r| count(&r.external_id) == best)
-            .map(|r| r.external_id.clone())
-            .collect();
-        let Some(chosen) = pick_target(releases, profile, prefs, Some(&among)) else {
-            break;
-        };
-        let (took, left) = rest
-            .into_iter()
-            .partition(|i| holders[*i].contains(&chosen.external_id));
-        rest = left;
-        out.push((chosen, took));
-    }
+) -> Vec<&'a Release> {
+    let key = |r: &Release| version_key(&r.title, r.track_count, r.disambiguation.as_deref());
+    let mut keys: Vec<String> = releases.iter().map(key).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut out: Vec<&Release> = keys
+        .iter()
+        .filter_map(|k| {
+            let among: Vec<String> = releases
+                .iter()
+                .filter(|r| &key(r) == k)
+                .map(|r| r.external_id.clone())
+                .collect();
+            pick_target(releases, profile, prefs, Some(&among))
+        })
+        .collect();
+    out.sort_by(|a, b| (a.release_date, &a.external_id).cmp(&(b.release_date, &b.external_id)));
     out
 }
 
@@ -107,6 +105,7 @@ mod tests {
             label: None,
             track_count: Some(tracks),
             disc_count: None,
+            disambiguation: None,
         }
     }
 
@@ -204,21 +203,18 @@ mod tests {
     }
 
     #[test]
-    fn two_recordings_on_one_release_take_one_release() {
+    fn releases_of_one_title_and_size_are_one_version() {
+        let mut deluxe = rel("d", "GB", "cd", 18, 2019);
+        deluxe.disambiguation = Some("Deluxe".into());
         let rs = [
-            rel("a", "GB", "cd", 13, 2019),
-            rel("b", "GB", "cd", 15, 2019),
-            rel("c", "GB", "cd", 15, 2020),
+            rel("a", "US", "cd", 12, 2019),
+            rel("b", "GB", "cd", 12, 2020),
+            deluxe,
         ];
-        let ids = |l: &[&str]| l.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        let (p, c) = (MetadataProfile::default(), Config::default());
-        let one = cover(&rs, &p, &c, &[ids(&["b", "c"]), ids(&["b"])]);
-        assert_eq!(one.len(), 1);
+        let v = versions(&rs, &MetadataProfile::default(), &Config::default());
         assert_eq!(
-            (one[0].0.external_id.as_str(), one[0].1.clone()),
-            ("b", vec![0, 1])
+            v.iter().map(|r| r.external_id.as_str()).collect::<Vec<_>>(),
+            ["a", "d"]
         );
-        let two = cover(&rs, &p, &c, &[ids(&["a"]), ids(&["c"])]);
-        assert_eq!(two.len(), 2);
     }
 }

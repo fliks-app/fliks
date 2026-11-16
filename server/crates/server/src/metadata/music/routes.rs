@@ -1,5 +1,5 @@
 //! Album hits as a search card (`docs/spec/music.md`).
-use super::target::main_release;
+use super::{Asked, classify};
 use crate::{
     http::{AppError, auth::Authed},
     metadata::{
@@ -49,14 +49,22 @@ pub async fn preview_album(State(st): State<AppState>, a: Authed, ids: Ids) -> R
         .ok_or_else(|| AppError::bad_request("externalId is not a provider id"))?;
     let lang = lang(&st).await?;
     let (fetched, edition) = if ns == Namespace::MUSICBRAINZ {
-        main_release(
-            &st,
-            &group,
-            &lang,
-            &MetadataProfile::default(),
-            Priority::Interactive,
-        )
-        .await?
+        match classify(&st, ns, &group, &lang, Priority::Interactive).await? {
+            Asked::Group(f) if f.releases.is_empty() => (*f, None),
+            asked => {
+                let src = asked
+                    .pick(
+                        &st,
+                        ns,
+                        &lang,
+                        &MetadataProfile::default(),
+                        None,
+                        Priority::Interactive,
+                    )
+                    .await?;
+                (src.fetched, Some(src.edition))
+            }
+        }
     } else {
         (
             super::fetch(&st, ns, &group, &lang, Priority::Interactive).await?,
@@ -64,12 +72,15 @@ pub async fn preview_album(State(st): State<AppState>, a: Authed, ids: Ids) -> R
         )
     };
     let mut album = fetched.album;
+    let group_id = album.external_id.clone();
     album.external_id = group;
     let mut out = card(ns, &album);
+    out["releaseGroupId"] = json!(group_id);
     out["artists"] = album.artists.iter().map(credit_json).collect();
     let (release, tracks) = match &edition {
         Some(e) => (
-            json!({"externalId": e.release.external_id, "title": e.release.title, "country": e.release.country,
+            json!({"externalId": e.release.external_id, "title": e.release.title,
+                   "disambiguation": e.release.disambiguation, "country": e.release.country,
                    "releaseDate": e.release.release_date.map(|d| d.to_string())}),
             e.tracks
                 .iter()
@@ -151,7 +162,8 @@ pub(crate) fn artist_hit(known: &Namespaces, p: Namespace, v: &Value) -> Option<
     }))
 }
 
-/// A recording hit with its release group as an album hit; `None` when the recording has no id or title or no group.
+/// A recording hit with its release group as an album hit and the release it is on, when the provider names one;
+/// `None` when the recording has no id or title or no group.
 pub(crate) fn recording_hit(known: &Namespaces, p: Namespace, v: &Value) -> Option<Value> {
     let id = known.normalize(p, &text(v, "externalId")?)?;
     let album = hit(known, p, v.get("album")?)?;
@@ -161,8 +173,12 @@ pub(crate) fn recording_hit(known: &Namespaces, p: Namespace, v: &Value) -> Opti
         .flatten()
         .filter_map(|a| text(a, "name").or_else(|| a.as_str().map(str::to_owned)))
         .collect();
+    let release = v.get("release").and_then(|r| {
+        Some(json!({"externalId": known.normalize(p, &text(r, "externalId")?)?, "title": text(r, "title")?}))
+    });
     Some(json!({
         "provider": p.as_str(), "externalId": id, "title": text(v, "title")?, "artists": artists,
-        "durationMs": v["durationMs"].as_u64().filter(|d| *d > 0), "album": album, "trackId": null,
+        "durationMs": v["durationMs"].as_u64().filter(|d| *d > 0), "album": album,
+        "release": release, "trackId": null,
     }))
 }

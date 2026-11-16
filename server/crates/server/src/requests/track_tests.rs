@@ -43,8 +43,8 @@ async fn ctx(pool: PgPool) -> Ctx {
     );
     fake.editions.lock().unwrap().insert(
         BONUS_RELEASE.into(),
-        json!({"externalId": BONUS_RELEASE, "title": "Alpha", "country": "XW", "status": "official", "media": "cd",
-               "trackCount": 3, "tracks": [
+        json!({"externalId": BONUS_RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "XW",
+               "status": "official", "media": "cd", "trackCount": 3, "tracks": [
             {"title": "One", "discNumber": 1, "position": 1, "number": 1, "durationMs": 100000, "recordingId": ONE},
             {"title": "Two", "discNumber": 1, "position": 2, "number": 2, "durationMs": 50000, "recordingId": TWO},
             {"title": "Three", "discNumber": 1, "position": 3, "number": 3, "durationMs": 70000, "recordingId": THREE}]}),
@@ -55,8 +55,8 @@ async fn ctx(pool: PgPool) -> Ctx {
         .insert(THREE.into(), vec![BONUS_RELEASE.into()]);
     fake.editions.lock().unwrap().insert(
         RELEASE.into(),
-        json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "media": "cd",
-               "trackCount": 2, "tracks": [
+        json!({"externalId": RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "FR",
+               "status": "official", "media": "cd", "trackCount": 2, "tracks": [
             {"title": "One", "discNumber": 1, "position": 1, "number": 1, "durationMs": 100000, "recordingId": ONE},
             {"title": "Two", "discNumber": 1, "position": 2, "number": 2, "durationMs": 50000, "recordingId": TWO}]}),
     );
@@ -102,7 +102,11 @@ impl Ctx {
     }
 
     async fn ask(&self, tok: &str, recordings: Option<Value>) -> (u16, Value) {
-        let mut body = json!({"mediaType": "album", "externalId": GROUP, "title": "Alpha",
+        self.ask_for(tok, GROUP, recordings).await
+    }
+
+    async fn ask_for(&self, tok: &str, id: &str, recordings: Option<Value>) -> (u16, Value) {
+        let mut body = json!({"mediaType": "album", "externalId": id, "title": "Alpha",
                               "wants": [{"family": "audio", "qualityProfileId": 1}]});
         if let Some(r) = recordings {
             body["recordings"] = r;
@@ -218,39 +222,35 @@ async fn approve(c: &Ctx, id: i64) -> (u16, Value) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_recording_no_release_holds_refuses_the_whole_approval(pool: PgPool) {
+async fn a_recording_the_release_lacks_refuses_the_whole_approval(pool: PgPool) {
     let c = ctx(pool).await;
-    let (_, r) = c.ask(&c.user, Some(json!([THREE, LOST]))).await;
+    let (_, r) = c.ask(&c.user, Some(json!([ONE, THREE]))).await;
     let (s, r) = approve(&c, r["id"].as_i64().unwrap()).await;
     assert_eq!(s, 404, "{r}");
-    let (album, editions): (bool, i64) = sqlx::query_as(
-        "SELECT (SELECT bool_or(monitored) FROM media WHERE type = 'album'), (SELECT count(*) FROM editions)",
-    )
-    .fetch_one(&c.pool)
-    .await
-    .unwrap();
-    assert_eq!((album, editions), (false, 1), "all or nothing");
+    assert!(c.monitored().await.is_empty(), "all or nothing");
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_track_only_another_release_holds_is_wanted_on_it(pool: PgPool) {
+async fn a_track_request_names_the_release_that_holds_the_track(pool: PgPool) {
     let c = ctx(pool).await;
-    let (s, r) = c.ask(&c.user, Some(json!([THREE]))).await;
-    assert_eq!(s, 201, "{r}");
+    let (s, r) = c
+        .ask_for(&c.user, BONUS_RELEASE, Some(json!([THREE])))
+        .await;
+    assert_eq!((s, &r["trackCount"]), (201, &json!(3)), "{r}");
     let (s, r) = approve(&c, r["id"].as_i64().unwrap()).await;
     assert_eq!(s, 201, "{r}");
     assert_eq!(c.monitored().await, [THREE]);
-    let target: String = sqlx::query_scalar(
-        r#"SELECT x.value FROM album_details ad JOIN edition_external_ids x ON x."editionId" = ad."targetEditionId""#,
+    let release: String = sqlx::query_scalar(
+        r#"SELECT value FROM media_external_ids WHERE kind = 'album' AND provider = 'musicbrainz'"#,
     )
     .fetch_one(&c.pool)
     .await
     .unwrap();
-    assert_eq!(target, RELEASE, "the target stays the standard release");
+    assert_eq!(release, BONUS_RELEASE);
 }
 
 #[sqlx::test(migrations = false)]
-async fn an_import_places_its_monitored_recordings_or_is_undone(pool: PgPool) {
+async fn an_import_monitors_its_recordings_or_is_undone(pool: PgPool) {
     let c = ctx(pool).await;
     let body = |r: &str| {
         json!({"type": "album", "provider": "musicbrainz", "externalId": GROUP, "libraryId": 1,
@@ -266,8 +266,8 @@ async fn an_import_places_its_monitored_recordings_or_is_undone(pool: PgPool) {
         .unwrap();
     assert_eq!(albums, 0, "the album is not created");
     let (s, r) = c
-        .call(&c.admin, "POST", "/api/media/import", body(THREE))
+        .call(&c.admin, "POST", "/api/media/import", body(TWO))
         .await;
     assert_eq!(s, 201, "{r}");
-    assert_eq!(c.monitored().await, [THREE]);
+    assert_eq!(c.monitored().await, [TWO]);
 }

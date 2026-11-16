@@ -11,10 +11,7 @@ use crate::{
             resolve_target_in,
         },
     },
-    metadata::{
-        books::{ANCHOR, author_works, series_works, text, work_id},
-        music::target,
-    },
+    metadata::books::{ANCHOR, author_works, series_works, text, work_id},
     state::AppState,
 };
 use chrono::NaiveDate;
@@ -359,7 +356,7 @@ fn provider_of(s: &Source) -> Namespace {
     }
 }
 
-/// Creates the release group as a monitored album, remembers it was discovered, and picks its target edition.
+/// Creates the release group's picked release as a monitored album and remembers it was discovered.
 async fn add_album(
     st: &AppState,
     job: &Job,
@@ -390,12 +387,6 @@ async fn add_album(
     .bind(id)
     .execute(&st.db)
     .await?;
-    if let Err(e) = target::ensure(st, id, BACKGROUND).await {
-        tracing::warn!(
-            "FollowRefresh: album #{id} has no target edition yet: {}",
-            e.text()
-        );
-    }
     Ok(())
 }
 
@@ -440,9 +431,6 @@ async fn stamp(st: &AppState, job: &Job, failed: i32) -> sqlx::Result<()> {
 
 /// Runs every follow and watch once; a failing one is logged and the rest go on.
 pub async fn run(st: &AppState) -> Result<(), String> {
-    if let Err(e) = target::sweep(st).await {
-        tracing::warn!("FollowRefresh: target editions not swept: {}", e.text());
-    }
     let jobs = jobs(st).await.map_err(|e| e.to_string())?;
     if jobs.is_empty() {
         return Ok(());
@@ -589,12 +577,12 @@ mod artist_tests {
         .unwrap();
         assert_eq!(ledger, 1);
         let wanted: i64 = sqlx::query_scalar(
-            r#"SELECT count(*) FROM items i JOIN album_details ad ON ad."targetEditionId" = i."editionId" WHERE i.monitored"#,
+            r#"SELECT count(*) FROM items i JOIN track_details td ON td."itemId" = i.id WHERE i.monitored"#,
         )
         .fetch_one(&db)
         .await
         .unwrap();
-        assert_eq!(wanted, 2, "the target edition's tracks are wanted");
+        assert_eq!(wanted, 2, "the release's tracks are wanted");
         let stamped: Option<i32> = sqlx::query_scalar(
             r#"SELECT "failedAdds" FROM person_follows WHERE "refreshedAt" IS NOT NULL"#,
         )

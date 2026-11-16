@@ -10,7 +10,7 @@ use crate::{
     metadata::{
         Search,
         music::{
-            Create, Fetched, Written, aliases, fetch, fetch_edition, write_album, write_edition,
+            Asked, Create, Fetched, Source, aliases, classify, fetch, fetch_edition, write_album,
         },
         walk,
     },
@@ -320,8 +320,8 @@ async fn language(st: &AppState, media: i32) -> Result<Resolved, AppError> {
     })
 }
 
-/// Links `media` to the release group and writes it with the release the files were matched to. A group
-/// another album already holds (its id or an alias of it) absorbs this album instead.
+/// Links `media` to the release the files were matched to and writes it. A release another album already
+/// holds (its id or an alias of it) absorbs this album instead.
 async fn apply(
     st: &AppState,
     media: i32,
@@ -329,15 +329,15 @@ async fn apply(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<bool, AppError> {
-    let group = found.fetched.album.external_id.clone();
-    if let Some(other) = aliases::album_of(&st.db, &group).await?
+    let release = found.edition.release.external_id.clone();
+    if let Some(other) = aliases::album_of(&st.db, &release).await?
         && other != media
     {
         if aliases::absorb_into(st, media, other).await? {
             st.ingest.settle.schedule(st, other);
             return Ok(true);
         }
-        tracing::warn!("album #{media}: an album of another library holds the group {group}");
+        tracing::warn!("album #{media}: an album of another library holds the release {release}");
         return Ok(false);
     }
     let linked = {
@@ -348,30 +348,18 @@ async fn apply(
             media,
             MediaKind::Album,
             NS,
-            &group,
+            &release,
         )
         .await?
     };
     if linked != Link::Linked {
         return Ok(true);
     }
-    if write_album(st, media, NS, &found.fetched, &group, lang, prio).await? != Written::Done {
-        return Ok(true);
-    }
-    let release = &found.edition.release.external_id;
-    let edition: Option<i32> = sqlx::query_scalar(
-        r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = 'audio'
-           ORDER BY EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id
-                             AND x.provider = 'musicbrainz' AND x.value = $2) DESC,
-                    (SELECT count(*) FROM items i WHERE i."editionId" = e.id) DESC, e.id LIMIT 1"#,
-    )
-    .bind(media)
-    .bind(release)
-    .fetch_optional(&st.db)
-    .await?;
-    if let Some(edition) = edition {
-        write_edition(st, media, edition, &found.edition, Create::No).await?;
-    }
+    let src = Source {
+        fetched: found.fetched,
+        edition: found.edition,
+    };
+    write_album(st, media, NS, &src, &release, lang, (Create::No, prio)).await?;
     Ok(true)
 }
 
@@ -420,7 +408,7 @@ pub async fn candidates(st: &AppState, media: i32) -> Result<Vec<Candidate>, App
     }
 }
 
-/// `group` given: the album is that release group, whatever the distance (a manual pick).
+/// `group` given: the album is that release, or the group's best release, whatever the distance (a manual pick).
 pub async fn identify(
     st: &AppState,
     media: i32,
@@ -449,10 +437,16 @@ pub async fn identify(
         None => tagged_group(st, &tags, prio, &local).await?,
     };
     if let Some((g, guessed)) = decided.filter(|_| apply_best) {
-        let fetched = fetch(st, NS, &g, &lang, prio).await?;
-        let wanted = release
+        let (fetched, named) = match classify(st, NS, &g, &lang, prio).await? {
+            Asked::Group(f) => (*f, None),
+            Asked::Release(src) => {
+                let release = src.release().to_owned();
+                (src.fetched, Some(release))
+            }
+        };
+        let wanted = named.as_deref().or(release
             .as_deref()
-            .filter(|r| fetched.releases.iter().any(|x| x.external_id == *r));
+            .filter(|r| fetched.releases.iter().any(|x| x.external_id == *r)));
         if wanted.is_some() || !guessed {
             let Some((edition, scored)) =
                 best_release(st, &fetched, &local, wanted, &cfg, &lang, prio).await

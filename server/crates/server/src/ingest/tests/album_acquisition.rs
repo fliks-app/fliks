@@ -138,7 +138,7 @@ async fn two_tracks(c: &Ctx, m: i32) {
              (901, {m}, 900, true, 'Low Tide'), (902, {m}, 900, false, 'High Tide');
            INSERT INTO track_details ("itemId", "mediaId", position, "discNumber", "trackNumber") VALUES
              (901, {m}, 1, 1, 1), (902, {m}, 2, 1, 2);
-           INSERT INTO album_details ("mediaId", "targetEditionId") VALUES ({m}, 900)"#
+           INSERT INTO album_details ("mediaId") VALUES ({m})"#
     )))
     .execute(&c.st.db)
     .await

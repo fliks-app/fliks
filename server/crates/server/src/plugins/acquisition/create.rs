@@ -58,6 +58,7 @@ pub async fn resolve_or_create(
     for (ns, value) in &entries {
         found = match kind {
             MediaKind::Book => held_book(&st.db, *ns, value).await,
+            MediaKind::Album => held_album(&st.db, *ns, value).await,
             _ => external_ids::find(&mut *tx, kind, *ns, value).await,
         }
         .map_err(db_err)?;
@@ -107,6 +108,29 @@ pub async fn resolve_or_create(
     Ok(id as u32)
 }
 
+/// The album that is the release `value` names, or the lowest of the releases of the group it names.
+async fn held_album(db: &PgPool, ns: Namespace, value: &str) -> sqlx::Result<Option<i32>> {
+    if ns != Namespace::MUSICBRAINZ {
+        return external_ids::find(db, MediaKind::Album, ns, value).await;
+    }
+    Ok(crate::metadata::music::aliases::albums_named(db, value)
+        .await?
+        .first()
+        .copied())
+}
+
+async fn held_media(
+    db: &PgPool,
+    kind: MediaKind,
+    ns: Namespace,
+    value: &str,
+) -> sqlx::Result<Option<i32>> {
+    match kind {
+        MediaKind::Album => held_album(db, ns, value).await,
+        _ => external_ids::find(db, kind, ns, value).await,
+    }
+}
+
 /// A lock wait past `lock_timeout` is the call's own timeout, not a database fault.
 fn lock_err(e: sqlx::Error) -> HostError {
     if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("55P03") {
@@ -135,7 +159,7 @@ async fn create(
     match created {
         Ok(id) => Ok(id),
         // Held by an import that does not take the title lock: the media exists now.
-        Err(e) if e.status() == 409 => external_ids::find(&st.db, kind, ns, value)
+        Err(e) if e.status() == 409 => held_media(&st.db, kind, ns, value)
             .await
             .map_err(db_err)?
             .ok_or_else(|| {

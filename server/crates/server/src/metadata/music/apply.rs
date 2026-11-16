@@ -1,7 +1,7 @@
-//! The write of a provider's release group and releases (`docs/spec/music.md` rules 11, 26-30). It deletes no
-//! edition, item or credit: what a provider stops listing is flagged `orphanedAt`, and a later hit clears it.
+//! The write of a provider's release and its group (`docs/spec/music.md` rules 11, 38-40). It deletes no item or
+//! credit: what a provider stops listing is flagged `orphanedAt`, and a later hit clears it.
 use super::{
-    Fetched, aliases,
+    Source, aliases,
     people::{self, Credited},
     works::{self, WorkSpec},
 };
@@ -10,7 +10,7 @@ use crate::{
     images::paths::{Target, Variant},
     ingest::record::file_records,
     media::{
-        external_ids, field_sources,
+        field_sources,
         items::lock_versions,
         write::{
             fields::{Fields, apply, merge_unmatched},
@@ -56,15 +56,14 @@ fn credited(c: &Credit) -> Credited {
     }
 }
 
-/// The poster a provider names: the album's own record first, then the poster of the other providers of
-/// the album order, which are asked only when a download fails. A provider's poster never replaces one
-/// that did not come from `ns`.
+/// The poster a provider names: the release's cover, then the group's poster, then the poster of the other
+/// providers of the album order, which are asked only when a download fails. A provider's poster never
+/// replaces one that did not come from `ns`.
 async fn poster(
     st: &AppState,
     media: i32,
     ns: Namespace,
-    f: &Fetched,
-    id: &str,
+    src: &Source,
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Option<String>, AppError> {
@@ -88,10 +87,14 @@ async fn poster(
         return Ok(None);
     }
     let target = Target::media(media, Variant::Poster);
-    if let Some(url) = &f.album.poster_url
-        && let Some(stored) = st.images.download_and_store(url, &target).await
+    let group = &src.fetched.album;
+    for url in [&src.edition.cover_url, &group.poster_url]
+        .into_iter()
+        .flatten()
     {
-        return Ok(Some(stored));
+        if let Some(stored) = st.images.download_and_store(url, &target).await {
+            return Ok(Some(stored));
+        }
     }
     for other in st.metadata.serving(MediaKind::Album) {
         if other == ns {
@@ -99,7 +102,7 @@ async fn poster(
         }
         let Ok(record) = st
             .metadata
-            .work(other, MediaKind::Album, id, lang, prio)
+            .work(other, MediaKind::Album, &group.external_id, lang, prio)
             .await
         else {
             continue;
@@ -117,33 +120,31 @@ async fn poster(
     Ok(None)
 }
 
-/// Writes the release group to the album `media` linked to `(ns, asked)`: the fields that are not locked,
-/// `album_details`, the album artists and the facts of the releases it already holds. A canonical id other
-/// than `asked` is a merge upstream: it moves the id (`aliases`).
+/// Writes the release `src` to the album `media` linked to `(ns, asked)`: the fields that are not locked,
+/// `album_details`, the album artists, then the release onto the album's edition (`write_release`). A release
+/// id other than `asked` is a merge upstream: it moves the id (`aliases`).
 pub async fn write_album(
     st: &AppState,
     media: i32,
     ns: Namespace,
-    f: &Fetched,
+    src: &Source,
     asked: &str,
     lang: &Resolved,
-    prio: Priority,
+    (create, prio): (Create, Priority),
 ) -> Result<Written, AppError> {
-    let mut asked = asked.to_owned();
-    if f.album.external_id != asked {
-        match aliases::redirect_album(st, media, &asked, &f.album.external_id).await? {
+    if src.release() != asked {
+        match aliases::redirect_album(st, media, asked, src.release()).await? {
             (aliases::Moved::Folded(into), refs) => {
                 if let Some(r) = refs {
                     orphans::release(st, r);
                 }
                 return Ok(Written::Folded(into));
             }
-            (aliases::Moved::Renamed, _) => asked = f.album.external_id.clone(),
-            (aliases::Moved::Gone | aliases::Moved::Elsewhere, _) => {}
+            (aliases::Moved::Renamed | aliases::Moved::Gone | aliases::Moved::Elsewhere, _) => {}
         }
     }
-    let stored = poster(st, media, ns, f, &asked, lang, prio).await?;
-    let a = &f.album;
+    let stored = poster(st, media, ns, src, lang, prio).await?;
+    let a = &src.fetched.album;
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
     let alive: Option<String> =
@@ -185,9 +186,10 @@ pub async fn write_album(
     field_sources::merge_field_sources(&mut tx, media, &provenance).await?;
     sqlx::query(
         r#"INSERT INTO album_details ("mediaId", "primaryType", "secondaryTypes", "firstReleaseDate",
-             "isCompilation", popularity, "orphanedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, NULL)
+             "isCompilation", popularity, "releaseGroupMbid", "orphanedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, NULL)
            ON CONFLICT ("mediaId") DO UPDATE SET
+             "releaseGroupMbid" = EXCLUDED."releaseGroupMbid",
              "primaryType" = COALESCE(EXCLUDED."primaryType", album_details."primaryType"),
              "secondaryTypes" = EXCLUDED."secondaryTypes",
              "firstReleaseDate" = COALESCE(EXCLUDED."firstReleaseDate", album_details."firstReleaseDate"),
@@ -201,65 +203,22 @@ pub async fn write_album(
     .bind(a.first_release_date)
     .bind(a.is_compilation)
     .bind(a.popularity)
+    .bind(&a.external_id)
     .execute(&mut *tx)
     .await?;
-    let mut artists: Vec<Credited> = a.artists.iter().map(credited).collect();
+    let line = if src.edition.artists.is_empty() {
+        &a.artists
+    } else {
+        &src.edition.artists
+    };
+    let mut artists: Vec<Credited> = line.iter().map(credited).collect();
     if a.is_compilation && artists.is_empty() {
         artists = vec![people::various_artists()];
     }
     people::replace_album_artists(&mut tx, media, &artists).await?;
-    release_facts(&mut tx, media, f).await?;
     tx.commit().await?;
+    write_release(st, media, &src.edition, create).await?;
     Ok(Written::Done)
-}
-
-/// The facts of the releases the album holds as editions; one it holds that the provider no longer lists is
-/// flagged, never removed.
-async fn release_facts(
-    tx: &mut sqlx::PgConnection,
-    media: i32,
-    f: &Fetched,
-) -> Result<(), AppError> {
-    for r in &f.releases {
-        sqlx::query(
-            r#"UPDATE editions e SET country = COALESCE($3, e.country), status = COALESCE($4, e.status),
-                 media = COALESCE($5, e.media), barcode = COALESCE($6, e.barcode),
-                 "catalogNumber" = COALESCE($7, e."catalogNumber"), publisher = COALESCE($8, e.publisher),
-                 "trackCount" = COALESCE($9, e."trackCount"), "discCount" = COALESCE($10, e."discCount"),
-                 "orphanedAt" = NULL
-               FROM edition_external_ids x
-               WHERE x."editionId" = e.id AND x."mediaId" = $1 AND x.provider = 'musicbrainz' AND x.value = $2
-                 AND e."mediaId" = $1"#,
-        )
-        .bind(media)
-        .bind(&r.external_id)
-        .bind(&r.country)
-        .bind(r.status)
-        .bind(r.media)
-        .bind(&r.barcode)
-        .bind(&r.catalog_number)
-        .bind(&r.label)
-        .bind(r.track_count)
-        .bind(r.disc_count)
-        .execute(&mut *tx)
-        .await?;
-    }
-    if f.releases.is_empty() {
-        return Ok(());
-    }
-    let listed: Vec<&str> = f.releases.iter().map(|r| r.external_id.as_str()).collect();
-    sqlx::query(
-        r#"UPDATE editions e SET "orphanedAt" = now()
-           WHERE e."mediaId" = $1 AND e."orphanedAt" IS NULL
-             AND EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id AND x.provider = 'musicbrainz')
-             AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id
-                              AND x.provider = 'musicbrainz' AND x.value = ANY($2))"#,
-    )
-    .bind(media)
-    .bind(&listed)
-    .execute(&mut *tx)
-    .await?;
-    Ok(())
 }
 
 struct Held {
@@ -408,48 +367,57 @@ async fn write_track(tx: &mut sqlx::PgConnection, item: i32, t: &Track) -> Resul
     Ok(())
 }
 
-/// Which of a release's tracks that the edition lacks `write_edition` creates.
+/// Which of a release's tracks that the edition lacks `write_release` creates.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Create {
     No,
-    /// Monitored as the album is (the target edition of a wanted album).
+    /// Monitored as the album is.
     AsAlbum,
-    /// Unmonitored: an edition kept for the recordings wanted on it.
+    /// Unmonitored: the tracks are wanted one by one.
     Unmonitored,
 }
 
-/// Writes the release `ed` to the edition `edition` of `media`: its facts, and its tracklist onto the tracks
-/// the files made (matched by id, then by distance). A track the files do not have is created as `create`
-/// says; a track of the edition that the release does not list is flagged. The caller holds the media's lock.
-pub async fn write_edition(
+/// The audio edition of the album, made when it has none. The caller holds the versions lock of the media.
+pub async fn edition_of(c: &mut sqlx::PgConnection, media: i32) -> sqlx::Result<i32> {
+    let held: Option<i32> = sqlx::query_scalar(
+        r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = 'audio' ORDER BY id LIMIT 1"#,
+    )
+    .bind(media)
+    .fetch_optional(&mut *c)
+    .await?;
+    match held {
+        Some(id) => Ok(id),
+        None => {
+            sqlx::query_scalar(
+                r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'audio') RETURNING id"#,
+            )
+            .bind(media)
+            .fetch_one(&mut *c)
+            .await
+        }
+    }
+}
+
+/// Writes the release `ed` to the album's edition: its facts, and its tracklist onto the tracks the files
+/// made (matched by id, then by distance). A track the files do not have is created as `create` says; a track
+/// of the edition that the release does not list is flagged.
+async fn write_release(
     st: &AppState,
     media: i32,
-    edition: i32,
     ed: &Edition,
     create: Create,
 ) -> Result<usize, AppError> {
     let mut tx = st.db.begin().await?;
     lock_versions(&mut tx, media).await?;
-    let alive: Option<i32> = sqlx::query_scalar(
-        r#"SELECT id FROM editions WHERE id = $1 AND "mediaId" = $2 FOR UPDATE"#,
-    )
-    .bind(edition)
-    .bind(media)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let alive: Option<i32> =
+        sqlx::query_scalar(r#"SELECT id FROM media WHERE id = $1 AND type = 'album' FOR UPDATE"#)
+            .bind(media)
+            .fetch_optional(&mut *tx)
+            .await?;
     if alive.is_none() {
         return Ok(0);
     }
-    let known = st.namespaces();
-    external_ids::link_edition(
-        &mut tx,
-        &known,
-        edition,
-        media,
-        Namespace::MUSICBRAINZ,
-        &ed.release.external_id,
-    )
-    .await?;
+    let edition = edition_of(&mut tx, media).await?;
     let r = &ed.release;
     sqlx::query(
         r#"UPDATE editions SET country = COALESCE($2, country), status = COALESCE($3, status),
@@ -458,7 +426,7 @@ pub async fn write_edition(
              "trackCount" = COALESCE($8, $9), "discCount" = COALESCE($10, "discCount"),
              "albumGain" = COALESCE($11, "albumGain"), "albumPeak" = COALESCE($12, "albumPeak"),
              language = COALESCE(language, $13),
-             title = NULLIF($14, (SELECT title FROM media WHERE id = $15)), "orphanedAt" = NULL
+             title = NULLIF($14, (SELECT title FROM media WHERE id = $15)), disambiguation = $16
            WHERE id = $1"#,
     )
     .bind(edition)
@@ -476,6 +444,7 @@ pub async fn write_edition(
     .bind(&ed.language)
     .bind(&r.title)
     .bind(media)
+    .bind(&r.disambiguation)
     .execute(&mut *tx)
     .await?;
     if let Some(d) = r.release_date {
@@ -556,13 +525,10 @@ pub async fn write_edition(
             .map(|(_, t)| t)
         {
             let item: i32 = sqlx::query_scalar(
-                // Monitored as the album is, unless a track was left out on purpose (one owned elsewhere aside).
+                // Monitored as the album is, unless a track was left out on purpose.
                 r#"INSERT INTO items ("mediaId", "editionId", monitored, title)
                    VALUES ($1, $2, $4 AND (SELECT monitored FROM media WHERE id = $1) AND NOT EXISTS (
-                     SELECT 1 FROM items x LEFT JOIN track_details xd ON xd."itemId" = x.id
-                      WHERE x."editionId" = $2 AND NOT x.monitored AND NOT EXISTS (
-                        SELECT 1 FROM track_details o JOIN item_parts op ON op."itemId" = o."itemId"
-                         WHERE o."recordingMbid" = xd."recordingMbid" AND o."mediaId" <> $1)), $3) RETURNING id"#,
+                     SELECT 1 FROM items x WHERE x."editionId" = $2 AND NOT x.monitored), $3) RETURNING id"#,
             )
             .bind(media)
             .bind(edition)
@@ -586,14 +552,6 @@ pub async fn write_edition(
     Ok(created)
 }
 
-fn create(as_album: bool) -> Create {
-    if as_album {
-        Create::AsAlbum
-    } else {
-        Create::No
-    }
-}
-
 /// The id the album is linked to, if any.
 async fn linked(st: &AppState, media: i32) -> Result<Option<String>, AppError> {
     Ok(sqlx::query_scalar(
@@ -615,9 +573,9 @@ async fn orphan_album(st: &AppState, media: i32) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Reads the provider the album is linked to again and writes it (rule 30); `false` when the album holds no
-/// id, its files are merged alone then. A release group the provider no longer knows is flagged, and so is a
-/// release; an outage fails the refresh and changes nothing.
+/// Reads the provider the album is linked to again and writes it (rule 38); `false` when the album holds no
+/// id, its files are merged alone then. A release or a release group the provider no longer knows flags the
+/// album; an outage fails the refresh and changes nothing.
 pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, AppError> {
     let Some(id) = linked(st, media).await? else {
         merge_unmatched(st, media).await?;
@@ -633,85 +591,41 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
         Some(l) => crate::metadata::library_language(st, l).await?,
         None => st.metadata.lang.resolve(None).await?,
     };
-    let fetched = match super::fetch(st, ns, &id, &lang, prio).await {
-        Ok(f) => f,
-        Err(e) if e.status() == StatusCode::NOT_FOUND => {
+    let missing = |e: &AppError| e.status() == StatusCode::NOT_FOUND;
+    let edition = match super::fetch_edition(st, ns, &id, &lang, prio).await {
+        Ok(e) => e,
+        Err(e) if missing(&e) => {
             orphan_album(st, media).await?;
             return Ok(true);
         }
         Err(e) => return Err(e),
     };
-    // The editions `write_album` leaves unflagged: those the group lists, or all when it lists none.
-    let listed: Vec<&str> = fetched
-        .releases
-        .iter()
-        .map(|r| r.external_id.as_str())
-        .collect();
-    let editions: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT e.id, x.value FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
-           WHERE e."mediaId" = $1 AND x.provider = 'musicbrainz'
-             AND (x.value = ANY($2) OR (cardinality($2) = 0 AND e."orphanedAt" IS NULL)) ORDER BY e.id"#,
+    let stored: Option<String> = sqlx::query_scalar(
+        r#"SELECT "releaseGroupMbid"::text FROM album_details WHERE "mediaId" = $1"#,
     )
     .bind(media)
-    .bind(&listed)
-    .fetch_all(&st.db)
-    .await?;
-    let mut read = Vec::with_capacity(editions.len());
-    for (edition, release) in editions {
-        match super::fetch_edition(st, ns, &release, &lang, prio).await {
-            Ok(ed) => read.push((edition, Some(ed))),
-            Err(e) if e.status() == StatusCode::NOT_FOUND => read.push((edition, None)),
-            Err(e) => return Err(e),
+    .fetch_optional(&st.db)
+    .await?
+    .flatten();
+    let group = stored
+        .or_else(|| edition.release_group_id.clone())
+        .ok_or_else(|| super::malformed(ns, "the release names no release group"))?;
+    let fetched = match super::fetch(st, ns, &group, &lang, prio).await {
+        Ok(f) => f,
+        Err(e) if missing(&e) => {
+            orphan_album(st, media).await?;
+            return Ok(true);
         }
-    }
-    if write_album(st, media, ns, &fetched, &id, &lang, prio).await? != Written::Done {
-        return Ok(true);
-    }
-    let target: Option<i32> =
-        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
-            .bind(media)
-            .fetch_optional(&st.db)
-            .await?
-            .flatten();
+        Err(e) => return Err(e),
+    };
     // An album with files never gets tracks made for it: they would double the ones its files did not pair with.
     let filed: bool =
         sqlx::query_scalar(r#"SELECT EXISTS (SELECT 1 FROM item_parts WHERE "mediaId" = $1)"#)
             .bind(media)
             .fetch_one(&st.db)
             .await?;
-    let mut created = 0;
-    for (edition, ed) in read {
-        match ed {
-            Some(ed) => {
-                created += write_edition(
-                    st,
-                    media,
-                    edition,
-                    &ed,
-                    create(target == Some(edition) && !filed),
-                )
-                .await?;
-            }
-            None => {
-                sqlx::query(
-                    r#"UPDATE editions SET "orphanedAt" = COALESCE("orphanedAt", now()) WHERE id = $1"#,
-                )
-                .bind(edition)
-                .execute(&st.db)
-                .await?;
-            }
-        }
-    }
-    match target {
-        Some(edition) if created > 0 => {
-            super::target::leave_owned(&st.db, media, edition).await?;
-        }
-        Some(_) => {}
-        None => {
-            if let Err(e) = super::target::ensure_any(st, media, prio).await {
-                tracing::warn!("album #{media}: no target edition yet: {}", e.text());
-            }
-        }
-    }
+    let create = if filed { Create::No } else { Create::AsAlbum };
+    let src = Source { fetched, edition };
+    write_album(st, media, ns, &src, &id, &lang, (create, prio)).await?;
     Ok(true)
 }

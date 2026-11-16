@@ -383,15 +383,12 @@ pub async fn ensure_media(
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
 ) -> Res<Option<i32>> {
-    let held = spec.title.media_type == MediaKind::Album
-        && crate::media::external_ids::find(
-            &st.db,
-            MediaKind::Album,
-            spec.title.provider,
-            &spec.title.external_id,
-        )
-        .await?
-        .is_some();
+    let before = match spec.title.media_type {
+        MediaKind::Album => {
+            crate::metadata::music::aliases::albums_named(&st.db, &spec.title.external_id).await?
+        }
+        _ => vec![],
+    };
     let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
         Ok(id) => id,
         Err(e) if e.status != 409 || super::is_work(spec.title.media_type) => {
@@ -429,18 +426,10 @@ pub async fn ensure_media(
     db::monitor_scope(&st.db, media_id, seasons).await?;
     if spec.title.media_type == MediaKind::Album {
         match spec.recordings.as_deref() {
-            Some(recordings) => want_tracks(st, media_id, recordings, held).await?,
-            None => {
-                if let Err(e) = crate::metadata::music::target::want_all(
-                    st,
-                    media_id,
-                    fliks_domain::metadata::limiter::Priority::Interactive,
-                )
-                .await
-                {
-                    tracing::warn!("album #{media_id}: not wanted as a whole yet: {}", e.text());
-                }
+            Some(recordings) => {
+                want_tracks(st, media_id, recordings, before.contains(&media_id)).await?
             }
+            None => crate::metadata::music::want::monitor_all(&st.db, &[media_id]).await?,
         }
     }
     Ok(Some(media_id))
@@ -749,17 +738,12 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     Ok(Value::Object(row))
 }
 
-/// The size of the edition the album would target, kept on the request so a list can say "2 of 12".
+/// The size of the release the album would be, kept on the request so a list can say "2 of 12".
 async fn remember_track_count(st: &AppState, id: i32, key: &TitleKey, library: i32) {
     use fliks_domain::metadata::limiter::Priority;
-    let tracks = crate::metadata::music::target::preview(
-        st,
-        &key.external_id,
-        library,
-        &[],
-        Priority::Interactive,
-    )
-    .await;
+    let tracks =
+        crate::metadata::music::tracklist(st, &key.external_id, library, Priority::Interactive)
+            .await;
     match tracks {
         Ok(t) if !t.is_empty() => {
             if let Err(e) = db::set_track_count(&st.db, id, t.len() as i32).await {

@@ -1,4 +1,5 @@
-//! `POST /api/media/import` for an album: a release group of a music provider (`docs/spec/music.md` rule 31).
+//! `POST /api/media/import` for an album: a release of a music provider, or a group it picks a release in
+//! (`docs/spec/music.md` rule 41).
 use super::{
     body::Body,
     identified::{Creation, Row, TAKEN, announce, discard, insert_row, search_added},
@@ -12,8 +13,8 @@ use crate::{
         hydrate, wants,
     },
     metadata::music::{
-        Written, fetch, target,
-        want::{self, Recording, Refused},
+        Asked, Create, Source, aliases, classify, resolve,
+        want::{self, Recording, Refused, Scope},
         write_album,
     },
     state::AppState,
@@ -25,7 +26,7 @@ use fliks_domain::{
         kind::MediaKind,
         wants::{WantSpec, parse_wants_profiled},
     },
-    metadata::limiter::Priority,
+    metadata::{language::Resolved, limiter::Priority},
     naming,
 };
 use serde_json::Value;
@@ -132,12 +133,13 @@ fn component(s: &str) -> String {
 }
 
 /// The folder of a new album: the artist folder and the album folder of the naming settings, the artist's left
-/// out when the album has none; a taken name takes the first characters of the release group id, 409 when that
+/// out when the album has none; a taken name takes the first characters of the release id, 409 when that
 /// one is taken too.
 async fn album_folder(
     st: &AppState,
     library: i32,
     album: &fliks_domain::music::provider::Album,
+    release: &str,
 ) -> Result<String, AppError> {
     let formats = crate::ingest::naming_formats(&st.db).await?;
     let artist = album.artists.first();
@@ -175,7 +177,7 @@ async fn album_folder(
     if taken(folder.clone()).await?.is_none() {
         return Ok(folder);
     }
-    let id: String = album.external_id.chars().take(8).collect();
+    let id: String = release.chars().take(8).collect();
     let suffixed = join(&format!("{album_dir} [{id}]"))?;
     if taken(suffixed.clone()).await?.is_some() {
         return Err(AppError::conflict(format!(
@@ -185,34 +187,103 @@ async fn album_folder(
     Ok(suffixed)
 }
 
-/// Creates the album from its release group; a failure after the row exists deletes it.
+/// What creating an album answered: the new album, or the one of the library that already is that release.
+pub(crate) enum Created {
+    New(i32),
+    Held(i32),
+}
+
+/// Creates the album from its release, an `externalId` being a release or a group (`create_from`); a library
+/// that holds it already answers 409.
 pub(crate) async fn create_album_from(st: &AppState, c: &Creation<'_>) -> Result<i32, AppError> {
     create_album(st, c, true).await
 }
 
-/// An album left unmonitored picks no target edition: nothing wants its tracks.
+/// `create_album_or_held` where a held album is a 409. An album left unmonitored has its tracks unmonitored.
 pub(crate) async fn create_album(
     st: &AppState,
     c: &Creation<'_>,
     monitored: bool,
 ) -> Result<i32, AppError> {
+    match create_album_or_held(st, c, monitored).await? {
+        Created::New(id) => Ok(id),
+        Created::Held(_) => Err(AppError::conflict(TAKEN)),
+    }
+}
+
+/// Reads the release `c.id` names in the library of `c.target`, then `create_from`.
+pub(crate) async fn create_album_or_held(
+    st: &AppState,
+    c: &Creation<'_>,
+    monitored: bool,
+) -> Result<Created, AppError> {
     let (ns, id) = c.id;
     let lang = crate::metadata::library_language(st, c.target.id).await?;
-    let fetched = fetch(st, ns, id, &lang, c.prio).await?;
-    let title = fetched.album.title.clone();
-    let folder = album_folder(st, c.target.id, &fetched.album).await?;
+    let profile = crate::libraries::metadata_profile(&st.db, c.target.id).await?;
+    let src = resolve(st, ns, id, &lang, &profile, c.prio).await?;
+    create_from(st, c, &src, &lang, monitored).await
+}
+
+/// The album of `library` that already is the release `src` (its id, or an alias of a merged one), or a
+/// release of the same group with the same recordings.
+async fn held_release(st: &AppState, src: &Source, library: i32) -> Result<Option<i32>, AppError> {
+    if let Some(held) = aliases::album_of(&st.db, src.release()).await? {
+        return Ok(Some(held));
+    }
+    let mut recordings: Vec<String> = src
+        .edition
+        .tracks
+        .iter()
+        .filter_map(|t| t.recording_id.clone())
+        .collect();
+    recordings.sort_unstable();
+    recordings.dedup();
+    if recordings.is_empty() {
+        return Ok(None);
+    }
+    Ok(sqlx::query_scalar(
+        r#"SELECT m.id FROM media m JOIN album_details ad ON ad."mediaId" = m.id
+            WHERE m.type = 'album' AND m."libraryId" = $1 AND ad."releaseGroupMbid"::text = $2
+              AND (SELECT COALESCE(array_agg(DISTINCT td."recordingMbid"::text ORDER BY td."recordingMbid"::text),
+                                   '{}') FROM track_details td
+                    WHERE td."mediaId" = m.id AND td."recordingMbid" IS NOT NULL) = $3
+            ORDER BY m.id LIMIT 1"#,
+    )
+    .bind(library)
+    .bind(&src.fetched.album.external_id)
+    .bind(&recordings)
+    .fetch_optional(&st.db)
+    .await?)
+}
+
+/// Creates the album that is the release `src`, with its edition and tracks (monitored as the album is); a
+/// failure after the row exists deletes it. The id asked, when it is neither the release nor its group, was
+/// merged upstream: it becomes an alias.
+pub(crate) async fn create_from(
+    st: &AppState,
+    c: &Creation<'_>,
+    src: &Source,
+    lang: &Resolved,
+    monitored: bool,
+) -> Result<Created, AppError> {
+    let (ns, asked) = c.id;
+    if let Some(held) = held_release(st, src, c.target.id).await? {
+        return Ok(Created::Held(held));
+    }
+    let album = &src.fetched.album;
+    let title = album.title.clone();
+    let folder = album_folder(st, c.target.id, album, src.release()).await?;
     let row = Row {
         kind: MediaKind::Album,
         title: &title,
-        year: fetched.album.year,
+        year: album.year,
         folder: &folder,
         overview: None,
         provider: Some(ns),
         refreshed: false,
         monitored,
     };
-    // The canonical id is what the album is linked to: a merged id the caller asked for becomes an alias.
-    let canonical = fetched.album.external_id.clone();
+    let canonical = src.release().to_owned();
     let (media, mut tx) = insert_row(st, &row, c.target, c.user, &c.links, c.wants).await?;
     if external_ids::link(
         &mut tx,
@@ -228,22 +299,24 @@ pub(crate) async fn create_album(
         return Err(AppError::conflict(TAKEN));
     }
     tx.commit().await?;
-    match write_album(st, media, ns, &fetched, &canonical, &lang, c.prio).await {
-        Ok(Written::Done) => {}
-        Ok(Written::Folded(_)) => {}
-        Err(e) => {
-            discard(st, media, MediaKind::Album).await;
-            return Err(e);
-        }
+    let create = if monitored {
+        Create::AsAlbum
+    } else {
+        Create::Unmonitored
+    };
+    if let Err(e) = write_album(st, media, ns, src, &canonical, lang, (create, c.prio)).await {
+        discard(st, media, MediaKind::Album).await;
+        return Err(e);
     }
-    if canonical != id
+    if asked != canonical
+        && asked != album.external_id
         && let Err(e) = sqlx::query(
             r#"INSERT INTO media_external_id_aliases ("mediaId", kind, provider, value) VALUES ($1, 'album', $2, $3)
                ON CONFLICT DO NOTHING"#,
         )
         .bind(media)
         .bind(ns.as_str())
-        .bind(id)
+        .bind(asked)
         .execute(&st.db)
         .await
     {
@@ -256,24 +329,23 @@ pub(crate) async fn create_album(
         (c.user, None),
     )
     .await?;
-    if monitored && let Err(e) = target::ensure(st, media, c.prio).await {
-        tracing::warn!("album #{media}: no target edition yet: {}", e.text());
-    }
-    Ok(media)
+    Ok(Created::New(media))
 }
 
-/// The album of a request: the release group in the request's library with its audio want, or the want
-/// added to the album the library already holds (403 when that one sits in a library outside `readable`).
+/// The album of a request: the release in the request's library with its audio want, or the want added to the
+/// album the library already holds (403 when that one sits in a library outside `readable`). A request scoped
+/// to some tracks (`scoped`) creates the album with every track unmonitored.
 pub async fn import_album_for_request(
     st: &AppState,
-    group: &str,
+    release: &str,
     wants: &[WantSpec],
+    scoped: bool,
     (library, folder): (Option<i32>, Option<i32>),
     (added_by, readable): (Option<i32>, &[i32]),
 ) -> Result<i32, AppError> {
     let ns = Namespace::MUSICBRAINZ;
-    let held = async || external_ids::find(&st.db, MediaKind::Album, ns, group).await;
-    if let Some(id) = held().await? {
+    let held = async || external_ids::find(&st.db, MediaKind::Album, ns, release).await;
+    let add_to = async |id: i32| {
         let own: Option<Option<i32>> =
             sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
                 .bind(id)
@@ -289,15 +361,18 @@ pub async fn import_album_for_request(
             .await
             .map_err(|e| wants::write_error(e, id))?;
         tx.commit().await?;
-        return Ok(id);
+        Ok(id)
+    };
+    if let Some(id) = held().await? {
+        return add_to(id).await;
     }
     let all = super::all_library_ids(&st.db).await?;
     let target = resolve_target_in(st, &all, MediaKind::Album, library, folder).await?;
-    let created = create_album_from(
+    let created = create_album_or_held(
         st,
         &Creation {
             kind: MediaKind::Album,
-            id: (ns, group),
+            id: (ns, release),
             target: &target,
             profiles: (None, None),
             user: added_by.filter(|u| *u != 0),
@@ -306,11 +381,17 @@ pub async fn import_album_for_request(
             wants: Some(wants),
             prio: Priority::Interactive,
         },
+        !scoped,
     )
     .await;
     match created {
-        Err(e) if e.status() == StatusCode::CONFLICT => held().await?.ok_or(e),
-        r => r,
+        Ok(Created::New(id)) => Ok(id),
+        Ok(Created::Held(id)) => add_to(id).await,
+        Err(e) if e.status() == StatusCode::CONFLICT => match held().await? {
+            Some(id) => add_to(id).await,
+            None => Err(e),
+        },
+        Err(e) => Err(e),
     }
 }
 
@@ -323,7 +404,7 @@ const WANT_FIELDS: [&str; 6] = [
     "wants",
 ];
 
-/// `POST /api/music/want-recording` (`docs/spec/music.md` rule 73): one track of a release group wanted.
+/// `POST /api/music/want-recording` (`docs/spec/music.md` rule 73): one track of a release wanted.
 pub(crate) async fn want_recording(
     st: &AppState,
     a: &Authed,
@@ -357,46 +438,81 @@ pub(crate) async fn want_recording(
         id("externalId", &recording)?,
         id("albumExternalId", &group)?,
     );
-    let acl = accessible_library_ids(&st.db, a).await?;
-    let held = external_ids::find(&st.db, MediaKind::Album, ns, &group).await?;
-    let (media, created) = match held {
-        Some(media) => {
-            let own: Option<Option<i32>> =
-                sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
-                    .bind(media)
-                    .fetch_optional(&st.db)
-                    .await?;
-            if !own.flatten().is_some_and(|l| acl.contains(&l)) {
-                return Err(AppError::conflict(TAKEN));
-            }
-            (media, false)
+    let readable = accessible_library_ids(&st.db, a).await?;
+    let recording = Recording::Mbid(&recording);
+    let looked: Vec<i32> = match library {
+        Some(l) => Some(l)
+            .filter(|l| readable.contains(l))
+            .into_iter()
+            .collect(),
+        None => readable,
+    };
+    let scope = Scope {
+        media: None,
+        libraries: Some(&looked),
+    };
+    let (media, item) = match want::item_of(&st.db, scope, recording, false).await? {
+        Some((media, item)) => {
+            want::monitor(&st.db, media, &[item], false).await?;
+            (media, item)
         }
         None => {
             let target = resolve_target(st, a, MediaKind::Album, library, folder).await?;
-            let media = create_album_from(
-                st,
-                &Creation {
-                    kind: MediaKind::Album,
-                    id: (ns, &group),
-                    target: &target,
-                    profiles: (None, None),
-                    user: Some(a.user.id).filter(|u| *u != 0),
-                    links: vec![],
-                    seasons: None,
-                    wants: specs.as_deref(),
-                    prio: Priority::Interactive,
-                },
-            )
-            .await?;
-            (media, true)
+            let c = Creation {
+                kind: MediaKind::Album,
+                id: (ns, &group),
+                target: &target,
+                profiles: (None, None),
+                user: Some(a.user.id).filter(|u| *u != 0),
+                links: vec![],
+                seasons: None,
+                wants: specs.as_deref(),
+                prio: Priority::Interactive,
+            };
+            want_new(st, &c, recording).await?
         }
     };
-    let item = want::want(st, media, Recording::Mbid(&recording), !created)
-        .await
-        .map_err(Refused::app_error)?;
     search_added(st, media).await;
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({"mediaId": media, "itemId": item})),
     ))
+}
+
+/// Creates the album a recording is wanted on and wants it (rule 73): `c.id` is the release it names, or the
+/// group whose releases that hold the recording are picked from. The tracks of a new album stay unmonitored but
+/// the recording's; a refusal deletes the album this call made.
+pub(crate) async fn want_new(
+    st: &AppState,
+    c: &Creation<'_>,
+    recording: Recording<'_>,
+) -> Result<(i32, i32), AppError> {
+    let (ns, id) = c.id;
+    let lang = crate::metadata::library_language(st, c.target.id).await?;
+    let profile = crate::libraries::metadata_profile(&st.db, c.target.id).await?;
+    let asked = classify(st, ns, id, &lang, c.prio).await?;
+    let among = match &asked {
+        Asked::Group(group) => Some(
+            want::holders(st, group, recording, &lang, c.prio)
+                .await
+                .map_err(Refused::app_error)?,
+        ),
+        Asked::Release(_) => None,
+    };
+    let src = asked
+        .pick(st, ns, &lang, &profile, among.as_deref(), c.prio)
+        .await?;
+    let (media, existed) = match create_from(st, c, &src, &lang, false).await? {
+        Created::New(media) => (media, false),
+        Created::Held(media) => (media, true),
+    };
+    match want::want(st, media, recording, existed).await {
+        Ok(item) => Ok((media, item)),
+        Err(refused) => {
+            if !existed {
+                discard(st, media, MediaKind::Album).await;
+            }
+            Err(refused.app_error())
+        }
+    }
 }

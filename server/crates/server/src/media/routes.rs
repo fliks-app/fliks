@@ -207,7 +207,11 @@ pub async fn get_media(
     } else if media["type"] == MediaKind::Comic.as_str() {
         media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
     } else if media["type"] == MediaKind::Album.as_str() {
-        media["album"] = music::detail(&st.db, id, a.user.id, &acl).await?;
+        let mut album = music::detail(&st.db, id, a.user.id, &acl).await?;
+        album["versions"] = crate::metadata::music::versions(&st, id, &acl)
+            .await?
+            .into();
+        media["album"] = album;
     }
     media["providers"] = attribution::providers(&st.db, id).await?.into();
     media["fieldSources"] = attribution::field_sources(&st.db, id).await?;

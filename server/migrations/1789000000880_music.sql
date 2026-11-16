@@ -10,7 +10,7 @@ ALTER TABLE "cleanup_rules" DROP CONSTRAINT "CK_cleanup_rules_levels",
     CHECK (cardinality("levels") >= 1
       AND "levels" <@ ARRAY['movie', 'series', 'season', 'episode', 'book', 'comic', 'album']);
 
--- Ids of MusicBrainz are UUIDs: a media (release group), an edition (release), a person (artist), a request
+-- Ids of MusicBrainz are UUIDs: a media (release), a person (artist), a request
 ALTER TABLE "media_external_ids"
   ADD CONSTRAINT "CK_media_external_ids_musicbrainz" CHECK (
     "provider" <> 'musicbrainz' OR "value" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
@@ -23,8 +23,7 @@ ALTER TABLE "edition_external_ids" DROP CONSTRAINT "CK_edition_external_ids_valu
     AND ("provider" <> 'asin' OR "value" ~ '^[0-9A-Z]{10}$')
     AND ("provider" <> 'openlibrary' OR "value" ~ '^OL[1-9][0-9]*M$')
     AND ("provider" <> 'bnf' OR "value" ~ '^cb[0-9a-z]+$')
-    AND ("provider" <> 'googlebooks' OR "value" ~ '^[A-Za-z0-9_-]{1,32}$')
-    AND ("provider" <> 'musicbrainz' OR "value" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'));
+    AND ("provider" <> 'googlebooks' OR "value" ~ '^[A-Za-z0-9_-]{1,32}$'));
 ALTER TABLE "person_external_ids" DROP CONSTRAINT "CK_person_external_ids_value",
   ADD CONSTRAINT "CK_person_external_ids_value" CHECK (
     ("provider" NOT IN ('tmdb', 'tvdb') OR "value" ~ '^[1-9][0-9]{0,8}$')
@@ -68,7 +67,7 @@ ALTER TABLE "media_credits" DROP CONSTRAINT "CK_media_credits_role",
 ALTER TABLE "person_follows" DROP CONSTRAINT "CK_person_follows_role",
   ADD CONSTRAINT "CK_person_follows_role" CHECK ("role" IN ('author', 'artist'));
 
--- Release-group-level detail row (media-details.md rule 12: one details table per kind)
+-- Detail row of the album's release group (media-details.md rule 12: one details table per kind)
 CREATE TABLE "album_details" (
   "id" integer NOT NULL DEFAULT nextval('media_details_id_seq'),
   "createdAt" timestamptz NOT NULL DEFAULT now(),
@@ -82,7 +81,7 @@ CREATE TABLE "album_details" (
       'audio drama', 'live', 'remix', 'dj-mix', 'mixtape/street', 'demo', 'field recording']),
   "firstReleaseDate" date,
   "isCompilation" boolean NOT NULL DEFAULT false,
-  "targetEditionId" integer,
+  "releaseGroupMbid" uuid,
   "popularity" double precision CONSTRAINT "CK_album_details_popularity" CHECK ("popularity" >= 0),
   "originalLanguage" text,
   "orphanedAt" timestamptz,
@@ -90,12 +89,10 @@ CREATE TABLE "album_details" (
   CONSTRAINT "UQ_album_details_media" UNIQUE ("mediaId"),
   CONSTRAINT "CK_album_details_kind" CHECK ("kind" = 'album'),
   CONSTRAINT "FK_album_details_media" FOREIGN KEY ("mediaId", "kind") REFERENCES "media"("id", "type")
-    ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT "FK_album_details_target" FOREIGN KEY ("targetEditionId", "mediaId") REFERENCES "editions"("id", "mediaId")
-    ON DELETE SET NULL ("targetEditionId")
+    ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE INDEX "IDX_album_details_media_kind" ON "album_details" ("mediaId", "kind");
-CREATE INDEX "IDX_album_details_target" ON "album_details" ("targetEditionId", "mediaId");
+CREATE INDEX "IDX_album_details_group" ON "album_details" ("releaseGroupMbid") WHERE "releaseGroupMbid" IS NOT NULL;
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON "album_details" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE OR REPLACE FUNCTION media_details_json(media integer) RETURNS jsonb LANGUAGE sql STABLE PARALLEL SAFE AS $$
@@ -136,7 +133,7 @@ CREATE OR REPLACE FUNCTION media_details_json(media integer) RETURNS jsonb LANGU
   LIMIT 1
 $$;
 
--- Edition facts of a release (an edition of an album is one pressing)
+-- Edition facts of a release (the one hidden edition of an album is its pressing)
 ALTER TABLE "editions"
   ADD COLUMN "country" text CONSTRAINT "CK_editions_country" CHECK ("country" ~ '^[A-Z]{2}$'),
   ADD COLUMN "status" text CONSTRAINT "CK_editions_status"
@@ -148,7 +145,7 @@ ALTER TABLE "editions"
   ADD COLUMN "discCount" integer CONSTRAINT "CK_editions_discCount" CHECK ("discCount" >= 1),
   ADD COLUMN "albumGain" real CONSTRAINT "CK_editions_albumGain" CHECK ("albumGain" BETWEEN -100 AND 100),
   ADD COLUMN "albumPeak" real CONSTRAINT "CK_editions_albumPeak" CHECK ("albumPeak" > 0),
-  ADD COLUMN "orphanedAt" timestamptz;
+  ADD COLUMN "disambiguation" text CONSTRAINT "CK_editions_disambiguation" CHECK ("disambiguation" <> '');
 
 -- Track facts of an item: a track is an ungrouped item of its release (items.md rule 4), `items."number"` stays NULL
 -- and the disc lives here, so a disc is never an episode group
@@ -176,6 +173,26 @@ CREATE INDEX "IDX_track_details_item_media" ON "track_details" ("itemId", "media
 CREATE INDEX "IDX_track_details_media" ON "track_details" ("mediaId");
 CREATE INDEX "IDX_track_details_recording" ON "track_details" ("recordingMbid") WHERE "recordingMbid" IS NOT NULL;
 CREATE INDEX "IDX_track_details_isrc" ON "track_details" ("isrc") WHERE "isrc" IS NOT NULL;
+
+-- The file a track plays: its own part's, else the one of a track of another album of the same library for the
+-- same recording (the ISRC only when either track holds no recording id): one file serves every release.
+CREATE FUNCTION track_file(item integer) RETURNS integer LANGUAGE sql STABLE PARALLEL SAFE AS $$
+  SELECT COALESCE(
+    (SELECT p."mediaFileId" FROM item_parts p WHERE p."itemId" = item ORDER BY p.version DESC, p.position LIMIT 1),
+    (SELECT p."mediaFileId" FROM track_details me JOIN media mm ON mm.id = me."mediaId"
+       JOIN track_details o ON o."recordingMbid" = me."recordingMbid" AND o."mediaId" <> me."mediaId"
+       JOIN media om ON om.id = o."mediaId" AND om."libraryId" IS NOT DISTINCT FROM mm."libraryId"
+       JOIN item_parts p ON p."itemId" = o."itemId"
+      WHERE me."itemId" = item
+      ORDER BY om.id, o."itemId", p.version DESC, p.position LIMIT 1),
+    (SELECT p."mediaFileId" FROM track_details me JOIN media mm ON mm.id = me."mediaId"
+       JOIN track_details o ON o.isrc = me.isrc AND o."mediaId" <> me."mediaId"
+         AND (o."recordingMbid" IS NULL OR me."recordingMbid" IS NULL)
+       JOIN media om ON om.id = o."mediaId" AND om."libraryId" IS NOT DISTINCT FROM mm."libraryId"
+       JOIN item_parts p ON p."itemId" = o."itemId"
+      WHERE me."itemId" = item
+      ORDER BY om.id, o."itemId", p.version DESC, p.position LIMIT 1))
+$$;
 
 -- Who made a track: several artists, composers and, for classical music, conductors and orchestras. The credited
 -- name is the text printed on the release; it may differ from the person's name.

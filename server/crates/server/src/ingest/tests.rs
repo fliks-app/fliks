@@ -5540,14 +5540,14 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn untagged_files_of_an_identified_album_fill_its_target_edition_and_satisfy_the_want(
+    async fn untagged_files_of_an_identified_album_fill_its_tracks_and_satisfy_the_want(
         pool: PgPool,
     ) {
         let c = ctx_music(pool, None).await;
         let l = album_lib(&c).await;
         let m = album(&c, l, "Alpha").await;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({m}, 'album', 'musicbrainz', '{GROUP}');
+            r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({m}, 'album', 'musicbrainz', '{RELEASE}');
                INSERT INTO editions ("mediaId", family) VALUES ({m}, 'audio');
                INSERT INTO items ("mediaId", "editionId", monitored, title)
                  SELECT {m}, e.id, true, t FROM editions e, unnest(ARRAY['One', 'Two', 'Three']) t;
@@ -5555,9 +5555,7 @@ mod music_ingest {
                  SELECT i.id, {m}, row_number() OVER (ORDER BY i.id), CASE i.title WHEN 'Three' THEN 2 ELSE 1 END,
                         CASE i.title WHEN 'Two' THEN 2 ELSE 1 END
                    FROM items i WHERE i."mediaId" = {m};
-               INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value)
-                 SELECT id, {m}, 'musicbrainz', '{RELEASE}' FROM editions;
-               INSERT INTO album_details ("mediaId", "targetEditionId") SELECT {m}, id FROM editions"#
+               INSERT INTO album_details ("mediaId", "releaseGroupMbid") VALUES ({m}, '{GROUP}')"#
         )))
         .execute(&c.st.db)
         .await
@@ -5585,17 +5583,15 @@ mod music_ingest {
         .unwrap();
         assert_eq!(
             count(&c, "SELECT count(*) FROM editions WHERE family = 'audio'").await,
-            2,
-            "the file no track pairs with gets the release-less edition"
+            1,
+            "an album holds one edition"
         );
         assert_eq!(
-            count(
-                &c,
-                "SELECT count(*) FROM item_parts p JOIN items i ON i.id = p.\"itemId\" JOIN album_details ad ON ad.\"mediaId\" = i.\"mediaId\" WHERE i.\"editionId\" = ad.\"targetEditionId\""
-            )
-            .await,
-            3
+            count(&c, "SELECT count(*) FROM items").await,
+            4,
+            "the file no track pairs with makes a track of the release"
         );
+        assert_eq!(count(&c, "SELECT count(*) FROM item_parts").await, 4);
         let wants = crate::media::wants::list(&c.st.db, m).await.unwrap();
         assert!(wants.iter().all(|w| w.satisfied), "{:?}", wants.len());
     }
