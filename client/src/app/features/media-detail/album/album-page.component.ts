@@ -1,13 +1,14 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, linkedSignal, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, effect, inject, input, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideCircleAlert, LucideClock, LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle } from '@lucide/angular';
 import { translatePlural, TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { DownloadProgressService } from '../../../core/services/download-progress.service';
+import type { KaraokeJobChanged } from '../../../core/services/api/karaoke.models';
 import { SseService } from '../../../core/services/sse.service';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
@@ -31,7 +32,7 @@ import { DetailSectionComponent } from '../../../shared/components/detail-sectio
 import { FactsGridComponent, type Fact } from '../../../shared/components/facts-grid/facts-grid';
 import { LikeController } from '../../../shared/utils/like-controller';
 import {
-  artistLine, formatDuration, groupByWork, groupDiscs, rowStates, splitOrphans, toTrackRequest, versionChip,
+  artistLine, flashTrack, formatDuration, groupByWork, groupDiscs, rowStates, splitOrphans, toTrackRequest, versionChip,
   type AlbumFacts, type Disc, type RowLeaf, type WorkSection,
 } from '../../music/music-utils';
 import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
@@ -188,12 +189,19 @@ export class AlbumPageComponent {
   protected readonly wantsOpen = signal(false);
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
 
+  private readonly focusTrack = inject(ActivatedRoute).snapshot.queryParamMap.get('track');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   constructor() {
+    let focused = !this.focusTrack;
+    afterRenderEffect(() => {
+      if (!focused && this.tracks().length) focused = flashTrack(this.host.nativeElement, this.focusTrack!);
+    });
     inject(SseService).karaokeEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
       if (e.type !== 'karaoke.job_changed') return;
-      const j = e as unknown as { itemId: number; state: string; progress?: number };
+      const j = e as unknown as KaraokeJobChanged;
       const live = j.state === 'queued' || j.state === 'running';
-      this.karaokeLive.update((m) => new Map(m).set(j.itemId, live ? { state: j.state as 'queued' | 'running', progress: j.progress ?? null } : null));
+      this.karaokeLive.update((m) => new Map(m).set(j.itemId, live ? { state: j.state as 'queued' | 'running', stage: j.stage, progress: j.progress ?? null } : null));
     });
     effect(() => {
       const key = this.titleKey();

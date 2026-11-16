@@ -61,6 +61,7 @@
     <ng-container *ngTemplateOutlet="externalToggle" />
     <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
   } @else if (isMusic()) {
+    <ng-container *ngTemplateOutlet="externalToggle" />
     <ng-container *ngTemplateOutlet="musicResults" />
   } @else if (!state.hasQuery()) {
     <!-- Discover / library browse: filter sidebar (desktop) + content -->

@@ -83,7 +83,7 @@ function isFrameworkNotFound(status: number, message: unknown): boolean {
 /** No answer from the server: the link is down, or the front door has no upstream while it restarts. */
 export const isUnreachable = (err: HttpErrorResponse): boolean => [0, 502, 504].includes(err.status);
 
-function extractMessage(
+export function extractMessage(
   err: HttpErrorResponse,
   translate: TranslateService,
 ): string {

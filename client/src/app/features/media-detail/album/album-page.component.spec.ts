@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -38,10 +39,11 @@ const playerStub = () => ({
   track: signal<{ mediaId: number; itemId: number } | null>(null),
 });
 
-function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}) {
+function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}, focus?: string) {
   const player = playerStub();
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
+      ...(focus ? [{ provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ track: focus }) } } }] : []),
       { provide: AudioPlayerService, useValue: player },
       { provide: PartyService, useValue: { active: () => false } },
       { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
@@ -65,6 +67,17 @@ describe('AlbumPageComponent', () => {
     expect(rows[2]!.getAttribute('data-state')).toBe('unwanted');
     expect(rows[2]!.querySelector('button')!.classList.contains('opacity-50')).toBe(true);
     expect(rows[0]!.querySelector('button')!.classList.contains('opacity-50')).toBe(false);
+  });
+
+  it('scrolls to the track named in the query and tints it', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { fixture, el } = setup([track(1), track(2)], [], {}, '2');
+    await fixture.whenStable();
+    const rows = el.querySelectorAll('[data-testid="track"]');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(rows[1]!.classList.contains('bg-primary/20')).toBe(true);
+    expect(rows[0]!.classList.contains('bg-primary/20')).toBe(false);
   });
 
   it('shows the version chip only when the group has several releases, and the other versions as cards', () => {

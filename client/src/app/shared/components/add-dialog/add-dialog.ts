@@ -9,6 +9,7 @@ import { LibrariesApiService, type LibrarySummary } from '../../../core/services
 import { MetadataService, type SeasonStub } from '../../../core/services/api/metadata.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
+import { extractMessage } from '../../../core/interceptors/error.interceptor';
 import { RequestsService, type CreateRequestBody } from '../../../core/services/api/requests.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -236,11 +237,13 @@ export class AddDialogComponent {
       this.close();
       this.done.emit({ mode: this.mode(), mediaId, ...(recordings ? { recordings } : {}) });
     } catch (e) {
-      // An album already requested counts as done; the global HTTP interceptor toasts any other failure.
+      // A request already made counts as done; any other request failure is toasted here.
       if (e instanceof HttpErrorResponse && e.status === 409 && this.mode() === 'request') {
         this.settled = true;
         this.close();
         this.done.emit({ mode: 'request', mediaId: null, ...(r.recording ? { recordings: [r.recording.externalId] } : {}) });
+      } else if (this.mode() === 'request' && e instanceof HttpErrorResponse) {
+        this.toast.error(extractMessage(e, this.translate));
       }
     } finally {
       this.busy.set(false);
@@ -315,7 +318,7 @@ export class AddDialogComponent {
         ...(this.hasSeasons() && this.selectedSeasons().size > 0 ? { seasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
       };
     }
-    const row = await this.requestsApi.create(body);
+    const row = await this.requestsApi.create(body, true);
     return row.mediaId ?? null;
   }
 }

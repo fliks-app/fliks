@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,7 +26,7 @@ const preview = (o: object = {}) => ({
   trackCount: 2, durationMs: 150000, existingMediaId: null, ...o,
 });
 
-function setup() {
+function setup(track?: string) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -34,6 +34,7 @@ function setup() {
       provideHttpClientTesting(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       provideRouter([]),
+      ...(track ? [{ provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ track }) } } }] : []),
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => p === 'media.create' } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
@@ -84,5 +85,17 @@ describe('AlbumPreviewComponent', () => {
     http.expectOne('/api/metadata/musicbrainz/album/g1').flush(preview({ existingMediaId: 5 }));
     await settle(fixture);
     expect(el.querySelector('a[href="/albums/5"]')).not.toBeNull();
+  });
+
+  it('scrolls to the track named in the query and tints it', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { fixture, http } = setup('x2');
+    http.expectOne('/api/metadata/musicbrainz/album/g1').flush(preview());
+    const el = await settle(fixture);
+    const rows = el.querySelectorAll('[data-testid="preview-track"]');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(rows[1]!.classList.contains('bg-primary/20')).toBe(true);
+    expect(rows[0]!.classList.contains('bg-primary/20')).toBe(false);
   });
 });

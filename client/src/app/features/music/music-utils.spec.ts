@@ -82,7 +82,8 @@ describe('rowStates', () => {
 
   it('is owned with a file, carrying the karaoke prep', () => {
     expect(kind(track({}))).toEqual({ kind: 'owned' });
-    expect(kind(track({}), { karaoke: () => ({ state: 'running', progress: 30 }) })).toEqual({ kind: 'owned', karaoke: { progress: 30 } });
+    expect(kind(track({}), { karaoke: () => ({ state: 'running', stage: 'align', progress: 50 }) })).toEqual({ kind: 'owned', karaoke: { progress: 80 } });
+    expect(kind(track({}), { karaoke: () => ({ state: 'running', progress: 30 }) })).toEqual({ kind: 'owned', karaoke: { progress: null } });
   });
 
   it('is downloading when a leaf covers the track, with the mean percent or none when unknown', () => {

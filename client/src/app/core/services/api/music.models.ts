@@ -1,5 +1,7 @@
 // Wire contract: the F4 section of the music plan (tracks are named by `itemId`)
 
+import type { KaraokeStage } from './karaoke.models';
+
 export interface MusicPerson {
   id: number;
   name: string;
@@ -98,7 +100,7 @@ export interface Track {
   /** The newest finished acquisition covering the track (queue state). */
   lastAttempt?: 'imported' | 'failed' | 'import_failed' | 'removed' | null;
   /** The karaoke prep under way, when any; follows `karaoke.job_changed`. */
-  karaoke?: { state: 'queued' | 'running'; progress: number | null } | null;
+  karaoke?: { state: 'queued' | 'running'; stage?: KaraokeStage; progress: number | null } | null;
   discNumber: number;
   discTitle: string | null;
   position: number;

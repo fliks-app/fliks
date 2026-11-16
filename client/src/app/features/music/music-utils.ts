@@ -1,4 +1,5 @@
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
+import { weightedProgress } from '../../core/services/karaoke/karaoke-prep';
 import type { ArtistAlbum, ArtistAlbumGroup, Track, TrackArtist, TrackRow, TrackWork } from '../../core/services/api/music.models';
 
 /** `m:ss`, or `h:mm:ss` from an hour up. */
@@ -173,7 +174,7 @@ export function rowStates(
     const covering = o.leaves.filter((l) => !l.itemIds || l.itemIds.includes(t.itemId));
     const failed = t.lastAttempt === 'failed' || t.lastAttempt === 'import_failed';
     let s: RowState;
-    if (t.hasFile) s = { kind: 'owned', ...(k ? { karaoke: { progress: k.progress } } : {}) };
+    if (t.hasFile) s = { kind: 'owned', ...(k ? { karaoke: { progress: k.stage && k.progress != null ? weightedProgress(k.stage, k.progress) : null } } : {}) };
     else if (covering.length) {
       const known = covering.flatMap((l) => (l.percent == null ? [] : [l.percent]));
       s = { kind: 'downloading', percent: known.length < covering.length ? null : Math.round(known.reduce((a, p) => a + p, 0) / known.length) };
@@ -182,4 +183,14 @@ export function rowStates(
     out.set(t.itemId, s);
   }
   return out;
+}
+
+/** Scrolls the row tagged `data-track-id` into view and tints it for two seconds; false when it is not rendered. */
+export function flashTrack(root: HTMLElement, id: string): boolean {
+  const el = [...root.querySelectorAll<HTMLElement>('[data-track-id]')].find((e) => e.dataset['trackId'] === id);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center' });
+  el.classList.add('bg-primary/20');
+  setTimeout(() => el.classList.remove('bg-primary/20'), 2000);
+  return true;
 }
