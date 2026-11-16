@@ -271,20 +271,24 @@ async fn mark_state(
         .collect();
     let mut media: HashMap<i32, &'static str> = HashMap::new();
     if !ids.is_empty() {
-        let rows: Vec<(i32, bool, bool)> = sqlx::query_as(
+        let rows: Vec<(i32, bool, bool, bool)> = sqlx::query_as(
             r#"SELECT m.id, m.monitored,
                       EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id)
-                      OR EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id)
+                      OR EXISTS (SELECT 1 FROM item_parts ip WHERE ip."mediaId" = m.id),
+                      EXISTS (SELECT 1 FROM acquisition_queue q WHERE q."mediaId" = m.id
+                              AND q."finishedAt" IS NULL AND q.state = ANY($2))
                FROM media m WHERE m.id = ANY($1)"#,
         )
         .bind(&ids)
+        .bind(crate::plugins::queue::IN_FLIGHT.map(String::from).to_vec())
         .fetch_all(db)
         .await?;
-        for (id, monitored, owned) in rows {
-            let state = match (owned, monitored) {
-                (true, _) => "owned",
-                (false, true) => "wanted",
-                (false, false) => "missing",
+        for (id, monitored, owned, transfer) in rows {
+            let state = match (owned, monitored, transfer) {
+                (true, _, _) => "owned",
+                (false, true, true) => "downloading",
+                (false, true, false) => "wanted",
+                (false, false, _) => "missing",
             };
             media.insert(id, state);
         }
@@ -575,13 +579,16 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         .iter()
         .filter_map(|h| h["externalId"].as_str())
         .collect();
-    let held: Vec<(i32, i32, String, bool, bool)> = if ids.is_empty() {
+    let held: Vec<(i32, i32, String, bool, bool, bool)> = if ids.is_empty() {
         vec![]
     } else {
         let libs = accessible_library_ids(db, a).await?;
         sqlx::query_as(
             r#"SELECT DISTINCT ON (td."recordingMbid") i.id, i."mediaId", td."recordingMbid"::text,
-                      track_file(i.id) IS NOT NULL, i.monitored AND m.monitored
+                      track_file(i.id) IS NOT NULL, i.monitored AND m.monitored,
+                      EXISTS (SELECT 1 FROM acquisition_queue q WHERE q."mediaId" = i."mediaId"
+                              AND q."finishedAt" IS NULL AND q.state = ANY($3)
+                              AND (q."itemIds" IS NULL OR i.id = ANY(q."itemIds")))
                FROM track_details td
                JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
                JOIN media m ON m.id = i."mediaId"
@@ -593,24 +600,66 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         )
         .bind(&ids)
         .bind(&libs)
+        .bind(crate::plugins::queue::IN_FLIGHT.map(String::from).to_vec())
         .fetch_all(db)
         .await?
     };
+    let asked = recording_requests(db, a, hits).await?;
     for h in hits {
-        let id = h["externalId"].as_str();
+        let id = h["externalId"].as_str().map(str::to_owned);
+        let id = id.as_deref();
         let row = held.iter().find(|r| Some(r.2.as_str()) == id);
         h["existingMediaId"] = row.map_or(Value::Null, |r| r.1.into());
         h["trackId"] = row.filter(|r| r.3).map_or(Value::Null, |r| r.0.into());
         h["state"] = row.map_or(Value::Null, |r| {
-            match (r.3, r.4) {
-                (true, _) => "owned",
-                (false, true) => "wanted",
-                (false, false) => "missing",
+            match (r.3, r.4, r.5) {
+                (true, _, _) => "owned",
+                (false, true, true) => "downloading",
+                (false, true, false) => "wanted",
+                (false, false, _) => "missing",
             }
             .into()
         });
+        h["requestStatus"] = id
+            .and_then(|id| asked.get(id))
+            .filter(|s| *s != "removed")
+            .map_or(Value::Null, |s| s.as_str().into());
     }
     Ok(())
+}
+
+/// The status of the caller's newest `add` request covering each recording hit, by recording id: a request of
+/// the hit's release or release group, whole or naming the recording.
+async fn recording_requests(
+    db: &PgPool,
+    a: &Authed,
+    hits: &[Value],
+) -> Result<HashMap<String, String>, AppError> {
+    let mut asked = HashMap::new();
+    if a.user.id == 0 {
+        return Ok(asked);
+    }
+    let text = |v: &Value| v.as_str().unwrap_or_default().to_owned();
+    let cols = |f: &dyn Fn(&Value) -> String| hits.iter().map(f).collect::<Vec<_>>();
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT DISTINCT ON (h.rec) h.rec, r.status::text
+           FROM unnest($2::text[], $3::text[], $4::text[], $5::text[]) AS h(rec, provider, grp, rel)
+           JOIN requests r ON r.provider = h.provider AND r."externalId" IN (h.grp, h.rel)
+           LEFT JOIN provider_namespaces pn ON pn.name = r.provider
+           WHERE r."userId" = $1 AND r."mediaType" = 'album' AND r.kind = 'add'
+             AND r."namespaceGeneration" IS NOT DISTINCT FROM pn.generation
+             AND (r.recordings IS NULL OR h.rec = ANY(r.recordings))
+           ORDER BY h.rec, r."createdAt" DESC, r.id DESC"#,
+    )
+    .bind(a.user.id)
+    .bind(cols(&|h| text(&h["externalId"])))
+    .bind(cols(&|h| text(&h["provider"])))
+    .bind(cols(&|h| text(&h["album"]["externalId"])))
+    .bind(cols(&|h| text(&h["release"]["externalId"])))
+    .fetch_all(db)
+    .await?;
+    asked.extend(rows);
+    Ok(asked)
 }
 
 /// How a walk asks: the album target (`None` is the albums themselves) and the time each provider gets.
