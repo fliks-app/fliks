@@ -8,19 +8,16 @@ const album = {
   title: 'Al',
   posterUrl: '/p.jpg',
   album: {
-    targetEditionId: 2,
-    editions: [{ id: 1, hasFiles: true }, { id: 2, hasFiles: true }],
     tracks: [
-      { itemId: 10, editionId: 1, hasFile: true, title: 'Other edition' },
-      { itemId: 20, editionId: 2, hasFile: true, title: 'A' },
-      { itemId: 21, editionId: 2, hasFile: false, title: 'No file' },
-      { itemId: 22, editionId: 2, hasFile: true, title: 'B' },
+      { itemId: 20, hasFile: true, title: 'A' },
+      { itemId: 21, hasFile: false, title: 'No file' },
+      { itemId: 22, hasFile: true, title: 'B' },
     ],
   },
 } as unknown as Media;
 
 describe('programme expansion', () => {
-  it('expands an album into the playable tracks of its default edition, in order', () => {
+  it('expands an album into the playable tracks of the release, in order', () => {
     expect(albumRows(album).map((r) => [r.mediaId, r.itemId, r.title, r.seriesTitle])).toEqual([
       [4, 20, 'A', 'Al'],
       [4, 22, 'B', 'Al'],

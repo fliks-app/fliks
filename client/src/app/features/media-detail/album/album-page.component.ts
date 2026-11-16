@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucideShuffle } from '@lucide/angular';
-import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
+import { LucideEllipsisVertical, LucideDownload, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle } from '@lucide/angular';
+import { translatePlural, TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
@@ -12,7 +11,7 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { RequestsService, titleRef, type TitleRequestState } from '../../../core/services/api/requests.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
-import type { AlbumCandidate, AlbumEdition, Track } from '../../../core/services/api/music.models';
+import type { AlbumCandidate, AlbumVersion, Track } from '../../../core/services/api/music.models';
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -27,7 +26,6 @@ import { DetailHeroComponent } from '../../../shared/components/detail-hero/deta
 import { heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
 import { FactsGridComponent, type Fact } from '../../../shared/components/facts-grid/facts-grid';
-import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { LikeController } from '../../../shared/utils/like-controller';
 import {
   artistLine, formatDuration, groupByWork, groupDiscs, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
@@ -35,7 +33,9 @@ import {
 import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TrackLineComponent } from '../../music/track-line.component';
-import { asAlbumMedia, defaultEditionId } from './album-media';
+import { mediaDetailLink } from '../../../core/media-kinds';
+import { MediaService } from '../../../core/services/api/media.service';
+import { asAlbumMedia, versionMeta } from './album-media';
 import { mediaTitleKey } from '../request-flow-controller';
 
 interface DiscView {
@@ -48,9 +48,9 @@ interface DiscView {
 @Component({
   selector: 'app-album-page',
   imports: [
-    FormsModule, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, TvSelectDirective, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
+    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
     ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent,
-    LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucideShuffle,
+    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -67,6 +67,7 @@ export class AlbumPageComponent {
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
   private readonly requestsApi = inject(RequestsService);
+  private readonly mediaApi = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly downloads = inject(MusicDownloadsService);
   protected readonly like = new LikeController(
@@ -75,16 +76,11 @@ export class AlbumPageComponent {
   );
 
   protected readonly album = computed(() => asAlbumMedia(this.media())?.album ?? null);
-  protected readonly editionId = linkedSignal(() => {
-    const a = this.album();
-    return a ? defaultEditionId(a) : null;
-  });
-  protected readonly edition = computed<AlbumEdition | null>(() => this.album()?.editions.find((e) => e.id === this.editionId()) ?? null);
+  protected readonly release = computed(() => this.album()?.release ?? null);
   /** The caller's heart as just set, over the loaded tracks. */
   private readonly overrides = linkedSignal<Media, Map<number, Partial<Track>>>({ source: this.media, computation: () => new Map() });
   protected readonly tracks = computed(() =>
     (this.album()?.tracks ?? [])
-      .filter((t) => t.editionId === this.editionId())
       .map((t) => ({ ...t, ...this.overrides().get(t.itemId) })),
   );
   private readonly cardActions = inject(CardActionsService);
@@ -98,7 +94,7 @@ export class AlbumPageComponent {
     groupDiscs(this.tracks()).map((disc) => ({ disc, sections: groupByWork(disc.tracks) })),
   );
   protected readonly playable = computed(() => this.tracks().filter((t) => t.hasFile));
-  protected readonly orphaned = computed(() => !!this.album()?.orphaned || !!this.edition()?.orphaned);
+  protected readonly orphaned = computed(() => !!this.album()?.orphaned);
   protected readonly desktop = heroDesktopLayout();
   /** Identify lists the releases the files may be, instead of the title search of the other kinds. */
   protected readonly actions = computed<MediaActionHandlers>(() => ({
@@ -111,6 +107,7 @@ export class AlbumPageComponent {
   protected readonly canRequest = computed(
     () => !this.auth.hasPermission('media.create') && this.auth.hasPermission('requests.create') && this.titleKey() != null && this.album() != null,
   );
+  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create') && this.titleKey() != null && this.album() != null);
   private readonly requestState = signal<TitleRequestState | null>(null);
   private readonly asked = signal<ReadonlySet<string>>(new Set());
   private pendingRecording: string | null = null;
@@ -123,17 +120,37 @@ export class AlbumPageComponent {
     return t.recordingId ? 'request' : null;
   }
 
-  protected requestTrack(t: Track): void {
+  /** A track the release lists that nobody wants yet: shown greyed, with a "+". */
+  protected unwanted(t: Track): boolean {
+    return !t.hasFile && !t.monitored;
+  }
+
+  protected readonly unwantedCount = computed(() => this.tracks().filter((t) => this.unwanted(t)).length);
+  /** From the loaded album, not the live tracks: the controls stay once the last track is wanted. */
+  protected readonly hasUnwanted = computed(() => (this.album()?.tracks ?? []).some((t) => this.unwanted(t)));
+
+  protected addTrack(t: Track): void {
     const key = this.titleKey();
     if (!key || !t.recordingId) return;
     const [provider, externalId] = titleRef(key);
     this.pendingRecording = t.recordingId;
-    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId }, mode: 'request' });
+    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId }, mode: this.canAdd() ? 'import' : 'request' });
   }
 
   protected onRequested(r: AddResult): void {
     const ids = r.recordings ?? (this.pendingRecording ? [this.pendingRecording] : []);
     this.asked.update((s) => new Set([...s, ...ids]));
+    if (r.mode === 'import') for (const t of this.tracks()) if (t.recordingId && ids.includes(t.recordingId)) this.patch(t.itemId, { monitored: true });
+  }
+
+  /** Monitors every track of the release in one call. */
+  protected async wantAll(): Promise<void> {
+    try {
+      await this.mediaApi.update(this.media().id, { monitored: true });
+      for (const t of this.tracks()) this.patch(t.itemId, { monitored: true });
+    } catch {
+      // The global interceptor toasts the failure.
+    }
   }
 
   protected readonly wantsOpen = signal(false);
@@ -152,10 +169,10 @@ export class AlbumPageComponent {
     this.wantsDialog()?.nativeElement.showModal();
   }
   protected readonly artistsText = computed(() => artistLine(this.album()?.artists ?? []));
-  protected readonly coverUrl = computed(() => this.edition()?.coverUrl ?? this.media().posterUrl);
+  protected readonly coverUrl = computed(() => this.release()?.coverUrl ?? this.media().posterUrl);
   protected readonly duration = computed(() => formatDuration(this.tracks().reduce((s, t) => s + (t.durationSeconds ?? 0), 0)));
   protected readonly facts = computed<Fact[]>(() => {
-    const e = this.edition();
+    const e = this.release();
     return [
       { label: 'music.country', value: e?.country },
       { label: 'music.media', value: e?.media },
@@ -167,8 +184,25 @@ export class AlbumPageComponent {
   });
   protected readonly line = artistLine;
 
-  protected editionLabel(e: AlbumEdition): string {
-    return [e.title, e.country, e.media, e.label, e.releaseDate?.slice(0, 4)].filter(Boolean).join(' · ') || `#${e.id}`;
+  private tracksText(n: number | null): string {
+    return n ? translatePlural(this.translate, 'music.track_count', n) : '';
+  }
+
+  /** The release's own label, else what tells it from its siblings. */
+  protected readonly versionLabel = computed(() => {
+    const r = this.release();
+    return r ? (r.disambiguation ?? versionMeta(r, this.tracksText(r.trackCount))) : null;
+  });
+
+  protected readonly otherVersions = computed(() => (this.album()?.versions ?? []).filter((v) => v.mediaId !== this.media().id));
+
+  protected versionText(v: AlbumVersion): string {
+    return versionMeta(v, this.tracksText(v.trackCount));
+  }
+
+  /** A held version is its album page; a missing one opens its release preview. */
+  protected versionLink(v: AlbumVersion): string[] {
+    return v.mediaId != null ? mediaDetailLink('album', v.mediaId) : ['/add/album', 'musicbrainz', v.releaseId];
   }
 
   private request(t: Track) {
@@ -178,8 +212,8 @@ export class AlbumPageComponent {
       title: m.title,
       coverUrl: this.coverUrl(),
       artists: this.artistsText(),
-      albumGain: this.edition()?.albumGain ?? null,
-      albumPeak: this.edition()?.albumPeak ?? null,
+      albumGain: this.release()?.albumGain ?? null,
+      albumPeak: this.release()?.albumPeak ?? null,
     };
     return toTrackRequest(t, facts);
   }

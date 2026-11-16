@@ -83,6 +83,14 @@ describe('SearchComponent hits', () => {
     expect(state.recordingsToAdd()).toEqual([]);
   });
 
+  it('opens the release a recording hit names, else its group', () => {
+    const { c } = setup();
+    const link = (rec: object) => (c as unknown as { releaseLink(r: object): string[] }).releaseLink(rec);
+    const album = hit({ mediaType: 'album', provider: 'musicbrainz', externalId: 'g' });
+    expect(link({ album, release: { externalId: 'rel', title: 'T' } })).toEqual(['/add/album', 'musicbrainz', 'rel']);
+    expect(link({ album, release: null })).toEqual(['/add/album', 'musicbrainz', 'g']);
+  });
+
   it('opens a provider artist through the person it resolves, once, then straight for a known one', async () => {
     const { c, navigate, resolveArtist } = setup();
     const open = (a: ArtistHit) => (c as unknown as { openArtist(a: ArtistHit): Promise<void> }).openArtist(a);

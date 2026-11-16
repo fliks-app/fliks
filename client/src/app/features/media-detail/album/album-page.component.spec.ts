@@ -15,13 +15,18 @@ import { bookSpecProviders } from '../book/book-test-setup';
 import { AlbumPageComponent } from './album-page.component';
 
 const track = (itemId: number, o: Partial<Track> = {}): Track => ({
-  itemId, editionId: 1, mediaFileId: itemId, hasFile: true, orphaned: false, discNumber: 1, discTitle: null, position: itemId,
+  itemId, mediaFileId: itemId, hasFile: true, monitored: true, orphaned: false, discNumber: 1, discTitle: null, position: itemId,
   trackNumber: itemId, label: null, title: 'T' + itemId, durationSeconds: 100, explicit: false, gain: null, peak: null, artists: [],
   credits: [], works: [], favourite: false, playCount: 0, lastPlayedAt: null, ...o,
 });
-const edition = (id: number) => ({ id, title: null, country: 'FR', hasFiles: true, orphaned: false, albumGain: -6, albumPeak: 1 });
+const release = { title: null, country: 'FR', disambiguation: 'Deluxe', trackCount: 3, releaseDate: '2005-01-01', albumGain: -6, albumPeak: 1, coverUrl: null };
+const versions = [
+  { releaseId: 'r-self', title: 'Alb', disambiguation: 'Deluxe', country: 'FR', releaseDate: '2005-01-01', trackCount: 3, discCount: 1, mediaId: 9 },
+  { releaseId: 'r-held', title: 'Alb', disambiguation: null, country: 'US', releaseDate: '2004-01-01', trackCount: 2, discCount: 1, mediaId: 12 },
+  { releaseId: 'r-new', title: 'Alb', disambiguation: 'Live', country: null, releaseDate: null, trackCount: 1, discCount: 1, mediaId: null },
+];
 const album = (tracks: Track[]) =>
-  ({ primaryType: 'Album', secondaryTypes: [], orphaned: false, targetEditionId: 1, artists: [{ id: 5, name: 'Band', creditedName: null, joinPhrase: null }], editions: [edition(1), edition(2)], tracks }) as unknown as AlbumDetail;
+  ({ primaryType: 'Album', secondaryTypes: [], orphaned: false, artists: [{ id: 5, name: 'Band', creditedName: null, joinPhrase: null }], release, sharedTracks: 0, versions, tracks }) as unknown as AlbumDetail;
 
 const playerStub = () => ({
   playTracks: vi.fn(async () => {}),
@@ -55,9 +60,33 @@ function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}
 describe('AlbumPageComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('lists the tracks of the default edition only', () => {
-    const { el } = setup([track(1), track(2), track(3, { editionId: 2 })]);
-    expect(el.querySelectorAll('[data-testid="track"]').length).toBe(2);
+  it('lists the whole tracklist, greying the tracks nobody wants', () => {
+    const { el } = setup([track(1), track(2), track(3, { hasFile: false, monitored: false })]);
+    const rows = el.querySelectorAll('[data-testid="track"]');
+    expect(rows.length).toBe(3);
+    expect(rows[2]!.querySelector('button')!.classList.contains('opacity-50')).toBe(true);
+    expect(rows[0]!.querySelector('button')!.classList.contains('opacity-50')).toBe(false);
+  });
+
+  it('shows the release label and the other versions, held ones linking to their album', () => {
+    const { el } = setup([track(1)]);
+    expect(el.querySelector('[data-testid="version"]')!.textContent).toContain('Deluxe');
+    const links = [...el.querySelectorAll('[data-testid="version-link"]')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/albums/12', '/add/album/musicbrainz/r-new']);
+  });
+
+  it('lets an adder want an unwanted track from its row, and the whole album at once', () => {
+    const { fixture, el, http } = setup([track(1), track(2, { hasFile: false, monitored: false, recordingId: 'r2' })], ['media.create', 'media.edit'], {
+      preferredProvider: 'musicbrainz', externalIds: [{ provider: 'musicbrainz', value: 'rel1' }],
+    } as Partial<Media>);
+    expect(el.querySelectorAll('[data-testid="track-add"]').length).toBe(1);
+    (el.querySelector('[data-testid="want-all"]') as HTMLButtonElement).click();
+    http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/9').flush({});
+    return fixture.whenStable().then(() => {
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="track-add"]')).toBeNull();
+      expect((el.querySelector('[data-testid="want-all"]') as HTMLButtonElement).disabled).toBe(true);
+    });
   });
 
   it('plays the album from a clicked track with the album facts', () => {
@@ -99,7 +128,7 @@ describe('AlbumPageComponent', () => {
     expect(el.querySelectorAll('[data-testid="work"]').length).toBe(1);
   });
 
-  it('opens the edition facts from the actions menu', () => {
+  it('opens the release facts from the actions menu', () => {
     const { fixture, el } = setup([track(1)]);
     const dialog = el.querySelector('dialog') as HTMLDialogElement;
     dialog.showModal = vi.fn();
@@ -168,7 +197,7 @@ describe('AlbumPageComponent', () => {
     const { fixture, http, el } = setup(
       [track(1), track(2, { hasFile: false, recordingId: 'r2' }), track(3, { hasFile: false, recordingId: 'r3' })],
       ['requests.create'],
-      { preferredProvider: 'musicbrainz', externalIds: [{ provider: 'musicbrainz', value: 'g1' }] } as Partial<Media>,
+      { preferredProvider: 'musicbrainz', externalIds: [{ provider: 'musicbrainz', value: 'rel1' }] } as Partial<Media>,
     );
     http.expectOne((r) => r.url === '/api/requests/title-state').flush({ requested: false, wholeAlbumRequested: false, requestedRecordings: ['r3'] });
     await fixture.whenStable();

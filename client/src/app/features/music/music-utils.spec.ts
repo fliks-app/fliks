@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtistAlbum, Track } from '../../core/services/api/music.models';
-import { artistLine, formatDuration, groupByWork, discographyTab, discographyTabs, groupDiscs, toTrackRequest } from './music-utils';
+import { albumSubtitle, artistLine, formatDuration, groupByWork, discographyTab, discographyTabs, groupDiscs, toTrackRequest } from './music-utils';
 
 const track = (o: Partial<Track>): Track => ({
-  itemId: 1, editionId: 1, mediaFileId: 1, hasFile: true, orphaned: false, discNumber: 1, discTitle: null, position: 1,
+  itemId: 1, mediaFileId: 1, hasFile: true, monitored: true, orphaned: false, discNumber: 1, discTitle: null, position: 1,
   trackNumber: 1, label: null, title: 't', durationSeconds: 60, explicit: false, gain: -3, peak: 0.9, artists: [], credits: [],
   works: [], favourite: false, playCount: 0, lastPlayedAt: null, ...o,
 });
@@ -64,5 +64,13 @@ describe('music utils', () => {
       [{ albumExternalId: 't' }, { albumExternalId: 'b' }, { albumExternalId: 't' }],
     );
     expect(t.albums.map((x) => x.title)).toEqual(['thriller', 'bad', 'new']);
+  });
+});
+
+describe('albumSubtitle', () => {
+  it('joins the year and the release label', () => {
+    expect(albumSubtitle(2005, 'Deluxe')).toBe('2005 · Deluxe');
+    expect(albumSubtitle(2005, null)).toBe('2005');
+    expect(albumSubtitle(null, null)).toBeUndefined();
   });
 });

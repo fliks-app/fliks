@@ -97,7 +97,7 @@ export class AudioPartyHost implements PartyHost {
       this.toast.error(this.translate.instant('player.next_unavailable'));
       return false;
     }
-    const edition = album.album.editions.find((e) => e.id === track.editionId);
+    const edition = album.album.release;
     await this.audio.openForParty(
       toTrackRequest(track, {
         mediaId,

@@ -37,6 +37,8 @@ import { CORE_ACQUISITION_ACTIONS } from '../../../core/plugin-ui/acquisition-co
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
+import type { AlbumListInfo } from '../../../core/services/api/music.models';
+import { albumSubtitle } from '../../../features/music/music-utils';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { isActive, type DownloadStatus } from '../../../core/services/download-status';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
@@ -472,6 +474,7 @@ export class MediaCardComponent {
     const authors = this.bookInfo()?.authors;
     if (authors?.length) return authors.map((a) => a.name).join(', ');
     const m = this.media();
+    if (m?.type === 'album') return albumSubtitle(m.year, (m as Media & { album?: AlbumListInfo }).album?.disambiguation);
     if (m?.year) return '' + m.year;
     return undefined;
   });

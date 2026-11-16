@@ -72,15 +72,14 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<Media[]>('/api/playback/recently-played', { params: { limit } }));
   }
 
-  /** The add preview of an album: its hit, artists and the tracklist of its main release. */
+  /** The add preview of an album: its hit, artists and the tracklist of the release it names (a group's main release). */
   albumPreview(provider: string, externalId: string): Promise<AlbumPreview> {
     return firstValueFrom(this.http.get<AlbumPreview>(`/api/metadata/${encodeURIComponent(provider)}/album/${encodeURIComponent(externalId)}`));
   }
 
-  /** The tracklist an album added to the library would get; with recording ids, the release that would hold them. */
-  albumTracks(provider: string, externalId: string, libraryId: number, recordingIds?: string[]): Promise<AlbumPreviewTrack[]> {
-    const params: Record<string, string | number> = { provider, externalId, libraryId };
-    if (recordingIds?.length) params['recordingId'] = recordingIds.slice(0, 50).join(',');
+  /** The tracklist of the release an album added to the library would be (the id names a release or its group). */
+  albumTracks(provider: string, externalId: string, libraryId: number): Promise<AlbumPreviewTrack[]> {
+    const params = { provider, externalId, libraryId };
     return firstValueFrom(this.http.get<AlbumPreviewTrack[]>('/api/music/albums/tracks', { params }));
   }
 

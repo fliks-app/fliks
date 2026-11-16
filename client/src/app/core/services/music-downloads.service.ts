@@ -2,7 +2,7 @@ import { Injectable, computed, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { translatePlural } from '../pipes/translate-plural.pipe';
 import { artistLine, toTrackRequest } from '../../features/music/music-utils';
-import { asAlbumMedia, defaultEditionId } from '../../features/media-detail/album/album-media';
+import { asAlbumMedia } from '../../features/media-detail/album/album-media';
 import type { MusicTrackRequest } from './audio-player/music-queue';
 import { MediaService } from './api/media.service';
 import { BookDownloadRefused, DownloadManagerService } from './download-manager.service';
@@ -41,13 +41,12 @@ export class MusicDownloadsService {
     return n === 0 ? 'none' : n === itemIds.length ? 'all' : 'some';
   }
 
-  /** The playable tracks of an album's edition, as the player takes them. */
+  /** The playable tracks of an album, as the player takes them. */
   async albumTracks(mediaId: number): Promise<MusicTrackRequest[]> {
     const m = await this.media.getOne(mediaId);
     const album = asAlbumMedia(m)?.album;
     if (!album) return [];
-    const editionId = defaultEditionId(album);
-    const edition = album.editions.find((e) => e.id === editionId);
+    const edition = album.release;
     const facts = {
       mediaId,
       title: m.title,
@@ -56,7 +55,7 @@ export class MusicDownloadsService {
       albumGain: edition?.albumGain ?? null,
       albumPeak: edition?.albumPeak ?? null,
     };
-    return album.tracks.filter((t) => t.editionId === editionId && t.hasFile).map((t) => toTrackRequest(t, facts));
+    return album.tracks.filter((t) => t.hasFile).map((t) => toTrackRequest(t, facts));
   }
 
   /** The tracks of several albums, in the order given. */

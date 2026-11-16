@@ -10,6 +10,9 @@
       @if (a.primaryType) {
         <span class="badge badge-outline badge-sm">{{ a.primaryType }}</span>
       }
+      @if (versionLabel(); as v) {
+        <span class="badge badge-primary badge-soft badge-sm" data-testid="version">{{ v }}</span>
+      }
       @if (a.firstReleaseDate) {
         <span>{{ a.firstReleaseDate.slice(0, 4) }}</span>
       }
@@ -88,21 +91,12 @@
 }
 
 @if (a) {
-  @if (a.editions.length > 1) {
-    <app-detail-section [heading]="'music.editions' | translate" [collapsible]="false">
-      <select appTvSelect class="select select-bordered w-full max-w-xl" [attr.aria-label]="'music.editions' | translate" [ngModel]="editionId()" (ngModelChange)="editionId.set(+$event)" data-testid="editions">
-        @for (e of a.editions; track e.id) {
-          <option [ngValue]="e.id">{{ editionLabel(e) }}</option>
-        }
-      </select>
-    </app-detail-section>
-  }
   <ng-template #row let-t>
     <li class="flex items-center gap-1 rounded-lg pe-1 hover:bg-base-200" data-testid="track">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-0 py-2 text-left md:px-3 focus-visible:outline-2 disabled:cursor-default" [class.opacity-50]="unwanted(t)" [disabled]="!t.hasFile" (click)="play(t.itemId)" [attr.aria-label]="('music.play_track' | translate: { title: t.title })">
         <app-track-line [title]="t.title" [itemId]="t.itemId" [active]="t.itemId === playingItemId()" [subtitle]="t.artists.length ? line(t.artists) : null" [explicit]="t.explicit" [durationSeconds]="t.durationSeconds">
           <span lead class="hidden w-8 shrink-0 text-right md:block tabular-nums text-base-content/60">{{ t.trackNumber ?? t.position }}</span>
-          @if (!t.hasFile && !canRequest()) {
+          @if (!t.hasFile && !canRequest() && !unwanted(t)) {
             <span class="badge badge-ghost badge-sm">{{ 'music.missing' | translate }}</span>
           }
         </app-track-line>
@@ -117,8 +111,18 @@
               <span class="badge badge-warning badge-soft badge-sm" data-testid="track-requested">{{ 'music.status_requested' | translate }}</span>
             }
             @case ('request') {
-              <button type="button" class="btn btn-ghost btn-xs" (click)="requestTrack(t)" data-testid="track-request">{{ 'music.request_track' | translate }}</button>
+              <button type="button" class="btn btn-ghost btn-xs btn-circle" (click)="addTrack(t)" [attr.aria-label]="'music.request_track' | translate" data-testid="track-request">
+                <svg lucidePlus class="size-4"></svg>
+              </button>
             }
+          }
+        </span>
+      } @else if (canAdd() && hasUnwanted()) {
+        <span class="flex size-10 shrink-0 items-center justify-center">
+          @if (unwanted(t)) {
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="addTrack(t)" [attr.aria-label]="'music.add_track' | translate" data-testid="track-add">
+              <svg lucidePlus class="size-5"></svg>
+            </button>
           }
         </span>
       }
@@ -131,6 +135,13 @@
     </li>
   </ng-template>
 
+  @if (canAdd() && hasUnwanted()) {
+    <div class="mt-4 flex items-center gap-3">
+      <button type="button" class="btn btn-outline btn-sm" [disabled]="!unwantedCount()" (click)="wantAll()" data-testid="want-all">
+        <svg lucideDownload class="size-4"></svg>{{ 'music.download_album' | translate }}
+      </button>
+    </div>
+  }
   @for (d of discs(); track d.disc.discNumber) {
     <section class="mt-4">
       @if (discs().length > 1 || d.disc.title) {
@@ -149,6 +160,25 @@
         }
       </ul>
     </section>
+  }
+  @if (otherVersions().length) {
+    <app-detail-section [heading]="'music.other_versions' | translate" [collapsible]="false">
+      <ul class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 scroll-ring-safe" data-testid="versions">
+        @for (v of otherVersions(); track v.releaseId) {
+          <li>
+            <a class="flex items-center gap-3 rounded-lg border border-base-300 px-3 py-2 hover:bg-base-200 focus-visible:outline-2" [routerLink]="versionLink(v)" data-testid="version-link">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{{ v.disambiguation ?? v.title }}</span>
+                <span class="block truncate text-sm text-base-content/60">{{ versionText(v) }}</span>
+              </span>
+              <span class="badge badge-sm shrink-0" [class.badge-success]="v.mediaId != null" [class.badge-soft]="v.mediaId != null" [class.badge-ghost]="v.mediaId == null">
+                {{ (v.mediaId != null ? 'music.version_held' : 'music.version_missing') | translate }}
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    </app-detail-section>
   }
   <dialog #detailsDialog class="modal" role="dialog" aria-modal="true">
     <div class="modal-box">

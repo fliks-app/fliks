@@ -211,7 +211,7 @@ describe('AddDialogComponent', () => {
   it('asks the server for the release holding the wanted recording', async () => {
     const { cmp, calls } = setup([lib(1, ['album'])]);
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r2', albumExternalId: 'g1' }, alwaysAsk: true });
-    expect(calls['tracks']).toEqual([['musicbrainz', 'g1', 1, ['r2']]]);
+    expect(calls['tracks']).toEqual([['musicbrainz', 'g1', 1]]);
     const ticked = (cmp as unknown as { ticked(t: { recordingId: string }): boolean }).ticked;
     expect([ticked.call(cmp, { recordingId: 'r1' }), ticked.call(cmp, { recordingId: 'r2' })]).toEqual([false, true]);
   });

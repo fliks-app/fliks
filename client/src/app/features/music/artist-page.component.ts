@@ -6,7 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
-import type { Discography, PopularTrack } from '../../core/services/api/music.models';
+import type { ArtistAlbum, Discography, PopularTrack } from '../../core/services/api/music.models';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -21,7 +21,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { TrackLineComponent } from './track-line.component';
-import { DISCOGRAPHY_TABS, type DiscographyTab, discographyTabs, trackRowRequest } from './music-utils';
+import { DISCOGRAPHY_TABS, albumSubtitle, type DiscographyTab, discographyTabs, trackRowRequest } from './music-utils';
 
 /** What a person card hands its page (`person-avatar-card`'s `state`). */
 export interface HandedPerson {
@@ -67,6 +67,9 @@ export class ArtistPageComponent {
     return p && this.filled().includes(p) ? p : (this.filled()[0] ?? null);
   });
   protected readonly albums = computed(() => (this.tab() ? this.tabs()[this.tab()!] : []));
+  protected albumLabel(a: ArtistAlbum): string | undefined {
+    return albumSubtitle(a.year, a.disambiguation);
+  }
   protected readonly popularShown = signal(5);
   protected readonly popular = computed(() => (this.data()?.popular ?? []).slice(0, this.popularShown()));
   protected readonly popularSkeleton = [0, 1, 2, 3, 4];

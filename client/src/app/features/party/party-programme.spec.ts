@@ -197,7 +197,7 @@ describe('PartyProgrammeComponent', () => {
   it('expands an album pick into its tracks, and lets a second track of the album in', async () => {
     getOne.mockResolvedValue({
       id: 4, type: 'album', title: 'Al', posterUrl: null,
-      album: { targetEditionId: 1, editions: [{ id: 1, hasFiles: true }], tracks: [{ itemId: 70, editionId: 1, hasFile: true, title: 'A' }, { itemId: 71, editionId: 1, hasFile: true, title: 'B' }] },
+      album: { release: { trackCount: 2 }, tracks: [{ itemId: 70, hasFile: true, title: 'A' }, { itemId: 71, hasFile: true, title: 'B' }] },
     });
     const f = await setup(true);
     await f.componentInstance['append']([{ mediaId: 4, episodeId: null, title: 'Al', posterUrl: null, type: 'album' }]);
