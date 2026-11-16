@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, effect, inject, output, signal, untracked, viewChild, Injector } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -54,6 +54,18 @@ export class AddDialogComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly picker = viewChild<ElementRef<HTMLElement>>('picker');
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    // The wanted track can sit far down a long tracklist: bring the first ticked row into view.
+    effect(() => {
+      const box = this.picker()?.nativeElement;
+      this.scope();
+      this.tracks();
+      if (box) untracked(() => afterNextRender(() => box.querySelector('[data-ticked]')?.scrollIntoView({ block: 'nearest' }), { injector: this.injector }));
+    });
+  }
 
   readonly done = output<AddResult>();
 
@@ -115,6 +127,7 @@ export class AddDialogComponent {
   protected readonly titleKey = computed(() => {
     const r = this.req();
     if (!r) return 'discover.add_to_library';
+    if (this.kind() === 'album') return this.mode() === 'import' ? 'discover.add_music' : 'discover.request_music';
     if (this.mode() === 'import') return 'discover.add_to_library';
     return this.hasSeasons() ? 'discover.request_series_title' : this.isVideo() ? 'discover.request_movie_title' : 'discover.request';
   });
