@@ -5461,7 +5461,7 @@
     "recompute_sync": "Lyrics sync",
     "prepare_track": "Prepare this track",
     "not_ready": "Not ready for karaoke yet",
-    "not_ready_hint": "The voice is separated and the lyrics synced word by word. About a minute.",
+    "not_ready_hint": "Separate the vocals from the instruments. This can take a few minutes.",
     "keeps_playing": "The music keeps playing during the preparation.",
     "preparing": "Preparing",
     "stop": "Stop",

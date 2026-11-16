@@ -5461,7 +5461,7 @@
     "recompute_sync": "Synchronisation",
     "prepare_track": "Préparer ce titre",
     "not_ready": "Pas encore prêt pour le karaoké",
-    "not_ready_hint": "La voix est séparée et les paroles calées mot à mot. Environ une minute.",
+    "not_ready_hint": "Séparer le chant des instruments. Cette opération peut prendre quelques minutes.",
     "keeps_playing": "La musique continue pendant la préparation.",
     "preparing": "Préparation",
     "stop": "Arrêter",
