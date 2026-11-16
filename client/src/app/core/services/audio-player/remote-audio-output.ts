@@ -8,6 +8,7 @@ import type { AudioRequest } from './audio-player.service';
 import { FullPlayerState } from '../playback/full-player-state';
 import type { AudioOutput } from './audio-output';
 import type { MusicTrackRequest, Repeat } from './music-queue';
+import type { StemMode } from './stem-mix';
 
 const NEXT_REPEAT: Record<Repeat, Repeat> = { off: 'all', all: 'one', one: 'off' };
 
@@ -104,6 +105,26 @@ export class RemoteAudioOutput implements AudioOutput {
 
   toggleMute(): void {
     this.target.toggleMute();
+  }
+
+  readonly stemMode = computed<StemMode>(() => this.report()?.stemMode ?? 'original');
+  readonly vocalLevel = computed(() => this.report()?.vocalLevel ?? 0);
+  readonly pitch = computed(() => this.report()?.pitch ?? 0);
+  readonly stemsAvailable = computed(() => this.report()?.stemsAvailable ?? false);
+  private readonly report = computed(() => (this.live() ? this.remote.targetState() : null));
+
+  setStemMode(mode: StemMode): void {
+    this.send({ action: 'karaoke', stemMode: mode });
+  }
+
+  /** A slider drag sends one command per pause, not per input. */
+  setVocalLevel(level: number): void {
+    const id = this.remote.observedTargetId();
+    if (id) this.remote.sendCoalesced(id, { action: 'karaoke', level });
+  }
+
+  setPitch(semitones: number): void {
+    this.send({ action: 'karaoke', pitch: Math.min(12, Math.max(-12, Math.round(semitones))) });
   }
 
   /** `track` already follows a skip sent from here. */

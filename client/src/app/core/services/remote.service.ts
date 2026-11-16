@@ -2,6 +2,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { NavigationEnd, Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
+import type { StemMode } from './audio-player/stem-mix';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { RemoteCommand, RemoteState, SseService, whenIdle, type WireQueue } from './sse.service';
@@ -81,6 +82,8 @@ export type RemoteCommandInput = {
   kind?: MediaType;
   itemIds?: number[];
   where?: 'next' | 'last';
+  stemMode?: StemMode;
+  pitch?: number;
 };
 
 /** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
@@ -481,7 +484,7 @@ export class RemoteService {
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'enqueue', 'audio', 'subtitle', 'quality', 'browse',
+      'seek', 'volume', 'mute', 'next', 'prev', 'shuffle', 'repeat', 'queue', 'enqueue', 'audio', 'subtitle', 'quality', 'browse', 'karaoke',
     ].includes(action);
   }
 
@@ -806,6 +809,10 @@ export class RemoteService {
       volume: s.volume,
       muted: s.muted,
       playbackRate: s.playbackRate,
+      stemMode: s.stemMode,
+      vocalLevel: s.vocalLevel,
+      pitch: s.pitch,
+      stemsAvailable: s.stemsAvailable,
       supportsVolume: s.supportsVolume,
       subtitleId: s.subtitleId,
       quality: s.quality,

@@ -2,7 +2,7 @@
 use crate::{
     events::{
         Num,
-        event::{EnqueueAt, Queue, RemoteAction, Repeat},
+        event::{EnqueueAt, Queue, RemoteAction, Repeat, StemMode},
     },
     http::AppError,
 };
@@ -127,6 +127,8 @@ pub struct Command {
     pub item_ids: Option<Vec<i64>>,
     #[serde(rename = "where")]
     pub position: Option<EnqueueAt>,
+    pub stem_mode: Option<StemMode>,
+    pub pitch: Option<i64>,
 }
 
 impl Command {
@@ -166,6 +168,16 @@ impl Command {
                 e.push("where must be one of the following values: next, last".into());
             }
         }
+        if self.pitch.is_some_and(|p| !(-12..=12).contains(&p)) {
+            e.push("pitch must be between -12 and 12".into());
+        }
+        if self.action == RemoteAction::Karaoke
+            && self.stem_mode.is_none()
+            && self.level.is_none()
+            && self.pitch.is_none()
+        {
+            e.push("karaoke needs stemMode, level or pitch".into());
+        }
         fail(e)
     }
 }
@@ -180,6 +192,19 @@ mod tests {
             .unwrap()
             .validate()
             .is_ok()
+    }
+
+    #[test]
+    fn a_karaoke_needs_one_field_and_a_pitch_within_an_octave() {
+        assert!(check(json!({"action":"karaoke","stemMode":"guide"})));
+        assert!(check(json!({"action":"karaoke","level":0.4})));
+        assert!(check(json!({"action":"karaoke","pitch":-12})));
+        assert!(!check(json!({"action":"karaoke"})));
+        assert!(!check(json!({"action":"karaoke","pitch":13})));
+        assert!(!check(json!({"action":"karaoke","level":1.5})));
+        let bad = |v| serde_json::from_value::<Command>(v).is_err();
+        assert!(bad(json!({"action":"karaoke","stemMode":"vocals"})));
+        assert!(bad(json!({"action":"karaoke","pitch":1.5})));
     }
 
     #[test]

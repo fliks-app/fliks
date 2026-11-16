@@ -520,6 +520,15 @@ describe('AudioPlayerService music mode', () => {
       expect(markApplied).toHaveBeenCalledWith('c2');
     });
 
+    it('applies a karaoke command and reports the mix, the key and the stems', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      validated.next(cmd('karaoke', { stemMode: 'guide', level: 0.4 }));
+      await vi.waitFor(() => expect([audio.stemMode(), audio.vocalLevel()]).toEqual(['guide', 0.4]));
+      expect(markApplied).toHaveBeenCalledWith('c1');
+      await vi.waitFor(() => expect(updatePlaybackState.mock.calls.at(-1)![1]).toMatchObject({ stemMode: 'guide', vocalLevel: 0.4, pitch: 0, stemsAvailable: false }));
+    });
+
     it('never reports the next queue index against the track a remote skip is leaving', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2), track(3)]);

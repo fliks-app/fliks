@@ -1,7 +1,7 @@
 //! The `LiveSession` shape, its defaults and the engine-side mappings (`presence.md` rules 2-9).
 use crate::events::{
     Identity,
-    event::{PlayState, QualityRung},
+    event::{PlayState, QualityRung, StemMode},
 };
 use fliks_engine_core::api::{
     AudioPlan, BitrateHint, ClientInfo, Decision, PlayMethod, SessionKind, SessionSnapshot,
@@ -48,6 +48,10 @@ pub struct LiveSession {
     pub volume: Option<f64>,
     pub muted: Option<bool>,
     pub playback_rate: f64,
+    pub stem_mode: Option<StemMode>,
+    pub vocal_level: Option<f64>,
+    pub pitch: Option<i32>,
+    pub stems_available: Option<bool>,
     pub audio_plan: Option<AudioPlan>,
     pub source_fps: Option<f64>,
     pub bitrate_by_quality: Option<BTreeMap<String, BitrateHint>>,
@@ -131,6 +135,10 @@ pub struct Beat {
     pub volume: Option<Option<f64>>,
     pub muted: Option<Option<bool>>,
     pub playback_rate: Option<f64>,
+    pub stem_mode: Option<Option<StemMode>>,
+    pub vocal_level: Option<Option<f64>>,
+    pub pitch: Option<Option<i32>>,
+    pub stems_available: Option<Option<bool>>,
 }
 
 impl LiveSession {
@@ -180,6 +188,10 @@ impl LiveSession {
             subtitle_track_index: None,
             volume: None,
             playback_rate: 1.0,
+            stem_mode: None,
+            vocal_level: None,
+            pitch: None,
+            stems_available: None,
             muted: None,
             audio_plan: Some(r.audio_plan.clone()),
             source_fps: r.source.frame_rate.as_deref().and_then(parse_source_fps),
@@ -239,7 +251,11 @@ impl LiveSession {
             audio_track_index,
             subtitle_track_index,
             volume,
-            muted
+            muted,
+            stem_mode,
+            vocal_level,
+            pitch,
+            stems_available
         );
         if let Some(r) = b.playback_rate {
             self.playback_rate = r;

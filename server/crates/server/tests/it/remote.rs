@@ -256,6 +256,55 @@ async fn load_command_relays_paused(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn karaoke_is_refused_by_a_target_that_did_not_declare_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("a", false).await;
+    let register = |device: &'static str, actions: Value| {
+        let body = json!({"deviceId": device, "actions": actions});
+        c.call("POST", "/api/remote/register", &a, Some(body))
+    };
+    assert_eq!(register("d1", json!(["play", "seek"])).await.0, 201);
+    assert_eq!(register("d2", json!(["play", "karaoke"])).await.0, 201);
+    let karaoke = json!({"action": "karaoke", "stemMode": "guide", "level": 0.5, "pitch": 2});
+    let (s, body) = c
+        .call(
+            "POST",
+            "/api/remote/d1%23native/command",
+            &a,
+            Some(karaoke.clone()),
+        )
+        .await;
+    assert_eq!(s, 409, "{body}");
+    assert_eq!(body["message"], "remote.error_unsupported_action");
+    let url = "/api/remote/d2%23native/command";
+    assert_eq!(c.call("POST", url, &a, Some(karaoke)).await.0, 202);
+    let (s, _) = c
+        .call("POST", url, &a, Some(json!({"action": "karaoke"})))
+        .await;
+    assert_eq!(s, 400);
+    let (s, _) = c
+        .call(
+            "POST",
+            url,
+            &a,
+            Some(json!({"action": "karaoke", "pitch": 13})),
+        )
+        .await;
+    assert_eq!(s, 400);
+    let (_, cmds) = c
+        .call("GET", "/api/remote/commands?targetId=d2%23native", &a, None)
+        .await;
+    assert_eq!(
+        (
+            cmds[0]["stemMode"].clone(),
+            cmds[0]["level"].clone(),
+            cmds[0]["pitch"].clone()
+        ),
+        (json!("guide"), json!(0.5), json!(2))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn load_without_kind_gets_the_media_kind(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("a", false).await;

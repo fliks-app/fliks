@@ -410,6 +410,8 @@ pub(crate) fn send(
         kind: dto.kind,
         item_ids: dto.item_ids,
         position: dto.position,
+        stem_mode: dto.stem_mode,
+        pitch: dto.pitch,
     };
     // Never `emit_to_user`: a broadcast would let one phone drive every device of the account.
     // A polled target released between the resolution and now: its device's web stream takes over.
