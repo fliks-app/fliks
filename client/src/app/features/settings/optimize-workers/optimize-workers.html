@@ -35,6 +35,9 @@
             </div>
             <span class="text-sm text-base-content/60">v{{ w.engineVersion }}</span>
             <div class="flex flex-wrap gap-2">
+              @if (w.karaoke) {
+                <span class="badge badge-primary text-sm">{{ 'settings.optimize.workers.karaoke' | translate }}</span>
+              }
               @for (d of w.devices; track d.id) {
                 <span class="badge badge-ghost text-sm"
                   >{{ d.id }}{{ d.name ? ' (' + d.name + ')' : '' }} · {{ d.encoders.join(', ') || '-' }}</span

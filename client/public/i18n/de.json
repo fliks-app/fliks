@@ -3831,6 +3831,7 @@
       },
       "workers": {
         "title": "Optimierungs-Worker",
+        "karaoke": "Karaoke",
         "desc": "Rechner, die Bibliotheksdateien neu kodieren und remuxen. Die Engine des Servers arbeitet immer; entfernte Worker verbinden sich mit einem Token.",
         "connected": "Verbundene Worker",
         "none_connected": "Seit dem Serverstart hat sich kein Worker verbunden.",
@@ -5292,6 +5293,10 @@
       "cancel_confirm": "Aufträge abbrechen",
       "cancel_keep": "Behalten",
       "progress_of": "Fortschritt von {{title}}",
+      "kind": {
+        "verify": "Prüfung",
+        "separate": "Karaoke-Trennung"
+      },
       "error_class": {
         "access": "Zugriff verweigert",
         "busy": "Datei in Benutzung",
@@ -5300,6 +5305,7 @@
         "damaged": "Ausgabe beschädigt",
         "engine": "Engine-Fehler",
         "io": "Festplattenfehler",
+        "model": "Modell nicht verfügbar",
         "network": "Netzwerkfehler",
         "nospace": "Kein Speicherplatz mehr",
         "nothing_to_do": "Nichts zu ändern",
@@ -5497,6 +5503,7 @@
       "background_cpu_hint": "Ohne geprüfte Beschleunigung werden Titel auf dem Prozessor vorbereitet: viel langsamer, und der Rechner bleibt ausgelastet.",
       "background_state": {
         "active": "Aktiv.",
+        "active_worker": "Aktiv, auf den Optimierungs-Workern.",
         "active_cpu": "Aktiv, auf dem Prozessor.",
         "no_model": "Inaktiv: kein Modell zur Stimmtrennung installiert.",
         "no_gpu": "Inaktiv: keine geprüfte Beschleunigung auf dieser Engine.",

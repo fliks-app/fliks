@@ -3849,6 +3849,7 @@
       },
       "workers": {
         "title": "Workers d'optimisation",
+        "karaoke": "Karaoké",
         "desc": "Machines qui ré-encodent et remuxent les fichiers de la bibliothèque. Le moteur du serveur travaille toujours ; les workers distants se connectent avec un jeton.",
         "connected": "Workers connectés",
         "none_connected": "Aucun worker ne s'est connecté depuis le démarrage du serveur.",
@@ -5315,6 +5316,10 @@
       "cancel_confirm": "Annuler les travaux",
       "cancel_keep": "Les garder",
       "progress_of": "Progression de {{title}}",
+      "kind": {
+        "verify": "Vérification",
+        "separate": "Séparation karaoké"
+      },
       "error_class": {
         "access": "Accès refusé",
         "busy": "Fichier utilisé",
@@ -5323,6 +5328,7 @@
         "damaged": "Sortie endommagée",
         "engine": "Erreur du moteur",
         "io": "Erreur disque",
+        "model": "Modèle indisponible",
         "network": "Erreur réseau",
         "nospace": "Plus de place",
         "nothing_to_do": "Rien à modifier",
@@ -5543,6 +5549,7 @@
       "background_cpu_hint": "Sans accélération vérifiée, les titres sont préparés sur le processeur : bien plus lent, et la machine reste occupée.",
       "background_state": {
         "active": "Actif.",
+        "active_worker": "Actif, sur les workers d'optimisation.",
         "active_cpu": "Actif, sur le processeur.",
         "no_model": "Inactif : aucun modèle de séparation de la voix installé.",
         "no_gpu": "Inactif : aucune accélération vérifiée sur ce moteur.",

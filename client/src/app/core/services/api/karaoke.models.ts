@@ -12,6 +12,8 @@ export interface KaraokeStatus {
   ready: boolean;
   gpu: boolean;
   background: boolean;
+  /** Optimization workers that take separation jobs now. */
+  workers: number;
 }
 
 export interface KaraokeLicence {
