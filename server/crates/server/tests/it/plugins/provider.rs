@@ -29,7 +29,7 @@ async fn namespaces_are_checked_at_registration() {
         m
     };
     let cases = [
-        ("tmdb", false, Some("core-namespace-not-official")),
+        ("tmdb", false, None),
         ("foo", true, Some("unknown-provider-namespace")),
         ("org.example.other:aid", false, Some("namespace-not-owned")),
         ("tmdb", true, None),

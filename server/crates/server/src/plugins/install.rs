@@ -200,6 +200,11 @@ impl Plugins {
             == Some("true")
     }
 
+    /// Rule 15: an archive with no signer is exempt from the signer rules under `plugins.allow_unsigned`.
+    pub async fn unsigned_ok(&self, signed_by: Option<&str>) -> bool {
+        signed_by.is_none() && self.allow_unsigned().await
+    }
+
     pub async fn inspect_bytes(&self, bytes: &[u8]) -> Result<Inspected, Refusal> {
         let allow = self.allow_unsigned().await;
         manifest::inspect(bytes, allow, &self.opts.keys)
@@ -343,7 +348,7 @@ impl Plugins {
         {
             return Err(ie(StatusCode::FORBIDDEN, "PLUGIN_DENIED", reason));
         }
-        let unsigned_ok = i.signed_by.is_none() && self.allow_unsigned().await;
+        let unsigned_ok = self.unsigned_ok(i.signed_by.as_deref()).await;
         let pending = {
             let _l = self.lock(id).await;
             let existing = packages::find(&self.db, id).await.map_err(internal)?;
