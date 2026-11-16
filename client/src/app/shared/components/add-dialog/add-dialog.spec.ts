@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
@@ -27,7 +28,7 @@ const lib = (id: number, types: string[], folders: number[] = [10], q: number | 
   }) as unknown as LibrarySummary;
 
 function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) {
-  const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [] };
+  const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [], tracks: [], tracksError: [] };
   const toast = { success: vi.fn(), error: vi.fn() };
   const show = vi.fn();
   HTMLDialogElement.prototype.showModal = show;
@@ -55,10 +56,14 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
       {
         provide: MusicApiService,
         useValue: {
-          albumTracks: async () => [
-            { recordingId: 'r1', discNumber: 1, position: 1, number: 1, title: 'One', durationMs: 1000 },
-            { recordingId: 'r2', discNumber: 1, position: 2, number: 2, title: 'Two', durationMs: 2000 },
-          ],
+          albumTracks: async (...a: unknown[]) => {
+            calls['tracks']!.push(a);
+            if (calls['tracksError']!.length) throw calls['tracksError']![0];
+            return [
+              { recordingId: 'r1', discNumber: 1, position: 1, number: 1, title: 'One', durationMs: 1000 },
+              { recordingId: 'r2', discNumber: 1, position: 2, number: 2, title: 'Two', durationMs: 2000 },
+            ];
+          },
           importAlbum: async (b: unknown) => (calls['album']!.push(b), { id: 43 }),
           wantRecording: async (b: unknown) => (calls['want']!.push(b), { mediaId: 44, itemId: 5 }),
         },
@@ -201,5 +206,22 @@ describe('AddDialogComponent', () => {
     dialog.toggleTrack('r2');
     await dialog.submit();
     expect((calls['request']![0] as { recordings: string[] }).recordings).toEqual(['r1', 'r2']);
+  });
+
+  it('asks the server for the release holding the wanted recording', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])]);
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r2', albumExternalId: 'g1' }, alwaysAsk: true });
+    expect(calls['tracks']).toEqual([['musicbrainz', 'g1', 1, ['r2']]]);
+    const ticked = (cmp as unknown as { ticked(t: { recordingId: string }): boolean }).ticked;
+    expect([ticked.call(cmp, { recordingId: 'r1' }), ticked.call(cmp, { recordingId: 'r2' })]).toEqual([false, true]);
+  });
+
+  it('blocks the track scope when no edition holds the recording', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])]);
+    calls['tracksError'] = [new HttpErrorResponse({ status: 404 })];
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r9', albumExternalId: 'g1' }, alwaysAsk: true });
+    const d = cmp as unknown as { tracksMissing(): boolean; canSubmit(): boolean };
+    expect(d.tracksMissing()).toBe(true);
+    expect(d.canSubmit()).toBe(false);
   });
 });

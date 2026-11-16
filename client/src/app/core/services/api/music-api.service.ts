@@ -77,9 +77,11 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<AlbumPreview>(`/api/metadata/${encodeURIComponent(provider)}/album/${encodeURIComponent(externalId)}`));
   }
 
-  /** The tracklist an album added to the library would get. */
-  albumTracks(provider: string, externalId: string, libraryId: number): Promise<AlbumPreviewTrack[]> {
-    return firstValueFrom(this.http.get<AlbumPreviewTrack[]>('/api/music/albums/tracks', { params: { provider, externalId, libraryId } }));
+  /** The tracklist an album added to the library would get; with recording ids, the release that would hold them. */
+  albumTracks(provider: string, externalId: string, libraryId: number, recordingIds?: string[]): Promise<AlbumPreviewTrack[]> {
+    const params: Record<string, string | number> = { provider, externalId, libraryId };
+    if (recordingIds?.length) params['recordingId'] = recordingIds.slice(0, 50).join(',');
+    return firstValueFrom(this.http.get<AlbumPreviewTrack[]>('/api/music/albums/tracks', { params }));
   }
 
   /** Adds an identified album (a provider hit) to a library; only `monitoredRecordings` stay monitored when given. */

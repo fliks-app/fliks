@@ -46,7 +46,7 @@
         }
       </div>
       @if (tracksFailed()) {
-        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.tracks_unavailable' | translate }}</div>
+        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ (tracksMissing() ? 'discover.tracks_no_edition' : 'discover.tracks_unavailable') | translate }}</div>
       } @else if (tracksLoading()) {
         <div class="flex h-24 items-center justify-center"><span class="loading loading-spinner loading-md"></span></div>
       } @else if (tracks().length) {

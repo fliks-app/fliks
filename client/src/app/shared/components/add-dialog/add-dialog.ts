@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, effect, inject, output, signal, untracked, viewChild, Injector } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -89,6 +90,7 @@ export class AddDialogComponent {
   protected readonly selectedTracks = signal<Set<string>>(new Set());
   protected readonly tracksLoading = signal(false);
   protected readonly tracksFailed = signal(false);
+  protected readonly tracksMissing = signal(false);
   private tracksSeq = 0;
   protected readonly formatDuration = formatDuration;
 
@@ -121,6 +123,7 @@ export class AddDialogComponent {
     if (this.busy() || this.loading() || this.noLibrary() || this.seasonsLoading() || this.nothingPicked()) return false;
     if (this.isVideo()) return this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
+    if (this.kind() === 'album' && this.scope() === 'track' && this.tracksMissing()) return false;
     if (this.kind() === 'album' && this.scope() === 'pick' && (this.tracksLoading() || this.tracksFailed() || this.selectedTracks().size === 0)) return false;
     return this.mode() === 'import' || this.audioQualityId() != null;
   });
@@ -170,6 +173,7 @@ export class AddDialogComponent {
     this.selectedTracks.set(new Set());
     this.tracksLoading.set(false);
     this.tracksFailed.set(false);
+    this.tracksMissing.set(false);
     this.wants.set([{ family: 'text', language: null }]);
   }
 
@@ -235,23 +239,29 @@ export class AddDialogComponent {
     this.selectedTracks.set(new Set());
     this.tracksLoading.set(true);
     this.tracksFailed.set(false);
+    this.tracksMissing.set(false);
     try {
       const seen = new Set<string>();
-      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
+      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library, r.recording ? [r.recording.externalId] : undefined)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
       if (seq !== this.tracksSeq) return;
       this.tracks.set(tracks);
       this.selectedTracks.set(this.initialPick(tracks));
-    } catch {
-      if (seq === this.tracksSeq) this.tracksFailed.set(true);
+    } catch (e) {
+      if (seq === this.tracksSeq) {
+        this.tracksFailed.set(true);
+        this.tracksMissing.set(e instanceof HttpErrorResponse && e.status === 404);
+      }
     } finally {
       if (seq === this.tracksSeq) this.tracksLoading.set(false);
     }
   }
 
+  protected readonly wantedId = computed(() => this.req()?.recording?.externalId ?? null);
+
   /** The wanted track alone when the pick starts from one, else every track. */
   private initialPick(tracks: AlbumPreviewTrack[]): Set<string> {
-    const want = this.req()?.recording?.externalId;
-    return want && this.scope() === 'pick' && tracks.some((t) => t.recordingId === want) ? new Set([want]) : new Set(tracks.map((t) => t.recordingId!));
+    const want = this.wantedId();
+    return want && this.scope() === 'pick' ? new Set([want]) : new Set(tracks.map((t) => t.recordingId!));
   }
 
   protected setScope(scope: AddScope) {
@@ -263,7 +273,7 @@ export class AddDialogComponent {
   protected ticked(t: AlbumPreviewTrack): boolean {
     switch (this.scope()) {
       case 'track':
-        return t.recordingId === this.req()?.recording?.externalId;
+        return t.recordingId === this.wantedId();
       case 'pick':
         return this.selectedTracks().has(t.recordingId!);
       default:
