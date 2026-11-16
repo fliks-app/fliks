@@ -3,10 +3,7 @@
 use super::{arr::Arr, dto, fetch};
 use crate::{
     http::{AppError, auth::Authed},
-    media::{
-        external_ids,
-        write::{Creation, album_import::create_album, resolve_target_in},
-    },
+    media::write::{Creation, album_import::create_album, resolve_target_in},
     outbound::{LIST_TIMEOUT, base_url},
     state::AppState,
 };
@@ -183,9 +180,9 @@ pub(super) async fn import(
     // MusicBrainz answers one request a second: a library's worth of albums is read in the background.
     tokio::spawn(async move {
         for (id, local, monitored) in wanted {
-            match external_ids::find(&st2.db, MediaKind::Album, Namespace::MUSICBRAINZ, &id).await {
-                Ok(None) => {}
-                Ok(Some(_)) => continue,
+            match crate::metadata::music::aliases::albums_named(&st2.db, &id).await {
+                Ok(held) if held.is_empty() => {}
+                Ok(_) => continue,
                 Err(e) => {
                     tracing::warn!("Lidarr import: {e}");
                     continue;

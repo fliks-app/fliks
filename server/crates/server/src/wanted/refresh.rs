@@ -295,7 +295,8 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
     let known: bool = sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE kind = $3 AND provider = $1 AND value = $2)
                 OR EXISTS (SELECT 1 FROM media_external_id_aliases WHERE kind = $3 AND provider = $1 AND value = $2)
-                OR EXISTS (SELECT 1 FROM discovered_works WHERE provider = $1 AND value = $2)"#,
+                OR EXISTS (SELECT 1 FROM discovered_works WHERE provider = $1 AND value = $2)
+                OR EXISTS (SELECT 1 FROM album_details WHERE $3 = 'album' AND "releaseGroupMbid"::text = $2)"#,
     )
     .bind(provider_of(&job.source).as_str())
     .bind(work)
