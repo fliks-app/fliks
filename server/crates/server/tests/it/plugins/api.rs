@@ -1209,21 +1209,45 @@ async fn signature_and_signer_gates() {
         h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await["status"],
         "active"
     );
+    let confirm = |bytes: Vec<u8>| {
+        let h = &h;
+        async move {
+            let (_, r) = h.upload(&bytes).await;
+            h.call(
+                "POST",
+                "/api/plugins/import/confirm",
+                Some(&h.admin),
+                Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+            )
+            .await
+        }
+    };
+    let unsigned = pack(&m, "0.1.0", &w, None);
     allow_unsigned(&h).await;
-    let (_, r) = h.upload(&pack(&m, "0.1.0", &w, None)).await;
+    let (_, staged) = h.upload(&unsigned).await;
+    h.set("plugins.allow_unsigned", "false").await;
     let (st, c) = h
         .call(
             "POST",
             "/api/plugins/import/confirm",
             Some(&h.admin),
-            Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+            Some(json!({"stagingId": staged["stagingId"], "sha256": staged["sha256"]})),
         )
         .await;
     assert_eq!(
         (st, c["code"].as_str()),
-        (409, Some("PLUGIN_SIGNER_CHANGED")),
-        "{c}"
+        (422, Some("PLUGIN_UNSIGNED")),
+        "setting off: {c}"
     );
+    allow_unsigned(&h).await;
+    let (st, c) = confirm(pack(&m, "0.1.0", &w, Some(&other_key()))).await;
+    assert_eq!(
+        (st, c["code"].as_str()),
+        (409, Some("PLUGIN_SIGNER_CHANGED")),
+        "another signer stays refused: {c}"
+    );
+    let (st, c) = confirm(unsigned).await;
+    assert_eq!(st, 201, "an unsigned build replaces the signed one: {c}");
     let r = h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await;
     assert_eq!(r["status"], "active", "{r}");
     s.finish().await;

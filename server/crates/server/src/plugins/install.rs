@@ -343,6 +343,7 @@ impl Plugins {
         {
             return Err(ie(StatusCode::FORBIDDEN, "PLUGIN_DENIED", reason));
         }
+        let unsigned_ok = i.signed_by.is_none() && self.allow_unsigned().await;
         let pending = {
             let _l = self.lock(id).await;
             let existing = packages::find(&self.db, id).await.map_err(internal)?;
@@ -363,7 +364,8 @@ impl Plugins {
                     e.version
                 );
             }
-            if let Some(e) = &existing
+            if !unsigned_ok
+                && let Some(e) = &existing
                 && e.verified_by_key_id.is_some()
                 && e.verified_by_key_id != i.signed_by
             {
@@ -375,7 +377,17 @@ impl Plugins {
             }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
-            if let Some(block) = m.get("provider")
+            if unsigned_ok {
+                sqlx::query(
+                    r#"UPDATE provider_namespaces SET "signerKeyId" = NULL WHERE "pluginId" = $1"#,
+                )
+                .bind(id)
+                .execute(&self.db)
+                .await
+                .map_err(internal)?;
+            }
+            if !unsigned_ok
+                && let Some(block) = m.get("provider")
                 && let Err(name) = super::namespaces::check_install(
                     &self.db,
                     i.signed_by.as_deref(),
