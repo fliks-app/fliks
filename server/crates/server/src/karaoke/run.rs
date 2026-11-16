@@ -227,7 +227,7 @@ fn stage(st: &AppState, item: i32, stage: &'static str) {
     update(st, item, |r| {
         r.state = "running";
         r.stage = Some(stage);
-        r.progress = Some(0.0);
+        r.progress = None;
     });
 }
 

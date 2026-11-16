@@ -81,7 +81,7 @@
                         </span>
                         <span class="flex min-w-0 flex-1 flex-col gap-1">
                           <span role="status">{{ 'karaoke.stage_' + st | translate }}</span>
-                          <progress class="progress progress-primary w-full" [class.invisible]="i !== cur" [value]="k.progress ?? 0" max="100" [attr.aria-label]="'karaoke.progress' | translate"></progress>
+                          <progress class="progress progress-primary w-full" [class.invisible]="i !== cur" [attr.value]="k.progress ?? null" max="100" [attr.aria-label]="'karaoke.progress' | translate"></progress>
                         </span>
                       </li>
                     }
