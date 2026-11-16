@@ -566,12 +566,12 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
                FROM track_details td
                JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
                JOIN media m ON m.id = i."mediaId"
-               JOIN album_details ad ON ad."mediaId" = m.id
+               LEFT JOIN album_details ad ON ad."mediaId" = m.id
                WHERE td."recordingMbid" = ANY($1::text[]::uuid[]) AND m."libraryId" = ANY($2)
                  AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
                ORDER BY td."recordingMbid",
                         EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) DESC,
-                        (i."editionId" = ad."targetEditionId") DESC, i.id"#,
+                        COALESCE(i."editionId" = ad."targetEditionId", false) DESC, i.id"#,
         )
         .bind(&ids)
         .bind(&libs)
