@@ -29,3 +29,5 @@ Module `server/crates/server/src/queue/` (`commit.rs`, `swap.rs`, `recover.rs`, 
 19. Every hour the queue loop reviews the files created in the last 30 days in `optimizeNewFiles` libraries that never had a job, through the same `queue_new` (a hard-linked file becomes eligible once it stops being linked, or a pending OCR is done).
 20. `POST /api/optimize/verify {mediaFileIds, priority?}` queues a `verify` job per file (full read, software decode counting the errors; `corrupt` and `damaged` failures raise `health.corrupt` once). Same answers as the optimize queueing.
 21. Settings `verifyIntervalDays` (0 = no scheduled verification, default) and `verifyBatch` (default 20): each hourly pass queues, at priority -10, the video files whose last finished `verify` is older than the interval (never verified first), without an active job or a remembered `corrupt`/`damaged` failure of the same bytes.
+
+A `separate` job (karaoke, `karaoke.md` rule 16) never reaches `staged` or `committing`: its stems are committed inside the worker's `result` and its row is deleted, so it leaves no entry in the optimize history.
