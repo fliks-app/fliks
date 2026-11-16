@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtistAlbum, Track } from '../../core/services/api/music.models';
-import { albumSubtitle, artistLine, formatDuration, groupByWork, discographyTab, discographyTabs, groupDiscs, toTrackRequest } from './music-utils';
+import { albumSubtitle, artistLine, formatDuration, groupByWork, discographyTab, discographyTabs, groupDiscs, groupReleases, rowStates, splitOrphans, toTrackRequest, versionChip } from './music-utils';
 
 const track = (o: Partial<Track>): Track => ({
   itemId: 1, mediaFileId: 1, hasFile: true, monitored: true, orphaned: false, discNumber: 1, discTitle: null, position: 1,
@@ -72,5 +72,69 @@ describe('albumSubtitle', () => {
     expect(albumSubtitle(2005, 'Deluxe')).toBe('2005 · Deluxe');
     expect(albumSubtitle(2005, null)).toBe('2005');
     expect(albumSubtitle(null, null)).toBeUndefined();
+  });
+});
+
+describe('rowStates', () => {
+  const o = (x: Partial<Parameters<typeof rowStates>[1]> = {}) => ({ leaves: [], requested: () => false, admin: true, karaoke: () => null, ...x });
+  const kind = (t: Track, x = {}) => rowStates([t], o(x)).get(t.itemId)!;
+  const none = { hasFile: false, monitored: false };
+
+  it('is owned with a file, carrying the karaoke prep', () => {
+    expect(kind(track({}))).toEqual({ kind: 'owned' });
+    expect(kind(track({}), { karaoke: () => ({ state: 'running', progress: 30 }) })).toEqual({ kind: 'owned', karaoke: { progress: 30 } });
+  });
+
+  it('is downloading when a leaf covers the track, with the mean percent or none when unknown', () => {
+    const leaves = [{ percent: 20, itemIds: [1] }, { percent: 60 }, { percent: 90, itemIds: [2] }];
+    expect(kind(track({ ...none }), { leaves })).toEqual({ kind: 'downloading', percent: 40 });
+    expect(kind(track({ ...none }), { leaves: [{ percent: null }] })).toEqual({ kind: 'downloading', percent: null });
+    expect(kind(track({ ...none, itemId: 3 }), { leaves: [{ percent: 5, itemIds: [1] }] }).kind).toBe('unwanted');
+  });
+
+  it('is failed for an admin and wanted for a requester when the last attempt failed', () => {
+    const t = track({ hasFile: false, monitored: true, lastAttempt: 'import_failed' });
+    expect(kind(t).kind).toBe('failed');
+    expect(kind(t, { admin: false }).kind).toBe('wanted');
+    expect(kind(track({ hasFile: false, monitored: true, lastAttempt: 'imported' })).kind).toBe('wanted');
+  });
+
+  it('is wanted when monitored or requested, else unwanted', () => {
+    expect(kind(track({ hasFile: false, monitored: true })).kind).toBe('wanted');
+    expect(kind(track({ ...none }), { requested: () => true }).kind).toBe('wanted');
+    expect(kind(track({ ...none })).kind).toBe('unwanted');
+  });
+});
+
+describe('versionChip', () => {
+  it('shows the label only when the group has several releases', () => {
+    expect(versionChip('Deluxe', 2)).toBe('Deluxe');
+    expect(versionChip('Deluxe', 1)).toBeNull();
+    expect(versionChip(null, 3)).toBeNull();
+  });
+});
+
+describe('groupReleases', () => {
+  it('folds a release group into its most owned release and counts the versions', () => {
+    const out = groupReleases([
+      album({ mediaId: 1, releaseGroupId: 'g', ownedTrackCount: 2 }),
+      album({ mediaId: 2, releaseGroupId: 'g', ownedTrackCount: 9 }),
+      album({ mediaId: 3, releaseGroupId: 'g', ownedTrackCount: 1 }),
+      album({ mediaId: null, owned: false, externalId: 'x', ownedTrackCount: 0 }),
+    ]);
+    expect(out.map((a) => [a.mediaId, a.versions])).toEqual([[2, 3], [null, 1]]);
+  });
+
+  it('feeds the tabs one card per group', () => {
+    const t = discographyTabs([album({ releaseGroupId: 'g' }), album({ mediaId: 2, releaseGroupId: 'g', ownedTrackCount: 5 })]);
+    expect(t.albums).toHaveLength(1);
+    expect(t.albums[0]!.versions).toBe(2);
+  });
+});
+
+describe('splitOrphans', () => {
+  it('sets the files with no track of the release apart', () => {
+    const r = splitOrphans([track({ itemId: 1 }), track({ itemId: 2, orphaned: true })]);
+    expect([r.listed.map((t) => t.itemId), r.orphans.map((t) => t.itemId)]).toEqual([[1], [2]]);
   });
 });

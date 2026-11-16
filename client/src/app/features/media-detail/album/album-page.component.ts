@@ -1,17 +1,20 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideEllipsisVertical, LucideDownload, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle } from '@lucide/angular';
+import { LucideCircleAlert, LucideClock, LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle } from '@lucide/angular';
 import { translatePlural, TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { DownloadProgressService } from '../../../core/services/download-progress.service';
+import { SseService } from '../../../core/services/sse.service';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { RequestsService, titleRef, type TitleRequestState } from '../../../core/services/api/requests.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
-import type { AlbumCandidate, AlbumVersion, Track } from '../../../core/services/api/music.models';
+import type { AlbumCandidate, Track } from '../../../core/services/api/music.models';
 import { PartyService } from '../../../core/services/party/party.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -28,11 +31,13 @@ import { DetailSectionComponent } from '../../../shared/components/detail-sectio
 import { FactsGridComponent, type Fact } from '../../../shared/components/facts-grid/facts-grid';
 import { LikeController } from '../../../shared/utils/like-controller';
 import {
-  artistLine, formatDuration, groupByWork, groupDiscs, toTrackRequest, type AlbumFacts, type Disc, type WorkSection,
+  artistLine, formatDuration, groupByWork, groupDiscs, rowStates, splitOrphans, toTrackRequest, versionChip,
+  type AlbumFacts, type Disc, type RowLeaf, type WorkSection,
 } from '../../music/music-utils';
 import { MusicDownloadButtonComponent } from '../../../shared/components/music-download-button/music-download-button';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
-import { TrackLineComponent } from '../../music/track-line.component';
+import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
+import { TrackDownloadGlyphComponent } from '../../../shared/components/track-download-glyph/track-download-glyph';
 import { mediaDetailLink } from '../../../core/media-kinds';
 import { MediaService } from '../../../core/services/api/media.service';
 import { asAlbumMedia, versionMeta } from './album-media';
@@ -48,9 +53,9 @@ interface DiscView {
 @Component({
   selector: 'app-album-page',
   imports: [
-    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackLineComponent, DetailSectionComponent, FactsGridComponent,
+    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, FactsGridComponent,
     ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent,
-    LucideDownload, LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle,
+    LucideCircleAlert, LucideClock, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle, LucideEllipsisVertical,
   ],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
@@ -70,6 +75,7 @@ export class AlbumPageComponent {
   private readonly mediaApi = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly downloads = inject(MusicDownloadsService);
+  private readonly progress = inject(DownloadProgressService);
   protected readonly like = new LikeController(
     { media: () => this.media(), episodeMode: () => false, focusedEpisode: () => null },
     this.likes,
@@ -91,8 +97,11 @@ export class AlbumPageComponent {
     facts: () => ({ isAdmin: this.auth.hasPermission('settings.access'), hasFiles: !!this.activeTrack()?.hasFile, identified: true }),
   });
   protected readonly discs = computed<DiscView[]>(() =>
-    groupDiscs(this.tracks()).map((disc) => ({ disc, sections: groupByWork(disc.tracks) })),
+    groupDiscs(this.split().listed).map((disc) => ({ disc, sections: groupByWork(disc.tracks) })),
   );
+  private readonly split = computed(() => splitOrphans(this.tracks()));
+  /** Files the ingest could not pair with a track of the release. */
+  protected readonly orphanFiles = computed(() => this.split().orphans);
   protected readonly playable = computed(() => this.tracks().filter((t) => t.hasFile));
   protected readonly orphaned = computed(() => !!this.album()?.orphaned);
   protected readonly desktop = heroDesktopLayout();
@@ -113,21 +122,33 @@ export class AlbumPageComponent {
   private pendingRecording: string | null = null;
   private readonly addDialog = viewChild(AddDialogComponent);
 
-  protected status(t: Track): 'available' | 'requested' | 'request' | null {
-    if (t.hasFile) return 'available';
+  private readonly askedAll = signal(false);
+  private readonly karaokeLive = linkedSignal<Media, Map<number, Track['karaoke']>>({ source: this.media, computation: () => new Map() });
+  private readonly leaves = computed<RowLeaf[]>(() =>
+    (this.progress.progress().get(this.media().id)?.leaves ?? []).map((l) => ({ percent: l.state === 'searching' ? null : l.percent, itemIds: l.itemIds })),
+  );
+  private isRequested(t: Track): boolean {
     const s = this.requestState();
-    if (s?.wholeAlbumRequested || (t.recordingId && (this.asked().has(t.recordingId) || s?.requestedRecordings?.includes(t.recordingId)))) return 'requested';
-    return t.recordingId ? 'request' : null;
+    return !!(this.askedAll() || s?.wholeAlbumRequested || (t.recordingId && (this.asked().has(t.recordingId) || s?.requestedRecordings?.includes(t.recordingId))));
   }
 
-  /** A track the release lists that nobody wants yet: shown greyed, with a "+". */
-  protected unwanted(t: Track): boolean {
-    return !t.hasFile && !t.monitored;
-  }
-
-  protected readonly unwantedCount = computed(() => this.tracks().filter((t) => this.unwanted(t)).length);
+  /** The one state per track the row draws: owned, downloading, wanted, failed or unwanted. */
+  protected readonly rowState = computed(() =>
+    rowStates(this.tracks(), {
+      leaves: this.leaves(),
+      requested: (t) => this.isRequested(t),
+      admin: this.auth.hasPermission('media.create'),
+      karaoke: (t) => (this.karaokeLive().has(t.itemId) ? this.karaokeLive().get(t.itemId) : t.karaoke),
+    }),
+  );
+  protected readonly unwantedCount = computed(() => [...this.rowState().values()].filter((s) => s.kind === 'unwanted').length);
   /** From the loaded album, not the live tracks: the controls stay once the last track is wanted. */
-  protected readonly hasUnwanted = computed(() => (this.album()?.tracks ?? []).some((t) => this.unwanted(t)));
+  protected readonly hasUnwanted = computed(() => (this.album()?.tracks ?? []).some((t) => !t.hasFile && !t.monitored && !t.orphaned));
+  /** Mean percent of the album's downloads; null while none is known, undefined when nothing downloads. */
+  protected readonly albumProgress = computed(() => {
+    const e = this.progress.progress().get(this.media().id);
+    return e ? e.percent : undefined;
+  });
 
   protected addTrack(t: Track): void {
     const key = this.titleKey();
@@ -140,7 +161,17 @@ export class AlbumPageComponent {
   protected onRequested(r: AddResult): void {
     const ids = r.recordings ?? (this.pendingRecording ? [this.pendingRecording] : []);
     this.asked.update((s) => new Set([...s, ...ids]));
-    if (r.mode === 'import') for (const t of this.tracks()) if (t.recordingId && ids.includes(t.recordingId)) this.patch(t.itemId, { monitored: true });
+    if (!ids.length) this.askedAll.set(true);
+    this.pendingRecording = null;
+  }
+
+  /** A viewer who may only request asks for every missing track. */
+  protected requestAlbum(): void {
+    const key = this.titleKey();
+    if (!key) return;
+    const [provider, externalId] = titleRef(key);
+    this.pendingRecording = null;
+    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, mode: 'request' });
   }
 
   /** Monitors every track of the release in one call. */
@@ -148,6 +179,7 @@ export class AlbumPageComponent {
     try {
       await this.mediaApi.update(this.media().id, { monitored: true });
       for (const t of this.tracks()) this.patch(t.itemId, { monitored: true });
+      this.askedAll.set(true);
     } catch {
       // The global interceptor toasts the failure.
     }
@@ -157,6 +189,12 @@ export class AlbumPageComponent {
   private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
 
   constructor() {
+    inject(SseService).karaokeEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
+      if (e.type !== 'karaoke.job_changed') return;
+      const j = e as unknown as { itemId: number; state: string; progress?: number };
+      const live = j.state === 'queued' || j.state === 'running';
+      this.karaokeLive.update((m) => new Map(m).set(j.itemId, live ? { state: j.state as 'queued' | 'running', progress: j.progress ?? null } : null));
+    });
     effect(() => {
       const key = this.titleKey();
       if (!this.canRequest() || !key) return;
@@ -183,27 +221,27 @@ export class AlbumPageComponent {
     ];
   });
   protected readonly line = artistLine;
+  protected readonly formatTime = formatDuration;
 
   private tracksText(n: number | null): string {
     return n ? translatePlural(this.translate, 'music.track_count', n) : '';
   }
 
-  /** The release's own label, else what tells it from its siblings. */
-  protected readonly versionLabel = computed(() => {
-    const r = this.release();
-    return r ? (r.disambiguation ?? versionMeta(r, this.tracksText(r.trackCount))) : null;
-  });
-
-  protected readonly otherVersions = computed(() => (this.album()?.versions ?? []).filter((v) => v.mediaId !== this.media().id));
-
-  protected versionText(v: AlbumVersion): string {
-    return versionMeta(v, this.tracksText(v.trackCount));
-  }
+  /** The release's own label, only when the group has several releases. */
+  protected readonly versionLabel = computed(() => versionChip(this.release()?.disambiguation, this.album()?.versions.length ?? 0));
 
   /** A held version is its album page; a missing one opens its release preview. */
-  protected versionLink(v: AlbumVersion): string[] {
-    return v.mediaId != null ? mediaDetailLink('album', v.mediaId) : ['/add/album', 'musicbrainz', v.releaseId];
-  }
+  protected readonly otherVersions = computed(() =>
+    (this.album()?.versions ?? [])
+      .filter((v) => v.mediaId !== this.media().id)
+      .map((v) => ({
+        id: v.releaseId,
+        title: v.disambiguation ?? this.translate.instant('music.version_standard'),
+        subtitle: versionMeta(v, this.tracksText(v.trackCount)),
+        link: v.mediaId != null ? mediaDetailLink('album', v.mediaId) : ['/add/album', 'musicbrainz', v.releaseId],
+        missing: v.mediaId == null,
+      })),
+  );
 
   private request(t: Track) {
     const m = this.media();
@@ -265,11 +303,21 @@ export class AlbumPageComponent {
       ...(this.party.active()
         ? [own('karaoke.queue_sing_this', 'mic', () => this.sing(t), !t.hasFile, { title: t.title })]
         : []),
+      ...(this.rowState().get(t.itemId)?.kind === 'failed' && this.retrySearch()
+        ? [own('music.retry_search', 'search', this.retrySearch()!)]
+        : []),
+      ...(this.desktop() ? [] : [own(t.favourite ? 'music.unfavourite' : 'music.favourite', 'heart', () => void this.toggleFavourite(t))]),
       ...(this.creditGroups(t).length ? [own('music.credits', 'users', () => this.openCredits(t))] : []),
       ...this.trackActions.rows().map((r) => toCardAction(r)),
     ];
     this.cardActions.register({ actions, anchor, placement: 'button', title: t.title, subtitle: this.artistsText(), imageUrl: this.coverUrl(), imageAspect: 'square' });
     this.cardActions.show();
+  }
+
+  /** The track's own "grab best" row, when a provider serves it. */
+  private retrySearch(): (() => void) | null {
+    const rows = this.trackActions.rows().flatMap((r) => r.children ?? [r]);
+    return rows.find((r) => r.actionId === 'item.grab-best')?.run ?? null;
   }
 
   protected sing(t: Track): void {

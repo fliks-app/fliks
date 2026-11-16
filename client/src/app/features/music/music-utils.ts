@@ -1,5 +1,5 @@
 import type { MusicTrackRequest } from '../../core/services/audio-player/music-queue';
-import type { ArtistAlbum, Track, TrackArtist, TrackRow, TrackWork } from '../../core/services/api/music.models';
+import type { ArtistAlbum, ArtistAlbumGroup, Track, TrackArtist, TrackRow, TrackWork } from '../../core/services/api/music.models';
 
 /** `m:ss`, or `h:mm:ss` from an hour up. */
 export function formatDuration(seconds: number | null | undefined): string {
@@ -111,16 +111,75 @@ export function discographyTab(a: Pick<ArtistAlbum, 'primaryType' | 'secondaryTy
   return p === 'album' && !secondary.length ? 'albums' : 'other';
 }
 
+/** One card per release group: the release holding most owned tracks stands for it. */
+export function groupReleases(albums: ArtistAlbum[]): ArtistAlbumGroup[] {
+  const groups = new Map<string, ArtistAlbumGroup>();
+  albums.forEach((a, i) => {
+    const key = a.releaseGroupId ?? `solo:${i}`;
+    const cur = groups.get(key);
+    if (!cur) groups.set(key, { ...a, versions: 1 });
+    else groups.set(key, { ...(a.ownedTrackCount > cur.ownedTrackCount ? a : cur), versions: cur.versions + 1 });
+  });
+  return [...groups.values()];
+}
+
 /** The albums by tab, owned and missing together: those holding a popular track first, in its order, then newest first. */
-export function discographyTabs(albums: ArtistAlbum[], popular: { albumExternalId?: string | null }[] = []): Record<DiscographyTab, ArtistAlbum[]> {
-  const out: Record<DiscographyTab, ArtistAlbum[]> = { albums: [], singles: [], compilations: [], other: [] };
-  for (const a of albums) out[discographyTab(a)].push(a);
+export function discographyTabs(albums: ArtistAlbum[], popular: { albumExternalId?: string | null }[] = []): Record<DiscographyTab, ArtistAlbumGroup[]> {
+  const out: Record<DiscographyTab, ArtistAlbumGroup[]> = { albums: [], singles: [], compilations: [], other: [] };
+  for (const a of groupReleases(albums)) out[discographyTab(a)].push(a);
   const rank = new Map<string, number>();
   popular.forEach((p, i) => p.albumExternalId && !rank.has(p.albumExternalId) && rank.set(p.albumExternalId, i));
-  const rankOf = (a: ArtistAlbum) => Math.min(rank.get(a.externalId ?? '') ?? Infinity, rank.get(a.releaseGroupId ?? '') ?? Infinity);
+  const rankOf = (a: ArtistAlbumGroup) => Math.min(rank.get(a.externalId ?? '') ?? Infinity, rank.get(a.releaseGroupId ?? '') ?? Infinity);
   // Infinity - Infinity is NaN, which falls through to the year like a tie.
-  const order = (a: ArtistAlbum, b: ArtistAlbum) =>
+  const order = (a: ArtistAlbumGroup, b: ArtistAlbumGroup) =>
     rankOf(a) - rankOf(b) || (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
   for (const k of DISCOGRAPHY_TABS) out[k].sort(order);
+  return out;
+}
+
+/** The release's own label as a chip, only when the group has several releases to tell apart. */
+export function versionChip(disambiguation: string | null | undefined, versions: number): string | null {
+  return versions > 1 ? (disambiguation ?? null) : null;
+}
+
+/** Tracks the release lists, then the files the ingest could not pair with any of its tracks. */
+export function splitOrphans(tracks: Track[]): { listed: Track[]; orphans: Track[] } {
+  return { listed: tracks.filter((t) => !t.orphaned), orphans: tracks.filter((t) => t.orphaned) };
+}
+
+/** What a track row shows: one glyph per kind, the row dims unless owned. */
+export interface RowState {
+  kind: 'owned' | 'downloading' | 'wanted' | 'failed' | 'unwanted';
+  /** Downloading: null while no percent is known. */
+  percent?: number | null;
+  /** Owned: the karaoke prep ring, `progress` null when unknown. */
+  karaoke?: { progress: number | null };
+}
+
+/** A download in flight; absent `itemIds` covers every track of the album. */
+export interface RowLeaf {
+  percent: number | null;
+  itemIds?: number[];
+}
+
+/** Merges the track, its downloads, its request and its karaoke prep into the one state the row draws. */
+export function rowStates(
+  tracks: Track[],
+  o: { leaves: RowLeaf[]; requested: (t: Track) => boolean; admin: boolean; karaoke: (t: Track) => Track['karaoke'] },
+): Map<number, RowState> {
+  const out = new Map<number, RowState>();
+  for (const t of tracks) {
+    const k = o.karaoke(t);
+    const covering = o.leaves.filter((l) => !l.itemIds || l.itemIds.includes(t.itemId));
+    const failed = t.lastAttempt === 'failed' || t.lastAttempt === 'import_failed';
+    let s: RowState;
+    if (t.hasFile) s = { kind: 'owned', ...(k ? { karaoke: { progress: k.progress } } : {}) };
+    else if (covering.length) {
+      const known = covering.flatMap((l) => (l.percent == null ? [] : [l.percent]));
+      s = { kind: 'downloading', percent: known.length < covering.length ? null : Math.round(known.reduce((a, p) => a + p, 0) / known.length) };
+    } else if (t.monitored && failed && o.admin) s = { kind: 'failed' };
+    else s = { kind: t.monitored || o.requested(t) ? 'wanted' : 'unwanted' };
+    out.set(t.itemId, s);
+  }
   return out;
 }
