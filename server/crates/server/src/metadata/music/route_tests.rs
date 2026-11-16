@@ -25,7 +25,8 @@ async fn ctx(pool: &PgPool, fake: MusicFake) -> (Router, String) {
            INSERT INTO persons (id, name) VALUES (1, 'Ana');
            INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'musicbrainz', '{ARTIST}');
            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (10, 'Own', 'album', 1, 'a');
-           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (10, 'album', 'musicbrainz', '{GROUP}');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (10, 'album', 'musicbrainz', '{RELEASE}');
+           INSERT INTO album_details ("mediaId", "releaseGroupMbid") VALUES (10, '{GROUP}');
            INSERT INTO editions (id, "mediaId", family) VALUES (1, 10, 'audio');
            INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 10, 1, 'One');
            INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES (1, 10, 1, '{OWNED}');
@@ -40,6 +41,7 @@ async fn ctx(pool: &PgPool, fake: MusicFake) -> (Router, String) {
     let app = crate::metadata::router()
         .merge(crate::persons::router())
         .merge(crate::music::router())
+        .merge(crate::media::router())
         .with_state(st);
     (app, t)
 }
@@ -75,8 +77,8 @@ fn fake() -> MusicFake {
     );
     f.editions.lock().unwrap().insert(
         RELEASE.into(),
-        json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "media": "cd",
-               "trackCount": 2, "tracks": [
+        json!({"externalId": RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "FR",
+               "status": "official", "media": "cd", "trackCount": 2, "tracks": [
             {"title": "One", "discNumber": 1, "position": 1, "number": 1, "durationMs": 100000, "recordingId": OWNED},
             {"title": "Two", "discNumber": 1, "position": 2, "number": 2, "durationMs": 50000, "recordingId": OTHER}]}),
     );
@@ -84,7 +86,9 @@ fn fake() -> MusicFake {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_preview_lists_the_main_release_and_marks_an_owned_album(pool: PgPool) {
+async fn the_preview_lists_a_release_or_the_one_a_group_picks_and_marks_an_owned_album(
+    pool: PgPool,
+) {
     let (app, t) = ctx(&pool, fake()).await;
     let (s, v) = get(
         &app,
@@ -104,7 +108,20 @@ async fn the_preview_lists_the_main_release_and_marks_an_owned_album(pool: PgPoo
     assert_eq!(v["release"]["externalId"], RELEASE);
     assert_eq!(v["artists"][0]["externalId"], ARTIST);
     assert_eq!(v["tracks"][1]["recordingId"], OTHER);
-    assert_eq!(v["existingMediaId"], 10);
+    assert_eq!(v["existingMediaId"], 10, "a release of the group is held");
+    assert_eq!(v["releaseGroupId"], GROUP);
+    let (s, v) = get(
+        &app,
+        &t,
+        &format!("/api/metadata/musicbrainz/album/{RELEASE}"),
+    )
+    .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(
+        (v["externalId"].as_str(), v["existingMediaId"].as_i64()),
+        (Some(RELEASE), Some(10))
+    );
+    assert_eq!(v["tracks"].as_array().unwrap().len(), 2);
     let (s, _) = get(&app, &t, "/api/metadata/tmdb/album/x").await;
     assert_eq!(s, 400);
     let missing = "33333333-3333-4333-8333-333333333333";
@@ -151,17 +168,73 @@ async fn without_top_recordings_the_owned_tracks_by_popularity_stand_in(pool: Pg
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_picker_takes_recording_ids_and_answers_for_the_wanted_release(pool: PgPool) {
+async fn the_picker_lists_the_release_a_group_or_a_release_would_be(pool: PgPool) {
     let (app, t) = ctx(&pool, fake()).await;
-    let base =
-        format!("/api/music/albums/tracks?provider=musicbrainz&externalId={GROUP}&libraryId=1");
-    let (s, v) = get(&app, &t, &format!("{base}&recordingId=nope")).await;
-    assert_eq!(s, 400, "{v}");
-    let (s, v) = get(&app, &t, &format!("{base}&recordingId={OTHER},{OWNED}")).await;
-    assert_eq!(s, 200, "{v}");
-    assert_eq!(v.as_array().unwrap().len(), 2);
-    assert_eq!(v[1]["recordingId"], OTHER);
+    for id in [GROUP, RELEASE] {
+        let uri =
+            format!("/api/music/albums/tracks?provider=musicbrainz&externalId={id}&libraryId=1");
+        let (s, v) = get(&app, &t, &uri).await;
+        assert_eq!(s, 200, "{v}");
+        assert_eq!(v.as_array().unwrap().len(), 2);
+        assert_eq!(v[1]["recordingId"], OTHER);
+    }
+    let uri = format!(
+        "/api/music/albums/tracks?provider=musicbrainz&externalId={GROUP}&libraryId=1&recordingId={OTHER}"
+    );
+    assert_eq!(
+        get(&app, &t, &uri).await.0,
+        400,
+        "the recordings are no longer a parameter"
+    );
     let missing = "33333333-3333-4333-8333-333333333333";
-    let (s, _) = get(&app, &t, &format!("{base}&recordingIds={missing}")).await;
-    assert_eq!(s, 404, "no release holds it");
+    let uri =
+        format!("/api/music/albums/tracks?provider=musicbrainz&externalId={missing}&libraryId=1");
+    assert_eq!(get(&app, &t, &uri).await.0, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_album_detail_lists_its_release_its_versions_and_the_tracks_it_shares(pool: PgPool) {
+    let f = fake();
+    let deluxe = "44444444-4444-4444-8444-444444444444";
+    f.children.lock().unwrap().insert(
+        GROUP.into(),
+        vec![
+            json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2}),
+            json!({"externalId": deluxe, "title": "Alpha", "country": "GB", "status": "official",
+                   "trackCount": 3, "disambiguation": "Deluxe"}),
+        ],
+    );
+    let (app, t) = ctx(&pool, f).await;
+    // A second album that plays the first one's file for the same recording.
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (11, 'Deluxe', 'album', 1, 'b');
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (11, 'album', 'musicbrainz', '{deluxe}');
+           INSERT INTO album_details ("mediaId", "releaseGroupMbid") VALUES (11, '{GROUP}');
+           INSERT INTO editions (id, "mediaId", family, "disambiguation") VALUES (2, 11, 'audio', 'Deluxe');
+           INSERT INTO items (id, "mediaId", "editionId", title) VALUES (2, 11, 2, 'One');
+           INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES (2, 11, 1, '{OWNED}')"#
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (s, v) = get(&app, &t, "/api/media/10").await;
+    assert_eq!(s, 200, "{v}");
+    let album = &v["album"];
+    assert_eq!(album["releaseGroupId"], GROUP);
+    assert_eq!(album["sharedTracks"], 1);
+    let versions = album["versions"].as_array().unwrap();
+    assert_eq!(
+        versions
+            .iter()
+            .map(|v| (v["releaseId"].as_str().unwrap(), v["mediaId"].as_i64()))
+            .collect::<Vec<_>>(),
+        [(deluxe, Some(11)), (RELEASE, Some(10))],
+        "the held ones with their album, none repeated from the provider"
+    );
+    let (_, v) = get(&app, &t, "/api/media/11").await;
+    let track = &v["album"]["tracks"][0];
+    assert_eq!(
+        (&track["hasFile"], &track["mediaFileId"]),
+        (&json!(true), &json!(1))
+    );
 }

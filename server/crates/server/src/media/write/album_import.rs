@@ -13,7 +13,7 @@ use crate::{
         hydrate, wants,
     },
     metadata::music::{
-        Asked, Create, Source, aliases, classify, resolve,
+        Asked, Create, Source, Written, aliases, classify, resolve,
         want::{self, Recording, Refused, Scope},
         write_album,
     },
@@ -228,7 +228,15 @@ pub(crate) async fn create_album_or_held(
 /// release of the same group with the same recordings.
 async fn held_release(st: &AppState, src: &Source, library: i32) -> Result<Option<i32>, AppError> {
     if let Some(held) = aliases::album_of(&st.db, src.release()).await? {
-        return Ok(Some(held));
+        let own: Option<Option<i32>> =
+            sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                .bind(held)
+                .fetch_optional(&st.db)
+                .await?;
+        return match own.flatten() == Some(library) {
+            true => Ok(Some(held)),
+            false => Err(AppError::conflict(TAKEN)),
+        };
     }
     let mut recordings: Vec<String> = src
         .edition
@@ -304,9 +312,13 @@ pub(crate) async fn create_from(
     } else {
         Create::Unmonitored
     };
-    if let Err(e) = write_album(st, media, ns, src, &canonical, lang, (create, c.prio)).await {
-        discard(st, media, MediaKind::Album).await;
-        return Err(e);
+    match write_album(st, media, ns, src, &canonical, lang, (create, c.prio)).await {
+        Ok(Written::Done) => {}
+        Ok(Written::Folded(into)) => return Ok(Created::Held(into)),
+        Err(e) => {
+            discard(st, media, MediaKind::Album).await;
+            return Err(e);
+        }
     }
     if asked != canonical
         && asked != album.external_id

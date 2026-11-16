@@ -720,10 +720,10 @@ pub(super) async fn find_or_create_unmatched(
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
     let mut existing = existing_unmatched(st, d, lib, &folder).await?;
-    // The release group the tags name, held by an album as its id or as the alias of a merged one.
+    // The release the tags name, held by an album as its id or as the alias of a merged one.
     if existing.is_none()
-        && let Some(group) = tagged.as_ref().and_then(|s| s.release_group.as_deref())
-        && let Some(held) = crate::metadata::music::aliases::album_of(&st.db, group).await?
+        && let Some(release) = tagged.as_ref().and_then(|s| s.release.as_deref())
+        && let Some(held) = crate::metadata::music::aliases::album_of(&st.db, release).await?
     {
         let same =
             sqlx::query_scalar::<_, bool>(r#"SELECT "libraryId" = $2 FROM media WHERE id = $1"#)

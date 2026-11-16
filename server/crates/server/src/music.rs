@@ -436,4 +436,58 @@ mod tests {
         assert_eq!(get("/api/tracks?sortBy=added&after=1".into()).await.0, 400);
         assert_eq!(get("/api/tracks?after=999".into()).await.0, 400);
     }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_shared_recording_is_listed_once_and_plays_through_both_albums(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let st = AppState::new(
+            pool.clone(),
+            Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL);
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["album"]');
+            INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+              (10, 'Alpha', 'album', 1, 'a'), (11, 'Alpha Deluxe', 'album', 1, 'b');
+            INSERT INTO editions (id, "mediaId", family) VALUES (1, 10, 'audio'), (2, 11, 'audio');
+            INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 10, 1, 'One'), (2, 11, 2, 'One');
+            INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES
+              (1, 10, 1, 'b0000000-0000-4000-8000-000000000001'), (2, 11, 1, 'b0000000-0000-4000-8000-000000000001');
+            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+              VALUES (1, 10, 1, '1.flac', 1, 'FLAC');
+            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (1, 1, 10, 0, 0);
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let t = testing::token(&st, 1, "admin").await;
+        let app = super::router().with_state(st);
+        let get = |uri: &'static str| {
+            let (app, t) = (app.clone(), t.clone());
+            async move {
+                let req = Request::get(uri)
+                    .header("authorization", format!("Bearer {t}"))
+                    .body(Body::empty())
+                    .unwrap();
+                let res = app.oneshot(req).await.unwrap();
+                let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                serde_json::from_slice::<Value>(&bytes).unwrap()
+            }
+        };
+        let listed = get("/api/tracks").await;
+        assert_eq!(listed.as_array().unwrap().len(), 1, "one row per recording");
+        assert_eq!(listed[0]["itemId"], 1);
+        let both = get("/api/tracks?ids=1,2").await;
+        assert_eq!(
+            (&both[1]["hasFile"], &both[1]["mediaFileId"]),
+            (&Value::Bool(true), &Value::from(1)),
+            "the deluxe track plays the first album's file"
+        );
+    }
 }

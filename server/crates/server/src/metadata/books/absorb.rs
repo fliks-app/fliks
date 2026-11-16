@@ -264,11 +264,7 @@ mod tests {
         .await
         .unwrap();
         found.sort();
-        let mut listed: Vec<String> = MOVED_WITH_PARENT
-            .iter()
-            .chain(&["album_details"])
-            .map(|t| (*t).into())
-            .collect();
+        let mut listed: Vec<String> = MOVED_WITH_PARENT.iter().map(|t| (*t).into()).collect();
         listed.sort();
         assert_eq!(found, listed);
     }

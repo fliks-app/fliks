@@ -653,7 +653,7 @@ async fn music_groups(
                 .into_iter()
                 .collect(),
             file_ids: sample
-                .and_then(|s| s.release_group)
+                .and_then(|s| s.release.or(s.release_group))
                 .map(|id| record::FileId {
                     provider: "musicbrainz",
                     external_id: id,
