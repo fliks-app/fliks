@@ -33,14 +33,15 @@ async fn refused(pool: &PgPool, sql: &str) -> bool {
 }
 
 #[sqlx::test(migrations = false)]
-async fn an_album_has_details_a_target_edition_and_a_json_arm(pool: PgPool) {
+async fn an_album_has_details_a_release_group_and_a_json_arm(pool: PgPool) {
     seed(&pool).await;
     sqlx::query(r#"INSERT INTO album_details ("mediaId", "primaryType", "secondaryTypes", "isCompilation", popularity)
         VALUES (10, 'album', '{live,remix}', false, 12.5)"#)
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query(r#"UPDATE album_details SET "targetEditionId" = 1 WHERE "mediaId" = 10"#)
+    sqlx::query(r#"UPDATE album_details SET "releaseGroupMbid" = $1::uuid WHERE "mediaId" = 10"#)
+        .bind(MB)
         .execute(&pool)
         .await
         .unwrap();
@@ -56,24 +57,11 @@ async fn an_album_has_details_a_target_edition_and_a_json_arm(pool: PgPool) {
         r#"UPDATE album_details SET "primaryType" = 'lp'"#,
         r#"UPDATE album_details SET "secondaryTypes" = '{live,nope}'"#,
         r#"UPDATE album_details SET popularity = -1"#,
-        // the target edition belongs to the album
-        r#"UPDATE album_details SET "targetEditionId" = 99"#,
+        r#"UPDATE album_details SET "releaseGroupMbid" = '5b11f4ce'"#,
         r#"INSERT INTO media (id, title, type) VALUES (11, 'B', 'album'); INSERT INTO album_details ("mediaId", kind) VALUES (11, 'movie')"#,
     ] {
         assert!(refused(&pool, bad).await, "{bad}");
     }
-    // a removed target edition leaves the album and its other columns alone
-    sqlx::query("DELETE FROM editions WHERE id = 1")
-        .execute(&pool)
-        .await
-        .unwrap();
-    let (t, p): (Option<i32>, Option<String>) = sqlx::query_as(
-        r#"SELECT "targetEditionId", "primaryType" FROM album_details WHERE "mediaId" = 10"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!((t, p.as_deref()), (None, Some("album")));
 }
 
 #[sqlx::test(migrations = false)]
@@ -94,10 +82,17 @@ async fn edition_facts_are_checked(pool: PgPool) {
             "{bad}"
         );
     }
-    sqlx::query(r#"UPDATE editions SET "orphanedAt" = now() WHERE id = 1"#)
+    sqlx::query(r#"UPDATE editions SET disambiguation = 'Deluxe' WHERE id = 1"#)
         .execute(&pool)
         .await
         .unwrap();
+    assert!(
+        refused(
+            &pool,
+            r#"UPDATE editions SET disambiguation = '' WHERE id = 1"#
+        )
+        .await
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -196,18 +191,16 @@ async fn works_nest_movements(pool: PgPool) {
 async fn musicbrainz_ids_are_uuids_and_name_one_album_and_one_artist(pool: PgPool) {
     seed(&pool).await;
     for bad in [
-        // one release group names one album
+        // one release names one album
         format!(r#"INSERT INTO media (id, title, type) VALUES (11, 'Dup', 'album'); INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (11, 'album', 'musicbrainz', '{MB}')"#),
         r#"INSERT INTO media (id, title, type) VALUES (11, 'Bad', 'album'); INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (11, 'album', 'musicbrainz', 'nope')"#.into(),
         format!(r#"INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (10, 'album', 'musicbrainz', '{}')"#, MB.to_uppercase()),
-        r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES (1, 10, 'musicbrainz', 'x')"#.into(),
         r#"INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'musicbrainz', '12')"#.into(),
     ] {
         assert!(refused(&pool, &bad).await, "{bad}");
     }
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        r#"INSERT INTO edition_external_ids ("editionId", "mediaId", provider, value) VALUES (1, 10, 'musicbrainz', '{MB}'), (1, 10, 'musicbrainz', '{MB2}');
-           INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'musicbrainz', '{MB}'), (1, 'tmdb', '5');
+        r#"INSERT INTO person_external_ids ("personId", provider, value) VALUES (1, 'musicbrainz', '{MB}'), (1, 'tmdb', '5');
            INSERT INTO media_external_id_aliases ("mediaId", kind, provider, value) VALUES (10, 'album', 'musicbrainz', '{MB2}');
            INSERT INTO person_external_id_aliases ("personId", provider, value) VALUES (1, 'musicbrainz', '{MB2}');"#
     )))

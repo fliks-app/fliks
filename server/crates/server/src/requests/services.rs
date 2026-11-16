@@ -197,6 +197,7 @@ pub async fn import_title(
             st,
             &spec.title.external_id,
             spec.wants.as_deref().unwrap_or_default(),
+            spec.recordings.is_some(),
             (spec.library_id, spec.folder_id),
             (added_by, &readable),
         )

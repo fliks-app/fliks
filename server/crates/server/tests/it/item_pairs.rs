@@ -27,7 +27,7 @@ const FIXTURE: &str = r#"
     INSERT INTO track_details ("itemId", "mediaId", "discNumber", position, "durationMs") VALUES
       (20, 10, 1, 1, 1), (21, 10, 1, 2, 1), (22, 10, 1, 3, 1),
       (25, 12, 1, 1, 1), (26, 12, 1, 2, 1), (27, 12, 1, 3, 1);
-    INSERT INTO album_details ("mediaId", "targetEditionId") VALUES (10, 10), (12, 13);
+    INSERT INTO album_details ("mediaId") VALUES (10), (12);
     INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
       SELECT i.id, i."mediaId", (SELECT min(id) FROM library_folders), 'f' || i.id, 1, 'q'
       FROM items i WHERE i.id IN (20, 21, 22, 23, 24, 25);

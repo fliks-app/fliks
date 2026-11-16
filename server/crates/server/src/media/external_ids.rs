@@ -226,13 +226,12 @@ pub async fn unlink(c: &mut PgConnection, media_id: i32, provider: Namespace) ->
 }
 
 /// The id namespaces an edition holds (`edition_external_ids` checks them).
-pub const EDITION_NAMESPACES: [Namespace; 6] = [
+pub const EDITION_NAMESPACES: [Namespace; 5] = [
     Namespace::ISBN,
     Namespace::ASIN,
     Namespace::OPENLIBRARY,
     Namespace::GOOGLEBOOKS,
     Namespace::BNF,
-    Namespace::MUSICBRAINZ,
 ];
 
 /// `value` as an edition id of `provider`, or `None` when the provider names no edition by it

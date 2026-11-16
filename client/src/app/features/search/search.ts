@@ -741,13 +741,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     ];
   }
 
-  protected add(row: SearchHit, recording?: RecordingHit, scope?: AddScope): void {
+  /** `release` replaces the hit's id: a recording names its own release, which is the album to add. */
+  protected add(row: SearchHit, recording?: RecordingHit, scope?: AddScope, release?: string): void {
+    const externalId = release ?? row.externalId;
     const req: AddRequest = {
       kind: row.mediaType,
       provider: row.provider,
-      externalId: row.externalId,
+      externalId,
       title: row.title,
-      ...(recording ? { recording: { externalId: recording.externalId, albumExternalId: row.externalId } } : {}),
+      ...(recording ? { recording: { externalId: recording.externalId, albumExternalId: externalId } } : {}),
       ...(scope ? { scope, alwaysAsk: true } : {}),
     };
     this.pendingAdd = { row, recording };
@@ -791,15 +793,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Wants or requests that one track, not the album. */
   protected addTrack(rec: RecordingHit): void {
-    this.add(rec.album, rec);
+    this.add(rec.album, rec, undefined, rec.release?.externalId);
   }
 
   protected pickTracks(rec: RecordingHit): void {
-    this.add(rec.album, rec, 'pick');
+    this.add(rec.album, rec, 'pick', rec.release?.externalId);
   }
 
   protected addAlbumOf(rec: RecordingHit): void {
-    this.add(rec.album);
+    this.add(rec.album, undefined, undefined, rec.release?.externalId);
+  }
+
+  /** The preview of the release the hit names, else of its group. */
+  protected releaseLink(rec: RecordingHit): string[] {
+    return ['/add/album', rec.album.provider, rec.release?.externalId ?? rec.album.externalId];
   }
 
   // ── Artists and tracks ──

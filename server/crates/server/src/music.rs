@@ -1,5 +1,4 @@
 //! Track view, composers, recordings and recently played (`docs/spec/music.md` rules 44-49).
-use crate::metadata::music::want::Recording;
 use crate::{
     http::{
         AppError,
@@ -22,7 +21,7 @@ use axum::{
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    external_id::{ExternalProvider, Namespace},
+    external_id::Namespace,
     media::kind::MediaKind,
     metadata::limiter::Priority,
 };
@@ -222,7 +221,7 @@ pub async fn want_recording(
     crate::media::write::album_import::want_recording(&st, &a, v).await
 }
 
-/// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get, of the release `recordingId` would be wanted on.
+/// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.
 #[utoipa::path(get, path = "/api/music/albums/tracks", responses((status = 200)))]
 pub async fn album_tracks(
     State(st): State<AppState>,
@@ -231,21 +230,6 @@ pub async fn album_tracks(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Create, Subject::Media)?;
     let bad = |m: &str| AppError::bad_request(vec![m.to_owned()]);
-    let (asked, q): (Vec<_>, Vec<_>) = q
-        .into_iter()
-        .partition(|(k, _)| k == "recordingId" || k == "recordingIds");
-    let recordings: Vec<String> = asked
-        .iter()
-        .flat_map(|(_, v)| v.split(','))
-        .map(|v| {
-            ExternalProvider::MusicBrainz
-                .normalize(v.trim())
-                .ok_or_else(|| bad("recordingId is not a recording id"))
-        })
-        .collect::<Result<_, _>>()?;
-    if recordings.len() > 50 {
-        return Err(bad("at most 50 recording ids"));
-    }
     let mut r = Reader::new(&q, &["provider", "externalId", "libraryId"]);
     let (provider, external, library) = (
         r.string("provider"),
@@ -270,15 +254,8 @@ pub async fn album_tracks(
     if !accessible_library_ids(&st.db, &a).await?.contains(&library) {
         return Err(AppError::not_found(format!("Library #{library} not found")));
     }
-    let wanted: Vec<_> = recordings.iter().map(|r| Recording::Mbid(r)).collect();
-    let tracks = crate::metadata::music::target::preview(
-        &st,
-        &group,
-        library,
-        &wanted,
-        Priority::Interactive,
-    )
-    .await?;
+    let tracks =
+        crate::metadata::music::tracklist(&st, &group, library, Priority::Interactive).await?;
     Ok(Json(Value::Array(
         tracks
             .iter()
@@ -458,5 +435,59 @@ mod tests {
         }
         assert_eq!(get("/api/tracks?sortBy=added&after=1".into()).await.0, 400);
         assert_eq!(get("/api/tracks?after=999".into()).await.0, 400);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_shared_recording_is_listed_once_and_plays_through_both_albums(pool: PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let st = AppState::new(
+            pool.clone(),
+            Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        sqlx::raw_sql(
+            r#"
+            INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL);
+            INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L1', '["album"]');
+            INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
+            INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
+              (10, 'Alpha', 'album', 1, 'a'), (11, 'Alpha Deluxe', 'album', 1, 'b');
+            INSERT INTO editions (id, "mediaId", family) VALUES (1, 10, 'audio'), (2, 11, 'audio');
+            INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 10, 1, 'One'), (2, 11, 2, 'One');
+            INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES
+              (1, 10, 1, 'b0000000-0000-4000-8000-000000000001'), (2, 11, 1, 'b0000000-0000-4000-8000-000000000001');
+            INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+              VALUES (1, 10, 1, '1.flac', 1, 'FLAC');
+            INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (1, 1, 10, 0, 0);
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let t = testing::token(&st, 1, "admin").await;
+        let app = super::router().with_state(st);
+        let get = |uri: &'static str| {
+            let (app, t) = (app.clone(), t.clone());
+            async move {
+                let req = Request::get(uri)
+                    .header("authorization", format!("Bearer {t}"))
+                    .body(Body::empty())
+                    .unwrap();
+                let res = app.oneshot(req).await.unwrap();
+                let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                serde_json::from_slice::<Value>(&bytes).unwrap()
+            }
+        };
+        let listed = get("/api/tracks").await;
+        assert_eq!(listed.as_array().unwrap().len(), 1, "one row per recording");
+        assert_eq!(listed[0]["itemId"], 1);
+        let both = get("/api/tracks?ids=1,2").await;
+        assert_eq!(
+            (&both[1]["hasFile"], &both[1]["mediaFileId"]),
+            (&Value::Bool(true), &Value::from(1)),
+            "the deluxe track plays the first album's file"
+        );
     }
 }

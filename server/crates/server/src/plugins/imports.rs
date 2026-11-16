@@ -331,7 +331,6 @@ impl host::Host for Ctx {
         library_id: Option<u32>,
     ) -> Result<t::WantedTrack, HostError> {
         let app = self.app();
-        let plugin_id = self.sh.id.to_string();
         call!(
             self,
             "music.wantRecording",
@@ -340,8 +339,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 tokio::spawn(async move {
-                    super::acquisition::want_recording(&app, &plugin_id, recording, library_id)
-                        .await
+                    super::acquisition::want_recording(&app, recording, library_id).await
                 })
                 .await
                 .map_err(|e| host_err("ERR", e.to_string()))?

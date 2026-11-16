@@ -3152,7 +3152,7 @@
         "tags": [
           "crate::music"
         ],
-        "summary": "`GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get, of the release `recordingId` would be wanted on.",
+        "summary": "`GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.",
         "operationId": "album_tracks",
         "responses": {
           "200": {}

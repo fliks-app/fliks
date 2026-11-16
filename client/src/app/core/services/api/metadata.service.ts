@@ -78,6 +78,8 @@ export interface RecordingHit {
   artists: string[];
   durationMs: number | null;
   album: SearchHit;
+  /** The release the hit is on, when the provider names one; the album above is its group. */
+  release?: { externalId: string; title: string } | null;
   existingMediaId: number | null;
   state: 'owned' | 'wanted' | 'missing' | null;
   trackId: number | null;

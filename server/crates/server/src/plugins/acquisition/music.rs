@@ -1,8 +1,8 @@
 //! The music reads and writes of the import lists (`docs/spec/plugins.md`): a track wanted by its recording, a
 //! playlist mirrored from item ids. The plugin never calls MusicBrainz itself: the host resolves for it.
 use super::*;
-use crate::media::external_ids;
-use crate::metadata::music::want::{self, Recording, Refused};
+use crate::media::write::{Creation, album_import::want_new, resolve_target_in};
+use crate::metadata::music::want::{self, Recording, Scope};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
 use fliks_domain::external_id::{ExternalProvider, Namespace};
@@ -87,13 +87,15 @@ pub async fn find_recording(
     recording: t::RecordingRef,
 ) -> Result<Option<t::WantedTrack>, HostError> {
     let recording = normalized(recording)?;
-    Ok(want::item_of(&st.db, None, want_ref(&recording), true)
-        .await
-        .map_err(db_err)?
-        .map(|(media, item)| t::WantedTrack {
-            media_id: media as u32,
-            item_id: item as u32,
-        }))
+    Ok(
+        want::item_of(&st.db, Scope::default(), want_ref(&recording), true)
+            .await
+            .map_err(db_err)?
+            .map(|(media, item)| t::WantedTrack {
+                media_id: media as u32,
+                item_id: item as u32,
+            }),
+    )
 }
 
 /// Refuses a group the metadata profile of the library it would be created in rejects.
@@ -138,16 +140,12 @@ async fn check_profile(st: &AppState, group: &str, library: Option<u32>) -> Resu
     ))
 }
 
-fn refused(e: Refused) -> HostError {
-    match e {
-        Refused::NotOnAlbum(_) => host_err(
-            "ERR_NOT_FOUND",
-            "no release of the album holds that recording",
-        ),
-        Refused::Unavailable => {
-            host_err("unavailable", "the album's releases are not available yet")
-        }
-        Refused::Db(e) => db_err(e),
+/// The host error of a failed album creation or want.
+fn failed(e: crate::http::AppError) -> HostError {
+    match e.status().as_u16() {
+        404 => host_err("ERR_NOT_FOUND", e.text()),
+        503 => host_err("unavailable", e.text()),
+        _ => host_err("ERR", e.text()),
     }
 }
 
@@ -155,12 +153,20 @@ fn refused(e: Refused) -> HostError {
 /// only that track monitored, one the library already had keeps its other tracks as they are.
 pub async fn want_recording(
     st: &AppState,
-    plugin_id: &str,
     recording: t::RecordingRef,
     library_id: Option<u32>,
 ) -> Result<t::WantedTrack, HostError> {
     let recording = normalized(recording)?;
-    let known = want::item_of(&st.db, None, want_ref(&recording), false)
+    let library = library_id
+        .map(i32::try_from)
+        .transpose()
+        .map_err(|_| host_err("ERR_VALIDATION", "libraryId is out of range"))?;
+    let looked = library.map(|l| [l]);
+    let scope = Scope {
+        media: None,
+        libraries: looked.as_ref().map(|l| &l[..]),
+    };
+    let known = want::item_of(&st.db, scope, want_ref(&recording), false)
         .await
         .map_err(db_err)?;
     let (media, item) = match known {
@@ -187,24 +193,27 @@ pub async fn want_recording(
                     .iter()
                     .find(|i| i.provider == "musicbrainz")
                     .ok_or_else(|| host_err("ERR_NOT_FOUND", "no album names that ISRC"))?;
-                let existed = external_ids::find(
-                    &st.db,
-                    MediaKind::Album,
-                    Namespace::MUSICBRAINZ,
-                    &group.value,
-                )
-                .await
-                .map_err(db_err)?
-                .is_some();
-                if !existed {
-                    check_profile(st, &group.value, library_id).await?;
-                }
-                let media =
-                    resolve_or_create(st, plugin_id, "album", &ids, library_id, None).await? as i32;
-                let item = want::want(st, media, want_ref(&recording), existed)
+                check_profile(st, &group.value, library_id).await?;
+                let all = crate::media::write::all_library_ids(&st.db)
                     .await
-                    .map_err(refused)?;
-                (media, item)
+                    .map_err(db_err)?;
+                let target = resolve_target_in(st, &all, MediaKind::Album, library, None)
+                    .await
+                    .map_err(|e| host_err("ERR_VALIDATION", e.text()))?;
+                let c = Creation {
+                    kind: MediaKind::Album,
+                    id: (Namespace::MUSICBRAINZ, &group.value),
+                    target: &target,
+                    profiles: (None, None),
+                    user: None,
+                    links: vec![],
+                    seasons: None,
+                    wants: None,
+                    prio: Priority::Background,
+                };
+                want_new(st, &c, want_ref(&recording))
+                    .await
+                    .map_err(failed)?
             }
         },
     };
@@ -356,7 +365,7 @@ mod tests {
                  SELECT 1, e.id, false, 'T' || n FROM editions e, generate_series(1, 3) n;
                INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid")
                  SELECT i.id, 1, 1, ('00000000-0000-0000-0000-00000000000' || (i.id % 10))::uuid FROM items i;
-               INSERT INTO album_details ("mediaId", "targetEditionId") SELECT 1, id FROM editions"#,
+               INSERT INTO album_details ("mediaId") VALUES (1)"#,
         )
         .execute(db)
         .await
@@ -372,7 +381,7 @@ mod tests {
         let ids = items(&db).await;
         let st = state(&db);
         let rec = format!("00000000-0000-0000-0000-00000000000{}", ids[1] % 10);
-        let w = want_recording(&st, "p", t::RecordingRef::Mbid(rec.clone()), None)
+        let w = want_recording(&st, t::RecordingRef::Mbid(rec.clone()), None)
             .await
             .unwrap();
         assert_eq!((w.media_id, w.item_id), (1, ids[1] as u32));
@@ -389,13 +398,12 @@ mod tests {
         );
         let unknown = want_recording(
             &st,
-            "p",
             t::RecordingRef::Mbid("99999999-9999-9999-9999-999999999999".into()),
             None,
         )
         .await;
         assert_eq!(unknown.unwrap_err().code, "ERR_NOT_FOUND");
-        let bad = want_recording(&st, "p", t::RecordingRef::Isrc("nope".into()), None).await;
+        let bad = want_recording(&st, t::RecordingRef::Isrc("nope".into()), None).await;
         assert_eq!(bad.unwrap_err().code, "ERR_VALIDATION");
     }
 

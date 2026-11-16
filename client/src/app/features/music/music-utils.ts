@@ -94,6 +94,11 @@ export function trackRowRequest(t: TrackRow): MusicTrackRequest {
   };
 }
 
+/** The year and the release's own label ("2005 · Deluxe") under an album card. */
+export function albumSubtitle(year: number | null | undefined, disambiguation: string | null | undefined): string | undefined {
+  return [year, disambiguation].filter(Boolean).join(' · ') || undefined;
+}
+
 export type DiscographyTab = 'albums' | 'singles' | 'compilations' | 'other';
 export const DISCOGRAPHY_TABS: readonly DiscographyTab[] = ['albums', 'singles', 'compilations', 'other'];
 
@@ -112,7 +117,7 @@ export function discographyTabs(albums: ArtistAlbum[], popular: { albumExternalI
   for (const a of albums) out[discographyTab(a)].push(a);
   const rank = new Map<string, number>();
   popular.forEach((p, i) => p.albumExternalId && !rank.has(p.albumExternalId) && rank.set(p.albumExternalId, i));
-  const rankOf = (a: ArtistAlbum) => (a.externalId != null ? (rank.get(a.externalId) ?? Infinity) : Infinity);
+  const rankOf = (a: ArtistAlbum) => Math.min(rank.get(a.externalId ?? '') ?? Infinity, rank.get(a.releaseGroupId ?? '') ?? Infinity);
   // Infinity - Infinity is NaN, which falls through to the year like a tie.
   const order = (a: ArtistAlbum, b: ArtistAlbum) =>
     rankOf(a) - rankOf(b) || (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);

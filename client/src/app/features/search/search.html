@@ -363,6 +363,7 @@
                     <div trigger tabindex="0" role="button" data-card-link class="btn btn-ghost btn-sm btn-square join-item" [attr.aria-label]="'discover.more_choices' | translate" data-testid="track-more">
                       <svg lucideChevronDown class="h-4 w-4"></svg>
                     </div>
+                    <a class="dropdown-item" [routerLink]="releaseLink(r)" data-testid="open-release">{{ 'music.open_release' | translate }}</a>
                     <button type="button" class="dropdown-item" (click)="pickTracks(r)" data-testid="pick-tracks">{{ 'discover.pick_tracks' | translate }}</button>
                     <button type="button" class="dropdown-item" (click)="addAlbumOf(r)" data-testid="whole-album">{{ (canAdd() ? 'discover.add_album' : 'discover.request_album') | translate }}</button>
                   </app-dropdown-menu>

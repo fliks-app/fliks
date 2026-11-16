@@ -153,9 +153,8 @@ pub(super) async fn extras(db: &PgPool, media: &[i32]) -> sqlx::Result<Extras> {
         }
     }
     let rows: Vec<(i32, i64)> = sqlx::query_as(
-        r#"SELECT ad."mediaId", (COALESCE(SUM(td."durationMs"), 0) / 60000)::bigint FROM album_details ad
-             JOIN items i ON i."editionId" = ad."targetEditionId" JOIN track_details td ON td."itemId" = i.id
-            WHERE ad."mediaId" = ANY($1) GROUP BY ad."mediaId""#,
+        r#"SELECT td."mediaId", (COALESCE(SUM(td."durationMs"), 0) / 60000)::bigint FROM track_details td
+            WHERE td."mediaId" = ANY($1) GROUP BY td."mediaId""#,
     )
     .bind(media)
     .fetch_all(db)

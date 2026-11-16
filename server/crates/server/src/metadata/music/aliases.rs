@@ -21,6 +21,23 @@ pub async fn album_of(db: impl sqlx::PgExecutor<'_>, id: &str) -> sqlx::Result<O
     .await
 }
 
+/// The albums an id names: the release as its live id or an alias, or every release of the group.
+pub async fn albums_named(db: impl sqlx::PgExecutor<'_>, id: &str) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT "mediaId" FROM (
+             SELECT "mediaId" FROM media_external_ids WHERE kind = 'album' AND provider = $1 AND value = $2
+             UNION ALL
+             SELECT "mediaId" FROM media_external_id_aliases WHERE kind = 'album' AND provider = $1 AND value = $2
+             UNION ALL
+             SELECT "mediaId" FROM album_details WHERE "releaseGroupMbid"::text = $2
+           ) x ORDER BY 1"#,
+    )
+    .bind(MB)
+    .bind(id)
+    .fetch_all(db)
+    .await
+}
+
 /// The person holding `id` as its live id, else as an alias.
 pub async fn person_of(db: impl sqlx::PgExecutor<'_>, id: &str) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar(
@@ -143,7 +160,105 @@ async fn fold(c: &mut PgConnection, from: i32, into: i32, old: Option<&str>) -> 
     if let Some(old) = old {
         add_album_alias(c, into, old).await?;
     }
-    crate::metadata::books::absorb::absorb(c, from, into).await
+    let editions = editions_of(c, from, into).await?;
+    let refs = crate::metadata::books::absorb::absorb(c, from, into).await?;
+    if let Some((old, kept)) = editions {
+        merge_editions(c, old, kept).await?;
+    }
+    Ok(refs)
+}
+
+/// A track as the merge of two albums reads it.
+#[derive(sqlx::FromRow)]
+struct Track {
+    item: i32,
+    recording: Option<String>,
+    isrc: Option<String>,
+    disc: i32,
+    number: Option<i32>,
+    title: Option<String>,
+}
+
+impl Track {
+    /// The same recording, else the same ISRC, else the same disc and number, else the same title.
+    fn is(&self, o: &Track) -> bool {
+        let same = |a: &Option<String>, b: &Option<String>| a.is_some() && a == b;
+        same(&self.recording, &o.recording)
+            || same(&self.isrc, &o.isrc)
+            || (self.number.is_some() && (self.disc, self.number) == (o.disc, o.number))
+            || self.title.as_ref().map(|t| t.trim().to_lowercase())
+                == o.title.as_ref().map(|t| t.trim().to_lowercase())
+    }
+}
+
+const TRACKS: &str = r#"SELECT i.id AS item, td."recordingMbid"::text AS recording, td.isrc, td."discNumber" AS disc,
+       td."trackNumber" AS number, i.title FROM items i JOIN track_details td ON td."itemId" = i.id
+     WHERE i."editionId" = $1 AND "#;
+
+/// The audio editions of `from` and of `into`, when both albums have one.
+async fn editions_of(
+    c: &mut PgConnection,
+    from: i32,
+    into: i32,
+) -> sqlx::Result<Option<(i32, i32)>> {
+    let edition = |media| {
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = 'audio' ORDER BY id LIMIT 1"#,
+        )
+        .bind(media)
+    };
+    Ok(edition(from)
+        .fetch_optional(&mut *c)
+        .await?
+        .zip(edition(into).fetch_optional(&mut *c).await?))
+}
+
+/// An album holds one edition: the files of the tracks of `old` move onto the tracks of `kept` that hold none
+/// and are the same recording; the filed tracks left join `kept`, and `old` goes with its other tracks.
+async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Result<()> {
+    let filed: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{TRACKS} EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
+    )))
+    .bind(old)
+    .fetch_all(&mut *c)
+    .await?;
+    let mut free: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{TRACKS} NOT EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
+    )))
+    .bind(kept)
+    .fetch_all(&mut *c)
+    .await?;
+    for t in &filed {
+        let Some(at) = free.iter().position(|f| t.is(f)) else {
+            continue;
+        };
+        let heir = free.remove(at);
+        sqlx::query(r#"UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#)
+            .bind(t.item)
+            .bind(heir.item)
+            .execute(&mut *c)
+            .await?;
+        sqlx::query("DELETE FROM items WHERE id = $1")
+            .bind(t.item)
+            .execute(&mut *c)
+            .await?;
+    }
+    sqlx::query(
+        r#"DELETE FROM items WHERE "editionId" = $1 AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = items.id)"#,
+    )
+    .bind(old)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(r#"UPDATE items SET "editionId" = $2 WHERE "editionId" = $1"#)
+        .bind(old)
+        .bind(kept)
+        .execute(&mut *c)
+        .await?;
+    sqlx::query("DELETE FROM editions WHERE id = $1")
+        .bind(old)
+        .execute(&mut *c)
+        .await?;
+    Ok(())
 }
 
 /// `from` (an album that holds no id) is folded into `into`, which holds the id its files were matched to;

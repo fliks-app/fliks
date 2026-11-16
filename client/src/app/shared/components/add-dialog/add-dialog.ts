@@ -242,7 +242,7 @@ export class AddDialogComponent {
     this.tracksMissing.set(false);
     try {
       const seen = new Set<string>();
-      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library, r.recording ? [r.recording.externalId] : undefined)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
+      const tracks = (await this.music.albumTracks(r.provider, r.externalId, library)).filter((t) => t.recordingId != null && !seen.has(t.recordingId) && seen.add(t.recordingId));
       if (seq !== this.tracksSeq) return;
       this.tracks.set(tracks);
       this.selectedTracks.set(this.initialPick(tracks));

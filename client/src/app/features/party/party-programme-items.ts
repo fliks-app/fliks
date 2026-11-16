@@ -1,18 +1,17 @@
 import type { Media } from '../../core/services/api/media.service';
 import type { TrackRow } from '../../core/services/api/music.models';
 import type { PartyItem } from '../../core/services/api/party-api.service';
-import { asAlbumMedia, defaultEditionId } from '../media-detail/album/album-media';
+import { asAlbumMedia } from '../media-detail/album/album-media';
 
 /** A row the host adds before the server describes it back. */
 export type NewRow = Pick<PartyItem, 'mediaId' | 'episodeId' | 'title' | 'posterUrl'> & { itemId?: number; seriesTitle?: string };
 
-/** The playable tracks of the album's default edition, in disc order. */
+/** The playable tracks of the album, in disc order. */
 export function albumRows(media: Media | null): NewRow[] {
   const album = asAlbumMedia(media);
   if (!media || !album) return [];
-  const edition = defaultEditionId(album.album);
   return album.album.tracks
-    .filter((t) => t.hasFile && t.editionId === edition)
+    .filter((t) => t.hasFile)
     .map((t) => ({ mediaId: media.id, episodeId: null, itemId: t.itemId, title: t.title, seriesTitle: media.title, posterUrl: media.posterUrl }));
 }
 

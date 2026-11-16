@@ -14,12 +14,11 @@ const album = {
   title: 'Al',
   posterUrl: '/p.jpg',
   album: {
-    targetEditionId: 1,
-    editions: [{ id: 1, coverUrl: '/c.jpg', albumGain: -3, albumPeak: 0.9, hasFiles: true }],
+    release: { coverUrl: '/c.jpg', albumGain: -3, albumPeak: 0.9 },
     artists: [{ id: 1, name: 'Band', creditedName: null, joinPhrase: null }],
     tracks: [
-      { itemId: 70, editionId: 1, hasFile: true, title: 'One', artists: [], durationSeconds: 100, gain: -1, peak: 0.5 },
-      { itemId: 71, editionId: 1, hasFile: false, title: 'Gone', artists: [], durationSeconds: 10, gain: null, peak: null },
+      { itemId: 70, hasFile: true, title: 'One', artists: [], durationSeconds: 100, gain: -1, peak: 0.5 },
+      { itemId: 71, hasFile: false, title: 'Gone', artists: [], durationSeconds: 10, gain: null, peak: null },
     ],
   },
 };

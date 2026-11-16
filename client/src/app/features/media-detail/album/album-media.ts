@@ -8,8 +8,7 @@ export function asAlbumMedia(m: Media | null): AlbumMedia | null {
   return m?.type === 'album' && Array.isArray((m as Partial<AlbumMedia>).album?.tracks) ? (m as AlbumMedia) : null;
 }
 
-/** The edition the page opens on: the target, else the first with files, else the first. */
-export function defaultEditionId(a: AlbumDetail): number | null {
-  const e = a.editions;
-  return (e.find((x) => x.id === a.targetEditionId) ?? e.find((x) => x.hasFiles) ?? e[0])?.id ?? null;
+/** What tells a release from the others of its group: size, country and year ("15 tracks · CA · 2005"). */
+export function versionMeta(v: { trackCount: number | null; country: string | null; releaseDate: string | null }, tracks: string): string {
+  return [v.trackCount ? tracks : '', v.country, v.releaseDate?.slice(0, 4)].filter(Boolean).join(' · ');
 }

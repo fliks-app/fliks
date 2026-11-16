@@ -5355,7 +5355,6 @@
     "shuffle": "Shuffle",
     "candidates": "Releases the files may be",
     "no_candidates": "No matching release found",
-    "editions": "Editions",
     "tracks": "Tracks",
     "disc": "Disc {{n}}",
     "credits": "Credits",
@@ -5419,7 +5418,15 @@
     "section_albums": "Albums",
     "section_artists": "Artists",
     "recently_played": "Recently played",
-    "tab_live_other": "Live & other"
+    "tab_live_other": "Live & other",
+    "add_track": "Add this track",
+    "download_album": "Add the whole album",
+    "other_versions": "Other versions",
+    "version_held": "In library",
+    "version_missing": "Not in library",
+    "open_release": "Open the release",
+    "confirm_delete_shared_one": "Delete \"{{title}}\" from the library? {{count}} track of another album plays these files and will be wanted again. The associated files will also be deleted from disk. This action is irreversible.",
+    "confirm_delete_shared_other": "Delete \"{{title}}\" from the library? {{count}} tracks of other albums play these files and will be wanted again. The associated files will also be deleted from disk. This action is irreversible."
   },
   "lyrics": {
     "edit": "Edit lyrics",

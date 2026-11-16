@@ -361,14 +361,12 @@ async fn resolve(
                    JOIN track_details td ON td."itemId" = i.id
                    JOIN editions e ON e.id = i."editionId"
                    JOIN media m ON m.id = i."mediaId"
-                   LEFT JOIN album_details ad ON ad."mediaId" = m.id
                    WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-                     AND CASE WHEN EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op."itemId" = o.id
-                                           JOIN editions oe ON oe.id = o."editionId"
-                                           WHERE o."mediaId" = m.id
+                     AND CASE WHEN EXISTS (SELECT 1 FROM items o JOIN editions oe ON oe.id = o."editionId"
+                                           WHERE o."mediaId" = m.id AND track_file(o.id) IS NOT NULL
                                              AND COALESCE(oe."libraryId", m."libraryId") = ANY($2))
-                              THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-                              ELSE i."editionId" = ad."targetEditionId" END
+                              THEN track_file(i.id) IS NOT NULL
+                              ELSE true END
                    ORDER BY td."discNumber", td.position, i.id"#,
                 media,
                 accessible

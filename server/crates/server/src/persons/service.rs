@@ -635,17 +635,17 @@ FROM persons p WHERE p.id = $1"#,
     let owned: Vec<Value> = sqlx::query_scalar(
         r#"SELECT jsonb_build_object('mediaId', m.id, 'externalId', x.value, 'title', m.title, 'year', m.year,
   'primaryType', ad."primaryType", 'secondaryTypes', COALESCE(to_jsonb(ad."secondaryTypes"), '[]'::jsonb),
+  'releaseGroupId', ad."releaseGroupMbid", 'disambiguation', te.disambiguation,
   'posterUrl', m."posterUrl", 'owned', true, 'monitored', m.monitored,
   'trackCount', GREATEST(t.n, COALESCE(te."trackCount", 0)), 'ownedTrackCount', t.owned)
 FROM media m JOIN media_credits c ON c."mediaId" = m.id AND c.role = 'artist' AND c."editionId" IS NULL
 LEFT JOIN album_details ad ON ad."mediaId" = m.id
-LEFT JOIN editions te ON te.id = ad."targetEditionId"
+LEFT JOIN editions te ON te."mediaId" = m.id AND te.family = 'audio'
 LEFT JOIN media_external_ids x ON x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz'
 CROSS JOIN LATERAL (SELECT count(*) AS n,
-    count(*) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)) AS owned
+    count(*) FILTER (WHERE track_file(i.id) IS NOT NULL) AS owned
   FROM items i JOIN editions e ON e.id = i."editionId"
-  WHERE i."mediaId" = m.id AND (i."editionId" = ad."targetEditionId" OR ad."targetEditionId" IS NULL)
-    AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) t
+  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) t
 WHERE c."personId" = $1 AND m.type = 'album' AND m."libraryId" = ANY($2)
 ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
     )
@@ -683,7 +683,8 @@ ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
             .unwrap_or_default();
         let held: HashSet<String> = albums
             .iter()
-            .filter_map(|v| v["externalId"].as_str().map(str::to_owned))
+            .flat_map(|v| [&v["externalId"], &v["releaseGroupId"]])
+            .filter_map(|v| v.as_str().map(str::to_owned))
             .collect();
         let aliases: HashSet<String> = sqlx::query_scalar(
             r#"SELECT a.value FROM media_external_id_aliases a JOIN media m ON m.id = a."mediaId"

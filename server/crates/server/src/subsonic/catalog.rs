@@ -22,8 +22,9 @@ fn set(o: &mut Obj, k: &str, v: impl Into<Value>) {
 fn album_visible(libs: &str) -> String {
     format!(
         r#"m.type = 'album' AND m."libraryId" = ANY({libs}) AND EXISTS (
-  SELECT 1 FROM items vi JOIN editions ve ON ve.id = vi."editionId" JOIN item_parts vp ON vp."itemId" = vi.id
-  WHERE vi."mediaId" = m.id AND COALESCE(ve."libraryId", m."libraryId") = ANY({libs}))"#
+  SELECT 1 FROM items vi JOIN editions ve ON ve.id = vi."editionId"
+  WHERE vi."mediaId" = m.id AND track_file(vi.id) IS NOT NULL
+    AND COALESCE(ve."libraryId", m."libraryId") = ANY({libs}))"#
     )
 }
 
@@ -129,9 +130,8 @@ FROM items i
 JOIN track_details td ON td."itemId" = i.id
 JOIN editions e ON e.id = i."editionId"
 JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-JOIN LATERAL (SELECT mf.id, mf.size, mf."relativePath", mf."streamInfo" FROM item_parts ip
-  JOIN media_files mf ON mf.id = ip."mediaFileId" WHERE ip."itemId" = i.id
-  ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1) f ON true
+JOIN LATERAL (SELECT mf.id, mf.size, mf."relativePath", mf."streamInfo" FROM media_files mf
+  WHERE mf.id = track_file(i.id)) f ON true
 WHERE m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
   AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
   AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
@@ -179,6 +179,7 @@ pub struct AlbumRow {
     pub primary_type: Option<String>,
     pub secondary: Option<Vec<String>>,
     pub publisher: Option<String>,
+    pub version: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -223,6 +224,7 @@ pub async fn albums(
   ad."firstReleaseDate"::text AS first_release, ad."isCompilation" AS compilation, ad."primaryType" AS primary_type,
   ad."secondaryTypes" AS secondary,
   (SELECT e2.publisher FROM editions e2 WHERE e2."mediaId" = m.id AND e2.publisher IS NOT NULL ORDER BY e2.id LIMIT 1) AS publisher,
+  (SELECT e2.disambiguation FROM editions e2 WHERE e2."mediaId" = m.id AND e2.family = 'audio' ORDER BY e2.id LIMIT 1) AS version,
   (SELECT lower(COALESCE(p."sortName", p.name)) FROM media_credits mc JOIN persons p ON p.id = mc."personId"
     WHERE mc."mediaId" = m.id AND mc.role = 'artist' ORDER BY mc.position LIMIT 1) AS artist_sort
 FROM media m
@@ -230,8 +232,7 @@ LEFT JOIN album_details ad ON ad."mediaId" = m.id
 JOIN LATERAL (SELECT count(*)::int AS songs,
     COALESCE(round(sum(COALESCE(td."durationMs" / 1000.0, (f."streamInfo"->>'durationSeconds')::float8, 0))), 0)::int AS duration
   FROM items i JOIN track_details td ON td."itemId" = i.id JOIN editions e ON e.id = i."editionId"
-  JOIN LATERAL (SELECT mf."streamInfo" FROM item_parts ip JOIN media_files mf ON mf.id = ip."mediaFileId"
-    WHERE ip."itemId" = i.id ORDER BY ip.version DESC, ip.position LIMIT 1) f ON true
+  JOIN LATERAL (SELECT mf."streamInfo" FROM media_files mf WHERE mf.id = track_file(i.id)) f ON true
   WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) st ON st.songs > 0
 WHERE {visible}
   AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
@@ -330,7 +331,7 @@ FROM media m
 CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(m.genres) = 'array' THEN m.genres ELSE '[]'::jsonb END) g(name)
 JOIN LATERAL (SELECT count(*) AS songs FROM items i JOIN editions e ON e.id = i."editionId"
   WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($1)
-    AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)) st ON true
+    AND track_file(i.id) IS NOT NULL) st ON true
 WHERE {visible} AND g.name <> ''
 GROUP BY lower(g.name) ORDER BY lower(min(g.name))"#
     );
@@ -750,6 +751,9 @@ pub fn album(r: &AlbumRow, c: &Credits, discs: &HashMap<i32, Vec<Value>>) -> Obj
     if let Some(p) = &r.publisher {
         set(&mut o, "recordLabels", vec![json!({"name": p})]);
     }
+    if let Some(v) = &r.version {
+        set(&mut o, "version", v.clone());
+    }
     if let Some(d) = discs.get(&r.id) {
         set(&mut o, "discTitles", d.clone());
     }
@@ -813,7 +817,7 @@ pub async fn visible_tracks(
         r#"SELECT i.id, i."mediaId" FROM items i JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
            WHERE i.id = ANY($1) AND m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-             AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)"#,
+             AND track_file(i.id) IS NOT NULL"#,
     )
     .bind(items)
     .bind(libs)

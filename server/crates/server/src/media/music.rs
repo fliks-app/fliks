@@ -33,24 +33,23 @@ pub(crate) async fn attach_list_info(
       {ARTISTS} ORDER BY c.position LIMIT 3) a), '[]'::jsonb),
   'primaryType', ad."primaryType", 'secondaryTypes', COALESCE(to_jsonb(ad."secondaryTypes"), '[]'::jsonb),
   'firstReleaseDate', ad."firstReleaseDate"::text, 'isCompilation', COALESCE(ad."isCompilation", false),
-  'trackCount', CASE WHEN t.n > 0 THEN t.n ELSE COALESCE(te."trackCount",
-      (SELECT max(e."trackCount") FROM editions e WHERE e."mediaId" = m.id), 0) END,
+  'releaseGroupId', ad."releaseGroupMbid", 'disambiguation', te.disambiguation,
+  'trackCount', CASE WHEN t.n > 0 THEN t.n ELSE COALESCE(te."trackCount", 0) END,
   'discCount', COALESCE(NULLIF(t.discs, 0), te."discCount", 0),
   'durationSeconds', t.secs,
   'playCount', (SELECT count(*) FROM playback_history h JOIN items i ON i.id = h."itemId"
       WHERE h."userId" = $2 AND i."mediaId" = m.id)) AS j
 FROM media m
 LEFT JOIN album_details ad ON ad."mediaId" = m.id
-LEFT JOIN editions te ON te.id = ad."targetEditionId"
+LEFT JOIN editions te ON te."mediaId" = m.id AND te.family = 'audio'
 CROSS JOIN LATERAL (SELECT EXISTS (SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
-      JOIN item_parts ip ON ip."itemId" = i.id
-      WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)) AS owned) o
+      WHERE i."mediaId" = m.id AND track_file(i.id) IS NOT NULL
+        AND COALESCE(e."libraryId", m."libraryId") = ANY($3)) AS owned) o
 CROSS JOIN LATERAL (SELECT count(*) AS n, count(DISTINCT td."discNumber") AS discs,
       COALESCE(sum(td."durationMs"), 0)::float8 / 1000 AS secs
   FROM items i JOIN track_details td ON td."itemId" = i.id JOIN editions e ON e.id = i."editionId"
   WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)
-    AND CASE WHEN o.owned THEN EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-             ELSE i."editionId" = ad."targetEditionId" END) t
+    AND (NOT o.owned OR track_file(i.id) IS NOT NULL)) t
 WHERE m.id = ANY($1)"#
     );
     let rows: Vec<(i32, Value)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
@@ -69,7 +68,7 @@ WHERE m.id = ANY($1)"#
     Ok(())
 }
 
-/// `AlbumDetail` of an album; `acl` decides the editions and tracks listed.
+/// `AlbumDetail` of an album, but for its `versions` (`metadata::music::versions`); `acl` decides the tracks listed.
 pub(crate) async fn detail(
     db: &PgPool,
     id: i32,
@@ -80,22 +79,26 @@ pub(crate) async fn detail(
         r#"SELECT jsonb_build_object(
   'primaryType', ad."primaryType", 'secondaryTypes', COALESCE(to_jsonb(ad."secondaryTypes"), '[]'::jsonb),
   'firstReleaseDate', ad."firstReleaseDate"::text, 'isCompilation', COALESCE(ad."isCompilation", false),
-  'targetEditionId', ad."targetEditionId", 'orphaned', ad."orphanedAt" IS NOT NULL,
+  'releaseGroupId', ad."releaseGroupMbid", 'orphaned', ad."orphanedAt" IS NOT NULL,
   'artists', COALESCE((SELECT jsonb_agg(a.j ORDER BY a.position) FROM ({ARTISTS}) a), '[]'::jsonb),
-  'editions', COALESCE((SELECT jsonb_agg(jsonb_build_object(
-      'id', e.id, 'title', e.title, 'country', e.country, 'status', e.status, 'media', e.media,
+  'release', (SELECT jsonb_build_object(
+      'title', e.title, 'country', e.country, 'status', e.status, 'media', e.media,
       'barcode', e.barcode, 'catalogNumber', e."catalogNumber", 'label', e.publisher,
+      'disambiguation', e.disambiguation,
       'releaseDate', (SELECT min(d.date) FROM media_release_dates d
           WHERE d."mediaId" = m.id AND d."editionId" = e.id)::text,
       'trackCount', COALESCE(e."trackCount", (SELECT count(*) FROM items i WHERE i."editionId" = e.id)),
       'discCount', COALESCE(e."discCount", (SELECT count(DISTINCT td."discNumber") FROM track_details td
           JOIN items i ON i.id = td."itemId" WHERE i."editionId" = e.id), 1),
-      'albumGain', e."albumGain", 'albumPeak', e."albumPeak", 'coverUrl', e."coverUrl",
-      'libraryId', e."libraryId",
-      'hasFiles', EXISTS (SELECT 1 FROM items i JOIN item_parts ip ON ip."itemId" = i.id WHERE i."editionId" = e.id),
-      'orphaned', e."orphanedAt" IS NOT NULL) ORDER BY e.id)
+      'albumGain', e."albumGain", 'albumPeak', e."albumPeak", 'coverUrl', e."coverUrl")
     FROM editions e WHERE e."mediaId" = m.id AND e.family = 'audio'
-      AND COALESCE(e."libraryId", m."libraryId") = ANY($2)), '[]'::jsonb)) AS j
+      AND COALESCE(e."libraryId", m."libraryId") = ANY($2) ORDER BY e.id LIMIT 1),
+  'sharedTracks', (SELECT count(*) FROM track_details o
+      WHERE o."mediaId" <> m.id
+        AND (o."recordingMbid" IN (SELECT x."recordingMbid" FROM track_details x WHERE x."mediaId" = m.id)
+             OR o.isrc IN (SELECT x.isrc FROM track_details x WHERE x."mediaId" = m.id))
+        AND NOT EXISTS (SELECT 1 FROM item_parts op WHERE op."itemId" = o."itemId")
+        AND track_file(o."itemId") IN (SELECT p."mediaFileId" FROM item_parts p WHERE p."mediaId" = m.id))) AS j
 FROM media m LEFT JOIN album_details ad ON ad."mediaId" = m.id WHERE m.id = $1"#
     );
     let mut detail: Value = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
@@ -107,7 +110,7 @@ FROM media m LEFT JOIN album_details ad ON ad."mediaId" = m.id WHERE m.id = $1"#
         r#"SELECT i.id FROM items i JOIN media m ON m.id = i."mediaId"
            JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
            WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-           ORDER BY i."editionId", td."discNumber", td.position, i.id"#,
+           ORDER BY td."discNumber", td.position, i.id"#,
     )
     .bind(id)
     .bind(acl)
@@ -138,7 +141,7 @@ pub(crate) async fn track_rows(
     }
     let rows: Vec<(i32, Value)> = sqlx::query_as(
         r#"SELECT i.id, jsonb_build_object(
-  'itemId', i.id, 'editionId', i."editionId", 'mediaFileId', pf.id, 'hasFile', pf.id IS NOT NULL,
+  'itemId', i.id, 'mediaFileId', pf.id, 'hasFile', pf.id IS NOT NULL, 'monitored', i.monitored,
   'orphaned', td."orphanedAt" IS NOT NULL, 'discNumber', td."discNumber", 'discTitle', td."discTitle",
   'position', td.position, 'trackNumber', td."trackNumber", 'recordingId', td."recordingMbid", 'label', td.label, 'title', COALESCE(i.title, ''),
   'durationSeconds', COALESCE(td."durationMs"::float8 / 1000, pf.dur), 'explicit', td.explicit,
@@ -168,8 +171,7 @@ pub(crate) async fn track_rows(
 FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
 JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
 LEFT JOIN LATERAL (SELECT f.id, (f."streamInfo"->>'durationSeconds')::float8 AS dur
-    FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
-    WHERE p."itemId" = i.id ORDER BY p.version DESC, p.position LIMIT 1) pf ON true
+    FROM media_files f WHERE f.id = track_file(i.id)) pf ON true
 WHERE i.id = ANY($3) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
     )
     .bind(uid)

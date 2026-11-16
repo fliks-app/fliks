@@ -22,14 +22,18 @@ export interface AlbumListInfo {
   secondaryTypes: string[];
   firstReleaseDate: string | null;
   isCompilation: boolean;
+  /** The release group this release belongs to. */
+  releaseGroupId: string | null;
+  /** The release's own label ("Deluxe", "Live"); null when the provider sends none. */
+  disambiguation: string | null;
   trackCount: number;
   discCount: number;
   durationSeconds: number;
   playCount: number;
 }
 
-export interface AlbumEdition {
-  id: number;
+/** The release an album is: one pressing with its own tracklist. */
+export interface AlbumRelease {
   title: string | null;
   country: string | null;
   status: string | null;
@@ -37,15 +41,25 @@ export interface AlbumEdition {
   barcode: string | null;
   catalogNumber: string | null;
   label: string | null;
+  disambiguation: string | null;
   releaseDate: string | null;
   trackCount: number;
   discCount: number;
   albumGain: number | null;
   albumPeak: number | null;
   coverUrl: string | null;
-  libraryId: number | null;
-  hasFiles: boolean;
-  orphaned: boolean;
+}
+
+/** Another release of the album's release group: held (`mediaId`) or only listed by the provider. */
+export interface AlbumVersion {
+  releaseId: string;
+  title: string;
+  disambiguation: string | null;
+  country: string | null;
+  releaseDate: string | null;
+  trackCount: number | null;
+  discCount: number | null;
+  mediaId: number | null;
 }
 
 export interface TrackArtist {
@@ -75,10 +89,11 @@ export interface TrackWork {
 
 export interface Track {
   itemId: number;
-  editionId: number;
   /** The playable part's file; null when the track has none. */
   mediaFileId: number | null;
   hasFile: boolean;
+  /** Wanted: an unwanted track of the release stays listed, greyed. */
+  monitored: boolean;
   orphaned: boolean;
   discNumber: number;
   discTitle: string | null;
@@ -106,11 +121,15 @@ export interface AlbumDetail {
   secondaryTypes: string[];
   firstReleaseDate: string | null;
   isCompilation: boolean;
-  targetEditionId: number | null;
+  releaseGroupId: string | null;
   orphaned: boolean;
   artists: AlbumArtist[];
-  editions: AlbumEdition[];
-  /** Every edition's tracks, by edition, disc number, position. */
+  release: AlbumRelease | null;
+  /** Tracks of other albums that play this album's files: what a delete reopens. */
+  sharedTracks: number;
+  /** The other releases of the group, this one included. */
+  versions: AlbumVersion[];
+  /** The whole tracklist by disc number, position. */
   tracks: Track[];
 }
 
@@ -141,6 +160,9 @@ export interface ArtistAlbum {
   year: number | null;
   primaryType: string | null;
   secondaryTypes: string[];
+  /** Owned albums only: the release's group and its own label. */
+  releaseGroupId?: string | null;
+  disambiguation?: string | null;
   posterUrl: string | null;
   owned: boolean;
   monitored: boolean;
@@ -213,7 +235,8 @@ export interface AlbumPreview {
   year: number | null;
   posterUrl: string | null;
   artists: { name: string; creditedName: string | null; joinPhrase: string | null; externalId: string | null }[];
-  release: { externalId: string; title: string; country: string | null; releaseDate: string | null } | null;
+  releaseGroupId: string | null;
+  release: { externalId: string; title: string; disambiguation: string | null; country: string | null; releaseDate: string | null } | null;
   tracks: AlbumPreviewTrack[];
   trackCount: number;
   durationMs: number;

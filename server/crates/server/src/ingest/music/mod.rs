@@ -24,7 +24,6 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::{
-    external_id::Namespace,
     media::{MUSIC_EXTS, family::Family},
     music::{
         provider::{self, STATUSES},
@@ -350,7 +349,7 @@ pub async fn unrequested(
     .fetch_one(&mut *c)
     .await
     .map_err(|e| e.to_string())?;
-    let Some(edition) = target_edition(&mut c, media)
+    let Some(edition) = held_edition(&mut c, media)
         .await
         .map_err(|e| e.to_string())?
         .filter(|_| wanted)
@@ -358,15 +357,10 @@ pub async fn unrequested(
         return Ok(vec![]);
     };
     let (mut free, mut next) = Default::default();
-    let editions = wanted_editions(&mut c, media, edition)
+    load_free(&mut c, edition, &mut free, &mut next)
         .await
         .map_err(|e| e.to_string())?;
-    for e in &editions {
-        load_free(&mut c, *e, &mut free, &mut next)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    let free: Vec<&Free> = editions.iter().flat_map(|e| &free[e]).collect();
+    let free: Vec<&Free> = free[&edition].iter().collect();
     let seps = separators_of(st).await;
     let mut out = vec![];
     for path in files {
@@ -432,27 +426,14 @@ impl Free {
     }
 }
 
-/// The audio editions a release-less file may join: the target, then the others holding a wanted track.
-async fn wanted_editions(c: &mut PgConnection, media: i32, target: i32) -> sqlx::Result<Vec<i32>> {
+/// The album's audio edition, when it has one.
+async fn held_edition(c: &mut PgConnection, media: i32) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar(
-        r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = 'audio'
-             AND (e.id = $2 OR EXISTS (SELECT 1 FROM items i WHERE i."editionId" = e.id AND i.monitored))
-           ORDER BY (e.id = $2) DESC, e.id"#,
+        r#"SELECT id FROM editions WHERE "mediaId" = $1 AND family = 'audio' ORDER BY id LIMIT 1"#,
     )
     .bind(media)
-    .bind(target)
-    .fetch_all(&mut *c)
+    .fetch_optional(&mut *c)
     .await
-}
-
-async fn target_edition(c: &mut PgConnection, media: i32) -> sqlx::Result<Option<i32>> {
-    Ok(
-        sqlx::query_scalar(r#"SELECT "targetEditionId" FROM album_details WHERE "mediaId" = $1"#)
-            .bind(media)
-            .fetch_optional(&mut *c)
-            .await?
-            .flatten(),
-    )
 }
 
 /// Loads the free tracks and the last position of `edition` once.
@@ -524,41 +505,12 @@ fn barcode(t: &TrackTags) -> Option<String> {
         .filter(|b| (8..=14).contains(&b.len()) && b.bytes().all(|c| c.is_ascii_digit()))
 }
 
-/// The audio edition a file with these tags belongs to: its release id's, else the one no release names.
-async fn edition_for(
-    c: &mut PgConnection,
-    st: &AppState,
-    media: i32,
-    t: &TrackTags,
-) -> sqlx::Result<i32> {
-    let held: Option<i32> = match &t.release {
-        Some(r) => {
-            sqlx::query_scalar(
-                r#"SELECT e.id FROM editions e JOIN edition_external_ids x ON x."editionId" = e.id
-                   WHERE e."mediaId" = $1 AND e.family = 'audio' AND x.provider = 'musicbrainz' AND x.value = $2
-                   ORDER BY e.id LIMIT 1"#,
-            )
-            .bind(media)
-            .bind(r)
-            .fetch_optional(&mut *c)
-            .await?
-        }
-        None => {
-            sqlx::query_scalar(
-                r#"SELECT e.id FROM editions e WHERE e."mediaId" = $1 AND e.family = 'audio'
-                     AND NOT EXISTS (SELECT 1 FROM edition_external_ids x WHERE x."editionId" = e.id
-                                      AND x.provider = 'musicbrainz')
-                   ORDER BY e.id LIMIT 1"#,
-            )
-            .bind(media)
-            .fetch_optional(&mut *c)
-            .await?
-        }
-    };
-    if let Some(id) = held {
+/// The album's edition, made with the facts these tags give when the album has none.
+async fn edition_for(c: &mut PgConnection, media: i32, t: &TrackTags) -> sqlx::Result<i32> {
+    if let Some(id) = held_edition(c, media).await? {
         return Ok(id);
     }
-    let id: i32 = sqlx::query_scalar(
+    sqlx::query_scalar(
         r#"INSERT INTO editions ("mediaId", family, publisher, status, media, barcode, "catalogNumber")
            VALUES ($1, 'audio', $2, $3, $4, $5, $6) RETURNING id"#,
     )
@@ -569,19 +521,7 @@ async fn edition_for(
     .bind(barcode(t))
     .bind(&t.catalog)
     .fetch_one(&mut *c)
-    .await?;
-    if let Some(r) = &t.release {
-        crate::media::external_ids::link_edition(
-            c,
-            &st.namespaces(),
-            id,
-            media,
-            Namespace::MUSICBRAINZ,
-            r,
-        )
-        .await?;
-    }
-    Ok(id)
+    .await
 }
 
 fn credited(n: &Named) -> Credited {
@@ -718,7 +658,7 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
     });
     let mut free: HashMap<i32, Vec<Free>> = HashMap::new();
     let mut next: HashMap<i32, i32> = HashMap::new();
-    let mut editions = vec![];
+    let mut editions = None;
     for (r, t) in &todo {
         if r.has_part {
             if fresh.contains(&r.id) {
@@ -754,34 +694,10 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             }
             continue;
         }
-        let target = target_edition(&mut tx, media)
+        let edition = edition_for(&mut tx, media, t)
             .await
             .map_err(|e| e.to_string())?;
-        let mut joined = None;
-        if let Some(target) = target.filter(|_| t.release.is_none()) {
-            // A release-less file joins a wanted edition only where it pairs with one of its free tracks.
-            for e in wanted_editions(&mut tx, media, target)
-                .await
-                .map_err(|e| e.to_string())?
-            {
-                load_free(&mut tx, e, &mut free, &mut next)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                if free[&e].iter().any(|f| f.pairs(t)) {
-                    joined = Some(e);
-                    break;
-                }
-            }
-        }
-        let edition = match joined {
-            Some(e) => e,
-            None => edition_for(&mut tx, st, media, t)
-                .await
-                .map_err(|e| e.to_string())?,
-        };
-        if !editions.contains(&edition) {
-            editions.push(edition);
-        }
+        editions = Some(edition);
         load_free(&mut tx, edition, &mut free, &mut next)
             .await
             .map_err(|e| e.to_string())?;
@@ -791,12 +707,11 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             Some(i) => heirs.remove(i).item,
             None => {
                 let item: i32 = sqlx::query_scalar(
-                    r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, $3, $4)
+                    r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, true, $3)
                        RETURNING id"#,
                 )
                 .bind(media)
                 .bind(edition)
-                .bind(target.is_none_or(|e| e == edition))
                 .bind(&t.title)
                 .fetch_one(&mut *tx)
                 .await
@@ -836,7 +751,7 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             .map_err(|e| e.to_string())?;
     }
     let all: Vec<TrackTags> = todo.iter().map(|(_, t)| t.clone()).collect();
-    album_facts(&mut tx, media, &all, &editions)
+    album_facts(&mut tx, media, &all, editions)
         .await
         .map_err(|e| e.to_string())?;
     tx.commit().await.map_err(|e| e.to_string())
@@ -848,7 +763,7 @@ async fn album_facts(
     c: &mut PgConnection,
     media: i32,
     tags: &[TrackTags],
-    editions: &[i32],
+    edition: Option<i32>,
 ) -> sqlx::Result<()> {
     let identified: bool = sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE "mediaId" = $1 AND kind = 'album' AND provider = 'musicbrainz')"#,
@@ -911,7 +826,7 @@ async fn album_facts(
         }
         people::replace_album_artists(c, media, &artists).await?;
     }
-    for e in editions {
+    if let Some(e) = edition {
         sqlx::query(
             r#"UPDATE editions e SET
                  "trackCount" = COALESCE(e."trackCount", n.tracks), "discCount" = COALESCE(e."discCount", n.discs),

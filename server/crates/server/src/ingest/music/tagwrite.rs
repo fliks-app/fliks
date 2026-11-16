@@ -108,10 +108,9 @@ pub async fn write_album_tags(st: &AppState, media: i32) -> Result<usize, String
         r#"SELECT mf.id AS file, lf.path AS folder, mf."relativePath" AS rel, i.title, td."discNumber" AS disc,
              td."trackNumber" AS number, td."recordingMbid"::text AS recording,
              td."releaseTrackMbid"::text AS release_track, m.title AS album, m.year,
-             (SELECT x.value FROM edition_external_ids x
-               WHERE x."editionId" = i."editionId" AND x.provider = 'musicbrainz') AS release,
              (SELECT x.value FROM media_external_ids x
-               WHERE x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz') AS "group",
+               WHERE x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz') AS release,
+             (SELECT ad."releaseGroupMbid"::text FROM album_details ad WHERE ad."mediaId" = m.id) AS "group",
              (SELECT string_agg(p.name, '; ' ORDER BY c.position) FROM item_credits c
                JOIN persons p ON p.id = c."personId" WHERE c."itemId" = i.id AND c.role = 'artist') AS artists,
              (SELECT string_agg(p.name, '; ' ORDER BY c.position) FROM media_credits c

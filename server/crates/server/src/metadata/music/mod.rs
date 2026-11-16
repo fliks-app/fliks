@@ -3,16 +3,19 @@
 pub mod aliases;
 mod apply;
 pub mod people;
+mod release;
 #[cfg(test)]
 mod route_tests;
 pub mod routes;
-pub mod target;
 #[cfg(test)]
 pub(crate) mod tests;
+mod versions;
 pub mod want;
 pub mod works;
 
-pub use apply::{Create, Written, refresh, write_album, write_edition};
+pub use apply::{Create, Written, edition_of, refresh, write_album};
+pub use release::{Asked, Source, classify, resolve, tracklist};
+pub use versions::versions;
 
 use super::{MetaError, Upstream, fail, unavailable};
 use crate::{http::AppError, state::AppState};
@@ -36,7 +39,7 @@ pub(crate) fn meta_fail(p: Namespace, e: MetaError) -> AppError {
     }
 }
 
-fn malformed(ns: Namespace, why: &str) -> AppError {
+pub(super) fn malformed(ns: Namespace, why: &str) -> AppError {
     unavailable(
         "request",
         ns,

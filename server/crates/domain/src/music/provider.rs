@@ -295,6 +295,8 @@ pub struct Release {
     pub label: Option<String>,
     pub track_count: Option<i32>,
     pub disc_count: Option<i32>,
+    /// What tells this pressing from the others of its group ("Deluxe", "remastered").
+    pub disambiguation: Option<String>,
 }
 
 pub fn release(v: &Value) -> Result<Release, &'static str> {
@@ -315,6 +317,7 @@ pub fn release(v: &Value) -> Result<Release, &'static str> {
         label: text(v, "label", MAX_NAME),
         track_count: int(v, "trackCount", 0, 9999),
         disc_count: int(v, "discCount", 1, 999),
+        disambiguation: text(v, "disambiguation", MAX_NAME),
     })
 }
 
@@ -429,6 +432,8 @@ fn track(v: &Value, index: usize) -> Result<Track, &'static str> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Edition {
     pub release: Release,
+    /// The MusicBrainz id of the release's group.
+    pub release_group_id: Option<String>,
     pub language: Option<String>,
     pub cover_url: Option<String>,
     pub album_gain: Option<f64>,
@@ -459,6 +464,7 @@ pub fn edition(v: &Value) -> Result<Edition, &'static str> {
         }
     }
     Ok(Edition {
+        release_group_id: text(v, "releaseGroupId", 128),
         language: text(v, "language", 8),
         cover_url: https(v, "coverUrl"),
         album_gain: float(v, "albumGain", |n| n.abs() <= 100.0),

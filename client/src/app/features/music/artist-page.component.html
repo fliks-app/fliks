@@ -83,13 +83,13 @@
         <app-media-grid>
           @for (a of albums(); track a.mediaId ?? a.externalId ?? a.title) {
             @if (a.owned) {
-              <app-media-card [square]="true" [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="a.year ? '' + a.year : undefined" [link]="['/albums', '' + a.mediaId]" />
+              <app-media-card [square]="true" [imageUrl]="a.posterUrl" [title]="a.title" [subtitle]="albumLabel(a)" [link]="['/albums', '' + a.mediaId]" />
             } @else {
               <app-media-card
                 [square]="true"
                 [imageUrl]="a.posterUrl"
                 [title]="a.title"
-                [subtitle]="a.year ? '' + a.year : undefined"
+                [subtitle]="albumLabel(a)"
                 badge="missing"
                 [hideStatusBar]="true"
                 [link]="a.externalId ? ['/add/album', 'musicbrainz', a.externalId] : null"

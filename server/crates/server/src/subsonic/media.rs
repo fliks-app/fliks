@@ -23,14 +23,12 @@ use axum::{
 /// A stream credential lives an hour: a player keeps one URL for the length of a track.
 const STREAM_TTL_SECS: u64 = 3600;
 
-/// The file a track plays: its first part of the highest version, when the caller reads the track.
+/// The file a track plays (`music.md` rule 52), when the caller reads the track.
 async fn track_file(st: &AppState, c: &Caller, item: i32) -> Result<Option<i32>, sqlx::Error> {
     sqlx::query_scalar(
-        r#"SELECT f.id FROM items i JOIN editions e ON e.id = i."editionId"
+        r#"SELECT track_file(i.id) FROM items i JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-           JOIN LATERAL (SELECT ip."mediaFileId" AS id FROM item_parts ip WHERE ip."itemId" = i.id
-             ORDER BY ip.version DESC, ip.position, ip."mediaFileId" LIMIT 1) f ON true
-           WHERE i.id = $1 AND m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
+           WHERE track_file(i.id) IS NOT NULL AND i.id = $1 AND m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
     )
     .bind(item)
     .bind(&c.libraries)
