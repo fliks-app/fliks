@@ -670,37 +670,56 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         assert_tracks_unclaimed(st, &key, r).await?;
     }
 
+    let own = match dto.media_type {
+        MediaKind::Album => db::active_adds_of(&mut tx, &keys)
+            .await?
+            .into_iter()
+            .find(|r| r.user_id == Some(a.user.id) && r.status == "pending"),
+        _ => None,
+    };
     let auto = candidates.approves(a, &dto, library_id);
-    let id = db::insert(
-        &mut *tx,
-        db::New {
-            user_id: a.user.id,
-            kind: "add",
-            title_key: &key,
-            title: &dto.title,
-            seasons: dto.seasons.as_deref(),
-            status: if auto { "approved" } else { "pending" },
-            approved_by: auto.then_some(a.user.id),
-            quality_profile_id: quality,
-            language_profile_id: language,
-            library_id: Some(library_id),
-            folder_id: dto.folder_id,
-            media_id: None,
-            poster_url: None,
-            fanart_url: None,
-            wants: dto.wants.as_deref(),
-            recordings: dto.recordings.as_deref(),
-        },
-    )
-    .await
-    .map_err(|e| lock_err(e, false))?;
+    let merged = own.is_some();
+    let id = match own {
+        // The caller's pending album request grows instead of a second row.
+        Some(own) => {
+            match (&dto.recordings, &own.recordings) {
+                (Some(r), Some(_)) => db::add_recordings(&mut *tx, own.id, r).await?,
+                (None, Some(_)) => db::widen(&mut *tx, own.id).await?,
+                _ => {}
+            }
+            own.id
+        }
+        None => db::insert(
+            &mut *tx,
+            db::New {
+                user_id: a.user.id,
+                kind: "add",
+                title_key: &key,
+                title: &dto.title,
+                seasons: dto.seasons.as_deref(),
+                status: if auto { "approved" } else { "pending" },
+                approved_by: auto.then_some(a.user.id),
+                quality_profile_id: quality,
+                language_profile_id: language,
+                library_id: Some(library_id),
+                folder_id: dto.folder_id,
+                media_id: None,
+                poster_url: None,
+                fanart_url: None,
+                wants: dto.wants.as_deref(),
+                recordings: dto.recordings.as_deref(),
+            },
+        )
+        .await
+        .map_err(|e| lock_err(e, false))?,
+    };
     tx.commit().await?;
     drop(turn);
-    if dto.recordings.is_some() {
+    if dto.recordings.is_some() && !merged {
         remember_track_count(st, id, &key, library_id).await;
     }
 
-    let spec = auto.then(|| ImportSpec {
+    let spec = (auto && !merged).then(|| ImportSpec {
         title: key.clone(),
         quality_profile_id: dto.quality_profile_id,
         language_profile_id: dto.language_profile_id,
@@ -717,7 +736,11 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         title: dto.title.clone(),
         seasons: dto.seasons.clone(),
     };
-    let media_id = settled(tokio::spawn(finish_create(st.clone(), added, spec))).await?;
+    let media_id = if merged {
+        None
+    } else {
+        settled(tokio::spawn(finish_create(st.clone(), added, spec))).await?
+    };
 
     let art = art_wait(st, id, key).await;
     let mut row = row_json(st, id).await?;

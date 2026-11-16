@@ -216,6 +216,30 @@ async fn a_whole_album_blocks_its_tracks_and_a_track_does_not_block_the_album(po
     assert_eq!(state["wholeAlbumRequested"], json!(true));
 }
 
+#[sqlx::test(migrations = false)]
+async fn a_pending_album_request_of_the_caller_grows_instead_of_a_second_row(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, first) = c.ask(&c.user, Some(json!([ONE]))).await;
+    assert_eq!(s, 201, "{first}");
+    let (s, r) = c.ask(&c.user, Some(json!([TWO]))).await;
+    assert_eq!(
+        (s, &r["id"], &r["recordings"]),
+        (201, &first["id"], &json!([ONE, TWO])),
+        "{r}"
+    );
+    let (s, r) = c.ask(&c.user, None).await;
+    assert_eq!(
+        (s, &r["id"], &r["recordings"]),
+        (201, &first["id"], &Value::Null),
+        "{r}"
+    );
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM requests")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 1);
+}
+
 async fn approve(c: &Ctx, id: i64) -> (u16, Value) {
     let uri = format!("/api/requests/{id}/approve");
     c.call(&c.admin, "POST", &uri, json!({})).await

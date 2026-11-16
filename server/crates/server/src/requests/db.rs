@@ -479,6 +479,20 @@ pub async fn set_track_count(db: &PgPool, id: i32, count: i32) -> sqlx::Result<(
     Ok(())
 }
 
+/// Adds recordings to a pending album request scoped to some tracks.
+pub async fn add_recordings(
+    db: impl PgExecutor<'_>,
+    id: i32,
+    recordings: &[String],
+) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE requests SET recordings = recordings || $2 WHERE id = $1"#)
+        .bind(id)
+        .bind(recordings)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
 /// Widens a pending album request to the whole album (an approval with `wholeAlbum`).
 pub async fn widen(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<()> {
     sqlx::query!(
