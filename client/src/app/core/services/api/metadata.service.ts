@@ -70,7 +70,7 @@ export interface ArtistHit {
   personId: number | null;
 }
 
-/** A recording the music provider found, with the album it is listed under; `trackId` is a track of the library that plays. */
+/** A recording the music provider found, with the album it is listed under; `existingMediaId` is the album of the track the library holds, `trackId` that track once it plays. */
 export interface RecordingHit {
   provider: string;
   externalId: string;
@@ -78,6 +78,8 @@ export interface RecordingHit {
   artists: string[];
   durationMs: number | null;
   album: SearchHit;
+  existingMediaId: number | null;
+  state: 'owned' | 'wanted' | 'missing' | null;
   trackId: number | null;
 }
 

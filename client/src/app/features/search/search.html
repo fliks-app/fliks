@@ -483,7 +483,7 @@
 </ng-template>
 
 <ng-template #libTracks>
-  @if (state.localTracks().length) {
+  @if (state.localTracks().length || recordingsHeld().length) {
     <div>
       <h3 class="text-lg font-semibold mb-3">{{ 'music.tab_tracks' | translate }}</h3>
       <ul class="flex flex-col gap-1 max-w-3xl">
@@ -499,6 +499,17 @@
               </app-track-line>
             </button>
             <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="['/albums', r.mediaId]">{{ 'music.open_album' | translate }}</a>
+          </li>
+        }
+        @for (r of recordingsHeld(); track r.externalId) {
+          <li class="flex items-center gap-1" data-testid="held-track">
+            <div class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2">
+              <app-track-line [title]="r.title" [subtitle]="r.artists.join(', ')" [durationSeconds]="r.durationMs ? r.durationMs / 1000 : null">
+                <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: r.album.posterUrl }" />
+                <span class="badge badge-sm" [class.badge-info]="r.state === 'wanted'" [class.badge-warning]="r.state !== 'wanted'">{{ (r.state === 'wanted' ? 'media_card.chip_wanted' : 'media_card.chip_missing') | translate }}</span>
+              </app-track-line>
+            </div>
+            <a class="btn btn-ghost btn-sm shrink-0" [routerLink]="albumLink(r)">{{ 'music.open_album' | translate }}</a>
           </li>
         }
       </ul>

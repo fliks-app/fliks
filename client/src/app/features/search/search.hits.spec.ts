@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SearchComponent } from './search';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
-import type { ArtistHit, SearchHit } from '../../core/services/api/metadata.service';
+import type { ArtistHit, RecordingHit, SearchHit } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { SearchStateService } from '../../core/services/search-state.service';
@@ -70,6 +70,17 @@ describe('SearchComponent hits', () => {
     expect(c.externalLink(hit({ provider: 'tvdb', externalId: '9' }))).toEqual(['/add/movie', 'tvdb', '9']);
     expect(c.externalLink(hit({ mediaType: 'album', provider: 'musicbrainz', externalId: 'g' }))).toEqual(['/add/album', 'musicbrainz', 'g']);
     expect(c.externalLink(hit({ existingMediaId: 4, mediaType: 'book' }))).toEqual(['/books', '4']);
+  });
+
+  it('flips a track to wanted once it is added', () => {
+    const { c, state } = setup();
+    const rec = { externalId: 'r', title: 'T', album: hit({ mediaType: 'album' }), existingMediaId: null, state: null, trackId: null } as unknown as RecordingHit;
+    state.recordingHits.set([rec]);
+    const p = c as unknown as { addTrack(r: RecordingHit): void; onAdded(r: object): void };
+    p.addTrack(rec);
+    p.onAdded({ mode: 'import', mediaId: 31, recordings: ['r'] });
+    expect(state.recordingHits()[0]).toMatchObject({ existingMediaId: 31, state: 'wanted' });
+    expect(state.recordingsToAdd()).toEqual([]);
   });
 
   it('opens a provider artist through the person it resolves, once, then straight for a known one', async () => {

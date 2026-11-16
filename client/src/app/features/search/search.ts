@@ -415,7 +415,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly trendAlbums = computed(() => (this.trendingWant().includes('album') ? this.state.musicTrending()?.albums ?? [] : []));
   private readonly trendArtists = computed(() => (this.trendingWant().includes('artist') ? this.state.musicTrending()?.artists ?? [] : []));
   private readonly trendTracks = computed(() =>
-    this.trendingWant().includes('recording') ? (this.state.musicTrending()?.recordings ?? []).filter((r) => r.trackId == null) : [],
+    this.trendingWant().includes('recording') ? (this.state.musicTrending()?.recordings ?? []).filter((r) => r.existingMediaId == null) : [],
   );
   /** The music rows: the provider hits of a query, else the trends. */
   protected readonly musicTracks = computed(() => (this.state.hasQuery() ? this.recordingsToAdd() : this.trendTracks()));
@@ -677,16 +677,21 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly albumsToAdd = this.state.albumsToAdd;
   protected readonly artistsToAdd = this.state.artistsToAdd;
   protected readonly recordingsToAdd = this.state.recordingsToAdd;
+  protected readonly recordingsHeld = this.state.recordingsHeld;
   /** The filter panel (genre, year, rating, sort) narrows videos; books and music have none. */
   protected readonly showFilters = this.isVideo;
   protected readonly libraryCount = computed(
     () =>
       this.state.localResults().length + this.videoHeld().length + this.booksHeld().length + this.albumsHeld().length +
-      this.state.localArtists().length + this.state.localTracks().length + this.state.localAuthors().length + this.state.localSeries().length,
+      this.state.localArtists().length + this.state.localTracks().length + this.recordingsHeld().length + this.state.localAuthors().length + this.state.localSeries().length,
   );
   protected readonly providerCount = computed(
     () => this.videoToAdd().length + this.booksToAdd().length + this.albumsToAdd().length + this.artistsToAdd().length + this.recordingsToAdd().length,
   );
+
+  protected albumLink(r: RecordingHit): string[] {
+    return mediaDetailLink('album', r.existingMediaId!);
+  }
 
   protected albumSubtitle(row: SearchHit): string {
     return [row.artists?.join(', '), row.year].filter(Boolean).join(' \u00b7 ');
@@ -758,6 +763,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pendingAdd = null;
     if (r.recordings) {
       this.requestedTracks.update((s) => new Set([...s, ...r.recordings!]));
+      const asked = new Set(r.recordings);
+      this.state.recordingHits.update((rows) =>
+        rows.map((x) => (asked.has(x.externalId) && x.existingMediaId == null ? { ...x, existingMediaId: r.mediaId, state: 'wanted' } : x)),
+      );
       return;
     }
     const next: SearchHit = {

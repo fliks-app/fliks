@@ -544,6 +544,26 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn an_open_track_of_another_edition_is_an_item_target(db: PgPool) {
+        album(&db).await;
+        sqlx::raw_sql(
+            r#"UPDATE items SET monitored = false WHERE title <> 'T1';
+               INSERT INTO editions ("mediaId", family) VALUES (1, 'audio');
+               INSERT INTO items ("mediaId", "editionId", monitored, title)
+                 SELECT 1, max(id), true, 'Alt' FROM editions;
+               INSERT INTO track_details ("itemId", "mediaId", "discNumber", position, "trackNumber", isrc)
+                 SELECT max(id), 1, 1, 1, 1, 'FRABC2400001' FROM items"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let day = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let out = targets(&db, &[1], day).await.unwrap();
+        assert_eq!(out.len(), 1, "no whole-album target");
+        assert_eq!(out[0].scope[0].isrc.as_deref(), Some("FRABC2400001"));
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_release_is_matched_by_album_and_artist(db: PgPool) {
         use t::SkipReason::*;
         album(&db).await;
