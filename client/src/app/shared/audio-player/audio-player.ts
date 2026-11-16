@@ -18,7 +18,9 @@ import {
   LucideGauge,
   LucideHeart,
   LucideListMusic,
-  LucideMic,
+  LucideLanguages,
+  LucideMessageSquareQuote,
+  LucideMicVocal,
   LucideRepeat,
   LucideRepeat1,
   LucideShuffle,
@@ -49,6 +51,7 @@ import {
   SPEEDS,
   type AudioBookmark,
 } from '../../core/services/audio-player/audio-player.service';
+import type { SingKind } from '../../core/services/karaoke/karaoke-prep';
 import type { AudioOutput } from '../../core/services/audio-player/audio-output';
 import type { RemoteAction } from '../../core/services/remote.service';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
@@ -77,6 +80,15 @@ import { LyricsPanelComponent } from './lyrics/lyrics-panel';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
 
+/** The Sing button's tooltip and label per state. */
+const SING_KEYS: Record<SingKind, string> = {
+  prepare: 'karaoke.sing',
+  queued: 'karaoke.queued',
+  running: 'karaoke.preparing_pct',
+  retry: 'karaoke.failed',
+  enter: 'karaoke.title',
+  exit: 'karaoke.title',
+};
 const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 
 /** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. The full player shows the local player, or the audio session of another device while that one is opened. */
@@ -133,7 +145,9 @@ function writeFlag(key: string, on: boolean): void {
     LucideGauge,
     LucideHeart,
     LucideListMusic,
-    LucideMic,
+    LucideLanguages,
+    LucideMessageSquareQuote,
+    LucideMicVocal,
     LucideRepeat,
     LucideRepeat1,
     LucideShuffle,
@@ -233,6 +247,9 @@ export class AudioPlayerComponent {
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
   /** The Karaoke toggle of the lyrics panel, kept across Lyrics being hidden and shown. */
   protected readonly karaokeStage = signal(false);
+  /** The mounted lyrics panel: the Sing button and the translation entries read its state. */
+  protected readonly lyricsPanel = viewChild(LyricsPanelComponent);
+  protected readonly singKeys = SING_KEYS;
   protected readonly queueOpen = signal(false);
   protected readonly queueEditing = signal(false);
   protected readonly selected = signal<ReadonlySet<MusicTrackRequest>>(new Set());

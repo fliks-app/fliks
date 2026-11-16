@@ -199,6 +199,17 @@
                 </div>
               </div>
               @if (audio.musicMode()) {
+                @if (lyricsPanel(); as p) {
+                  @for (d of p.layers(); track d.id) {
+                    <button type="button" class="dropdown-item" [attr.aria-pressed]="d.id === p.layerId()" (click)="p.toggleLayer(d.id); closeMenu()" data-testid="lyrics-layer">
+                      <svg lucideLanguages class="h-4 w-4"></svg>
+                      <span class="min-w-0 flex-1 truncate text-left">{{ 'lyrics.kind_' + d.kind | translate }} {{ d.lang === 'und' ? '' : d.lang }}</span>
+                      @if (d.id === p.layerId()) {
+                        <svg lucideCheck class="h-4 w-4"></svg>
+                      }
+                    </button>
+                  }
+                }
                 @if (canEditLyrics) {
                   <button type="button" class="dropdown-item" (click)="editLyrics(); closeMenu()" data-testid="lyrics-edit">
                     <svg lucidePencil class="h-4 w-4"></svg>
@@ -447,6 +458,36 @@
           />
         }
         <span class="flex-1"></span>
+        @if (lyricsPanel(); as p) {
+          @if (p.karaokeOn() && !p.stemsNative()) {
+            @if (p.singKind(); as kind) {
+              @let label = singKeys[kind] | translate: { pct: p.prepPct() };
+              <button
+                type="button"
+                class="btn btn-ghost btn-circle tooltip tooltip-top relative"
+                [class.text-primary]="kind === 'exit'"
+                [attr.aria-pressed]="kind === 'enter' || kind === 'exit' ? kind === 'exit' : null"
+                (click)="p.sing()"
+                [attr.aria-label]="label"
+                [attr.data-tip]="kind === 'retry' && p.failedReason() ? label + ' ' + p.failedReason() : label"
+                data-testid="karaoke-sing-button"
+                [attr.data-state]="kind"
+              >
+                <svg lucideMicVocal class="h-5 w-5"></svg>
+                @if (kind === 'queued') {
+                  <span class="loading loading-ring pointer-events-none absolute inset-0 size-full text-primary" aria-hidden="true"></span>
+                } @else if (kind === 'running') {
+                  <svg class="pointer-events-none absolute inset-0 size-full -rotate-90 text-primary" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="18" cy="18" r="16" stroke-opacity=".2" />
+                    <circle cx="18" cy="18" r="16" pathLength="100" [attr.stroke-dasharray]="p.prepPct() + ' 100'" stroke-linecap="round" />
+                  </svg>
+                } @else if (kind === 'retry') {
+                  <span class="pointer-events-none absolute right-2 top-2 size-2 rounded-full bg-error" aria-hidden="true"></span>
+                }
+              </button>
+            }
+          }
+        }
         @if (hasLyrics()) {
           <button
             type="button"
@@ -458,7 +499,7 @@
             [attr.data-tip]="'lyrics.title' | translate"
             data-testid="lyrics-toggle"
           >
-            <svg lucideMic class="h-5 w-5"></svg>
+            <svg lucideMessageSquareQuote class="h-5 w-5"></svg>
           </button>
         }
         @if (asSheet()) {
