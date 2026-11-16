@@ -13,7 +13,7 @@ fn ctx() -> Ctx {
         role_id: Some(3),
         media_type: MediaKind::Series,
         library_id: Some(2),
-        genre_ids: vec![16, 35],
+        genre_ids: Some(vec![16, 35]),
         year: Some(2015),
         season_count: Some(2),
         wants: vec![],
@@ -54,15 +54,32 @@ fn media_type_library_and_genres_all_have_to_hold() {
 #[test]
 fn unanswerable_criteria_fail_the_rule() {
     let mut c = ctx();
-    (c.year, c.season_count, c.genre_ids) = (None, None, vec![]);
+    (c.year, c.season_count, c.genre_ids) = (None, None, None);
     for criteria in [
         json!({"yearFrom": 2000}),
         json!({"yearTo": 2030}),
         json!({"maxSeasons": 3}),
         json!({"genreIds": [16]}),
+        json!({"excludedGenreIds": [16]}),
     ] {
         assert!(!matches(&criteria, &c), "{criteria}");
     }
+}
+
+#[test]
+fn an_excluded_genre_fails_the_rule_even_beside_an_included_one() {
+    assert!(!matches(&json!({"excludedGenreIds": [16]}), &ctx()));
+    assert!(!matches(
+        &json!({"genreIds": [35], "excludedGenreIds": [16]}),
+        &ctx()
+    ));
+    assert!(matches(&json!({"excludedGenreIds": [99]}), &ctx()));
+    let mut c = ctx();
+    c.genre_ids = Some(vec![]);
+    assert!(
+        matches(&json!({"excludedGenreIds": [16]}), &c),
+        "a title without genres has none to exclude"
+    );
 }
 
 #[test]
@@ -140,6 +157,7 @@ fn only_the_criteria_that_need_tmdb_read_metadata() {
         false
     ));
     assert!(reads_metadata(&json!({"genreIds": [16]}), true));
+    assert!(reads_metadata(&json!({"excludedGenreIds": [16]}), true));
     assert!(reads_metadata(&json!({"yearFrom": 2000}), true));
     assert!(reads_metadata(&json!({"maxSeasons": 2}), false));
     assert!(

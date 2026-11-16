@@ -340,6 +340,7 @@ async fn auto_approval_reads_the_book_kind_and_fails_closed_on_tmdb_facts(pool: 
         );
     };
     rule(json!({"mediaType": "book", "genreIds": [1]})).await;
+    rule(json!({"mediaType": "book", "excludedGenreIds": [1]})).await;
     let (_, r) = c
         .request(&c.manager, "OL2W", json!([want("text", None)]))
         .await;

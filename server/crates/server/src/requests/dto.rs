@@ -678,7 +678,7 @@ pub fn rule(v: Value) -> Res<Rule> {
     })
 }
 
-const CRITERIA_KEYS: [&str; 10] = [
+const CRITERIA_KEYS: [&str; 11] = [
     "families",
     "languages",
     "userIds",
@@ -686,6 +686,7 @@ const CRITERIA_KEYS: [&str; 10] = [
     "mediaType",
     "libraryIds",
     "genreIds",
+    "excludedGenreIds",
     "maxSeasons",
     "yearFrom",
     "yearTo",
