@@ -523,6 +523,8 @@ mod tests {
             title: None,
             air_date: None,
             unit_count: None,
+            isrc: None,
+            duration_ms: None,
         };
         let mut tg = t::Target {
             media_id: 7,

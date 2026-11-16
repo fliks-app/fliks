@@ -697,6 +697,48 @@ impl MetadataProvider for PluginProvider {
         self.declares(Some(MediaKind::Album), target.capability())
     }
 
+    fn has_recording_releases(&self) -> bool {
+        self.declares(Some(MediaKind::Album), "recordingReleases")
+    }
+
+    fn recording_releases<'a>(
+        &'a self,
+        source: Namespace,
+        id: &'a str,
+        p: Priority,
+    ) -> Call<'a, Vec<String>> {
+        async move {
+            self.has(Some(MediaKind::Album), "recordingReleases")?;
+            let recording = ExternalId {
+                provider: source.as_str().to_owned(),
+                value: id.to_owned(),
+            };
+            let (ids, seen) = self
+                .call(false, p, move |i| {
+                    Box::pin(async move {
+                        let (g, s) = i.provider();
+                        g.call_recording_releases(s, &recording).await
+                    })
+                })
+                .await?;
+            let own = self.key.as_str();
+            let ids = if ids.len() > MAX_LIST {
+                Err(bad("too many releases"))
+            } else {
+                ids.iter()
+                    .map(|r| {
+                        (r.provider == own)
+                            .then(|| ExternalProvider::MusicBrainz.normalize(&r.value))
+                            .flatten()
+                            .ok_or_else(|| bad("a release id is not a UUID"))
+                    })
+                    .collect()
+            };
+            self.checked(&seen, ids)
+        }
+        .boxed()
+    }
+
     fn has_scene(&self) -> bool {
         self.declares(None, "scene") && self.block.scene.iter().any(|n| n == "tvdb")
     }

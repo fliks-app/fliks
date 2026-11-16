@@ -82,6 +82,8 @@ impl IssueRow {
             title: self.title.clone(),
             air_date: self.air_date.map(|d| d.to_string()),
             unit_count: None,
+            isrc: None,
+            duration_ms: None,
         }
     }
 }

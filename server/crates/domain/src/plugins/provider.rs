@@ -13,7 +13,7 @@ pub const EXPORT: &str = "fliks:plugin/metadata-provider@3.0.0";
 /// The kinds of work a provider may serve (the documented set of the WIT `kind`).
 pub const KINDS: [&str; 5] = ["movie", "series", "book", "comic", "album"];
 /// The capabilities a kind lists, one per `metadata-provider` function family.
-pub const CAPABILITIES: [&str; 14] = [
+pub const CAPABILITIES: [&str; 15] = [
     "search",
     "work",
     "children",
@@ -28,10 +28,17 @@ pub const CAPABILITIES: [&str; 14] = [
     "lyrics",
     "artistSearch",
     "recordingSearch",
+    "recordingReleases",
 ];
 /// The resources `snapshotTtlSecs` may name.
-pub const RESOURCES: [&str; 6] = [
-    "work", "children", "edition", "person", "chapters", "credits",
+pub const RESOURCES: [&str; 7] = [
+    "work",
+    "children",
+    "edition",
+    "person",
+    "chapters",
+    "credits",
+    "recording",
 ];
 
 /// The longest `snapshotTtlSecs` value: ten years.
@@ -228,13 +235,17 @@ pub fn validate_block(b: &Value) -> Result<(), &'static str> {
                     c.iter().any(|c| {
                         matches!(
                             c.as_str(),
-                            Some("lyrics" | "artistSearch" | "recordingSearch")
+                            Some(
+                                "lyrics" | "artistSearch" | "recordingSearch" | "recordingReleases"
+                            )
                         )
                     })
                 })
         })
     {
-        return Err("provider.kinds: lyrics, artistSearch and recordingSearch go under album only");
+        return Err(
+            "provider.kinds: lyrics, artistSearch, recordingSearch and recordingReleases go under album only",
+        );
     }
     let scene = o.get("kinds").and_then(Value::as_object).is_some_and(|k| {
         k.values()
@@ -560,9 +571,10 @@ mod tests {
             json!({"namespaces": [{"name": "musicbrainz"}], "kinds": kinds,
                    "limits": {"ratePerSec": 1, "burst": 1}})
         };
-        let album = json!({"album": ["search", "artistSearch", "recordingSearch"]});
+        let album =
+            json!({"album": ["search", "artistSearch", "recordingSearch", "recordingReleases"]});
         assert_eq!(validate_block(&block(album)), Ok(()));
-        for cap in ["artistSearch", "recordingSearch"] {
+        for cap in ["artistSearch", "recordingSearch", "recordingReleases"] {
             assert!(validate_block(&block(json!({ "movie": [cap] }))).is_err());
         }
     }

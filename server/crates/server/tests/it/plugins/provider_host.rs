@@ -282,6 +282,51 @@ async fn an_undeclared_find_by_answers_none() {
     s.finish().await;
 }
 
+const ALBUM_CAPS: [&str; 2] = ["search", "recordingReleases"];
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_recording_releases_answer_is_checked() {
+    let edit = |m: &mut Value| m["provider"]["kinds"] = json!({"album": ALBUM_CAPS});
+    let Some((s, h, _)) = up("pvrecrel", |_| {}, edit).await else {
+        return;
+    };
+    let p = h.st.metadata.of(Ns::TMDB);
+    assert!(p.has_recording_releases());
+    let got = p.recording_releases(Ns::MUSICBRAINZ, "good", GO).await;
+    let id = "9bd4a9bd-0000-4000-8000-000000000001";
+    assert_eq!(got.unwrap(), [id, id]);
+    for bad in ["not-uuid", "foreign"] {
+        let e = p
+            .recording_releases(Ns::MUSICBRAINZ, bad, GO)
+            .await
+            .unwrap_err();
+        assert_eq!(e.status, Some(502), "{bad}");
+    }
+    let e = p
+        .recording_releases(Ns::MUSICBRAINZ, "gone", GO)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status, Some(404));
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_undeclared_recording_releases_answers_404() {
+    let Some((s, h, _)) = up("pvnorecrel", |_| {}, |_| {}).await else {
+        return;
+    };
+    let p = h.st.metadata.of(Ns::TMDB);
+    assert!(!p.has_recording_releases());
+    let e = p
+        .recording_releases(Ns::MUSICBRAINZ, "good", GO)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status, Some(404));
+    h.finish().await;
+    s.finish().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn background_calls_leave_an_instance_to_an_interactive_one() {
     let Some((s, h, lang)) = up("pvbg", |_| {}, |_| {}).await else {
