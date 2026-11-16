@@ -22,8 +22,9 @@ echo "target dir: $CARGO_TARGET_DIR (delete it when done)" >&2
 archive=$(ls "$tmp"/dist/*.fkplugin)
 
 jar=$tmp/jar
-curl -sS --fail-with-body -c "$jar" -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg u "$user" --arg p "$pass" '{username:$u,password:$p}')" "$url/api/auth/login" >&2
+curl -sS --fail-with-body -c "$jar" -o "$tmp/login" -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg u "$user" --arg p "$pass" '{username:$u,password:$p}')" "$url/api/auth/login" ||
+  { jq -r '.message? // empty' "$tmp/login" >&2; exit 1; }
 inspected=$(curl -sS --fail-with-body -b "$jar" -c "$jar" -F "file=@$archive" "$url/api/plugins/import/inspect")
 curl -sS --fail-with-body -b "$jar" -c "$jar" -H 'Content-Type: application/json' \
   -d "$(jq '{stagingId, sha256}' <<<"$inspected")" "$url/api/plugins/import/confirm" |
