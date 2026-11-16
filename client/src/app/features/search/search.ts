@@ -764,8 +764,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!hit) return;
     this.pendingAdd = null;
     if (r.recordings) {
-      this.requestedTracks.update((s) => new Set([...s, ...r.recordings!]));
       const asked = new Set(r.recordings);
+      if (r.mode === 'request') this.requestedTracks.update((s) => new Set([...s, ...asked]));
       this.state.recordingHits.update((rows) =>
         rows.map((x) => (asked.has(x.externalId) && x.existingMediaId == null ? { ...x, existingMediaId: r.mediaId, state: 'wanted' } : x)),
       );
@@ -779,7 +779,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     };
     const swap = (rows: SearchHit[]) => rows.map((x) => (x === hit.row ? next : x));
     for (const list of [this.state.movieHits, this.state.seriesHits, this.state.bookHits, this.state.albumHits]) list.update(swap);
-    this.state.recordingHits.update((rows) => rows.map((x) => (x.album === hit.row ? { ...x, album: next } : x)));
+    const wanted = r.mode === 'import' && r.mediaId != null;
+    this.state.recordingHits.update((rows) =>
+      rows.map((x) => (x.album === hit.row ? { ...x, album: next, ...(wanted && x.existingMediaId == null ? { existingMediaId: r.mediaId, state: 'wanted' as const } : {}) } : x)),
+    );
   }
 
   /** Tracks asked for since the search, which the hit does not know yet. */

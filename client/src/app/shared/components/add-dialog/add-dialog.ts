@@ -337,7 +337,7 @@ export class AddDialogComponent {
     this.busy.set(true);
     try {
       const mediaId = this.mode() === 'import' ? await this.importIt(r) : await this.requestIt(r);
-      const recordings = this.mode() === 'request' && r.kind === 'album' ? this.recordings(r).recordings : undefined;
+      const recordings = r.kind === 'album' ? this.recordings(r).recordings : undefined;
       rememberLibrary(r.kind, this.libraryId());
       this.toast.success(this.translate.instant(this.mode() === 'import' ? 'discover.import_success' : 'discover.request_success'));
       this.close();
