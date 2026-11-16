@@ -285,6 +285,22 @@ async fn update(tx: &mut sqlx::PgConnection, id: i32, f: &Fields) -> Result<(), 
     Ok(())
 }
 
+/// A removed row that returns: its fields and the tracks of its new grab replace the old ones.
+async fn reopen(
+    tx: &mut sqlx::PgConnection,
+    plugin: &str,
+    id: i32,
+    f: &Fields,
+) -> Result<(), sqlx::Error> {
+    update(tx, id, f).await?;
+    sqlx::query(r#"UPDATE acquisition_queue SET "itemIds" = $2 WHERE id = $1"#)
+        .bind(id)
+        .bind(take_claim(plugin, f.media))
+        .execute(tx)
+        .await?;
+    Ok(())
+}
+
 /// What one snapshot did: the rows it moved and the units its entries cover.
 struct Applied {
     changes: Changes,
@@ -405,7 +421,7 @@ async fn reconcile(
                     }
                 }
                 match removed {
-                    Some(id) => update(&mut tx, id, &e.f).await?,
+                    Some(id) => reopen(&mut tx, plugin, id, &e.f).await?,
                     None => insert(&mut tx, plugin, &e).await?,
                 }
                 changes.touch(e.f.media, true);

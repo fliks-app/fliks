@@ -1406,6 +1406,99 @@ async fn an_album_search_targets_artists_and_recordings(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn music_hits_carry_the_downloading_state_and_the_request_status_of_the_caller(pool: PgPool) {
+    const REC2: &str = "9e8ce4d3-45d6-4c3f-8d70-3f2c9fb05b44";
+    let (c, mb) = music_ctx(pool.clone()).await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (3, 'M', '["album"]');
+           INSERT INTO library_folders ("libraryId", path) VALUES (3, '/tmp/m');
+           INSERT INTO media (id, title, type, "libraryId", "folderName", monitored) VALUES (60, 'Beta', 'album', 3, 'b', true);
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES (60, 'album', 'musicbrainz', '{GROUP}');
+           INSERT INTO editions (id, "mediaId", family) VALUES (60, 60, 'audio');
+           INSERT INTO items (id, "mediaId", "editionId", title, monitored) VALUES (60, 60, 60, 'A', true), (61, 60, 60, 'B', true);
+           INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid") VALUES (60, 60, 1, '{REC}'), (61, 60, 2, '{REC2}');
+           INSERT INTO acquisition_queue ("pluginId", ref, "mediaId", "itemIds", "sourceId", "sourceName", title,
+             quality, method, state) VALUES ('p', 'x', 60, '{{60}}', 's', 'S', 't', 'q', 'auto', 'active')"#
+    )))
+    .execute(&pool)
+    .await
+    .unwrap();
+    mb.ok(
+        "search/album/recording",
+        json!([recording(REC, GROUP), recording(REC2, GROUP)]),
+    );
+    mb.ok(
+        "search/album",
+        json!([{"externalId": GROUP, "title": "Beta", "year": 1999, "mediaType": "album"}]),
+    );
+    let ask = |recordings: Option<&'static str>, status: &'static str, ago: i32| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                r#"INSERT INTO requests ("userId", "mediaType", title, status, provider, "externalId", wants, recordings,
+                     "createdAt") VALUES ((SELECT id FROM users WHERE username = 'admin'), 'album', 'Beta',
+                     $1::requests_status_enum, 'musicbrainz', $2, '[{"family":"audio"}]', $4,
+                     now() - make_interval(mins => $3))"#,
+            )
+            .bind(status)
+            .bind(GROUP)
+            .bind(ago)
+            .bind(recordings.map(|r| vec![r.to_owned()]))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    let hits = |target: &'static str| {
+        let c = &c;
+        let uri = format!("/api/metadata/search/album?q=beta&target={target}");
+        async move {
+            let (s, v) = call(c, &uri, Some(&c.admin)).await;
+            assert_eq!(s, 200, "{v}");
+            v
+        }
+    };
+    let pick = |v: &Value, k: &str| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h[k].clone())
+            .collect::<Vec<_>>()
+    };
+    ask(Some(REC2), "pending", 3).await;
+    let rec = hits("recording").await;
+    assert_eq!(pick(&rec, "state"), [json!("downloading"), json!("wanted")]);
+    assert_eq!(
+        pick(&rec, "requestStatus"),
+        [Value::Null, json!("pending")],
+        "a request naming a recording covers only it"
+    );
+    let album = hits("album").await;
+    assert_eq!(
+        (album[0]["state"].clone(), album[0]["requestStatus"].clone()),
+        (json!("downloading"), Value::Null),
+        "a track request is not a whole-album one"
+    );
+
+    ask(None, "approved", 2).await;
+    let rec = hits("recording").await;
+    assert_eq!(
+        pick(&rec, "requestStatus"),
+        [json!("approved"), json!("approved")]
+    );
+    assert_eq!(hits("album").await[0]["requestStatus"], "approved");
+
+    ask(None, "removed", 1).await;
+    let rec = hits("recording").await;
+    assert_eq!(
+        pick(&rec, "requestStatus"),
+        [Value::Null, Value::Null],
+        "the newest is removed"
+    );
+    assert_eq!(hits("album").await[0]["requestStatus"], Value::Null);
+}
+
+#[sqlx::test(migrations = false)]
 async fn resolving_an_artist_is_idempotent_names_it_from_the_provider_and_never_matches_by_name(
     pool: PgPool,
 ) {

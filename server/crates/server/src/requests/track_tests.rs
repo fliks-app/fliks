@@ -240,6 +240,23 @@ async fn a_pending_album_request_of_the_caller_grows_instead_of_a_second_row(poo
     assert_eq!(rows, 1);
 }
 
+#[sqlx::test(migrations = false)]
+async fn growing_a_pending_request_does_not_count_against_the_quota(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::query(r#"INSERT INTO user_quotas ("userId", kind, "limit") VALUES (2, 'album', 1)"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, first) = c.ask(&c.user, Some(json!([ONE]))).await;
+    assert_eq!(s, 201, "{first}");
+    let (s, r) = c.ask(&c.user, Some(json!([TWO]))).await;
+    assert_eq!((s, &r["id"]), (201, &first["id"]), "{r}");
+    let (s, _) = c
+        .ask_for(&c.user, BONUS_RELEASE, Some(json!([THREE])))
+        .await;
+    assert_eq!(s, 403, "a second title is a new request");
+}
+
 async fn approve(c: &Ctx, id: i64) -> (u16, Value) {
     let uri = format!("/api/requests/{id}/approve");
     c.call(&c.admin, "POST", &uri, json!({})).await

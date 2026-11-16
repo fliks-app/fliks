@@ -629,7 +629,15 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             .await
             .map_err(|e| lock_err(e, false))?;
     }
-    check_quota(&mut tx, a, dto.media_type).await?;
+    // A merge adds no request: no quota, unless the pending one is gone once the title is locked.
+    let skipped_quota = dto.media_type == MediaKind::Album
+        && db::active_adds_of(&mut tx, &keys)
+            .await?
+            .iter()
+            .any(|r| r.user_id == Some(a.user.id) && r.status == "pending");
+    if !skipped_quota {
+        check_quota(&mut tx, a, dto.media_type).await?;
+    }
     db::lock_titles(&mut tx, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
@@ -677,6 +685,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             .find(|r| r.user_id == Some(a.user.id) && r.status == "pending"),
         _ => None,
     };
+    if own.is_none() && skipped_quota {
+        check_quota(&mut tx, a, dto.media_type).await?;
+    }
     let auto = candidates.approves(a, &dto, library_id);
     let merged = own.is_some();
     let id = match own {
