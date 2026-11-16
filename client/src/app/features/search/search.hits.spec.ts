@@ -83,6 +83,18 @@ describe('SearchComponent hits', () => {
     expect(state.recordingsToAdd()).toEqual([]);
   });
 
+  it('flips every track of an album added as a whole', () => {
+    const { c, state } = setup();
+    const album = hit({ mediaType: 'album' });
+    const recs = ['a', 'b'].map((id) => ({ externalId: id, title: id, album, existingMediaId: null, state: null, trackId: null }) as unknown as RecordingHit);
+    state.recordingHits.set(recs);
+    const p = c as unknown as { addAlbumOf(r: RecordingHit): void; onAdded(r: object): void };
+    p.addAlbumOf(recs[0]);
+    p.onAdded({ mode: 'import', mediaId: 32 });
+    expect(state.recordingHits().map((r) => r.existingMediaId)).toEqual([32, 32]);
+    expect(state.recordingsToAdd()).toEqual([]);
+  });
+
   it('opens the release a recording hit names, else its group', () => {
     const { c } = setup();
     const link = (rec: object) => (c as unknown as { releaseLink(r: object): string[] }).releaseLink(rec);
