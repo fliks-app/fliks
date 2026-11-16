@@ -139,6 +139,22 @@ pub fn carries_grant(existing: &Package, new_signed_by: Option<&str>) -> bool {
         && existing.verified_by_key_id.as_deref() == new_signed_by
 }
 
+/// Drops the snapshots under the registry key (first namespace) of each manifest: new code may map records differently.
+async fn drop_snapshots(
+    db: &sqlx::PgPool,
+    manifests: impl IntoIterator<Item = &Value>,
+) -> sqlx::Result<()> {
+    let keys: Vec<&str> = manifests
+        .into_iter()
+        .filter_map(|m| m["provider"]["namespaces"][0]["name"].as_str())
+        .collect();
+    sqlx::query("DELETE FROM metadata_snapshots WHERE provider = ANY($1)")
+        .bind(&keys)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
 impl Plugins {
     pub fn summary(&self, p: &Package) -> Summary {
         let process = p.is_process();
@@ -416,6 +432,15 @@ impl Plugins {
             )
             .await
             .map_err(internal)?;
+            if existing
+                .as_ref()
+                .is_none_or(|e| e.version != i.version || e.archive != bytes)
+            {
+                let old = existing.as_ref().map(|e| &e.manifest);
+                drop_snapshots(&self.db, old.into_iter().chain([m]))
+                    .await
+                    .map_err(internal)?;
+            }
             packages::grant_scopes(&self.db, id, m)
                 .await
                 .map_err(internal)?;
@@ -545,6 +570,7 @@ impl Plugins {
             }
         }
         packages::delete(&self.db, id).await?;
+        drop_snapshots(&self.db, [&pkg.manifest]).await?;
         if delete_data {
             let _ = std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
         }

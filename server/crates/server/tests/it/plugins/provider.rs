@@ -105,3 +105,41 @@ async fn config_get_needs_no_scope_for_a_provider() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn snapshots_follow_the_code_of_their_provider() {
+    let Some((mut m, w)) = provider() else { return };
+    m["provider"]["namespaces"] = json!([{"name": "tmdb"}]);
+    let Some(s) = Scratch::create("snapcode").await else {
+        return;
+    };
+    let h = harness(&s, "snapcode", |_| {}).await;
+    let key = test_key();
+    let count = async |p: &str| -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM metadata_snapshots WHERE provider = $1")
+            .bind(p)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap()
+    };
+    let v1 = pack(&m, "0.1.0", &w, Some(&key));
+    h.install(&v1).await;
+    sqlx::query(
+        r#"INSERT INTO metadata_snapshots (provider, resource, kind, "externalId", body)
+           VALUES ('tmdb', 'work', 'movie', '1', '{}'), ('other', 'work', 'movie', '1', '{}')"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    h.install(&v1).await;
+    assert_eq!(
+        count("tmdb").await,
+        1,
+        "the same archive keeps its snapshots"
+    );
+    h.install(&pack(&m, "0.2.0", &w, Some(&key))).await;
+    assert_eq!(count("tmdb").await, 0, "a new version drops them");
+    assert_eq!(count("other").await, 1, "another provider is untouched");
+    h.finish().await;
+    s.finish().await;
+}
