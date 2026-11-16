@@ -158,6 +158,25 @@ pub(super) async fn discard(st: &AppState, id: i32, kind: MediaKind) {
     }
 }
 
+/// Asks the acquisition to search a media a caller just added, when it has something wanted.
+pub async fn search_added(st: &AppState, id: i32) {
+    let wanted = sqlx::query_scalar(
+        r#"SELECT monitored AND EXISTS (SELECT 1 FROM wants WHERE "mediaId" = media.id)
+             FROM media WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await;
+    match wanted {
+        Ok(Some(true)) => st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
+            media_ids: vec![i64::from(id)],
+            reason: "media-added".into(),
+        }),
+        Ok(_) => {}
+        Err(e) => tracing::warn!("media #{id}: search on add not asked: {e}"),
+    }
+}
+
 /// Logs and announces a media created in `library`, from `pref` when it came from a provider record.
 pub(super) async fn announce(
     st: &AppState,

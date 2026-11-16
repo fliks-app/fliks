@@ -747,4 +747,75 @@ pub(crate) mod tests {
         );
         assert_eq!(editions(&db).await[1].2, 2);
     }
+
+    /// POSTs `body` to `uri` as an admin and returns the `media.acquisition.requested` reasons it emitted.
+    async fn add(db: &PgPool, drop_album: bool, uri: &str, body: serde_json::Value) -> Vec<String> {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        let st = state(db, fake()).await;
+        if drop_album {
+            sqlx::query("DELETE FROM media WHERE id = 1")
+                .execute(db)
+                .await
+                .unwrap();
+        }
+        sqlx::query(r#"INSERT INTO users (id, username, "isAdmin") VALUES (1, 'admin', true)"#)
+            .execute(db)
+            .await
+            .unwrap();
+        let tok = crate::auth::testing::token(&st, 1, "admin").await;
+        let mut rx = st.hub.subscribe();
+        let app = crate::media::write::routes(axum::Router::new())
+            .merge(crate::music::router())
+            .with_state(st);
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .header("x-fliks-kinds", "album")
+            .header("authorization", format!("Bearer {tok}"))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status().as_u16(), 201);
+        let mut reasons = vec![];
+        while let Ok(b) = rx.try_recv() {
+            if let crate::events::Bus::Domain(
+                crate::events::DomainEvent::MediaAcquisitionRequested { reason, .. },
+            ) = &*b
+            {
+                reasons.push(reason.clone());
+            }
+        }
+        reasons
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn wanting_a_track_of_a_held_album_asks_one_search(db: PgPool) {
+        let body = json!({"provider": "musicbrainz", "externalId": LIVE, "albumExternalId": GROUP});
+        assert_eq!(
+            add(&db, false, "/api/music/want-recording", body).await,
+            ["media-added"]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn wanting_a_track_of_a_new_album_asks_one_search(db: PgPool) {
+        let body = json!({"provider": "musicbrainz", "externalId": LIVE, "albumExternalId": GROUP,
+                          "libraryId": 1});
+        assert_eq!(
+            add(&db, true, "/api/music/want-recording", body).await,
+            ["media-added"]
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_album_import_asks_one_search(db: PgPool) {
+        let body = json!({"type": "album", "provider": "musicbrainz", "externalId": GROUP,
+                          "libraryId": 1});
+        assert_eq!(
+            add(&db, true, "/api/media/import", body).await,
+            ["media-added"]
+        );
+    }
 }

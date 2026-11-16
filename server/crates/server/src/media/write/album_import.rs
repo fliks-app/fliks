@@ -1,7 +1,7 @@
 //! `POST /api/media/import` for an album: a release group of a music provider (`docs/spec/music.md` rule 31).
 use super::{
     body::Body,
-    identified::{Creation, Row, TAKEN, announce, discard, insert_row},
+    identified::{Creation, Row, TAKEN, announce, discard, insert_row, search_added},
     import::{resolve_target, resolve_target_in},
 };
 use crate::{
@@ -118,6 +118,7 @@ pub(super) async fn import_album(
             return Err(refused.app_error());
         }
     }
+    search_added(st, media).await;
     let acl = accessible_library_ids(&st.db, a).await?;
     let out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
         .await?
@@ -393,6 +394,7 @@ pub(crate) async fn want_recording(
     let item = want::want(st, media, Recording::Mbid(&recording), !created)
         .await
         .map_err(Refused::app_error)?;
+    search_added(st, media).await;
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({"mediaId": media, "itemId": item})),

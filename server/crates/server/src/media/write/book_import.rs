@@ -3,6 +3,7 @@ use super::{
     body::Body,
     identified::{
         Creation, Row, TAKEN, announce, create_identified, discard, held_elsewhere, insert_row,
+        search_added,
     },
     import::{Target, creation_folder, resolve_target},
 };
@@ -111,6 +112,7 @@ pub(super) async fn import_book(
         },
     )
     .await?;
+    search_added(st, id).await;
     let acl = accessible_library_ids(&st.db, a).await?;
     let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
         .await?

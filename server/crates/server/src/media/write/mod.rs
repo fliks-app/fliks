@@ -3,6 +3,7 @@ pub(crate) mod body;
 pub(crate) mod book_import;
 pub use album_import::import_album_for_request;
 pub use book_import::import_book_for_request;
+pub use identified::search_added;
 pub(crate) mod album_import;
 mod comic_edit;
 mod comic_import;
