@@ -15,19 +15,6 @@ pub(crate) fn num(f: f64) -> Value {
     }
 }
 
-/// `%`, `_` and `\` literal in an `ILIKE` pattern.
-fn contains_pattern(q: &str) -> String {
-    let mut p = String::from("%");
-    for c in q.chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            p.push('\\');
-        }
-        p.push(c);
-    }
-    p.push('%');
-    p
-}
-
 /// `books-api.md` A7.
 pub async fn list(
     db: &PgPool,
@@ -50,7 +37,7 @@ WHERE m."libraryId" = ANY($1) AND ($2::text IS NULL OR m.type = $2) AND ($3::tex
 GROUP BY c.id ORDER BY c.name ASC, c.id ASC LIMIT $4 OFFSET $5"#,
         scope,
         kind.map(MediaKind::as_str),
-        q.map(contains_pattern),
+        q.map(fliks_domain::media::search::contains_pattern),
         paging.map(|p| p.0),
         paging.map(|p| p.1),
         &kinds.names()
@@ -145,10 +132,5 @@ mod tests {
         assert!(missing_positions(&[]).is_empty());
         assert_eq!(missing_positions(&[(0.0, 0.0)]), Vec::<i64>::new());
         assert_eq!(missing_positions(&[(1e9, 1e9)]).len(), MAX_MISSING as usize);
-    }
-
-    #[test]
-    fn like_metacharacters_are_literal() {
-        assert_eq!(contains_pattern(r"a%b_c\d"), r"%a\%b\_c\\d%");
     }
 }

@@ -35,14 +35,7 @@ pub fn search_patterns(q: &str) -> Option<Vec<String>> {
     let words: Vec<String> = q
         .replace(['"', '*'], " ")
         .split_whitespace()
-        .map(|w| {
-            format!(
-                "%{}%",
-                w.replace('\\', "\\\\")
-                    .replace('%', "\\%")
-                    .replace('_', "\\_")
-            )
-        })
+        .map(fliks_domain::media::search::contains_pattern)
         .collect();
     (!words.is_empty()).then_some(words)
 }

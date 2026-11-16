@@ -16,13 +16,7 @@ const LIKED: &str = r#"EXISTS (SELECT 1 FROM likes l WHERE l."userId" = "#;
 const DURATION: &str = r#"COALESCE(td."durationMs"::float8 / 1000, pf.dur)"#;
 
 fn like(s: &str) -> String {
-    format!(
-        "%{}%",
-        s.trim()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_")
-    )
+    fliks_domain::media::search::contains_pattern(s.trim())
 }
 
 fn range<'a, T: sqlx::Encode<'a, Postgres> + sqlx::Type<Postgres> + Send + 'a>(

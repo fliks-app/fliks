@@ -119,12 +119,7 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
             .push_bind(l);
     }
     if let Some(t) = text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
-        let like = format!(
-            "%{}%",
-            t.replace('\\', "\\\\")
-                .replace('%', "\\%")
-                .replace('_', "\\_")
-        );
+        let like = fliks_domain::media::search::contains_pattern(t);
         qb.push(" AND (i.title ILIKE ")
             .push_bind(like.clone())
             .push(" OR m.title ILIKE ")

@@ -1,7 +1,7 @@
 //! The user reads of the guide (`livetv-guide.md`): the match report, `on-now`, `guide`, `programs/:id`, `search` and the prune.
 use super::{
     admin,
-    channels::{Visible, denied_for, like_pattern, text_filter},
+    channels::{Visible, denied_for, text_filter},
     dto::{Query as Q, query_flag, query_int},
     model::{PROGRAM_COLS, Program},
     sync::setting_int,
@@ -320,7 +320,7 @@ pub async fn search(
                                 OR lower(btrim(c."groupName")) <> ALL (SELECT lower(btrim(x)) FROM unnest($5::text[]) AS x)))
            ORDER BY p."startsAt", p.id LIMIT 50"#
     )))
-    .bind(like_pattern(&text))
+    .bind(fliks_domain::media::search::contains_pattern(&text))
     .bind(now - Duration::days(past))
     .bind(now + Duration::days(future))
     .bind(a.user.id)

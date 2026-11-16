@@ -16,9 +16,36 @@ pub fn prefix_tsquery(q: &str) -> String {
         .join(" & ")
 }
 
+/// Tags and keyboards disagree on which one they type, so a search matches any of them for any other.
+pub const APOSTROPHES: [char; 4] = ['\'', '’', '‘', 'ʼ'];
+
+/// The `ILIKE` pattern of a text contained anywhere: `%`, `_` and `\` literal, an apostrophe any apostrophe.
+pub fn contains_pattern(q: &str) -> String {
+    let mut p = String::from("%");
+    for c in q.chars() {
+        match c {
+            c if APOSTROPHES.contains(&c) => p.push('_'),
+            '%' | '_' | '\\' => {
+                p.push('\\');
+                p.push(c);
+            }
+            _ => p.push(c),
+        }
+    }
+    p.push('%');
+    p
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_contains_pattern_escapes_wildcards_and_folds_apostrophes() {
+        assert_eq!(contains_pattern(r"a%b_c\d"), r"%a\%b\_c\\d%");
+        assert_eq!(contains_pattern("J'ai"), "%J_ai%");
+        assert_eq!(contains_pattern("J’ai"), "%J_ai%");
+    }
 
     #[test]
     fn words_get_a_prefix_star() {
