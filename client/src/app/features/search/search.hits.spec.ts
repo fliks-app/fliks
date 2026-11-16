@@ -104,4 +104,13 @@ describe('SearchComponent hits', () => {
     expect(view.trackRequested(rec(null))).toBe(true);
     expect(view.trackRequested(rec(null, 'r2'))).toBe(false);
   });
+
+  it('reloads the results once a track is imported', () => {
+    const { c } = setup();
+    const run = vi.fn().mockResolvedValue(undefined);
+    c['runSearch'] = run;
+    c['pendingAdd'] = { row: hit(), recording: { externalId: 'r1' } as never };
+    c['onAdded']({ mode: 'import', mediaId: 1 });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
 });

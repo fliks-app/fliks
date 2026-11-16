@@ -751,13 +751,17 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private pendingAdd: { row: SearchHit; recording?: RecordingHit } | null = null;
 
-  /** The card flips to its new state without another search. */
+  /** The card flips to its new state without another search; an imported track reloads the results. */
   protected onAdded(r: AddResult): void {
     const hit = this.pendingAdd;
     if (!hit) return;
     this.pendingAdd = null;
     if (r.recordings) {
       this.requestedTracks.update((s) => new Set([...s, ...r.recordings!]));
+      return;
+    }
+    if (r.mode === 'import' && hit.recording) {
+      void this.runSearch();
       return;
     }
     const next: SearchHit = {
