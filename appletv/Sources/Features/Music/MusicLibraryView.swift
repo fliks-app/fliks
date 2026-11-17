@@ -272,7 +272,7 @@ private struct TracksTab: View {
                 Task { if (try? await MusicAPI.setFavourite(on, mediaId: row.mediaId, itemId: row.itemId)) == nil { rows[i].favourite = !on } }
             },
             onPlaylist: { picker.open(mediaId: row.mediaId, itemId: row.itemId) },
-            onPlayNext: { player.addNext([QueueTrack(row: row)]) },
+            onPlayNext: PartyService.shared.canPlayNext ? { player.addNext([QueueTrack(row: row)]) } : nil,
             onQueue: { player.addLast([QueueTrack(row: row)]) })
     }
 

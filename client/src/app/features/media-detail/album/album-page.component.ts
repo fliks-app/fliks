@@ -298,18 +298,15 @@ export class AlbumPageComponent {
   /** The track's own actions, then the acquisition rows, in the panel the other kinds use. */
   protected openTrackMenu(t: Track, anchor: HTMLElement): void {
     this.activeTrack.set(t);
-    const own = (key: string, icon: string, run: () => void, disabled = false, params?: object): CardAction => ({
-      label: this.translate.instant(key, params), icon, run, disabled, section: 'track',
+    const own = (key: string, icon: string, run: () => void, disabled = false): CardAction => ({
+      label: this.translate.instant(key), icon, run, disabled, section: 'track',
     });
     const actions: CardAction[] = [
-      own('music.play_next', 'list-start', () => this.enqueue(t, 'next'), !t.hasFile),
+      ...(this.canPlayNext() ? [own('music.play_next', 'list-start', () => this.enqueue(t, 'next'), !t.hasFile)] : []),
       own('music.add_to_queue', 'list-end', () => this.enqueue(t, 'last'), !t.hasFile),
       own('playlists.add_to_playlist_title', 'list-plus', () => this.addToPlaylist(t), !t.hasFile),
       ...(this.downloads.available() && t.hasFile
         ? [own(this.downloads.itemIds().has(t.itemId) ? 'downloads.remove_from_device' : 'downloads.download', 'download', () => this.toggleDownload(t))]
-        : []),
-      ...(this.party.active()
-        ? [own('karaoke.queue_sing_this', 'mic', () => this.sing(t), !t.hasFile, { title: t.title })]
         : []),
       ...(this.rowState().get(t.itemId)?.kind === 'failed' && this.retrySearch()
         ? [own('music.retry_search', 'search', this.retrySearch()!)]
@@ -328,8 +325,9 @@ export class AlbumPageComponent {
     return rows.find((r) => r.actionId === 'item.grab-best')?.run ?? null;
   }
 
-  protected sing(t: Track): void {
-    void this.party.proposeTrack(this.media().id, t.itemId);
+  /** A member of a party that takes turns has no "next": the server places each song by turn. */
+  private canPlayNext(): boolean {
+    return !(this.party.active() && this.party.party()?.rotation && !this.party.isHost());
   }
 
   protected enqueue(t: Track, where: 'next' | 'last'): void {

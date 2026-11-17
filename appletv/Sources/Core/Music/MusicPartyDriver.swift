@@ -21,6 +21,7 @@ final class MusicPartyDriver {
         guard !attached else { return resync() }
         attached = true
         player.intercept = { [weak self] t in self?.intercept(t) ?? false }
+        player.enqueueIntercept = { [weak self] tracks, next in self?.enqueue(tracks, next: next) ?? false }
         player.onTrackEnded = { [weak self] _ in self?.ended() }
         party.onLive = { [weak self] live in self?.apply(live) }
         party.onRejoined = { [weak self] in self?.resync() }
@@ -38,6 +39,7 @@ final class MusicPartyDriver {
         driftTimer?.invalidate()
         driftTimer = nil
         player.intercept = nil
+        player.enqueueIntercept = nil
         player.onTrackEnded = nil
         party.onLive = nil
         party.onRejoined = nil
@@ -69,31 +71,27 @@ final class MusicPartyDriver {
         return true
     }
 
-    /// The host's natural end: the server idles the party and moves it along its queue.
-    private func ended() {
-        guard party.active, party.isHost, let item = party.live?.item, item.isTrack else { return }
-        advanceFrom = item
-        Task { await party.sendEnded(mediaId: item.mediaId, episodeId: item.episodeId, itemId: item.itemId) }
+    /// Enqueued tracks go to the party's programme, which is the queue; false outside a party.
+    private func enqueue(_ tracks: [QueueTrack], next: Bool) -> Bool {
+        guard party.active else { return false }
+        guard party.canControl else {
+            party.show(tr("party.error_host_only"))
+            return true
+        }
+        Task { await party.addToProgramme(tracks.map { ($0.mediaId, $0.itemId) }, next: next) }
+        return true
     }
 
-    /// The track the host's end was sent for, until the party moves on or idles on it.
-    private var advanceFrom: PartyItem?
-
-    /// An idle party with songs in the singer queue goes on to the next singer.
-    private func advanceSinger(_ live: PartyLiveState) {
-        guard let from = advanceFrom else { return }
-        if live.item.itemId != from.itemId { advanceFrom = nil }
-        else if live.state == "idle" {
-            advanceFrom = nil
-            if party.isHost, !party.singerQueue.isEmpty { Task { await party.advanceSinger(from: from) } }
-        }
+    /// The host's natural end: the server moves the party along its programme, or idles it.
+    private func ended() {
+        guard party.active, party.isHost, let item = party.live?.item, item.isTrack else { return }
+        Task { await party.sendEnded(mediaId: item.mediaId, episodeId: item.episodeId, itemId: item.itemId) }
     }
 
     // MARK: - Party state -> player
 
     private func apply(_ live: PartyLiveState) {
         guard attached else { return }
-        advanceSinger(live)
         guard live.item.isTrack else { return leaveForVideo(live.item) }
         generation += 1
         let gen = generation
@@ -117,6 +115,7 @@ final class MusicPartyDriver {
         driftTimer?.invalidate()
         driftTimer = nil
         player.intercept = nil
+        player.enqueueIntercept = nil
         player.onTrackEnded = nil
         player.stop()
         Task { await party.reopenPlayer(item) }

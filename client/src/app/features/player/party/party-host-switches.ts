@@ -4,7 +4,7 @@ import { type PartySwitches } from '../../../core/services/api/party-api.service
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
-const KEYS = ['policy', 'reactionsEnabled', 'chatEnabled', 'linkSharing', 'public'] as const;
+const KEYS = ['policy', 'reactionsEnabled', 'chatEnabled', 'linkSharing', 'rotation', 'public'] as const;
 
 /** The switches of `to` that differ from `from`. */
 export function switchesPatch(from: PartySwitches, to: PartySwitches): Partial<PartySwitches> {

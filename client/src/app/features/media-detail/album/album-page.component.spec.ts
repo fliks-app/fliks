@@ -39,13 +39,13 @@ const playerStub = () => ({
   track: signal<{ mediaId: number; itemId: number } | null>(null),
 });
 
-function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}, focus?: string) {
+function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}, focus?: string, party: object = { active: () => false }) {
   const player = playerStub();
   TestBed.configureTestingModule({
     providers: bookSpecProviders(
       ...(focus ? [{ provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ track: focus }) } } }] : []),
       { provide: AudioPlayerService, useValue: player },
-      { provide: PartyService, useValue: { active: () => false } },
+      { provide: PartyService, useValue: party },
       { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p), user: () => null, sessionEpoch: () => 0, isAuthenticated: () => false } },
     ),
@@ -140,6 +140,18 @@ describe('AlbumPageComponent', () => {
     expect(panel.actions()!.map((a) => a.icon)).toEqual(['list-start', 'list-end', 'list-plus', 'download']);
     panel.actions()![0]!.run();
     expect(player.enqueueTracks).toHaveBeenCalledWith([expect.objectContaining({ itemId: 1 })], 'next');
+  });
+
+  it('gives a member of a party that takes turns no "play next"', () => {
+    const turns = (isHost: boolean) => ({ active: () => true, party: () => ({ rotation: true }), isHost: () => isHost });
+    const icons = (isHost: boolean) => {
+      const { el } = setup([track(1)], [], {}, undefined, turns(isHost));
+      (el.querySelector('[data-testid="track-menu"]') as HTMLButtonElement).click();
+      return TestBed.inject(CardActionsService).actions()!.map((a) => a.icon);
+    };
+    expect(icons(false)).not.toContain('list-start');
+    TestBed.resetTestingModule();
+    expect(icons(true)).toContain('list-start');
   });
 
   it('draws a work heading only over a group of tracks', () => {

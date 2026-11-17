@@ -20,13 +20,17 @@ struct PartyItem: Codable, Equatable {
     var episodeTitle: String? = nil
     /// The viewer cannot open the media: title and artwork are blank, the ids stay.
     let hidden: Bool
-    /// A track of an album (`mediaId` is the album, `seriesTitle` its title); absent for video.
+    /// The row's item, named by every programme row; for a track `mediaId` is the album and `seriesTitle` its title.
     var itemId: Int? = nil
+    /// The media's type: `album` marks a track, whatever `itemId` says.
+    var mediaType: String? = nil
+    /// The user who added the row to the programme (a karaoke row's singer); set on `/queue` rows only.
+    var addedBy: Int? = nil
 }
 
 extension PartyItem: Identifiable {
     var id: String { "\(mediaId).\(episodeId ?? 0).\(itemId ?? 0)" }
-    var isTrack: Bool { itemId != nil }
+    var isTrack: Bool { mediaType == "album" }
 
     /// The same programme entry: a track is named by its item, an episode by its id.
     func sameEntry(as other: PartyItem) -> Bool {
@@ -35,6 +39,12 @@ extension PartyItem: Identifiable {
 }
 
 extension PartyItem {
+    /// The next three rows after `current` (all of them while nothing plays), the karaoke stage's "up next".
+    static func upNext(after current: PartyItem?, in rows: [PartyItem]) -> [PartyItem] {
+        let at = current.flatMap { cur in rows.firstIndex { $0.sameEntry(as: cur) } } ?? -1
+        return Array(rows.dropFirst(at + 1).prefix(3))
+    }
+
     /// The title (`Title S01E02` for an episode), or the neutral line of a masked row.
     var shownTitle: String { hidden ? tr("party.proposal_hidden") : title }
 
@@ -56,15 +66,13 @@ extension PartyItem {
     var cardImage: String? { hidden ? nil : (stillUrl ?? fanartUrl ?? posterUrl) }
 }
 
-/// A film suggested for the start.
+/// A title suggested for the start.
 struct PartyProposal: Codable, Equatable, Identifiable {
     let id: Int
     let item: PartyItem
     let proposedBy: Int
     let upvoterIds: [Int]
     let downvoterIds: [Int]
-    /// A pending song of the karaoke queue: 1 is the next singer. Absent for a film.
-    var queuePosition: Int? = nil
     var score: Int { upvoterIds.count - downvoterIds.count }
 
     /// Most upvotes first, then fewest downvotes, then the oldest (lowest id): how the server picks the start.
@@ -205,6 +213,7 @@ struct Party: Codable, Equatable, Identifiable {
     var reactionsEnabled: Bool?
     var chatEnabled: Bool?
     var linkSharing: Bool?
+    var rotation: Bool?
     var inviteToken: String?
     var guests: [PartyGuest]?
     var proposals: [PartyProposal]?
@@ -233,7 +242,7 @@ enum PartyEvent {
     case state(PartyStateEvent)
     case programme(partyId: Int, rev: Int, item: PartyItem?)
     case members(partyId: Int, rev: Int, members: [PartyMember])
-    case settings(partyId: Int, rev: Int, name: String, policy: String, reactionsEnabled: Bool, chatEnabled: Bool, linkSharing: Bool)
+    case settings(partyId: Int, rev: Int, name: String, policy: String, reactionsEnabled: Bool, chatEnabled: Bool, linkSharing: Bool, rotation: Bool)
     case message(partyId: Int, message: PartyMessage)
     case reaction(partyId: Int, username: String, emoji: String)
     case closed(partyId: Int, reason: String)
@@ -247,7 +256,7 @@ enum PartyEvent {
     private struct Members: Decodable { let partyId: Int; let rev: Int; let members: [PartyMember] }
     private struct Settings: Decodable {
         let partyId: Int; let rev: Int; let name: String; let policy: String
-        let reactionsEnabled: Bool; let chatEnabled: Bool; let linkSharing: Bool
+        let reactionsEnabled: Bool; let chatEnabled: Bool; let linkSharing: Bool; let rotation: Bool
     }
     private struct Message: Decodable { let partyId: Int; let message: PartyMessage }
     private struct Reaction: Decodable { let partyId: Int; let username: String; let emoji: String }
@@ -269,7 +278,8 @@ enum PartyEvent {
         case "party.settings":
             return (try? d.decode(Settings.self, from: data)).map {
                 .settings(partyId: $0.partyId, rev: $0.rev, name: $0.name, policy: $0.policy,
-                          reactionsEnabled: $0.reactionsEnabled, chatEnabled: $0.chatEnabled, linkSharing: $0.linkSharing)
+                          reactionsEnabled: $0.reactionsEnabled, chatEnabled: $0.chatEnabled, linkSharing: $0.linkSharing,
+                          rotation: $0.rotation)
             }
         case "party.message":
             return (try? d.decode(Message.self, from: data)).map { .message(partyId: $0.partyId, message: $0.message) }

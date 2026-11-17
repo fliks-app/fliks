@@ -81,14 +81,32 @@ final class MusicTests: XCTestCase {
     }
 
     func testPartyItemNamesATrackByItsItem() throws {
-        let json = #"{"mediaId":5,"mediaFileId":null,"episodeId":null,"title":"Song","posterUrl":null,"fanartUrl":null,"hidden":false,"itemId":77,"seriesTitle":"Album"}"#
+        let json = #"{"mediaId":5,"mediaFileId":null,"episodeId":null,"title":"Song","posterUrl":null,"fanartUrl":null,"hidden":false,"itemId":77,"mediaType":"album","seriesTitle":"Album","addedBy":4}"#
         let item = try JSONDecoder().decode(PartyItem.self, from: Data(json.utf8))
         XCTAssertTrue(item.isTrack)
+        XCTAssertEqual(item.addedBy, 4)
         XCTAssertEqual(item.cardTitle, "Song")
         XCTAssertEqual(item.cardSubtitle, "Album")
         var other = item
         other.itemId = 78
         XCTAssertFalse(item.sameEntry(as: other))
+    }
+
+    func testAFilmRowIsNotATrackEvenWithItsItemId() throws {
+        let json = #"{"mediaId":5,"mediaFileId":null,"episodeId":null,"title":"Film","posterUrl":null,"fanartUrl":null,"hidden":false,"itemId":9,"mediaType":"movie","addedBy":null}"#
+        let item = try JSONDecoder().decode(PartyItem.self, from: Data(json.utf8))
+        XCTAssertFalse(item.isTrack)
+        XCTAssertNil(item.addedBy)
+    }
+
+    func testUpNextIsTheThreeRowsAfterThePlayingOne() {
+        func row(_ n: Int) -> PartyItem {
+            PartyItem(mediaId: 9, mediaFileId: nil, episodeId: nil, title: "S\(n)", posterUrl: nil, fanartUrl: nil, hidden: false, itemId: n)
+        }
+        let rows = (1...6).map(row)
+        XCTAssertEqual(PartyItem.upNext(after: rows[1], in: rows).compactMap(\.itemId), [3, 4, 5])
+        XCTAssertEqual(PartyItem.upNext(after: rows[5], in: rows), [])
+        XCTAssertEqual(PartyItem.upNext(after: nil, in: rows).compactMap(\.itemId), [1, 2, 3])
     }
 
     func testDurationFormat() {

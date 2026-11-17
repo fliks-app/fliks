@@ -55,6 +55,8 @@ export class PartyProgrammeComponent {
   /** The item playing, highlighted once the party is live. */
   readonly current = input<PartyItem | null>(null);
   readonly live = input(false);
+  /** Who can have added a row, to name its author. */
+  readonly people = input<readonly { userId: number; username: string }[]>([]);
   /** The party's new snapshot after an edit. */
   readonly changed = output<PartyDto>();
 
@@ -78,6 +80,7 @@ export class PartyProgrammeComponent {
         hidden: !!item.hidden,
         title: track ? item.title : (item.seriesTitle ?? item.title),
         label: track ? item.seriesTitle : label,
+        by: this.people().find((p) => p.userId === item.addedBy)?.username ?? '',
         thumb: itemThumb(item),
         playing: this.live() && !!cur && sameItem(cur, item),
       };

@@ -31,6 +31,9 @@
             @if (r.label && !r.hidden) {
               <p class="truncate text-sm text-base-content/60">{{ r.label }}</p>
             }
+            @if (r.by) {
+              <p class="truncate text-xs text-base-content/50" data-testid="programme-author">{{ 'party.added_by' | translate: { name: r.by } }}</p>
+            }
             @if (r.playing) {
               <span class="badge badge-primary badge-sm mt-0.5 whitespace-nowrap">{{ 'party.programme_now' | translate }}</span>
             }

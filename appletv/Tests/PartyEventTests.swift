@@ -92,6 +92,13 @@ final class PartyEventTests: XCTestCase {
 
     private let hiddenItem = #"{"mediaId":8,"mediaFileId":null,"episodeId":null,"title":"","posterUrl":null,"fanartUrl":null,"additionalFanartUrls":[],"hidden":true}"#
 
+    func testSettingsEventCarriesTheTurnsSwitch() {
+        let json = #"{"type":"party.settings","partyId":5,"rev":4,"name":"p","policy":"everyone","reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"rotation":true,"public":false}"#
+        guard case let .settings(partyId, _, _, _, _, _, _, rotation)? = decode(json) else { return XCTFail("not a settings event") }
+        XCTAssertEqual(partyId, 5)
+        XCTAssertTrue(rotation)
+    }
+
     func testProposalsEventKeepsAMaskedRowNeutral() {
         let json = #"{"type":"party.proposals","partyId":5,"proposals":[{"id":2,"item":\#(item),"proposedBy":1,"upvoterIds":[1,3],"downvoterIds":[]},{"id":3,"item":\#(hiddenItem),"proposedBy":3,"upvoterIds":[3],"downvoterIds":[]}]}"#
         guard case let .proposals(partyId, list)? = decode(json) else { return XCTFail("not a proposals event") }

@@ -18,7 +18,7 @@ import { albumRows } from './party-programme-items';
 type Film = { mediaId: number; mediaFileId?: number; episodeId: number | null; itemId?: number; title: string; posterUrl: string | null };
 
 const SWITCHES_KEY = 'fliks.partySwitches';
-const DEFAULT_SWITCHES: PartySwitches = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false };
+const DEFAULT_SWITCHES: PartySwitches = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, rotation: false, public: false };
 
 /** The switches of the last party created on this device, all on the first time. */
 function storedSwitches(): PartySwitches {

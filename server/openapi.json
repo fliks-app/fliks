@@ -3895,6 +3895,30 @@
         }
       }
     },
+    "/api/parties/{id}/programme/items": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "Adds rows right after the playing one or at the end; a member of a party that takes turns has\nthem placed by turn, within `karaoke.queue_cap` upcoming rows.",
+        "operationId": "add_items",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/parties/{id}/programme/items/{itemId}": {
+      "delete": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The host removes any row but the playing one; a member removes the upcoming rows they added.",
+        "operationId": "remove_item",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/parties/{id}/proposals": {
       "post": {
         "tags": [
@@ -3918,18 +3942,6 @@
         "responses": {
           "200": {},
           "201": {}
-        }
-      }
-    },
-    "/api/parties/{id}/proposals/next": {
-      "post": {
-        "tags": [
-          "crate::party"
-        ],
-        "summary": "The host plays the head of the singer queue (`karaoke.md` rule 37).",
-        "operationId": "next_singer",
-        "responses": {
-          "200": {}
         }
       }
     },

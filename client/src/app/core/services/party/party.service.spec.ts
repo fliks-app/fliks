@@ -21,14 +21,14 @@ import { VoiceService } from './voice.service';
 import { ReactionsService } from './reactions.service';
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
-  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false,
+  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false, addedBy: null,
 });
 
 function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
   return {
     id: 7, name: 'p', status: 'live', scheduledAt: null, host: { userId: 1, username: 'a' },
     item: item(1, 100), playlist: null, memberCount: 1, policy: 'everyone', reactionsEnabled: true, chatEnabled: true,
-    linkSharing: false, public: false, cover: null, inviteToken: null, guests: [], proposals: [],
+    linkSharing: false, rotation: false, public: false, cover: null, inviteToken: null, guests: [], proposals: [],
     live: { rev, playback: { state: 'paused', anchor: { position: 0, serverTimeMs: 0 } }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },
     ...over,
   };
@@ -39,7 +39,7 @@ function setup(connected = false, confirmed = true) {
   const api = {
     join: vi.fn(), get: vi.fn(), create: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
     leave: vi.fn().mockResolvedValue(undefined), status: vi.fn().mockResolvedValue(undefined), kick: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
-    proposeTrack: vi.fn().mockResolvedValue([]), nextSinger: vi.fn(), intent: vi.fn().mockResolvedValue({ rev: 3 }),
+    addToProgramme: vi.fn().mockResolvedValue({}), removeFromProgramme: vi.fn().mockResolvedValue({}), intent: vi.fn().mockResolvedValue({ rev: 3 }),
   };
   const confirm = vi.fn().mockResolvedValue(confirmed);
   const sse = { partyEvents: events, connected: signal(connected), targetId: signal('dev') };
@@ -140,37 +140,34 @@ describe('PartyService queue', () => {
   });
 });
 
-describe('PartyService singer queue', () => {
-  const song = (id: number, queuePosition?: number) => ({
-    id, item: { ...item(9), itemId: 5000 + id, mediaType: 'album' }, proposedBy: id, upvoterIds: [id], downvoterIds: [], queuePosition,
-  });
+describe('PartyService programme as the one queue', () => {
+  const row = (n: number, addedBy: number | null) => ({ ...item(9), itemId: 5000 + n, mediaType: 'album', addedBy });
 
-  it('lists the pending songs by queue position and keeps them out of the film proposals', () => {
+  it('lists the next three rows after the playing one with their authors', () => {
     const { svc } = setup();
-    const film = { id: 1, item: item(2), proposedBy: 1, upvoterIds: [1], downvoterIds: [] };
-    svc.proposals.set([song(2, 2), film, song(3, 1)]);
-    expect(svc.singerQueue().map((p) => p.id)).toEqual([3, 2]);
-    expect(svc.filmProposals()).toEqual([film]);
+    svc.applySnapshot(dto(1, { item: { ...row(2, 1), episodeId: null } }));
+    svc.live.set({ rev: 1, state: 'playing', item: row(2, 1), anchor: { position: 0, serverTimeMs: 0 }, whenMs: null, by: null, action: null });
+    svc.programme.set([row(1, 1), row(2, 1), row(3, 2), row(4, 1), row(5, 2), row(6, 1)]);
+    expect(svc.upNext().map((r) => r.itemId)).toEqual([5003, 5004, 5005]);
+    svc.programme.set([row(1, 1)]);
+    expect(svc.upNext()).toEqual([row(1, 1)]);
   });
 
-  it('proposes a track and plays the next singer with a next intent on the answered revision', async () => {
+  it('adds and removes rows through the programme routes', async () => {
     const { svc, api } = setup();
     svc.applySnapshot(dto(1));
-    api.nextSinger.mockResolvedValue(dto(2));
-    expect(await svc.proposeTrack(9, 5001)).toBe(true);
-    expect(api.proposeTrack).toHaveBeenCalledWith(7, 9, 5001);
-    await svc.playSinger();
-    expect(api.intent).toHaveBeenCalledWith(7, expect.objectContaining({ action: 'next', baseRev: 2 }));
+    expect(await svc.addToProgramme([{ mediaId: 9, itemId: 5001 }], 'next')).toBe(true);
+    expect(api.addToProgramme).toHaveBeenCalledWith(7, [{ mediaId: 9, itemId: 5001 }], 'next');
+    await svc.removeFromProgramme(5001);
+    expect(api.removeFromProgramme).toHaveBeenCalledWith(7, 5001);
+    api.addToProgramme.mockRejectedValue(new Error('refused'));
+    expect(await svc.addToProgramme([{ mediaId: 9, itemId: 5002 }], 'last')).toBe(false);
   });
 
-  it('moves on in one request naming the item it idles on, then applies the answer', async () => {
-    const { svc, api } = setup();
-    svc.applySnapshot(dto(1));
-    api.nextSinger.mockResolvedValue(dto(4));
-    await svc.advanceSinger({ mediaId: 1, itemId: 100 });
-    expect(api.nextSinger).toHaveBeenCalledWith(7, { from: { mediaId: 1, itemId: 100 }, deviceId: expect.any(String) });
-    expect(api.intent).not.toHaveBeenCalled();
-    expect(svc.live()?.rev).toBe(4);
+  it('names a user among the members, the guests and the host', () => {
+    const { svc } = setup();
+    svc.applySnapshot(dto(1, { guests: [{ userId: 3, username: 'bob', source: 'invite' }] }));
+    expect([svc.userName(1), svc.userName(3), svc.userName(9), svc.userName(null)]).toEqual(['a', 'bob', '', '']);
   });
 });
 

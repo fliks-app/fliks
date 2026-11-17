@@ -33,7 +33,7 @@ use fliks_domain::{
     js::now_ms,
     party::{
         ANIMATED_REACTIONS, CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent,
-        Item, LOBBY_OPEN_BEFORE_MS, Policy, noto_code, same_row,
+        Item, LOBBY_OPEN_BEFORE_MS, Policy, Rule, noto_code, place, same_row,
     },
 };
 use serde_json::{Value, json};
@@ -70,6 +70,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/invitees", post(invite))
         .route("/api/parties/{id}/quit", post(quit))
         .route("/api/parties/{id}/queue", get(queue))
+        .merge(super::programme::router())
         .merge(super::proposals::proposal_router())
 }
 
@@ -193,7 +194,7 @@ fn starting_due(row: &Row) -> bool {
     now_ms() >= at - LOBBY_OPEN_BEFORE_MS
 }
 
-async fn row_of(st: &AppState, id: i32) -> R<Row> {
+pub(super) async fn row_of(st: &AppState, id: i32) -> R<Row> {
     db::get(&st.db, id).await?.ok_or_else(not_found)
 }
 
@@ -370,6 +371,7 @@ pub(super) async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<
         reactions_enabled: row.reactions_enabled,
         chat_enabled: row.chat_enabled,
         link_sharing: row.link_sharing,
+        rotation: row.rotation,
         invite_token: sees_token.then(|| row.invite_token.clone()),
         guests: guests
             .into_iter()
@@ -583,15 +585,17 @@ pub async fn create(
     let scheduled = b.scheduled_at.filter(|t| *t > now);
     let at = scheduled.unwrap_or(now);
     let policy = b.policy.unwrap_or(Policy::Everyone);
-    let (inherit_reactions, inherit_chat, inherit_link) = db::owner_switches(&st.db, me)
-        .await?
-        .unwrap_or((true, true, true));
+    let (inherit_reactions, inherit_chat, inherit_link, inherit_rotation) =
+        db::owner_switches(&st.db, me)
+            .await?
+            .unwrap_or((true, true, true, false));
     let (mut row, created) = db::insert(
         &st.db,
         &db::New {
             reactions_enabled: b.reactions_enabled.unwrap_or(inherit_reactions),
             chat_enabled: b.chat_enabled.unwrap_or(inherit_chat),
             link_sharing: b.link_sharing.unwrap_or(inherit_link),
+            rotation: b.rotation.unwrap_or(inherit_rotation),
             public: b.public.unwrap_or(false),
             name: &valid_name(&b.name)?,
             owner: me,
@@ -747,6 +751,7 @@ async fn apply_patch(
     row.reactions_enabled = b.reactions_enabled.unwrap_or(row.reactions_enabled);
     row.chat_enabled = b.chat_enabled.unwrap_or(row.chat_enabled);
     row.link_sharing = b.link_sharing.unwrap_or(row.link_sharing);
+    row.rotation = b.rotation.unwrap_or(row.rotation);
     row.public = b.public.unwrap_or(row.public);
     let regenerate = b.regenerate_token == Some(true);
     if regenerate {
@@ -761,6 +766,7 @@ async fn apply_patch(
             row.reactions_enabled,
             row.chat_enabled,
             row.link_sharing,
+            row.rotation,
             row.public,
         ),
         row.scheduled_at,
@@ -772,6 +778,7 @@ async fn apply_patch(
         || b.reactions_enabled.is_some()
         || b.chat_enabled.is_some()
         || b.link_sharing.is_some()
+        || b.rotation.is_some()
         || b.public.is_some()
     {
         registry::ensure_held(st, &row).await?;
@@ -786,6 +793,7 @@ async fn apply_patch(
                         b.reactions_enabled,
                         b.chat_enabled,
                         b.link_sharing,
+                        b.rotation,
                         b.public,
                     ],
                     now_ms(),
@@ -1065,8 +1073,10 @@ pub(super) enum Edit {
     Replace(Vec<Item>),
     /// The item joins the end, unless it is already there.
     Append(Item),
-    /// A track already played moves to the end so the party can go to it again.
-    Requeue(Item),
+    /// Rows added by the caller and placed by the rule; a row already played moves to its new place.
+    Add(Vec<Item>, Rule),
+    /// The row leaves the programme.
+    Remove(Item),
 }
 
 /// The one path that writes the programme, under the party's gate so edits and their events keep
@@ -1074,6 +1084,15 @@ pub(super) enum Edit {
 pub(super) async fn edit_programme(st: &AppState, a: &Authed, row: &mut Row, edit: Edit) -> R<()> {
     let _held = hold(st, row.id).await;
     edit_held(st, a, row, edit).await
+}
+
+/// The `items` the programme `current` does not hold yet.
+fn new_rows(current: &[db::QueueRow], items: &[Item]) -> Vec<Item> {
+    items
+        .iter()
+        .filter(|i| !current.iter().any(|r| same_row(&r.item, i)))
+        .cloned()
+        .collect()
 }
 
 /// A pair without `itemId` is read once, here, as the item it names: it is a 409 when it names several
@@ -1123,35 +1142,71 @@ pub(super) async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Ed
     *row = row_of(st, id).await?;
     require_open(row)?;
     let current = db::programme_rows(&st.db, id).await?;
-    let replaced = matches!(edit, Edit::Replace(_));
-    let items = match edit {
-        Edit::Replace(items) => name_items(st, items).await?,
-        Edit::Requeue(item) => {
-            let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
-            if row.item().is_none_or(|c| !same_row(&c, &item)) {
-                items.retain(|i| !same_row(i, &item));
-            }
-            if !items.iter().any(|i| same_row(i, &item)) {
-                items.push(item);
-            }
-            items
+    let me = Some(a.user.id);
+    let author_of = |i: &Item| {
+        current
+            .iter()
+            .find(|r| same_row(&r.item, i))
+            .map_or(me, |r| r.added_by)
+    };
+    let mut rows: Vec<(Item, Option<i32>)> = current
+        .iter()
+        .map(|r| (r.item.clone(), r.added_by))
+        .collect();
+    let mut note = None;
+    let added: Vec<Item> = match edit {
+        Edit::Replace(items) => {
+            let items = name_items(st, items).await?;
+            rows = items.iter().map(|i| (i.clone(), author_of(i))).collect();
+            note = programme_note(&current, &items);
+            new_rows(&current, &items)
         }
         Edit::Append(item) => {
-            let mut items: Vec<Item> = current.iter().map(|r| r.item.clone()).collect();
-            if !items.iter().any(|i| same_row(i, &item)) {
-                items.push(item);
+            if !rows.iter().any(|(i, _)| same_row(i, &item)) {
+                rows.push((item.clone(), me));
             }
+            new_rows(&current, &[item])
+        }
+        Edit::Remove(item) => {
+            rows.retain(|(i, _)| !same_row(i, &item));
+            note = Some(("programme_changed", json!({ "added": 0, "removed": 1 })));
+            vec![]
+        }
+        Edit::Add(items, rule) => {
+            let items = name_items(st, items).await?;
+            if distinct(items.clone()).len() != items.len() {
+                return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+            }
+            let started = row.status == "live";
+            let playing = row.item();
+            for item in &items {
+                let current_at = |rows: &[(Item, Option<i32>)]| {
+                    let playing = playing.as_ref()?;
+                    rows.iter().position(|(i, _)| same_row(i, playing))
+                };
+                if let Some(at) = rows.iter().position(|(i, _)| same_row(i, item)) {
+                    if at >= current_at(&rows).unwrap_or(0) {
+                        return Err(fail(StatusCode::CONFLICT, "party.error_in_programme"));
+                    }
+                    rows.remove(at);
+                }
+                let authors: Vec<_> = rows.iter().map(|r| r.1).collect();
+                let at = place(&authors, current_at(&rows), started, me, rule)
+                    .map_err(|_| fail(StatusCode::CONFLICT, "party.error_queue_full"))?;
+                rows.insert(at, (item.clone(), me));
+            }
+            note = Some((
+                "programme_changed",
+                json!({ "added": items.len(), "removed": 0 }),
+            ));
             items
         }
     };
+    let items: Vec<Item> = rows.iter().map(|r| r.0.clone()).collect();
     if items.len() > MAX_PROGRAMME || distinct(items.clone()).len() != items.len() {
         return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
     }
-    let mut vetted: Vec<Item> = items
-        .iter()
-        .filter(|i| !current.iter().any(|r| same_row(&r.item, i)))
-        .cloned()
-        .collect();
+    let mut vetted = added;
     if row.status == "scheduled"
         && let Some(head) = items.first()
         && current.first().is_none_or(|c| !same_row(&c.item, head))
@@ -1167,10 +1222,9 @@ pub(super) async fn edit_held(st: &AppState, a: &Authed, row: &mut Row, edit: Ed
         vet_items(st, id, &vetted, &ids).await?;
     }
     let cover = row.cover.as_deref().and_then(|c| c.prune(&items));
-    db::set_programme(&st.db, id, &items, cover.as_ref()).await?;
+    let authors: Vec<_> = rows.iter().map(|r| r.1).collect();
+    db::set_programme(&st.db, id, &items, &authors, cover.as_ref()).await?;
     let head = items.first().cloned();
-    // An append is `choose` (which posts `proposal_chosen`) or the start on the top vote.
-    let note = replaced.then(|| programme_note(&current, &items)).flatten();
     registry::ensure_held(st, row).await?;
     mutate_held(st, id, |l| {
         let mut fx = l.programme(head);
@@ -1239,6 +1293,7 @@ async fn go_live(st: &AppState, a: &Authed, id: i32, at: Option<&Item>, position
     mutate_held(st, id, |l| ((), l.go_live(item, position, now_ms())))
         .await
         .ok_or_else(not_live)?;
+    super::proposals::drop_all(st, &row).await?;
     let guests = db::guest_ids(&st.db, id).await?;
     st.hub.emit_to_users(
         &guests,
@@ -1405,24 +1460,6 @@ pub(super) async fn queue_step(
     users.dedup();
     let step = steps::step(st, rows, &current, forward, &users).await?;
     Ok(Some((step, current)))
-}
-
-/// Moves the party on to the next row of its programme as an `intent` `next` of `device` would. The caller
-/// holds the gate.
-pub(super) async fn advance_held(st: &AppState, row: &Row, me: i32, device: &str) -> R<()> {
-    let (step, _) = queue_step(st, row, true)
-        .await?
-        .ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid"))?;
-    mutate_held(st, row.id, |l| {
-        let rev = l.room.rev;
-        match l.advance(me, device, rev, step, now_ms()) {
-            Ok((_, e)) => (Ok(()), e),
-            Err(e) => (Err(e), vec![]),
-        }
-    })
-    .await
-    .ok_or_else(not_live)?
-    .map_err(machine_err)
 }
 
 async fn run(
@@ -1736,12 +1773,12 @@ pub async fn queue(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<Vec<PartyItem>>> {
     let row = member_row(&st, id, a.user.id).await?;
-    let items: Vec<Item> = db::programme_rows(&st.db, row.id)
-        .await?
-        .into_iter()
-        .map(|r| r.item)
-        .collect();
+    let rows = db::programme_rows(&st.db, row.id).await?;
+    let items: Vec<Item> = rows.iter().map(|r| r.item.clone()).collect();
     let mut dtos = item_dtos(&st, &items).await?;
+    for (dto, r) in dtos.iter_mut().zip(&rows) {
+        dto.added_by = r.added_by;
+    }
     let mut refs: Vec<&mut PartyItem> = dtos.iter_mut().collect();
     conceal_items(&st, a.user.id, &mut refs).await?;
     Ok(Json(dtos))

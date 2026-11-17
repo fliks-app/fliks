@@ -127,6 +127,7 @@ impl Parties {
             l.room.reactions_enabled = row.reactions_enabled;
             l.room.chat_enabled = row.chat_enabled;
             l.room.link_sharing = row.link_sharing;
+            l.room.rotation = row.rotation;
             l.room.public = row.public;
             l.room.restore_chat(chat);
             l
@@ -292,6 +293,7 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         episode_title: i.episode_title,
         media_type: i.media_type,
         hidden: false,
+        added_by: None,
     }
 }
 
@@ -574,6 +576,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 reactions_enabled,
                 chat_enabled,
                 link_sharing,
+                rotation,
                 public,
             } => emit(SseEvent::PartySettings {
                 party_id: pid,
@@ -583,6 +586,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 reactions_enabled,
                 chat_enabled,
                 link_sharing,
+                rotation,
                 public,
             }),
             Effect::Message(m) => {

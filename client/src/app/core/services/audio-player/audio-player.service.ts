@@ -72,6 +72,7 @@ export type AudioPartyCommand =
   | { type: 'next' }
   | { type: 'prev' }
   | { type: 'item'; index: number }
+  | { type: 'enqueue'; tracks: readonly MusicTrackRequest[]; where: 'next' | 'last' }
   | { type: 'queue'; tracks: readonly MusicTrackRequest[] };
 
 export type AudioPartyRouter = (c: AudioPartyCommand) => boolean;
@@ -410,6 +411,7 @@ export class AudioPlayerService {
   enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
     if (!tracks.length) return;
     if (!this._musicMode()) return void (this.enqueueOnOwner(tracks, where) || this.playTracks(tracks));
+    if (this.routed({ type: 'enqueue', tracks, where })) return;
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
     this.queueEdited();

@@ -35,7 +35,7 @@ import { mediaQuerySignal } from '../../utils/viewport';
 import { ClockService } from './clock.service';
 import { ReactionsService } from './reactions.service';
 import { AudioPartyHost } from './audio-party-host';
-import { isTrack, itemIn, sameItem, type ItemRef } from './party-item';
+import { isTrack, sameItem } from './party-item';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -82,6 +82,7 @@ function closeReason(err: unknown): PartyCloseReason | null {
 const ROOM_LOST = ['party.error_not_member', 'party.error_not_live'];
 const BUBBLE_MS = 4000;
 const REJOIN_RETRY_MS = 2000;
+const UP_NEXT = 3;
 /** How long a reaction rises over the video; its CSS animation follows. */
 export const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
@@ -116,13 +117,21 @@ export class PartyService {
   readonly programme = signal<PartyItem[]>([]);
   readonly members = signal<PartyMember[]>([]);
   readonly proposals = signal<PartyProposal[]>([]);
-  readonly filmProposals = computed(() => this.proposals().filter((p) => !isTrack(p.item)));
-  /** The songs waiting to be sung, next singer first. */
-  readonly singerQueue = computed(() =>
-    this.proposals()
-      .filter((p) => p.queuePosition !== undefined)
-      .sort((a, b) => a.queuePosition! - b.queuePosition!),
-  );
+  /** The name of a user the party knows (a member, a guest or the host); empty for anyone else. */
+  userName(userId: number | null): string {
+    const p = this.party();
+    if (userId == null || !p) return '';
+    const found = this.members().find((m) => m.userId === userId) ?? p.guests.find((g) => g.userId === userId) ?? (p.host.userId === userId ? p.host : null);
+    return found?.username ?? '';
+  }
+
+  /** The rows after the playing one (all of them while nothing plays), at most the next three. */
+  readonly upNext = computed(() => {
+    const rows = this.programme();
+    const cur = this.live()?.item;
+    const at = cur ? rows.findIndex((r) => sameItem(r, cur)) : -1;
+    return rows.slice(at + 1, at + 1 + UP_NEXT);
+  });
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
@@ -583,6 +592,7 @@ export class PartyService {
                 reactionsEnabled: e.reactionsEnabled,
                 chatEnabled: e.chatEnabled,
                 linkSharing: e.linkSharing,
+                rotation: e.rotation,
                 public: e.public,
                 inviteToken: e.linkSharing || this.isHost() ? p.inviteToken : null,
               }
@@ -670,17 +680,17 @@ export class PartyService {
     }
   }
 
-  /** Puts a track forward as a song to sing; false when the server refused (the interceptor toasted it). */
-  async proposeTrack(mediaId: number, itemId: number): Promise<boolean> {
+  /** Adds rows to the programme, right after the playing one or at the end; false when the server refused (the interceptor toasted it). */
+  async addToProgramme(items: PartyItemIn[], where: 'next' | 'last'): Promise<boolean> {
     const id = this.party()?.id;
     if (id == null) return false;
-    try {
-      await this.api.proposeTrack(id, mediaId, itemId);
-    } catch {
-      return false;
-    }
-    this.toast.success(this.translate.instant('karaoke.queue_added'));
-    return true;
+    return this.api.addToProgramme(id, items, where).then(() => true, () => false);
+  }
+
+  /** Removes a programme row; the interceptor toasts a refusal. */
+  async removeFromProgramme(itemId: number): Promise<void> {
+    const id = this.party()?.id;
+    if (id != null) await this.api.removeFromProgramme(id, itemId).catch(() => {});
   }
 
   /** Host: replaces the programme; its event reloads the rows. */
@@ -688,34 +698,6 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return false;
     return this.api.programme(id, items).then(() => true, () => false);
-  }
-
-  /** Removes a pending song; the interceptor toasts a refusal. */
-  async cancelProposal(partyId: number, proposalId: number): Promise<void> {
-    await this.api.unpropose(partyId, proposalId).catch(() => {});
-  }
-
-  /** Host: plays the head of the singer queue, or the song `proposalId`, now. */
-  async playSinger(proposalId?: number): Promise<void> {
-    const id = this.party()?.id;
-    if (id == null) return;
-    try {
-      this.applySnapshot(await (proposalId === undefined ? this.api.nextSinger(id) : this.api.choose(id, proposalId)));
-    } catch {
-      return;
-    }
-    await this.sendIntent('next');
-  }
-
-  /** Host: the party idles on `from` and a song waits; the server moves on in one step, whichever host device asks first. */
-  async advanceSinger(from: ItemRef): Promise<void> {
-    const id = this.party()?.id;
-    if (id == null) return;
-    try {
-      this.applySnapshot(await this.api.nextSinger(id, { from: itemIn(from), deviceId: this.deviceId() }));
-    } catch {
-      return;
-    }
   }
 
   async reportStatus(status: 'ready' | 'buffering', position: number): Promise<void> {

@@ -87,10 +87,9 @@ struct TrackActions {
     var favourite: Bool
     var onFavourite: () -> Void
     var onPlaylist: () -> Void
-    var onPlayNext: () -> Void
+    /// Nil where the party's turns place each track.
+    var onPlayNext: (() -> Void)?
     var onQueue: () -> Void
-    /// Puts the track forward as a song to sing; set while a party is joined.
-    var onSing: (() -> Void)? = nil
 }
 
 /// One line of a track list: number or cover, title, artists, duration; a white pill when focused.
@@ -131,10 +130,9 @@ struct TrackLine: View {
         Button(action: a.onFavourite) {
             Label(tr(a.favourite ? "music.unfavourite" : "music.favourite"), systemImage: a.favourite ? "heart.slash" : "heart")
         }
-        if let sing = a.onSing {
-            Button(action: sing) { Label(tr("karaoke.sing"), systemImage: "music.mic") }
+        if let next = a.onPlayNext {
+            Button(action: next) { Label(tr("music.play_next"), systemImage: "text.insert") }
         }
-        Button(action: a.onPlayNext) { Label(tr("music.play_next"), systemImage: "text.insert") }
         Button(action: a.onQueue) { Label(tr("music.add_to_queue"), systemImage: "text.append") }
         Button(action: a.onPlaylist) { Label(tr("playlists.add_to_playlist_title"), systemImage: "text.badge.plus") }
     }

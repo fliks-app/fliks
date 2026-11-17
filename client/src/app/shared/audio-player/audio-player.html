@@ -77,7 +77,7 @@
         <div class="absolute inset-0 flex items-center justify-end bg-error pr-5 text-error-content opacity-[var(--swipe,0)]" aria-hidden="true">
           <svg lucideTrash2 class="h-5 w-5"></svg>
         </div>
-        <div appSwipeRemove [swipeDisabled]="queueEditing() || queueLocked()" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1">
+        <div appSwipeRemove [swipeDisabled]="queueEditing() || !canRemove(q, i)" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1">
           <button
             type="button"
             class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left"
@@ -103,6 +103,9 @@
             <span class="min-w-0 flex-1">
               <span class="block truncate" [class.text-primary]="i === audio.queueIndex()">{{ q.title }}</span>
               <span class="block truncate text-sm text-base-content/60">{{ q.artists }}</span>
+              @if (author(q); as who) {
+                <span class="block truncate text-xs text-base-content/50" data-testid="queue-author">{{ 'party.added_by' | translate: { name: who } }}</span>
+              }
             </span>
           </button>
           @if (isTv() && !queueEditing() && !queueLocked()) {
@@ -113,7 +116,7 @@
               <svg lucideArrowDown class="h-4 w-4"></svg>
             </button>
           }
-          @if (!isTouch() && !queueEditing() && !queueLocked()) {
+          @if (!isTouch() && !queueEditing() && canRemove(q, i)) {
             <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="local.removeFromQueue(i)" [attr.aria-label]="'music_player.remove' | translate">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>

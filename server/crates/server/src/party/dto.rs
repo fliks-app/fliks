@@ -3,7 +3,7 @@ use super::cover::{Cover, CoverDto};
 use crate::http::{AppError, json::iso_ms};
 use chrono::{DateTime, Utc};
 use fliks_domain::party::{
-    Action, Anchor, Item, MemberStatus, Message, Policy, Role, State, Voice,
+    Action, Anchor, Item, MemberStatus, Message, Policy, Role, State, Voice, Where,
 };
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +46,7 @@ pub struct Create {
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
     pub link_sharing: Option<bool>,
+    pub rotation: Option<bool>,
     pub public: Option<bool>,
     pub invitee_ids: Option<Vec<i32>>,
     pub items: Option<Vec<ItemIn>>,
@@ -92,6 +93,7 @@ pub struct Patch {
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
     pub link_sharing: Option<bool>,
+    pub rotation: Option<bool>,
     pub public: Option<bool>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
@@ -183,12 +185,13 @@ pub struct IntentIn {
     pub base_rev: u64,
 }
 
-/// `from` and `deviceId` together make `proposals/next` also move the party on, only while it idles on `from`.
+/// Rows to add to the programme, right after the playing one or at the end.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct NextIn {
-    pub from: Option<ItemIn>,
-    pub device_id: Option<String>,
+#[serde(deny_unknown_fields)]
+pub struct AddIn {
+    pub items: Vec<ItemIn>,
+    #[serde(rename = "where")]
+    pub place: Where,
 }
 
 #[derive(Deserialize)]
@@ -299,6 +302,8 @@ pub struct PartyItem {
     pub media_type: String,
     /// The viewer cannot open the media: title and artwork are blanked, the ids stay.
     pub hidden: bool,
+    /// The user who added the row to the programme; set on programme rows only.
+    pub added_by: Option<i32>,
 }
 
 #[derive(Serialize, Clone)]
@@ -376,9 +381,6 @@ pub struct ProposalDto {
     pub proposed_by: i32,
     pub upvoter_ids: Vec<i32>,
     pub downvoter_ids: Vec<i32>,
-    /// A pending track proposal's place in the singer queue, from 1.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub queue_position: Option<i32>,
 }
 
 /// `1` up, `-1` down.
@@ -419,6 +421,7 @@ pub struct PartyDto {
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
     pub link_sharing: bool,
+    pub rotation: bool,
     pub invite_token: Option<String>,
     pub guests: Vec<GuestDto>,
     pub proposals: Vec<ProposalDto>,

@@ -178,6 +178,15 @@ describe('PartyProgrammeComponent', () => {
     expect(ids(0)).toEqual(['1:', '2:20', '2:21', '2:22', '3:']);
   });
 
+  it('names the user who added a row', async () => {
+    api.queue.mockResolvedValue([{ ...A, addedBy: 7 }, { ...B, addedBy: null }]);
+    const f = await setup(false);
+    f.componentRef.setInput('people', [{ userId: 7, username: 'cara' }]);
+    f.detectChanges();
+    const authors = Array.from(el(f).querySelectorAll('[data-testid="programme-author"]'));
+    expect(authors.map((a) => a.textContent)).toEqual(['party.added_by']);
+  });
+
   it('shows a track as its title over its album and keeps its item id in the PUT', async () => {
     const trackRow = { ...item(4), itemId: 70, mediaType: 'album', title: 'Song', seriesTitle: 'Al' } as PartyItem;
     api.queue.mockResolvedValue([A, trackRow, { ...trackRow, itemId: 71, title: 'Other' }]);
