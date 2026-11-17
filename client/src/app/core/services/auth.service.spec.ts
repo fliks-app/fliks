@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { NEVER, of, throwError } from 'rxjs';
 import { AuthService, type User } from './auth.service';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ServerConfigService } from './server-config.service';
 import { ServerCacheService } from './server-cache.service';
 import { SessionStoreService } from './session-store.service';
@@ -101,7 +102,8 @@ describe('AuthService.ensureStreamToken', () => {
 
     expect(await service.ensureStreamToken(7)).toBe('st');
     expect(post).toHaveBeenCalledTimes(2);
-    expect(post).toHaveBeenCalledWith('/api/auth/stream-token', { mediaFileId: 7 });
+    expect(post).toHaveBeenCalledWith('/api/auth/stream-token', { mediaFileId: 7 }, expect.anything());
+    expect(post.mock.calls[0][2].context.get(SKIP_ERROR_TOAST)).toBe(true);
   });
 
   it('keeps one token per file and falls back to the access token for another', async () => {
