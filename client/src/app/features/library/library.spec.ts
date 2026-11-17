@@ -23,6 +23,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
+import { MediaStartService } from '../../core/services/media-start.service';
 
 const OWN_KEY = 'library-route::name=films';
 
@@ -147,6 +148,7 @@ function createHarness(remembered?: number) {
         useValue: { activate: vi.fn(), deactivate: vi.fn(), deactivateIf: vi.fn(), restore: vi.fn(), restoreSticky: vi.fn(), remembered: () => remembered },
       },
       { provide: AppResumeService, useValue: { resume$: EMPTY } },
+      { provide: MediaStartService, useValue: { resume: vi.fn() } },
     ],
   });
 
