@@ -259,7 +259,6 @@ export class CastPlayerService {
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
         mediaId: t.mediaId,
         itemId: t.itemId,
-        stem: kind,
         mediaFileId: fileId,
         userId: this.authService.user()?.id,
         currentTime: position,
@@ -270,13 +269,6 @@ export class CastPlayerService {
       console.error('[cast] stem LOAD failed', err);
       return false;
     }
-  }
-
-  /** Has the receiver play the vocals stem over the stem it plays of track `t`, at `level`; null drops them. */
-  async mixVocals(t: CastTrack, fileId: number, contentType: string, level: number | null): Promise<void> {
-    if (level === null) return this.cast.sendFliks({ kind: 'vocals', url: null });
-    const url = await this.stemUrl(fileId, 'vocals');
-    if (url) this.cast.sendFliks({ kind: 'vocals', itemId: t.itemId, url, contentType, level });
   }
 
   private async stemUrl(fileId: number, kind: StemKind): Promise<string | null> {

@@ -710,6 +710,10 @@ export class AudioPlayerService {
         if (this.casting) this.onPlayState(!paused);
       });
       effect(() => {
+        const buffering = cast.buffering();
+        if (this.casting) this._buffering.set(buffering);
+      });
+      effect(() => {
         const ended = cast.ended();
         const media = cast.receiverMedia();
         if (this._casting() && this._track()) untracked(() => this.onReceiverStatus(ended, media));
@@ -743,36 +747,33 @@ export class AudioPlayerService {
     return (this.castStemRun = this.castStemRun.then(() => this.applyCastStem()).catch(() => undefined));
   }
 
-  /** On Cast a stem mode plays the instrumental stem, the receiver mixing the vocals over it at the vocal level; `original` the track again. */
+  /** On Cast the receiver plays one file: a stem mode loads that stem (the guide, else the instrumental) at the position, `original` the track again. */
   private async applyCastStem(): Promise<void> {
     const req = this.mq.current;
     const file = this.castStemFile;
     if (!req || file === null) return;
-    const kind = this._stemMode() === 'original' ? null : 'instrumental';
-    const cast = this.injector.get(CastPlayerService);
-    const vocals = () => cast.mixVocals(req, file, this.castStemTypes.vocals ?? 'audio/ogg', kind && this._vocalLevel());
-    if (kind === this.castKind) return void (kind && vocals());
+    const mode = this._stemMode();
+    const kind = mode === 'original' ? null : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
+    if (kind === this.castKind) return;
     // The LOAD below empties the receiver's queue.
     this.dropPreload();
     const generation = this.generation;
     const position = this._position();
     const autoplay = this._playing();
+    const cast = this.injector.get(CastPlayerService);
     const current = () => generation === this.generation;
     if (kind) {
       if (!(await cast.castStem(req, file, kind, this.castStemTypes[kind] ?? 'audio/ogg', position, autoplay, current))) {
         return void (current() && this.onStemsFailed());
       }
     } else {
-      void vocals();
       const info = await cast.castTrack(req, autoplay, position, current);
       if (!info) return void (current() && this.onStemsFailed());
       if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
       this.info = info;
       this.sessionId = info.sessionId;
     }
-    if (generation !== this.generation) return;
-    this.castKind = kind;
-    if (kind) void vocals();
+    if (generation === this.generation) this.castKind = kind;
   }
 
   private preloadNear(position: number): void {

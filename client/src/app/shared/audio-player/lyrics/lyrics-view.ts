@@ -73,11 +73,12 @@ export class LyricsViewComponent {
     inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.frame));
     effect(() => {
       this.audio.playing();
+      this.audio.buffering();
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
       untracked(() => this.sync(this.anchor.pos));
     });
     effect(() => {
-      const run = this.audio.playing() && this.timed();
+      const run = this.audio.playing() && !this.audio.buffering() && this.timed();
       cancelAnimationFrame(this.frame);
       if (run) untracked(() => this.tick());
     });

@@ -62,8 +62,6 @@ export interface CastMediaInfo {
   episodeId?: number;
   /** The music track, whose media is the album. */
   itemId?: number;
-  /** The karaoke stem a music LOAD plays instead of the track; the receiver mixes the vocals over it. */
-  stem?: string;
   /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
@@ -686,7 +684,6 @@ export class CastService implements OnDestroy {
       mediaId: info.mediaId,
       episodeId: info.episodeId,
       itemId: info.itemId,
-      stem: info.stem,
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
       sid: info.sid,

@@ -969,58 +969,6 @@ function renderMusicProgress(elapsed, total, played) {
   musicPlayed.style.width = played;
 }
 
-// --- Vocals over a stem ------------------------------------------------------
-// A karaoke mode loads the instrumental stem (its customData has `stem`); the sender sends the vocals stem,
-// which plays here on the media element's clock at the level it sets, so the level changes with no reload.
-
-const VOCALS_SEEK_S = 0.3;
-const VOCALS_NUDGE_S = 0.04;
-const vocalsEl = document.createElement('audio');
-vocalsEl.preload = 'auto';
-let vocalsItem = null;
-
-function dropVocals() {
-  vocalsItem = null;
-  vocalsEl.pause();
-  vocalsEl.removeAttribute('src');
-  vocalsEl.load();
-}
-
-function syncVocals() {
-  if (vocalsItem === null) return;
-  const info = playerManager.getMediaInformation();
-  const item = musicItemId(info);
-  if (item !== null && item !== vocalsItem) return dropVocals();
-  const media = findMediaElement();
-  const over = !!media && item === vocalsItem && !!info.customData.stem && vocalsEl.volume > 0;
-  if (!over || media.paused || media.ended || media.readyState < 3) return void vocalsEl.pause();
-  // A seek outlasts the tolerance: seeking again before it lands would loop and starve the media element.
-  if (vocalsEl.seeking) return;
-  const drift = vocalsEl.currentTime - media.currentTime;
-  if (vocalsEl.paused || Math.abs(drift) > VOCALS_SEEK_S) vocalsEl.currentTime = media.currentTime;
-  // A small drift closes by rate, which a cut in the voice would not.
-  const nudge = Math.abs(drift) > VOCALS_NUDGE_S && Math.abs(drift) <= VOCALS_SEEK_S ? (drift > 0 ? 0.97 : 1.03) : 1;
-  vocalsEl.playbackRate = media.playbackRate * nudge;
-  if (vocalsEl.paused) vocalsEl.play().catch(() => {});
-}
-setInterval(syncVocals, 250);
-[
-  cast.framework.events.EventType.PLAYING,
-  cast.framework.events.EventType.PAUSE,
-  cast.framework.events.EventType.SEEKED,
-  cast.framework.events.EventType.WAITING,
-].forEach((evt) => playerManager.addEventListener(evt, syncVocals));
-
-context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
-  const msg = event.data;
-  if (!msg || msg.kind !== 'vocals') return;
-  if (!msg.url || typeof msg.itemId !== 'number') return dropVocals();
-  if (vocalsEl.getAttribute('src') !== msg.url) vocalsEl.src = msg.url;
-  vocalsItem = msg.itemId;
-  vocalsEl.volume = Math.min(1, Math.max(0, Number(msg.level) || 0));
-  syncVocals();
-});
-
 // --- Boot ---------------------------------------------------------------
 //
 // `useShakaForHls: true` makes CAF use Shaka for HLS — the same engine

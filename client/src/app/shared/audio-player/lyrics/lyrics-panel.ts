@@ -153,6 +153,8 @@ export class LyricsPanelComponent {
       untracked(() => void this.load(id));
     });
     effect(() => {
+      this.audio.playing();
+      this.audio.buffering();
       this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
     });
   }
@@ -324,7 +326,7 @@ export class LyricsPanelComponent {
   }
 
   protected stamp(): void {
-    const ms = this.anchor.pos + (this.audio.playing() ? (performance.now() - this.anchor.at) * this.audio.rate() : 0);
+    const ms = this.anchor.pos + (this.audio.playing() && !this.audio.buffering() ? (performance.now() - this.anchor.at) * this.audio.rate() : 0);
     this.tap.update((s) => tapStamp(s, ms));
   }
 
