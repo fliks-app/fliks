@@ -1204,8 +1204,8 @@ impl Live {
         let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
         let actor = room.members[i].clone();
         let mut out = vec![];
+        // No idle first: the next row keeps the play state the ended one had, as a `setItem` would.
         if pb.can_end(room, user_id, device_id, item) && same_row(from, &pb.item) {
-            pb.idle(room, &mut out, now, &actor);
             pb.walk(room, &mut out, &actor, step, true, now);
         }
         Ok((room.rev, out))
@@ -2357,6 +2357,19 @@ mod tests {
             .unwrap()
             .1;
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn an_ended_advance_keeps_playing_on_the_next_row() {
+        let mut l = party();
+        l.pb_mut().state = State::Playing;
+        let to = step(true, &[], Some(row(3, None)));
+        l.advance_after_ended(1, "d1", Some(&item()), &item(), to, 5)
+            .unwrap();
+        assert_eq!(l.pb().state, State::Waiting);
+        ready(&mut l, 1, "d1", 0.0, 6);
+        ready(&mut l, 2, "d2", 0.0, 6);
+        assert_eq!(l.pb().state, State::Playing);
     }
 
     #[test]

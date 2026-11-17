@@ -284,9 +284,18 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// A party picks the next track: a routed queue lines nothing up, so its track ends instead of running on.
     @objc func setRouted(_ call: CAPPluginCall) {
-        routed = call.getBool("routed") ?? false
-        call.resolve()
+        let on = call.getBool("routed") ?? false
+        DispatchQueue.main.async {
+            self.routed = on
+            if on {
+                for item in self.player.items().dropFirst() { self.player.remove(item) }
+            } else {
+                self.prefetchNext()
+            }
+            call.resolve()
+        }
     }
 
     @objc func stop(_ call: CAPPluginCall) {
@@ -346,11 +355,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func prefetchNext() {
-        guard player.items().count < 2, let next = nextIndex() else { return }
+        guard !routed, player.items().count < 2, let next = nextIndex() else { return }
         let mine = generation
         let current = index
         Task { @MainActor in
-            guard let (item, found) = await self.makeItem(from: next), mine == self.generation, current == self.index, self.player.items().count < 2 else { return }
+            guard let (item, found) = await self.makeItem(from: next), mine == self.generation, current == self.index, !self.routed, self.player.items().count < 2 else { return }
             self.indexOfItem[ObjectIdentifier(item)] = found
             self.player.insert(item, after: self.player.items().last)
         }

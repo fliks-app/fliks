@@ -132,6 +132,8 @@ final class MusicHost {
     private final FliksApi api;
     private final MusicCatalog catalog;
     private final ExoPlayer exo;
+    /** Paused at the end of a routed track: the party, not the queue, picks what plays next. */
+    private boolean heldAtEnd;
     private final RoutedPlayer player;
     private final Map<Long, Resolved> resolved = new ConcurrentHashMap<>();
     private final Map<String, List<MediaItem>> searches = new ConcurrentHashMap<>();
@@ -249,6 +251,7 @@ final class MusicHost {
 
     void setRouted(boolean routed) {
         player.routed = routed;
+        main.post(() -> exo.setPauseAtEndOfMediaItems(routed));
     }
 
     String absolute(String path) {
@@ -468,7 +471,7 @@ final class MusicHost {
         o.put("playWhenReady", exo.getPlayWhenReady());
         o.put("buffering", s == Player.STATE_BUFFERING);
         o.put("ready", s == Player.STATE_READY);
-        o.put("ended", s == Player.STATE_ENDED);
+        o.put("ended", s == Player.STATE_ENDED || heldAtEnd);
         emit("state", o);
     }
 
@@ -702,6 +705,7 @@ final class MusicHost {
     private final class Listener implements Player.Listener {
         @Override
         public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
+            heldAtEnd = false;
             if (stems.active()) {
                 stems.clear();
                 emit("stems", new JSObject().put("state", "cleared"));
@@ -751,6 +755,14 @@ final class MusicHost {
 
         @Override
         public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+            heldAtEnd = !playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM;
+            emitState();
+        }
+
+        @Override
+        public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+            if (reason != Player.DISCONTINUITY_REASON_SEEK || !heldAtEnd) return;
+            heldAtEnd = false;
             emitState();
         }
 
