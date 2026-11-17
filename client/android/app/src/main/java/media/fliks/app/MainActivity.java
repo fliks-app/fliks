@@ -50,6 +50,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(ImmersivePlugin.class);
         registerPlugin(OrientationPlugin.class);
+        registerPlugin(KaraokeMicPlugin.class);
         registerPlugin(PipPlugin.class);
         registerPlugin(HdrPlugin.class);
         registerPlugin(AudioCapabilitiesPlugin.class);
