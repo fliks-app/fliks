@@ -35,11 +35,18 @@ describe('undecodableAudioFormats', () => {
       return { supported: true };
     });
     vi.stubGlobal('navigator', { mediaCapabilities: { decodingInfo } });
-    expect([...(await undecodableAudioFormats())]).toEqual(['audio/flac']);
+    expect([...(await undecodableAudioFormats(opens('audio/')))]).toEqual(['audio/flac']);
+  });
+
+  it('does not probe a MIME the element cannot open', async () => {
+    const decodingInfo = vi.fn(async () => ({ supported: true }));
+    vi.stubGlobal('navigator', { mediaCapabilities: { decodingInfo } });
+    await undecodableAudioFormats(opens('audio/mpeg'));
+    expect(decodingInfo).toHaveBeenCalledTimes(1);
   });
 
   it('is empty where the API is missing', async () => {
     vi.stubGlobal('navigator', {});
-    expect((await undecodableAudioFormats()).size).toBe(0);
+    expect((await undecodableAudioFormats(opens('audio/'))).size).toBe(0);
   });
 });
