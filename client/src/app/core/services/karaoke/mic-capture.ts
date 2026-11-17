@@ -53,7 +53,8 @@ export class MicCapture {
     let rate = 48000;
     this.native = await KaraokeMic.addListener('block', ({ data }) => {
       const pcm = new Int16Array(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)).buffer);
-      onFrame({ t: now(), midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
+      // The pitch comes from the window ending at this block: stamp the middle of it, where the sound was.
+      onFrame({ t: now() - (WINDOW / 2 / rate) * 1000, midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
     });
     try {
       rate = (await KaraokeMic.start()).sampleRate;

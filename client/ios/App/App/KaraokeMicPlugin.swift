@@ -11,8 +11,10 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
     ]
 
-    private static let block = 1024
+    private static let block = 512
     private let engine = AVAudioEngine()
+    private let queue = DispatchQueue(label: "karaoke.mic")
+    private var sink: AVAudioSinkNode?
     private var samples = [Int16]()
 
     @objc func start(_ call: CAPPluginCall) {
@@ -33,6 +35,7 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP, .allowAirPlay])
+            try session.setPreferredIOBufferDuration(0.005)
             try session.setActive(true)
         } catch {
             call.reject("unavailable")
@@ -49,23 +52,33 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("unavailable")
             return
         }
-        input.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.block), format: format) { [weak self] buffer, _ in
-            self?.push(buffer)
+        // A sink node is called once per input cycle; a tap delivers its buffers in coarser, delayed chunks.
+        let sink = AVAudioSinkNode { [weak self] _, frames, list in
+            let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+            guard let data = buffers.first?.mData?.assumingMemoryBound(to: Float.self) else { return noErr }
+            let chunk = Array(UnsafeBufferPointer(start: data, count: Int(frames)))
+            self?.queue.async { self?.push(chunk) }
+            return noErr
         }
+        engine.attach(sink)
+        engine.connect(input, to: sink, format: format)
+        self.sink = sink
         do {
             try engine.start()
         } catch {
-            input.removeTap(onBus: 0)
+            engine.detach(sink)
+            self.sink = nil
             call.reject("unavailable")
             return
         }
+        // Voice processing moves the output to the receiver; the music stays on the loudspeaker.
+        try? session.overrideOutputAudioPort(.speaker)
         call.resolve(["sampleRate": format.sampleRate, "echoCancelled": echoCancelled])
     }
 
-    private func push(_ buffer: AVAudioPCMBuffer) {
-        guard let channel = buffer.floatChannelData?[0] else { return }
-        for i in 0..<Int(buffer.frameLength) {
-            samples.append(Int16(max(-1, min(1, channel[i])) * 32767))
+    private func push(_ chunk: [Float]) {
+        for value in chunk {
+            samples.append(Int16(max(-1, min(1, value)) * 32767))
             if samples.count == Self.block {
                 let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
                 notifyListeners("block", data: ["data": data.base64EncodedString()])
@@ -76,10 +89,11 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func close() {
         guard engine.isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        if let sink { engine.detach(sink) }
+        sink = nil
         try? engine.inputNode.setVoiceProcessingEnabled(false)
-        samples.removeAll()
+        queue.async { self.samples.removeAll() }
         // Back to the plain playback session: a mixable one loses the lock screen controls.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
     }
