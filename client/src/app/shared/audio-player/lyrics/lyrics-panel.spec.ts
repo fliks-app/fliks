@@ -8,6 +8,7 @@ import { LyricsApiService } from '../../../core/services/api/lyrics-api.service'
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { KaraokeService } from '../../../core/services/karaoke/karaoke.service';
 import { SseService } from '../../../core/services/sse.service';
 import { LyricsPanelComponent } from './lyrics-panel';
 
@@ -19,6 +20,7 @@ async function create(structuredLyrics: unknown[] = [], output?: unknown, state?
     itemState: vi.fn(async () => none),
     prepare: vi.fn(async () => ({ ...none, state: 'queued' })),
   };
+  const session = { singing: signal(true), stopSinging: vi.fn() };
   const audio = {
     musicMode: signal(true),
     track: signal({ itemId: 7 }),
@@ -37,6 +39,7 @@ async function create(structuredLyrics: unknown[] = [], output?: unknown, state?
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: KaraokeApiService, useValue: karaoke },
+      { provide: KaraokeService, useValue: session },
       { provide: LyricsApiService, useValue: { get: async () => ({ structuredLyrics }) } },
       { provide: AudioPlayerService, useValue: audio },
       { provide: AuthService, useValue: { hasPermission: () => true } },
@@ -53,7 +56,7 @@ async function create(structuredLyrics: unknown[] = [], output?: unknown, state?
   if (!output || (output as { supports(): boolean }).supports()) await vi.waitFor(() => expect(karaoke.itemState).toHaveBeenCalled());
   await f.whenStable();
   f.detectChanges();
-  return { f, karaoke, audio, panel: f.componentInstance as unknown as { singKind(): string | null; sing(): void; stage(): boolean; layers(): unknown[] } };
+  return { f, karaoke, audio, session, panel: f.componentInstance as unknown as { singKind(): string | null; sing(): void; stage(): boolean; layers(): unknown[] } };
 }
 
 describe('LyricsPanelComponent karaoke', () => {
@@ -64,6 +67,24 @@ describe('LyricsPanelComponent karaoke', () => {
     expect(panel.singKind()).toBe('prepare');
     panel.sing();
     expect(karaoke.prepare).toHaveBeenCalledWith(7, {});
+  });
+
+  it('keeps the mic across tracks and stops it with the stage', async () => {
+    const { f, panel, audio, session } = await create([], undefined, { ...none, state: 'ready', stems: {}, lyrics: true });
+    f.componentRef.setInput('stage', true);
+    f.detectChanges();
+    await f.whenStable();
+    session.stopSinging.mockClear();
+    audio.track.set({ itemId: 8 });
+    f.componentRef.setInput('itemId', 8);
+    f.detectChanges();
+    await f.whenStable();
+    expect(session.stopSinging).not.toHaveBeenCalled();
+    f.componentRef.setInput('stage', false);
+    f.detectChanges();
+    await f.whenStable();
+    expect(session.stopSinging).toHaveBeenCalled();
+    expect(panel.stage()).toBe(false);
   });
 
   it('retries a failed track and does nothing while it runs', async () => {

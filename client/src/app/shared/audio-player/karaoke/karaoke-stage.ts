@@ -120,7 +120,6 @@ export class KaraokeStageComponent {
     destroyRef.onDestroy(() => {
       clearInterval(timer);
       cancelAnimationFrame(this.frame);
-      this.karaoke.stopSinging();
       this.relay.close('display');
     });
     effect(() => {

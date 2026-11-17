@@ -5,6 +5,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
 import type { KaraokeFailure, KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
 import { DeviceService } from '../../../core/services/device.service';
+import { KaraokeService } from '../../../core/services/karaoke/karaoke.service';
 import { failureText } from '../../../core/services/karaoke/karaoke-failure';
 import { singKind, weightedProgress } from '../../../core/services/karaoke/karaoke-prep';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
@@ -32,6 +33,7 @@ const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttm
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
   private readonly karaoke = inject(KaraokeApiService);
+  private readonly session = inject(KaraokeService);
   private readonly translate = inject(TranslateService);
   private readonly local = inject(AudioPlayerService);
   protected readonly failure = (f: KaraokeFailure) => failureText(this.translate, f);
@@ -120,7 +122,15 @@ export class LyricsPanelComponent {
   private anchor = { pos: 0, at: 0 };
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.clearBubble());
+    inject(DestroyRef).onDestroy(() => {
+      this.clearBubble();
+      this.session.stopSinging();
+    });
+    // The mic outlives the stage, which is rebuilt on every track: it stops with karaoke, not with the track.
+    effect(() => {
+      const state = this.kState();
+      if (!this.stage() || (state && state.state !== 'ready')) untracked(() => this.session.singing() && this.session.stopSinging());
+    });
     void this.karaoke.status().then((s) => this.kStatus.set(s), () => undefined);
     inject(SseService)
       .karaokeEvents.pipe(takeUntilDestroyed())
