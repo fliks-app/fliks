@@ -1,8 +1,8 @@
-<div class="scroll-ring-safe flex h-full min-h-0 flex-col gap-2 overflow-hidden short:gap-1 sm:gap-3 short:sm:gap-1" data-testid="karaoke-stage">
+<div class="scroll-ring-safe relative flex h-full min-h-0 flex-col gap-2 overflow-hidden short:gap-1 sm:gap-3 short:sm:gap-1" data-testid="karaoke-stage">
   <div class="grid min-h-6 shrink-0 place-items-center sm:min-h-10 compact:sm:min-h-6 short:min-h-0 short:sm:min-h-0">
-  <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3" [class.invisible]="!rows().length" data-testid="karaoke-scores">
+  <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3 short:absolute short:right-1 short:top-0 short:z-10 short:flex-col short:items-end short:gap-1" [class.invisible]="!rows().length" data-testid="karaoke-scores">
     @for (r of rows(); track r.userId; let i = $index) {
-      <li class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-1" [class.text-xl]="tv()" [class.text-base]="!tv()">
+      <li class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-1 short:py-0.5" [class.text-xl]="tv()" [class.text-base]="!tv()">
         @let s = singer(r.agentId, i);
         @if (s.mark) {
           <span [style.color]="s.colour" aria-hidden="true">{{ s.mark }}</span>
