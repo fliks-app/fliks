@@ -12,6 +12,12 @@ const AUDIO_FORMATS: ReadonlyArray<{ mime: string; containers: string[]; codecs:
   { mime: 'audio/wav; codecs="1"', containers: ['wav'], codecs: ['pcm_s16le', 'pcm_s24le'] },
 ];
 
+/** The file extension of an audio MIME: AVFoundation names a local file's format by its extension, it does not sniff. */
+export function audioExtension(contentType: string): string | null {
+  const mime = contentType.split(';')[0].trim().toLowerCase();
+  return AUDIO_FORMATS.find((f) => f.mime.split(';')[0] === mime)?.containers[0] ?? null;
+}
+
 /** The formats the element reports it can open, minus the `denied` MIMEs; Direct Play opens the file with `src`, so `canPlayType` is the probe, not MSE. */
 export function probeAudioDirectPlay(
   el: Pick<HTMLMediaElement, 'canPlayType'>,
