@@ -1,6 +1,6 @@
 import { computed, Signal } from '@angular/core';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
-import type { LocalHandoff, LocalOutput, PlaybackOption, PlaybackOutput, PlaybackSnapshot, PlaybackTimeline } from '../../core/services/playback/playback-output';
+import type { LocalOutput, VideoHandoff, PlaybackOption, PlaybackOutput, PlaybackSnapshot, PlaybackTimeline } from '../../core/services/playback/playback-output';
 import type { PlayerStateService } from '../../core/services/player-state.service';
 import { parseAudioIndex, type SpriteMetadata } from '../../core/utils/player.utils';
 
@@ -35,7 +35,7 @@ export interface LocalOutputHost {
   selectAudio(id: string): Promise<void>;
   selectQuality(id: string): Promise<void>;
   onBack(): void;
-  release(): Promise<LocalHandoff | null>;
+  release(): Promise<VideoHandoff | null>;
   stepAside(): void;
   resume(snapshot: PlaybackSnapshot): Promise<void>;
 }
@@ -144,6 +144,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   };
   skip = () => this.host.skip();
   playNext = () => this.host.playNext();
+  holds = () => this.host.mediaId() !== 0;
   release = () => this.host.release();
   stepAside = () => this.host.stepAside();
   resume = (snapshot: PlaybackSnapshot) => this.host.resume(snapshot);

@@ -28,7 +28,7 @@ import { SessionSyncService } from '../../core/services/session-sync.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
-import type { CastStart, LocalHandoff, PlaybackOutput, PlaybackSnapshot } from '../../core/services/playback/playback-output';
+import type { CastStart, PlaybackOutput, PlaybackSnapshot, VideoHandoff } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -2486,7 +2486,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private trackSetup: Promise<void> = Promise.resolve();
 
   /** Moving off this device: the engine falls silent and unloads, and what the target needs is handed over. */
-  private async releaseForHandoff(): Promise<LocalHandoff | null> {
+  private async releaseForHandoff(): Promise<VideoHandoff | null> {
     const resolveSubtitle = !this.firstLoadSetupDone;
     await this.firstLoadSettled;
     await this.trackSetup.catch(() => {});
@@ -2504,6 +2504,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.muted = true;
     await engine.unload();
     return {
+      kind: 'video',
       snapshot,
       cast: this.castStart(),
       resolveSubtitle,

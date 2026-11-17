@@ -4,6 +4,7 @@ import type { EdlRange } from '../../utils/edl-policy';
 import type { CastPlayerService } from '../cast-player.service';
 import type { CastSubtitleStyle } from '../cast-settings.service';
 import type { LaunchTracks } from '../track-manager.service';
+import type { MusicTrackRequest } from '../audio-player/music-queue';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
 export interface PlaybackOption {
@@ -126,8 +127,16 @@ export interface PlaybackOutput {
 /** What `CastPlayerService.startCast` needs to describe the media being handed to a receiver. */
 export type CastStart = Parameters<CastPlayerService['startCast']>[0];
 
-/** What a local output gives up when playback leaves this device. */
-export interface LocalHandoff {
+/** What a music hand-over carries; the queue itself stays on the audio player. */
+export interface MusicSnapshot {
+  track: MusicTrackRequest;
+  position: number;
+  paused: boolean;
+}
+
+/** What the video player gives up when playback leaves this device. */
+export interface VideoHandoff {
+  kind: 'video';
   snapshot: PlaybackSnapshot;
   cast: CastStart;
   /** The first load had not settled, so the subtitle pick may have been refused: the receiver resolves its own. */
@@ -136,13 +145,23 @@ export interface LocalHandoff {
   /** This device's own stream session, stopped once the receiver streams on its own. */
   localSessionId?: string;
 }
+export interface MusicHandoff {
+  kind: 'music';
+  snapshot: MusicSnapshot;
+}
+export type LocalHandoff = VideoHandoff | MusicHandoff;
 
-/** The player's output: the one that can leave this device and come back. */
-export interface LocalOutput extends PlaybackOutput {
-  /** Pause, mute and unload the engine; null when no item is open. */
-  release(): Promise<LocalHandoff | null>;
+/** A player of this device that playback leaves and comes back to. */
+export interface LocalPlayer<H extends LocalHandoff> {
+  /** An item is open: it falls silent for a receiver that already plays. */
+  holds(): boolean;
+  /** Pause, mute and unload, handing over what the next output needs; null when nothing may leave. */
+  release(): Promise<H | null>;
   /** Pause and mute without unloading: another output already plays. */
   stepAside(): void;
   /** Load again, or for the first time, where the snapshot says. */
-  resume(snapshot: PlaybackSnapshot): Promise<void>;
+  resume(snapshot: H['snapshot']): Promise<void>;
 }
+
+/** The video player's output: the one that can leave this device and come back. */
+export interface LocalOutput extends PlaybackOutput, LocalPlayer<VideoHandoff> {}

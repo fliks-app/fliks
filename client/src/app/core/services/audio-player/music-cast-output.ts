@@ -10,6 +10,7 @@ import { ToastService } from '../toast.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
 import type { StemKind } from '../api/karaoke.models';
 import type { MusicTrackRequest } from './music-queue';
+import type { MusicHandoff, MusicSnapshot } from '../playback/playback-output';
 import type { StemMode } from './stem-mix';
 
 /** What the audio player lends its cast output. */
@@ -28,7 +29,8 @@ export interface MusicCastHost {
   /** The track was loaded again (stem to original): a new server session. */
   reloaded(info: PlaybackInfoResponse): void;
   stemsFailed(): void;
-  receiverGone(): void;
+  /** Plays the snapshot's track on the receiver. */
+  startOnCast(s: MusicSnapshot): Promise<void>;
 }
 
 /** The server's mix of a stem file, as a receiver source id. */
@@ -52,6 +54,8 @@ export class MusicCastOutput {
   readonly isConnected = this.cast.isConnected;
   /** This device's music plays on the receiver. */
   readonly active = this._active.asReadonly();
+  /** Music plays on the receiver. */
+  readonly hasMedia = this.active;
 
   /** Bumped by every call that makes an in-flight load or prepare stale. */
   private generation = 0;
@@ -90,10 +94,6 @@ export class MusicCastOutput {
       const media = this.cast.receiverMedia();
       if (host && this.active() && host.current()) untracked(() => this.onStatus(host, ended, media));
     });
-    effect(() => {
-      const host = this.host();
-      if (host && !this.cast.isConnected() && this.active()) untracked(() => host.receiverGone());
-    });
   }
 
   attach(host: MusicCastHost): () => void {
@@ -109,6 +109,19 @@ export class MusicCastOutput {
     const info = await this.loadTrack(t, autoplay, startAt, current);
     if (info) this._active.set(true);
     return info;
+  }
+
+  /** The queue track with the receiver's position and play state, as the audio player last saw them. */
+  snapshot(): MusicSnapshot | null {
+    const host = this.host();
+    const track = host?.current();
+    if (!host || !track) return null;
+    const { position, playing } = host.playhead();
+    return { track, position, paused: !playing };
+  }
+
+  start(h: MusicHandoff): Promise<void> {
+    return this.host()?.startOnCast(h.snapshot) ?? Promise.resolve();
   }
 
   play(): void {

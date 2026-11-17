@@ -7,6 +7,7 @@ import { MediaService } from '../api/media.service';
 import { MusicApiService } from '../api/music-api.service';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { MusicCastOutput } from '../audio-player/music-cast-output';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
@@ -16,7 +17,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
 import { ToastService } from '../toast.service';
-import type { LocalHandoff, LocalOutput, PlaybackSnapshot } from './playback-output';
+import type { LocalOutput, MusicSnapshot, PlaybackSnapshot, VideoHandoff } from './playback-output';
 import { FullPlayerState } from './full-player-state';
 import { PlaybackSession } from './playback-session';
 
@@ -49,8 +50,9 @@ function target() {
   return t;
 }
 
-function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
+function handoff(over: Partial<VideoHandoff> = {}): VideoHandoff {
   return {
+    kind: 'video',
     snapshot: {
       item: { fileId: 7, mediaId: 3, episodeId: 9 },
       position: 120,
@@ -63,7 +65,7 @@ function handoff(over: Partial<LocalHandoff> = {}): LocalHandoff {
       mediaFileId: 7, mediaId: 3, episodeId: 9,
       playbackMode: 'transcode', subtitles: [], qualities: [], audioTracks: [],
       activeQualityId: '1080p', activeSubtitleId: 'sub-2', activeAudioStreamIndex: 1,
-    } as LocalHandoff['cast'],
+    } as VideoHandoff['cast'],
     ...over,
   };
 }
@@ -113,7 +115,8 @@ function setup() {
     videoItem: SessionSyncService.prototype.videoItem,
   };
   const device = { isTv: signal(false) };
-  const audio = { canMoveToCast: signal(false), moveToCast: vi.fn(async () => {}), pause: vi.fn() };
+  const audio = { holds: vi.fn(() => false), release: vi.fn(async (): Promise<unknown> => null), stepAside: vi.fn(), resume: vi.fn(async (_s: MusicSnapshot) => {}) };
+  const musicCast = { hasMedia: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}) };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
@@ -127,6 +130,7 @@ function setup() {
       { provide: RemoteService, useValue: remoteSvc },
       { provide: CastPlayerService, useValue: castPlayer },
       { provide: AudioPlayerService, useValue: audio },
+      { provide: MusicCastOutput, useValue: musicCast },
       { provide: DeviceService, useValue: device },
       { provide: Router, useValue: router },
       { provide: StreamingApiService, useValue: streaming },
@@ -140,13 +144,14 @@ function setup() {
   const local = {
     id: 'local',
     item: vi.fn(() => ({ mediaId: 3, episodeId: 9 })),
+    holds: vi.fn(() => true),
     release: vi.fn(async () => handoff()),
     snapshot: vi.fn(() => null),
     stepAside: vi.fn(),
     resume: vi.fn(async () => {}),
     disconnect: vi.fn(),
   } as unknown as LocalOutput;
-  return { session, syncSvc, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming, audio };
+  return { session, syncSvc, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming, audio, musicCast };
 }
 
 describe('PlaybackSession', () => {
@@ -552,26 +557,106 @@ describe('PlaybackSession', () => {
       expect(castPlayer.reloadCastStream).not.toHaveBeenCalled();
     });
 
+    const musicSnapshot: MusicSnapshot = { track: { itemId: 1 } as MusicSnapshot['track'], position: 42, paused: false };
+
     it('hands the playing music over when no video player is mounted', async () => {
-      const { cast, audio } = setup();
-      audio.canMoveToCast.set(true);
+      const { cast, audio, musicCast } = setup();
+      audio.holds.mockReturnValue(true);
+      const handoff = { kind: 'music', snapshot: musicSnapshot };
+      audio.release.mockResolvedValue(handoff);
       TestBed.tick();
       cast.isConnected.set(true);
       TestBed.tick();
-      await vi.waitFor(() => expect(audio.moveToCast).toHaveBeenCalledTimes(1));
-      expect(audio.pause).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(musicCast.start).toHaveBeenCalledWith(handoff));
+      expect(audio.stepAside).not.toHaveBeenCalled();
     });
 
-    it('pauses the music, never moving it, when the receiver has media', () => {
+    it('steps the music aside, never moving it, when the receiver has media', () => {
       const { session, cast, audio, castPlayer } = setup();
-      audio.canMoveToCast.set(true);
+      audio.holds.mockReturnValue(true);
       castPlayer.hasMedia.mockReturnValue(true);
       TestBed.tick();
       cast.isConnected.set(true);
       TestBed.tick();
-      expect(audio.pause).toHaveBeenCalledTimes(1);
-      expect(audio.moveToCast).not.toHaveBeenCalled();
+      expect(audio.stepAside).toHaveBeenCalledTimes(1);
+      expect(audio.release).not.toHaveBeenCalled();
       expect(session.kind()).toBe('cast');
+    });
+
+    it('steps the music aside when the receiver already plays music', () => {
+      const { cast, audio, musicCast } = setup();
+      audio.holds.mockReturnValue(true);
+      musicCast.hasMedia.set(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(audio.stepAside).toHaveBeenCalledTimes(1);
+      expect(audio.release).not.toHaveBeenCalled();
+    });
+
+    it('leaves an audiobook playing here when an empty receiver connects', async () => {
+      const { cast, audio, musicCast } = setup();
+      audio.holds.mockReturnValue(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await vi.waitFor(() => expect(audio.release).toHaveBeenCalledTimes(1));
+      expect(musicCast.start).not.toHaveBeenCalled();
+      expect(audio.stepAside).not.toHaveBeenCalled();
+    });
+
+    it('leaves a player still loading alone', () => {
+      const { session, cast, local } = setup();
+      (local.holds as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      session.attachLocal(local);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(local.release).not.toHaveBeenCalled();
+      expect(local.stepAside).not.toHaveBeenCalled();
+    });
+
+    it('sends a video hand-over to the video cast output, not the music one', async () => {
+      const { session, cast, local, castPlayer, musicCast } = setup();
+      cast.isConnected.set(true);
+      session.attachLocal(local);
+      await session.moveTo('cast');
+      expect(castPlayer.startCast).toHaveBeenCalledTimes(1);
+      expect(musicCast.start).not.toHaveBeenCalled();
+    });
+
+    it('resumes the music where the receiver was when the cast session ends', async () => {
+      const { cast, audio, musicCast } = setup();
+      audio.holds.mockReturnValue(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await vi.waitFor(() => expect(audio.release).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r));
+      musicCast.hasMedia.set(true);
+      musicCast.snapshot.mockReturnValue(musicSnapshot);
+      TestBed.tick();
+      cast.isConnected.set(false);
+      TestBed.tick();
+      expect(audio.resume).toHaveBeenCalledWith(musicSnapshot);
+    });
+
+    it('does not resume music that was closed while casting', async () => {
+      const { cast, audio, musicCast } = setup();
+      audio.holds.mockReturnValue(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await vi.waitFor(() => expect(audio.release).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r));
+      musicCast.hasMedia.set(true);
+      musicCast.snapshot.mockReturnValue(musicSnapshot);
+      TestBed.tick();
+      musicCast.hasMedia.set(false);
+      TestBed.tick();
+      cast.isConnected.set(false);
+      TestBed.tick();
+      expect(audio.resume).not.toHaveBeenCalled();
     });
 
     it('resumes the engine at the receiver position when the session ends', () => {

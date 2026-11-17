@@ -43,3 +43,13 @@ describe('LocalPlaybackOutput id-based picks', () => {
     expect(host.selectQuality).toHaveBeenCalledWith('720p');
   });
 });
+
+describe('LocalPlaybackOutput holds', () => {
+  it('holds an item once the player has its media id', () => {
+    const mediaId = signal(0);
+    const output = new LocalPlaybackOutput({ mediaId } as unknown as LocalOutputHost, {} as never);
+    expect(output.holds()).toBe(false);
+    mediaId.set(3);
+    expect(output.holds()).toBe(true);
+  });
+});

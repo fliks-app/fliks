@@ -266,7 +266,7 @@ function createHarness(opts: {
           play: vi.fn(),
         },
       },
-      { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: () => false, hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
+      { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: () => false, hasMedia: signal(false), hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
       { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
       { provide: RemotePlaybackTarget, useValue: { isConnected: () => false, isObserving: () => false } },
       {

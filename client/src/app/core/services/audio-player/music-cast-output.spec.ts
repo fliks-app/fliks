@@ -63,7 +63,7 @@ describe('MusicCastOutput', () => {
     advanced: vi.fn(),
     reloaded: vi.fn(),
     stemsFailed: vi.fn(),
-    receiverGone: vi.fn(),
+    startOnCast: vi.fn(async () => {}),
   };
   const stems = (vocals: number) => [
     { url: 'http://srv/api/media-files/77/stems/instrumental/pcm?token=st', gain: 1 },
@@ -213,14 +213,32 @@ describe('MusicCastOutput', () => {
     expect(host.playState).toHaveBeenLastCalledWith(true);
   });
 
-  it('stops the receiver only when it plays there, and tells its host when the receiver goes', async () => {
+  it('stops the receiver only when it plays there', async () => {
     const out = TestBed.inject(MusicCastOutput);
-    await start(out);
-    cast.isConnected.set(false);
-    TestBed.tick();
-    expect(host.receiverGone).toHaveBeenCalledTimes(1);
-    out.release();
+    out.attach(host as MusicCastHost);
     out.stop();
     expect(cast.stop).not.toHaveBeenCalled();
+    await out.load(track(1), true, 0, () => true);
+    expect(out.hasMedia()).toBe(true);
+    out.stop();
+    expect(cast.stop).toHaveBeenCalledTimes(1);
+    expect(out.hasMedia()).toBe(false);
+  });
+
+  it('snapshots the receiver position and play state with the queue track', () => {
+    const out = TestBed.inject(MusicCastOutput);
+    expect(out.snapshot()).toBeNull();
+    out.attach(host as MusicCastHost);
+    expect(out.snapshot()).toEqual({ track: track(1), position: 30, paused: false });
+    current = null;
+    expect(out.snapshot()).toBeNull();
+  });
+
+  it('starts a music hand-over through its host', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    out.attach(host as MusicCastHost);
+    const snapshot = { track: track(1), position: 12, paused: true };
+    await out.start({ kind: 'music', snapshot });
+    expect(host.startOnCast).toHaveBeenCalledWith(snapshot);
   });
 });

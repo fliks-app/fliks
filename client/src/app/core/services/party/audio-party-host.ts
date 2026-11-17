@@ -52,7 +52,7 @@ export class AudioPartyHost implements PartyHost {
     seekLocked: this.never,
     position: () => this.audio.position(),
     seek: (t) => void this.audio.seekLocal(t),
-    play: () => this.audio.resume(),
+    play: () => this.audio.playLoaded(),
     pause: async () => this.audio.pause(),
     sync: {
       slackS: 0.5,

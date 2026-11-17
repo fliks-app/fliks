@@ -5,6 +5,8 @@ import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CastPlaybackTarget } from './cast-playback-target';
 import { CastService } from './cast.service';
+import { AudioPlayerService } from './audio-player/audio-player.service';
+import { MusicCastOutput } from './audio-player/music-cast-output';
 import { CastPlayerService } from './cast-player.service';
 import { MediaService } from './api/media.service';
 import { PartyService } from './party/party.service';
@@ -15,7 +17,7 @@ function setup(autoPlayNext = true, partyActive = false) {
   const cast = { ended: signal(false), isConnected: signal(true), resumedState: signal(null), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), setTextTrackStyle: vi.fn(async () => {}), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
   const timeline = signal<{ intro: unknown; outro: unknown; chapters: unknown[]; edl: unknown[] }>({ intro: null, outro: null, chapters: [], edl: [] });
-  const cp = { timeline, mediaFileId: signal(5), changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
+  const cp = { timeline, mediaFileId: signal(5), activeAudioStreamIndex: signal(0), activeSubtitleId: signal(null), changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };
   const media = {
     id: 1,
     type: 'series',
@@ -30,6 +32,8 @@ function setup(autoPlayNext = true, partyActive = false) {
       provideZonelessChangeDetection(),
       { provide: CastService, useValue: cast },
       { provide: CastPlayerService, useValue: cp },
+      { provide: MusicCastOutput, useValue: { hasMedia: signal(false) } },
+      { provide: AudioPlayerService, useValue: { holds: () => false } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
       { provide: PartyService, useValue: { drives: signal(partyActive) } },

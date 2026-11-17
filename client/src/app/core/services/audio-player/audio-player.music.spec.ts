@@ -414,33 +414,59 @@ describe('AudioPlayerService music mode', () => {
     expect(castOut.stop).toHaveBeenCalled();
   });
 
-  it('goes on here where the receiver was when the cast ends', async () => {
+  it('resumes a snapshot here, from the same track', async () => {
     castLoad.mockResolvedValue(castInfo('cs', 10));
     castOut.isConnected.set(true);
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
-    host.position(42);
-    host.playState(true);
-    host.receiverGone();
-    await vi.waitFor(() => expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 42 }));
+    await audio.resume({ track: track(1), position: 42, paused: false });
+    expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 42 });
     expect(audio.isCasting()).toBe(false);
     expect(audio.track()?.itemId).toBe(1);
+    expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
     expect(castOut.stop).not.toHaveBeenCalled();
   });
 
-  it('moves the track playing here to a receiver that connects, where it was', async () => {
+  it('releases the music track with its position and play state, and plays it on the receiver when its cast output starts it', async () => {
     castLoad.mockResolvedValue(castInfo('cs', 77));
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     els(audio)[0].dispatchEvent(new Event('play'));
     await audio.seek(30);
-    expect(audio.canMoveToCast()).toBe(true);
+    expect(audio.holds()).toBe(true);
+    const handoff = await audio.release();
+    expect(handoff).toEqual({ kind: 'music', snapshot: { track: expect.objectContaining({ itemId: 1 }), position: 30, paused: false } });
     castOut.isConnected.set(true);
-    await audio.moveToCast();
+    await host.startOnCast(handoff!.snapshot);
     expect(castLoad).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function));
     expect(audio.isCasting()).toBe(true);
-    expect(audio.canMoveToCast()).toBe(false);
     expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
+  });
+
+  it('releases nothing for an audiobook, a party track or while loading', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play({ mediaId: 9, itemId: 90, title: 'Book' });
+    expect(audio.holds()).toBe(true);
+    expect(await audio.release()).toBeNull();
+    await audio.playTracks([track(1)]);
+    let open!: () => void;
+    getItemPlaybackInfo.mockImplementationOnce(() => new Promise((r) => (open = () => r({ playMethod: 'DirectPlay', playUrl: '/s/2', mediaFileId: 20, sessionId: 's2', durationSeconds: 100, parts: [{ index: 0, playUrl: '/s/2', offsetS: 0, durationS: 100, contentType: 'audio/flac' }] }))));
+    const loading = audio.playTracks([track(2)]);
+    await vi.waitFor(() => expect(audio.loading()).toBe(true));
+    expect(await audio.release()).toBeNull();
+    open();
+    await loading;
+    partyRouter.set(((c: { type: string }) => c.type === 'external') as never);
+    expect(await audio.release()).toBeNull();
+  });
+
+  it('steps aside by pausing the local engine, never the receiver', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    els(audio)[0].dispatchEvent(new Event('play'));
+    audio.stepAside();
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    expect(castOut.pause).not.toHaveBeenCalled();
   });
 
   it('queues the next track on its cast output near the end', async () => {

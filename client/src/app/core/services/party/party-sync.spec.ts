@@ -15,6 +15,7 @@ import { PlayerStateService } from '../player-state.service';
 import { MediaService } from '../api/media.service';
 import { PlayerSettingsService } from '../player-settings.service';
 import { PlaybackSession } from '../playback/playback-session';
+import { MusicCastOutput } from '../audio-player/music-cast-output';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { ToastService } from '../toast.service';
 import { LocalPlaybackOutput, type LocalOutputHost } from '../../../features/player/local-playback-output';
@@ -111,6 +112,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
+      { provide: MusicCastOutput, useValue: { hasMedia: signal(false) } },
       { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), itemId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false), isObserving: signal(false) } },

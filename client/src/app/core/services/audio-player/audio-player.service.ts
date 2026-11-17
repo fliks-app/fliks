@@ -31,6 +31,7 @@ import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix'
 import { FullPlayerState } from '../playback/full-player-state';
 import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
 import { PlayerStateService } from '../player-state.service';
+import type { LocalPlayer, MusicHandoff, MusicSnapshot } from '../playback/playback-output';
 import { MusicCastOutput } from './music-cast-output';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
@@ -95,7 +96,7 @@ const BOOKMARKS_KEY = 'fliks.audio.bookmarks';
 
 /** The one audio player of the app: an `<audio>` pair driven as a single timeline across the parts of an item, outliving every route. */
 @Injectable({ providedIn: 'root' })
-export class AudioPlayerService {
+export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private readonly streaming = inject(StreamingApiService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly mediaService = inject(MediaService);
@@ -208,8 +209,6 @@ export class AudioPlayerService {
   private generation = 0;
   /** A cast device plays the queue. */
   readonly isCasting = this.castOut.active;
-  /** A music track this device plays itself, which a connected receiver can take over. */
-  readonly canMoveToCast = computed(() => this._musicMode() && this._track() !== null && !this.castOut.active());
   private readonly mq = new MusicQueue();
   private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
   private preTried: MusicTrackRequest | null = null;
@@ -267,7 +266,7 @@ export class AudioPlayerService {
         this.sessionId = info.sessionId;
       },
       stemsFailed: () => this.onStemsFailed(),
-      receiverGone: () => void this.returnFromCast(),
+      startOnCast: async (s) => void (await this.startMusic(s.track, !s.paused, s.position, true)),
     });
     if (this.nativeAudio) {
       void this.attachNative().catch(() => undefined);
@@ -321,7 +320,7 @@ export class AudioPlayerService {
       return true;
     }
     const generation = ++this.generation;
-    await this.release(true);
+    await this.teardown(true);
     this.leaveMusic();
     this._track.set(req);
     this._loading.set(true);
@@ -553,7 +552,7 @@ export class AudioPlayerService {
   }
 
   /** Plays the loaded track without going through the party. */
-  resume(): void {
+  playLoaded(): void {
     if (this.castOut.active()) return this.castOut.play();
     if (this.nativeOn) return void this.nativeAudio!.play();
     void this.el()?.play().catch(() => undefined);
@@ -619,24 +618,35 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
-  /** The receiver is gone (left from the device picker, or lost): the track goes on here, where and as it played there. */
-  private async returnFromCast(): Promise<void> {
-    const req = this.mq.current;
-    if (!req) return this.close();
-    await this.startMusic(req, this._playing(), this._position(), false);
+  /** An item is open here, which a receiver that connects can take or silence. */
+  holds(): boolean {
+    return this._track() !== null;
   }
 
-  /** Moves the track to the connected receiver, at the position and play state it had here. */
-  async moveToCast(): Promise<void> {
+  /** Hands the playing music over with its position and play state; null for a book, a party track, a track still loading or one already on the receiver. */
+  async release(): Promise<MusicHandoff | null> {
     const req = this.mq.current;
-    if (!this.canMoveToCast() || !req || this._loading() || this.blockedByParty()) return;
-    await this.startMusic(req, this._playing(), this._position(), true);
+    if (!this._musicMode() || !req || this._loading() || this.castOut.active() || this.blockedByParty()) return null;
+    const snapshot: MusicSnapshot = { track: req, position: this._position(), paused: !this._playing() };
+    await this.teardown(true);
+    return { kind: 'music', snapshot };
+  }
+
+  /** Another output already plays: the local engine pauses, the receiver is left alone. */
+  stepAside(): void {
+    if (this.nativeOn) void this.nativeAudio!.pause();
+    else this.el()?.pause();
+  }
+
+  /** Plays the snapshot's track here, where and as it played elsewhere. */
+  async resume(s: MusicSnapshot): Promise<void> {
+    await this.startMusic(s.track, !s.paused, s.position, false);
   }
 
   /** False when the start was overtaken by another one or failed. A paused open stays here unless `toCast`: the party opens its track paused on this device. */
   private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0, toCast = autoplay): Promise<boolean> {
     const generation = ++this.generation;
-    await this.release(true);
+    await this.teardown(true);
     this._pitch.set(0);
     this._musicMode.set(true);
     this._track.set(this.audioOf(req));
@@ -1155,7 +1165,7 @@ export class AudioPlayerService {
     this.generation++;
     this._muted.set(false);
     this.castOut.stop();
-    await this.release();
+    await this.teardown();
     this.stopRetired();
     void this.nativeAudio?.stop().catch(() => undefined);
     this.leaveMusic();
@@ -1423,7 +1433,7 @@ export class AudioPlayerService {
     const wasPlaying = this._playing();
     switch (cmd.action) {
       case 'play':
-        this.resume();
+        this.playLoaded();
         break;
       case 'pause':
         this.pause();
@@ -1554,7 +1564,7 @@ export class AudioPlayerService {
   private setPlaying(want: boolean): void {
     if (want === this._playing()) return;
     if (this.routed({ type: 'toggle' })) return;
-    if (want) this.resume();
+    if (want) this.playLoaded();
     else this.pause();
   }
 
@@ -1666,7 +1676,7 @@ export class AudioPlayerService {
   }
 
   /** Saves the position and tears the current item down; `next` when another item follows, which the session plays on into. */
-  private async release(next = false): Promise<void> {
+  private async teardown(next = false): Promise<void> {
     clearInterval(this.beatTimer);
     const el = this.el();
     if ((el || this.castOut.active() || this.nativeOn) && this.info) {
