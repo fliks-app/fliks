@@ -10,6 +10,7 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 
+import com.getcapacitor.Bridge;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -27,8 +28,6 @@ import java.util.List;
 /** The bridge of the audio player (music queue and audiobook parts) to the native player. */
 @CapacitorPlugin(name = "AudioPlayer")
 public class AudioPlayerPlugin extends Plugin {
-    private static final String CAPACITOR_FILE = "https://localhost/_capacitor_file_/";
-
     private final Handler main = new Handler(Looper.getMainLooper());
     private MusicHost host;
 
@@ -121,8 +120,7 @@ public class AudioPlayerPlugin extends Plugin {
                 .build();
         try {
             for (int i = 0; i < parts.length(); i++) {
-                String url = parts.getJSONObject(i).getString("url");
-                if (url.startsWith(CAPACITOR_FILE)) url = "file:///" + url.substring(CAPACITOR_FILE.length());
+                String url = localFile(parts.getJSONObject(i).getString("url"));
                 items.add(new MediaItem.Builder().setMediaId("p:" + i).setUri(url).setMediaMetadata(md).build());
             }
         } catch (JSONException e) {
@@ -256,10 +254,12 @@ public class AudioPlayerPlugin extends Plugin {
         return out;
     }
 
+    /** A downloaded file comes as its WebView address, whose scheme follows the app's `androidScheme`; the player reads the disk. */
     @Nullable
-    private static String localFile(@Nullable String url) {
+    private String localFile(@Nullable String url) {
         if (url == null || url.isEmpty()) return null;
-        return url.startsWith(CAPACITOR_FILE) ? "file:///" + url.substring(CAPACITOR_FILE.length()) : url;
+        String webView = getBridge().getLocalUrl() + Bridge.CAPACITOR_FILE_START + "/";
+        return url.startsWith(webView) ? "file:///" + url.substring(webView.length()) : url;
     }
 
     private static double num(JSONObject o, String key) {

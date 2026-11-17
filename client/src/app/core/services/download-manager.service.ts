@@ -1,6 +1,7 @@
 import { Injectable, inject, computed, effect, signal, type Signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import { StreamingApiService } from './api/streaming-api.service';
+import { StreamingApiService, type PlaybackInfoResponse } from './api/streaming-api.service';
+import { audioExtension } from './audio-direct-play';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService, type Media } from './api/media.service';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
@@ -520,13 +521,18 @@ export class DownloadManagerService {
   /** The files of an edition with their span on the item timeline, and how to fetch each. An audio item answers its parts and chapters. */
   private async describeBook(t: BookDownloadTarget): Promise<{ book: OfflineBook; mediaFileId: number; urls: (i: number) => Promise<string> }> {
     const base = { itemId: t.itemId, family: t.family, format: t.format, artist: t.artist, coverUrl: t.coverUrl, track: t.track };
+    /** Stored audio keeps its extension, which a native player reads the format from. */
+    const named = (key: string, info: PlaybackInfoResponse) => {
+      const ext = audioExtension(info.contentType);
+      return ext ? `${key}.${ext}` : key;
+    };
     if (t.track) {
       const info = await this.streamingApi.getItemPlaybackInfo(t.itemId, this.deviceProfile.getProfile());
       if (info.sessionId) this.streamingApi.stopSession(info.sessionId).catch(() => undefined);
       const durationS = info.durationSeconds || t.track.durationSeconds || 0;
       return {
         mediaFileId: info.mediaFileId,
-        book: { ...base, files: [{ key: String(t.itemId), offsetS: 0, durationS }], durationSeconds: durationS },
+        book: { ...base, files: [{ key: named(String(t.itemId), info), offsetS: 0, durationS }], durationSeconds: durationS },
         urls: async () => {
           await this.auth.ensureStreamToken(info.mediaFileId);
           return this.streamingApi.getOriginalDownloadUrl(info.mediaFileId);
@@ -553,7 +559,7 @@ export class DownloadManagerService {
       mediaFileId: info.mediaFileId,
       book: {
         ...base,
-        files: parts.map((p, i) => ({ key: `${t.itemId}-${i}`, offsetS: p.offsetS, durationS: p.durationS })),
+        files: parts.map((p, i) => ({ key: named(`${t.itemId}-${i}`, info), offsetS: p.offsetS, durationS: p.durationS })),
         chapters: info.chapters,
         durationSeconds: info.durationSeconds,
       },

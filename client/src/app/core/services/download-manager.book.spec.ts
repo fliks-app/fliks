@@ -36,7 +36,7 @@ function setup(initial: DownloadTask[] = [], opts: { wifiOnly?: boolean; connect
     getOriginalDownloadUrl: (id: number) => `/api/stream/${id}?download=1`,
     buildPlayUrl: ({ playUrl }: { playUrl: string }) => `${playUrl}?token=t`,
     getItemPlaybackInfo: vi.fn(async () => ({
-      mediaFileId: 400, playMethod: 'DirectPlay', playUrl: '/api/stream/400/parts/0', durationSeconds: 30, sessionId: 'sid', chapters: [{ startSeconds: 0, endSeconds: 30 }],
+      mediaFileId: 400, playMethod: 'DirectPlay', playUrl: '/api/stream/400/parts/0', contentType: 'audio/mpeg', durationSeconds: 30, sessionId: 'sid', chapters: [{ startSeconds: 0, endSeconds: 30 }],
       parts: [
         { index: 0, playUrl: '/api/stream/400/parts/0', offsetS: 0, durationS: 10 },
         { index: 1, playUrl: '/api/stream/400/parts/1', offsetS: 10, durationS: 20 },
@@ -101,12 +101,12 @@ describe('DownloadManagerService, book downloads', () => {
     await settled();
     expect(streaming.stopSession).toHaveBeenCalledWith('sid');
     expect(books.storeFile.mock.calls.map((c) => [c[1], c[2]])).toEqual([
-      [`${saved()[0].id}-40-0`, '/api/stream/400/parts/0?token=t'],
-      [`${saved()[0].id}-40-1`, '/api/stream/400/parts/1?token=t'],
+      [`${saved()[0].id}-40-0.mp3`, '/api/stream/400/parts/0?token=t'],
+      [`${saved()[0].id}-40-1.mp3`, '/api/stream/400/parts/1?token=t'],
     ]);
     expect(saved()[0].book).toMatchObject({
       durationSeconds: 30,
-      files: [{ key: `${saved()[0].id}-40-0`, offsetS: 0, durationS: 10 }, { key: `${saved()[0].id}-40-1`, offsetS: 10, durationS: 20 }],
+      files: [{ key: `${saved()[0].id}-40-0.mp3`, offsetS: 0, durationS: 10 }, { key: `${saved()[0].id}-40-1.mp3`, offsetS: 10, durationS: 20 }],
     });
     expect(saved()[0]).toMatchObject({ status: 'ready', sizeBytes: 100, mediaFileId: 400 });
   });
@@ -213,7 +213,7 @@ describe('DownloadManagerService, book downloads', () => {
     const removed = books.remove.mock.calls.flatMap((c) => (c[0] as { files: { key: string }[] }).files.map((f) => f.key));
     expect(removed.every((k) => k.startsWith(`${first.id}-`))).toBe(true);
     expect(removed.length).toBeGreaterThan(0);
-    expect(saved().find((t) => t.id === second.id)?.book?.files[0].key).toBe(`${second.id}-40-0`);
+    expect(saved().find((t) => t.id === second.id)?.book?.files[0].key).toBe(`${second.id}-40-0.mp3`);
   });
 
   it('deleting a failed task keeps the EPUB a ready task of the same item still uses', async () => {
