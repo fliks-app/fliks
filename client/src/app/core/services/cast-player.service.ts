@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource } from './cast.service';
+import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource, type CastResumeState } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
@@ -139,7 +139,7 @@ export function castBurnInId(subtitles: SubtitleOption[], activeId: string | nul
 }
 
 /** Everything {@link CastPlayerService} needs to take a session over again. */
-interface CastResumeState {
+interface VideoCastState {
   mediaFileId: number;
   mediaId: number;
   episodeId: number | undefined;
@@ -541,7 +541,7 @@ export class CastPlayerService {
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
-  private resumeState(): CastResumeState {
+  private resumeState(): VideoCastState {
     return {
       mediaFileId: this.mediaFileId(),
       mediaId: this.mediaId(),
@@ -561,7 +561,7 @@ export class CastPlayerService {
   }
 
   /** What a LOAD's customData carries; the track and quality lists are rebuilt by the next reload. */
-  private stateFromReceiver(d: Record<string, unknown>): CastResumeState {
+  private stateFromReceiver(d: Record<string, unknown>): VideoCastState {
     return {
       mediaFileId: d['mediaFileId'] as number,
       mediaId: d['mediaId'] as number,
@@ -580,15 +580,9 @@ export class CastPlayerService {
     };
   }
 
-  /** Restores the session a native or desktop sender kept alive; the player route awaits this before it launches locally. */
-  async adoptSurvivingSession(): Promise<void> {
-    await this.cast.settled;
-    this.adoptResumed();
-  }
-
-  private adoptResumed(): void {
-    const state = this.cast.resumedState() as CastResumeState | null;
-    if (state && !this.hasMedia()) this.restore(state);
+  /** Takes over the video session a native or desktop sender kept alive. */
+  adopt(state: CastResumeState): void {
+    if (!this.hasMedia()) this.restore(state as unknown as VideoCastState);
   }
 
   /** The receiver plays a session another user's sender loaded: this sender is a remote control and makes no
@@ -608,7 +602,7 @@ export class CastPlayerService {
     }
   }
 
-  private restore(s: CastResumeState): void {
+  private restore(s: VideoCastState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
@@ -648,7 +642,7 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
-    this.cast.clearResumeState();
+    this.cast.clearResumeState('video');
     this.mediaFileId.set(0);
     this.mediaId.set(0);
     this.episodeId.set(undefined);
@@ -675,10 +669,6 @@ export class CastPlayerService {
         }, CastPlayerService.DISCONNECT_GRACE_MS);
       }
     });
-    effect(() => {
-      this.cast.resumedState();
-      untracked(() => this.adoptResumed());
-    });
     // The receiver is the source of truth: a tab reload rejoins its media, another sender's LOAD replaces ours.
     effect(() => {
       const data = this.cast.receiverMedia();
@@ -688,7 +678,7 @@ export class CastPlayerService {
     // taken over as it was left without reloading the receiver.
     effect(() => {
       if (!this.hasMedia()) return;
-      this.cast.saveResumeState(this.resumeState());
+      this.cast.saveResumeState('video', this.resumeState());
     });
     // Probe is a no-op when the cache already covers the device.
     effect(() => {

@@ -12,7 +12,7 @@ import { PlayerSettingsService } from './player-settings.service';
 import { CastSettingsService } from './cast-settings.service';
 
 function setup(autoPlayNext = true, partyActive = false) {
-  const cast = { ended: signal(false), isConnected: signal(true), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), setTextTrackStyle: vi.fn(async () => {}), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
+  const cast = { ended: signal(false), isConnected: signal(true), resumedState: signal(null), isPaused: signal(true), buffering: signal(false), currentTime: signal(12), setTextTrackStyle: vi.fn(async () => {}), duration: signal(0), nextRequested$: new Subject<void>(), sendFliks: vi.fn(), seek: vi.fn(), play: vi.fn(), pause: vi.fn() };
   const quickStart = vi.fn(async () => {});
   const timeline = signal<{ intro: unknown; outro: unknown; chapters: unknown[]; edl: unknown[] }>({ intro: null, outro: null, chapters: [], edl: [] });
   const cp = { timeline, mediaFileId: signal(5), changeAudio: vi.fn(async () => {}), changeQuality: vi.fn(async () => {}), selectSubtitle: vi.fn(async () => true), mediaId: signal(1), episodeId: signal(10), hasMedia: signal(true), reloading: signal(false), availableQualities: signal([]), quickStart };

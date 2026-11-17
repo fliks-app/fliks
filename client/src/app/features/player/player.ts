@@ -1188,7 +1188,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.queue.clear();
     }
 
-    await this.castPlayerService.adoptSurvivingSession();
+    await this.session.rejoinCast();
     if (this.destroyed) return;
     if (this.session.isLocal()) {
       this.attachLocalOutput();

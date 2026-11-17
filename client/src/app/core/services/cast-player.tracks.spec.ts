@@ -315,10 +315,9 @@ describe('a session another user loaded', () => {
 describe('cast session that outlived the renderer', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('is restored before the player route decides to launch locally', async () => {
-    const { svc, cast } = setup();
-    cast.resumedState.set({ mediaFileId: 9, mediaId: 3, activeSubtitleId: null, availableSubtitles: [] });
-    await svc.adoptSurvivingSession();
+  it('is restored before the player route decides to launch locally', () => {
+    const { svc } = setup();
+    svc.adopt({ kind: 'video', mediaFileId: 9, mediaId: 3, activeSubtitleId: null, availableSubtitles: [] });
     expect(svc.hasMedia()).toBe(true);
     expect(svc.mediaFileId()).toBe(9);
   });
@@ -431,7 +430,14 @@ describe('cast stop', () => {
     svc.startCast({ ...base, subtitles: [], activeSubtitleId: null });
     svc.clear();
     expect(svc.mediaId()).toBe(0);
-    expect(cast.clearResumeState).toHaveBeenCalled();
+    expect(cast.clearResumeState).toHaveBeenCalledWith('video');
+  });
+
+  it('saves its resume state as video', () => {
+    const { svc, cast } = setup();
+    svc.startCast({ ...base, subtitles: [], activeSubtitleId: null });
+    TestBed.tick();
+    expect(cast.saveResumeState).toHaveBeenCalledWith('video', expect.objectContaining({ mediaFileId: MEDIA_FILE_ID }));
   });
 });
 

@@ -396,3 +396,33 @@ describe('CastService web sender script', () => {
     expect(sender().length).toBe(0);
   });
 });
+
+describe('CastService resume state', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const withBridge = () => {
+    const svc = make(null);
+    const setResumeState = vi.fn(async (_o: { state: unknown }) => {});
+    Object.assign(svc, { hasCastBridge: true, bridge: { setResumeState } });
+    return { svc, setResumeState };
+  };
+
+  it('tags a saved state with its kind and reads an untagged one as video', () => {
+    const { svc, setResumeState } = withBridge();
+    (svc as unknown as { resumed(r: object): void }).resumed({ mediaFileId: 4 });
+    expect(svc.resumedState()).toEqual({ mediaFileId: 4, kind: 'video' });
+    svc.saveResumeState('music', { itemId: 2 });
+    expect(setResumeState).toHaveBeenCalledWith({ state: { itemId: 2, kind: 'music' } });
+  });
+
+  it('clears the slot only for the kind that saved it last', () => {
+    const { svc, setResumeState } = withBridge();
+    svc.saveResumeState('video', { a: 1 });
+    svc.saveResumeState('music', { b: 1 });
+    setResumeState.mockClear();
+    svc.clearResumeState('video');
+    expect(setResumeState).not.toHaveBeenCalled();
+    svc.clearResumeState('music');
+    expect(setResumeState).toHaveBeenCalledWith({ state: null });
+  });
+});

@@ -252,6 +252,8 @@ function createHarness(opts: {
         provide: CastService,
         useValue: {
           isConnected: () => false,
+          resumedState: () => null,
+          settled: Promise.resolve(),
           receiverPlays: () => true,
           isAvailable: () => false,
           connecting: () => false,
@@ -275,7 +277,6 @@ function createHarness(opts: {
           reloadCastStream: vi.fn(),
           startCast: vi.fn(),
           clear: vi.fn(),
-          adoptSurvivingSession: vi.fn(async () => {}),
           selectionFor: vi.fn(() => null),
           activeAudioStreamIndex: () => undefined,
           activeSubtitleId: () => null,

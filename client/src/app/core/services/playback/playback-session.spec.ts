@@ -74,6 +74,8 @@ function setup() {
   const party = { drives: signal(false), party: signal<{ id: number } | null>(null) };
   const castSvc = {
     isConnected: cast.isConnected,
+    resumedState: signal<Record<string, unknown> | null>(null),
+    settled: Promise.resolve(),
     connecting: signal(false),
     currentTime: vi.fn(() => 55),
     disconnect: vi.fn(),
@@ -91,6 +93,7 @@ function setup() {
   };
   const castPlayer = {
     hasMedia: vi.fn(() => false),
+    adopt: vi.fn(),
     reloading: vi.fn(() => false),
     mediaFileId: signal(0),
     startCast: vi.fn(),
@@ -234,6 +237,36 @@ describe('PlaybackSession', () => {
     party.drives.set(true);
     expect(session.command({ type: 'next' })).toBe(true);
     expect(router).toHaveBeenLastCalledWith({ type: 'next' }, 'video');
+  });
+
+  describe('rejoin after a restart', () => {
+    it('adopts an untagged state as video before the route decides', async () => {
+      const { session, castSvc, castPlayer } = setup();
+      const state = { kind: 'video', mediaFileId: 7 };
+      castSvc.resumedState.set(state);
+      await session.rejoinCast();
+      expect(castPlayer.adopt).toHaveBeenCalledWith(state);
+    });
+
+    it('adopts a resume event that arrives once connected', () => {
+      const { castSvc, castPlayer, cast } = setup();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      castSvc.resumedState.set({ kind: 'video', mediaFileId: 7 });
+      TestBed.tick();
+      expect(castPlayer.adopt).toHaveBeenCalledTimes(1);
+    });
+
+    it('steps the local player aside when the rejoined receiver has media', () => {
+      const { session, castSvc, castPlayer, cast, local } = setup();
+      session.attachLocal(local);
+      castPlayer.hasMedia.mockImplementation(() => castPlayer.adopt.mock.calls.length > 0);
+      castSvc.resumedState.set({ kind: 'video', mediaFileId: 7 });
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(local.stepAside).toHaveBeenCalled();
+      expect(local.release).not.toHaveBeenCalled();
+    });
   });
 
   describe('moveTo', () => {

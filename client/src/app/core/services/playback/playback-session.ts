@@ -155,6 +155,10 @@ export class PlaybackSession {
         if (casting) this.onCastConnected();
       });
     });
+    // A session that outlived the renderer is rejoined as soon as a bridge hands its state back.
+    effect(() => {
+      if (this.castSvc().resumedState()) untracked(() => this.rejoin());
+    });
     // An audio view follows an owner that now plays a video into the video player.
     effect(() => {
       if (this.fullPlayer.open() !== 'audio' || !this.fullPlayer.remote()) return;
@@ -491,7 +495,19 @@ export class PlaybackSession {
     });
   }
 
+  /** Restores the session a native or desktop sender kept alive; the player route awaits this before it launches locally. */
+  async rejoinCast(): Promise<void> {
+    await this.castSvc().settled;
+    this.rejoin();
+  }
+
+  private rejoin(): void {
+    const state = this.castSvc().resumedState();
+    if (state?.kind === 'video') this.castPlayer().adopt(state);
+  }
+
   private onCastConnected(): void {
+    this.rejoin();
     const local = this.local();
     if (this.moving || local?.item().mediaId === 0) return;
     // A receiver that already plays keeps its media: only this device falls silent.

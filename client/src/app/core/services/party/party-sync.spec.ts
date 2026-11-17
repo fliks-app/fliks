@@ -48,6 +48,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     nextRequested$: new Subject<void>(),
     sendFliks: vi.fn(),
     isConnected: signal(false),
+    resumedState: signal(null),
     isPaused: signal(true),
     buffering: signal(false),
     ended: signal(false),
