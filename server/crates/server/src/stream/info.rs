@@ -313,7 +313,20 @@ async fn run(
         }
     });
     let (mut file, item) = match target {
-        Target::File(id) => (resolve_file(st, Some(a), id).await?, None),
+        Target::File(id) => {
+            let file = resolve_file(st, Some(a), id).await?;
+            if file
+                .info
+                .as_ref()
+                .is_some_and(|i| i.video.is_empty() && !i.audio.is_empty())
+            {
+                return Err(AppError::with_message(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "errors.no_video_stream",
+                ));
+            }
+            (file, None)
+        }
         Target::Item(id, version) => {
             let (file, item) = open_item(st, a, id, version).await?;
             (file, Some(item))

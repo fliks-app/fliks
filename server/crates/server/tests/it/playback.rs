@@ -528,7 +528,7 @@ async fn a_pair_naming_several_ungrouped_items_is_a_409(pool: PgPool) {
     ] {
         let (s, b) = c.api(method, &uri, body).await;
         assert_eq!(s, 409, "{method} {uri}: {b}");
-        assert_eq!(b["message"], "ambiguous_item");
+        assert_eq!(b["message"], "errors.ambiguous_item");
     }
     let other = c
         .id(&format!(

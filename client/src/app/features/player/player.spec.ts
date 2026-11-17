@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import type { PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
@@ -466,6 +467,26 @@ describe('PlayerComponent pre-roll', () => {
       MEDIA_ID,
       expect.objectContaining({ positionSeconds: 0 }),
     );
+  });
+
+  it('sends no heartbeat while the error card is up', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 12;
+    h.state.setError('failed');
+
+    await h.component.savePosition(true);
+
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+  });
+
+  it('does not queue a beat the server refuses', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 12;
+    h.streamingApi.updatePlaybackState.mockRejectedValueOnce(new HttpErrorResponse({ status: 409 }) as never);
+
+    await h.component.savePosition(true);
+
+    expect(TestBed.inject(OfflinePlaybackSyncService).queue).not.toHaveBeenCalled();
   });
 
   it('records no progress while a pre-roll item is playing', async () => {
@@ -3630,10 +3651,10 @@ describe('PlayerComponent next item warm-up', () => {
     h.component.outroMarker.set({ startSeconds: 80, endSeconds: 100 });
     h.state.currentTime.set(50);
     h.component.warmNext();
-    expect(getOne).not.toHaveBeenCalledWith(42);
+    expect(getOne).not.toHaveBeenCalledWith(42, { silent: true });
 
     h.state.currentTime.set(81);
     h.component.warmNext();
-    expect(getOne).toHaveBeenCalledWith(42);
+    expect(getOne).toHaveBeenCalledWith(42, { silent: true });
   });
 });

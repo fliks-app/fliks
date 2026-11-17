@@ -38,7 +38,7 @@ Scope: how the host delivers the audio and text items of a book: resolving an it
 ## Item identity on the playback routes
 
 15. `itemId` (integer) names the item directly: in the body of the heartbeat and of `toggle-watched`, and in the query of `GET` and `DELETE state`. The item must belong to the path `mediaId` and to a visible edition (`COALESCE(editions."libraryId", media."libraryId")` among the caller's libraries, like rule 1), else it names none (the answer of an unknown pair: empty body, no-op, 404 `not_found`, `{state: null}`). When `itemId` is present `episodeId` is not read. The same gate (media library, then visible edition) applies to the item a `(mediaId, episodeId?)` pair names.
-16. Without `itemId` the pair `(mediaId, episodeId?)` resolves as before, so a book with several editions is still `409 ambiguous_item`. The wire `episodeId` of a state, of `remote.state` and of the history is the item's id only when the item is grouped, whatever named it.
+16. Without `itemId` the pair `(mediaId, episodeId?)` resolves as before, so a book with several editions is still `409 errors.ambiguous_item`. The wire `episodeId` of a state, of `remote.state` and of the history is the item's id only when the item is grouped, whatever named it.
 17. The heartbeat's debounce key is `<user>:<media>:i<itemId>` when `itemId` is given, so two editions of one book never share a flush. A file-bound token must be a part of the named item (the route's auth in `heartbeat.md`).
 
 ## Progression and locator

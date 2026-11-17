@@ -833,9 +833,11 @@ export class AuthService {
       try {
         const mint = () =>
           firstValueFrom(
+            // Every caller handles a null token; a toast would land over the player's own error card.
             this.http.post<{ streamToken: string; expiresAt: number }>(
               '/api/auth/stream-token',
               { mediaFileId },
+              { context: new HttpContext().set(SKIP_ERROR_TOAST, true) },
             ),
           );
         // One retry rides out a server blip; a second failure returns null.

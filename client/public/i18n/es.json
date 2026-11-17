@@ -3910,6 +3910,8 @@
     "404": "Recurso no encontrado",
     "409": "Conflicto: el recurso ya existe",
     "already_running": "Esto ya se está ejecutando.",
+    "ambiguous_item": "Este título contiene varios elementos y no se eligió ninguno.",
+    "no_video_stream": "Este archivo no tiene pista de vídeo.",
     "folder_overlap": "Esta carpeta es igual a otra carpeta de biblioteca, la contiene o está dentro de ella. Las carpetas deben ser independientes en todas las bibliotecas.",
     "folder_in_use": "Esta carpeta aún contiene medios: muévelos o quítalos de Fliks primero.",
     "folder_reserved": "No se puede usar esta carpeta: es la raíz del sistema o contiene los datos o la caché de Fliks.",
