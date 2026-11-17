@@ -1084,10 +1084,10 @@ impl Live {
         vec![Effect::Programme { rev, item }]
     }
 
-    /// `POST /start`: plays `item`, the row's chosen film. Every member, invited or not, gets the
-    /// new state; with the host in, it plays once everyone has loaded.
-    pub fn go_live(&mut self, item: Item, now: i64) -> Vec<Effect> {
-        let mut pb = Playback::new(item, 0.0, now);
+    /// `POST /start`: plays `item` from `position`, the row's chosen film. Every member, invited or
+    /// not, gets the new state; with the host in, it plays once everyone has loaded.
+    pub fn go_live(&mut self, item: Item, position: f64, now: i64) -> Vec<Effect> {
+        let mut pb = Playback::new(item, position, now);
         let room = &mut self.room;
         room.reset_empty(now);
         let host = room
@@ -1097,7 +1097,7 @@ impl Live {
             .cloned();
         let mut out = Vec::new();
         match host {
-            Some(h) => pb.enter_waiting(room, &mut out, 0.0, true, &h, Action::Play, now),
+            Some(h) => pb.enter_waiting(room, &mut out, position, true, &h, Action::Play, now),
             None => pb.state_effect(room, &mut out, now, None, None, None),
         }
         self.playback = Some(pb);
@@ -1550,7 +1550,7 @@ mod tests {
             .unwrap();
         assert_eq!(l.room.members[0].status, MemberStatus::Waiting);
         assert!(l.playback.is_none());
-        let out = l.go_live(item(), 3);
+        let out = l.go_live(item(), 0.0, 3);
         assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
         assert_eq!(l.pb().state, State::Idle);
         assert_eq!(l.pb().item, item());
@@ -1573,7 +1573,7 @@ mod tests {
             &out[..],
             [Effect::Programme { item: Some(_), .. }]
         ));
-        l.go_live(item(), 3);
+        l.go_live(item(), 0.0, 3);
         assert_eq!(l.pb().state, State::Waiting);
     }
 
@@ -1583,7 +1583,7 @@ mod tests {
         let rev = l.room.rev;
         let out = l.programme(Some(item()));
         assert!(matches!(&out[..], [Effect::Programme { rev: r, item: Some(_) }] if *r == rev + 1));
-        l.go_live(item(), 1);
+        l.go_live(item(), 0.0, 1);
         let out = l.programme(Some(Item {
             media_id: 9,
             media_file_id: None,
@@ -1599,12 +1599,24 @@ mod tests {
         let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
         l.join(1, "alice", "d1", "c1", 0);
         l.join(2, "bob", "d2", "c2", 0);
-        l.go_live(item(), 1);
+        l.go_live(item(), 0.0, 1);
         assert_eq!(l.pb().state, State::Waiting);
         ready(&mut l, 1, "d1", 0.0, 2);
         assert_eq!(l.pb().state, State::Waiting);
         let out = ready(&mut l, 2, "d2", 0.0, 3);
         assert_eq!(state_of(&out).map(|s| s.0), Some(State::Playing));
+    }
+
+    #[test]
+    fn go_live_at_a_position_anchors_the_waiting_phase_there() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
+        l.join(1, "alice", "d1", "c1", 0);
+        l.go_live(item(), 600.0, 1);
+        assert_eq!(l.pb().state, State::Waiting);
+        assert_eq!(l.pb().anchor.position, 600.0);
+        ready(&mut l, 1, "d1", 600.0, 2);
+        assert_eq!(l.pb().state, State::Playing);
+        assert_eq!(l.pb().anchor.position, 600.0);
     }
 
     #[test]
@@ -1792,7 +1804,7 @@ mod tests {
         l.leave(2, "d2", 5).unwrap();
         assert_eq!(l.room.host_id, 1);
         assert_eq!(l.transfer(3, "alice", 6), Err(Error::Invalid("host")));
-        l.go_live(item(), 10);
+        l.go_live(item(), 0.0, 10);
         l.join(1, "alice", "d1", "c1", 11);
         l.leave(1, "d1", 12).unwrap();
         assert_eq!(l.room.host_id, 1);

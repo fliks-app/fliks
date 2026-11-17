@@ -1,8 +1,8 @@
-import { DestroyRef, Injectable, Injector, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { MediaService } from '../api/media.service';
-import type { PartyItem } from '../api/party-api.service';
+import type { PartyItem, PartyItemIn } from '../api/party-api.service';
 import { ClockService } from './clock.service';
 import { PartyService, type PartyLiveState } from './party.service';
 import { DeviceService } from '../device.service';
@@ -13,7 +13,8 @@ import { VoiceService } from './voice.service';
 import { VoiceDucker, type DuckEngine } from './party-ducking';
 import { AudioPartyHost } from './audio-party-host';
 import type { AudioPartyCommand } from '../audio-player/audio-player.service';
-import { itemIn, sameItem, type PartyPlayable } from './party-item';
+import type { MusicTrackRequest } from '../audio-player/music-queue';
+import { isTrack, itemIn, sameItem, type PartyPlayable } from './party-item';
 import { PlaybackSession, type PlaybackCommand } from '../playback/playback-session';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { DRIFT_CHECK_MS, driftAction, driftProfile, groupPosition } from './party-drift';
@@ -77,7 +78,6 @@ export class PartySync {
 
   constructor() {
     this.session.setPartyRouter(this.takeCommand);
-    this.party.closed.subscribe(() => this.host() && !this.isAudio() && this.goHome());
     const drift = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     inject(DestroyRef).onDestroy(() => clearInterval(drift));
   }
@@ -98,13 +98,17 @@ export class PartySync {
 
   /** The audio player takes the party's transport while it is the host. */
   private readonly takeAudio = (c: AudioPartyCommand): boolean => {
-    if (c.type === 'drives') return this.party.active();
+    if (!this.party.active()) return false;
+    if (c.type === 'drives') return true;
     if (c.type === 'external') {
-      if (this.party.active()) this.toast.info(this.translate.instant('party.audio_busy'));
-      return this.party.active();
+      this.toast.info(this.translate.instant('party.audio_busy'));
+      return true;
     }
-    // The audio queue holds only the party's track: the server owns the rest.
-    return c.type === 'item' || this.takeCommand(c);
+    if (c.type === 'queue') {
+      void this.editProgramme(c.tracks);
+      return true;
+    }
+    return this.takeCommand(c);
   };
 
   private readonly takeCommand = (c: PlaybackCommand): boolean => {
@@ -152,16 +156,17 @@ export class PartySync {
     void this.router.navigate([], { queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  /** A member leaves the party (the host ends it instead) and goes home. */
-  async leave(): Promise<void> {
-    const audio = this.isAudio();
-    await this.party.leave();
-    if (!audio) this.goHome();
-  }
-
-  private goHome(): void {
-    void this.router.navigateByUrl('/', { replaceUrl: true });
-  }
+  /** However it ends (leave, end, kick, expiry), the player keeps the programme as its queue and plays on solo; only the URL forgets the party. */
+  private wasActive = false;
+  private readonly exitEffect = effect(() => {
+    const active = this.party.active();
+    untracked(() => {
+      if (this.wasActive && !active && this.host() && !this.isAudio()) {
+        void this.router.navigate([], { queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
+      }
+      this.wasActive = active;
+    });
+  });
 
   // ── Local intent routing (called by the player in place of acting on the engine) ──
 
@@ -204,19 +209,31 @@ export class PartySync {
 
   /** An item picked from the queue menu: the server moves everyone, this device included. */
   async requestQueueItem(index: number): Promise<void> {
+    if (this.isAudio()) {
+      const row = this.audioHost!.rowAt(index);
+      const cur = this.party.live()?.item;
+      if (row && !(cur && sameItem(row, cur))) await this.requestItem(row);
+      return;
+    }
     const item = this.queue.items()[index];
-    if (item && index !== this.queue.index()) await this.requestItem(item);
+    if (item && index !== this.queue.index()) await this.requestItem(itemIn(item));
   }
 
-  private async requestItem(item: QueueItem): Promise<void> {
-    if (!this.gate()) return;
-    await this.party.sendIntent('setItem', {
-      item: {
-        mediaId: item.mediaId,
-        ...(item.mediaFileId != null && { mediaFileId: item.mediaFileId }),
-        ...(item.episodeId != null && { episodeId: item.episodeId }),
-      },
-    });
+  private async requestItem(item: PartyItemIn): Promise<void> {
+    if (this.gate()) await this.party.sendIntent('setItem', { item });
+  }
+
+  /** An edit of the audio queue is an edit of the programme: the host sends it, a member proposes what it added. */
+  private async editProgramme(tracks: readonly MusicTrackRequest[]): Promise<void> {
+    const rows = this.party.programme();
+    // A mixed programme is read-only here: the queue shows its tracks only.
+    if (rows.length && rows.every(isTrack)) {
+      const next = tracks.map((t) => ({ mediaId: t.mediaId, itemId: t.itemId }));
+      // The programme event brings the new rows; a refusal or a proposal puts the queue back on the old ones.
+      if (this.party.isHost() && (await this.party.setProgramme(next))) return;
+      if (!this.party.isHost()) for (const t of next.filter((t) => !rows.some((r) => sameItem(r, t)))) await this.party.proposeTrack(t.mediaId, t.itemId);
+    }
+    await this.projectQueue();
   }
 
   /** Forced seek to wherever the group is. */
@@ -235,12 +252,58 @@ export class PartySync {
 
   /** A track on the programme hands the party to the audio player, a film hands it back to the video player. */
   private readonly hostEffect = effect(() => {
-    const item = this.party.active() ? (this.party.live()?.item ?? null) : null;
-    untracked(() => this.followKind(item));
+    const active = this.party.active();
+    const item = this.party.live()?.item ?? null;
+    untracked(() => (active ? this.followKind(item) : this.releaseAudio()));
   });
 
+  /** The programme is the queue: the player carrying the party shows its rows, the cursor on the playing one. */
+  private readonly queueEffect = effect(() => {
+    this.party.programme();
+    this.playingRow();
+    this.host();
+    this.queue.source();
+    untracked(() => void this.projectQueue());
+  });
+
+  /** The playing row's identity: a play, pause or seek does not change it, so it does not re-project the queue. */
+  private readonly playingRow = computed(() => {
+    const i = this.party.live()?.item;
+    return i ? `${i.mediaId}:${i.episodeId ?? ''}:${i.itemId ?? ''}` : '';
+  });
+
+  private projectGen = 0;
+
+  private async projectQueue(): Promise<void> {
+    const party = this.party.party();
+    const cur = this.party.live()?.item;
+    if (!party || !cur || !this.host() || !this.party.active()) return;
+    const rows = this.party.programme();
+    if (this.isAudio()) {
+      const gen = ++this.projectGen;
+      const tracks = await this.audioHost!.requests(rows.filter(isTrack));
+      if (gen === this.projectGen && this.isAudio()) this.audioHost!.adopt(tracks, tracks.findIndex((t) => t.itemId === cur.itemId));
+      return;
+    }
+    const items = rows.filter((r) => !isTrack(r)).map((r) => this.queueItem(r));
+    const at = items.findIndex((i) => i.mediaId === cur.mediaId && (i.episodeId ?? null) === cur.episodeId);
+    const held = this.queue.items();
+    const same = held.length === items.length && held.every((h, i) => h.mediaId === items[i].mediaId && h.episodeId === items[i].episodeId);
+    if (!items.length || (same && this.queue.source() === 'party' && this.queue.sourceId() === party.id && this.queue.index() === at)) return;
+    this.queue.start(items, at, { source: 'party', sourceId: party.id, autoplay: false });
+  }
+
+  private queueItem(r: PartyItem): QueueItem {
+    return {
+      mediaId: r.mediaId,
+      ...(r.episodeId != null && { episodeId: r.episodeId }),
+      title: r.hidden ? this.translate.instant('party.proposal_hidden') : r.title,
+      fanartUrl: r.fanartUrl,
+    };
+  }
+
   private followKind(item: PartyItem | null): void {
-    if (item?.itemId != null) {
+    if (item && isTrack(item)) {
       const audio = (this.audioHost ??= this.injector.get(AudioPartyHost));
       const prev = this.host();
       if (prev === audio) return;
@@ -251,12 +314,18 @@ export class PartySync {
     }
     if (!this.isAudio()) return;
     const audio = this.audioHost!;
+    this.releaseAudio();
+    audio.onBack();
+    if (item) void this.party.openPlayer(item);
+  }
+
+  /** The party no longer drives the audio player: it keeps its track and queue and plays on solo. */
+  private releaseAudio(): void {
+    if (!this.isAudio()) return;
     this.ducker.stop();
     this.unroute?.();
     this.unroute = null;
     this.host.set(null);
-    audio.onBack();
-    if (item) void this.party.openPlayer(item);
   }
 
   private readonly duckEffect = effect(() => {

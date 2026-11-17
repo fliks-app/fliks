@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { itemIn, sameItem } from './party-item';
 
 describe('party item identity', () => {
-  it('tells two tracks of one album apart, and a track from the album row', () => {
+  it('tells two tracks of one album apart, and reads a row without an item as the same media and episode', () => {
     expect(sameItem({ mediaId: 1, itemId: 5 }, { mediaId: 1, itemId: 6 })).toBe(false);
     expect(sameItem({ mediaId: 1, episodeId: null, itemId: 5 }, { mediaId: 1, episodeId: undefined, itemId: 5 })).toBe(true);
-    expect(sameItem({ mediaId: 1, itemId: 5 }, { mediaId: 1 })).toBe(false);
+    expect(sameItem({ mediaId: 1, itemId: 5 }, { mediaId: 1 })).toBe(true);
   });
 
   it('keeps the episode key and ignores absent itemId as before', () => {

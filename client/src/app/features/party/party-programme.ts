@@ -6,7 +6,7 @@ import { DropListSettleDirective } from '../../shared/directives/drop-list-settl
 import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
-import { itemIn, sameItem as sameRow, type ItemRef } from '../../core/services/party/party-item';
+import { isTrack, itemIn, sameItem as sameRow, type ItemRef } from '../../core/services/party/party-item';
 import { SseService } from '../../core/services/sse.service';
 import { DeviceService } from '../../core/services/device.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -71,7 +71,7 @@ export class PartyProgrammeComponent {
     this.items().map((item) => {
       const label = episodeLabel({ seasonNumber: item.seasonNumber, episodeNumber: item.episodeNumber, episodeTitle: item.episodeTitle });
       const cur = this.current();
-      const track = item.itemId != null;
+      const track = isTrack(item);
       return {
         item,
         key: rowKey(item),

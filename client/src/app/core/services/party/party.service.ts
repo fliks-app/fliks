@@ -21,7 +21,7 @@ import {
   type PartyUser,
 } from '../api/party-api.service';
 import { MediaService } from '../api/media.service';
-import { PlaybackQueueService } from '../playback-queue.service';
+import type { QueueItem } from '../playback-queue.service';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService, type PartyEvent } from '../sse.service';
@@ -35,7 +35,7 @@ import { mediaQuerySignal } from '../../utils/viewport';
 import { ClockService } from './clock.service';
 import { ReactionsService } from './reactions.service';
 import { AudioPartyHost } from './audio-party-host';
-import { itemIn, sameItem, type ItemRef } from './party-item';
+import { isTrack, itemIn, sameItem, type ItemRef } from './party-item';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -57,7 +57,7 @@ export interface FloatingReaction {
 }
 
 /** What the create dialog needs to know about what to watch: one item, a playlist the party follows, or nothing yet. */
-export type PartyCreateTarget = { title: string } & (
+export type PartyCreateTarget = { title: string; /** The series from this episode on. */ queue?: QueueItem[] } & (
   | { mediaId: number; mediaFileId: number; episodeId?: number; playlistId?: undefined }
   | { playlistId: number; mediaId?: undefined }
   | { mediaId?: undefined; playlistId?: undefined }
@@ -104,7 +104,6 @@ export class PartyService {
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
-  private readonly queue = inject(PlaybackQueueService);
   private readonly device = inject(DeviceService);
   private readonly injector = inject(Injector);
 
@@ -113,9 +112,11 @@ export class PartyService {
   readonly live = signal<PartyLiveState | null>(null);
   /** In the party's room, whether or not a film plays yet. */
   private readonly joined = signal(false);
+  /** The programme in its order, whatever its kind: the queue of the player that carries the party follows it. */
+  readonly programme = signal<PartyItem[]>([]);
   readonly members = signal<PartyMember[]>([]);
   readonly proposals = signal<PartyProposal[]>([]);
-  readonly filmProposals = computed(() => this.proposals().filter((p) => p.item.itemId === undefined));
+  readonly filmProposals = computed(() => this.proposals().filter((p) => !isTrack(p.item)));
   /** The songs waiting to be sung, next singer first. */
   readonly singerQueue = computed(() =>
     this.proposals()
@@ -275,7 +276,7 @@ export class PartyService {
         return false;
       }
       this.adopt(dto);
-      await this.loadQueue();
+      await this.loadProgramme();
       return true;
     } catch {
       return false;
@@ -300,6 +301,30 @@ export class PartyService {
       this.onActionError(err);
     }
   }
+
+  /** Solo player to party in one call: `items` is the programme, `at` the row playing now, `position` where. */
+  async startHere(name: string, items: PartyItemIn[], at: PartyItemIn, position: number): Promise<PartyDto | null> {
+    if (this.party() || this.starting) return null;
+    this.starting = true;
+    try {
+      const dto = await this.api.create({ name, items, live: { deviceId: this.deviceId(), at, position } });
+      this.created.next();
+      this.adopt(dto);
+    } catch {
+      return null;
+    } finally {
+      this.starting = false;
+    }
+    const item = this.party()?.item;
+    if (!item || !isTrack(item)) {
+      await this.router.navigate([], { queryParams: { party: this.party()!.id }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
+    await this.loadProgramme();
+    return this.party();
+  }
+
+  /** A `startHere` is in flight: a second tap must not open a second party. */
+  private starting = false;
 
   async setReady(ready: boolean): Promise<void> {
     const id = this.party()?.id;
@@ -370,49 +395,31 @@ export class PartyService {
     this.panelOpen.set(false);
     this.lastRev = 0;
     this.queuedFor = null;
+    this.programme.set([]);
     this.needsRejoin.set(false);
   }
 
-  /** The player menu lists the queue the server steps through, and the cursor follows the item. */
-  private async loadQueue(): Promise<void> {
+  /** The programme the server steps through; the party sync shows it as the queue of the player that carries the party. */
+  async loadProgramme(): Promise<void> {
     const party = this.party();
     if (!party) return;
     const rows = await this.api.queue(party.id).catch(() => null);
-    if (!rows) return;
-    // Tracks play in the audio player, which has no video queue to show.
-    const items = rows.filter((i) => i.itemId == null);
+    if (!rows || this.party()?.id !== party.id) return;
+    this.programme.set(rows);
     this.queuedFor = this.item();
-    if (!items.length) {
-      if (this.queue.source() === 'party') this.queue.clear();
-      return;
-    }
-    const cur = this.item();
-    // Off the programme, the cursor sits before row 0, where the server's `next` lands.
-    const at = cur ? items.findIndex((i) => sameItem(i, cur)) : 0;
-    this.queue.start(
-      items.map((i) => ({
-        mediaId: i.mediaId,
-        ...(i.episodeId != null && { episodeId: i.episodeId }),
-        title: i.hidden ? this.translate.instant('party.proposal_hidden') : i.title,
-        fanartUrl: i.fanartUrl,
-      })),
-      at,
-      { source: 'party', sourceId: party.id, autoplay: false },
-    );
   }
 
   /** The server derives the queue from the current item, so another show, a movie or an edited playlist needs a reload. */
   private syncQueue(item: PartyItem): void {
     const q = this.queuedFor;
-    if (!q || item.itemId != null || sameItem(q, item)) return;
-    if (this.queue.items().some((i) => i.mediaId === item.mediaId && (i.episodeId ?? null) === item.episodeId)) return;
-    void this.loadQueue();
+    if (!q || sameItem(q, item) || this.programme().some((i) => sameItem(i, item))) return;
+    void this.loadProgramme();
   }
 
   /** A track opens the audio player, anything else the video player's route. */
   async openPlayer(item: PartyItem): Promise<void> {
-    await this.loadQueue();
-    if (item.itemId != null) {
+    await this.loadProgramme();
+    if (isTrack(item)) {
       if (!(await this.injector.get(AudioPartyHost).openItem(item))) await this.leave();
       return;
     }
@@ -555,7 +562,7 @@ export class PartyService {
       case 'party.programme':
         if (!this.acceptRev(e.rev)) return;
         if (!this.live()) this.party.update((p) => (p ? { ...p, item: e.item } : p));
-        else void this.loadQueue();
+        else void this.loadProgramme();
         break;
       case 'party.proposals':
         this.proposalEvents++;
@@ -674,6 +681,13 @@ export class PartyService {
     }
     this.toast.success(this.translate.instant('karaoke.queue_added'));
     return true;
+  }
+
+  /** Host: replaces the programme; its event reloads the rows. */
+  async setProgramme(items: PartyItemIn[]): Promise<boolean> {
+    const id = this.party()?.id;
+    if (id == null) return false;
+    return this.api.programme(id, items).then(() => true, () => false);
   }
 
   /** Removes a pending song; the interceptor toasts a refusal. */

@@ -566,6 +566,18 @@ pub async fn create(
     if let Some(c) = &b.cover {
         c.check(&programme)?;
     }
+    let live_at: Option<Item> = b.live.as_ref().and_then(|l| l.at.clone()).map(Item::from);
+    if let Some(live) = &b.live {
+        if live_at
+            .as_ref()
+            .is_some_and(|at| !programme.iter().any(|p| same_row(p, at)))
+        {
+            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+        }
+        if connection_for(&st, me, &live.device_id).is_none() {
+            return Err(fail(StatusCode::CONFLICT, "party.error_no_connection"));
+        }
+    }
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
     let now = Utc::now();
     let scheduled = b.scheduled_at.filter(|t| *t > now);
@@ -574,7 +586,7 @@ pub async fn create(
     let (inherit_reactions, inherit_chat, inherit_link) = db::owner_switches(&st.db, me)
         .await?
         .unwrap_or((true, true, true));
-    let (row, created) = db::insert(
+    let (mut row, created) = db::insert(
         &st.db,
         &db::New {
             reactions_enabled: b.reactions_enabled.unwrap_or(inherit_reactions),
@@ -588,6 +600,7 @@ pub async fn create(
             policy,
             scheduled_at: at,
             cover: b.cover.as_ref(),
+            dedupe: b.live.is_none(),
         },
         &invitees,
         scheduled.is_none(),
@@ -602,7 +615,34 @@ pub async fn create(
             registry::announce_lobby(&st, &row).await?;
         }
     }
+    if let Some(live) = &b.live {
+        open_live(&st, &a, &row, live, live_at.as_ref()).await?;
+        row = row_of(&st, row.id).await?;
+    }
     Ok((StatusCode::CREATED, Json(dto(&st, &row, me, true).await?)))
+}
+
+/// The host's device enters the room of the party just created, which goes live on `at`.
+async fn open_live(
+    st: &AppState,
+    a: &Authed,
+    row: &Row,
+    live: &LiveIn,
+    at: Option<&Item>,
+) -> R<()> {
+    let me = a.user.id;
+    if !registry::ensure(st, row).await? {
+        return Err(fail(StatusCode::CONFLICT, "party.error_ended"));
+    }
+    let conn = connection_for(st, me, &live.device_id)
+        .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_no_connection"))?;
+    let name = a.user.username.clone();
+    mutate(st, row.id, |l| {
+        ((), l.join(me, &name, &live.device_id, &conn, now_ms()))
+    })
+    .await;
+    let _held = hold(st, row.id).await;
+    go_live(st, a, row.id, at, live.position.unwrap_or(0.0)).await
 }
 
 #[utoipa::path(get, path = "/api/parties", responses((status = 200)))]
@@ -1161,15 +1201,16 @@ pub async fn start(
     require_open(&row)?;
     if row.status == "scheduled" {
         let _held = hold(&st, id).await;
-        go_live(&st, &a, id).await?;
+        go_live(&st, &a, id, None, 0.0).await?;
     }
     let row = row_of(&st, id).await?;
     Ok(Json(dto(&st, &row, me, true).await?))
 }
 
-/// The start, under the gate. An empty programme takes the top vote; a head nobody can play, or a
-/// member cannot open, is refused as a `setItem` would.
-async fn go_live(st: &AppState, a: &Authed, id: i32) -> R<()> {
+/// The start, under the gate, on row `at` of the programme (the head when `None`) from `position`. An
+/// empty programme takes the top vote; a row nobody can play, or a member cannot open, is refused as a
+/// `setItem` would.
+async fn go_live(st: &AppState, a: &Authed, id: i32, at: Option<&Item>, position: f64) -> R<()> {
     let mut row = row_of(st, id).await?;
     require_open(&row)?;
     if row.status != "scheduled" {
@@ -1181,20 +1222,21 @@ async fn go_live(st: &AppState, a: &Authed, id: i32) -> R<()> {
         let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
         edit_held(st, a, &mut row, Edit::Append(item)).await?;
     }
-    let head = db::programme_rows(&st.db, id)
-        .await?
-        .into_iter()
-        .next()
-        .filter(|r| r.playable)
-        .ok_or_else(|| machine_err(PartyErr::NoItem))?
-        .item;
+    let mut rows = db::programme_rows(&st.db, id).await?.into_iter();
+    let head = match at {
+        Some(at) => rows.find(|r| same_row(&r.item, at)),
+        None => rows.next(),
+    }
+    .filter(|r| r.playable)
+    .ok_or_else(|| machine_err(PartyErr::NoItem))?
+    .item;
     let ids = accessible_library_ids(&st.db, a).await?;
     assert_media_accessible(&st.db, head.media_id, &ids).await?;
     vet_items(st, id, std::slice::from_ref(&head), &ids).await?;
-    let item = db::set_live(&st.db, id)
+    let item = db::set_live(&st.db, id, at.and(head.item_id))
         .await?
         .ok_or_else(|| machine_err(PartyErr::NoItem))?;
-    mutate_held(st, id, |l| ((), l.go_live(item, now_ms())))
+    mutate_held(st, id, |l| ((), l.go_live(item, position, now_ms())))
         .await
         .ok_or_else(not_live)?;
     let guests = db::guest_ids(&st.db, id).await?;

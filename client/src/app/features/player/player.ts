@@ -125,6 +125,9 @@ import { RemoteController } from './remote-controller';
 import { PartySync } from '../../core/services/party/party-sync';
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
+import { PartyApiService } from '../../core/services/api/party-api.service';
+import { PartyInviteComponent } from '../party/party-invite';
+import { itemIn, programmeOf } from '../../core/services/party/party-item';
 import { ReactionsService } from '../../core/services/party/reactions.service';
 import { PartyPanelComponent } from './party/party-panel';
 import { PartyFloatersComponent } from './party/party-floaters';
@@ -141,7 +144,7 @@ import { isMediaKind, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
+  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent, PartyInviteComponent],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
@@ -716,6 +719,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   );
   protected readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartySync);
+  private readonly partyApi = inject(PartyApiService);
+  protected readonly invite = viewChild(PartyInviteComponent);
+
+  /** A solo, local, real item (no pre-roll, no download) the host may turn into a party. */
+  protected canStartParty(): boolean {
+    return !this.partyCtl.active() && this.partyApi.canCreate() && this.session.isLocal() && !this.preRollActive() && !this.isOfflinePlayback && !!this.mediaFileId && !!this.mediaId;
+  }
+
+  protected async startParty(): Promise<void> {
+    const current = { mediaId: this.mediaId, mediaFileId: this.mediaFileId, ...(this.episodeId != null && { episodeId: this.episodeId }) };
+    const dto = await this.party.startHere(this.mediaTitle(), programmeOf(this.queue.items(), current), itemIn(current), this.currentTime());
+    // The dialog mounts with the party: open it once rendered.
+    if (dto) afterNextRender(() => this.invite()?.open(), { injector: this.injector });
+  }
+
   private readonly detachParty = this.partyCtl.attach({
     engine: () => this.engine,
     urlPartyId: () => +this.route.snapshot.queryParams['party'] || 0,

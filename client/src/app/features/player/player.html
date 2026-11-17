@@ -271,6 +271,12 @@
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
     (openReactionSettings)="partyDialog.set('reactions')"
+    [partyCanStart]="canStartParty()"
+    [partyIsHost]="party.isHost()"
+    [partyCanInvite]="party.isHost() || !!party.party()?.inviteToken"
+    (startParty)="startParty()"
+    (inviteParty)="invite()?.open()"
+    (leaveParty)="party.leaveOrEnd()"
   >
     @if (reactionDock()) {
       <app-party-reaction-dock />
@@ -307,6 +313,9 @@
   @defer {
     <app-party-panel animate.enter="panel-slide-in" animate.leave="panel-slide-out" (openSettings)="partyDialog.set('party')" />
   }
+}
+@if (partyCtl.active() && party.party(); as p) {
+  <app-party-invite [view]="p" [button]="false" (updated)="party.applySnapshot($event)" />
 }
 @if (partyCtl.active() && partyDialog(); as dialog) {
   @defer {

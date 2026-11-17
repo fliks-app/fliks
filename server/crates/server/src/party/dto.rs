@@ -50,6 +50,7 @@ pub struct Create {
     pub invitee_ids: Option<Vec<i32>>,
     pub items: Option<Vec<ItemIn>>,
     pub cover: Option<Cover>,
+    pub live: Option<LiveIn>,
 }
 
 impl Create {
@@ -70,6 +71,14 @@ impl Create {
                 || self.playlist_id.is_some())
         {
             return Err(invalid("item"));
+        }
+        if let Some(live) = &self.live {
+            if live.position.is_some_and(|p| !p.is_finite() || p < 0.0) {
+                return Err(AppError::bad_request("party.error_invalid".to_owned()));
+            }
+            if self.scheduled_at.is_some() {
+                return Err(invalid("live"));
+            }
         }
         Ok(())
     }
@@ -101,6 +110,15 @@ pub struct Join {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Device {
     pub device_id: String,
+}
+
+/// Opens the party live: the host's device joins and the party plays row `at` (the head when absent) from `position`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct LiveIn {
+    pub device_id: String,
+    pub at: Option<ItemIn>,
+    pub position: Option<f64>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -277,6 +295,8 @@ pub struct PartyItem {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub episode_title: Option<String>,
+    /// The media's type: `album` for a track, which the audio player plays.
+    pub media_type: String,
     /// The viewer cannot open the media: title and artwork are blanked, the ids stay.
     pub hidden: bool,
 }

@@ -274,6 +274,7 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         season_number: None,
         episode_number: None,
         episode_title: None,
+        media_type: String::new(),
     });
     PartyItem {
         media_id: item.media_id,
@@ -289,6 +290,7 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         season_number: i.season_number,
         episode_number: i.episode_number,
         episode_title: i.episode_title,
+        media_type: i.media_type,
         hidden: false,
     }
 }

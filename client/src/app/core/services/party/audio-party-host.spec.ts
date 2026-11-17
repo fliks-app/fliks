@@ -55,7 +55,7 @@ function setup(media: unknown = album) {
   return { host: TestBed.inject(AudioPartyHost), audio, toast };
 }
 
-const item = (itemId: number) => ({ mediaId: 4, itemId, episodeId: null }) as PartyItem;
+const item = (itemId: number) => ({ mediaId: 4, itemId, episodeId: null, mediaType: 'album' }) as PartyItem;
 
 describe('AudioPartyHost output', () => {
   it('names the loaded track by album and item, and a placeholder when none plays', () => {
@@ -130,5 +130,27 @@ describe('AudioPartyHost openItem', () => {
     const { host, audio } = setup();
     host.onBack();
     expect(audio.close).toHaveBeenCalled();
+  });
+});
+
+describe('AudioPartyHost queue requests', () => {
+  it('builds one request per programme row, from the row itself when the album or file is gone', async () => {
+    const { host } = setup();
+    const gone = { ...item(71), title: 'Gone', seriesTitle: 'Al', posterUrl: '/p.jpg' } as PartyItem;
+    const out = await host.requests([item(70), gone]);
+    expect(out.map((r) => r.itemId)).toEqual([70, 71]);
+    expect(out[0].artists).toBe('Band');
+    expect(out[1]).toMatchObject({ mediaId: 4, title: 'Gone', albumTitle: 'Al', coverUrl: '/p.jpg', durationSeconds: null });
+  });
+
+  it('labels a masked row like the video queue does', async () => {
+    const { host } = setup(null);
+    const masked = { ...item(70), title: '', hidden: true } as PartyItem;
+    expect((await host.requests([masked]))[0].title).toBe('party.proposal_hidden');
+  });
+
+  it('keeps the rows of an album that cannot be fetched', async () => {
+    const { host } = setup(null);
+    expect((await host.requests([item(70)])).map((r) => r.itemId)).toEqual([70]);
   });
 });

@@ -73,11 +73,11 @@
   <ol cdkDropList [cdkDropListSortPredicate]="sortAllowed" (cdkDropListDropped)="onQueueDrop($event)" class="flex flex-col">
     @for (q of upcoming(); track q; let r = $index) {
       @let i = r + queueStart();
-      <li cdkDrag [cdkDragData]="i" [cdkDragDisabled]="isTv() || remoteView() || i === audio.queueIndex()" class="queue-row relative overflow-hidden rounded-lg" [class]="i === audio.queueIndex() ? 'mb-1 border-b border-base-content/10 rounded-b-none' : ''" appTvRow>
+      <li cdkDrag [cdkDragData]="i" [cdkDragDisabled]="isTv() || queueLocked() || i === audio.queueIndex()" class="queue-row relative overflow-hidden rounded-lg" [class]="i === audio.queueIndex() ? 'mb-1 border-b border-base-content/10 rounded-b-none' : ''" appTvRow>
         <div class="absolute inset-0 flex items-center justify-end bg-error pr-5 text-error-content opacity-[var(--swipe,0)]" aria-hidden="true">
           <svg lucideTrash2 class="h-5 w-5"></svg>
         </div>
-        <div appSwipeRemove [swipeDisabled]="queueEditing() || remoteView()" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1">
+        <div appSwipeRemove [swipeDisabled]="queueEditing() || queueLocked()" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1">
           <button
             type="button"
             class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left"
@@ -105,7 +105,7 @@
               <span class="block truncate text-sm text-base-content/60">{{ q.artists }}</span>
             </span>
           </button>
-          @if (isTv() && !queueEditing() && !remoteView()) {
+          @if (isTv() && !queueEditing() && !queueLocked()) {
             <button type="button" class="btn btn-ghost btn-sm btn-circle" [disabled]="i <= queueStart()" (click)="local.moveInQueue(i, i - 1)" [attr.aria-label]="'music_player.move_up' | translate">
               <svg lucideArrowUp class="h-4 w-4"></svg>
             </button>
@@ -113,7 +113,7 @@
               <svg lucideArrowDown class="h-4 w-4"></svg>
             </button>
           }
-          @if (!isTouch() && !queueEditing() && !remoteView()) {
+          @if (!isTouch() && !queueEditing() && !queueLocked()) {
             <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="local.removeFromQueue(i)" [attr.aria-label]="'music_player.remove' | translate">
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
@@ -126,7 +126,7 @@
                 <svg lucidePlay class="h-4 w-4"></svg>
               }
             </button>
-          } @else if (!isTv() && !remoteView()) {
+          } @else if (!isTv() && !queueLocked()) {
             <button type="button" cdkDragHandle class="flex h-10 w-10 shrink-0 cursor-grab items-center justify-center text-base-content/50" [attr.aria-label]="'music_player.reorder' | translate">
               <svg lucideGripVertical class="h-5 w-5"></svg>
             </button>
@@ -233,6 +233,28 @@
                     {{ 'music_player.preamp' | translate }}: {{ local.preamp() > 0 ? '+' : '' }}{{ local.preamp() }} dB
                   </button>
                 }
+              }
+              @if (canStartParty()) {
+                <button type="button" class="dropdown-item" (click)="startParty(); closeMenu()" data-testid="party-start">
+                  <svg lucideUsers class="h-4 w-4"></svg>
+                  {{ 'party.listen_together' | translate }}
+                </button>
+              }
+              @if (party.active()) {
+                <button type="button" class="dropdown-item" (click)="openPartyPage(); closeMenu()" data-testid="party-open">
+                  <svg lucideUsers class="h-4 w-4"></svg>
+                  {{ 'party.open_page' | translate }}
+                </button>
+                @if (canInviteParty()) {
+                  <button type="button" class="dropdown-item" (click)="invite()?.open(); closeMenu()" data-testid="party-invite">
+                    <svg lucideUserPlus class="h-4 w-4"></svg>
+                    {{ 'party.invite' | translate }}
+                  </button>
+                }
+                <button type="button" class="dropdown-item" (click)="party.leaveOrEnd(); closeMenu()" data-testid="party-leave">
+                  <svg lucideLogOut class="h-4 w-4"></svg>
+                  {{ (party.isHost() ? 'party.end' : 'party.leave') | translate }}
+                </button>
               }
               <button type="button" class="dropdown-item" (click)="stop(); closeMenu()">
                 <svg lucideX class="h-4 w-4"></svg>
@@ -396,6 +418,7 @@
           [class.text-primary]="audio.shuffle()"
           [attr.aria-pressed]="audio.shuffle()"
           [disabled]="!canShuffle()"
+          [class.invisible]="party.active()"
           (click)="audio.setShuffle(!audio.shuffle())"
           [attr.aria-label]="'music_player.shuffle' | translate"
           [attr.data-tip]="'music_player.shuffle' | translate"
@@ -420,6 +443,7 @@
           class="btn btn-ghost btn-circle tooltip tooltip-left [--size:2.5rem]"
           [class.text-primary]="audio.repeat() !== 'off'"
           [disabled]="!canRepeat()"
+          [class.invisible]="party.active()"
           (click)="audio.cycleRepeat()"
           [attr.aria-label]="('music_player.repeat_' + audio.repeat()) | translate"
           [attr.data-tip]="('music_player.repeat_' + audio.repeat()) | translate"
@@ -586,7 +610,7 @@
           </button>
         } @else {
           <h3 animate.enter="fade-up-in" class="text-xl font-bold">{{ 'music_player.queue' | translate }}</h3>
-          @if (!remoteView()) {
+          @if (!queueLocked()) {
             <button animate.enter="fade-up-in" type="button" class="btn btn-sm rounded-full" (click)="queueEditing.set(true)" data-testid="queue-edit">{{ 'music_player.queue_edit' | translate }}</button>
           }
         }
@@ -603,11 +627,11 @@
             <span class="max-w-full truncate">{{ 'music_player.queue_remove_selected' | translate }}</span>
           </button>
         } @else {
-          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.shuffle()" [attr.aria-pressed]="audio.shuffle()" [disabled]="!canShuffle()" (click)="audio.setShuffle(!audio.shuffle())">
+          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.shuffle()" [attr.aria-pressed]="audio.shuffle()" [disabled]="!canShuffle()" [class.invisible]="party.active()" (click)="audio.setShuffle(!audio.shuffle())">
             <svg lucideShuffle class="h-5 w-5"></svg>
             <span class="max-w-full truncate">{{ 'music_player.shuffle' | translate }}</span>
           </button>
-          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.repeat() !== 'off'" [disabled]="!canRepeat()" (click)="audio.cycleRepeat()">
+          <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [class.text-primary]="audio.repeat() !== 'off'" [disabled]="!canRepeat()" [class.invisible]="party.active()" (click)="audio.cycleRepeat()">
             @if (audio.repeat() === 'one') {
               <svg lucideRepeat1 class="h-5 w-5"></svg>
             } @else {
@@ -626,4 +650,7 @@
     </div>
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
   </dialog>
+}
+@if (party.active() && party.party(); as p) {
+  <app-party-invite [view]="p" [button]="false" (updated)="party.applySnapshot($event)" />
 }

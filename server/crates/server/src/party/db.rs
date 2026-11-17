@@ -82,6 +82,8 @@ pub struct New<'a> {
     pub public: bool,
     pub scheduled_at: DateTime<Utc>,
     pub cover: Option<&'a Cover>,
+    /// Return the host's open party on the same item instead of inserting; a live create always inserts.
+    pub dedupe: bool,
 }
 
 /// The owner's host switches on their latest party, for the next one's defaults.
@@ -104,7 +106,7 @@ pub async fn insert(
     immediate: bool,
 ) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
-    let item = n.programme.first();
+    let item = n.programme.first().filter(|_| n.dedupe);
     let existing = match item {
         Some(item) => {
             sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -519,19 +521,21 @@ pub async fn update_settings(
     Ok(())
 }
 
-/// Goes live on the head of the programme, which becomes the playing item and is returned. `None`
-/// when the party is not `scheduled` or its programme is empty: nothing changed.
-pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<Option<Item>> {
+/// Goes live on the programme row `at` (an item id; the head when `None`), which becomes the playing
+/// item and is returned. `None` when the party is not `scheduled` or the row is missing: nothing changed.
+pub async fn set_live(db: &PgPool, id: i32, at: Option<i32>) -> sqlx::Result<Option<Item>> {
     let row: Option<(i32, Option<i32>, Option<i32>, i32)> = sqlx::query_as(
         r#"UPDATE watch_parties p SET status = 'live', "startedAt" = now(),
                "itemId" = h."itemId", "mediaFileId" = h."mediaFileId"
            FROM (SELECT "itemId", "mediaFileId" FROM watch_party_items
-                 WHERE "partyId" = $1 ORDER BY position LIMIT 1) h
+                 WHERE "partyId" = $1 AND ($2::int IS NULL OR "itemId" = $2)
+                 ORDER BY position LIMIT 1) h
            WHERE p.id = $1 AND p.status = 'scheduled'
            RETURNING (SELECT i."mediaId" FROM items i WHERE i.id = h."itemId"), h."mediaFileId",
                      (SELECT i.id FROM items i WHERE i.id = h."itemId" AND i."groupId" IS NOT NULL), h."itemId""#,
     )
     .bind(id)
+    .bind(at)
     .fetch_optional(db)
     .await?;
     Ok(
@@ -664,6 +668,8 @@ pub struct ItemInfo {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub episode_title: Option<String>,
+    /// The media's type (`movie`, `series`, `album`, ...).
+    pub media_type: String,
 }
 
 /// Media title (with `S01E02` for an episode, the track title for a track) and artwork of every
@@ -686,13 +692,14 @@ pub async fn item_infos(
         Option<String>,
         bool,
         String,
+        String,
     );
     let media: Vec<i32> = keys.iter().map(|k| k.0).collect();
     let episode: Vec<Option<i32>> = keys.iter().map(|k| k.1).collect();
     let item: Vec<Option<i32>> = keys.iter().map(|k| k.2).collect();
     let rows: Vec<Row> = sqlx::query_as(
         r#"SELECT q.media, q.episode, q.item, m.title, m."posterUrl", m."fanartUrl", m."additionalFanartUrls",
-                  s."number", e."number", e."stillUrl", e.title, ti.id IS NOT NULL, COALESCE(ti.title, '')
+                  s."number", e."number", e."stillUrl", e.title, ti.id IS NOT NULL, COALESCE(ti.title, ''), m.type::text
            FROM unnest($1::int[], $2::int[], $3::int[]) AS q(media, episode, item)
            JOIN media m ON m.id = q.media
            LEFT JOIN items e ON e.id = q.episode
@@ -721,6 +728,7 @@ pub async fn item_infos(
                 ep_title,
                 track,
                 track_title,
+                media_type,
             )| {
                 let series = (episode.is_some() || track).then(|| title.clone());
                 let title = match (season, number) {
@@ -740,6 +748,7 @@ pub async fn item_infos(
                         season_number: season,
                         episode_number: number,
                         episode_title: ep_title.filter(|t| !t.is_empty()),
+                        media_type,
                     },
                 )
             },
@@ -965,12 +974,13 @@ mod tests {
             public: false,
             scheduled_at: Utc::now() + chrono::Duration::hours(1),
             cover: None,
+            dedupe: true,
         };
         let (row, _) = insert(&pool, &new, &[], false).await.unwrap();
         assert_eq!(row.item().unwrap().item_id, Some(second));
         let rows = programme_rows(&pool, row.id).await.unwrap();
         assert_eq!(rows[0].item.item_id, Some(second));
-        let live = set_live(&pool, row.id).await.unwrap().unwrap();
+        let live = set_live(&pool, row.id, None).await.unwrap().unwrap();
         assert_eq!(live.item_id, Some(second));
         persist(&pool, row.id, 3.0, &live).await.unwrap();
         let kept: Option<i32> =

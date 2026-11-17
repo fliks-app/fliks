@@ -19,6 +19,7 @@ import { MediaAdminService } from '../../../core/services/media-admin.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { PartyService } from '../../../core/services/party/party.service';
+import { buildSeriesQueueItems } from '../../utils/media-play.util';
 import { PartyApiService } from '../../../core/services/api/party-api.service';
 import { StreamingApiService, type PlaybackState } from '../../../core/services/api/streaming-api.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
@@ -501,11 +502,15 @@ export class DetailHeroComponent {
     const mediaFileId = this.resumeMediaFileId() ?? this.selectedFileId();
     if (!mediaFileId) return;
     const episodeId = this.resumeEpisodeId() ?? this.episodeId();
+    const m = this.media();
+    const series = episodeId != null && m ? buildSeriesQueueItems(m) : [];
+    const from = series.findIndex((q) => q.episodeId === episodeId);
     this.injector.get(PartyService).createRequest.set({
       title: this.title(),
       mediaId: this.mediaId(),
       mediaFileId,
       ...(episodeId != null && { episodeId }),
+      ...(from >= 0 && { queue: series.slice(from) }),
     });
   }
 

@@ -68,6 +68,8 @@ import {
   LucideSmilePlus,
   LucideCast,
   LucideUsers,
+  LucideUserPlus,
+  LucideLogOut,
   LucideHeadphones,
   LucideLeaf,
   LucideLock,
@@ -130,6 +132,8 @@ const SWIPE_MIN_PX = 50;
     LucideSmilePlus,
     LucideCast,
     LucideUsers,
+    LucideUserPlus,
+    LucideLogOut,
     LucideHeadphones,
     LucideLeaf,
     LucideLock,
@@ -400,6 +404,14 @@ export class PlayerControlsComponent {
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();
   readonly openReactionSettings = output<void>();
+  /** The menu offers "watch together": a solo local item the user may turn into a party. */
+  readonly partyCanStart = input(false);
+  readonly partyIsHost = input(false);
+  /** The host invites people; a member only shares the link, when the party has one. */
+  readonly partyCanInvite = input(false);
+  readonly startParty = output<void>();
+  readonly inviteParty = output<void>();
+  readonly leaveParty = output<void>();
   /** The action strip's content: the party reaction button, projected by the player. */
   protected readonly dock = contentChild(PartyReactionDockComponent);
   readonly toggleFillScreen = output<void>();
