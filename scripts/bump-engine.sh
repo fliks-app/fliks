@@ -1,25 +1,12 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image (tag + digest) and the server's engine tag (e.g. 0.4.1)
-#        scripts/bump-engine.sh --local <checkout> patch the server's engine crate to <checkout> (untracked server/.cargo/config.toml)
-#                                          (needs `cargo update -p fliks-engine-core`; never commit the patched Cargo.lock)
+# Usage: scripts/bump-engine.sh <version>   rewrite engine.lock, the Dockerfile engine image (tag + digest) and the server's engine tag (e.g. 0.4.1)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-case "${1:?usage: bump-engine.sh <version> | --local <checkout>}" in
---local)
-    co="$(realpath "${2:?checkout path}")"
-    mkdir -p server/.cargo
-    cat > server/.cargo/config.toml <<EOT
-[patch."https://github.com/fliks-app/engine"]
-fliks-engine-core = { path = "$co/crates/core" }
-EOT
-    exit 0
-    ;;
-esac
-
-v="${1#v}"
+v="${1:?usage: bump-engine.sh <version>}"
+v="${v#v}"
 gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tmp"
 
 {
