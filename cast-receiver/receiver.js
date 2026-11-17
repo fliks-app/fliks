@@ -50,13 +50,16 @@ playerManager.addEventListener(
     document.body.classList.add('playing');
     const current = playerManager.getQueueManager().getCurrentItem();
     if (current && current.itemId === upNext) upNext = null;
-    renderMusic();
+    renderMusic(playerManager.getMediaInformation());
     qoeLoaded();
     publishAudioTracks();
     startEdl();
     watchCaptionTracks();
   },
 );
+
+// The queue moving on switches the media before the next track has loaded.
+playerManager.addEventListener(cast.framework.events.EventType.MEDIA_STATUS, () => renderMusic(playerManager.getMediaInformation()));
 
 [
   cast.framework.events.EventType.MEDIA_FINISHED,
@@ -577,6 +580,9 @@ playerManager.setMessageInterceptor(
     // A LOAD starts a new queue: the up-next item went with the old one.
     upNext = null;
     const media = loadRequest.media;
+    renderMusic(media);
+    // A track's view needs nothing loaded: it replaces the splash while the audio buffers.
+    if (document.body.classList.contains('music-on')) document.body.classList.add('playing');
     if (media) {
       prepareEdl(media, loadRequest);
       cueState.fileId = media.customData ? media.customData.mediaFileId ?? null : null;
@@ -910,17 +916,22 @@ const musicElapsed = musicEl.querySelector('.music-elapsed');
 const musicTotal = musicEl.querySelector('.music-total');
 const musicPlayed = musicEl.querySelector('.music-played');
 
-function playingItemId() {
-  const info = playerManager.getMediaInformation();
+function musicItemId(info) {
   const id = info && info.customData ? info.customData.itemId : undefined;
   return typeof id === 'number' ? id : null;
 }
 
-function renderMusic() {
-  const music = playingItemId() !== null;
+function playingItemId() {
+  return musicItemId(playerManager.getMediaInformation());
+}
+
+/** Shows the view of `info` from its LOAD on, so the video bar never shows first; a status without media keeps it. */
+function renderMusic(info) {
+  if (!info) return;
+  const music = musicItemId(info) !== null;
   document.body.classList.toggle('music-on', music);
   if (!music) return;
-  const meta = playerManager.getMediaInformation().metadata || {};
+  const meta = info.metadata || {};
   const cover = meta.images && meta.images.length ? meta.images[0].url : '';
   if ((musicCover.getAttribute('src') || '') !== cover) {
     if (cover) musicCover.setAttribute('src', cover);
