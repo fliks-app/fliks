@@ -2,6 +2,7 @@ import { EffectRef, Injectable, Injector, computed, effect, inject, signal, untr
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { StreamingApiService } from '../api/streaming-api.service';
+import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
@@ -64,6 +65,7 @@ export class PlaybackSession {
   private readonly party = () => this.injector.get(PartyService);
   private readonly castSvc = () => this.injector.get(CastService);
   private readonly castPlayer = () => this.injector.get(CastPlayerService);
+  private readonly audio = () => this.injector.get(AudioPlayerService);
   private readonly remoteSvc = () => this.injector.get(RemoteService);
   private readonly router = () => this.injector.get(Router);
   private readonly sync = () => this.injector.get(SessionSyncService);
@@ -351,8 +353,13 @@ export class PlaybackSession {
     const cast = this.castSvc();
     if (!cast.isConnected() && !(await this.connectCast(deviceId))) return false;
     const local = this.local();
-    const handoff = await local?.release();
-    if (!local || !handoff) return true;
+    // No video player mounted (opening one closes the audio player): the audio player is what plays here.
+    if (!local) {
+      await this.audio().moveToCast();
+      return true;
+    }
+    const handoff = await local.release();
+    if (!handoff) return true;
     const cp = this.castPlayer();
     if (handoff.resolveSubtitle) {
       const sub = await cp.resolveStartSubtitle(
@@ -476,10 +483,10 @@ export class PlaybackSession {
 
   private onCastConnected(): void {
     const local = this.local();
-    if (!local || this.moving || local.item().mediaId === 0) return;
+    if (this.moving || local?.item().mediaId === 0) return;
     // A receiver that already plays keeps its media: only this device falls silent.
-    if (this.castPlayer().hasMedia()) local.stepAside();
-    else void this.moveTo('cast');
+    if (this.castPlayer().hasMedia()) local ? local.stepAside() : this.audio().pause();
+    else if (local || this.audio().canMoveToCast()) void this.moveTo('cast');
   }
 
   /** Any way back to this device that `moveTo` did not take (receiver lost, "stop controlling", the mini-bar's

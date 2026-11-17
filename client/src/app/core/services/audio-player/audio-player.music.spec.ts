@@ -383,7 +383,7 @@ describe('AudioPlayerService music mode', () => {
     castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
-    expect(castTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }));
+    expect(castTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 0);
     expect(getItemPlaybackInfo).not.toHaveBeenCalled();
     expect(audio.playing()).toBe(true);
     audio.toggle();
@@ -393,6 +393,21 @@ describe('AudioPlayerService music mode', () => {
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 77, sessionId: 'cs', positionSeconds: 30 }));
     await audio.close();
     expect(cast.stop).toHaveBeenCalled();
+  });
+
+  it('moves the track playing here to a receiver that connects, where it was', async () => {
+    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    els(audio)[0].dispatchEvent(new Event('play'));
+    await audio.seek(30);
+    expect(audio.canMoveToCast()).toBe(true);
+    cast.isConnected.set(true);
+    await audio.moveToCast();
+    expect(castTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 30);
+    expect(audio.isCasting()).toBe(true);
+    expect(audio.canMoveToCast()).toBe(false);
+    expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
   });
 
   it('loads the stem on the receiver in a stem mode and the track again on original', async () => {

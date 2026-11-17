@@ -230,6 +230,8 @@ export class AudioPlayerService {
   private set casting(on: boolean) {
     this._casting.set(on);
   }
+  /** A music track this device plays itself, which a connected receiver can take over. */
+  readonly canMoveToCast = computed(() => this._musicMode() && this._track() !== null && !this._casting());
   private cast: CastService | null = null;
   private readonly mq = new MusicQueue();
   private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
@@ -625,8 +627,15 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
-  /** False when the start was overtaken by another one or failed. */
-  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0): Promise<boolean> {
+  /** Moves the track to the connected receiver, at the position and play state it had here. */
+  async moveToCast(): Promise<void> {
+    const req = this.mq.current;
+    if (!this.canMoveToCast() || !req || this._loading() || this.blockedByParty()) return;
+    await this.startMusic(req, this._playing(), this._position(), true);
+  }
+
+  /** False when the start was overtaken by another one or failed. A paused open stays here unless `toCast`: the party opens its track paused on this device. */
+  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0, toCast = autoplay): Promise<boolean> {
     const generation = ++this.generation;
     await this.release(true);
     this._pitch.set(0);
@@ -640,8 +649,8 @@ export class AudioPlayerService {
     this._bookmarks.set([]);
     try {
       if (this.network.isOnline()) await this.sync.flush();
-      if (autoplay && this.bindCast().isConnected()) {
-        await this.startCast(req, generation);
+      if (toCast && this.bindCast().isConnected()) {
+        await this.startCast(req, generation, autoplay, startAt);
         return generation === this.generation && this._track() !== null;
       }
       if (this.nativeAudio) {
@@ -704,10 +713,10 @@ export class AudioPlayerService {
     return cast;
   }
 
-  private async startCast(req: MusicTrackRequest, generation: number): Promise<void> {
+  private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number): Promise<void> {
     await this.nativeAudio?.stop().catch(() => undefined);
     this.injector.get(NowPlayingMetadataService).primeTracks([req]);
-    const info = await this.injector.get(CastPlayerService).castTrack(req);
+    const info = await this.injector.get(CastPlayerService).castTrack(req, autoplay, startAt);
     if (generation !== this.generation) return;
     if (!info) return void (await this.close());
     this.info = info;
@@ -715,7 +724,7 @@ export class AudioPlayerService {
     this.casting = true;
     this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
     this.setupMediaSession(this._track()!);
-    this.onPlayState(true);
+    this.onPlayState(autoplay);
     this._stemMode.set('original');
     void this.refreshStems();
   }

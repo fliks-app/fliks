@@ -2,6 +2,8 @@ import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
 import { DeviceChipComponent } from '../device-chip/device-chip';
+import { DeviceIconComponent } from '../device-chip/device-icon';
+import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
@@ -141,6 +143,7 @@ function writeFlag(key: string, on: boolean): void {
     PopoverMenuComponent,
     MarqueeComponent,
     DeviceChipComponent,
+    DeviceIconComponent,
     DropdownMenuComponent,
     RemotePickerListComponent,
     TranslatePipe,
@@ -194,6 +197,7 @@ export class AudioPlayerComponent {
   private readonly remoteOut = inject(RemoteAudioOutput);
   protected readonly sync = inject(SessionSyncService);
   protected readonly surface = inject(PlaybackSurface);
+  protected readonly playingOn = inject(PlaybackDevice);
   private readonly fullPlayer = inject(FullPlayerState);
   /** The full player drives another device's session; it stays on it while the player closes. */
   protected readonly remoteView = this.fullPlayer.remote;

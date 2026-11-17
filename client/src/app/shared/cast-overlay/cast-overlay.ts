@@ -6,6 +6,7 @@ import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
+import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { RemoteAudioOutput } from '../../core/services/audio-player/remote-audio-output';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
@@ -36,8 +37,12 @@ export class CastOverlayComponent {
     return meta?.fanartUrl ?? meta?.posterUrl ?? null;
   });
 
-  /** The cast or remote output; null on a TV, which never casts, and while playing locally. */
-  protected readonly output = computed(() => (this.device.isTv() || this.session.isLocal() ? null : this.session.output()));
+  private readonly localAudio = inject(AudioPlayerService);
+
+  /** The cast or remote output; null on a TV, which never casts, while playing locally, and while the audio player's own bar drives the receiver. */
+  protected readonly output = computed(() =>
+    this.device.isTv() || this.session.isLocal() || this.localAudio.isCasting() ? null : this.session.output(),
+  );
 
   protected readonly audioView = inject(RemoteAudioOutput);
 

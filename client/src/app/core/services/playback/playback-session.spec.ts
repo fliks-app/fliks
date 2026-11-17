@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MediaService } from '../api/media.service';
 import { MusicApiService } from '../api/music-api.service';
 import { StreamingApiService } from '../api/streaming-api.service';
+import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
@@ -109,6 +110,7 @@ function setup() {
     videoItem: SessionSyncService.prototype.videoItem,
   };
   const device = { isTv: signal(false) };
+  const audio = { canMoveToCast: signal(false), moveToCast: vi.fn(async () => {}), pause: vi.fn() };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
@@ -121,6 +123,7 @@ function setup() {
       { provide: CastService, useValue: castSvc },
       { provide: RemoteService, useValue: remoteSvc },
       { provide: CastPlayerService, useValue: castPlayer },
+      { provide: AudioPlayerService, useValue: audio },
       { provide: DeviceService, useValue: device },
       { provide: Router, useValue: router },
       { provide: StreamingApiService, useValue: streaming },
@@ -140,7 +143,7 @@ function setup() {
     resume: vi.fn(async () => {}),
     disconnect: vi.fn(),
   } as unknown as LocalOutput;
-  return { session, syncSvc, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming };
+  return { session, syncSvc, cast, remote, party, local, castSvc, remoteSvc, castPlayer, device, router, streaming, audio };
 }
 
 describe('PlaybackSession', () => {
@@ -503,6 +506,28 @@ describe('PlaybackSession', () => {
       expect(local.stepAside).toHaveBeenCalledTimes(1);
       expect(local.release).not.toHaveBeenCalled();
       expect(castPlayer.reloadCastStream).not.toHaveBeenCalled();
+    });
+
+    it('hands the playing music over when no video player is mounted', async () => {
+      const { cast, audio } = setup();
+      audio.canMoveToCast.set(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      await vi.waitFor(() => expect(audio.moveToCast).toHaveBeenCalledTimes(1));
+      expect(audio.pause).not.toHaveBeenCalled();
+    });
+
+    it('pauses the music, never moving it, when the receiver has media', () => {
+      const { session, cast, audio, castPlayer } = setup();
+      audio.canMoveToCast.set(true);
+      castPlayer.hasMedia.mockReturnValue(true);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(audio.pause).toHaveBeenCalledTimes(1);
+      expect(audio.moveToCast).not.toHaveBeenCalled();
+      expect(session.kind()).toBe('cast');
     });
 
     it('resumes the engine at the receiver position when the session ends', () => {
