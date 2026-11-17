@@ -285,3 +285,60 @@ html.vt-player-close app-party-page img {
       0 0,
     none;
 }
+
+/* Container transform (shared/utils/morph-transition.ts): the box travels between both rects and both states dissolve on it,
+   fit to its width and top-aligned; keyed parts fly above it, the scrim fades below it. */
+html.vt-morph::view-transition-group(.morph),
+html.vt-morph::view-transition-group(.morph-part),
+html.vt-morph::view-transition-group(.morph-scrim) {
+  animation-duration: 400ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+html.vt-morph::view-transition-group(.morph-scrim) {
+  z-index: 1;
+}
+html.vt-morph::view-transition-group(.morph) {
+  z-index: 2;
+}
+html.vt-morph::view-transition-group(.morph-part) {
+  z-index: 3;
+}
+html.vt-morph::view-transition-image-pair(.morph) {
+  animation-name: vt-morph-corners;
+}
+@keyframes vt-morph-corners {
+  from {
+    clip-path: inset(0 round var(--vt-morph-from-radius));
+  }
+  to {
+    clip-path: inset(0 round var(--vt-morph-to-radius));
+  }
+}
+/* A part only the old side has leaves at once rather than hang where it was. */
+html.vt-morph::view-transition-old(.morph-part):only-child {
+  animation-duration: 120ms;
+}
+/* Parts scale by height, so a title follows its font size instead of the other box's width. */
+html.vt-morph::view-transition-old(.morph-part),
+html.vt-morph::view-transition-new(.morph-part) {
+  inline-size: auto;
+  block-size: 100%;
+}
+
+/* Only what a morph or relayout names takes part: a route transition's names (posters, chrome) would float above the page snapshot. */
+html.vt-morph *,
+html.vt-relayout * {
+  view-transition-name: none !important;
+}
+
+/* Relayout (shared/utils/morph-transition.ts): marked blocks slide between their two boxes at their own size, cropped to the moving box. */
+html.vt-relayout::view-transition-group(.relayout) {
+  animation-duration: 350ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  clip-path: inset(0);
+}
+html.vt-relayout::view-transition-old(.relayout),
+html.vt-relayout::view-transition-new(.relayout) {
+  inline-size: auto;
+  block-size: auto;
+}

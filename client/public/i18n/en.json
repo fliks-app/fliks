@@ -5543,7 +5543,6 @@
     "line_bonus": "line bonus {{n}}",
     "close": "Close",
     "singer": "Singer {{n}}",
-    "queue_title": "Up next",
     "admin": {
       "title": "Karaoke",
       "desc": "Separate the voice of a track to sing over it, and sync its lyrics word by word.",

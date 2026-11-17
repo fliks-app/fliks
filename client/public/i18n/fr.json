@@ -5543,7 +5543,6 @@
     "line_bonus": "bonus de ligne {{n}}",
     "close": "Fermer",
     "singer": "Chanteur {{n}}",
-    "queue_title": "À suivre",
     "admin": {
       "title": "Karaoké",
       "desc": "Sépare la voix d'un titre pour chanter par-dessus et synchronise ses paroles mot à mot.",

@@ -82,7 +82,6 @@ function closeReason(err: unknown): PartyCloseReason | null {
 const ROOM_LOST = ['party.error_not_member', 'party.error_not_live'];
 const BUBBLE_MS = 4000;
 const REJOIN_RETRY_MS = 2000;
-const UP_NEXT = 3;
 /** How long a reaction rises over the video; its CSS animation follows. */
 export const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
@@ -125,13 +124,6 @@ export class PartyService {
     return found?.username ?? '';
   }
 
-  /** The rows after the playing one (all of them while nothing plays), at most the next three. */
-  readonly upNext = computed(() => {
-    const rows = this.programme();
-    const cur = this.live()?.item;
-    const at = cur ? rows.findIndex((r) => sameItem(r, cur)) : -1;
-    return rows.slice(at + 1, at + 1 + UP_NEXT);
-  });
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);

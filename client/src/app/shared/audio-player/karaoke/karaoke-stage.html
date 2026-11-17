@@ -25,10 +25,6 @@
   }
   </div>
 
-  @if (inParty()) {
-    <app-karaoke-queue />
-  }
-
   <canvas #lane class="w-full shrink-0 text-base-content" [class.h-24]="!tv()" [class.sm:h-40]="!tv()" [class.compact:sm:h-28]="!tv()" [class.short:h-12]="!tv()" [class.short:sm:h-12]="!tv()" [class.h-56]="tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
   <span #primary class="hidden text-primary" aria-hidden="true"></span>
 
@@ -36,8 +32,8 @@
     <app-lyrics-view class="block h-full sm:h-80 sm:max-h-full" [doc]="doc()" [large]="true" [output]="output()" />
   </div>
 
-  <div class="scroll-ring-safe flex shrink-0 items-center justify-center gap-2 px-1 py-1 max-sm:flex-nowrap short:flex-nowrap sm:flex-wrap" appTvSection data-testid="karaoke-controls">
-    <div class="flex min-w-0 items-center gap-2 rounded-full bg-base-200 p-1 max-sm:flex-1 short:flex-1" role="group" [attr.aria-label]="'karaoke.mix' | translate">
+  <div class="scroll-ring-safe flex shrink-0 items-center justify-center gap-2 px-1 py-1 max-sm:flex-nowrap short:flex-nowrap sm:flex-wrap compact:sm:flex-nowrap" appTvSection data-testid="karaoke-controls">
+    <div class="flex min-w-0 items-center gap-2 rounded-full bg-base-200 p-1 max-sm:flex-1 short:flex-1 compact:sm:flex-1" role="group" [attr.aria-label]="'karaoke.mix' | translate">
       <div class="join shrink-0">
         @for (m of modes; track m) {
           <button
@@ -50,8 +46,8 @@
             [attr.data-testid]="'karaoke-mode-' + m"
           >
             @if (m === 'instrumental') {
-              <span class="max-sm:hidden short:hidden">{{ 'karaoke.mode_instrumental' | translate }}</span>
-              <span class="sm:hidden short:inline">{{ 'karaoke.mode_instrumental_short' | translate }}</span>
+              <span class="max-sm:hidden short:hidden compact:sm:hidden">{{ 'karaoke.mode_instrumental' | translate }}</span>
+              <span class="sm:hidden short:inline compact:sm:inline">{{ 'karaoke.mode_instrumental_short' | translate }}</span>
             } @else {
               {{ 'karaoke.mode_' + m | translate }}
             }
@@ -60,7 +56,7 @@
       </div>
       <input
         type="range"
-        class="range range-primary range-xs min-w-0 flex-1 transition-opacity sm:w-36 sm:flex-none short:w-auto short:flex-1"
+        class="range range-primary range-xs min-w-0 flex-1 transition-opacity sm:w-36 sm:flex-none short:w-auto short:flex-1 compact:sm:w-auto compact:sm:flex-1"
         [class.opacity-40]="stemMode() !== 'guide'"
         min="0"
         max="100"
@@ -161,12 +157,12 @@
 <ng-template #actions>
 <div class="flex items-center gap-1 rounded-full bg-base-200 p-1">
   @if (canSing) {
-    <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full max-sm:btn-circle max-sm:min-w-0 short:btn-circle short:min-w-0" [attr.aria-label]="(karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
+    <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full max-sm:btn-circle max-sm:min-w-0 short:btn-circle short:min-w-0 compact:sm:btn-circle compact:sm:min-w-0" [attr.aria-label]="(karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" (click)="toggleSinging()" data-testid="karaoke-sing">
       <svg lucideMic class="h-4 w-4"></svg>
-      <span class="max-sm:hidden short:hidden">{{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}</span>
+      <span class="max-sm:hidden short:hidden compact:sm:hidden">{{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}</span>
     </button>
   }
-  <button type="button" class="btn btn-ghost btn-sm btn-circle tooltip tooltip-left" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" [attr.data-tip]="'karaoke.settings' | translate" data-testid="karaoke-settings">
+  <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" data-testid="karaoke-settings">
     <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
   </button>
 </div>

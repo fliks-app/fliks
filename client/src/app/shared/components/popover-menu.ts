@@ -136,13 +136,21 @@ export class PopoverMenuComponent {
   /** Re-reads the anchor rect on anchor change and viewport tick, keeping the box inside the viewport.
    * It flips side when the requested one can't fit a usable menu, and its free space caps `maxHeight`. */
   readonly position = computed(() => {
+    const p = this.place();
+    // `width` is a min-width: a right-aligned box is pinned by `right` so wider content grows away from the anchor.
+    if (!p.alignRight) return { ...p, right: null as number | null };
+    const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    return { ...p, left: null as number | null, right: viewportW - p.left - p.width };
+  });
+
+  private place() {
     this.viewportTick(); // dependency: forces recompute on scroll / resize
     const GUTTER = 8;
     const WIDTH = this.width();
     const MIN_HEIGHT = 120;
     const a = this.anchor();
     if (!a)
-      return { top: 0 as number | null, bottom: null as number | null, left: 0, width: 0, maxHeight: 0 };
+      return { top: 0 as number | null, bottom: null as number | null, left: 0, width: 0, maxHeight: 0, alignRight: false };
     const r = a.getBoundingClientRect();
     const placement = this.placement();
     const wantTop = placement.startsWith('top');
@@ -179,6 +187,7 @@ export class PopoverMenuComponent {
         left,
         width: WIDTH,
         maxHeight: Math.max(MIN_HEIGHT, viewportH - top - GUTTER),
+        alignRight: left < r.left,
       };
     }
 
@@ -200,6 +209,7 @@ export class PopoverMenuComponent {
         left,
         width: WIDTH,
         maxHeight: Math.max(MIN_HEIGHT, viewportH - top - GUTTER),
+        alignRight: true,
       };
     }
 
@@ -229,8 +239,9 @@ export class PopoverMenuComponent {
       left,
       width: WIDTH,
       maxHeight,
+      alignRight: onEnd,
     };
-  });
+  }
 
   close() {
     this.closed.emit();

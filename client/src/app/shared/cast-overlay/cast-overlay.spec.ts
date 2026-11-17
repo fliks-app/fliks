@@ -202,7 +202,7 @@ describe('CastOverlayComponent', () => {
       const { el, sync } = setup({ local: true, account: accountSession(), live: false });
       sync.session.set(accountSession({ positionSeconds: 1800 }));
       expect(el.querySelector('[aria-label="player.pause"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="observed-progress"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="player-bar-progress"]')).not.toBeNull();
     });
 
     it('opens the full audio player on the session from the strip of an audio session only', () => {
