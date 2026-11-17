@@ -40,6 +40,7 @@ pub mod optimize;
 pub mod outbound;
 pub mod party;
 pub mod paths;
+pub mod pcm;
 pub mod persons;
 pub mod playback;
 pub mod playlists;

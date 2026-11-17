@@ -526,7 +526,7 @@ function renderBar() {
   const music = document.body.classList.contains('music-on');
   if (music) {
     renderMusicState(st);
-    renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', pct(time));
+    renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', duration ? Math.min(1, time / duration) : 0);
   }
   // The music view shows its own progress.
   const show = !idle && !music && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
@@ -580,6 +580,13 @@ playerManager.setMessageInterceptor(
     // A LOAD starts a new queue: the up-next item went with the old one.
     upNext = null;
     const media = loadRequest.media;
+    if (activeMix) closeMix(activeMix);
+    const mixId = media && typeof media.contentId === 'string' && media.contentId.startsWith(MIX_SCHEME) ? media.contentId.slice(MIX_SCHEME.length) : null;
+    if (mixId && mixSpecs.has(mixId)) {
+      activeMix = startMix(mixId, mixSpecs.get(mixId), loadRequest.currentTime || 0);
+      media.contentUrl = activeMix.url;
+      media.contentType = 'audio/mp4';
+    }
     renderMusic(media);
     // A track's view needs nothing loaded: it replaces the splash while the audio buffers.
     if (document.body.classList.contains('music-on')) document.body.classList.add('playing');
@@ -963,11 +970,196 @@ function renderMusicState(st) {
   musicState.className = 'music-state ' + (st === BarState.PLAYING ? 'playing' : st === BarState.PAUSED ? 'paused' : 'waiting');
 }
 
-function renderMusicProgress(elapsed, total, played) {
-  musicElapsed.textContent = elapsed;
-  musicTotal.textContent = total;
-  musicPlayed.style.width = played;
+/** Text only when it changes and the bar by transform: the player data changes many times a second. */
+function renderMusicProgress(elapsed, total, fraction) {
+  if (musicElapsed.textContent !== elapsed) musicElapsed.textContent = elapsed;
+  if (musicTotal.textContent !== total) musicTotal.textContent = total;
+  musicPlayed.style.transform = `scaleX(${fraction})`;
 }
+
+// --- Mixes ------------------------------------------------------------------
+// A sender declares a mix (`mix`: 16-bit PCM sources, each with its gain) and LOADs `fliks-mix:<id>`. The receiver
+// streams the sources, sums them and feeds the media element through MSE (mixer.js): a gain change remixes what is
+// buffered ahead, with no reload.
+
+const { BLOCK, mix, flacFrame, initSegment, mediaSegment } = self.FliksMixer;
+const MIX_SCHEME = 'fliks-mix:';
+const MIX_AHEAD_S = 3;
+const MIX_REMIX_LEAD_S = 0.3;
+const MIX_KEEP_S = 10;
+const MIX_SEGMENT_BLOCKS = 6;
+const mixSpecs = new Map();
+let activeMix = null;
+
+/** One SourceBuffer operation at a time, in order. */
+function mixOp(m, fn) {
+  m.ops = m.ops.then(() => {
+    if (m.closed) return;
+    fn();
+    return m.sb.updating ? new Promise((r) => m.sb.addEventListener('updateend', r, { once: true })) : undefined;
+  }).catch((e) => console.warn('[fliks-cast] mix op', e));
+  return m.ops;
+}
+
+/** Appends the mix of `raw` (per-source samples from frame `start`) as segments of whole blocks. */
+function appendMix(m, start, raw) {
+  const frames = raw[0].length / m.channels;
+  const mixed = mix(raw, m.gains);
+  for (let at = 0; at < frames; at += BLOCK * MIX_SEGMENT_BLOCKS) {
+    const list = [];
+    const durations = [];
+    for (let f = at; f < Math.min(frames, at + BLOCK * MIX_SEGMENT_BLOCKS); f += BLOCK) {
+      const chunk = mixed.subarray(f * m.channels, Math.min(frames, f + BLOCK) * m.channels);
+      list.push(flacFrame(chunk, m.channels, m.rate, start + f));
+      durations.push(chunk.length / m.channels);
+    }
+    const segment = mediaSegment(++m.seq, start + at, list, durations);
+    mixOp(m, () => m.sb.appendBuffer(segment));
+  }
+}
+
+/** Opens the sources from `fromS` and streams them in until they end or a newer run starts. */
+async function runMix(m, fromS) {
+  const run = ++m.run;
+  m.abort.abort();
+  m.abort = new AbortController();
+  const from = fromS.toFixed(3);
+  const responses = await Promise.all(m.sources.map((src) =>
+    fetch(src.url + (src.url.includes('?') ? '&' : '?') + 'from=' + from, { signal: m.abort.signal })));
+  if (run !== m.run) return;
+  const format = /rate=(\d+);\s*channels=(\d+)/.exec(responses[0].headers.get('content-type') || '');
+  if (!format) throw new Error('not a PCM source');
+  const frameBytes = 2 * +format[2];
+  const range = /\/(\d+)$/.exec(responses[0].headers.get('content-range') || '');
+  const total = (range ? +range[1] : +responses[0].headers.get('content-length')) / frameBytes;
+  if (!m.sb) {
+    m.rate = +format[1];
+    m.channels = +format[2];
+    m.sb = m.ms.addSourceBuffer('audio/mp4; codecs="flac"');
+    // The length before the init segment: CAF seeks to the LOAD's position once the metadata is in.
+    m.ms.duration = total / m.rate;
+    mixOp(m, () => m.sb.appendBuffer(initSegment(m.rate, m.channels)));
+  }
+  const readers = responses.map((r) => ({ reader: r.body.getReader(), buf: new Uint8Array(0), done: false }));
+  const take = async (src, bytes) => {
+    while (src.buf.length < bytes && !src.done) {
+      const { done, value } = await src.reader.read();
+      if (done) src.done = true;
+      else {
+        const joined = new Uint8Array(src.buf.length + value.length);
+        joined.set(src.buf);
+        joined.set(value, src.buf.length);
+        src.buf = joined;
+      }
+    }
+    const out = new Int16Array(bytes / 2);
+    const n = Math.min(bytes, src.buf.length);
+    out.set(new Int16Array(src.buf.buffer.slice(src.buf.byteOffset, src.buf.byteOffset + n - (n % 2))));
+    src.buf = src.buf.subarray(n);
+    return out;
+  };
+  m.base = Math.floor(+from * m.rate);
+  m.end = m.base;
+  m.raw = [];
+  const media = findMediaElement();
+  // Ahead of the playhead, or of the run's start while the element has not seeked there yet.
+  const ahead = () => m.end / m.rate - Math.max(media ? media.currentTime : 0, m.base / m.rate);
+  for (;;) {
+    while (ahead() > MIX_AHEAD_S && run === m.run) await new Promise((r) => setTimeout(r, 200));
+    if (run !== m.run) return;
+    const want = BLOCK * MIX_SEGMENT_BLOCKS;
+    const left = Math.min(want, total - m.end);
+    if (left <= 0) break;
+    const raw = await Promise.all(readers.map((src) => take(src, left * frameBytes)));
+    if (run !== m.run) return;
+    appendMix(m, m.end, raw);
+    // The element waits where nothing was appended: it starts with the run.
+    if (m.end === m.base && media) mixOp(m, () => { if (media.currentTime < m.base / m.rate) media.currentTime = m.base / m.rate; });
+    m.raw.push({ start: m.end, raw });
+    m.end += left;
+    const played = media ? Math.floor(media.currentTime * m.rate) : 0;
+    while (m.raw.length && m.raw[0].start + m.raw[0].raw[0].length / m.channels <= played) m.raw.shift();
+    if (media && media.currentTime > MIX_KEEP_S) mixOp(m, () => m.sb.remove(0, media.currentTime - MIX_KEEP_S));
+  }
+  mixOp(m, () => { if (m.ms.readyState === 'open') m.ms.endOfStream(); });
+}
+
+/** Streams the mix from `fromS`; a failure that is not a newer run ends it in a network error, which CAF reports. */
+function streamMix(m, fromS) {
+  runMix(m, fromS).catch((e) => {
+    if (e.name === 'AbortError' || m.closed) return;
+    console.warn('[fliks-cast] mix', e);
+    if (m.ms.readyState === 'open') m.ms.endOfStream('network');
+  });
+}
+
+/** New gains apply from a block boundary just ahead of the playhead: what is buffered past it is remixed. */
+function remix(m) {
+  const media = findMediaElement();
+  if (!media || !m.sb || !m.raw.length) return;
+  const lead = Math.ceil((media.currentTime + MIX_REMIX_LEAD_S) * m.rate);
+  const first = m.raw.findIndex((c) => c.start + c.raw[0].length / m.channels > lead);
+  if (first < 0) return;
+  const chunk = m.raw[first];
+  const from = chunk.start + Math.max(0, Math.ceil((lead - chunk.start) / BLOCK) * BLOCK);
+  mixOp(m, () => m.sb.remove(from / m.rate, Infinity));
+  m.raw.slice(first).forEach((c) => {
+    const skip = Math.max(0, from - c.start) * m.channels;
+    if (skip < c.raw[0].length) appendMix(m, c.start + skip / m.channels, c.raw.map((r) => r.subarray(skip)));
+  });
+}
+
+function closeMix(m) {
+  if (m.closed) return;
+  m.closed = true;
+  m.run++;
+  m.abort.abort();
+  clearTimeout(m.remixTimer);
+  URL.revokeObjectURL(m.url);
+  if (activeMix === m) activeMix = null;
+}
+
+function startMix(id, sources, startS) {
+  const ms = new MediaSource();
+  const m = { id, ms, url: URL.createObjectURL(ms), sources, gains: sources.map((s) => +s.gain || 0), sb: null, ops: Promise.resolve(),
+    abort: new AbortController(), run: 0, seq: 0, rate: 0, channels: 0, base: 0, end: 0, raw: [], closed: false, remixTimer: 0 };
+  ms.addEventListener('sourceopen', () => streamMix(m, startS), { once: true });
+  ms.addEventListener('sourceclose', () => closeMix(m));
+  return m;
+}
+
+// A seek outside what the run streams starts it again from there.
+playerManager.addEventListener(cast.framework.events.EventType.SEEKING, () => {
+  const m = activeMix;
+  const media = findMediaElement();
+  if (!m || !m.sb || !media) return;
+  const at = media.currentTime * m.rate;
+  if (at < m.base || at > m.end + MIX_AHEAD_S * m.rate) {
+    mixOp(m, () => m.sb.remove(0, Infinity));
+    streamMix(m, media.currentTime);
+  }
+});
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || msg.kind !== 'mix' || typeof msg.id !== 'string' || !Array.isArray(msg.sources)) return;
+  mixSpecs.delete(msg.id);
+  mixSpecs.set(msg.id, msg.sources);
+  if (mixSpecs.size > 4) mixSpecs.delete(mixSpecs.keys().next().value);
+  const m = activeMix;
+  if (!m || m.id !== msg.id) return;
+  if (msg.sources.some((s, i) => !m.sources[i] || s.url !== m.sources[i].url)) {
+    m.sources = msg.sources;
+    m.gains = msg.sources.map((s) => +s.gain || 0);
+    const media = findMediaElement();
+    if (m.sb) mixOp(m, () => m.sb.remove(0, Infinity));
+    return streamMix(m, media ? media.currentTime : 0);
+  }
+  m.gains = msg.sources.map((s) => +s.gain || 0);
+  // A slider sends a burst of levels: one remix for it.
+  clearTimeout(m.remixTimer);
+  m.remixTimer = setTimeout(() => remix(m), 120);
+});
 
 // --- Boot ---------------------------------------------------------------
 //

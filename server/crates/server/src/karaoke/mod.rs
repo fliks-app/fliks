@@ -20,7 +20,7 @@ use crate::{
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Path, Request, State},
+    extract::{Path, Query, Request, State},
     http::{HeaderValue, StatusCode, header},
     response::Response,
     routing::{get, post},
@@ -122,6 +122,10 @@ pub fn router() -> Router<AppState> {
             get(item_state).post(prepare).delete(remove),
         )
         .route("/api/media-files/{mediaFileId}/stems/{kind}", get(stem))
+        .route(
+            "/api/media-files/{mediaFileId}/stems/{kind}/pcm",
+            get(stem_pcm),
+        )
         .route("/api/media-files/{mediaFileId}/cdg", get(cdg_file))
 }
 
@@ -512,32 +516,12 @@ pub async fn stem(
     Path((file, kind)): Path<(i32, String)>,
     req: Request,
 ) -> Result<Response, AppError> {
-    let FileBoundAuthed { auth, bound_file } = auth;
-    if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
-        return Err(AppError::bare(StatusCode::UNAUTHORIZED));
-    }
-    auth.require(Action::Read, Subject::Media)?;
-    let not_found = || AppError::not_found("Stem not found");
-    if !store::KINDS.contains(&kind.as_str()) {
-        return Err(not_found());
-    }
-    let item: i32 = sqlx::query_scalar(
-        r#"SELECT ip."itemId" FROM item_parts ip JOIN track_details td ON td."itemId" = ip."itemId"
-           WHERE ip."mediaFileId" = $1 LIMIT 1"#,
-    )
-    .bind(file)
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(not_found)?;
-    crate::music::assert_track(&st, &auth, item).await?;
     let from_start = req
         .headers()
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
         .is_none_or(|r| r.starts_with("bytes=0-"));
-    let path = store::serve(&st.db, file, &kind, from_start)
-        .await?
-        .ok_or_else(not_found)?;
+    let path = stem_path(&st, auth, file, &kind, from_start).await?;
     let mime = mime_of(&path).parse().expect("mime");
     let mut res = ServeFile::new_with_mime(&path, &mime)
         .oneshot(req)
@@ -548,6 +532,56 @@ pub async fn stem(
         HeaderValue::from_static("private, max-age=0"),
     );
     Ok(res)
+}
+
+#[derive(Deserialize)]
+pub struct PcmQuery {
+    from: Option<f64>,
+}
+
+/// Rule 20a.
+#[utoipa::path(get, path = "/api/media-files/{mediaFileId}/stems/{kind}/pcm", responses((status = 200), (status = 206), (status = 404)))]
+pub async fn stem_pcm(
+    State(st): State<AppState>,
+    auth: FileBoundAuthed,
+    Path((file, kind)): Path<(i32, String)>,
+    Query(q): Query<PcmQuery>,
+) -> Result<Response, AppError> {
+    let from = q.from.unwrap_or(0.0);
+    let path = stem_path(&st, auth, file, &kind, from <= 0.0).await?;
+    let pcm = crate::pcm::rendition(&st, file, std::path::Path::new(&path)).await?;
+    crate::pcm::serve(&pcm, from).await
+}
+
+/// The stem file of `kind` for `file`, after the credential and track checks of rule 20.
+async fn stem_path(
+    st: &AppState,
+    auth: FileBoundAuthed,
+    file: i32,
+    kind: &str,
+    from_start: bool,
+) -> Result<String, AppError> {
+    let FileBoundAuthed { auth, bound_file } = auth;
+    if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
+        return Err(AppError::bare(StatusCode::UNAUTHORIZED));
+    }
+    auth.require(Action::Read, Subject::Media)?;
+    let not_found = || AppError::not_found("Stem not found");
+    if !store::KINDS.contains(&kind) {
+        return Err(not_found());
+    }
+    let item: i32 = sqlx::query_scalar(
+        r#"SELECT ip."itemId" FROM item_parts ip JOIN track_details td ON td."itemId" = ip."itemId"
+           WHERE ip."mediaFileId" = $1 LIMIT 1"#,
+    )
+    .bind(file)
+    .fetch_optional(&st.db)
+    .await?
+    .ok_or_else(not_found)?;
+    crate::music::assert_track(st, &auth, item).await?;
+    store::serve(&st.db, file, kind, from_start)
+        .await?
+        .ok_or_else(not_found)
 }
 
 /// Rule 32: the `.cdg` of the track of `file`, served whole like a stem (same credentials).

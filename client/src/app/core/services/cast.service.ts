@@ -62,6 +62,8 @@ export interface CastMediaInfo {
   episodeId?: number;
   /** The music track, whose media is the album. */
   itemId?: number;
+  /** The karaoke stem a music LOAD plays instead of the track. */
+  stem?: string;
   /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
@@ -79,6 +81,15 @@ export interface CastMediaInfo {
   /** Intro and credits ranges, kept in `customData` so a rejoining sender rebuilds its cues. */
   intro?: { startSeconds: number; endSeconds: number };
   outro?: { startSeconds: number; endSeconds: number };
+}
+
+/** The content id a LOAD of the receiver mix `id` carries. */
+export const castMixUrl = (id: string) => `fliks-mix:${id}`;
+
+/** A source of a receiver mix: 16-bit PCM (`audio/L16`) at `url`, which takes `from=<seconds>`, summed at `gain`. */
+export interface CastMixSource {
+  url: string;
+  gain: number;
 }
 
 interface NativeCastLoadOpts {
@@ -675,6 +686,11 @@ export class CastService implements OnDestroy {
     this.sendFliks({ kind: 'queue_next', media });
   }
 
+  /** Declares or updates the receiver mix `id`, which a LOAD of `castMixUrl(id)` plays; settles once sent. */
+  setMix(id: string, sources: CastMixSource[]): Promise<void> {
+    return this.send({ kind: 'mix', id, sources });
+  }
+
   // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
   private loadCustomData(info: CastMediaInfo) {
     return {
@@ -684,6 +700,7 @@ export class CastService implements OnDestroy {
       mediaId: info.mediaId,
       episodeId: info.episodeId,
       itemId: info.itemId,
+      stem: info.stem,
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
       sid: info.sid,
@@ -801,13 +818,14 @@ export class CastService implements OnDestroy {
 
   /** A message on the Fliks namespace to the receiver; dropped when nothing is connected. */
   sendFliks(msg: object): void {
+    void this.send(msg);
+  }
+
+  private async send(msg: object): Promise<void> {
     const message = JSON.stringify(msg);
-    if (this.hasCastBridge) {
-      void this.bridge.sendMessage?.({ namespace: FLIKS_CAST_NAMESPACE, message }).catch(() => {});
-      return;
-    }
     try {
-      void Promise.resolve(cast.framework.CastContext.getInstance().getCurrentSession?.()?.sendMessage(FLIKS_CAST_NAMESPACE, message)).catch(() => {});
+      if (this.hasCastBridge) await this.bridge.sendMessage?.({ namespace: FLIKS_CAST_NAMESPACE, message });
+      else await cast.framework.CastContext.getInstance().getCurrentSession?.()?.sendMessage(FLIKS_CAST_NAMESPACE, message);
     } catch { /* no session */ }
   }
 

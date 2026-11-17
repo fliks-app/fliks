@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService, type CastMediaInfo } from './cast.service';
+import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
@@ -169,6 +169,9 @@ const RECEIVER_CAPS_LATEST = 3;
 
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
+
+/** The receiver mix of the karaoke stems of a file. */
+const mixId = (fileId: number) => `karaoke-${fileId}`;
 type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
 
 /** A sample of the previous load, still in flight when a reload minted a new sid. */
@@ -247,9 +250,31 @@ export class CastPlayerService {
     autoplay: boolean,
     current: () => boolean = () => true,
   ): Promise<boolean> {
-    const [url, castInfo] = await Promise.all([this.stemUrl(fileId, kind), this.authService.getCastInfo()]);
-    if (!url || !current()) return false;
-    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
+    const url = await this.stemUrl(fileId, kind);
+    return !!url && current() && this.loadStem(t, fileId, url, contentType, kind, position, autoplay);
+  }
+
+  /** Replaces the receiver's media by its mix of the instrumental and the vocals of `t`, the vocals at `vocals`. */
+  async castMix(t: CastTrack, fileId: number, vocals: number, position: number, autoplay: boolean, current: () => boolean): Promise<boolean> {
+    const sources = await this.karaokeMix(fileId, vocals);
+    if (!sources || !current()) return false;
+    await this.cast.setMix(mixId(fileId), sources);
+    return current() && this.loadStem(t, fileId, castMixUrl(mixId(fileId)), 'audio/mp4', 'mix', position, autoplay);
+  }
+
+  /** A new vocal level for the mix the receiver plays: it remixes what it buffered, with no reload. */
+  async setMixVocals(fileId: number, vocals: number): Promise<void> {
+    const sources = await this.karaokeMix(fileId, vocals);
+    if (sources) await this.cast.setMix(mixId(fileId), sources);
+  }
+
+  private async karaokeMix(fileId: number, vocals: number): Promise<CastMixSource[] | null> {
+    const [instrumental, voice] = await Promise.all([this.stemUrl(fileId, 'instrumental/pcm'), this.stemUrl(fileId, 'vocals/pcm')]);
+    return instrumental && voice ? [{ url: instrumental, gain: 1 }, { url: voice, gain: vocals }] : null;
+  }
+
+  private async loadStem(t: CastTrack, fileId: number, url: string, contentType: string, stem: string, position: number, autoplay: boolean) {
+    this.cast.setCastStreamBase((await this.authService.getCastInfo()).streamBaseUrl);
     try {
       await this.cast.loadMedia({
         url,
@@ -259,6 +284,7 @@ export class CastPlayerService {
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
         mediaId: t.mediaId,
         itemId: t.itemId,
+        stem,
         mediaFileId: fileId,
         userId: this.authService.user()?.id,
         currentTime: position,
@@ -271,9 +297,9 @@ export class CastPlayerService {
     }
   }
 
-  private async stemUrl(fileId: number, kind: StemKind): Promise<string | null> {
+  private async stemUrl(fileId: number, path: string): Promise<string | null> {
     const token = await this.authService.ensureStreamToken(fileId);
-    return token && `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
+    return token && `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${path}`)}?token=${encodeURIComponent(token)}`;
   }
 
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */

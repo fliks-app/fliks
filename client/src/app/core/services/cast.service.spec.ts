@@ -254,6 +254,22 @@ describe('CastService up next', () => {
   });
 });
 
+describe('CastService receiver mix', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('declares a mix on the Fliks namespace, settled once the bridge has sent it', async () => {
+    const svc = make(null);
+    const sendMessage = vi.fn(async () => {});
+    (svc as unknown as { hasCastBridge: boolean; bridge: unknown }).hasCastBridge = true;
+    (svc as unknown as { bridge: unknown }).bridge = { sendMessage };
+    await svc.setMix('m1', [{ url: 'u', gain: 0.5 }]);
+    expect(sendMessage).toHaveBeenCalledWith({ namespace: 'urn:x-cast:media.fliks.app', message: JSON.stringify({ kind: 'mix', id: 'm1', sources: [{ url: 'u', gain: 0.5 }] }) });
+  });
+});
+
 describe('CastService receiver messages', () => {
   afterEach(() => TestBed.resetTestingModule());
 

@@ -427,6 +427,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::karaoke::prepare,
         crate::karaoke::remove,
         crate::karaoke::stem,
+        crate::karaoke::stem_pcm,
         crate::karaoke::cdg_file,
         persons::provider_credits,
         persons::bibliography,

@@ -422,7 +422,7 @@ body.music-on .state-icon {
   display: none;
 }
 
-/* A small canvas scaled up by the compositor: smooth, and painted once per cover. */
+/* A small canvas scaled up on its own layer: painted once per cover, never again under what changes above it. */
 .music-backdrop {
   position: absolute;
   inset: 0;
@@ -430,19 +430,11 @@ body.music-on .state-icon {
   height: 100%;
   opacity: 0;
   transition: opacity 600ms ease-out;
+  will-change: transform;
 }
 
 .music-backdrop.shown {
   opacity: 1;
-}
-
-/* Fine grain over the gradient: an 8-bit TV output bands a smooth dark one. */
-.music::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .music-track {
@@ -498,7 +490,7 @@ body.lyrics-on .music-track {
   opacity: 0.7;
 }
 
-/* Equalizer bars while playing, a pause sign while paused, still bars while loading. */
+/* Still bars, never animated (the device's two cores also feed the audio): bright while playing, a pause sign while paused. */
 .music-state {
   display: inline-flex;
   flex-shrink: 0;
@@ -512,36 +504,28 @@ body.lyrics-on .music-track {
   height: 100%;
   border-radius: 0.25vh;
   background: currentColor;
-  transform-origin: bottom;
-  transform: scaleY(0.35);
-  opacity: 0.6;
+  opacity: 0.5;
+}
+
+.music-state i:nth-child(1) {
+  height: 55%;
+}
+
+.music-state i:nth-child(3) {
+  height: 75%;
 }
 
 .music-state.playing i {
   opacity: 1;
-  animation: eq 900ms ease-in-out infinite alternate;
-}
-
-.music-state.playing i:nth-child(2) {
-  animation-delay: -300ms;
-}
-
-.music-state.playing i:nth-child(3) {
-  animation-delay: -600ms;
 }
 
 .music-state.paused i {
+  height: 100%;
   opacity: 1;
-  transform: none;
 }
 
 .music-state.paused i:nth-child(2) {
   display: none;
-}
-
-@keyframes eq {
-  from { transform: scaleY(0.25); }
-  to { transform: scaleY(1); }
 }
 
 .music-progress {
@@ -555,11 +539,11 @@ body.lyrics-on .music-track {
 
 .music-played {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
+  inset: 0;
   background: #fff;
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
 }
 
 .music-times {

@@ -32,6 +32,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 - `edl.js`: EDL skip/mute policy (port of `client/src/app/core/utils/edl-policy.ts`).
 - `cues.js`: skip cue and progress band policy.
 - `lyrics.js`: joins the chunked lyrics document and finds the active line and each word's fill (`node --test lyrics.test.js`).
+- `mixer.js`: sums 16-bit PCM sources at their gains and frames the mix as uncompressed FLAC in fragmented MP4 for MSE (`node --test mixer.test.js`; its decode test needs ffmpeg).
 - `captions.js`: the sender's text track style as CSS for the receiver's own caption layer.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
@@ -154,6 +155,17 @@ The sender follows the move from the media status, whose `customData.sid` turns 
 
 ```ts
 { kind: 'queue_next', media: { url: string, contentType: string, title: string, subtitle: string, posterUrl: string, customData: object } | null }
+```
+
+A mix plays several 16-bit PCM sources summed at their gains in the one media element, through MSE: a Cast
+device runs one media element at a time and its Web Audio output does not keep real time. The sender declares
+the mix, then LOADs `fliks-mix:<id>` (the token-bearing URLs stay out of `customData`). Each `url` takes
+`from=<seconds>` and answers `audio/L16; rate=<r>; channels=<c>`, all sources alike, exposing `Content-Range`
+for the length. A `mix` with the same id and URLs changes the gains: the receiver remixes what it buffered
+ahead (about 3 s) from just past the playhead, with no reload.
+
+```ts
+{ kind: 'mix', id: string, sources: { url: string, gain: number }[] }
 ```
 
 A music track (a LOAD or queued item whose `customData` has an `itemId`) shows the music view: its

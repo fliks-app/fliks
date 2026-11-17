@@ -26,6 +26,7 @@ import {
   type NativeAudioTrackRequest,
 } from '../../plugins/audio-player.plugin';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { RemoteService } from '../remote.service';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
@@ -631,6 +632,13 @@ export class AudioPlayerService {
     else await this.startMusic(t);
   }
 
+  /** The receiver is gone (left from the device picker, or lost): the track goes on here, where and as it played there. */
+  private async returnFromCast(): Promise<void> {
+    const req = this.mq.current;
+    if (!req) return this.close();
+    await this.startMusic(req, this._playing(), this._position(), false);
+  }
+
   /** Moves the track to the connected receiver, at the position and play state it had here. */
   async moveToCast(): Promise<void> {
     const req = this.mq.current;
@@ -719,7 +727,7 @@ export class AudioPlayerService {
         if (this._casting() && this._track()) untracked(() => this.onReceiverStatus(ended, media));
       });
       effect(() => {
-        if (!cast.isConnected() && this.casting) void this.close();
+        if (!cast.isConnected() && this.casting) untracked(() => void this.returnFromCast());
       });
     });
     return cast;
@@ -747,25 +755,28 @@ export class AudioPlayerService {
     return (this.castStemRun = this.castStemRun.then(() => this.applyCastStem()).catch(() => undefined));
   }
 
-  /** On Cast the receiver plays one file: a stem mode loads that stem (the guide, else the instrumental) at the position, `original` the track again. */
+  /** On Cast a stem mode plays the receiver's mix of the instrumental and the vocals at the vocal level (a server without
+   *  stem PCM: the guide stem, else the instrumental); `original` the track again. */
   private async applyCastStem(): Promise<void> {
     const req = this.mq.current;
     const file = this.castStemFile;
     if (!req || file === null) return;
     const mode = this._stemMode();
-    const kind = mode === 'original' ? null : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
-    if (kind === this.castKind) return;
+    const mixed = this.injector.get(ServerVersionService).supports(SERVER_SINCE.stemPcm);
+    const kind = mode === 'original' ? null : mixed ? 'mix' : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
+    const cast = this.injector.get(CastPlayerService);
+    if (kind === this.castKind) return kind === 'mix' ? cast.setMixVocals(file, this._vocalLevel()) : undefined;
     // The LOAD below empties the receiver's queue.
     this.dropPreload();
     const generation = this.generation;
     const position = this._position();
     const autoplay = this._playing();
-    const cast = this.injector.get(CastPlayerService);
     const current = () => generation === this.generation;
     if (kind) {
-      if (!(await cast.castStem(req, file, kind, this.castStemTypes[kind] ?? 'audio/ogg', position, autoplay, current))) {
-        return void (current() && this.onStemsFailed());
-      }
+      const loaded = kind === 'mix'
+        ? await cast.castMix(req, file, this._vocalLevel(), position, autoplay, current)
+        : await cast.castStem(req, file, kind, this.castStemTypes[kind] ?? 'audio/ogg', position, autoplay, current);
+      if (!loaded) return void (current() && this.onStemsFailed());
     } else {
       const info = await cast.castTrack(req, autoplay, position, current);
       if (!info) return void (current() && this.onStemsFailed());
@@ -1106,7 +1117,8 @@ export class AudioPlayerService {
   private castStemFile: number | null = null;
   /** Content type of each stem the receiver may load. */
   private castStemTypes: Partial<Record<StemKind, string>> = {};
-  private castKind: StemKind | null = null;
+  /** What the receiver plays in place of the track: a stem, or its mix of the stems. */
+  private castKind: StemKind | 'mix' | null = null;
   private castStemRun: Promise<void> = Promise.resolve();
 
   /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
