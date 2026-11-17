@@ -259,7 +259,7 @@ export class BrowserDeviceProfileService {
       void AudioCaps.addListener('audioRouteChanged', () => void loadAudio()).catch(() => undefined);
     }
     if (!Capacitor.isNativePlatform()) {
-      void undecodableAudioFormats().then((denied) => this.refresh(() => (this.undecodableAudio = denied)));
+      void undecodableAudioFormats(new Audio()).then((denied) => this.refresh(() => (this.undecodableAudio = denied)));
     }
     void undecodableVideoMimes(webVideoMimes()).then((denied) => this.refresh(() => (this.undecodableVideo = denied)));
     void detectHdrTransfers().then((t) => this.refresh(() => (this.hdrTransfers = t)));

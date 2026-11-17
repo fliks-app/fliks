@@ -3488,6 +3488,21 @@ describe('PlayerComponent stall counting', () => {
     vis.mockRestore();
   });
 
+  it('destroy stops the server session only after the engine has torn down', async () => {
+    const h = createHarness();
+    const c = h.component as any;
+    c.session.isLocal = () => true;
+    c.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
+    let finish!: () => void;
+    h.engine.destroy.mockImplementation(() => new Promise<void>((r) => (finish = r)));
+    c.ngOnDestroy();
+    expect(fetchSpy.mock.calls.some(([u]) => u === 'stop://x')).toBe(false);
+    finish();
+    await flush();
+    expect(fetchSpy.mock.calls.some(([u]) => u === 'stop://x')).toBe(true);
+  });
+
   it('unload banks the playhead with a keepalive PUT that carries no sid', () => {
     const h = createHarness();
     const c = h.component as any;

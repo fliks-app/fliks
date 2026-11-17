@@ -1451,18 +1451,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     if (this.session.isLocal()) {
       this.qoe.flushKeepalive(this.activeSessionId());
-      // keepalive fetch (not HttpClient) so the stop survives if this destroy
-      // coincides with a page unload / app background.
-      this.fireAndForgetStopSessions();
     }
+    // Stopping the session kills the server's streams: Shaka must have aborted its requests first, or a failing one
+    // reaches the torn-down parser. keepalive fetch (not HttpClient) so the stop survives a page unload.
+    const sid = this.session.isLocal() ? this.activeSessionId() : undefined;
+    const stopSession = () => this.fireAndForgetStopSessions(sid);
     if (this.engine) {
       if (this.isNativeEngine()) {
         releaseEngineSurface();
       }
-      this.engine.destroy().catch(() => {});
+      void this.engine.destroy().catch(() => {}).finally(stopSession);
       // Drop the reference so any late async (recovery / cast resume) can't
       // reload a torn-down engine and relaunch playback in the background.
       this.engine = null;
+    } else {
+      stopSession();
     }
     this.removeSubtitleStyle();
     const video = this.videoEl()?.nativeElement;
@@ -3475,7 +3478,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.keepalivePositionSave();
     if (this.session.isLocal()) {
       this.qoe.flushKeepalive(this.activeSessionId());
-      this.fireAndForgetStopSessions();
+      this.fireAndForgetStopSessions(this.activeSessionId());
     }
   };
 
@@ -3754,10 +3757,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     fetch(url, { ...init, body }).catch(() => {});
   }
 
-  private fireAndForgetStopSessions() {
+  private fireAndForgetStopSessions(sid: string | undefined) {
     // Release this device's session on exit, DirectPlay included, so its "now watching" row clears at once
     // instead of lingering until the backend idle reap.
-    const sid = this.activeSessionId();
     if (!sid) return;
     const url = this.streamingApi.getStopSessionUrl(sid);
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});

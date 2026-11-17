@@ -28,13 +28,14 @@ export function probeAudioDirectPlay(
   return { containers: union((f) => f.containers), videoCodecs: [], audioCodecs: union((f) => f.codecs) };
 }
 
-/** The MIMEs `mediaCapabilities` says cannot be decoded; empty where the API is missing, so `canPlayType` alone decides. */
-export async function undecodableAudioFormats(): Promise<Set<string>> {
+/** The MIMEs `mediaCapabilities` says cannot be decoded; empty where the API is missing, so `canPlayType` alone decides.
+ * Only MIMEs the element opens are probed: an engine rejects a type it does not know with a console error. */
+export async function undecodableAudioFormats(el: Pick<HTMLMediaElement, 'canPlayType'>): Promise<Set<string>> {
   const caps = typeof navigator === 'undefined' ? undefined : navigator.mediaCapabilities;
   const denied = new Set<string>();
   if (!caps?.decodingInfo) return denied;
   await Promise.all(
-    AUDIO_FORMATS.map(async ({ mime }) => {
+    AUDIO_FORMATS.filter(({ mime }) => !!el.canPlayType(mime)).map(async ({ mime }) => {
       try {
         const r = await caps.decodingInfo({ type: 'file', audio: { contentType: mime } });
         if (!r.supported) denied.add(mime);
