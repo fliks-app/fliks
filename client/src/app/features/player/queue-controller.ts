@@ -16,8 +16,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { PartyService } from '../../core/services/party/party.service';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
-import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { kindOf } from '../../core/media-kinds';
+import { buildSeriesQueueItems, resolveNextEpisodeItem, resolvePlayableFile } from '../../shared/utils/media-play.util';
 
 export interface QueueHost {
   media(): Media | null;
@@ -66,29 +65,8 @@ export class QueueController {
     this.host.mediaLoadedTick();
     const m = this.host.media();
     const currentEpId = this.host.episodeId();
-    if (!m || !kindOf(m.type).hasSeasons || !currentEpId || !m.seasons?.length) return null;
-    // Flatten episodes in S/E order (skip specials: seasonNumber <= 0).
-    const flat: { seasonNumber: number; episodeNumber: number; id: number }[] = [];
-    for (const s of m.seasons) {
-      if ((s.seasonNumber ?? 0) <= 0) continue;
-      for (const ep of s.episodes ?? []) {
-        flat.push({
-          seasonNumber: s.seasonNumber,
-          episodeNumber: ep.episodeNumber ?? 0,
-          id: ep.id,
-        });
-      }
-    }
-    flat.sort(
-      (a, b) =>
-        a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
-    );
-    const idx = flat.findIndex((e) => e.id === currentEpId);
-    if (idx < 0 || idx >= flat.length - 1) return null;
-    const next = flat[idx + 1];
-    const file = (m.files ?? []).find((f) => f.episodeId === next.id);
-    if (!file) return null;
-    return { episodeId: next.id, mediaFileId: file.id };
+    const next = m && currentEpId ? resolveNextEpisodeItem(m, currentEpId) : null;
+    return next?.episodeId != null && next.mediaFileId != null ? { episodeId: next.episodeId, mediaFileId: next.mediaFileId } : null;
   });
 
   /** The queue's next entry; null when nothing follows or there is no queue (a standalone film). */

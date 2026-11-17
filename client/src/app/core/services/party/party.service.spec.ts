@@ -16,11 +16,12 @@ import { SseService, type PartyEvent } from '../sse.service';
 import { ToastService } from '../toast.service';
 import { ClockService } from './clock.service';
 import { PartyService } from './party.service';
+import { isTrack, programmeOf } from './party-item';
 import { VoiceService } from './voice.service';
 import { ReactionsService } from './reactions.service';
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
-  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, hidden: false,
+  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false,
 });
 
 function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
@@ -139,28 +140,9 @@ describe('PartyService queue', () => {
   });
 });
 
-describe('PartyService queue cursor', () => {
-  it('sits before the first row when the playing item is not in the programme', async () => {
-    const { svc, api, queue } = setup(true);
-    api.join.mockResolvedValue(dto(1, { item: item(9) }));
-    await svc.resume(7);
-    expect(queue.index()).toBe(-1);
-    expect(queue.current()).toBeNull();
-    expect(queue.peekNext()?.mediaId).toBe(1);
-    expect(queue.peekNext()?.episodeId).toBe(100);
-  });
-
-  it('follows the playing item when the programme holds it', async () => {
-    const { svc, api, queue } = setup(true);
-    api.join.mockResolvedValue(dto(1, { item: item(1, 101) }));
-    await svc.resume(7);
-    expect(queue.index()).toBe(1);
-  });
-});
-
 describe('PartyService singer queue', () => {
   const song = (id: number, queuePosition?: number) => ({
-    id, item: { ...item(9), itemId: 5000 + id }, proposedBy: id, upvoterIds: [id], downvoterIds: [], queuePosition,
+    id, item: { ...item(9), itemId: 5000 + id, mediaType: 'album' }, proposedBy: id, upvoterIds: [id], downvoterIds: [], queuePosition,
   });
 
   it('lists the pending songs by queue position and keeps them out of the film proposals', () => {
@@ -504,5 +486,93 @@ describe('PartyService switching parties', () => {
     expect(svc.drives()).toBe(false);
     svc.applySnapshot(dto(2));
     expect(svc.drives()).toBe(true);
+  });
+});
+
+describe('PartyService startHere', () => {
+  const programme = [{ mediaId: 1, mediaFileId: 10, episodeId: 100 }, { mediaId: 1, episodeId: 101 }];
+
+  it('opens the party live in one call, then tags the player URL with it', async () => {
+    const { svc, api, router } = setup();
+    api.create.mockResolvedValue(dto(2));
+    expect(await svc.startHere('t', programme, programme[0], 600)).not.toBeNull();
+    expect(api.create).toHaveBeenCalledWith({ name: 't', items: programme, live: { deviceId: 'dev', at: programme[0], position: 600 } });
+    expect(api.join).not.toHaveBeenCalled();
+    expect(api.start).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith([], { queryParams: { party: 7 }, queryParamsHandling: 'merge', replaceUrl: true });
+    expect(svc.drives()).toBe(true);
+    expect(svc.programme()).toHaveLength(2);
+  });
+
+  it('leaves the URL alone for a track', async () => {
+    const { svc, api, router } = setup();
+    api.create.mockResolvedValue(dto(2, { item: { ...item(1), itemId: 5, mediaType: 'album' } }));
+    await svc.startHere('t', [{ mediaId: 1, itemId: 5 }], { mediaId: 1, itemId: 5 }, 0);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a second call while one is in flight', async () => {
+    const { svc, api } = setup();
+    let done!: (d: PartyDto) => void;
+    api.create.mockReturnValue(new Promise<PartyDto>((r) => (done = r)));
+    const first = svc.startHere('t', programme, programme[0], 0);
+    expect(await svc.startHere('t', programme, programme[0], 0)).toBeNull();
+    done(dto(2));
+    await first;
+    expect(api.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays solo when the create is refused', async () => {
+    const { svc, api } = setup();
+    api.create.mockRejectedValue(http(409, 'party.error_no_connection'));
+    expect(await svc.startHere('t', programme, programme[0], 0)).toBeNull();
+    expect(svc.party()).toBeNull();
+  });
+});
+
+describe('PartyService programme rows', () => {
+  it('tells a track from a film by the media type, whatever carries an itemId', () => {
+    expect(isTrack({ mediaType: 'album' })).toBe(true);
+    expect(isTrack({ mediaType: 'series' })).toBe(false);
+  });
+
+  it('keeps the programme of the party and reloads it for an item it lacks', async () => {
+    const { svc, api, events } = setup(true);
+    api.join.mockResolvedValue(dto(1));
+    await svc.resume(7);
+    expect(svc.programme()).toHaveLength(2);
+    events.next({ type: 'party.programme', partyId: 7, rev: 2, item: null } as PartyEvent);
+    await Promise.resolve();
+    expect(api.queue).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('programmeOf', () => {
+  it('keeps the queue as it is, history included, and carries the file of the current row', () => {
+    const queue = [{ mediaId: 1, episodeId: 1 }, { mediaId: 1, episodeId: 2 }, { mediaId: 1, episodeId: 3 }, { mediaId: 1, episodeId: 2 }];
+    expect(programmeOf(queue, { mediaId: 1, episodeId: 2, mediaFileId: 9 })).toEqual([
+      { mediaId: 1, episodeId: 1 },
+      { mediaId: 1, mediaFileId: 9, episodeId: 2 },
+      { mediaId: 1, episodeId: 3 },
+    ]);
+  });
+
+  it('finds the current row in a queue whose rows carry no item id', () => {
+    const queue = [{ mediaId: 1, episodeId: 1 }, { mediaId: 1, episodeId: 2 }];
+    expect(programmeOf(queue, { mediaId: 1, episodeId: 2, itemId: 9 })).toHaveLength(2);
+  });
+
+  it('puts the current row first when the queue is empty', () => {
+    expect(programmeOf([], { mediaId: 4, mediaFileId: 2 })).toEqual([{ mediaId: 4, mediaFileId: 2 }]);
+  });
+
+  it('cuts to 500 rows in a window that keeps the current one and prefers what follows', () => {
+    const queue = Array.from({ length: 700 }, (_, i) => ({ mediaId: 1, episodeId: i + 1 }));
+    const early = programmeOf(queue, queue[10]);
+    expect(early).toHaveLength(500);
+    expect(early[0].episodeId).toBe(11);
+    const late = programmeOf(queue, queue[650]);
+    expect(late[0].episodeId).toBe(201);
+    expect(late.some((r) => r.episodeId === 651)).toBe(true);
   });
 });

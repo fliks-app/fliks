@@ -412,12 +412,48 @@ describe('AudioPlayerService music mode', () => {
       return router;
     };
 
-    it('opens its track paused, with a queue of just that track', async () => {
+    it('opens its track paused, alone in the queue when the programme is not adopted yet', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.openForParty(track(3));
       expect(audio.queue().map((t) => t.itemId)).toEqual([3]);
       expect(audio.track()?.itemId).toBe(3);
       expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    });
+
+    it('opens a track where the adopted programme holds it, and adopts a programme under the playing track', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.openForParty(track(2));
+      audio.adoptQueue([track(1), track(2), track(3)], 1);
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2, 3]);
+      expect(audio.queueIndex()).toBe(1);
+      expect(audio.track()?.itemId).toBe(2);
+      await audio.openForParty(track(3));
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2, 3]);
+      expect(audio.queueIndex()).toBe(2);
+    });
+
+    it('leaves the preload and the native queue alone when the adopted programme is the queue already', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.openForParty(track(2));
+      audio.adoptQueue([track(1), track(2)], 1);
+      const before = audio.queue();
+      audio.adoptQueue([track(1), track(2)], 1);
+      expect(audio.queue()).toBe(before);
+    });
+
+    it('sends a queue edit to the party, which holds the programme, and keeps the playing row', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2)]);
+      const router = vi.fn((c: { type: string }) => c.type !== 'external');
+      audio.setPartyRouter(router as never);
+      audio.enqueueTracks([track(3)], 'last');
+      expect(router).toHaveBeenCalledWith({ type: 'queue', tracks: expect.arrayContaining([expect.objectContaining({ itemId: 3 })]) });
+      audio.removeFromQueue(1);
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 3]);
+      audio.removeFromQueue(0);
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 3]);
+      audio.setShuffle(true);
+      expect(audio.shuffle()).toBe(false);
     });
 
     it('turns toggle, seek, next and previous into party commands and leaves the element alone', async () => {

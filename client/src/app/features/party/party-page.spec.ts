@@ -21,7 +21,7 @@ import { TvService } from '../../core/services/tv.service';
 import { PartyPageComponent } from './party-page';
 
 const item = (mediaId: number, episodeId: number | null = null) =>
-  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, hidden: false, additionalFanartUrls: [] }) as PartyItem;
+  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false, additionalFanartUrls: [] }) as PartyItem;
 const dto = (it: PartyItem | null) =>
   ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, cover: null, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
 

@@ -27,8 +27,10 @@ export interface PartyItemIn {
 
 export interface PartyItem {
   mediaId: number;
-  /** Present only for a track: the album is `mediaId`, the title is the track's. */
+  /** The row's item, present on every programme row; for a track the album is `mediaId`. */
   itemId?: number;
+  /** The media's type: `album` marks a track, the audio player's. */
+  mediaType: string;
   mediaFileId: number | null;
   episodeId: number | null;
   title: string;
@@ -174,6 +176,8 @@ export interface CreatePartyBody {
   inviteeIds?: number[];
   items?: PartyItemIn[];
   cover?: PartyCoverChoice;
+  /** Opens the party playing: this device joins and `at` (the head when absent) plays from `position`. */
+  live?: { deviceId: string; at?: PartyItemIn; position?: number };
 }
 
 export interface PartyIntentBody {

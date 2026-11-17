@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucidePlus, LucideX } from '@lucide/angular';
 import { MediaService } from '../../core/services/api/media.service';
-import { itemIn } from '../../core/services/party/party-item';
+import { itemIn, MAX_PROGRAMME } from '../../core/services/party/party-item';
 import type { PartySwitches } from '../../core/services/api/party-api.service';
 import { PartyService, type PartyCreateTarget } from '../../core/services/party/party.service';
 import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
@@ -78,7 +78,7 @@ export class PartyCreateModalComponent {
       untracked(() => {
         this.party.createRequest.set(null);
         this.target.set(req);
-        this.films.set(req.mediaId == null ? [] : [{ mediaId: req.mediaId, mediaFileId: req.mediaFileId, episodeId: req.episodeId ?? null, title: req.title, posterUrl: null }]);
+        this.films.set(this.rowsOf(req));
         this.name.set(req.title);
         this.cover.set(AUTO_COVER);
         this.later.set(false);
@@ -92,6 +92,19 @@ export class PartyCreateModalComponent {
         dialog.nativeElement.showModal();
       });
     });
+  }
+
+  /** The programme a target opens with: its series queue, else its one item. */
+  private rowsOf(req: PartyCreateTarget): Film[] {
+    if (req.mediaId == null) return [];
+    const rows = req.queue ?? [{ mediaId: req.mediaId, episodeId: req.episodeId, title: req.title }];
+    return rows.map((q, i) => ({
+      mediaId: q.mediaId,
+      mediaFileId: i === 0 ? req.mediaFileId : q.mediaFileId,
+      episodeId: q.episodeId ?? null,
+      title: req.title,
+      posterUrl: null,
+    }));
   }
 
   protected canSubmit(): boolean {
@@ -134,7 +147,7 @@ export class PartyCreateModalComponent {
         ...(t.playlistId != null
           ? { playlistId: t.playlistId }
           : films.length > 0 && {
-              items: films.map(itemIn),
+              items: films.slice(0, MAX_PROGRAMME).map(itemIn),
             }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
         ...(choice && { cover: choice }),

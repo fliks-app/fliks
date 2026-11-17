@@ -102,7 +102,7 @@ export const routes: Routes = [
       {
         path: 'parties/:id',
         loadComponent: () => import('./features/party/party-page').then((m) => m.PartyPageComponent),
-        data: { titleKey: 'party.watch_together' },
+        data: { titleKey: 'party.rail_title' },
       },
       {
         path: 'libraries/:libraryName',

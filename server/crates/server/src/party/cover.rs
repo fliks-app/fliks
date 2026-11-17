@@ -102,7 +102,7 @@ impl Cover {
     pub fn dto(&self, party: i32, resolved: &mut impl Iterator<Item = PartyItem>) -> CoverDto {
         match self {
             Self::Item(_) => CoverDto::Item {
-                item: resolved.next().expect("one item resolved per ref"),
+                item: Box::new(resolved.next().expect("one item resolved per ref")),
             },
             Self::Mosaic { items } => CoverDto::Mosaic {
                 items: resolved.take(items.len()).collect(),
@@ -120,7 +120,7 @@ impl Cover {
 #[derive(Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CoverDto {
-    Item { item: PartyItem },
+    Item { item: Box<PartyItem> },
     Mosaic { items: Vec<PartyItem> },
     Upload { url: String },
 }

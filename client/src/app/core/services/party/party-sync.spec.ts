@@ -40,6 +40,10 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     leave: vi.fn(),
     openPlayer: vi.fn(),
     drives: signal(true),
+    programme: signal<unknown[]>([]),
+    setProgramme: vi.fn().mockResolvedValue(true),
+    proposeTrack: vi.fn().mockResolvedValue(true),
+    leaveOrEnd: vi.fn().mockResolvedValue(true),
   };
   const cast = {
     nextRequested$: new Subject<void>(),
@@ -63,6 +67,9 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
             { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
           ],
     index: () => 0,
+    start: vi.fn(),
+    source: () => null as string | null,
+    sourceId: () => null as number | null,
   };
   const openItem = vi.fn().mockResolvedValue(opts.opens ?? true);
   const audio = {
@@ -72,6 +79,9 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     }),
     router: null as null | ((c: { type: string }) => boolean),
     openItem: vi.fn().mockResolvedValue(true),
+    requests: vi.fn().mockResolvedValue([]),
+    adopt: vi.fn(),
+    rowAt: vi.fn(),
     onBack: vi.fn(),
     engine: () => ({ volume: 1, supportsVolume: true }),
     urlPartyId: () => 0,
@@ -358,19 +368,24 @@ describe('PartySync on a Cast session', () => {
 });
 
 describe('PartySync leaving', () => {
-  it('lands on the Home when the host ends the party', () => {
-    const { ctl, closed, router, host } = setup();
-    closed.next();
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
+  const exits = (router: { navigate: ReturnType<typeof vi.fn> }) =>
+    expect(router.navigate).toHaveBeenCalledWith([], { queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
+
+  it.each(['the host ends the party', 'a member leaves'])('keeps the player and its queue, and drops the party from the URL when %s', (_why) => {
+    const { party, router, host, queue } = setup({ joined: 3 });
+    TestBed.tick();
+    party.active.set(false);
+    TestBed.tick();
+    exits(router);
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
     expect(host.onBack).not.toHaveBeenCalled();
+    expect(queue.start).not.toHaveBeenCalled();
   });
 
-  it('lands on the Home when a member leaves', async () => {
-    const { ctl, party, router } = setup();
-    await ctl.leave();
-    expect(party.leave).toHaveBeenCalled();
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
-    router.navigateByUrl.mockClear();
+  it('leaves the URL alone while the party stays', () => {
+    const { router } = setup({ joined: 3 });
+    TestBed.tick();
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 });
 
@@ -459,7 +474,7 @@ describe('PartySync outside the player', () => {
 });
 
 describe('PartySync with a track item', () => {
-  const track = { mediaId: 4, itemId: 70, episodeId: null, mediaFileId: null };
+  const track = { mediaId: 4, itemId: 70, episodeId: null, mediaFileId: null, mediaType: 'album' };
   const live = (state: string, item: unknown = track) => ({ state, item, anchor: { position: 0, serverTimeMs: Date.now() }, whenMs: null });
 
   it('hands the party to the audio player and leaves the video one', () => {
@@ -514,14 +529,113 @@ describe('PartySync with a track item', () => {
     expect(party.sendIntent).toHaveBeenCalledWith('ended', { item: { mediaId: 4, itemId: 70 } });
   });
 
+  it('keeps the audio player and its queue playing solo when the party stops driving it', () => {
+    const { party, audio } = setup();
+    party.live.set(live('paused'));
+    TestBed.tick();
+    expect(audio.route).toHaveBeenCalledTimes(1);
+    party.active.set(false);
+    TestBed.tick();
+    expect(audio.onBack).not.toHaveBeenCalled();
+    expect(party.openPlayer).not.toHaveBeenCalled();
+    expect(audio.router!({ type: 'next' })).toBe(false);
+  });
+
   it('closes the audio player and opens the film when the group moves to a film', () => {
     const { party, audio } = setup();
     party.live.set(live('paused'));
     TestBed.tick();
-    const film = { mediaId: 1, itemId: undefined, episodeId: null };
+    const film = { mediaId: 1, itemId: 9, episodeId: null, mediaType: 'movie' };
     party.live.set(live('paused', film));
     TestBed.tick();
     expect(audio.onBack).toHaveBeenCalled();
     expect(party.openPlayer).toHaveBeenCalledWith(film);
+  });
+});
+
+describe('PartySync programme as queue', () => {
+  const row = (mediaId: number, episodeId: number | null, mediaType = 'series', itemId = mediaId * 100 + (episodeId ?? 0)) => ({
+    mediaId, episodeId, itemId, mediaType, mediaFileId: null, title: `t${mediaId}-${episodeId}`, fanartUrl: null, hidden: false,
+  });
+  const live = (item: unknown) => ({ state: 'paused', item, anchor: { position: 0, serverTimeMs: Date.now() }, whenMs: null });
+
+  it('shows the programme rows on the video queue, the cursor on the playing one', () => {
+    const { party, queue } = setup({ joined: 3 });
+    party.programme.set([row(1, 100), row(1, 101), row(1, 102)]);
+    party.live.set(live(row(1, 101)));
+    TestBed.tick();
+    expect(queue.start).toHaveBeenCalledWith(
+      [expect.objectContaining({ mediaId: 1, episodeId: 100 }), expect.objectContaining({ episodeId: 101 }), expect.objectContaining({ episodeId: 102 })],
+      1,
+      { source: 'party', sourceId: 3, autoplay: false },
+    );
+  });
+
+  it('does not project the queue again on a play, a pause or a seek', () => {
+    const { party, queue } = setup({ joined: 3 });
+    party.programme.set([row(1, 100), row(1, 101)]);
+    party.live.set(live(row(1, 100)));
+    TestBed.tick();
+    queue.start.mockClear();
+    party.live.set({ ...live(row(1, 100)), state: 'playing' });
+    TestBed.tick();
+    party.live.set({ ...live(row(1, 100)), state: 'paused', anchor: { position: 40, serverTimeMs: Date.now() } });
+    TestBed.tick();
+    expect(queue.start).not.toHaveBeenCalled();
+  });
+
+  it('puts the cursor before the first row when the playing item is off the programme', () => {
+    const { party, queue } = setup({ joined: 3 });
+    party.programme.set([row(1, 100), row(1, 101)]);
+    party.live.set(live(row(9, null, 'movie')));
+    TestBed.tick();
+    expect(queue.start).toHaveBeenCalledWith(expect.any(Array), -1, { source: 'party', sourceId: 3, autoplay: false });
+  });
+
+  it('sends a queue pick of the audio player as setItem naming the row', async () => {
+    const { party, audio } = setup({ joined: 3 });
+    const t = row(4, null, 'album', 70);
+    party.live.set(live(t));
+    TestBed.tick();
+    audio.rowAt.mockReturnValue({ mediaId: 4, itemId: 71 });
+    expect(audio.router!({ type: 'item', index: 1 } as never)).toBe(true);
+    await vi.waitFor(() => expect(party.sendIntent).toHaveBeenCalledWith('setItem', { item: { mediaId: 4, itemId: 71 } }));
+  });
+
+  it('adopts the programme tracks as the audio queue without reloading the playing one', async () => {
+    const { party, audio } = setup({ joined: 3 });
+    const a = row(4, null, 'album', 70);
+    const b = row(4, null, 'album', 71);
+    party.programme.set([a, b]);
+    audio.requests.mockResolvedValue([{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 71 }]);
+    party.live.set(live(b));
+    TestBed.tick();
+    await vi.waitFor(() => expect(audio.adopt).toHaveBeenCalledWith([{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 71 }], 1));
+  });
+
+  it('sends the edited audio queue as the programme when the host edits it', async () => {
+    const { party, audio } = setup({ joined: 3 });
+    const a = row(4, null, 'album', 70);
+    party.isHost.set(true);
+    party.programme.set([a]);
+    party.live.set(live(a));
+    TestBed.tick();
+    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }] } as never);
+    await vi.waitFor(() => expect(party.setProgramme).toHaveBeenCalledWith([{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }]));
+  });
+
+  it('turns what a member adds into proposals and keeps a mixed programme read-only', async () => {
+    const { party, audio } = setup({ joined: 3 });
+    const a = row(4, null, 'album', 70);
+    party.programme.set([a]);
+    party.live.set(live(a));
+    TestBed.tick();
+    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 72 }] } as never);
+    await vi.waitFor(() => expect(party.proposeTrack).toHaveBeenCalledWith(4, 72));
+    party.programme.set([a, row(1, 5)]);
+    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 73 }] } as never);
+    await Promise.resolve();
+    expect(party.proposeTrack).toHaveBeenCalledTimes(1);
+    expect(party.setProgramme).not.toHaveBeenCalled();
   });
 });

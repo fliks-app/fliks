@@ -179,7 +179,7 @@ describe('PartyProgrammeComponent', () => {
   });
 
   it('shows a track as its title over its album and keeps its item id in the PUT', async () => {
-    const trackRow = { ...item(4), itemId: 70, title: 'Song', seriesTitle: 'Al' } as PartyItem;
+    const trackRow = { ...item(4), itemId: 70, mediaType: 'album', title: 'Song', seriesTitle: 'Al' } as PartyItem;
     api.queue.mockResolvedValue([A, trackRow, { ...trackRow, itemId: 71, title: 'Other' }]);
     const f = await setup(true);
     const li = el(f).querySelectorAll('li')[1];

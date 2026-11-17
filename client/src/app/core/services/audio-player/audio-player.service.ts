@@ -71,7 +71,8 @@ export type AudioPartyCommand =
   | { type: 'seek'; at: number }
   | { type: 'next' }
   | { type: 'prev' }
-  | { type: 'item'; index: number };
+  | { type: 'item'; index: number }
+  | { type: 'queue'; tracks: readonly MusicTrackRequest[] };
 
 export type AudioPartyRouter = (c: AudioPartyCommand) => boolean;
 
@@ -220,6 +221,8 @@ export class AudioPlayerService {
   private generation = 0;
   /** True while the playing track is on a Cast receiver instead of the local elements. */
   private readonly _casting = signal(false);
+  /** A cast device plays the queue. */
+  readonly isCasting = this._casting.asReadonly();
   private get casting(): boolean {
     return this._casting();
   }
@@ -403,7 +406,7 @@ export class AudioPlayerService {
 
   /** Adds tracks after the current one or at the end; starts them when nothing plays. */
   enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
-    if (!tracks.length || this.blockedByParty()) return;
+    if (!tracks.length) return;
     if (!this._musicMode()) return void (this.enqueueOnOwner(tracks, where) || this.playTracks(tracks));
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
@@ -451,6 +454,8 @@ export class AudioPlayerService {
   }
 
   removeFromQueue(index: number): void {
+    // A party's playing row moves only with the party.
+    if (index === this.mq.index && this.routed({ type: 'drives' })) return;
     const removingCurrent = index === this.mq.index;
     this.mq.remove(index);
     if (!removingCurrent) return this.queueEdited();
@@ -468,6 +473,7 @@ export class AudioPlayerService {
   }
 
   setShuffle(on: boolean): void {
+    if (this.routed({ type: 'drives' })) return;
     this.mq.setShuffle(on);
     this.queueEdited();
   }
@@ -484,6 +490,19 @@ export class AudioPlayerService {
   }
 
   private queueEdited(): void {
+    this.dropPreload();
+    this.syncQueue();
+    this.pushQueue();
+    // Under a party the edited list is the programme: the party takes it and the queue follows its event.
+    this.routed({ type: 'queue', tracks: [...this.mq.tracks] });
+  }
+
+  /** A party's programme becomes the queue: the loaded track keeps playing, nothing reloads. */
+  adoptQueue(tracks: readonly MusicTrackRequest[], index: number): void {
+    const held = this.mq.tracks;
+    if (index === this.mq.index && held.length === tracks.length && held.every((t, i) => t.itemId === tracks[i].itemId)) return;
+    this.mq.adopt(tracks, index, false);
+    this.mq.repeat = 'off';
     this.dropPreload();
     this.syncQueue();
     this.pushQueue();
@@ -517,9 +536,11 @@ export class AudioPlayerService {
     return this.routed({ type: 'external' });
   }
 
-  /** The party opens its track paused: the queue holds just that track, and the group starts it. */
+  /** The party opens its track paused, where the queue already holds it, and the group starts it. */
   async openForParty(req: MusicTrackRequest): Promise<void> {
-    this.mq.set([req], 0, false);
+    const at = this.mq.tracks.findIndex((t) => t.itemId === req.itemId);
+    if (at >= 0) this.mq.playAt(at);
+    else this.mq.set([req], 0, false);
     this.mq.repeat = 'off';
     this.syncQueue();
     await this.startMusic(req, false);

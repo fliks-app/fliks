@@ -4,7 +4,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DeviceChipComponent } from '../device-chip/device-chip';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
-import { Component, ElementRef, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
@@ -44,6 +44,9 @@ import {
   LucideVolume2,
   LucideVolumeX,
   LucideX,
+  LucideUserPlus,
+  LucideUsers,
+  LucideLogOut,
 } from '@lucide/angular';
 import {
   AudioPlayerService,
@@ -65,6 +68,10 @@ import type { AlbumDetail } from '../../core/services/api/music.models';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
+import { PartyApiService } from '../../core/services/api/party-api.service';
+import { PartyService } from '../../core/services/party/party.service';
+import { isTrack, itemIn, programmeOf } from '../../core/services/party/party-item';
+import { PartyInviteComponent } from '../../features/party/party-invite';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { formatTime } from '../../core/utils/player.utils';
@@ -114,6 +121,10 @@ function writeFlag(key: string, on: boolean): void {
 @Component({
   selector: 'app-audio-player',
   imports: [
+    PartyInviteComponent,
+    LucideUserPlus,
+    LucideUsers,
+    LucideLogOut,
     CdkDrag,
     SeekbarComponent,
     CdkDragHandle,
@@ -219,6 +230,22 @@ export class AudioPlayerComponent {
   protected readonly canEditLyrics = inject(AuthService).hasPermission('media.edit');
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   private readonly device = inject(DeviceService);
+  private readonly injector = inject(Injector);
+  protected readonly party = inject(PartyService);
+  private readonly partyApi = inject(PartyApiService);
+  protected readonly invite = viewChild(PartyInviteComponent);
+  /** The host invites people; a member only shares the link, when the party has one. */
+  protected readonly canInviteParty = computed(() => this.party.isHost() || !!this.party.party()?.inviteToken);
+  /** The queue's remove, move and drag: not on another device's session, and in a party only for the host of an all-track programme. */
+  protected readonly queueLocked = computed(() => {
+    if (this.remoteView()) return true;
+    const rows = this.party.programme();
+    return this.party.active() && !(this.party.isHost() && rows.length > 0 && rows.every(isTrack));
+  });
+  /** A solo track of the local player the user may turn into a party (not an audiobook, not a remote's session). */
+  protected readonly canStartParty = computed(
+    () => !this.party.active() && this.partyApi.canCreate() && this.local.musicMode() && !!this.local.track() && !this.remoteView() && !this.local.isCasting(),
+  );
   /** Touch and TV get a full-height sheet; a modal dialog sits in the top layer and would hide the menu's own sheet. */
   protected readonly isTouch = this.device.isTouch;
   protected readonly isTv = this.device.isTv;
@@ -369,6 +396,21 @@ export class AudioPlayerComponent {
   protected onQueueRowClick(q: MusicTrackRequest, i: number): void {
     if (!this.queueEditing()) void this.audio.playQueueAt(i);
     else if (i !== this.audio.queueIndex()) this.toggleSelected(q);
+  }
+
+  protected async startParty(): Promise<void> {
+    const queue = this.local.queue();
+    const at = this.local.queueIndex();
+    const current = queue[at];
+    if (!current) return;
+    const dto = await this.party.startHere(current.albumTitle || current.title, programmeOf(queue, current), itemIn(current), this.local.position());
+    // The dialog mounts with the party: open it once rendered.
+    if (dto) afterNextRender(() => this.invite()?.open(), { injector: this.injector });
+  }
+
+  protected openPartyPage(): void {
+    const id = this.party.party()?.id;
+    if (id != null) this.party.openPage(id);
   }
 
   protected closeMenu(): void {

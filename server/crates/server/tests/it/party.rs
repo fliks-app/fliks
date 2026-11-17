@@ -273,6 +273,60 @@ async fn create_checks_follows_and_join_checks_access_and_connection(pool: PgPoo
 }
 
 #[sqlx::test(migrations = false)]
+async fn create_live_joins_the_host_and_plays_the_row_at_the_position(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    let rows = json!([{"mediaId": 1}, {"mediaId": 2}]);
+    let live = |at: Value, position: Value| json!({"name": "n", "items": rows, "live": {"deviceId": "da", "at": at, "position": position}});
+    let (s, e) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(live(json!({"mediaId": 3}), json!(0))),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    let (s, e) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(live(json!({"mediaId": 2}), json!(-1))),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(live(json!({"mediaId": 2}), json!(600.5))),
+        )
+        .await;
+    assert_eq!(s, 201);
+    assert_eq!(p["status"], "live");
+    assert_eq!(p["item"]["mediaId"], 2);
+    assert_eq!(p["item"]["mediaType"], "movie");
+    assert_eq!(p["live"]["playback"]["anchor"]["position"], 600.5);
+    assert_eq!(p["live"]["members"].as_array().unwrap().len(), 1);
+    let (s, again) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "items": [{"mediaId": 2}], "live": {"deviceId": "da", "position": 5}})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    assert_ne!(again["id"], p["id"]);
+    assert_eq!(again["status"], "live");
+    assert_eq!(again["live"]["playback"]["anchor"]["position"], 5.0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;

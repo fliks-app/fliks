@@ -53,7 +53,7 @@ export class PartySettingsComponent {
 
   protected async leave(): Promise<void> {
     this.dialog().nativeElement.close();
-    await this.controller.leave();
+    await this.party.leave();
   }
 
   protected async end(): Promise<void> {
