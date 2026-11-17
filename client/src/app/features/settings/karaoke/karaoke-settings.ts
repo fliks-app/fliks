@@ -174,11 +174,12 @@ export function qualityModelReady(model: KaraokeModel | undefined): boolean {
   return model?.state === 'installed';
 }
 
-export type BackgroundState = 'active' | 'active_cpu' | 'no_model' | 'no_gpu' | 'stopped';
+export type BackgroundState = 'active' | 'active_worker' | 'active_cpu' | 'no_model' | 'no_gpu' | 'stopped';
 
 /** Why the saved background pass runs or not; `null` while karaoke is off or the status is unknown. */
 export function backgroundState(s: KaraokeStatus | null): BackgroundState | null {
   if (!s?.enabled) return null;
+  if (s.background && s.workers > 0) return 'active_worker';
   if (s.background) return s.gpu ? 'active' : 'active_cpu';
   if (!s.separate) return 'no_model';
   return s.gpu ? 'stopped' : 'no_gpu';

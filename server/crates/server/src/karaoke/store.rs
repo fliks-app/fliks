@@ -77,12 +77,21 @@ pub struct New<'a> {
 
 /// Replaces the row of `(file, kind)`; the file it named before is removed.
 pub async fn put(db: &PgPool, n: &New<'_>) -> sqlx::Result<()> {
+    let old = put_in(&mut *db.acquire().await?, n).await?;
+    if let Some(old) = old {
+        let _ = tokio::fs::remove_file(old).await;
+    }
+    Ok(())
+}
+
+/// [`put`] on a caller's connection; the replaced file is returned, for the caller to remove once committed.
+pub async fn put_in(db: &mut sqlx::PgConnection, n: &New<'_>) -> sqlx::Result<Option<String>> {
     let old: Option<String> = sqlx::query_scalar(
         r#"SELECT path FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2"#,
     )
     .bind(n.file)
     .bind(n.kind)
-    .fetch_optional(db)
+    .fetch_optional(&mut *db)
     .await?;
     sqlx::query(
         r#"INSERT INTO derived_audio ("mediaFileId", kind, model, "modelVersion", provider, path, size, "durationMs")
@@ -99,12 +108,9 @@ pub async fn put(db: &PgPool, n: &New<'_>) -> sqlx::Result<()> {
     .bind(n.path)
     .bind(n.size)
     .bind(n.duration_ms)
-    .execute(db)
+    .execute(&mut *db)
     .await?;
-    if let Some(old) = old.filter(|o| o != n.path) {
-        let _ = tokio::fs::remove_file(old).await;
-    }
-    Ok(())
+    Ok(old.filter(|o| o != n.path))
 }
 
 /// The file of a served stem; a request that starts the file marks every stem of it as used.
@@ -258,7 +264,12 @@ pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
 
 /// Tracks with a file and no valid stems, newest first, leaving out `failed` (rule 16): a file with both
 /// imports is done, like [`valid`].
-pub async fn unprepared(db: &PgPool, failed: &[i32], limit: i64) -> sqlx::Result<Vec<i32>> {
+pub async fn unprepared(
+    db: &PgPool,
+    failed: &[i32],
+    limit: i64,
+    profile: &str,
+) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar(
         r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
            JOIN item_parts ip ON ip."itemId" = i.id AND ip.version = (
@@ -266,11 +277,16 @@ pub async fn unprepared(db: &PgPool, failed: &[i32], limit: i64) -> sqlx::Result
            WHERE (SELECT count(*) FROM derived_audio d WHERE d."mediaFileId" = ip."mediaFileId") < 3
              AND (SELECT count(DISTINCT d.kind) FROM derived_audio d
                   WHERE d."mediaFileId" = ip."mediaFileId" AND d.provider = 'import') < 2
+             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
+                             AND j.kind = 'separate' AND j.state IN ('queued', 'leased'))
+             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
+                             AND j.kind = 'separate' AND j.state = 'cancelled' AND j."profileHash" = $3)
              AND i.id <> ALL($1)
            ORDER BY i.id DESC LIMIT $2"#,
     )
     .bind(failed)
     .bind(limit)
+    .bind(profile)
     .fetch_all(db)
     .await
 }

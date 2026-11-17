@@ -10,7 +10,7 @@ use tokio::sync::Notify;
 pub(super) static CHANGED: Notify = Notify::const_new();
 
 /// A job was created or changed state: the watcher sweeps.
-pub(super) fn changed() {
+pub(crate) fn changed() {
     CHANGED.notify_waiters();
 }
 

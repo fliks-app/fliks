@@ -41,9 +41,26 @@ async fn put(
     body: &str,
     last: bool,
 ) -> (StatusCode, String) {
+    put_named(st, token, job, "", offset, body, last).await
+}
+
+async fn put_named(
+    st: &AppState,
+    token: &str,
+    job: i64,
+    name: &str,
+    offset: u64,
+    body: &str,
+    last: bool,
+) -> (StatusCode, String) {
+    let query = if name.is_empty() {
+        String::new()
+    } else {
+        format!("?name={name}")
+    };
     let req = Request::builder()
         .method(Method::PUT)
-        .uri(format!("/engine/jobs/{job}/output"))
+        .uri(format!("/engine/jobs/{job}/output{query}"))
         .header("authorization", format!("Bearer {token}"))
         .header("upload-offset", offset.to_string())
         .header("x-fliks-attempt", "1")
@@ -79,9 +96,11 @@ async fn an_upload_is_resumable_and_checked_against_its_hash(pool: PgPool) {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
-    assert!(remote::output_error(&st, job, 1, 6, &sha).await.is_none());
-    assert!(remote::output_error(&st, job, 1, 6, "00").await.is_some());
-    assert!(remote::output_error(&st, job, 1, 5, &sha).await.is_some());
+    let at = staged.to_string_lossy().into_owned();
+    let key = (job, 1, "");
+    assert!(remote::output_error(&st, key, &at, 6, &sha).await.is_none());
+    assert!(remote::output_error(&st, key, &at, 6, "00").await.is_some());
+    assert!(remote::output_error(&st, key, &at, 5, &sha).await.is_some());
     // Another worker's token cannot write to this lease.
     let (_, other) = tokens::create(&pool, "o").await.unwrap();
     assert_eq!(
@@ -228,14 +247,13 @@ async fn a_stale_result_does_not_touch_the_live_upload(pool: PgPool) {
         .unwrap();
     assert_eq!(res.status(), StatusCode::CONFLICT);
     assert_eq!(st.queue.uploads.lock().unwrap().len(), 1);
-    assert!(st.queue.uploads.lock().unwrap().contains_key(&(job, 1)));
-    // An output the job has no staging path for is an error, not an accepted one.
-    sqlx::query(r#"UPDATE jobs SET "stagedPath" = NULL WHERE id = $1"#)
-        .bind(job)
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert!(remote::output_error(&st, job, 1, 4, "00").await.is_some());
+    assert!(
+        st.queue
+            .uploads
+            .lock()
+            .unwrap()
+            .contains_key(&(job, 1, String::new()))
+    );
     let _ = std::fs::remove_dir_all(staged.parent().unwrap());
 }
 
@@ -249,4 +267,43 @@ async fn a_rename_keeps_the_leases_of_a_token(pool: PgPool) {
     assert_eq!(ended(json!({"pathAccess": "shared"})).await, Some(true));
     assert_eq!(ended(json!({"pathAccess": "shared"})).await, Some(false));
     assert_eq!(ended(json!({"enabled": false})).await, Some(true));
+}
+
+#[sqlx::test(migrations = false)]
+async fn stems_of_one_attempt_are_independent_uploads(pool: PgPool) {
+    let (st, token, job, staged) = world(&pool).await;
+    sqlx::query("UPDATE jobs SET kind = 'separate', \"stagedPath\" = NULL WHERE id = $1")
+        .bind(job)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let up = |name, offset, body, last| put_named(&st, &token, job, name, offset, body, last);
+    assert_eq!(up("vocals", 0, "abcd", false).await.0, StatusCode::OK);
+    assert_eq!(up("guide", 0, "xy", true).await.0, StatusCode::OK);
+    assert_eq!(up("vocals", 4, "ef", true).await.0, StatusCode::OK);
+    let read = |name| std::fs::read(remote::upload_path(job, 1, name)).unwrap();
+    assert_eq!(
+        (read("vocals"), read("guide")),
+        (b"abcdef".to_vec(), b"xy".to_vec())
+    );
+    assert_eq!(up("drums", 0, "x", false).await.0, StatusCode::BAD_REQUEST);
+    // An unnamed chunk is the optimize output: refused on a separate job.
+    assert_eq!(
+        put(&st, &token, job, 0, "x", false).await.0,
+        StatusCode::CONFLICT
+    );
+    for name in ["vocals", "guide"] {
+        let _ = std::fs::remove_file(remote::upload_path(job, 1, name));
+    }
+    let _ = std::fs::remove_dir_all(staged.parent().unwrap());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_named_chunk_on_an_optimize_job_is_fenced(pool: PgPool) {
+    let (st, token, job, staged) = world(&pool).await;
+    assert_eq!(
+        put_named(&st, &token, job, "vocals", 0, "x", false).await.0,
+        StatusCode::CONFLICT
+    );
+    let _ = std::fs::remove_dir_all(staged.parent().unwrap());
 }

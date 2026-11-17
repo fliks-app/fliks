@@ -258,6 +258,8 @@ export interface OptimizeWorker {
   /** ISO time of the worker's last hello, lease or heartbeat. */
   lastSeenAt: string;
   devices: WorkerDevice[];
+  /** Takes karaoke separation jobs now. */
+  karaoke: boolean;
 }
 
 export interface PathMapping {
@@ -334,6 +336,7 @@ export const ERROR_CLASSES = [
   'damaged',
   'engine',
   'io',
+  'model',
   'network',
   'nospace',
   'shared',

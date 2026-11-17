@@ -72,6 +72,8 @@ pub struct Want<'a> {
     pub max_jobs: u32,
     /// The worker reads the library by path: only then can it run a verification, a metadata edit or a sidecar.
     pub local: bool,
+    /// The worker may run a karaoke `Separate` (`karaoke::remote::eligible`).
+    pub karaoke: bool,
 }
 
 pub struct Taken {
@@ -170,6 +172,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     let rows = sqlx::query!(
         r#"SELECT id, kind, "inPath" AS in_path, "inSize" AS in_size, "mediaFileId" AS media_file_id FROM jobs
            WHERE state = 'queued' AND "notBefore" <= now() AND (kind <> 'verify' OR $4)
+             AND (kind <> 'separate' OR $6)
              AND ($4 OR (payload #>> '{plan,level}' IS DISTINCT FROM 'metadata'
                   AND CASE WHEN jsonb_typeof(payload #> '{plan,extraSubtitles}') = 'array'
                        THEN jsonb_array_length(payload #> '{plan,extraSubtitles}') ELSE 0 END = 0))
@@ -181,7 +184,8 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
         w.sw,
         w.fallback,
         w.local,
-        w.device == CPU_DEVICE
+        w.device == CPU_DEVICE,
+        w.karaoke
     )
     .fetch_all(&mut *tx)
     .await?;
@@ -364,6 +368,7 @@ pub fn next_after(class: JobErrorClass, failures: i32) -> Next {
         JobErrorClass::Stale => Next::Skip,
         JobErrorClass::Nospace => Next::Retry { delay_s: 900 },
         JobErrorClass::Busy => Next::Retry { delay_s: 300 },
+        JobErrorClass::Model => Next::Retry { delay_s: 60 },
         JobErrorClass::Engine | JobErrorClass::Network if failures + 1 >= MAX_FAILURES => {
             Next::Fail
         }
@@ -595,5 +600,6 @@ mod tests {
         assert_eq!(next_after(Engine, 0), Next::Retry { delay_s: 60 });
         assert_eq!(next_after(Engine, 1), Next::Retry { delay_s: 120 });
         assert_eq!(next_after(Network, 2), Next::Fail);
+        assert_eq!(next_after(Model, 5), Next::Retry { delay_s: 60 });
     }
 }

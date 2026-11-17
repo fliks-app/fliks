@@ -170,6 +170,8 @@
                   <td>
                     @if (j.level) {
                       {{ 'optimize.queue.level.' + j.level | translate }}
+                    } @else if (j.kind !== 'optimize') {
+                      {{ 'optimize.queue.kind.' + j.kind | translate }}
                     }
                   </td>
                   <td>{{ j.deviceId ?? '-' }}</td>
@@ -274,6 +276,8 @@
                   <td>
                     @if (j.level) {
                       {{ 'optimize.queue.level.' + j.level | translate }}
+                    } @else if (j.kind !== 'optimize') {
+                      {{ 'optimize.queue.kind.' + j.kind | translate }}
                     }
                   </td>
                   <td>{{ j.inSize != null ? formatBytes(j.inSize) : '-' }}</td>
@@ -353,6 +357,8 @@
                 <td>
                   @if (j.level) {
                     {{ 'optimize.queue.level.' + j.level | translate }}
+                  } @else if (j.kind !== 'optimize') {
+                    {{ 'optimize.queue.kind.' + j.kind | translate }}
                   }
                 </td>
                 <td>{{ j.codec?.toUpperCase() ?? '-' }}</td>

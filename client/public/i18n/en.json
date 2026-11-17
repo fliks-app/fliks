@@ -3849,6 +3849,7 @@
       },
       "workers": {
         "title": "Optimization workers",
+        "karaoke": "Karaoke",
         "desc": "Machines that re-encode and remux library files. The server's own engine always works; remote workers connect with a token.",
         "connected": "Connected workers",
         "none_connected": "No worker has connected since the server started.",
@@ -5315,6 +5316,10 @@
       "cancel_confirm": "Cancel the jobs",
       "cancel_keep": "Keep them",
       "progress_of": "Progress of {{title}}",
+      "kind": {
+        "verify": "Verification",
+        "separate": "Karaoke separation"
+      },
       "error_class": {
         "access": "Access denied",
         "busy": "File in use",
@@ -5323,6 +5328,7 @@
         "damaged": "Damaged output",
         "engine": "Engine error",
         "io": "Disk error",
+        "model": "Model unavailable",
         "network": "Network error",
         "nospace": "No space left",
         "nothing_to_do": "Nothing to change",
@@ -5543,6 +5549,7 @@
       "background_cpu_hint": "Without a verified acceleration, tracks are prepared on the processor: much slower, and the machine stays busy.",
       "background_state": {
         "active": "Active.",
+        "active_worker": "Active, on the optimization workers.",
         "active_cpu": "Active, on the processor.",
         "no_model": "Inactive: no voice separation model installed.",
         "no_gpu": "Inactive: no verified acceleration on this engine.",

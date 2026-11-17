@@ -6388,10 +6388,11 @@
         "tags": [
           "crate::queue::remote"
         ],
-        "summary": "`PUT /engine/jobs/{id}/output`: one chunk at `Upload-Offset`, which must equal the length held.",
+        "summary": "`PUT /engine/jobs/{id}/output[?name=<stem>]`: one chunk at `Upload-Offset`, which must equal the length held.",
         "operationId": "put_output",
         "responses": {
           "200": {},
+          "400": {},
           "409": {}
         }
       }

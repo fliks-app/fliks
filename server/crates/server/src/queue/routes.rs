@@ -16,9 +16,9 @@ use axum::{
     routing::{post, put},
 };
 use fliks_engine_core::api::{
-    JobHeartbeatRequest, JobHeartbeatResponse, JobResultRequest, LeaseRequest, LeasedJob,
-    PathMapping, UPLOAD_CHUNK_BYTES, WorkerHello, WorkerHelloResponse, WorkerSettings,
-    apply_path_mappings,
+    JobError, JobErrorClass, JobHeartbeatRequest, JobHeartbeatResponse, JobResultRequest,
+    LeaseRequest, LeasedJob, PathMapping, UPLOAD_CHUNK_BYTES, WorkerHello, WorkerHelloResponse,
+    WorkerSettings, apply_path_mappings,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -93,15 +93,21 @@ pub async fn hello(
     if let Principal::Token(id) = who {
         tokens::touch(&st.db, id).await.map_err(db)?;
     }
+    let kick =
+        matches!(who, Principal::Token(_)) && body.features.iter().any(|f| f == "karaoke-separate");
     st.queue.register(
         key,
         Worker {
             principal: who,
             engine_version: body.engine_version,
             devices: body.devices,
+            features: body.features,
         },
     );
     st.queue.wake.notify_waiters();
+    if kick {
+        st.karaoke.kick.notify_one();
+    }
     let conf = settings::load(&st.db).await.map_err(db)?;
     Ok(Json(WorkerHelloResponse {
         settings: WorkerSettings {
@@ -129,11 +135,6 @@ enum Reach {
 }
 
 fn leased(t: store::Taken, reach: &Reach, token: Option<String>) -> Result<LeasedJob, AppError> {
-    let tag = if t.kind == "verify" {
-        "Verify"
-    } else {
-        "Optimize"
-    };
     let mut payload = t.payload;
     let map = |p: String| match reach {
         Reach::Path(m) if !m.is_empty() => apply_path_mappings(m, &p),
@@ -149,7 +150,18 @@ fn leased(t: store::Taken, reach: &Reach, token: Option<String>) -> Result<Lease
             }
         }
     }
-    let kind = serde_json::from_value(json!({ "type": tag, "payload": payload }))
+    let wire = match t.kind.as_str() {
+        "separate" => match payload {
+            Value::Object(mut o) => {
+                o.insert("type".into(), "Separate".into());
+                Value::Object(o)
+            }
+            other => other,
+        },
+        "verify" => json!({ "type": "Verify", "payload": payload }),
+        _ => json!({ "type": "Optimize", "payload": payload }),
+    };
+    let kind = serde_json::from_value(wire)
         .map_err(|e| AppError::internal(format!("job {} payload: {e}", t.id)))?;
     let (input_path, staged_path, input_url) = match reach {
         Reach::Path(_) => (t.in_path.map(map), t.staged_path.map(map), None),
@@ -216,6 +228,7 @@ pub async fn lease(
                 .filter(|c| !anywhere.contains(c))
                 .cloned()
                 .collect();
+            let karaoke = crate::karaoke::remote::eligible(&st, &key, &worker).await;
             let want = store::Want {
                 key: &key,
                 device: &device.id,
@@ -224,6 +237,7 @@ pub async fn lease(
                 fallback: &fallback,
                 max_jobs: conf.max_jobs(&device.id, device.max_jobs),
                 local,
+                karaoke,
             };
             if let Some(t) = store::take(&st.db, &want).await.map_err(db)? {
                 if let Some(old) = t.old_staged.clone() {
@@ -256,6 +270,7 @@ pub async fn heartbeat(
     ValidJson(req): ValidJson<JobHeartbeatRequest>,
 ) -> Result<Json<JobHeartbeatResponse>, AppError> {
     let key = who.owner_key(&req.worker_id);
+    st.queue.touch(&key);
     let beat = store::heartbeat(
         &st.db,
         id,
@@ -293,8 +308,17 @@ pub async fn result(
     ValidJson(req): ValidJson<JobResultRequest>,
 ) -> Result<Json<Value>, AppError> {
     let key = who.owner_key(&req.worker_id);
+    st.queue.touch(&key);
     let attempt = req.attempt as i32;
     let out_size = req.out_size as i64;
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM jobs WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&st.db)
+        .await
+        .map_err(db)?;
+    if kind.as_deref() == Some("separate") {
+        return crate::karaoke::remote::result(&st, &key, id, req).await;
+    }
     let mut meta = serde_json::Map::new();
     for (k, v) in [
         ("level", json!(req.level)),
@@ -397,10 +421,18 @@ async fn output_error(
         Principal::Local => true,
         Principal::Token(t) => tokens::access(&st.db, t).await.map_err(db)?.shared,
     };
+    let staged = store::staged_of(&st.db, id).await.map_err(db)?;
     if !by_path {
-        return Ok(super::remote::output_error(st, id, attempt, size, sha).await);
+        let Some(path) = staged else {
+            return Ok(Some(JobError {
+                class: JobErrorClass::Network,
+                message: "the staged output of the job is unknown".into(),
+                stderr_tail: None,
+            }));
+        };
+        return Ok(super::remote::output_error(st, (id, attempt, ""), &path, size, sha).await);
     }
-    let Some(path) = store::staged_of(&st.db, id).await.map_err(db)? else {
+    let Some(path) = staged else {
         return Ok(None);
     };
     let on_disk = tokio::fs::metadata(&path)

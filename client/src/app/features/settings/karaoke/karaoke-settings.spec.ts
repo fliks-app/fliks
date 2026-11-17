@@ -20,13 +20,14 @@ describe('qualityModelReady', () => {
 });
 
 describe('backgroundState', () => {
-  const status = (s: Partial<KaraokeStatus>) => ({ enabled: true, separate: true, gpu: false, background: false, ...s }) as KaraokeStatus;
+  const status = (s: Partial<KaraokeStatus>) => ({ enabled: true, separate: true, gpu: false, background: false, workers: 0, ...s }) as KaraokeStatus;
 
   it('names why the pass runs or not', () => {
     expect(backgroundState(null)).toBeNull();
     expect(backgroundState(status({ enabled: false }))).toBeNull();
     expect(backgroundState(status({ background: true, gpu: true }))).toBe('active');
     expect(backgroundState(status({ background: true }))).toBe('active_cpu');
+    expect(backgroundState(status({ background: true, workers: 1 }))).toBe('active_worker');
     expect(backgroundState(status({ separate: false }))).toBe('no_model');
     expect(backgroundState(status({}))).toBe('no_gpu');
     expect(backgroundState(status({ gpu: true }))).toBe('stopped');
