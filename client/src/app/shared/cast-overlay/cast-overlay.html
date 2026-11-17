@@ -1,14 +1,20 @@
 @if (output(); as o) {
   @if (!o.isIdle()) {
-  <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
-       [style.bottom]="surface.aboveAudio() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'">
-    <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box p-1 text-left disabled:cursor-default"
-            [disabled]="!session.playing()" [attr.aria-label]="'remote.open_player' | translate" (click)="open()">
-      <div class="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-base-300" [class.skeleton]="!session.nowPlaying()">
+    <app-player-bar
+      [raised]="surface.aboveAudio()"
+      [openLabel]="'remote.open_player' | translate"
+      [openDisabled]="!session.playing()"
+      [playing]="o.targetOffline() ? null : !o.uiPaused()"
+      (opened)="open()"
+      (toggled)="togglePlay()"
+    >
+      <ng-container ngProjectAs="[barCover]">
         @if (artwork(); as art) {
           <img [cachedSrc]="art | resolveUrl:'thumb'" alt="" class="h-full w-full object-cover" />
+        } @else if (!session.nowPlaying()) {
+          <span class="skeleton absolute inset-0"></span>
         }
-      </div>
+      </ng-container>
       <span class="min-w-0">
         <app-marquee class="text-sm font-semibold" [text]="session.nowPlaying()?.title ?? ''" [secondary]="session.nowPlaying()?.artist ?? ''" />
         <span class="flex items-center gap-1 text-sm text-info">
@@ -16,65 +22,39 @@
           <span class="truncate">{{ session.deviceName() }}</span>
         </span>
       </span>
-    </button>
-    @if (!o.targetOffline()) {
-      <button type="button" class="btn btn-ghost btn-circle" (click)="togglePlay()"
-              [attr.aria-label]="(o.uiPaused() ? 'player.play' : 'player.pause') | translate">
-        @if (o.uiPaused()) {
-          <svg lucidePlay class="h-5 w-5"></svg>
-        } @else {
-          <svg lucidePause class="h-5 w-5"></svg>
-        }
+      <button barActions type="button" class="btn btn-ghost btn-circle" (click)="o.disconnect()" [attr.aria-label]="'remote.disconnect_row' | translate">
+        <svg lucideX class="h-5 w-5"></svg>
       </button>
-    }
-    <button type="button" class="btn btn-ghost btn-circle" (click)="o.disconnect()"
-            [attr.aria-label]="'remote.disconnect_row' | translate">
-      <svg lucideX class="h-5 w-5"></svg>
-    </button>
-  </div>
+    </app-player-bar>
   }
 } @else if (observed(); as s) {
-  <div class="fixed inset-x-2 lg:inset-x-auto lg:right-4 lg:w-[27rem] z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 backdrop-blur-sm p-1 pr-2 shadow-xl"
-       [class.opacity-60]="surface.syncing()"
-       [attr.aria-busy]="surface.syncing()"
-       style="bottom: max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))">
-    <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-box p-1 text-left sm:gap-3" (click)="surface.open(s)">
-      <ng-container *ngTemplateOutlet="info" />
-    </button>
-    <ng-template #info>
-      <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-base-300 sm:h-12 sm:w-12">
-        @if (observedArtwork(); as art) {
-          @for (a of [art]; track a) {
-            <img [cachedSrc]="a | resolveUrl:'thumb'" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" />
-          }
+  <app-player-bar
+    [opens]="audio() ? 'audio' : 'video'"
+    [busy]="surface.syncing()"
+    [playing]="!paused()"
+    [percent]="audio() || percent() > 0 ? percent() : null"
+    (opened)="surface.open(s)"
+    (toggled)="toggleObserved()"
+  >
+    <ng-container ngProjectAs="[barCover]">
+      @if (observedArtwork(); as art) {
+        @for (a of [art]; track a) {
+          <img [cachedSrc]="a | resolveUrl:'thumb'" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" />
         }
-        @if (swipe.cover(); as sc) {
-          <img [cachedSrc]="sc.url | resolveUrl: 'thumb'" alt="" class="absolute inset-0 z-[2] h-full w-full object-cover" [class.swipe-settle]="sc.settle" [style.opacity]="sc.opacity" />
-        }
-      </div>
-      <app-swipe-track #swipe [output]="audioView" [lines]="observedLines" [disabled]="!audio()" (skipped)="$event === 'next' ? audioView.next() : audioView.previous()" />
-      <!-- `n`: the neighbour a swipe brings in, null for the session's own track. -->
-      <ng-template #observedLines let-n>
-        <app-marquee class="text-sm font-semibold" [text]="n ? n.title : observedTitle()" [secondary]="n ? n.artists : (observedEpisode() ?? observedArtist())" />
-        <span class="flex items-center gap-1 truncate text-sm text-info">
-          <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
-          <span class="truncate">{{ sync.ownerName(s) }}</span>
-          <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ n ? clock(0) : time() }}</span>
-        </span>
-        @if (audio() || percent() > 0) {
-          <div class="mt-1 h-1 w-full overflow-hidden rounded-full bg-base-content/15" aria-hidden="true" data-testid="observed-progress">
-            <div class="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear" [style.width.%]="n ? 0 : percent()"></div>
-          </div>
-        }
-      </ng-template>
-    </ng-template>
-    <button type="button" class="btn btn-ghost btn-circle btn-sm sm:btn-md" (click)="toggleObserved()"
-            [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate">
-      @if (paused()) {
-        <svg lucidePlay class="h-5 w-5"></svg>
-      } @else {
-        <svg lucidePause class="h-5 w-5"></svg>
       }
-    </button>
-  </div>
+      @if (swipe.cover(); as sc) {
+        <img [cachedSrc]="sc.url | resolveUrl: 'thumb'" alt="" class="absolute inset-0 z-[2] h-full w-full object-cover" [class.swipe-settle]="sc.settle" [style.opacity]="sc.opacity" />
+      }
+    </ng-container>
+    <app-swipe-track #swipe [output]="audioView" [lines]="observedLines" [disabled]="!audio()" (skipped)="$event === 'next' ? audioView.next() : audioView.previous()" />
+    <!-- `n`: the neighbour a swipe brings in, null for the session's own track. -->
+    <ng-template #observedLines let-n>
+      <app-marquee class="text-sm font-semibold" [attr.data-morph]="n ? null : 'title'" [text]="n ? n.title : observedTitle()" [secondary]="n ? n.artists : (observedEpisode() ?? observedArtist())" />
+      <span class="flex items-center gap-1 truncate text-sm text-info">
+        <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
+        <span class="truncate">{{ sync.ownerName(s) }}</span>
+        <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ n ? clock(0) : time() }}</span>
+      </span>
+    </ng-template>
+  </app-player-bar>
 }

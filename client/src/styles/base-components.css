@@ -659,17 +659,24 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   .player-box .player-cover {
     transition: width var(--player-ease), max-width var(--player-ease);
   }
+  .player-box .player-queue {
+    transition: padding var(--player-ease);
+  }
   .player-box-full .player-cover-col {
     width: min(28rem, 36vw);
   }
   .player-box-full .player-cover {
     max-width: 100%;
   }
+  .player-box-full .player-queue {
+    padding: 1rem 3rem;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .player-box,
   .player-box .player-cover-col,
-  .player-box .player-cover { transition-duration: 1ms; }
+  .player-box .player-cover,
+  .player-box .player-queue { transition-duration: 1ms; }
 }
 
 /* `.tooltip` sets inline-block, which would drop a button's flex centring. */

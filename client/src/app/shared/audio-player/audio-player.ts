@@ -6,6 +6,9 @@ import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { RemotePickerListComponent } from '../remote-picker/remote-picker-list';
 import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, linkedSignal, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { morph, relayout } from '../utils/morph-transition';
+import { PlayerBarComponent } from '../player-bar/player-bar';
+import { FullPlayerState } from '../../core/services/playback/full-player-state';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
@@ -145,6 +148,7 @@ function writeFlag(key: string, on: boolean): void {
     CachedSrcDirective,
     LyricsPanelComponent,
     TvRowDirective,
+    PlayerBarComponent,
     TvSectionDirective,
     LucideBookmarkPlus,
     LucideArrowDown,
@@ -190,8 +194,9 @@ export class AudioPlayerComponent {
   private readonly remoteOut = inject(RemoteAudioOutput);
   protected readonly sync = inject(SessionSyncService);
   protected readonly surface = inject(PlaybackSurface);
-  /** The full player drives another device's session. */
-  protected readonly remoteView = this.remoteOut.expanded;
+  private readonly fullPlayer = inject(FullPlayerState);
+  /** The full player drives another device's session; it stays on it while the player closes. */
+  protected readonly remoteView = this.fullPlayer.remote;
   /** Transport and seek answer: always locally, and remotely only while the owner reports itself. */
   protected readonly controllable = computed(() => !this.remoteView() || this.remoteOut.controllable());
   protected readonly canToggle = computed(() => this.controllable() || this.parkedView());
@@ -286,6 +291,8 @@ export class AudioPlayerComponent {
   protected readonly lyricsEdit = signal(false);
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
   /** The side column fills the height and scrolls itself: the lyrics, or the desktop queue. */
+  /** Desktop lists the queue inline: in place of the lyrics, or beside them when fullscreen has the room. */
+  protected readonly queueInline = computed(() => this.audio.musicMode() && !this.asSheet() && (!this.lyricsShown() || this.fullscreen()));
   protected readonly panelFills = computed(() => this.lyricsShown() || (this.audio.musicMode() && !this.asSheet()));
   /** The Karaoke toggle of the lyrics panel, kept across Lyrics being hidden and shown. */
   protected readonly karaokeStage = signal(false);
@@ -325,18 +332,47 @@ export class AudioPlayerComponent {
       });
     });
     effect(() => {
-      const el = this.dialog()?.nativeElement;
-      if (!el) return;
-      if (this.audio.expanded() && !el.open) el.showModal();
-      else if (!this.audio.expanded() && el.open) el.close();
+      const expand = this.fullPlayer.open() === 'audio';
+      untracked(() => this.present(expand));
     });
     effect(() => writeFlag(FULLSCREEN_KEY, this.fullscreen()));
     effect(() => writeFlag(LYRICS_KEY, this.lyricsOn()));
   }
 
+  /** The sheet slides over the bar, which stays under it: it follows `open` with no morph. */
+  protected readonly sheetOpen = computed(() => this.fullPlayer.open() === 'audio');
+
+  /** Desktop opens the dialog out of the bar and closes back into it. */
+  private present(expand: boolean): void {
+    const dialog = this.dialog()?.nativeElement;
+    const box = dialog?.querySelector<HTMLElement>('.player-box');
+    const presented = expand ? 'audio' : null;
+    if (!dialog || !box || this.fullPlayer.presented() === presented) return;
+    const bar = () => document.querySelector<HTMLElement>('[data-player-bar="audio"]');
+    morph({
+      from: expand ? bar() : box,
+      scrim: dialog,
+      update: async () => {
+        this.fullPlayer.presented.set(presented);
+        await this.rendered();
+        if (expand) dialog.showModal();
+        else dialog.close();
+        return expand ? box : bar();
+      },
+    });
+  }
+
   protected toggleLyrics(): void {
-    this.lyricsEdit.set(false);
-    this.lyricsOn.set(!this.lyricsShown());
+    relayout(this.dialog()?.nativeElement ?? null, () => {
+      this.lyricsEdit.set(false);
+      this.lyricsOn.set(!this.lyricsShown());
+      return this.rendered();
+    });
+  }
+
+  /** Settles after Angular's next render; registering it schedules one. */
+  private rendered(): Promise<void> {
+    return new Promise((resolve) => afterNextRender(() => resolve(), { injector: this.injector }));
   }
 
   protected editLyrics(): void {

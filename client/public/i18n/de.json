@@ -5492,7 +5492,6 @@
     "line_bonus": "Zeilenbonus {{n}}",
     "close": "Schließen",
     "singer": "Sänger {{n}}",
-    "queue_title": "Als Nächstes",
     "admin": {
       "title": "Karaoke",
       "desc": "Trennt die Stimme eines Titels, damit man dazu singen kann, und synchronisiert den Text Wort für Wort.",

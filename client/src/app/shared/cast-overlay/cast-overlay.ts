@@ -1,7 +1,6 @@
-import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucidePause, LucidePlay, LucideX } from '@lucide/angular';
+import { LucideX } from '@lucide/angular';
 import { DeviceIconComponent } from '../device-chip/device-icon';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -16,11 +15,12 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { MarqueeComponent } from '../components/marquee';
 import { SwipeTrackComponent } from '../audio-player/swipe-track';
+import { PlayerBarComponent } from '../player-bar/player-bar';
 
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [NgTemplateOutlet, LucidePause, LucidePlay, LucideX, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe, MarqueeComponent, SwipeTrackComponent],
+  imports: [LucideX, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe, MarqueeComponent, SwipeTrackComponent, PlayerBarComponent],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {

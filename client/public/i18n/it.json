@@ -5492,7 +5492,6 @@
     "line_bonus": "bonus riga {{n}}",
     "close": "Chiudi",
     "singer": "Cantante {{n}}",
-    "queue_title": "Prossimi",
     "admin": {
       "title": "Karaoke",
       "desc": "Separa la voce di un brano per cantarci sopra e sincronizza il testo parola per parola.",

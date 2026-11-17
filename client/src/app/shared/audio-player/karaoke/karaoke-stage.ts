@@ -15,7 +15,6 @@ import { GOLD, SINGER_COLOURS, singerStyle } from '../../../core/services/karaok
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { LyricsViewComponent } from '../lyrics/lyrics-view';
-import { KaraokeQueueComponent } from './karaoke-queue';
 
 const BEHIND_MS = 2000;
 const AHEAD_MS = 6000;
@@ -44,7 +43,7 @@ function readMix(): SavedMix | null {
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores, the mix bar and the settings. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeQueueComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
+  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
@@ -99,7 +98,6 @@ export class KaraokeStageComponent {
   private readonly range = computed(() => laneRange(this.doc(), this.pitch()));
   protected readonly hasMelody = computed(() => (this.doc().cueLine ?? []).some((l) => l.cue.some((c) => c.pitch !== undefined)));
   protected readonly canSing = this.karaoke.canSing;
-  protected readonly inParty = this.party.active;
 
   protected readonly status = computed(() => {
     const issue = this.karaoke.micIssue();

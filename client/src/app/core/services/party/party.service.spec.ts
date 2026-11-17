@@ -141,18 +141,6 @@ describe('PartyService queue', () => {
 });
 
 describe('PartyService programme as the one queue', () => {
-  const row = (n: number, addedBy: number | null) => ({ ...item(9), itemId: 5000 + n, mediaType: 'album', addedBy });
-
-  it('lists the next three rows after the playing one with their authors', () => {
-    const { svc } = setup();
-    svc.applySnapshot(dto(1, { item: { ...row(2, 1), episodeId: null } }));
-    svc.live.set({ rev: 1, state: 'playing', item: row(2, 1), anchor: { position: 0, serverTimeMs: 0 }, whenMs: null, by: null, action: null });
-    svc.programme.set([row(1, 1), row(2, 1), row(3, 2), row(4, 1), row(5, 2), row(6, 1)]);
-    expect(svc.upNext().map((r) => r.itemId)).toEqual([5003, 5004, 5005]);
-    svc.programme.set([row(1, 1)]);
-    expect(svc.upNext()).toEqual([row(1, 1)]);
-  });
-
   it('adds and removes rows through the programme routes', async () => {
     const { svc, api } = setup();
     svc.applySnapshot(dto(1));

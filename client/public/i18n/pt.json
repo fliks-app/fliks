@@ -5492,7 +5492,6 @@
     "line_bonus": "bónus de linha {{n}}",
     "close": "Fechar",
     "singer": "Cantor {{n}}",
-    "queue_title": "A seguir",
     "admin": {
       "title": "Karaoke",
       "desc": "Separa a voz de uma faixa para cantar por cima e sincroniza a letra palavra a palavra.",
