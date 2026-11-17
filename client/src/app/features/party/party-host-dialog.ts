@@ -36,7 +36,7 @@ export class PartyHostDialogComponent {
   protected readonly busy = signal(false);
   protected readonly min = signal('');
   protected readonly newWhen = signal('');
-  protected readonly draft = signal<PartySwitches>({ policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false });
+  protected readonly draft = signal<PartySwitches>({ policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, rotation: false, public: false });
   protected readonly cover = signal<CoverDraft>(AUTO_COVER);
   protected readonly coverOptions = signal<CoverOption[]>([]);
   private readonly coverDiff = computed(() => coverChange(this.view().cover, this.cover()));
@@ -50,7 +50,7 @@ export class PartyHostDialogComponent {
 
   show(): void {
     const v = this.view();
-    this.draft.set({ policy: v.policy, reactionsEnabled: v.reactionsEnabled, chatEnabled: v.chatEnabled, linkSharing: v.linkSharing, public: v.public });
+    this.draft.set({ policy: v.policy, reactionsEnabled: v.reactionsEnabled, chatEnabled: v.chatEnabled, linkSharing: v.linkSharing, rotation: v.rotation, public: v.public });
     this.newWhen.set(v.scheduledAt ? toLocalInput(new Date(v.scheduledAt)) : '');
     this.min.set(toLocalInput(new Date()));
     this.cover.set(draftFromCover(v.cover));

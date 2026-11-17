@@ -104,6 +104,10 @@ export class PartySync {
       this.toast.info(this.translate.instant('party.audio_busy'));
       return true;
     }
+    if (c.type === 'enqueue') {
+      if (this.gate()) void this.party.addToProgramme(c.tracks.map((t) => ({ mediaId: t.mediaId, itemId: t.itemId })), c.where);
+      return true;
+    }
     if (c.type === 'queue') {
       void this.editProgramme(c.tracks);
       return true;
@@ -223,15 +227,16 @@ export class PartySync {
     if (this.gate()) await this.party.sendIntent('setItem', { item });
   }
 
-  /** An edit of the audio queue is an edit of the programme: the host sends it, a member proposes what it added. */
+  /** A move or removal in the audio queue is an edit of the programme: the host sends the list, a member removes their own rows. */
   private async editProgramme(tracks: readonly MusicTrackRequest[]): Promise<void> {
     const rows = this.party.programme();
-    // A mixed programme is read-only here: the queue shows its tracks only.
-    if (rows.length && rows.every(isTrack)) {
+    const kept = (r: PartyItem) => tracks.some((t) => t.itemId === r.itemId);
+    // A mixed programme is read-only here (the queue shows its tracks only); a refusal puts the queue back.
+    if (this.party.isHost()) {
       const next = tracks.map((t) => ({ mediaId: t.mediaId, itemId: t.itemId }));
-      // The programme event brings the new rows; a refusal or a proposal puts the queue back on the old ones.
-      if (this.party.isHost() && (await this.party.setProgramme(next))) return;
-      if (!this.party.isHost()) for (const t of next.filter((t) => !rows.some((r) => sameItem(r, t)))) await this.party.proposeTrack(t.mediaId, t.itemId);
+      if (rows.length && rows.every(isTrack) && (await this.party.setProgramme(next))) return;
+    } else {
+      for (const r of rows.filter((r) => isTrack(r) && !kept(r))) await this.party.removeFromProgramme(r.itemId!);
     }
     await this.projectQueue();
   }
@@ -377,31 +382,13 @@ export class PartySync {
     });
   });
 
-  /** The host's natural end: the server idles the party and moves it on along its queue. */
+  /** The host's natural end: the server moves the party on along its programme, or idles it. */
   private readonly endedEffect = effect(() => {
     const out = this.out();
     if (!out?.ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      this.advanceFrom = out.item();
       void this.party.sendIntent('ended', { item: itemIn(out.item()) });
-    });
-  });
-
-  /** The item the host's end was sent for, until the party moves on or idles on it. */
-  private advanceFrom: ReturnType<PartyPlayable['item']> | null = null;
-
-  /** An idle party with songs waiting in the singer queue goes on to the next singer. */
-  private readonly singerEffect = effect(() => {
-    const live = this.party.live();
-    const from = this.advanceFrom;
-    if (!from || !live) return;
-    untracked(() => {
-      if (!sameItem(live.item, from)) this.advanceFrom = null;
-      else if (live.state === 'idle') {
-        this.advanceFrom = null;
-        if (this.party.isHost() && this.party.singerQueue().length > 0) void this.party.advanceSinger(from);
-      }
     });
   });
 

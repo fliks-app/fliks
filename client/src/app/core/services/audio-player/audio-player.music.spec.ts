@@ -451,17 +451,19 @@ describe('AudioPlayerService music mode', () => {
       expect(audio.queue()).toBe(before);
     });
 
-    it('sends a queue edit to the party, which holds the programme, and keeps the playing row', async () => {
+    it('hands an enqueue to the party and sends a queue edit to it, which holds the programme, and keeps the playing row', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
       const router = vi.fn((c: { type: string }) => c.type !== 'external');
       audio.setPartyRouter(router as never);
       audio.enqueueTracks([track(3)], 'last');
-      expect(router).toHaveBeenCalledWith({ type: 'queue', tracks: expect.arrayContaining([expect.objectContaining({ itemId: 3 })]) });
+      expect(router).toHaveBeenCalledWith({ type: 'enqueue', tracks: [expect.objectContaining({ itemId: 3 })], where: 'last' });
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
       audio.removeFromQueue(1);
-      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 3]);
+      expect(router).toHaveBeenCalledWith({ type: 'queue', tracks: [expect.objectContaining({ itemId: 1 })] });
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1]);
       audio.removeFromQueue(0);
-      expect(audio.queue().map((t) => t.itemId)).toEqual([1, 3]);
+      expect(audio.queue().map((t) => t.itemId)).toEqual([1]);
       audio.setShuffle(true);
       expect(audio.shuffle()).toBe(false);
     });

@@ -26,6 +26,7 @@ pub struct Row {
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
     pub link_sharing: bool,
+    pub rotation: bool,
     pub public: bool,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub status: String,
@@ -57,7 +58,7 @@ const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id, p."hostId" AS host_
     CASE WHEN it."groupId" IS NOT NULL THEN it.id END AS episode_id, it.id AS item_id,
     p."playlistId" AS playlist_id, p."inviteToken" AS invite_token,
     p.policy, p."reactionsEnabled" AS reactions_enabled, p."chatEnabled" AS chat_enabled,
-    p."linkSharing" AS link_sharing, p."public" AS public, p."scheduledAt" AS scheduled_at, p.status, p.position, p.cover"#;
+    p."linkSharing" AS link_sharing, p.rotation, p."public" AS public, p."scheduledAt" AS scheduled_at, p.status, p.position, p.cover"#;
 
 const FROM: &str = r#"watch_parties p LEFT JOIN LATERAL (
     SELECT "itemId", "mediaFileId" FROM watch_party_items
@@ -79,6 +80,7 @@ pub struct New<'a> {
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
     pub link_sharing: bool,
+    pub rotation: bool,
     pub public: bool,
     pub scheduled_at: DateTime<Utc>,
     pub cover: Option<&'a Cover>,
@@ -87,9 +89,12 @@ pub struct New<'a> {
 }
 
 /// The owner's host switches on their latest party, for the next one's defaults.
-pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(bool, bool, bool)>> {
+pub async fn owner_switches(
+    db: &PgPool,
+    owner: i32,
+) -> sqlx::Result<Option<(bool, bool, bool, bool)>> {
     sqlx::query_as(
-        r#"SELECT "reactionsEnabled", "chatEnabled", "linkSharing" FROM watch_parties
+        r#"SELECT "reactionsEnabled", "chatEnabled", "linkSharing", rotation FROM watch_parties
            WHERE "ownerId" = $1 ORDER BY "createdAt" DESC, id DESC LIMIT 1"#,
     )
     .bind(owner)
@@ -156,8 +161,8 @@ pub async fn insert(
     };
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO watch_parties (name, "ownerId", "playlistId", "inviteToken", policy,
-               "reactionsEnabled", "chatEnabled", "linkSharing", "public", "scheduledAt", cover, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'scheduled')
+               "reactionsEnabled", "chatEnabled", "linkSharing", rotation, "public", "scheduledAt", cover, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'scheduled')
            RETURNING id"#,
     )
     .bind(n.name)
@@ -168,12 +173,19 @@ pub async fn insert(
     .bind(n.reactions_enabled)
     .bind(n.chat_enabled)
     .bind(n.link_sharing)
+    .bind(n.rotation)
     .bind(n.public)
     .bind(scheduled_at)
     .bind(n.cover.map(Json))
     .fetch_one(&mut *tx)
     .await?;
-    insert_items(&mut tx, id, n.programme).await?;
+    insert_items(
+        &mut tx,
+        id,
+        n.programme,
+        &vec![Some(n.owner); n.programme.len()],
+    )
+    .await?;
     add_invitees_in(&mut tx, id, invitees).await?;
     let row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLS} FROM {FROM} WHERE p.id = $1"
@@ -198,27 +210,35 @@ pub async fn set_cover(
     Ok(())
 }
 
-async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -> sqlx::Result<()> {
+async fn insert_items(
+    tx: &mut sqlx::PgConnection,
+    party: i32,
+    items: &[Item],
+    authors: &[Option<i32>],
+) -> sqlx::Result<()> {
     sqlx::query(
-        r#"INSERT INTO watch_party_items ("partyId", position, "itemId", "mediaFileId")
-           SELECT $1, (n - 1)::int, COALESCE(i, item_of(m, e)), f
-           FROM unnest($2::int[], $3::int[], $4::int[], $5::int[]) WITH ORDINALITY AS t(m, f, e, i, n)"#,
+        r#"INSERT INTO watch_party_items ("partyId", position, "itemId", "mediaFileId", "addedBy")
+           SELECT $1, (n - 1)::int, COALESCE(i, item_of(m, e)), f, a
+           FROM unnest($2::int[], $3::int[], $4::int[], $5::int[], $6::int[])
+                WITH ORDINALITY AS t(m, f, e, i, a, n)"#,
     )
     .bind(party)
     .bind(items.iter().map(|i| i.media_id).collect::<Vec<_>>())
     .bind(items.iter().map(|i| i.media_file_id).collect::<Vec<_>>())
     .bind(items.iter().map(|i| i.episode_id).collect::<Vec<_>>())
     .bind(items.iter().map(|i| i.item_id).collect::<Vec<_>>())
+    .bind(authors)
     .execute(tx)
     .await?;
     Ok(())
 }
 
-/// Replaces the programme and the cover left over it, in one transaction.
+/// Replaces the programme (each row with its author) and the cover left over it, in one transaction.
 pub async fn set_programme(
     db: &PgPool,
     party: i32,
     items: &[Item],
+    authors: &[Option<i32>],
     cover: Option<&Cover>,
 ) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
@@ -227,7 +247,7 @@ pub async fn set_programme(
         .bind(party)
         .execute(&mut *tx)
         .await?;
-    insert_items(&mut tx, party, items).await?;
+    insert_items(&mut tx, party, items, authors).await?;
     tx.commit().await
 }
 
@@ -497,14 +517,14 @@ pub async fn update_settings(
     id: i32,
     name: &str,
     policy: Policy,
-    switches: (bool, bool, bool, bool),
+    switches: (bool, bool, bool, bool, bool),
     scheduled_at: Option<DateTime<Utc>>,
     token: &str,
 ) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE watch_parties SET name = $2, policy = $3, "reactionsEnabled" = $4,
-               "chatEnabled" = $5, "linkSharing" = $6, "public" = $7, "scheduledAt" = $8,
-               "inviteToken" = $9
+               "chatEnabled" = $5, "linkSharing" = $6, rotation = $7, "public" = $8,
+               "scheduledAt" = $9, "inviteToken" = $10
            WHERE id = $1"#,
     )
     .bind(id)
@@ -514,6 +534,7 @@ pub async fn update_settings(
     .bind(switches.1)
     .bind(switches.2)
     .bind(switches.3)
+    .bind(switches.4)
     .bind(scheduled_at)
     .bind(token)
     .execute(db)
@@ -838,15 +859,18 @@ pub async fn playlist_names(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i3
 pub struct QueueRow {
     pub item: Item,
     pub playable: bool,
+    /// Who added the row; unset for a playlist row not in a programme yet.
+    pub added_by: Option<i32>,
 }
 
-type ProgrammeRow = (i32, Option<i32>, Option<i32>, i32, bool);
+type ProgrammeRow = (i32, Option<i32>, Option<i32>, i32, bool, Option<i32>);
 
 /// The programme in its order.
 pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<ProgrammeRow> = sqlx::query_as(
         r#"SELECT it."mediaId", i."mediaFileId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, it.id,
-                  (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number")))
+                  (EXISTS (SELECT 1 FROM item_parts p JOIN items e ON e.id = p."itemId" WHERE p."itemId" = i."itemId" AND NOT EXISTS (SELECT 1 FROM item_parts q JOIN items j ON j.id = q."itemId" WHERE q."mediaFileId" = p."mediaFileId" AND j."number" < e."number"))),
+                  i."addedBy"
            FROM watch_party_items i JOIN items it ON it.id = i."itemId"
            WHERE i."partyId" = $1 ORDER BY i.position"#,
     )
@@ -856,7 +880,7 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
     Ok(rows
         .into_iter()
         .map(
-            |(media_id, media_file_id, episode_id, item_id, playable)| QueueRow {
+            |(media_id, media_file_id, episode_id, item_id, playable, added_by)| QueueRow {
                 item: Item {
                     media_id,
                     media_file_id,
@@ -864,6 +888,7 @@ pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRo
                     item_id: Some(item_id),
                 },
                 playable,
+                added_by,
             },
         )
         .collect())
@@ -888,6 +913,7 @@ pub async fn track_rows(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<QueueRow>>
                 item_id: Some(item_id),
             },
             playable: true,
+            added_by: None,
         })
         .collect())
 }
@@ -913,6 +939,7 @@ pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<Queue
                 item_id: Some(item_id),
             },
             playable,
+            added_by: None,
         })
         .collect())
 }
@@ -971,6 +998,7 @@ mod tests {
             reactions_enabled: true,
             chat_enabled: true,
             link_sharing: false,
+            rotation: false,
             public: false,
             scheduled_at: Utc::now() + chrono::Duration::hours(1),
             cover: None,

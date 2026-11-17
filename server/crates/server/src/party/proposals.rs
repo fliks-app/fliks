@@ -1,12 +1,11 @@
-//! Proposals and votes of a party, and the karaoke singer queue they make up (`docs/spec/watch-party.md`,
-//! Proposals; `docs/spec/karaoke.md` rule 37).
+//! Proposals and votes of a party before its start (`docs/spec/watch-party.md`, Proposals).
 use super::{
     db,
-    dto::{NextIn, PartyDto, PartyItem, ProposalDto, ProposalIn, ProposalsIn, VoteIn},
+    dto::{PartyDto, PartyItem, ProposalDto, ProposalIn, ProposalsIn, VoteIn},
     registry::{hold, item_dtos, note, note_held},
     routes::{
-        Edit, PartyError, R, advance_held, conceal_items, edit_held, fail, host_of, member_row,
-        not_found, require_host, require_open,
+        Edit, R, conceal_items, edit_held, fail, host_of, member_row, not_found, require_host,
+        require_open,
     },
 };
 use crate::{
@@ -25,18 +24,13 @@ use axum::{
     http::StatusCode,
     routing::{delete, post},
 };
-use fliks_domain::{
-    js::now_ms,
-    party::{Item, State as PlayState, same_row},
-};
+use fliks_domain::{js::now_ms, party::Item};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use std::collections::HashMap;
 
 const MAX_PROPOSALS: i64 = 30;
 const RATE_WINDOW_MS: i64 = 10_000;
 const MAX_PER_WINDOW: usize = 10;
-const DEFAULT_QUEUE_CAP: i64 = 2;
 
 pub(super) fn proposal_router() -> Router<AppState> {
     Router::new()
@@ -47,7 +41,6 @@ pub(super) fn proposal_router() -> Router<AppState> {
             "/api/parties/{id}/proposals/{pid}/vote",
             delete(unvote).put(vote),
         )
-        .route("/api/parties/{id}/proposals/next", post(next_singer))
         .route("/api/parties/{id}/proposals/{pid}/choose", post(choose))
 }
 
@@ -62,7 +55,7 @@ async fn raw(db: &PgPool, party: i32) -> sqlx::Result<Vec<Raw>> {
            FROM watch_party_proposals p
            JOIN items it ON it.id = p."itemId" JOIN media m ON m.id = it."mediaId"
            LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
-           WHERE p."partyId" = $1 AND p."chosenAt" IS NULL
+           WHERE p."partyId" = $1
            GROUP BY p.id, it.id, m.type ORDER BY p."createdAt", p.id"#,
     )
     .bind(party)
@@ -93,7 +86,6 @@ async fn resolve(st: &AppState, party: i32) -> Result<Vec<ProposalDto>, AppError
         })
         .collect();
     let items = item_dtos(st, &items).await?;
-    let positions: HashMap<i32, i32> = queue(&st.db, party).await?.into_iter().zip(1..).collect();
     Ok(rows
         .into_iter()
         .zip(items)
@@ -104,60 +96,9 @@ async fn resolve(st: &AppState, party: i32) -> Result<Vec<ProposalDto>, AppError
                 proposed_by,
                 upvoter_ids,
                 downvoter_ids,
-                queue_position: positions.get(&id).copied(),
             },
         )
         .collect())
-}
-
-/// Round-robin over `(proposal, singer)` entries, oldest first: every singer's n-th song before
-/// anyone's (n+1)-th; inside a round the singer whose last song (`last`, ms) is oldest, then the
-/// one whose first entry is oldest.
-fn round_robin(entries: &[(i32, i32)], last: &HashMap<i32, i64>) -> Vec<i32> {
-    let mut seen: HashMap<i32, (usize, usize)> = HashMap::new();
-    let mut keyed: Vec<_> = entries
-        .iter()
-        .enumerate()
-        .map(|(i, &(id, singer))| {
-            let (n, first) = seen.entry(singer).or_insert((0, i));
-            let key = (
-                *n,
-                last.get(&singer).copied().unwrap_or(i64::MIN),
-                *first,
-                i,
-            );
-            *n += 1;
-            (key, id)
-        })
-        .collect();
-    keyed.sort();
-    keyed.into_iter().map(|(_, id)| id).collect()
-}
-
-/// The pending track proposals of a party in singing order.
-async fn queue(db: &PgPool, party: i32) -> sqlx::Result<Vec<i32>> {
-    let rows: Vec<(i32, i32, Option<i64>)> = sqlx::query_as(
-        r#"SELECT p.id, p."proposedBy", (extract(epoch FROM p."chosenAt") * 1000)::bigint
-           FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
-           JOIN media m ON m.id = it."mediaId" AND m.type = 'album'
-           WHERE p."partyId" = $1 ORDER BY p."createdAt", p.id"#,
-    )
-    .bind(party)
-    .fetch_all(db)
-    .await?;
-    let mut last: HashMap<i32, i64> = HashMap::new();
-    for &(_, singer, at) in &rows {
-        if let Some(at) = at {
-            let e = last.entry(singer).or_insert(at);
-            *e = (*e).max(at);
-        }
-    }
-    let pending: Vec<_> = rows
-        .iter()
-        .filter(|r| r.2.is_none())
-        .map(|r| (r.0, r.1))
-        .collect();
-    Ok(round_robin(&pending, &last))
 }
 
 async fn conceal(st: &AppState, viewer: i32, all: &mut [ProposalDto]) -> Result<(), AppError> {
@@ -184,16 +125,15 @@ async fn announce(st: &AppState, row: &db::Row) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The film proposal the start takes (a track is a singer's song, not a vote): the most upvotes, then the fewest downvotes; a tie on both is a
+/// The proposal the start takes: the most upvotes, then the fewest downvotes; a tie on both is a
 /// 409 the host settles by accepting one.
 pub(super) async fn top(db: &PgPool, party: i32) -> R<Option<Item>> {
     let rows: Vec<(i32, Option<i32>, i32, i64, i64)> = sqlx::query_as(
         r#"SELECT it."mediaId", CASE WHEN it."groupId" IS NOT NULL THEN it.id END, it.id,
                   count(*) FILTER (WHERE v."value" = 1), count(*) FILTER (WHERE v."value" = -1)
            FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
-           JOIN media m ON m.id = it."mediaId" AND m.type <> 'album'
            LEFT JOIN watch_party_votes v ON v."proposalId" = p.id
-           WHERE p."partyId" = $1 AND p."chosenAt" IS NULL GROUP BY p.id, it.id
+           WHERE p."partyId" = $1 GROUP BY p.id, it.id
            ORDER BY 4 DESC, 5 ASC LIMIT 2"#,
     )
     .bind(party)
@@ -242,30 +182,30 @@ pub(super) async fn forget_users(
     Ok(())
 }
 
-pub(super) async fn clear(db: &PgPool, party: i32) -> sqlx::Result<()> {
-    sqlx::query(r#"DELETE FROM watch_party_proposals WHERE "partyId" = $1"#)
+pub(super) async fn clear(db: &PgPool, party: i32) -> sqlx::Result<u64> {
+    let done = sqlx::query(r#"DELETE FROM watch_party_proposals WHERE "partyId" = $1"#)
         .bind(party)
         .execute(db)
         .await?;
+    Ok(done.rows_affected())
+}
+
+/// Drops the proposals and votes when the party goes live, and tells the owner and guests.
+pub(super) async fn drop_all(st: &AppState, row: &db::Row) -> Result<(), AppError> {
+    if clear(&st.db, row.id).await? > 0 {
+        announce(st, row).await?;
+    }
     Ok(())
 }
 
-/// The row of a party a member may still propose on (`live` only for tracks, checked by the
-/// caller); the machine of a lobby is not needed.
+/// The row of a party a member may still propose or vote on: proposals end with the lobby.
 async fn open_row(st: &AppState, id: i32, me: i32) -> R<db::Row> {
     let row = member_row(st, id, me).await?;
     require_open(&row)?;
+    if row.status != "scheduled" {
+        return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
+    }
     Ok(row)
-}
-
-async fn queue_cap(st: &AppState) -> i64 {
-    crate::settings::setting_value(&st.db, "karaoke.queue_cap")
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.trim().parse::<i64>().ok())
-        .unwrap_or(DEFAULT_QUEUE_CAP)
-        .clamp(1, 20)
 }
 
 /// Adds the proposal, or only the caller's vote when the title is already proposed.
@@ -324,21 +264,14 @@ async fn add_proposals(
     for item in &items {
         assert_media_accessible(&st.db, item.media_id, &ids).await?;
         super::routes::check_item(st, item, &ids).await?;
-        let (target, track): (i32, bool) = sqlx::query_as(
-            r#"SELECT t.id, m.type = 'album' FROM items t JOIN media m ON m.id = t."mediaId"
-               WHERE t.id = COALESCE($1, item_of($2, $3))"#,
-        )
-        .bind(item.item_id)
-        .bind(item.media_id)
-        .bind(item.episode_id)
-        .fetch_one(&st.db)
-        .await?;
-        if row.status != "scheduled" && !track {
-            return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
-        }
-        targets.push((target, track));
+        let target: i32 = sqlx::query_scalar("SELECT COALESCE($1, item_of($2, $3))")
+            .bind(item.item_id)
+            .bind(item.media_id)
+            .bind(item.episode_id)
+            .fetch_one(&st.db)
+            .await?;
+        targets.push(target);
     }
-    let cap = queue_cap(st).await;
     let mut tx = st.db.begin().await?;
     // The party row lock serializes the counts and the insert.
     sqlx::query(
@@ -349,10 +282,10 @@ async fn add_proposals(
     .await?
     .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_not_scheduled"))?;
     let mut added = 0;
-    for &(target, track) in &targets {
+    for &target in &targets {
         let existing: Option<i32> = sqlx::query_scalar(
             r#"SELECT id FROM watch_party_proposals
-               WHERE "partyId" = $1 AND "itemId" = $2 AND "chosenAt" IS NULL"#,
+               WHERE "partyId" = $1 AND "itemId" = $2"#,
         )
         .bind(id)
         .bind(target)
@@ -361,38 +294,8 @@ async fn add_proposals(
         let pid = match existing {
             Some(pid) => pid,
             None => {
-                if track {
-                    let queued: bool = sqlx::query_scalar(
-                        r#"SELECT EXISTS (SELECT 1 FROM watch_party_items i JOIN watch_parties p ON p.id = i."partyId"
-                           WHERE i."partyId" = $1 AND i."itemId" = $2
-                             AND (p.status = 'scheduled' OR i."itemId" IS NOT DISTINCT FROM p."itemId"
-                                  OR i.position > COALESCE((SELECT c.position FROM watch_party_items c
-                                                            WHERE c."partyId" = $1 AND c."itemId" = p."itemId"), -1)))"#,
-                    )
-                    .bind(id)
-                    .bind(target)
-                    .fetch_one(&mut *tx)
-                    .await?;
-                    if queued {
-                        return Err(fail(StatusCode::CONFLICT, "party.error_in_programme"));
-                    }
-                    let mine: i64 = sqlx::query_scalar(
-                        r#"SELECT count(*) FROM watch_party_proposals p
-                           JOIN items it ON it.id = p."itemId"
-                           JOIN media m ON m.id = it."mediaId" AND m.type = 'album'
-                           WHERE p."partyId" = $1 AND p."proposedBy" = $2 AND p."chosenAt" IS NULL"#,
-                    )
-                    .bind(id)
-                    .bind(me)
-                    .fetch_one(&mut *tx)
-                    .await?;
-                    if mine >= cap {
-                        return Err(fail(StatusCode::CONFLICT, "party.error_queue_full"));
-                    }
-                }
                 let count: i64 = sqlx::query_scalar(
-                    r#"SELECT count(*) FROM watch_party_proposals
-                       WHERE "partyId" = $1 AND "chosenAt" IS NULL"#,
+                    r#"SELECT count(*) FROM watch_party_proposals WHERE "partyId" = $1"#,
                 )
                 .bind(id)
                 .fetch_one(&mut *tx)
@@ -456,7 +359,7 @@ async fn proposal(st: &AppState, id: i32, pid: i32) -> R<(i32, Item)> {
                   CASE WHEN m.type = 'album' THEN it.id END
            FROM watch_party_proposals p JOIN items it ON it.id = p."itemId"
            JOIN media m ON m.id = it."mediaId"
-           WHERE p.id = $1 AND p."partyId" = $2 AND p."chosenAt" IS NULL"#,
+           WHERE p.id = $1 AND p."partyId" = $2"#,
     )
     .bind(pid)
     .bind(id)
@@ -580,116 +483,15 @@ pub async fn choose(
     let mut row = open_row(&st, id, me).await?;
     require_host(&st, &row, me)?;
     let _held = hold(&st, id).await;
-    take(&st, &a, &mut row, pid).await?;
-    Ok(Json(super::routes::dto(&st, &row, me, true).await?))
-}
-
-/// The host plays the head of the singer queue (`karaoke.md` rule 37).
-#[utoipa::path(post, path = "/api/parties/{id}/proposals/next", responses((status = 200)))]
-pub async fn next_singer(
-    State(st): State<AppState>,
-    SessionAuthed(a): SessionAuthed,
-    PathParams(id): PathParams<i32>,
-    ValidJson(b): ValidJson<NextIn>,
-) -> R<Json<PartyDto>> {
-    let me = a.user.id;
-    let mut row = open_row(&st, id, me).await?;
-    require_host(&st, &row, me)?;
-    let advance = match (b.from, b.device_id) {
-        (Some(from), Some(device)) => Some((Item::from(from), device)),
-        (None, _) => None,
-        (Some(_), None) => return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid")),
-    };
-    let _held = hold(&st, id).await;
-    if let Some((from, _)) = &advance {
-        let idle_on_from = st.parties.view(id).is_some_and(|v| {
-            v.item.as_ref().is_some_and(|i| same_row(i, from))
-                && v.playback.is_some_and(|p| p.state == PlayState::Idle)
-        });
-        if !idle_on_from {
-            return Ok(Json(super::routes::dto(&st, &row, me, true).await?));
-        }
-    }
-    let queue = queue(&st.db, id).await?;
-    if queue.is_empty() {
-        return Err(fail(StatusCode::CONFLICT, "party.error_queue_empty"));
-    }
-    // A head some member cannot open is passed over, not left to block the queue.
-    let mut passed = vec![];
-    let mut refused = None;
-    let mut taken = false;
-    for pid in queue {
-        match take(&st, &a, &mut row, pid).await {
-            Ok(()) => {
-                taken = true;
-                break;
-            }
-            Err(e @ PartyError::Extra(_, "party.error_member_no_access", ..)) => {
-                passed.push(proposal(&st, id, pid).await?.1);
-                refused.get_or_insert(e);
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    if !taken {
-        return Err(refused.expect("a non-empty queue"));
-    }
-    for item in &passed {
-        note_held(
-            &st,
-            &row,
-            "item_skipped",
-            &a.user.username,
-            item_args(item, json!({})),
-        )
-        .await?;
-    }
-    if let Some((_, device)) = advance {
-        advance_held(&st, &row, me, &device).await?;
-    }
-    Ok(Json(super::routes::dto(&st, &row, me, true).await?))
-}
-
-/// Appends proposal `pid`'s item to the programme; a track proposal leaves the queue but keeps
-/// its singer's turn. The caller holds the party's gate.
-async fn take(st: &AppState, a: &Authed, row: &mut db::Row, pid: i32) -> R<()> {
-    let (_, item) = proposal(st, row.id, pid).await?;
-    let track = item.item_id.is_some();
-    let edit = if track {
-        Edit::Requeue(item.clone())
-    } else {
-        Edit::Append(item.clone())
-    };
-    edit_held(st, a, row, edit).await?;
-    if track {
-        sqlx::query(r#"UPDATE watch_party_proposals SET "chosenAt" = now() WHERE id = $1"#)
-            .bind(pid)
-            .execute(&st.db)
-            .await?;
-        announce(st, row).await?;
-    }
+    let (_, item) = proposal(&st, id, pid).await?;
+    edit_held(&st, &a, &mut row, Edit::Append(item.clone())).await?;
     note_held(
-        st,
-        row,
+        &st,
+        &row,
         "proposal_chosen",
         &a.user.username,
         item_args(&item, json!({})),
     )
     .await?;
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rounds_go_singer_by_singer_the_least_recent_first() {
-        // a: 1 2 3, b: 4, c: 5 6; c sang last night, a never, b earlier.
-        let all = [(1, 10), (2, 10), (3, 10), (4, 20), (5, 30), (6, 30)];
-        let last = HashMap::from([(30, 900), (20, 100)]);
-        assert_eq!(round_robin(&all, &last), [1, 4, 5, 2, 6, 3]);
-        assert_eq!(round_robin(&all, &HashMap::new()), [1, 4, 5, 2, 6, 3]);
-        assert!(round_robin(&[], &last).is_empty());
-    }
+    Ok(Json(super::routes::dto(&st, &row, me, true).await?))
 }

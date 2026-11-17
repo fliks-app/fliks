@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 
+mod place;
+pub use place::{Full, Rule, Where, place};
+
 pub const WAIT_TIMEOUT_MS: i64 = 10_000;
 pub const MIN_START_DELAY_MS: i64 = 500;
 pub const AWAY_GRACE_MS: i64 = 120_000;
@@ -240,6 +243,7 @@ pub enum Effect {
         reactions_enabled: bool,
         chat_enabled: bool,
         link_sharing: bool,
+        rotation: bool,
         public: bool,
     },
     Message(Message),
@@ -309,6 +313,8 @@ pub struct Room {
     pub chat_enabled: bool,
     /// Whether members, not only the host, receive the invite token.
     pub link_sharing: bool,
+    /// Whether members' additions to the programme take turns.
+    pub rotation: bool,
     /// Whether the party is listed to every user allowed to see public parties.
     pub public: bool,
     pub host_id: i32,
@@ -359,6 +365,7 @@ impl Room {
             reactions_enabled: true,
             chat_enabled: true,
             link_sharing: true,
+            rotation: false,
             public: false,
             host_id,
             rev: now.max(1) as u64,
@@ -540,7 +547,7 @@ impl Room {
         by: &str,
         name: Option<String>,
         policy: Option<Policy>,
-        switches: [Option<bool>; 4],
+        switches: [Option<bool>; 5],
         now: i64,
     ) -> Vec<Effect> {
         let mut changes = vec![];
@@ -555,11 +562,12 @@ impl Room {
             ));
             self.policy = p;
         }
-        let [reactions, chat, link, public] = switches;
+        let [reactions, chat, link, rotation, public] = switches;
         let flags = [
             ("reactionsEnabled", &mut self.reactions_enabled, reactions),
             ("chatEnabled", &mut self.chat_enabled, chat),
             ("linkSharing", &mut self.link_sharing, link),
+            ("rotation", &mut self.rotation, rotation),
             ("public", &mut self.public, public),
         ];
         for (setting, current, new) in flags {
@@ -576,6 +584,7 @@ impl Room {
             reactions_enabled: self.reactions_enabled,
             chat_enabled: self.chat_enabled,
             link_sharing: self.link_sharing,
+            rotation: self.rotation,
             public: self.public,
         }];
         for (kind, args) in changes {
@@ -2053,7 +2062,7 @@ mod tests {
         let mut l = party();
         let r = l.room.rev;
         l.room
-            .set_settings("h", Some("n".into()), Some(Policy::HostOnly), [None; 4], 0);
+            .set_settings("h", Some("n".into()), Some(Policy::HostOnly), [None; 5], 0);
         assert_eq!(l.room.rev, r + 1);
         for i in 0..250 {
             l.room
@@ -2083,7 +2092,7 @@ mod tests {
             "h",
             Some(name),
             Some(policy),
-            [Some(true), Some(false), None, Some(false)],
+            [Some(true), Some(false), None, None, Some(false)],
             0,
         );
         assert_eq!(
@@ -2100,7 +2109,7 @@ mod tests {
         };
         let fx = l
             .room
-            .set_settings("h", Some("n".into()), Some(other), [None; 4], 1);
+            .set_settings("h", Some("n".into()), Some(other), [None; 5], 1);
         assert_eq!(
             kinds(&fx),
             [
@@ -2121,7 +2130,7 @@ mod tests {
             "h",
             None,
             None,
-            [Some(false), Some(false), Some(false), Some(true)],
+            [Some(false), Some(false), Some(false), None, Some(true)],
             0,
         );
         assert!(matches!(
@@ -2146,7 +2155,7 @@ mod tests {
             "h",
             None,
             None,
-            [Some(true), Some(true), Some(true), Some(false)],
+            [Some(true), Some(true), Some(true), None, Some(false)],
             0,
         );
         assert!(l.room.react(1, "d1", "x", 0).is_ok());

@@ -204,13 +204,18 @@ enum MusicTransport: Equatable {
         queueChanged()
     }
 
+    /// A party takes enqueued tracks (`next`: right after the playing one) instead of the local queue.
+    var enqueueIntercept: (([QueueTrack], Bool) -> Bool)?
+
     func addNext(_ tracks: [QueueTrack]) {
+        if enqueueIntercept?(tracks, true) == true { return }
         if current == nil { return play(tracks) }
         queue.addNext(tracks)
         queueChanged()
     }
 
     func addLast(_ tracks: [QueueTrack]) {
+        if enqueueIntercept?(tracks, false) == true { return }
         if current == nil { return play(tracks) }
         queue.addLast(tracks)
         queueChanged()

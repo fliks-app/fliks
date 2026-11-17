@@ -1,4 +1,4 @@
-import { computed, provideZonelessChangeDetection, signal } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -21,7 +21,7 @@ import { TvService } from '../../core/services/tv.service';
 import { PartyPageComponent } from './party-page';
 
 const item = (mediaId: number, episodeId: number | null = null) =>
-  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false, additionalFanartUrls: [] }) as PartyItem;
+  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, mediaType: 'movie', hidden: false, addedBy: null, additionalFanartUrls: [] }) as PartyItem;
 const dto = (it: PartyItem | null) =>
   ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, cover: null, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
 
@@ -31,7 +31,7 @@ describe('PartyPageComponent film selection', () => {
   let enter: ReturnType<typeof vi.fn>;
   let connected: ReturnType<typeof signal<boolean>>;
   let lobby: ReturnType<typeof signal<boolean>>;
-  let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>>; filmProposals: ReturnType<typeof computed<PartyProposal[]>> };
+  let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>> };
   const flush = async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
     TestBed.tick();
@@ -44,7 +44,7 @@ describe('PartyPageComponent film selection', () => {
     connected = signal(true);
     lobby = signal(false);
     const proposals = signal<PartyProposal[]>([]);
-    service = { party: signal<PartyDto | null>(null), proposals, filmProposals: computed(() => proposals()) };
+    service = { party: signal<PartyDto | null>(null), proposals };
     const stub = (v: object) => v as never;
     vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
     TestBed.overrideComponent(PartyPageComponent, { set: { template: '', imports: [] } });

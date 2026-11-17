@@ -236,12 +236,25 @@ export class AudioPlayerComponent {
   protected readonly invite = viewChild(PartyInviteComponent);
   /** The host invites people; a member only shares the link, when the party has one. */
   protected readonly canInviteParty = computed(() => this.party.isHost() || !!this.party.party()?.inviteToken);
-  /** The queue's remove, move and drag: not on another device's session, and in a party only for the host of an all-track programme. */
+  private readonly me = inject(AuthService).user;
+  /** The queue's move and drag: not on another device's session, and in a party only for the host of an all-track programme. */
   protected readonly queueLocked = computed(() => {
     if (this.remoteView()) return true;
     const rows = this.party.programme();
     return this.party.active() && !(this.party.isHost() && rows.length > 0 && rows.every(isTrack));
   });
+  /** Removing a row: where the queue is editable, or in a party an upcoming row the member added. */
+  protected canRemove(q: MusicTrackRequest, i: number): boolean {
+    if (!this.queueLocked()) return true;
+    if (this.remoteView() || !this.party.active() || this.party.isHost()) return false;
+    return i > this.audio.queueIndex() && this.party.programme().find((r) => r.itemId === q.itemId)?.addedBy === this.me()?.id;
+  }
+
+  /** The user who added a track of a party's queue, empty outside a party. */
+  protected author(q: MusicTrackRequest): string {
+    return this.party.active() ? this.party.userName(this.party.programme().find((r) => r.itemId === q.itemId)?.addedBy ?? null) : '';
+  }
+
   /** A solo track of the local player the user may turn into a party (not an audiobook, not a remote's session). */
   protected readonly canStartParty = computed(
     () => !this.party.active() && this.partyApi.canCreate() && this.local.musicMode() && !!this.local.track() && !this.remoteView() && !this.local.isCasting(),

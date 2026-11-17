@@ -24,6 +24,13 @@
     (valueChange)="changed.emit({ linkSharing: $event })"
   />
   <app-toggle-field
+    [label]="'party.switch_rotation' | translate"
+    [hint]="'party.switch_rotation_hint' | translate"
+    [disabled]="disabled()"
+    [value]="value().rotation"
+    (valueChange)="changed.emit({ rotation: $event })"
+  />
+  <app-toggle-field
     [label]="'party.switch_public' | translate"
     [hint]="'party.switch_public_hint' | translate"
     [disabled]="disabled()"

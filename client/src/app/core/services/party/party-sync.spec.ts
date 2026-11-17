@@ -32,8 +32,6 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
-    singerQueue: signal<unknown[]>([]),
-    advanceSinger: vi.fn().mockResolvedValue(undefined),
     closed,
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
@@ -42,7 +40,8 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     drives: signal(true),
     programme: signal<unknown[]>([]),
     setProgramme: vi.fn().mockResolvedValue(true),
-    proposeTrack: vi.fn().mockResolvedValue(true),
+    addToProgramme: vi.fn().mockResolvedValue(true),
+    removeFromProgramme: vi.fn().mockResolvedValue(undefined),
     leaveOrEnd: vi.fn().mockResolvedValue(true),
   };
   const cast = {
@@ -243,21 +242,6 @@ describe('PartySync queue', () => {
     TestBed.tick();
     await Promise.resolve();
     expect(party.sendIntent.mock.calls).toEqual([['ended', { item: { mediaId: 1 } }]]);
-  });
-
-  it('plays the next singer once the party idles on the ended item, not when it moved on', async () => {
-    const { party, state } = setup({ joined: 3 });
-    party.isHost.set(true);
-    party.singerQueue.set([{ id: 1 }]);
-    state.ended.set(true);
-    TestBed.tick();
-    party.live.set({ state: 'idle', item: { mediaId: 1 } });
-    TestBed.tick();
-    expect(party.advanceSinger).toHaveBeenCalledTimes(1);
-    expect(party.advanceSinger).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 1 }));
-    party.live.set({ state: 'idle', item: { mediaId: 1 } });
-    TestBed.tick();
-    expect(party.advanceSinger).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the answer on a film to the server', async () => {
@@ -624,18 +608,36 @@ describe('PartySync programme as queue', () => {
     await vi.waitFor(() => expect(party.setProgramme).toHaveBeenCalledWith([{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }]));
   });
 
-  it('turns what a member adds into proposals and keeps a mixed programme read-only', async () => {
-    const { party, audio } = setup({ joined: 3 });
+  it('adds enqueued tracks to the programme, after the host-only gate', async () => {
+    const { party, audio, toast } = setup({ joined: 3 });
     const a = row(4, null, 'album', 70);
     party.programme.set([a]);
     party.live.set(live(a));
     TestBed.tick();
-    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 72 }] } as never);
-    await vi.waitFor(() => expect(party.proposeTrack).toHaveBeenCalledWith(4, 72));
+    const tracks = [{ mediaId: 4, itemId: 70 }];
+    expect(audio.router!({ type: 'enqueue', tracks, where: 'next' } as never)).toBe(true);
+    expect(party.addToProgramme).toHaveBeenCalledWith(tracks, 'next');
+    party.canControl.set(false);
+    expect(audio.router!({ type: 'enqueue', tracks, where: 'last' } as never)).toBe(true);
+    expect(party.addToProgramme).toHaveBeenCalledTimes(1);
+    expect(toast.info).toHaveBeenCalled();
+  });
+
+  it('removes the rows a member took out of the queue and keeps a mixed host programme read-only', async () => {
+    const { party, audio } = setup({ joined: 3 });
+    const a = row(4, null, 'album', 70);
+    const b = row(4, null, 'album', 71);
+    party.programme.set([a, b]);
+    party.live.set(live(a));
+    TestBed.tick();
+    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }] } as never);
+    await vi.waitFor(() => expect(party.removeFromProgramme).toHaveBeenCalledWith(71));
+    expect(party.setProgramme).not.toHaveBeenCalled();
+    party.isHost.set(true);
     party.programme.set([a, row(1, 5)]);
     audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 73 }] } as never);
     await Promise.resolve();
-    expect(party.proposeTrack).toHaveBeenCalledTimes(1);
     expect(party.setProgramme).not.toHaveBeenCalled();
+    expect(party.removeFromProgramme).toHaveBeenCalledTimes(1);
   });
 });

@@ -518,14 +518,16 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
             "PATCH",
             &url,
             &a,
-            Some(json!({"chatEnabled": false, "reactionsEnabled": false})),
+            Some(json!({"chatEnabled": false, "reactionsEnabled": false, "rotation": true})),
         )
         .await;
     assert_eq!(
         (s, p["chatEnabled"].clone(), p["reactionsEnabled"].clone()),
         (200, json!(false), json!(false))
     );
+    assert_eq!(p["rotation"], json!(true));
     let settings = events_of(&mut sb, "party.settings").await;
+    assert_eq!(settings.last().unwrap()["rotation"], json!(true));
     assert_eq!(settings.last().unwrap()["chatEnabled"], json!(false));
     assert_eq!(settings.last().unwrap()["reactionsEnabled"], json!(false));
 
@@ -562,6 +564,11 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
             next["reactionsEnabled"].clone()
         ),
         (json!(false), json!(false))
+    );
+    assert_eq!(
+        next["rotation"],
+        json!(true),
+        "the turns switch is inherited"
     );
     let (_, own) = c
         .call(
@@ -2884,16 +2891,22 @@ async fn track(c: &Ctx, url: &str, tok: &str, n: i32) -> (u16, Value) {
     .await
 }
 
-fn position_of(list: &Value, n: i32) -> Value {
-    list.as_array()
-        .unwrap()
+async fn add_tracks(c: &Ctx, url: &str, tok: &str, tracks: &[i32], place: &str) -> (u16, Value) {
+    let items: Vec<_> = tracks
         .iter()
-        .find(|p| p["item"]["itemId"] == 5000 + n)
-        .map_or(Value::Null, |p| p["queuePosition"].clone())
+        .map(|n| json!({"mediaId": 500, "itemId": 5000 + n}))
+        .collect();
+    c.call(
+        "POST",
+        &format!("{url}/programme/items"),
+        tok,
+        Some(json!({"items": items, "where": place})),
+    )
+    .await
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_live_party_queues_tracks_round_robin_with_a_cap_and_a_cancel(pool: PgPool) {
+async fn members_add_by_turn_with_a_cap_and_remove_their_own_rows(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (alice, a) = c.user("alice", true).await;
@@ -2901,149 +2914,113 @@ async fn a_live_party_queues_tracks_round_robin_with_a_cap_and_a_cancel(pool: Pg
     let (cara, cc) = c.user("cara", true).await;
     c.follow(alice, bob).await;
     c.follow(alice, cara).await;
-    let url = bare_party(&c, &a, &[bob, cara]).await;
-    let (s, _) = c
-        .call(
-            "POST",
-            &format!("{url}/select"),
-            &a,
-            Some(json!({"mediaId": 1})),
-        )
+    let _sa = c.stream(&a, "da").await;
+    let _sb = c.stream(&b, "db").await;
+    let _sc = c.stream(&cc, "dc").await;
+    let url = singing_party(&c, &a, &[(bob, &b, "db"), (cara, &cc, "dc")]).await;
+    let (s, p) = c
+        .call("PATCH", &url, &a, Some(json!({"rotation": true})))
         .await;
-    assert_eq!(s, 200);
-    let (s, _) = c.call("POST", &format!("{url}/start"), &a, None).await;
-    assert_eq!(s, 200);
+    assert_eq!((s, p["rotation"].clone()), (200, json!(true)));
 
-    let (s, e) = propose(&c, &url, &b, 1).await;
-    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
-    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
-    assert_eq!(track(&c, &url, &a, 2).await.0, 201);
-    assert_eq!(track(&c, &url, &b, 3).await.0, 201);
-    let (s, l) = track(&c, &url, &cc, 4).await;
-    assert_eq!(s, 201);
-    let (s, e) = track(&c, &url, &a, 5).await;
+    assert_eq!(add_tracks(&c, &url, &a, &[1, 2], "last").await.0, 200);
+    assert_eq!(add_tracks(&c, &url, &b, &[3], "next").await.0, 200);
+    assert_eq!(add_tracks(&c, &url, &cc, &[4], "last").await.0, 200);
+    assert_eq!(add_tracks(&c, &url, &b, &[5], "last").await.0, 200);
+    let (s, e) = add_tracks(&c, &url, &b, &[6], "last").await;
     assert_eq!((s, msg(&e)), (409, Some("party.error_queue_full")));
-    let order: Vec<Value> = (1..=4).map(|n| position_of(&l, n)).collect();
-    assert_eq!(order, [json!(1), json!(4), json!(2), json!(3)]);
+    let o = programme_items(&c, &url).await;
+    assert_eq!(o[1..], [5003, 5004, 5001, 5005, 5002]);
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
+    let by: Vec<_> = q
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["addedBy"].clone())
+        .collect();
+    assert_eq!(
+        by[1..],
+        [
+            json!(bob),
+            json!(cara),
+            json!(alice),
+            json!(bob),
+            json!(alice)
+        ]
+    );
 
-    let by_bob = l.as_array().unwrap()[2]["id"].as_i64().unwrap();
     let (s, e) = c
-        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &cc, None)
+        .call("DELETE", &format!("{url}/programme/items/5003"), &cc, None)
         .await;
     assert_eq!((s, msg(&e)), (403, Some("party.error_not_author")));
     let (s, _) = c
-        .call("DELETE", &format!("{url}/proposals/{by_bob}"), &b, None)
-        .await;
-    assert_eq!(s, 204);
-
-    let (s, _) = c
-        .call("POST", &format!("{url}/proposals/next"), &b, None)
-        .await;
-    assert_eq!(s, 403);
-    let (s, p) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .call("DELETE", &format!("{url}/programme/items/5003"), &b, None)
         .await;
     assert_eq!(s, 200);
-    assert_eq!(p["proposals"].as_array().unwrap().len(), 2);
-    assert_eq!(position_of(&p["proposals"], 4), json!(1), "alice just sang");
-    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
-    assert_eq!(q.as_array().unwrap().len(), 2);
-    let (s, e) = track(&c, &url, &b, 1).await;
-    assert_eq!((s, msg(&e)), (409, Some("party.error_in_programme")));
-
-    for _ in 0..2 {
-        let (s, _) = c
-            .call("POST", &format!("{url}/proposals/next"), &a, None)
-            .await;
-        assert_eq!(s, 200);
-    }
     let (s, e) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, None)
+        .call(
+            "DELETE",
+            &format!("{url}/programme/items/{}", o[0]),
+            &a,
+            None,
+        )
         .await;
-    assert_eq!((s, msg(&e)), (409, Some("party.error_queue_empty")));
-    let (s, l) = track(&c, &url, &a, 6).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_item_playing")));
+
+    // The host is not held to the turns: `next` is right after the playing row.
+    assert_eq!(add_tracks(&c, &url, &a, &[6], "next").await.0, 200);
     assert_eq!(
-        (s, position_of(&l, 6)),
-        (201, json!(1)),
-        "a chosen row frees the cap"
+        programme_items(&c, &url).await[1..],
+        [5006, 5004, 5001, 5005, 5002]
+    );
+    let (s, _) = c
+        .call("DELETE", &format!("{url}/programme/items/5004"), &a, None)
+        .await;
+    assert_eq!(s, 200, "the host removes any row");
+    let (s, _) = c
+        .call("PATCH", &url, &a, Some(json!({"rotation": false})))
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(add_tracks(&c, &url, &b, &[3], "next").await.0, 200);
+    assert_eq!(
+        programme_items(&c, &url).await[1],
+        5003,
+        "without turns a member's next is literal"
     );
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_played_track_can_be_proposed_again_and_moves_to_the_end_of_the_programme(pool: PgPool) {
+async fn a_played_track_added_again_moves_to_its_new_place(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (_alice, a) = c.user("alice", true).await;
-    let url = bare_party(&c, &a, &[]).await;
-    let id: i32 = url.rsplit('/').next().unwrap().parse().unwrap();
-    let (s, _) = c
-        .call(
-            "POST",
-            &format!("{url}/select"),
-            &a,
-            Some(json!({"mediaId": 1})),
-        )
-        .await;
-    assert_eq!(s, 200);
-    assert_eq!(
-        c.call("POST", &format!("{url}/start"), &a, None).await.0,
-        200
-    );
     let _stream = c.stream(&a, "da").await;
-    assert_eq!(join(&c, &url, &a, "da").await.0, 200);
-    let next = || async {
+    let url = singing_party(&c, &a, &[]).await;
+    assert_eq!(add_tracks(&c, &url, &a, &[1, 2], "last").await.0, 200);
+    for _ in 0..2 {
         let (_, now) = c.call("GET", &url, &a, None).await;
         let rev = now["live"]["rev"].as_u64().unwrap();
-        c.call(
-            "POST",
-            &format!("{url}/intent"),
-            &a,
-            Some(json!({"deviceId": "da", "action": "next", "baseRev": rev})),
-        )
-        .await
-        .0
-    };
-    let order = || async {
-        sqlx::query_scalar::<_, i32>(
-            r#"SELECT "itemId" FROM watch_party_items WHERE "partyId" = $1 ORDER BY position"#,
-        )
-        .bind(id)
-        .fetch_all(&c.pool)
-        .await
-        .unwrap()
-    };
-    for n in [1, 2] {
-        assert_eq!(track(&c, &url, &a, n).await.0, 201);
         let (s, _) = c
-            .call("POST", &format!("{url}/proposals/next"), &a, None)
+            .call(
+                "POST",
+                &format!("{url}/intent"),
+                &a,
+                Some(json!({"deviceId": "da", "action": "next", "baseRev": rev})),
+            )
             .await;
-        assert_eq!(s, 200);
-        assert_eq!(next().await, 202);
+        assert_eq!(s, 202);
     }
-    let (s, e) = track(&c, &url, &a, 2).await;
+    let (s, e) = add_tracks(&c, &url, &a, &[2], "last").await;
     assert_eq!(
         (s, msg(&e)),
         (409, Some("party.error_in_programme")),
         "playing"
     );
-    assert_eq!(track(&c, &url, &a, 1).await.0, 201, "played");
-    let (s, _) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, None)
-        .await;
-    assert_eq!(s, 200);
-    let o = order().await;
+    let (s, e) = add_tracks(&c, &url, &a, &[1, 1], "last").await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid_item")));
+    assert_eq!(add_tracks(&c, &url, &a, &[1], "last").await.0, 200);
+    let o = programme_items(&c, &url).await;
     assert_eq!((o.len(), o[1], o[2]), (3, 5002, 5001));
-    let chosen: i64 = sqlx::query_scalar(
-        r#"SELECT count(*) FROM watch_party_proposals WHERE "partyId" = $1 AND "itemId" = 5001 AND "chosenAt" IS NOT NULL"#,
-    )
-    .bind(id)
-    .fetch_one(&c.pool)
-    .await
-    .unwrap();
-    assert_eq!(chosen, 2, "both turns are kept");
-    assert_eq!(next().await, 202);
-    let (_, now) = c.call("GET", &url, &a, None).await;
-    assert_eq!(now["item"]["itemId"], 5001);
 }
 
 /// A live party on the film, its host (alice) joined as device `da`, with `others` (user, token, device) joined.
@@ -3083,55 +3060,6 @@ async fn programme_items(c: &Ctx, url: &str) -> Vec<i32> {
     .unwrap()
 }
 
-#[sqlx::test(migrations = false)]
-async fn two_hosts_ending_the_same_song_advance_the_party_once(pool: PgPool) {
-    let c = ctx(pool).await;
-    album_tracks(&c).await;
-    let (_alice, a) = c.user("alice", true).await;
-    let _stream = c.stream(&a, "da").await;
-    let url = singing_party(&c, &a, &[]).await;
-    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
-    assert_eq!(track(&c, &url, &a, 2).await.0, 201);
-    let (_, now) = c.call("GET", &url, &a, None).await;
-    assert_eq!(now["live"]["playback"]["state"], "idle");
-
-    let body = json!({"from": {"mediaId": 1}, "deviceId": "da"});
-    let next = format!("{url}/proposals/next");
-    let calls = (0..2).map(|_| c.call("POST", &next, &a, Some(body.clone())));
-    let results = futures_util::future::join_all(calls).await;
-    assert!(results.iter().all(|r| r.0 == 200));
-    assert_eq!(
-        programme_items(&c, &url).await.len(),
-        2,
-        "one song was taken"
-    );
-    let (_, now) = c.call("GET", &url, &a, None).await;
-    assert_eq!(now["item"]["itemId"], 5001);
-    assert_eq!(now["live"]["playback"]["state"], "waiting");
-    let left = now["proposals"].as_array().unwrap().len();
-    assert_eq!(left, 1, "the second song still waits");
-
-    // The party is no longer idle on the film: a late call changes nothing.
-    let (s, _) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, Some(body))
-        .await;
-    assert_eq!(s, 200);
-    assert_eq!(programme_items(&c, &url).await.len(), 2);
-    let (s, e) = c
-        .call(
-            "POST",
-            &format!("{url}/proposals/next"),
-            &a,
-            Some(json!({"from": {"mediaId": 1}})),
-        )
-        .await;
-    assert_eq!(
-        (s, msg(&e)),
-        (400, Some("party.error_invalid")),
-        "from needs a device"
-    );
-}
-
 /// An album in a second library that alice opens and nobody else does: items 6001 and 6002.
 async fn hidden_album(c: &Ctx, alice: i32) {
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
@@ -3153,7 +3081,7 @@ async fn hidden_album(c: &Ctx, alice: i32) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_head_song_a_member_cannot_open_is_passed_over_and_named(pool: PgPool) {
+async fn a_song_a_member_cannot_open_is_refused_and_names_them(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (alice, a) = c.user("alice", true).await;
@@ -3163,56 +3091,27 @@ async fn a_head_song_a_member_cannot_open_is_passed_over_and_named(pool: PgPool)
     let _sa = c.stream(&a, "da").await;
     let _sb = c.stream(&b, "db").await;
     let url = singing_party(&c, &a, &[(bob, &b, "db")]).await;
-    let hidden = c
+    let (s, e) = c
         .call(
             "POST",
-            &format!("{url}/proposals"),
+            &format!("{url}/programme/items"),
             &a,
-            Some(json!({"mediaId": 600, "itemId": 6001})),
+            Some(json!({"items": [{"mediaId": 600, "itemId": 6001}], "where": "last"})),
         )
-        .await;
-    assert_eq!(hidden.0, 201);
-    assert_eq!(track(&c, &url, &a, 1).await.0, 201);
-
-    let (s, p) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, None)
-        .await;
-    assert_eq!(s, 200);
-    let o = programme_items(&c, &url).await;
-    assert_eq!((o.len(), o[1]), (2, 5001));
-    let pending: Vec<_> = p["proposals"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|q| q["item"]["itemId"].clone())
-        .collect();
-    assert_eq!(
-        pending,
-        [json!(6001)],
-        "the passed-over song keeps its place"
-    );
-    assert!(
-        systems(&p)
-            .iter()
-            .any(|(k, args)| k == "item_skipped" && args["mediaId"] == 600)
-    );
-
-    let (s, e) = c
-        .call("POST", &format!("{url}/proposals/next"), &a, None)
         .await;
     assert_eq!(
         (s, msg(&e), e["usernames"].clone()),
         (409, Some("party.error_member_no_access"), json!(["bob"]))
     );
+    assert_eq!(programme_items(&c, &url).await.len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
+async fn a_choose_and_a_cancel_of_one_proposal_are_ordered(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (_alice, a) = c.user("alice", true).await;
-    let _stream = c.stream(&a, "da").await;
-    let url = singing_party(&c, &a, &[]).await;
+    let url = bare_party(&c, &a, &[]).await;
     for n in 1..=5 {
         let (s, l) = track(&c, &url, &a, n).await;
         assert_eq!(s, 201);
@@ -3234,12 +3133,116 @@ async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
         );
         let in_programme = programme_items(&c, &url).await.contains(&(5000 + n));
         assert_eq!(chosen.0 == 200, in_programme, "round {n}");
-        assert_ne!(
-            chosen.0 == 200,
-            cancelled.0 == 204,
-            "round {n}: exactly one wins"
+        assert!(
+            chosen.0 == 200 || chosen.0 == 404,
+            "round {n}: a choose after the cancel is a 404"
         );
+        assert_eq!(cancelled.0, 204, "round {n}");
     }
+}
+
+#[sqlx::test(migrations = false)]
+async fn put_programme_keeps_the_author_of_the_rows_it_keeps(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let _sa = c.stream(&a, "da").await;
+    let _sb = c.stream(&b, "db").await;
+    let url = singing_party(&c, &a, &[(bob, &b, "db")]).await;
+    assert_eq!(add_tracks(&c, &url, &b, &[1], "last").await.0, 200);
+    let items = json!([{"mediaId": 500, "itemId": 5001}, {"mediaId": 500, "itemId": 5002}]);
+    let (s, _) = c
+        .call(
+            "PUT",
+            &format!("{url}/programme"),
+            &a,
+            Some(json!({"items": items})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
+    let by: Vec<_> = q
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["addedBy"].clone())
+        .collect();
+    assert_eq!(by, [json!(bob), json!(alice)]);
+    let (s, e) = c
+        .call(
+            "PUT",
+            &format!("{url}/programme"),
+            &b,
+            Some(json!({"items": []})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn proposals_and_votes_end_when_the_party_goes_live(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 2).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let url = bare_party(&c, &a, &[bob]).await;
+    assert_eq!(propose(&c, &url, &b, 2).await.0, 201);
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/select"),
+            &a,
+            Some(json!({"mediaId": 1})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        c.call("POST", &format!("{url}/start"), &a, None).await.0,
+        200
+    );
+    let (_, now) = c.call("GET", &url, &a, None).await;
+    assert_eq!(now["proposals"], json!([]));
+    let (s, e) = propose(&c, &url, &b, 2).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+    let (s, e) = c
+        .call(
+            "PUT",
+            &format!("{url}/proposals/1/vote"),
+            &b,
+            Some(json!({"value": 1})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+    let (s, e) = c
+        .call("POST", &format!("{url}/proposals/1/choose"), &a, None)
+        .await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_not_scheduled")));
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_who_controls_playback_adds_to_the_programme(pool: PgPool) {
+    let c = ctx(pool).await;
+    album_tracks(&c).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let _sa = c.stream(&a, "da").await;
+    let _sb = c.stream(&b, "db").await;
+    let url = singing_party(&c, &a, &[(bob, &b, "db")]).await;
+    let (s, _) = c
+        .call("PATCH", &url, &a, Some(json!({"policy": "host_only"})))
+        .await;
+    assert_eq!(s, 200);
+    let (s, e) = add_tracks(&c, &url, &b, &[1], "last").await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_host_only")));
+    assert_eq!(add_tracks(&c, &url, &a, &[1], "last").await.0, 200);
+    let (s, e) = c
+        .call("DELETE", &format!("{url}/programme/items/9999"), &a, None)
+        .await;
+    assert_eq!((s, msg(&e)), (404, Some("party.error_not_found")));
 }
 
 /// A second library with a film in it, which alice opens and nobody else does.

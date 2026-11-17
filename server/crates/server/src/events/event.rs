@@ -601,6 +601,7 @@ pub enum SseEvent {
         reactions_enabled: bool,
         chat_enabled: bool,
         link_sharing: bool,
+        rotation: bool,
         public: bool,
     },
     #[serde(rename = "party.message")]

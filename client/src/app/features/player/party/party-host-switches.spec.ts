@@ -10,21 +10,21 @@ describe('PartyHostSwitchesComponent', () => {
       providers: [provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } })],
     });
     const fixture = TestBed.createComponent(PartyHostSwitchesComponent);
-    fixture.componentRef.setInput('value', { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false });
+    fixture.componentRef.setInput('value', { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, rotation: false, public: false });
     const emitted: unknown[] = [];
     fixture.componentInstance.changed.subscribe((p: unknown) => emitted.push(p));
     fixture.detectChanges();
     const boxes = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>('input[type=checkbox]');
-    expect(boxes.length).toBe(5);
-    boxes[4].click();
+    expect(boxes.length).toBe(6);
+    boxes[5].click();
     expect(emitted).toEqual([{ public: true }]);
   });
 });
 
 describe('switchesPatch', () => {
   it('keeps only the switches that changed', () => {
-    const from = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, public: false } as const;
+    const from = { policy: 'everyone', reactionsEnabled: true, chatEnabled: true, linkSharing: true, rotation: false, public: false } as const;
     expect(switchesPatch(from, { ...from })).toEqual({});
-    expect(switchesPatch(from, { ...from, chatEnabled: false, public: true })).toEqual({ chatEnabled: false, public: true });
+    expect(switchesPatch(from, { ...from, chatEnabled: false, rotation: true })).toEqual({ chatEnabled: false, rotation: true });
   });
 });

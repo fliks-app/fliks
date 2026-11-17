@@ -45,6 +45,8 @@ export interface PartyItem {
   episodeTitle: string | null;
   /** A programme row the viewer cannot open: masked, but still part of the list the host sends back. */
   hidden: boolean;
+  /** Who added the row to the programme (a karaoke row's singer); null on any other item. */
+  addedBy: number | null;
 }
 
 export interface PartyUser {
@@ -130,6 +132,8 @@ export interface PartySwitches {
   reactionsEnabled: boolean;
   chatEnabled: boolean;
   linkSharing: boolean;
+  /** Members' additions to the programme take turns ("Chacun son tour"). */
+  rotation: boolean;
   /** Visible to every user holding `parties.read_public`. */
   public: boolean;
 }
@@ -140,15 +144,13 @@ export interface PartyGuest extends PartyUser {
   source: PartyGuestSource;
 }
 
-/** A film or track put forward by a member; `item.hidden` when the viewer cannot open it. */
+/** A title put forward by a member before the start; `item.hidden` when the viewer cannot open it. */
 export interface PartyProposal {
   id: number;
   item: PartyItem;
   proposedBy: number;
   upvoterIds: number[];
   downvoterIds: number[];
-  /** A pending track proposal's place in the singer queue, from 1 (`karaoke.md` rule 31). */
-  queuePosition?: number;
 }
 
 export interface PartyDto extends PartySummaryDto, PartySwitches {
@@ -172,6 +174,7 @@ export interface CreatePartyBody {
   reactionsEnabled?: boolean;
   chatEnabled?: boolean;
   linkSharing?: boolean;
+  rotation?: boolean;
   public?: boolean;
   inviteeIds?: number[];
   items?: PartyItemIn[];
@@ -268,21 +271,21 @@ export class PartyApiService {
     );
   }
 
+  /** Adds rows right after the playing one (`next`) or at the end; a member of a party that takes turns is placed by turn. */
+  addToProgramme(id: number, items: PartyItemIn[], where: 'next' | 'last') {
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/programme/items`, { items, where }));
+  }
+
+  /** The host removes any row but the playing one, a member the upcoming rows they added. */
+  removeFromProgramme(id: number, itemId: number) {
+    return firstValueFrom(this.http.delete<PartyDto>(`/api/parties/${id}/programme/items/${itemId}`));
+  }
+
   proposeMany(id: number, items: { mediaId: number; episodeId: number | null; itemId?: number }[]) {
     const body = {
       items: items.map(({ mediaId, episodeId, itemId }) => ({ mediaId, ...(episodeId != null && { episodeId }), ...(itemId != null && { itemId }) })),
     };
     return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals/batch`, body));
-  }
-
-  /** A track put forward as a song to sing, on a scheduled or live party. */
-  proposeTrack(id: number, mediaId: number, itemId: number) {
-    return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals`, { mediaId, itemId }));
-  }
-
-  /** Host: `choose` of the head of the singer queue; with `from` and `deviceId` it also moves the party on, only while it idles on `from`. */
-  nextSinger(id: number, advance?: { from: PartyItemIn; deviceId: string }) {
-    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/proposals/next`, advance ?? {}));
   }
 
   unpropose(id: number, proposalId: number) {
