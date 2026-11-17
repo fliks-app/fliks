@@ -27,7 +27,7 @@ export class MicCapture {
 
   /** `now` is the clock the frames are stamped with: host media time in ms. */
   async start(onFrame: (f: PitchFrame) => void, now: () => number): Promise<void> {
-    if (Capacitor.getPlatform() === 'android') return this.startNative(onFrame, now);
+    if (['android', 'ios'].includes(Capacitor.getPlatform())) return this.startNative(onFrame, now);
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
@@ -46,14 +46,15 @@ export class MicCapture {
     }
   }
 
-  /** The WebView's echo canceller would put Android in call mode, so the platform one runs natively. */
+  /** Android: the WebView's echo canceller would put the phone in call mode. iOS: WebKit's capture opens a session that interrupts the music. Both capture natively. */
   private async startNative(onFrame: (f: PitchFrame) => void, now: () => number): Promise<void> {
     const win = new PitchWindow();
     const smooth = new PitchSmoother();
     let rate = 48000;
     this.native = await KaraokeMic.addListener('block', ({ data }) => {
       const pcm = new Int16Array(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)).buffer);
-      onFrame({ t: now(), midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
+      // The pitch comes from the window ending at this block: stamp the middle of it, where the sound was.
+      onFrame({ t: now() - (WINDOW / 2 / rate) * 1000, midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
     });
     try {
       rate = (await KaraokeMic.start()).sampleRate;
