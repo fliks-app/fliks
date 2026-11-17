@@ -20,7 +20,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 /** The instrumental and vocals stems of the playing track, two players slaved to the queue's player. */
 @OptIn(markerClass = UnstableApi.class)
 final class StemCompanions {
-    static final long DRIFT_MS = 150;
+    static final long DRIFT_MS = 500;
+    private static final long NUDGE_MS = 40;
+    private static final float NUDGE = 0.04f;
     private static final long TICK_MS = 250;
 
     /** What a mix does to the sound: the queue player's own level and each stem's. */
@@ -34,7 +36,7 @@ final class StemCompanions {
         }
     }
 
-    /** True when a stem has drifted far enough from the queue player to be seeked. */
+    /** Beyond this a stem is seeked; below it a speed nudge catches up, since every seek flushes the audio. */
     static boolean needsReseek(long mainMs, long stemMs) {
         return Math.abs(mainMs - stemMs) > DRIFT_MS;
     }
@@ -153,8 +155,11 @@ final class StemCompanions {
         long at = main.getCurrentPosition();
         PlaybackParameters rate = main.getPlaybackParameters();
         for (ExoPlayer p : new ExoPlayer[]{instrumental, vocals}) {
-            if (!p.getPlaybackParameters().equals(rate)) p.setPlaybackParameters(rate);
+            long drift = at - p.getCurrentPosition();
             if (needsReseek(at, p.getCurrentPosition())) p.seekTo(at);
+            PlaybackParameters want = new PlaybackParameters(
+                    rate.speed * (drift > NUDGE_MS ? 1 + NUDGE : drift < -NUDGE_MS ? 1 - NUDGE : 1), rate.pitch);
+            if (!p.getPlaybackParameters().equals(want)) p.setPlaybackParameters(want);
             if (p.getPlayWhenReady() != run) p.setPlayWhenReady(run);
         }
     }
