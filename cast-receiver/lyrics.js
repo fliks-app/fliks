@@ -1,4 +1,4 @@
-/* Lyrics of the receiver: the sender's chunked document, the active line and each word's fill. */
+/* Lyrics of the receiver: the sender's chunked document, the active line and its words. */
 (function (root) {
   'use strict';
 
@@ -56,12 +56,6 @@
     return out;
   }
 
-  /** Fill 0..100 of each cue at `posMs`. */
-  function fills(cues, posMs, offset) {
-    const t = posMs + (offset || 0);
-    return cues.map((c) => (t <= c.start ? 0 : t >= c.end || c.end <= c.start ? 100 : ((t - c.start) / (c.end - c.start)) * 100));
-  }
-
   /** The sender of the current LOAD owns the lyrics; true when another sender held them (its document is stale). */
   function claim(state, senderId) {
     const replaced = !!state.sender && state.sender !== senderId;
@@ -74,7 +68,7 @@
     return !state.sender || state.sender === senderId;
   }
 
-  const api = { createAssembler, activeIndex, segments, fills, claim, owns };
+  const api = { createAssembler, activeIndex, segments, claim, owns };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FliksLyrics = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -20,7 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
-const { createAssembler, activeIndex, segments, fills, claim, owns } = self.FliksLyrics;
+const { createAssembler, activeIndex, segments, claim, owns } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -780,10 +780,32 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 // The sender pushes the document in chunks (`lyrics`) and drops it with `lyrics_clear`; the receiver follows its own clock.
 
 const lyricsEl = document.getElementById('lyrics');
-const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], add: createAssembler() };
+const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], wipes: [], add: createAssembler() };
+// A sung word is lit by two counter-moving layers: transforms only, so the compositor runs the wipe at full frame rate.
+const WIPE = [{ transform: 'translateX(-100%)' }, { transform: 'none' }];
+const WIPE_BACK = [{ transform: 'translateX(100%)' }, { transform: 'none' }];
+const WIPE_SLACK_MS = 50;
+
+/** A cued word, its spaces left outside so the line still wraps between words. */
+function wordEl(line, text) {
+  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  const word = document.createElement('span');
+  word.className = 'word';
+  word.textContent = core;
+  const wipe = document.createElement('span');
+  wipe.className = 'wipe';
+  const fill = document.createElement('span');
+  fill.className = 'wipe-fill';
+  fill.textContent = core;
+  wipe.appendChild(fill);
+  word.appendChild(wipe);
+  line.append(lead, word, trail);
+  return { wipe, fill };
+}
 
 /** Every line of the document in one column, words wrapped where a line has cues. */
 function buildLyrics(doc, timed) {
+  stopWipes();
   const list = document.createElement('div');
   list.className = timed ? 'lyrics-list' : 'lyrics-list static';
   lyricsState.rows = [];
@@ -793,13 +815,8 @@ function buildLyrics(doc, timed) {
     line.className = 'lyric';
     const words = [];
     for (const seg of row.cues && row.cues.length ? segments(row.text, row.cues) : [{ text: row.text, cue: null }]) {
-      const span = document.createElement('span');
-      span.textContent = seg.text;
-      if (seg.cue !== null) {
-        span.className = 'word';
-        words[seg.cue] = span;
-      }
-      line.appendChild(span);
+      if (seg.cue !== null) words[seg.cue] = wordEl(line, seg.text);
+      else line.append(seg.text);
     }
     list.appendChild(line);
     lyricsState.rows.push(line);
@@ -818,6 +835,35 @@ function showLine(i) {
   if (line) lyricsState.list.style.transform = `translateY(${-(line.offsetTop + line.offsetHeight / 2)}px)`;
 }
 
+function stopWipes() {
+  for (const w of lyricsState.wipes) w.anims.forEach((a) => a.cancel());
+  lyricsState.wipes = [];
+}
+
+/** Arms the wipe of each word of line `i`; syncWipes keeps them on the media clock. */
+function wipeLine(i) {
+  stopWipes();
+  const row = lyricsState.doc.rows[i];
+  (row && row.cues ? row.cues : []).forEach((cue, k) => {
+    const el = lyricsState.words[i][k];
+    if (!el) return;
+    const timing = { duration: Math.max(1, cue.end - cue.start), fill: 'both', easing: 'linear' };
+    lyricsState.wipes.push({ cue, duration: timing.duration, anims: [el.wipe.animate(WIPE, timing), el.fill.animate(WIPE_BACK, timing)] });
+  });
+}
+
+/** The wipes follow the playback state, and are moved only when they drift from the media clock `t`. */
+function syncWipes(t, playing) {
+  for (const w of lyricsState.wipes) {
+    const at = Math.min(t - w.cue.start, w.duration);
+    for (const a of w.anims) {
+      if (playing && a.playState === 'paused') a.play();
+      else if (!playing && a.playState !== 'paused') a.pause();
+      if (Math.abs(a.currentTime - at) > WIPE_SLACK_MS) a.currentTime = at;
+    }
+  }
+}
+
 function refreshLyrics() {
   const { doc } = lyricsState;
   // A document belongs to its track: the next one's arrives just after the queue moves on.
@@ -833,14 +879,14 @@ function refreshLyrics() {
   if (i !== lyricsState.shown) {
     lyricsState.shown = i;
     showLine(i);
+    wipeLine(i);
   }
-  const cues = i >= 0 ? doc.rows[i].cues : null;
-  const words = lyricsState.words[i];
-  if (cues) fills(cues, pos, doc.offset).forEach((f, k) => words[k] && words[k].style.setProperty('--fill', f + '%'));
+  syncWipes(pos + (doc.offset || 0), playerManager.getPlayerState() === cast.framework.messages.PlayerState.PLAYING);
 }
 setInterval(refreshLyrics, 100);
 
 function dropLyrics() {
+  stopWipes();
   lyricsState.doc = null;
   lyricsState.built = null;
   lyricsState.list = null;

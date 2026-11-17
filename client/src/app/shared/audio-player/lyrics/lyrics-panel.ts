@@ -18,7 +18,7 @@ import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
-import { layerAligned, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
+import { layerAligned, mainLyrics, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
 const READY_BUBBLE_MS = 6000;
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
@@ -63,15 +63,9 @@ export class LyricsPanelComponent {
 
   readonly layerId = signal<number | null>(null);
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
-  protected readonly mains = computed(() => this.docs().filter((d) => d.kind === 'main'));
   /** Translations and pronunciations, picked from the player's menu. */
   readonly layers = computed(() => this.docs().filter((d) => d.kind !== 'main'));
-  /** The karaoke view shows the word-synced text (the only kind with a fill and a melody), the plain view the other text; either falls back to what exists. */
-  protected readonly main = computed(() => {
-    const wordSynced = this.mains().find((d) => d.cueLine?.length);
-    const plain = this.mains().find((d) => !d.cueLine?.length);
-    return (this.stage() ? wordSynced ?? plain : plain ?? wordSynced) ?? null;
-  });
+  protected readonly main = computed(() => mainLyrics(this.docs(), this.stage()));
   private readonly layer = computed(() => this.layers().find((d) => d.id === this.layerId()) ?? null);
   /** An aligned layer goes under each main line; any other replaces the main text. */
   protected readonly under = computed(() => {

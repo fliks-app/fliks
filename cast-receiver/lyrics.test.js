@@ -1,7 +1,7 @@
 // Run: node --test cast-receiver/lyrics.test.js
 const test = require('node:test');
 const assert = require('node:assert');
-const { createAssembler, activeIndex, segments, fills, claim, owns } = require('./lyrics.js');
+const { createAssembler, activeIndex, segments, claim, owns } = require('./lyrics.js');
 
 test('joins parts, ignores an older seq', () => {
   const add = createAssembler();
@@ -12,14 +12,13 @@ test('joins parts, ignores an older seq', () => {
   assert.equal(doc.rows[0].text, 'a');
 });
 
-test('active line, byte-cut words and fills', () => {
+test('active line and byte-cut words', () => {
   const rows = [{ start: 0 }, { start: 1000 }];
   assert.equal(activeIndex(rows, 500, 0), 0);
   assert.equal(activeIndex(rows, 500, 600), 1);
   assert.equal(activeIndex([{ start: 0 }, {}], 5, 0), -1);
   const seg = segments('é bc', [{ byteStart: 0, byteEnd: 2 }, { byteStart: 3, byteEnd: 5 }]);
   assert.deepEqual(seg.map((s) => s.text), ['é', ' ', 'bc']);
-  assert.deepEqual(fills([{ start: 0, end: 100 }, { start: 200, end: 300 }], 50, 0), [50, 0]);
 });
 
 test('the sender of the current LOAD owns the lyrics, a later connection does not', () => {

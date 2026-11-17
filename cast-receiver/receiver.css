@@ -604,10 +604,26 @@ body.lyrics-on .music-track {
   opacity: 1;
 }
 
+.word {
+  position: relative;
+  display: inline-block;
+}
+
 .lyric.cur .word {
-  --fill: 0%;
-  background: linear-gradient(90deg, #fff var(--fill), rgba(255, 255, 255, 0.4) var(--fill));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* The lit copy of a word, shown as far as its wipe went. */
+.wipe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform: translateX(-100%);
+}
+
+.wipe-fill {
+  display: block;
+  white-space: nowrap;
+  color: #fff;
+  transform: translateX(100%);
 }
