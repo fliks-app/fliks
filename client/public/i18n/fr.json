@@ -5479,6 +5479,11 @@
     "tap_back": "Retour"
   },
   "karaoke": {
+    "mix": "Mixage du son",
+    "mode_original": "Original",
+    "mode_guide": "Guide",
+    "mode_instrumental": "Instrumental",
+    "mode_instrumental_short": "Instru",
     "title": "Karaoké",
     "preparing_pct": "Préparation du karaoké · {{pct}} %",
     "ready_tap": "Karaoké prêt · Chanter",

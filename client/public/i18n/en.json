@@ -5479,6 +5479,11 @@
     "tap_back": "Back"
   },
   "karaoke": {
+    "mix": "Sound mix",
+    "mode_original": "Original",
+    "mode_guide": "Guide",
+    "mode_instrumental": "Instrumental",
+    "mode_instrumental_short": "Instru",
     "title": "Karaoke",
     "preparing_pct": "Preparing karaoke · {{pct}} %",
     "ready_tap": "Karaoke ready · Sing",
