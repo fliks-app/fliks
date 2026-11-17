@@ -3933,6 +3933,7 @@
     "404": "Ressource introuvable",
     "409": "Conflit : la ressource existe déjà",
     "already_running": "Cette opération est déjà en cours.",
+    "ambiguous_item": "Ce titre contient plusieurs éléments et aucun n'a été choisi.",
     "folder_overlap": "Ce dossier est identique à un autre dossier de bibliothèque, le contient ou s'y trouve. Les dossiers doivent être distincts, toutes bibliothèques confondues.",
     "folder_in_use": "Ce dossier contient encore des médias : déplacez-les ou retirez-les de Fliks d'abord.",
     "folder_reserved": "Ce dossier ne peut pas être utilisé : c'est la racine du système ou il contient les données ou le cache de Fliks.",

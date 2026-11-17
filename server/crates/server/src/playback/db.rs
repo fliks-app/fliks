@@ -130,7 +130,7 @@ pub async fn named_item(
     .fetch_one(db)
     .await?;
     if row.item.is_none() && episode.is_none() && row.ungrouped > 1 {
-        return Err(AppError::conflict("ambiguous_item"));
+        return Err(AppError::conflict("errors.ambiguous_item"));
     }
     Ok(row.item)
 }

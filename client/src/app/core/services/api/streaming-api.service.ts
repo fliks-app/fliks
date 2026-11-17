@@ -686,16 +686,15 @@ export class StreamingApiService {
       qoe?: QoeSample;
     },
   ) {
+    // Every caller handles a failed write; a refused beat would toast on each tick.
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    // A replay is awaited before an item opens: a black-holed link must not hang it.
+    if (body.playedAt != null) context.set(API_TIMEOUT_MS, 15_000);
     return firstValueFrom(
-      this.http.put<HeartbeatResponse | null>(
-        `/api/playback/media/${mediaId}/state`,
-        body,
-        {
-          headers: this.sseConnectionHeaders(),
-          // A replay is awaited before an item opens: a black-holed link must not hang it.
-          ...(body.playedAt != null && { context: new HttpContext().set(API_TIMEOUT_MS, 15_000) }),
-        },
-      ),
+      this.http.put<HeartbeatResponse | null>(`/api/playback/media/${mediaId}/state`, body, {
+        headers: this.sseConnectionHeaders(),
+        context,
+      }),
     );
   }
 

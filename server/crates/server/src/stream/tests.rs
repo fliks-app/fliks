@@ -1382,7 +1382,10 @@ async fn a_book_with_two_editions_is_named_by_its_item_on_the_playback_routes(po
         Some(json!({"mediaFileId": b.epub, "progression": 0.4})),
     )
     .await;
-    assert_eq!((s, body["message"].as_str()), (409, Some("ambiguous_item")));
+    assert_eq!(
+        (s, body["message"].as_str()),
+        (409, Some("errors.ambiguous_item"))
+    );
     let text_beat = json!({"mediaFileId": b.epub, "progression": 0.4, "locator": {"href": "c1.xhtml", "locations": {"progression": 0.5}}});
     let (s, body) = call(
         &c,

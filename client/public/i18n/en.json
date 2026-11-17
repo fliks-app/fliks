@@ -3933,6 +3933,7 @@
     "404": "Resource not found",
     "409": "Conflict: the resource already exists",
     "already_running": "This is already running.",
+    "ambiguous_item": "This title holds several items and none was chosen.",
     "folder_overlap": "This folder is the same as, contains or sits inside another library folder. Folders must be separate, across all libraries.",
     "folder_in_use": "This folder still holds media: move them or remove them from Fliks first.",
     "folder_reserved": "This folder cannot be used: it is the system root or holds the Fliks data or cache.",

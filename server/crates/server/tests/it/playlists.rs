@@ -257,7 +257,10 @@ async fn add_expands_a_media_with_several_items_and_keeps_the_book_ambiguous(poo
             .unwrap();
     assert_eq!(order, vec![21, 20], "owned tracks in disc order");
     let (s, b) = add(json!({"mediaId": 11})).await;
-    assert_eq!((s, b["message"].as_str()), (409, Some("ambiguous_item")));
+    assert_eq!(
+        (s, b["message"].as_str()),
+        (409, Some("errors.ambiguous_item"))
+    );
     assert_eq!(add(json!({"itemId": 24})).await.1, json!({"added": 1}));
 }
 

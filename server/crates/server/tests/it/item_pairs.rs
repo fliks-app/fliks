@@ -1,6 +1,6 @@
 //! Every route that names a media (`items.md` rules 13, 36): a bare pair for a media with several
-//! items is a 409 `ambiguous_item`, an `itemId` of a visible edition works and one of a hidden
-//! edition is a 404, whichever route takes it.
+//! items is a 409 `errors.ambiguous_item`, an `itemId` of a visible edition works and one of a
+//! hidden edition is a 404, whichever route takes it.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
@@ -188,7 +188,7 @@ async fn check(what: &str, expect: &Expect, mut run: impl AsyncFnMut(i32, Name) 
         };
         assert!(ok, "{what}, {case}: expected {want}, got {s}: {b}");
         if want == 409 {
-            assert_eq!(b["message"], "ambiguous_item", "{what}, {case}");
+            assert_eq!(b["message"], "errors.ambiguous_item", "{what}, {case}");
         }
     }
 }
@@ -302,7 +302,7 @@ async fn party_routes(pool: PgPool) {
         let (s, b) = c.call("POST", "/api/parties", body).await;
         assert_eq!(
             (s, &b["message"]),
-            (want, &json!("ambiguous_item")),
+            (want, &json!("errors.ambiguous_item")),
             "top-level {media}"
         );
     }

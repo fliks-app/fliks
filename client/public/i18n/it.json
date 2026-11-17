@@ -3910,6 +3910,7 @@
     "404": "Risorsa non trovata",
     "409": "Conflitto: la risorsa esiste già",
     "already_running": "Questa operazione è già in corso.",
+    "ambiguous_item": "Questo titolo contiene più elementi e non ne è stato scelto nessuno.",
     "folder_overlap": "Questa cartella coincide con un'altra cartella di libreria, la contiene o si trova al suo interno. Le cartelle devono essere distinte in tutte le librerie.",
     "folder_in_use": "Questa cartella contiene ancora file multimediali: spostali o rimuovili prima da Fliks.",
     "folder_reserved": "Questa cartella non può essere usata: è la radice del sistema oppure contiene i dati o la cache di Fliks.",

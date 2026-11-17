@@ -3910,6 +3910,7 @@
     "404": "Recurso não encontrado",
     "409": "Conflito: o recurso já existe",
     "already_running": "Isto já está em execução.",
+    "ambiguous_item": "Este título contém vários itens e nenhum foi escolhido.",
     "folder_overlap": "Esta pasta é igual a outra pasta de biblioteca, contém-na ou está dentro dela. As pastas têm de ser independentes em todas as bibliotecas.",
     "folder_in_use": "Esta pasta ainda contém medias: mova-as ou remova-as primeiro do Fliks.",
     "folder_reserved": "Esta pasta não pode ser usada: é a raiz do sistema ou contém os dados ou a cache do Fliks.",
