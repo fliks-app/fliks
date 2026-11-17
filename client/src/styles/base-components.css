@@ -676,3 +676,10 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 .btn.tooltip {
   display: inline-flex;
 }
+
+/* A touch tap leaves :hover stuck, so the tooltip outlives the control it labels. */
+@media (hover: none) and (pointer: coarse) {
+  body:not(.tv) .tooltip::before,
+  body:not(.tv) .tooltip::after,
+  body:not(.tv) .tooltip > .tooltip-content { display: none; }
+}

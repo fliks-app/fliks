@@ -48,7 +48,7 @@ function create() {
       { provide: AudioPlayerService, useValue: audio },
       { provide: KaraokeService, useValue: karaoke },
       { provide: KaraokeRelayService, useValue: { open: vi.fn(), close: vi.fn() } },
-      { provide: PartyService, useValue: { active: signal(false), isHost: signal(false), singerQueue: signal([]), members: () => [], party: () => null } },
+      { provide: PartyService, useValue: { active: signal(false), isHost: signal(false) } },
       { provide: DeviceService, useValue: { isTv: signal(false), isTouch: signal(false), isPhone: signal(false) } },
     ],
   });
@@ -58,38 +58,43 @@ function create() {
   return { f, audio, el: f.nativeElement as HTMLElement };
 }
 
-describe('KaraokeStageComponent voice level', () => {
-  beforeEach(() => localStorage.removeItem('fliks.karaoke.level'));
+describe('KaraokeStageComponent mix bar', () => {
+  beforeEach(() => localStorage.removeItem('fliks.karaoke.mix'));
   afterEach(() => TestBed.resetTestingModule());
 
-  const slider = (el: HTMLElement) => el.querySelector('[data-testid="karaoke-vocal-level"]') as HTMLInputElement;
-  const drag = (el: HTMLElement, v: string) => {
-    slider(el).value = v;
-    slider(el).dispatchEvent(new Event('input'));
-  };
-
-  it('plays the stems at the dragged level, leaving the original mix first', () => {
+  it('plays the original mix on Original and the stems on the other presets', () => {
     const { el, audio } = create();
-    drag(el, '60');
+    (el.querySelector('[data-testid="karaoke-mode-instrumental"]') as HTMLButtonElement).click();
+    expect(audio.setStemMode).toHaveBeenLastCalledWith('instrumental');
+    (el.querySelector('[data-testid="karaoke-mode-original"]') as HTMLButtonElement).click();
+    expect(audio.setStemMode).toHaveBeenLastCalledWith('original');
+  });
+
+  it('selects Guide at the dragged level, and Guide restores the last level', () => {
+    const { el, audio } = create();
+    const slider = el.querySelector('[data-testid="karaoke-vocal-level"]') as HTMLInputElement;
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input'));
     expect(audio.setStemMode).toHaveBeenLastCalledWith('guide');
+    expect(audio.setVocalLevel).toHaveBeenLastCalledWith(0.6);
+    (el.querySelector('[data-testid="karaoke-mode-instrumental"]') as HTMLButtonElement).click();
+    (el.querySelector('[data-testid="karaoke-mode-guide"]') as HTMLButtonElement).click();
     expect(audio.setVocalLevel).toHaveBeenLastCalledWith(0.6);
   });
 
-  it('goes back to the original mix at 100 and to silence of the voice at 0', () => {
-    const { el, audio } = create();
-    drag(el, '100');
-    expect(audio.setStemMode).toHaveBeenLastCalledWith('original');
-    drag(el, '0');
-    expect(audio.setVocalLevel).toHaveBeenLastCalledWith(0);
-  });
-
-  it('reads the slider from the mode and the vocal level', () => {
+  it('rests the slider at the end of the preset and returns to the guide level on Guide', () => {
     const { f, el, audio } = create();
-    expect(slider(el).value).toBe('100');
-    (audio.stemMode as unknown as { set(v: string): void }).set('guide');
-    (audio.vocalLevel as unknown as { set(v: number): void }).set(0.3);
-    f.detectChanges();
-    expect(slider(el).value).toBe('30');
+    const slider = el.querySelector('[data-testid="karaoke-vocal-level"]') as HTMLInputElement;
+    const at = (mode: string) => {
+      (audio.stemMode as unknown as { set(v: string): void }).set(mode);
+      f.detectChanges();
+      return slider.value;
+    };
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input'));
+    expect(at('instrumental')).toBe('0');
+    expect(at('original')).toBe('100');
+    expect(at('guide')).toBe('60');
   });
 
   it('reads and drives the displayed output in remote view', () => {
@@ -97,23 +102,30 @@ describe('KaraokeStageComponent voice level', () => {
     const out = { stemMode: signal('guide'), vocalLevel: signal(0.3), stemsAvailable: signal(true), pitch: signal(2), position: signal(0), duration: signal(0), playing: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
     f.componentRef.setInput('output', out);
     f.detectChanges();
-    drag(el, '40');
-    expect(out.setVocalLevel).toHaveBeenCalledWith(0.4);
-    expect(audio.setVocalLevel).not.toHaveBeenCalled();
+    el.querySelector<HTMLButtonElement>('[data-testid="karaoke-mode-instrumental"]')!.click();
+    expect(out.setStemMode).toHaveBeenCalledWith('instrumental');
+    expect(audio.setStemMode).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('+2');
   });
 
-  it('restores the saved level when the stage opens again', () => {
+  it('remembers the preset and restores it when the stage opens again', () => {
     const first = create();
-    drag(first.el, '60');
+    first.el.querySelector<HTMLButtonElement>('[data-testid="karaoke-mode-instrumental"]')!.click();
     TestBed.resetTestingModule();
     const again = create();
     again.f.detectChanges();
-    expect(again.audio.setVocalLevel).toHaveBeenLastCalledWith(0.6);
+    expect(again.audio.setStemMode).toHaveBeenCalledWith('instrumental');
   });
 
-  it('has no mode buttons and no queue button outside a party', () => {
-    const { el } = create();
-    expect(el.querySelector('[data-testid="karaoke-mode-guide"]')).toBeNull();
-    expect(el.querySelector('[data-testid="karaoke-queue-open"]')).toBeNull();
+  it('restores the guide level with Guide', () => {
+    const first = create();
+    const slider = first.el.querySelector('[data-testid="karaoke-vocal-level"]') as HTMLInputElement;
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input'));
+    TestBed.resetTestingModule();
+    const again = create();
+    again.f.detectChanges();
+    expect(again.audio.setStemMode).toHaveBeenCalledWith('guide');
+    expect(again.audio.setVocalLevel).toHaveBeenLastCalledWith(0.6);
   });
 });

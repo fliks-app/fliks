@@ -139,8 +139,8 @@
 
 <ng-template #full>
   @if (audio.uiTrack(); as t) {
-    <div class="flex min-h-0 flex-1 flex-col gap-4" data-testid="audio-full">
-      <div class="flex items-center gap-1">
+    <div class="flex min-h-0 flex-1 flex-col gap-4 short:grid short:grid-cols-[minmax(0,1fr)_minmax(15rem,21rem)] short:grid-rows-[auto_minmax(0,1fr)] short:gap-x-4 short:gap-y-1" [class.compact:gap-2]="lyricsShown()" data-testid="audio-full">
+      <div class="flex items-center gap-1 short:col-start-1 short:row-start-1">
         <button type="button" class="btn btn-ghost btn-circle tooltip tooltip-bottom" (click)="audio.collapse()" [attr.aria-label]="'audio_player.collapse' | translate" [attr.data-tip]="'audio_player.collapse' | translate">
           <svg lucideChevronDown class="h-6 w-6"></svg>
         </button>
@@ -243,9 +243,9 @@
         }
       </div>
 
-      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row" [class.overflow-hidden]="lyricsShown()" [class.overflow-y-auto]="!lyricsShown()" [class.short:min-h-56]="lyricsShown()" appTvSection>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2" [class.overflow-hidden]="lyricsShown()" [class.overflow-y-auto]="!lyricsShown()" [class.short:min-h-0]="lyricsShown()" appTvSection>
         <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
-          <div class="player-cover flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 sm:max-w-64">
+          <div class="player-cover flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 short:max-w-32 sm:max-w-64">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
               @if (!coverFailed()) {
                 <img [cachedSrc]="cover" alt="" class="h-full w-full object-cover" (error)="coverFailed.set(true)" />
@@ -328,6 +328,7 @@
         </div>
       </div>
 
+      <div class="contents short:col-start-2 short:row-span-2 short:row-start-1 short:flex short:flex-col short:justify-between short:gap-2">
       @if (audio.musicMode()) {
         <div class="flex items-center gap-3">
           @if (lyricsShown()) {
@@ -464,7 +465,7 @@
               @let label = singKeys[kind] | translate: { pct: p.prepPct() };
               <button
                 type="button"
-                class="btn btn-ghost btn-circle tooltip tooltip-top relative"
+                class="btn btn-ghost btn-circle tooltip tooltip-left relative"
                 [class.text-primary]="kind === 'exit'"
                 [attr.aria-pressed]="kind === 'enter' || kind === 'exit' ? kind === 'exit' : null"
                 (click)="p.sing()"
@@ -564,6 +565,7 @@
         </button>
       </div>
       }
+      </div>
     </div>
   }
 </ng-template>
@@ -590,7 +592,7 @@
         }
       </div>
       <ng-container *ngTemplateOutlet="queueList" />
-      <div class="sticky bottom-0 -mx-4 -mb-4 flex gap-2 bg-neutral px-4 py-3">
+      <div class="sticky bottom-[calc(0px-env(safe-area-inset-bottom,0px))] -mx-4 -mb-[calc(1rem+env(safe-area-inset-bottom,0px))] flex gap-2 bg-neutral before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-8 before:bg-gradient-to-t before:from-neutral before:to-transparent px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
         @if (queueEditing()) {
           <button animate.enter="fade-up-in" type="button" class="btn h-auto min-h-0 min-w-0 flex-1 flex-col gap-1 rounded-2xl py-2 text-sm font-normal" [disabled]="!selected().size" (click)="moveSelectedToTop()" data-testid="queue-move-top">
             <svg lucideArrowUpToLine class="h-5 w-5"></svg>

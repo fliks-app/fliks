@@ -128,4 +128,18 @@ describe('LyricsViewComponent', () => {
     expect(el.querySelectorAll('[data-testid="lyrics-sweep"]').length).toBe(1);
     expect(el.querySelector('[data-testid="lyrics-guessed"]')?.textContent).toBe('(so)');
   });
+  it('locks manual scrolling in the large (karaoke) view and keeps room to centre the first and last line', () => {
+    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
+    const f = TestBed.createComponent(LyricsViewComponent);
+    f.componentRef.setInput('doc', { id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'a' }] } as StructuredLyrics);
+    f.detectChanges();
+    const box = (f.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="lyrics-lines"]')!;
+    expect(box.classList.contains('overflow-y-auto')).toBe(true);
+    expect(box.querySelectorAll('[aria-hidden="true"].shrink-0')).toHaveLength(2);
+    f.componentRef.setInput('large', true);
+    f.detectChanges();
+    expect(box.classList.contains('overflow-hidden')).toBe(true);
+    expect(box.classList.contains('overflow-y-auto')).toBe(false);
+  });
 });

@@ -1,5 +1,6 @@
 /* `tv:` variant (body.tv): a 1080p TV reports innerWidth=960 (DPR 2), so width breakpoints would pack tablet columns. */
 @custom-variant tv (body.tv &);
+@custom-variant compact (@media (max-height: 48rem));
 @custom-variant short (@media (max-height: 32rem));
 /* `reduced-effects:` variant (body.reduced-effects, set by DeviceService on TV and low-memory devices). */
 @custom-variant reduced-effects (body.reduced-effects &);
