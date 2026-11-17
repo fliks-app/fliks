@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
@@ -84,7 +84,11 @@ export class KaraokeStageComponent {
   protected readonly modes = MODES;
   /** The last guide level, restored when Guide is selected again. */
   private readonly saved = readMix();
-  protected readonly guideLevel = signal(this.saved?.guide ?? this.guideStart());
+  /** Follows the level the output plays at; off Guide it keeps the last one. */
+  protected readonly guideLevel = linkedSignal<number, number>({
+    source: () => this.audio.vocalLevel?.() ?? 0,
+    computation: (v, prev) => (v > 0 && v < 1 ? v : (prev?.value ?? this.saved?.guide ?? GUIDE_VOCAL_LEVEL)),
+  });
   /** The slider rests at 0 on Instrumental and 100 on Original, and shows the guide level on Guide. */
   protected readonly sliderValue = computed(() => {
     const mode = this.stemMode();
@@ -115,7 +119,8 @@ export class KaraokeStageComponent {
     effect(() => {
       if (restored || !this.stemsAvailable()) return;
       restored = true;
-      untracked(() => this.setMode(this.saved!.mode));
+      // The preset is this browser's: another device's session keeps its own mix.
+      if (!this.output()) untracked(() => this.setMode(this.saved!.mode));
     });
     destroyRef.onDestroy(() => {
       clearInterval(timer);
@@ -145,14 +150,11 @@ export class KaraokeStageComponent {
     if (dur > 0 && this.audio.position() >= dur - 1.5) this.karaoke.finish(this.doc(), this.title());
   }
 
-  private guideStart(): number {
-    const v = this.audio.vocalLevel?.() ?? 0;
-    return v > 0 && v < 1 ? v : GUIDE_VOCAL_LEVEL;
-  }
-
   protected setMode(mode: StemMode): void {
+    // Read first: entering a stem mode resets the output's level, which the guide level follows.
+    const level = this.guideLevel();
     this.audio.setStemMode?.(mode);
-    if (mode === 'guide') this.audio.setVocalLevel?.(this.guideLevel());
+    if (mode === 'guide') this.audio.setVocalLevel?.(level);
     this.remember(mode);
   }
 

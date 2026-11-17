@@ -239,6 +239,16 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ volume: 0.3, muted: true })));
   });
 
+  it('reports a stem mode at once and a dragged vocal level once settled', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    audio.setStemMode('instrumental');
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ stemMode: 'instrumental' })));
+    audio.setVocalLevel(0.4);
+    audio.setVocalLevel(0.6);
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ stemMode: 'guide', vocalLevel: 0.6 })));
+  });
+
   it('reports a skip as playing while the next track loads, never as a pause', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);

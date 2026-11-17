@@ -242,7 +242,7 @@ export class AudioPlayerService {
   readonly volume = this.level.asReadonly();
   private readonly _muted = signal(false);
   readonly muted = this._muted.asReadonly();
-  private volumeBeat: ReturnType<typeof setTimeout> | undefined;
+  private settleBeat: ReturnType<typeof setTimeout> | undefined;
   /** True while the native player holds the playing track; it resolves the streams of a music queue itself. */
   private nativeOn = false;
   private nativeReady = false;
@@ -259,7 +259,9 @@ export class AudioPlayerService {
     if (!track || !info) return null;
     if (this.queueAhead()) return null;
     const queue = this._musicMode() ? [this._queue().map((t) => t.itemId), this._queueIndex(), this._shuffle(), this._repeat(), this.neighbour(1) !== null] : null;
-    return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.effectiveRate(), queue]);
+    // The vocal level is left out: a dragged slider reports once it settles.
+    const mix = this._musicMode() ? [this._stemMode(), this._pitch(), this._stemsAvailable()] : null;
+    return JSON.stringify([track.itemId, info.mediaFileId, this._playing(), this.effectiveRate(), queue, mix]);
   });
 
   constructor() {
@@ -893,6 +895,7 @@ export class AudioPlayerService {
     if (this._stemMode() !== 'original') this._stemMode.set(v === 0 ? 'instrumental' : 'guide');
     this.applyGains();
     if (this.casting) void this.switchCastStem();
+    this.reportSettled();
   }
 
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
@@ -1486,20 +1489,20 @@ export class AudioPlayerService {
 
   setVolume(level: number): void {
     this.setLevel(level, false);
-    this.reportVolume();
+    this.reportSettled();
   }
 
   /** At level 0 the button restores a level instead of toggling a mute nobody hears. */
   toggleMute(): void {
     if (this.volume() === 0) this.setLevel(0.5, false);
     else this.setLevel(this.volume(), !this._muted());
-    this.reportVolume();
+    this.reportSettled();
   }
 
-  /** A dragged slider reports its level once it settles, not on every step. */
-  private reportVolume(): void {
-    clearTimeout(this.volumeBeat);
-    this.volumeBeat = setTimeout(() => this.beat(), 300);
+  /** A dragged slider (volume, vocal level) reports its level once it settles, not on every step. */
+  private reportSettled(): void {
+    clearTimeout(this.settleBeat);
+    this.settleBeat = setTimeout(() => this.beat(), 300);
   }
 
   /** Swaps the queue under the running track; another current track starts it. */

@@ -11,7 +11,11 @@ import { KaraokeService } from '../../../core/services/karaoke/karaoke.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { KaraokeStageComponent } from './karaoke-stage';
 
-function create() {
+function remoteOutput(mode: string, level: number) {
+  return { stemMode: signal(mode), vocalLevel: signal(level), stemsAvailable: signal(true), pitch: signal(0), position: signal(0), duration: signal(0), playing: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
+}
+
+function create(output?: ReturnType<typeof remoteOutput>) {
   const audio = {
     stemMode: signal('original'),
     vocalLevel: signal(0),
@@ -54,6 +58,7 @@ function create() {
   });
   const f = TestBed.createComponent(KaraokeStageComponent);
   f.componentRef.setInput('doc', { offset: 0, line: [], cueLine: [] } as unknown as StructuredLyrics);
+  if (output) f.componentRef.setInput('output', output);
   f.detectChanges();
   return { f, audio, el: f.nativeElement as HTMLElement };
 }
@@ -115,6 +120,24 @@ describe('KaraokeStageComponent mix bar', () => {
     const again = create();
     again.f.detectChanges();
     expect(again.audio.setStemMode).toHaveBeenCalledWith('instrumental');
+  });
+
+  it("keeps a remote device's mix instead of applying this browser's preset", () => {
+    localStorage.setItem('fliks.karaoke.mix', JSON.stringify({ mode: 'instrumental', guide: 0.5 }));
+    const out = remoteOutput('guide', 0.3);
+    const { audio } = create(out);
+    expect(out.setStemMode).not.toHaveBeenCalled();
+    expect(audio.setStemMode).not.toHaveBeenCalled();
+  });
+
+  it("shows the remote device's guide level on the slider and follows it", () => {
+    const out = remoteOutput('guide', 0.3);
+    const { f, el } = create(out);
+    const slider = el.querySelector('[data-testid="karaoke-vocal-level"]') as HTMLInputElement;
+    expect(slider.value).toBe('30');
+    out.vocalLevel.set(0.7);
+    f.detectChanges();
+    expect(slider.value).toBe('70');
   });
 
   it('restores the guide level with Guide', () => {
