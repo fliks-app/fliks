@@ -236,6 +236,8 @@ export class AudioPlayerService {
   private readonly mq = new MusicQueue();
   private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
   private preTried: MusicTrackRequest | null = null;
+  /** The next track, queued on the receiver after the playing one. */
+  private castNext: { req: MusicTrackRequest; info: PlaybackInfoResponse } | null = null;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
   private stems: StemMix | null = null;
@@ -697,14 +699,23 @@ export class AudioPlayerService {
     runInInjectionContext(this.injector, () => {
       effect(() => {
         const time = cast.currentTime();
-        if (this.casting) this._position.set(time);
+        if (!this.casting) return;
+        this._position.set(time);
+        untracked(() => this.preloadNear(time));
       });
       effect(() => {
         const paused = cast.isPaused();
         if (this.casting) this.onPlayState(!paused);
       });
+      // Only the end of the track playing here: a status that still reports the previous one is stale.
       effect(() => {
-        if (cast.ended() && this.casting) void this.onMusicEnded();
+        if (cast.ended() && this.casting && cast.receiverMedia()?.['itemId'] === this._track()?.itemId) void this.onMusicEnded();
+      });
+      effect(() => {
+        const sid = cast.receiverMedia()?.['sid'];
+        untracked(() => {
+          if (this.casting && this.castNext && sid === this.castNext.info.sessionId) this.onCastAdvanced();
+        });
       });
       effect(() => {
         if (!cast.isConnected() && this.casting) void this.close();
@@ -737,6 +748,8 @@ export class AudioPlayerService {
     const mode = this._stemMode();
     const kind = mode === 'original' ? null : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
     if (kind === this.castKind) return;
+    // The LOAD below empties the receiver's queue.
+    this.dropPreload();
     const generation = this.generation;
     const position = this._position();
     const autoplay = this._playing();
@@ -756,10 +769,17 @@ export class AudioPlayerService {
     if (generation === this.generation) this.castKind = kind;
   }
 
-  /** Loads the next track's stream on the standby element once the current one nears its end. */
+  private preloadNear(position: number): void {
+    const duration = this._duration();
+    if (this._musicMode() && !this.pre && !this.castNext && duration > 0 && duration - position < PRELOAD_S) this.preloadNext();
+  }
+
+  /** Loads the next track's stream on the standby element, or queues it on the receiver, once the current one nears its end. */
   private preloadNext(): void {
     const next = this.mq.peekNext();
-    if (!next || this.casting || this.routed({ type: 'drives' }) || this.preTried === next || this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
+    if (!next || this.routed({ type: 'drives' }) || this.preTried === next) return;
+    if (this.casting) return this.queueOnCast(next);
+    if (this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
     this.preTried = next;
     const generation = this.generation;
     void this.localParts(next.itemId)
@@ -789,10 +809,36 @@ export class AudioPlayerService {
       .catch(() => undefined);
   }
 
+  /** The receiver moves on to the queued track by itself at the end of this one, with no LOAD in between. */
+  private queueOnCast(next: MusicTrackRequest): void {
+    this.preTried = next;
+    const generation = this.generation;
+    this.injector.get(NowPlayingMetadataService).primeTracks([next]);
+    void this.injector
+      .get(CastPlayerService)
+      .prepareTrack(next)
+      .then(({ pi, media }) => {
+        // The receiver names the track it plays by its session: one without could not be followed.
+        if (generation !== this.generation || this.preTried !== next || !this.casting || !pi.sessionId) {
+          if (pi.sessionId) void this.streaming.stopSession(pi.sessionId).catch(() => undefined);
+          return;
+        }
+        this.castNext = { req: next, info: pi };
+        this.cast!.queueNext(media);
+      })
+      .catch(() => undefined);
+  }
+
   private dropPreload(): void {
     const pre = this.pre;
+    const queued = this.castNext;
     this.pre = null;
+    this.castNext = null;
     this.preTried = null;
+    if (queued) {
+      this.cast?.queueNext(null);
+      void this.streaming.stopSession(queued.info.sessionId!).catch(() => undefined);
+    }
     if (!pre) return;
     if (pre.info.sessionId) void this.streaming.stopSession(pre.info.sessionId).catch(() => undefined);
     const standby = this.els[1 - this.current];
@@ -804,21 +850,13 @@ export class AudioPlayerService {
   private swapToPreloaded(pre: NonNullable<typeof this.pre>): void {
     const old = this.els[this.current];
     const standby = this.els[1 - this.current];
-    this._position.set(this._duration());
-    this.beat();
-    if (this.sessionId) this.retiring.push(this.sessionId);
+    this.retireTrack();
     this.pre = null;
     this.preTried = null;
-    this._pitch.set(0);
     this.current = 1 - this.current;
-    this.info = pre.info;
-    this.sessionId = pre.info.sessionId;
     this.parts = pre.parts;
     this.partIndex = 0;
-    this._track.set(this.audioOf(pre.req));
-    this._duration.set(pre.info.durationSeconds ?? pre.req.durationSeconds ?? 0);
-    this._position.set(0);
-    this.setupMediaSession(this._track()!);
+    this.takeTrack(pre.req, pre.info);
     standby.playbackRate = this.playRate();
     standby.currentTime = 0;
     void standby.play().catch(() => undefined);
@@ -826,6 +864,38 @@ export class AudioPlayerService {
     old.removeAttribute('src');
     this.dropStems();
     void this.refreshStems();
+  }
+
+  /** The receiver moved on to the track queued on it: the queue follows, nothing reloads. */
+  private onCastAdvanced(): void {
+    const { req, info } = this.castNext!;
+    this.retireTrack();
+    this.castNext = null;
+    this.preTried = null;
+    this.mq.next(true);
+    this.syncQueue();
+    this.takeTrack(req, info);
+    this._stemMode.set('original');
+    this.dropStems();
+    void this.refreshStems();
+  }
+
+  /** Reports the finished track at its end; its session stops once the next one beats. */
+  private retireTrack(): void {
+    this._position.set(this._duration());
+    this.beat();
+    if (this.sessionId) this.retiring.push(this.sessionId);
+  }
+
+  /** `req` already streams under `info`: it becomes the playing track. */
+  private takeTrack(req: MusicTrackRequest, info: PlaybackInfoResponse): void {
+    this._pitch.set(0);
+    this.info = info;
+    this.sessionId = info.sessionId;
+    this._track.set(this.audioOf(req));
+    this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
+    this._position.set(0);
+    this.setupMediaSession(this._track()!);
   }
 
   /** Moves on after a track ends: repeat one replays it, else the next track, else stops. */
@@ -1325,7 +1395,7 @@ export class AudioPlayerService {
       standby.src = next.url;
       standby.load();
     }
-    if (this._musicMode() && !this.pre && this._duration() - position < PRELOAD_S) this.preloadNext();
+    this.preloadNear(position);
     const now = Date.now();
     if (now - this.lastPositionState > POSITION_STATE_MS) {
       this.lastPositionState = now;

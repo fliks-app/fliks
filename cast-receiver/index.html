@@ -38,6 +38,21 @@
        splash above it on idle. -->
   <cast-media-player id="player"></cast-media-player>
 
+  <!-- Music track: its artwork blurred as the backdrop, the cover with its progress; the lyrics sit beside it. -->
+  <div id="music" class="music" aria-hidden="true">
+    <div class="music-backdrop"></div>
+    <div class="music-track">
+      <img class="music-cover" alt="">
+      <div class="music-title"></div>
+      <div class="music-artist"></div>
+      <div class="music-progress"><div class="music-played"></div></div>
+      <div class="music-times">
+        <span class="music-elapsed"></span>
+        <span class="music-total"></span>
+      </div>
+    </div>
+  </div>
+
   <div id="edl-notice" class="edl-notice" role="status"></div>
 
   <div id="skip-cue" class="skip-cue" role="status"></div>

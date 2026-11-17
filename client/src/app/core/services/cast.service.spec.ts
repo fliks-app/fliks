@@ -235,6 +235,25 @@ describe('CastService LOAD failure', () => {
   });
 });
 
+describe('CastService up next', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('sends the track to queue with the customData of a LOAD, and null to drop it', () => {
+    const svc = make(null);
+    const sent = vi.spyOn(svc, 'sendFliks').mockImplementation(() => {});
+    svc.queueNext({ ...load(), itemId: 4, sid: 's4' });
+    expect(sent).toHaveBeenCalledWith({
+      kind: 'queue_next',
+      media: expect.objectContaining({ url: load().url, customData: expect.objectContaining({ itemId: 4, sid: 's4', title: 't' }) }),
+    });
+    svc.queueNext(null);
+    expect(sent).toHaveBeenLastCalledWith({ kind: 'queue_next', media: null });
+  });
+});
+
 describe('CastService receiver messages', () => {
   afterEach(() => TestBed.resetTestingModule());
 

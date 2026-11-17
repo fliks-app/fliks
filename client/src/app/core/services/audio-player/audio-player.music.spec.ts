@@ -42,6 +42,7 @@ describe('AudioPlayerService music mode', () => {
   const stopSession = vi.fn();
   const castTrack = vi.fn();
   const castStem = vi.fn();
+  const prepareTrack = vi.fn();
   const itemState = vi.fn();
   const cast = {
     isConnected: signal(false),
@@ -52,6 +53,8 @@ describe('AudioPlayerService music mode', () => {
     pause: vi.fn(),
     seek: vi.fn(),
     stop: vi.fn(),
+    receiverMedia: signal<Record<string, unknown> | null>(null),
+    queueNext: vi.fn(),
   };
   type Loader = (cmd: RemoteCommand) => Promise<void>;
   const loaders: Record<string, Loader> = {};
@@ -77,7 +80,12 @@ describe('AudioPlayerService music mode', () => {
     remoting = false;
     trackRequests.mockClear();
     cast.isConnected.set(false);
+    cast.currentTime.set(0);
+    cast.ended.set(false);
+    cast.receiverMedia.set(null);
+    cast.queueNext.mockClear();
     castTrack.mockReset();
+    prepareTrack.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
       playUrl: `/s/${itemId}`,
@@ -111,7 +119,7 @@ describe('AudioPlayerService music mode', () => {
           },
         },
         { provide: CastService, useValue: cast },
-        { provide: CastPlayerService, useValue: { castTrack, castStem } },
+        { provide: CastPlayerService, useValue: { castTrack, castStem, prepareTrack } },
         { provide: KaraokeApiService, useValue: { itemState } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
@@ -408,6 +416,52 @@ describe('AudioPlayerService music mode', () => {
     expect(audio.isCasting()).toBe(true);
     expect(audio.canMoveToCast()).toBe(false);
     expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
+  });
+
+  it('queues the next track on the receiver near the end, then follows it there without a LOAD', async () => {
+    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
+    prepareTrack.mockResolvedValue({ pi: { sessionId: 'cs2', mediaFileId: 20, durationSeconds: 120, playMethod: 'DirectPlay' }, media: { url: '/c/2' } });
+    cast.isConnected.set(true);
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    cast.currentTime.set(85);
+    TestBed.tick();
+    await vi.waitFor(() => expect(cast.queueNext).toHaveBeenCalledWith({ url: '/c/2' }));
+    expect(prepareTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 2 }));
+    cast.receiverMedia.set({ itemId: 2, sid: 'cs2' });
+    TestBed.tick();
+    expect(audio.track()?.itemId).toBe(2);
+    expect(audio.queueIndex()).toBe(1);
+    expect(audio.duration()).toBe(120);
+    expect(castTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the queued track from the receiver when the queue changes under it', async () => {
+    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
+    prepareTrack.mockResolvedValue({ pi: { sessionId: 'cs2', mediaFileId: 20, durationSeconds: 120, playMethod: 'DirectPlay' }, media: { url: '/c/2' } });
+    cast.isConnected.set(true);
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2), track(3)]);
+    cast.currentTime.set(85);
+    TestBed.tick();
+    await vi.waitFor(() => expect(cast.queueNext).toHaveBeenCalledTimes(1));
+    audio.removeFromQueue(1);
+    expect(cast.queueNext).toHaveBeenLastCalledWith(null);
+    expect(stopSession).toHaveBeenCalledWith('cs2');
+  });
+
+  it('ignores an end the receiver still reports for the previous track', async () => {
+    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
+    cast.isConnected.set(true);
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    cast.receiverMedia.set({ itemId: 7, sid: 'old' });
+    cast.ended.set(true);
+    TestBed.tick();
+    expect(castTrack).toHaveBeenCalledTimes(1);
+    cast.receiverMedia.set({ itemId: 1, sid: 'cs1' });
+    TestBed.tick();
+    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 2 }), true, 0));
   });
 
   it('loads the stem on the receiver in a stem mode and the track again on original', async () => {

@@ -662,9 +662,22 @@ export class CastService implements OnDestroy {
     }
   }
 
-  private async sendLoad(info: CastMediaInfo): Promise<void> {
-    // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
-    const customData = {
+  /** Puts `info` after the media playing on the receiver, which moves on to it by itself; null drops it. */
+  queueNext(info: CastMediaInfo | null): void {
+    const media = info && {
+      url: info.url,
+      contentType: info.contentType,
+      title: info.title,
+      subtitle: info.subtitle ?? '',
+      posterUrl: info.posterUrl ?? '',
+      customData: this.loadCustomData(info),
+    };
+    this.sendFliks({ kind: 'queue_next', media });
+  }
+
+  // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
+  private loadCustomData(info: CastMediaInfo) {
+    return {
       title: info.title,
       subtitle: info.subtitle,
       posterUrl: info.posterUrl,
@@ -681,7 +694,10 @@ export class CastService implements OnDestroy {
       intro: info.intro,
       outro: info.outro,
     };
+  }
 
+  private async sendLoad(info: CastMediaInfo): Promise<void> {
+    const customData = this.loadCustomData(info);
     const subtitleStyle = this.castSettings.get().subtitleStyle;
 
     if (this.hasCastBridge) {

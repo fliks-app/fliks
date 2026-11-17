@@ -441,3 +441,130 @@ body:not(.playing) .captions {
   -webkit-text-fill-color: transparent;
   text-shadow: none;
 }
+
+/* Music view, above the player's own audio screen and below the splash. */
+.music {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  overflow: hidden;
+  background: var(--fliks-bg);
+}
+
+body.music-on .music {
+  display: block;
+}
+
+.music-backdrop {
+  position: absolute;
+  inset: -20%;
+  background-position: center;
+  background-size: cover;
+  filter: blur(12vh) saturate(1.6) brightness(0.6);
+  will-change: transform;
+}
+
+.music-track {
+  position: absolute;
+  top: 50%;
+  left: 27%;
+  width: 52vh;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  transition: left 500ms ease-out;
+}
+
+/* Alone without lyrics. */
+body:not(.lyrics-on) .music-track {
+  left: 50%;
+}
+
+.music-cover {
+  display: block;
+  width: 52vh;
+  height: 52vh;
+  border-radius: 1.5vh;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 3vh 8vh rgba(0, 0, 0, 0.45);
+}
+
+.music-cover:not([src]) {
+  visibility: hidden;
+}
+
+.music-title,
+.music-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-title {
+  margin-top: 3.5vh;
+  font-size: 3.4vh;
+  font-weight: 600;
+}
+
+.music-artist {
+  margin-top: 0.6vh;
+  font-size: 2.8vh;
+  opacity: 0.7;
+}
+
+.music-progress {
+  position: relative;
+  height: 0.6vh;
+  margin-top: 3vh;
+  border-radius: 0.6vh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.music-played {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: #fff;
+}
+
+.music-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1vh;
+  font-size: 2.2vh;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+body.music-on .lyrics {
+  left: 50%;
+  right: 6%;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  text-align: left;
+  text-shadow: none;
+}
+
+body.music-on .lyric {
+  font-size: 4.4vh;
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+body.music-on .lyric.cur {
+  margin: 2vh 0;
+  font-size: 6.4vh;
+  color: #fff;
+}
+
+body.music-on .lyric .word {
+  background: linear-gradient(90deg, #fff var(--fill), rgba(255, 255, 255, 0.4) var(--fill));
+  -webkit-background-clip: text;
+  background-clip: text;
+}

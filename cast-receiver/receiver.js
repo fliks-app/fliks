@@ -40,14 +40,17 @@ console.log('[fliks-cast] receiver boot start');
 
 // --- Idle splash visibility ---------------------------------------------
 //
-// CAF doesn't expose a "media is showing" flag directly — we infer it from
-// LOAD_START → ENDED transitions. body.playing toggles the splash via CSS.
+// body.playing hides the splash from the first loaded media until the player is idle again (renderBar):
+// a LOAD replacing the media or the queue moving on keeps it hidden.
 
 playerManager.addEventListener(
   cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
   () => {
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
+    const current = playerManager.getQueueManager().getCurrentItem();
+    if (current && current.itemId === upNext) upNext = null;
+    renderMusic();
     qoeLoaded();
     publishAudioTracks();
     startEdl();
@@ -59,12 +62,7 @@ playerManager.addEventListener(
   cast.framework.events.EventType.MEDIA_FINISHED,
   cast.framework.events.EventType.ABORT,
   cast.framework.events.EventType.ENDED,
-].forEach((evt) => {
-  playerManager.addEventListener(evt, () => {
-    document.body.classList.remove('playing');
-    stopEdl();
-  });
-});
+].forEach((evt) => playerManager.addEventListener(evt, stopEdl));
 
 // Surface any player error on the device's DevTools console with the full
 // CAF event payload (detailedErrorCode, reason, shaka-side error data).
@@ -72,7 +70,6 @@ playerManager.addEventListener(
   cast.framework.events.EventType.ERROR,
   (event) => {
     console.error('[fliks-cast] ERROR', JSON.stringify(event));
-    document.body.classList.remove('playing');
     stopEdl();
     // Forward to web senders so they can refresh the sid and resume; the
     // sender classifies recoverable (network / 410) vs dead-end errors.
@@ -515,14 +512,18 @@ function renderBar() {
   renderStateIcon(st, spinning);
   spinnerEl.classList.toggle('show', spinning);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
-  const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
+  if (idle) document.body.classList.remove('playing');
+  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
+  const time = playerData.currentTime || 0;
+  const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
+  const music = document.body.classList.contains('music-on');
+  if (music) renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', pct(time));
+  // The music view shows its own progress.
+  const show = !idle && !music && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
   document.body.classList.toggle('bar-on', show);
   if (barPlayer) barPlayer.classList.toggle('bar-on', show);
   if (!show) return;
-  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
-  const time = playerData.currentTime || 0;
-  const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
   // An episode leads with its own label (`subtitle`), the series name under it; any other subtitle (artists) stays below.
   const info = playerManager.getMediaInformation();
   const episode = !!(playerData.subtitle && info && info.customData && info.customData.episodeId);
@@ -566,6 +567,8 @@ playerManager.setMessageInterceptor(
       'contentType=',
       loadRequest.media?.contentType,
     );
+    // A LOAD starts a new queue: the up-next item went with the old one.
+    upNext = null;
     const media = loadRequest.media;
     if (media) {
       prepareEdl(media, loadRequest);
@@ -788,7 +791,10 @@ function renderLyrics(i) {
 
 function refreshLyrics() {
   const { doc } = lyricsState;
-  if (!doc || !document.body.classList.contains('playing')) return lyricsEl.classList.remove('show');
+  // A document belongs to its track: the next one's arrives just after the queue moves on.
+  const visible = !!doc && doc.itemId === playingItemId() && document.body.classList.contains('playing');
+  document.body.classList.toggle('lyrics-on', visible);
+  if (!visible) return lyricsEl.classList.remove('show');
   const pos = playerManager.getCurrentTimeSec() * 1000;
   const timed = doc.synced && doc.rows.every((r) => r.start !== undefined && r.start !== null);
   const i = timed ? activeIndex(doc.rows, pos, doc.offset) : -1;
@@ -832,6 +838,87 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
     dropLyrics();
   }
 });
+
+// --- Up next ----------------------------------------------------------------
+// The sender queues the next music track ahead of the end of the current one; CAF moves on to it by itself,
+// with no IDLE in between. One item at most: a new one replaces it, `media: null` drops it.
+
+const UP_NEXT_PRELOAD_S = 15;
+let upNext = null;
+
+function queuedMedia(m) {
+  const media = new cast.framework.messages.MediaInformation();
+  media.contentId = m.url;
+  media.contentUrl = m.url;
+  media.contentType = m.contentType;
+  media.streamType = cast.framework.messages.StreamType.BUFFERED;
+  media.hlsSegmentFormat = cast.framework.messages.HlsSegmentFormat.FMP4;
+  const meta = new cast.framework.messages.GenericMediaMetadata();
+  meta.title = m.title || '';
+  meta.subtitle = m.subtitle || '';
+  if (m.posterUrl) meta.images = [new cast.framework.messages.Image(m.posterUrl)];
+  media.metadata = meta;
+  media.customData = m.customData || {};
+  return media;
+}
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || msg.kind !== 'queue_next') return;
+  const queue = playerManager.getQueueManager();
+  const current = queue.getCurrentItem();
+  // The queue may already have moved on to it: never drop the playing item.
+  if (upNext !== null && (!current || current.itemId !== upNext)) queue.removeItems([upNext]);
+  upNext = null;
+  if (!msg.media) return;
+  const item = new cast.framework.messages.QueueItem();
+  item.media = queuedMedia(msg.media);
+  item.autoplay = true;
+  item.preloadTime = UP_NEXT_PRELOAD_S;
+  queue.insertItems([item]);
+  const items = queue.getItems() || [];
+  upNext = items.length ? items[items.length - 1].itemId : null;
+  console.log('[fliks-cast] up next', upNext, msg.media.title);
+});
+
+// --- Music view -------------------------------------------------------------
+// A music track (its LOAD carries an `itemId`) shows its cover over its own artwork blurred, the lyrics beside it.
+
+const musicEl = document.getElementById('music');
+const musicBackdrop = musicEl.querySelector('.music-backdrop');
+const musicCover = musicEl.querySelector('.music-cover');
+const musicTitle = musicEl.querySelector('.music-title');
+const musicArtist = musicEl.querySelector('.music-artist');
+const musicElapsed = musicEl.querySelector('.music-elapsed');
+const musicTotal = musicEl.querySelector('.music-total');
+const musicPlayed = musicEl.querySelector('.music-played');
+
+function playingItemId() {
+  const info = playerManager.getMediaInformation();
+  const id = info && info.customData ? info.customData.itemId : undefined;
+  return typeof id === 'number' ? id : null;
+}
+
+function renderMusic() {
+  const music = playingItemId() !== null;
+  document.body.classList.toggle('music-on', music);
+  if (!music) return;
+  const meta = playerManager.getMediaInformation().metadata || {};
+  const cover = meta.images && meta.images.length ? meta.images[0].url : '';
+  if ((musicCover.getAttribute('src') || '') !== cover) {
+    if (cover) musicCover.setAttribute('src', cover);
+    else musicCover.removeAttribute('src');
+    musicBackdrop.style.backgroundImage = cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none';
+  }
+  musicTitle.textContent = meta.title || '';
+  musicArtist.textContent = meta.subtitle || meta.artist || '';
+}
+
+function renderMusicProgress(elapsed, total, played) {
+  musicElapsed.textContent = elapsed;
+  musicTotal.textContent = total;
+  musicPlayed.style.width = played;
+}
 
 // --- Boot ---------------------------------------------------------------
 //

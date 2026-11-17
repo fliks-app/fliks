@@ -95,7 +95,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     partyActive: signal(false),
   };
   const audioView = { expand: vi.fn(), track: signal(null), position: () => sync.positionNow(account()!), duration: () => sync.durationNow(account()!), queue: signal([]), neighbour: () => null, next: vi.fn(), previous: vi.fn() };
-  const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null), isCasting: signal(false) };
+  const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) };
   TestBed.configureTestingModule({
     providers: [
       provideTranslateService(),
@@ -134,13 +134,6 @@ describe('CastOverlayComponent', () => {
     expect(setup({ local: true }).el.querySelector('button')).toBeNull();
     TestBed.resetTestingModule();
     expect(setup({ tv: true }).el.querySelector('button')).toBeNull();
-  });
-
-  it('leaves the receiver to the audio bar while the audio player casts', () => {
-    const { el, audio, fixture } = setup();
-    audio.isCasting.set(true);
-    fixture.detectChanges();
-    expect(el.querySelector('button')).toBeNull();
   });
 
   it('opens the player on a tap, pauses and disconnects from its own buttons', () => {

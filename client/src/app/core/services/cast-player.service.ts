@@ -1,12 +1,12 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService } from './cast.service';
+import { CastService, type CastMediaInfo } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.service';
-import { StreamingApiService, lostCurrentSession, type PlayMethod } from './api/streaming-api.service';
+import { StreamingApiService, lostCurrentSession, type PlayMethod, type PlaybackInfoResponse } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import type { StemKind } from './api/karaoke.models';
@@ -143,7 +143,6 @@ interface CastResumeState {
   mediaFileId: number;
   mediaId: number;
   episodeId: number | undefined;
-  itemId?: number;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
   playbackId?: string | null;
@@ -275,31 +274,13 @@ export class CastPlayerService {
 
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
   async castTrack(t: CastTrack, autoplay = true, startAt = 0, current: () => boolean = () => true) {
-    const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
-      this.authService.getCastInfo(),
-    ]);
+    const { pi, media } = await this.prepareTrack(t, startAt);
     if (!current()) {
       if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
       return null;
     }
-    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
-    const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
     try {
-      await this.cast.loadMedia({
-        url,
-        contentType,
-        title: t.title,
-        subtitle: t.artists,
-        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
-        mediaId: t.mediaId,
-        itemId: t.itemId,
-        mediaFileId: pi.mediaFileId,
-        sid: pi.sessionId,
-        userId: this.authService.user()?.id,
-        currentTime: startAt,
-        autoplay,
-      });
+      await this.cast.loadMedia({ ...media, autoplay });
       return pi;
     } catch (err) {
       console.error('[cast] LOAD failed', err);
@@ -307,6 +288,30 @@ export class CastPlayerService {
       this.toast.error(this.translate.instant('cast.error.load_failed'));
       return null;
     }
+  }
+
+  /** The server's playback info of a music track and the receiver media that plays it. */
+  async prepareTrack(t: CastTrack, startAt = 0): Promise<{ pi: PlaybackInfoResponse; media: CastMediaInfo }> {
+    const [pi, castInfo] = await Promise.all([
+      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
+      this.authService.getCastInfo(),
+    ]);
+    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
+    const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
+    const media: CastMediaInfo = {
+      url,
+      contentType,
+      title: t.title,
+      subtitle: t.artists,
+      posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
+      mediaId: t.mediaId,
+      itemId: t.itemId,
+      mediaFileId: pi.mediaFileId,
+      sid: pi.sessionId,
+      userId: this.authService.user()?.id,
+      currentTime: startAt,
+    };
+    return { pi, media };
   }
 
   /** Conservative video side of the profile: only a v2 receiver, and only what its MSE reports; levels
@@ -419,8 +424,6 @@ export class CastPlayerService {
   readonly mediaFileId = signal(0);
   readonly mediaId = signal(0);
   readonly episodeId = signal<number | undefined>(undefined);
-  /** Set only while a music track plays. */
-  readonly itemId = signal<number | undefined>(undefined);
   readonly playbackMode = signal<PlaybackMode>('transcode');
   /** Markers, chapters and EDL of the file on the receiver, from its playback-info. */
   readonly timeline = signal<PlaybackTimeline>(NO_TIMELINE);
@@ -472,7 +475,6 @@ export class CastPlayerService {
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
-    this.itemId.set(undefined);
     this.playbackMode.set(opts.playbackMode);
     this.selectionFileId = opts.mediaFileId;
     this.activeQualityId.set(opts.activeQualityId);
@@ -514,7 +516,6 @@ export class CastPlayerService {
       mediaFileId: this.mediaFileId(),
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
-      itemId: this.itemId(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
       playbackId: this.playbackId,
@@ -535,7 +536,6 @@ export class CastPlayerService {
       mediaFileId: d['mediaFileId'] as number,
       mediaId: d['mediaId'] as number,
       episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
-      itemId: typeof d['itemId'] === 'number' ? d['itemId'] : undefined,
       playbackMode: 'transcode',
       liveSessionId: typeof d['sid'] === 'string' && !this.controlOnly() ? d['sid'] : null,
       playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
@@ -570,7 +570,8 @@ export class CastPlayerService {
 
   private followReceiver(data: Record<string, unknown> | null): void {
     if (!data || !this.cast.isConnected() || this.reloading()) return;
-    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number') {
+    // A music track (its LOAD carries an `itemId`) belongs to the audio player.
+    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number' || typeof data['itemId'] === 'number') {
       if (this.hasMedia()) this.clear();
     } else if (!this.hasMedia() || data['mediaFileId'] !== this.mediaFileId()) {
       this.restore(this.stateFromReceiver(data));
@@ -581,7 +582,6 @@ export class CastPlayerService {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
-    this.itemId.set(s.itemId);
     this.playbackMode.set(s.playbackMode);
     this.setLiveSession(s.liveSessionId);
     this.playbackId = s.playbackId ?? null;
@@ -622,7 +622,6 @@ export class CastPlayerService {
     this.mediaFileId.set(0);
     this.mediaId.set(0);
     this.episodeId.set(undefined);
-    this.itemId.set(undefined);
     this.timeline.set(NO_TIMELINE);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);

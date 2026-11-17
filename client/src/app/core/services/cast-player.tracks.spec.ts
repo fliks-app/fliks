@@ -221,6 +221,17 @@ describe('another sender loads on the receiver', () => {
     expect(svc.episodeId()).toBe(2);
   });
 
+  it('leaves a music track to the audio player, its video stream stopped', () => {
+    const { svc, cast } = setup();
+    svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
+    cast.receiverMedia.set(ours);
+    TestBed.tick();
+    cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9, itemId: 12, sid: 'm' });
+    TestBed.tick();
+    expect(svc.hasMedia()).toBe(false);
+    expect(svc.liveSessionId()).toBeNull();
+  });
+
   it('stops mirroring media from another app', () => {
     const { svc, cast } = setup();
     svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
