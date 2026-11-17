@@ -27,7 +27,7 @@ export class MicCapture {
 
   /** `now` is the clock the frames are stamped with: host media time in ms. */
   async start(onFrame: (f: PitchFrame) => void, now: () => number): Promise<void> {
-    if (Capacitor.getPlatform() === 'android') return this.startNative(onFrame, now);
+    if (['android', 'ios'].includes(Capacitor.getPlatform())) return this.startNative(onFrame, now);
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
@@ -46,7 +46,7 @@ export class MicCapture {
     }
   }
 
-  /** The WebView's echo canceller would put Android in call mode, so the platform one runs natively. */
+  /** Android: the WebView's echo canceller would put the phone in call mode. iOS: WebKit's capture opens a session that interrupts the music. Both capture natively. */
   private async startNative(onFrame: (f: PitchFrame) => void, now: () => number): Promise<void> {
     const win = new PitchWindow();
     const smooth = new PitchSmoother();
