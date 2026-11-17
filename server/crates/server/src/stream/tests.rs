@@ -1428,8 +1428,28 @@ async fn an_audio_item_resumes_on_the_item_route_only(pool: PgPool) {
     item_info(&c, &c.token, b.audio, "").await;
     let req = c.fake.seen("POST", "/v1/sessions").pop().unwrap().body;
     assert_eq!(req["startAtS"].as_f64(), Some(100.0));
+    // A part with a video stream is the only audio file the per-file route opens (rule 6).
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = $2 WHERE id = $1"#)
+        .bind(b.files[1])
+        .bind(stream_info())
+        .execute(&c.pool)
+        .await
+        .unwrap();
     let uri = format!("/api/stream/{}/playback-info", b.files[1]);
     call(&c, "POST", &uri, &c.token, Some(device())).await;
     let req = c.fake.seen("POST", "/v1/sessions").pop().unwrap().body;
     assert_eq!(req["startAtS"].as_f64(), Some(0.0));
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_file_route_refuses_a_file_without_video(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let b = audiobook(&c).await;
+    let uri = format!("/api/stream/{}/playback-info", b.files[0]);
+    let (s, body) = call(&c, "POST", &uri, &c.token, Some(device())).await;
+    assert_eq!(
+        (s, body["message"].as_str()),
+        (422, Some("errors.no_video_stream"))
+    );
+    assert!(c.fake.seen("POST", "/v1/sessions").is_empty());
 }

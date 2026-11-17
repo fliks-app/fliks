@@ -3911,6 +3911,7 @@
     "409": "Konflikt: die Ressource existiert bereits",
     "already_running": "Das läuft bereits.",
     "ambiguous_item": "Dieser Titel enthält mehrere Elemente, aber keines wurde ausgewählt.",
+    "no_video_stream": "Diese Datei hat keine Videospur.",
     "folder_overlap": "Dieser Ordner stimmt mit einem anderen Bibliotheksordner überein, enthält ihn oder liegt darin. Ordner müssen über alle Bibliotheken hinweg getrennt sein.",
     "folder_in_use": "Dieser Ordner enthält noch Medien: Verschieben Sie sie oder entfernen Sie sie zuerst aus Fliks.",
     "folder_reserved": "Dieser Ordner kann nicht verwendet werden: Er ist das Systemstammverzeichnis oder enthält die Daten oder den Cache von Fliks.",
