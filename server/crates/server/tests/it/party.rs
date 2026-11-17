@@ -2930,7 +2930,7 @@ async fn members_add_by_turn_with_a_cap_and_remove_their_own_rows(pool: PgPool) 
     let (s, e) = add_tracks(&c, &url, &b, &[6], "last").await;
     assert_eq!((s, msg(&e)), (409, Some("party.error_queue_full")));
     let o = programme_items(&c, &url).await;
-    assert_eq!(o[1..], [5001, 5003, 5004, 5002, 5005]);
+    assert_eq!(o[1..], [5003, 5004, 5001, 5005, 5002]);
     let (_, q) = c.call("GET", &format!("{url}/queue"), &a, None).await;
     let by: Vec<_> = q
         .as_array()
@@ -2941,11 +2941,11 @@ async fn members_add_by_turn_with_a_cap_and_remove_their_own_rows(pool: PgPool) 
     assert_eq!(
         by[1..],
         [
-            json!(alice),
             json!(bob),
             json!(cara),
             json!(alice),
-            json!(bob)
+            json!(bob),
+            json!(alice)
         ]
     );
 
@@ -2971,7 +2971,7 @@ async fn members_add_by_turn_with_a_cap_and_remove_their_own_rows(pool: PgPool) 
     assert_eq!(add_tracks(&c, &url, &a, &[6], "next").await.0, 200);
     assert_eq!(
         programme_items(&c, &url).await[1..],
-        [5006, 5001, 5004, 5002, 5005]
+        [5006, 5004, 5001, 5005, 5002]
     );
     let (s, _) = c
         .call("DELETE", &format!("{url}/programme/items/5004"), &a, None)

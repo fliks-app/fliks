@@ -37,7 +37,8 @@ pub fn place(
         Rule::At(Where::Last) => return Ok(authors.len()),
         Rule::Turns { cap } => cap,
     };
-    let played = if started { current.unwrap_or(0) } else { 0 };
+    // The playing row is its author's latest turn.
+    let played = if started { start } else { 0 };
     let mut last: HashMap<Option<i32>, usize> = HashMap::new();
     for (i, a) in authors[..played].iter().enumerate() {
         last.insert(*a, i);
@@ -99,6 +100,17 @@ mod tests {
         assert_eq!(queue(&[], &adds, 9), [1, 4, 5, 2, 6, 3]);
         let late = [(1, A), (2, B), (3, A)];
         assert_eq!(queue(&[A], &late, 9), [2, 1, 3]);
+    }
+
+    #[test]
+    fn the_singer_playing_now_has_just_sung() {
+        // a sang row 0, b sings row 1; a adds, then b adds: b must not follow itself.
+        let mut authors = vec![A, B];
+        for who in [A, B] {
+            let at = place(&authors, Some(1), true, who, Rule::Turns { cap: 9 }).unwrap();
+            authors.insert(at, who);
+        }
+        assert_eq!(authors, [A, B, A, B]);
     }
 
     #[test]
