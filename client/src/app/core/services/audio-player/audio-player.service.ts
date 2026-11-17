@@ -32,7 +32,7 @@ import { FullPlayerState } from '../playback/full-player-state';
 import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
 import { PlayerStateService } from '../player-state.service';
 import type { LocalPlayer, MusicHandoff, MusicSnapshot } from '../playback/playback-output';
-import { MusicCastOutput } from './music-cast-output';
+import { MusicCastOutput, type MusicAdoption } from './music-cast-output';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -267,6 +267,13 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
       },
       stemsFailed: () => this.onStemsFailed(),
       startOnCast: async (s) => void (await this.startMusic(s.track, !s.paused, s.position, true)),
+      queue: () => (this._musicMode() ? { itemIds: this._queue().map((t) => t.itemId), index: this._queueIndex(), shuffle: this._shuffle(), repeat: this._repeat() } : null),
+      adopt: (a) => this.adoptCast(a),
+      adopted: () => void this.refreshStems(),
+      lost: () => {
+        this.castOut.release();
+        void this.close();
+      },
     });
     if (this.nativeAudio) {
       void this.attachNative().catch(() => undefined);
@@ -697,6 +704,36 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         this._loading.set(false);
       }
     }
+  }
+
+  /** Takes the track the receiver already plays: no LOAD, the receiver's session keeps beating from here. */
+  private async adoptCast(a: MusicAdoption): Promise<boolean> {
+    if (this._track() || this.blockedByParty()) return false;
+    const generation = ++this.generation;
+    const queued = a.queue ? await this.queueOf({ itemIds: a.queue.itemIds, index: a.queue.index }) : null;
+    let tracks = queued?.tracks ?? [];
+    let at = tracks.findIndex((t, i) => i >= queued!.index && t.itemId === a.itemId);
+    if (at < 0) at = tracks.findIndex((t) => t.itemId === a.itemId);
+    const kept = at >= 0;
+    if (!kept) {
+      tracks = await this.music.trackRequests([a.itemId]);
+      at = 0;
+    }
+    if (generation !== this.generation || this._track() || !tracks.length) return false;
+    this.mq.adopt(tracks, at, kept && a.queue!.shuffle);
+    this.mq.repeat = kept ? a.queue!.repeat : 'off';
+    this.syncQueue();
+    const req = tracks[at];
+    this._pitch.set(0);
+    this._musicMode.set(true);
+    this._track.set(this.audioOf(req));
+    this.info = { playMethod: 'DirectPlay', mediaFileId: a.mediaFileId, sessionId: a.sid ?? undefined, durationSeconds: req.durationSeconds ?? 0 } as PlaybackInfoResponse;
+    this.sessionId = a.sid ?? undefined;
+    this._duration.set(req.durationSeconds ?? 0);
+    this._stemMode.set(a.stemMode);
+    this._vocalLevel.set(a.vocalLevel);
+    this.setupMediaSession(this._track()!);
+    return true;
   }
 
   private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number): Promise<void> {

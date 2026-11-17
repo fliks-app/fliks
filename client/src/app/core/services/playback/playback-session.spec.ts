@@ -116,7 +116,7 @@ function setup() {
   };
   const device = { isTv: signal(false) };
   const audio = { holds: vi.fn(() => false), release: vi.fn(async (): Promise<unknown> => null), stepAside: vi.fn(), resume: vi.fn(async (_s: MusicSnapshot) => {}) };
-  const musicCast = { hasMedia: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}) };
+  const musicCast = { hasMedia: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}), adopt: vi.fn() };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
@@ -271,6 +271,22 @@ describe('PlaybackSession', () => {
       TestBed.tick();
       expect(local.stepAside).toHaveBeenCalled();
       expect(local.release).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('music rejoin', () => {
+    it('arms the music cast output with a music-tagged resumed state and steps the local player aside', () => {
+      const { castSvc, cast, audio, musicCast, castPlayer } = setup();
+      audio.holds.mockReturnValue(true);
+      musicCast.adopt.mockImplementation(() => musicCast.hasMedia.set(true));
+      const state = { kind: 'music', itemId: 4, mediaFileId: 40 };
+      castSvc.resumedState.set(state);
+      cast.isConnected.set(true);
+      TestBed.tick();
+      expect(musicCast.adopt).toHaveBeenCalledWith(state);
+      expect(castPlayer.adopt).not.toHaveBeenCalled();
+      expect(audio.stepAside).toHaveBeenCalled();
+      expect(audio.release).not.toHaveBeenCalled();
     });
   });
 

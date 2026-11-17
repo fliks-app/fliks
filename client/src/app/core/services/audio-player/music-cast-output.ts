@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../auth.service';
 import { CastPlayerService } from '../cast-player.service';
@@ -9,14 +9,41 @@ import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { ToastService } from '../toast.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
 import type { StemKind } from '../api/karaoke.models';
-import type { MusicTrackRequest } from './music-queue';
+import type { MusicTrackRequest, Repeat } from './music-queue';
 import type { MusicHandoff, MusicSnapshot } from '../playback/playback-output';
 import type { StemMode } from './stem-mix';
+
+export type ResumeQueue = { itemIds: number[]; index: number; shuffle: boolean; repeat: Repeat };
+
+/** Saved with kind `music`; `mediaId` and `mediaFileId` are what a desktop relaunch matches against the receiver. */
+export interface MusicCastState {
+  mediaId: number;
+  mediaFileId: number;
+  itemId: number;
+  sid: string | null;
+  /** The receiver's statuses carry no stem: the state does. */
+  stem: StemKind | 'mix' | null;
+  queue: ResumeQueue | null;
+  stemMode: StemMode;
+  vocalLevel: number;
+}
+
+/** What the receiver plays of ours, as the audio player takes it over. */
+export interface MusicAdoption {
+  itemId: number;
+  sid: string | null;
+  mediaFileId: number;
+  queue: ResumeQueue | null;
+  stemMode: StemMode;
+  vocalLevel: number;
+}
 
 /** What the audio player lends its cast output. */
 export interface MusicCastHost {
   /** The queue track playing, reactive. */
   current(): MusicTrackRequest | null;
+  /** The play order, reactive; null outside music. */
+  queue(): ResumeQueue | null;
   karaoke(): { mode: StemMode; level: number };
   /** Where the receiver is and whether it plays, as of now. */
   playhead(): { position: number; playing: boolean };
@@ -31,6 +58,12 @@ export interface MusicCastHost {
   stemsFailed(): void;
   /** Plays the snapshot's track on the receiver. */
   startOnCast(s: MusicSnapshot): Promise<void>;
+  /** Takes over the receiver's track; false when this device plays something else. */
+  adopt(a: MusicAdoption): Promise<boolean>;
+  /** The adopted media is active: its stems can be looked up. */
+  adopted(): void;
+  /** Another sender's media replaced ours on the receiver. */
+  lost(): void;
 }
 
 /** The server's mix of a stem file, as a receiver source id. */
@@ -51,11 +84,15 @@ export class MusicCastOutput {
 
   private readonly host = signal<MusicCastHost | null>(null);
   private readonly _active = signal(false);
+  /** A resumed state armed: the next status of the user's own music on the receiver is adopted. */
+  private readonly pending = signal<MusicCastState | null>(null);
+  /** The receiver ids of the last LOAD or advance, which the resume state carries. */
+  private readonly loaded = signal<Pick<MusicCastState, 'mediaId' | 'mediaFileId' | 'itemId' | 'sid'> | null>(null);
   readonly isConnected = this.cast.isConnected;
   /** This device's music plays on the receiver. */
   readonly active = this._active.asReadonly();
-  /** Music plays on the receiver. */
-  readonly hasMedia = this.active;
+  /** Ours plays on the receiver, or a resumed state waits to take it back. */
+  readonly hasMedia = computed(() => this._active() || this.pending() !== null);
 
   /** Bumped by every call that makes an in-flight load or prepare stale. */
   private generation = 0;
@@ -65,11 +102,13 @@ export class MusicCastOutput {
   private tried: MusicTrackRequest | null = null;
   /** The receiver reported the playing track under way, so its end can be told from the status of a move to it. */
   private started = false;
+  /** A status named our track: media without an item id then means another sender replaced it. */
+  private seen = false;
   private stemFile: number | null = null;
   /** Content type of each stem the receiver may load. */
   private stemTypes: Partial<Record<StemKind, string>> = {};
   /** What the receiver plays in place of the track: a stem, or its mix of the stems. */
-  private stemKind: StemKind | 'mix' | null = null;
+  private readonly stemKind = signal<StemKind | 'mix' | null>(null);
   private stemRun: Promise<void> = Promise.resolve();
 
   constructor() {
@@ -94,6 +133,27 @@ export class MusicCastOutput {
       const media = this.cast.receiverMedia();
       if (host && this.active() && host.current()) untracked(() => this.onStatus(host, ended, media));
     });
+    effect(() => {
+      const host = this.host();
+      const pending = this.pending();
+      const media = this.cast.receiverMedia();
+      if (host && pending && !this._active() && this.cast.isConnected()) untracked(() => void this.follow(host, pending, media));
+    });
+    effect(() => {
+      const host = this.host();
+      const loaded = this.loaded();
+      if (!host || !loaded || !this.active()) return;
+      const state: MusicCastState = { ...loaded, stem: this.stemKind(), queue: host.queue(), stemMode: host.karaoke().mode, vocalLevel: host.karaoke().level };
+      untracked(() => this.cast.saveResumeState('music', state));
+    });
+    let wasConnected = false;
+    effect(() => {
+      const connected = this.cast.isConnected();
+      untracked(() => {
+        if (wasConnected && !connected) this.pending.set(null);
+        wasConnected = connected;
+      });
+    });
   }
 
   attach(host: MusicCastHost): () => void {
@@ -105,6 +165,7 @@ export class MusicCastOutput {
   async load(t: MusicTrackRequest, autoplay: boolean, startAt: number, current: () => boolean): Promise<PlaybackInfoResponse | null> {
     this.generation++;
     this.started = false;
+    this.seen = false;
     this.nowPlaying.primeTracks([t]);
     const info = await this.loadTrack(t, autoplay, startAt, current);
     if (info) this._active.set(true);
@@ -150,6 +211,15 @@ export class MusicCastOutput {
   release(): void {
     this.generation++;
     this._active.set(false);
+    this.seen = false;
+    this.pending.set(null);
+    this.loaded.set(null);
+    this.cast.clearResumeState('music');
+  }
+
+  /** Arms the adoption of the receiver's music of this user, from the state a bridge handed back. */
+  adopt(state: MusicCastState): void {
+    if (!this.active()) this.pending.set(state);
   }
 
   /** The receiver moves on to `next` by itself at the end of the playing track, with no LOAD in between. */
@@ -193,7 +263,7 @@ export class MusicCastOutput {
 
   clearStems(): void {
     this.stemFile = null;
-    this.stemKind = null;
+    this.stemKind.set(null);
   }
 
   /** One switch at a time, each from the state when it runs: a second LOAD would replace the first and fail it. */
@@ -211,7 +281,7 @@ export class MusicCastOutput {
     const { mode, level } = host.karaoke();
     const mixed = this.serverVersion.supports(SERVER_SINCE.stemPcm);
     const kind = mode === 'original' ? null : mixed ? 'mix' : mode === 'guide' && 'guide' in this.stemTypes ? 'guide' : 'instrumental';
-    if (kind === this.stemKind) return kind === 'mix' ? this.setMixVocals(file, level) : undefined;
+    if (kind === this.stemKind()) return kind === 'mix' ? this.setMixVocals(file, level) : undefined;
     // The LOAD below empties the receiver's queue.
     this.dropNext();
     const generation = this.generation;
@@ -227,7 +297,7 @@ export class MusicCastOutput {
       if (!info) return void (current() && host.stemsFailed());
       host.reloaded(info);
     }
-    if (current()) this.stemKind = kind;
+    if (current()) this.stemKind.set(kind);
   }
 
   /** A status names the media it reports: the queued track the receiver moved on to, the track playing here, or a stale one. */
@@ -236,17 +306,39 @@ export class MusicCastOutput {
     const next = this.next;
     if (next && media['sid'] === next.info.sessionId) {
       this.started = false;
+      this.seen = true;
       this.next = null;
       this.tried = null;
+      this.loaded.set({ mediaId: next.req.mediaId, mediaFileId: next.info.mediaFileId, itemId: next.req.itemId, sid: next.info.sessionId ?? null });
       return host.advanced(next.req, next.info);
     }
+    if (typeof media['itemId'] !== 'number') return this.seen ? host.lost() : undefined;
     if (media['itemId'] !== host.current()?.itemId) return;
+    this.seen = true;
     // The queue reports its move to a track as that track IDLE and finished: only an end after it played counts.
     if (!ended) this.started = true;
     else if (this.started) {
       this.started = false;
       host.ended();
     }
+  }
+
+  /** Takes the receiver's music of this user once a resumed state armed it; the state's mix survives only for its own item. */
+  private async follow(host: MusicCastHost, pending: MusicCastState, media: Record<string, unknown> | null): Promise<void> {
+    const itemId = media?.['itemId'];
+    const mediaFileId = media?.['mediaFileId'];
+    if (!media || typeof itemId !== 'number' || typeof mediaFileId !== 'number' || media['userId'] !== this.auth.user()?.id) return;
+    this.pending.set(null);
+    const same = itemId === pending.itemId;
+    const sid = same ? pending.sid : typeof media['sid'] === 'string' ? media['sid'] : null;
+    const stemMode = same ? pending.stemMode : 'original';
+    if (!(await host.adopt({ itemId, sid, mediaFileId, queue: pending.queue, stemMode, vocalLevel: same ? pending.vocalLevel : 0 }))) return;
+    this.seen = true;
+    this.started = false;
+    this.stemKind.set(same ? pending.stem : null);
+    this.loaded.set({ mediaId: typeof media['mediaId'] === 'number' ? media['mediaId'] : pending.mediaId, mediaFileId, itemId, sid });
+    this._active.set(true);
+    host.adopted();
   }
 
   /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
@@ -299,6 +391,7 @@ export class MusicCastOutput {
         currentTime: position,
         autoplay,
       });
+      this.loaded.update((l) => ({ mediaId: t.mediaId, itemId: t.itemId, mediaFileId: fileId, sid: l?.sid ?? null }));
       return true;
     } catch (err) {
       console.error('[cast] stem LOAD failed', err);
@@ -320,6 +413,7 @@ export class MusicCastOutput {
     }
     try {
       await this.cast.loadMedia({ ...media, autoplay });
+      this.loaded.set({ mediaId: t.mediaId, mediaFileId: pi.mediaFileId, itemId: t.itemId, sid: pi.sessionId ?? null });
       return pi;
     } catch (err) {
       console.error('[cast] LOAD failed', err);

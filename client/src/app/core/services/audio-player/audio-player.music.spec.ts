@@ -469,6 +469,40 @@ describe('AudioPlayerService music mode', () => {
     expect(castOut.pause).not.toHaveBeenCalled();
   });
 
+  it('adopts a receiver track: queue, cursor and the receiver\'s session, beats with its sid, sends no LOAD', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    const queue = { itemIds: [1, 2, 3], index: 0, shuffle: false, repeat: 'all' as const };
+    expect(await host.adopt({ itemId: 2, sid: 'rs', mediaFileId: 20, queue, stemMode: 'guide', vocalLevel: 0.3 })).toBe(true);
+    expect(audio.track()?.itemId).toBe(2);
+    expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2, 3]);
+    expect(audio.queueIndex()).toBe(1);
+    expect(audio.repeat()).toBe('all');
+    expect(audio.stemMode()).toBe('guide');
+    expect(audio.vocalLevel()).toBe(0.3);
+    expect(castLoad).not.toHaveBeenCalled();
+    expect(getItemPlaybackInfo).not.toHaveBeenCalled();
+    TestBed.tick();
+    await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 2, mediaFileId: 20, sessionId: 'rs' })));
+  });
+
+  it('refuses a receiver track while it plays something else', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    expect(await host.adopt({ itemId: 2, sid: null, mediaFileId: 20, queue: null, stemMode: 'original', vocalLevel: 0 })).toBe(false);
+    expect(audio.track()?.itemId).toBe(1);
+  });
+
+  it('closes without stopping the receiver when its cast output loses it', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs1', 10));
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    castOut.stop.mockClear();
+    host.lost();
+    await vi.waitFor(() => expect(audio.track()).toBeNull());
+    expect(castOut.release).toHaveBeenCalled();
+  });
+
   it('queues the next track on its cast output near the end', async () => {
     castOut.isConnected.set(true);
     castLoad.mockResolvedValue(castInfo('cs1', 10));

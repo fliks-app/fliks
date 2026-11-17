@@ -4,7 +4,7 @@ import { TranslateService } from '@ngx-translate/core';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
-import { MusicCastOutput } from '../audio-player/music-cast-output';
+import { MusicCastOutput, type MusicCastState } from '../audio-player/music-cast-output';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
@@ -511,7 +511,9 @@ export class PlaybackSession {
 
   private rejoin(): void {
     const state = this.castSvc().resumedState();
-    if (state?.kind === 'video') this.castPlayer().adopt(state);
+    if (!state) return;
+    if (state.kind === 'music') this.musicCast().adopt(state as unknown as MusicCastState);
+    else this.castPlayer().adopt(state);
   }
 
   private receiverBusy(): boolean {
