@@ -11,10 +11,11 @@
     <p class="text-sm text-error" role="alert">{{ 'lyrics.error' | translate }}</p>
   }
 
-  <div class="min-h-24 flex-1">
+  <div class="flex min-h-24 flex-1 flex-col justify-center">
     @if (mode() === 'view') {
       @if (stageDoc(); as d) {
         <app-karaoke-stage
+          class="block h-full min-h-0"
           [doc]="d"
           [output]="output()"
           [title]="audio.track()?.title ?? ''"
@@ -32,7 +33,7 @@
         @if (loading() && !res()) {
           <!-- Nothing until the lyrics land, so "no lyrics" never flashes. -->
         } @else if (shown(); as d) {
-          <app-lyrics-view [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
+          <app-lyrics-view class="block h-full sm:h-80 sm:max-h-full" [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
         } @else if (res()?.instrumental) {
           <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
         } @else {
