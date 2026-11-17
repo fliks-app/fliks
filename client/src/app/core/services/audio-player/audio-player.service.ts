@@ -238,6 +238,8 @@ export class AudioPlayerService {
   private preTried: MusicTrackRequest | null = null;
   /** The next track, queued on the receiver after the playing one. */
   private castNext: { req: MusicTrackRequest; info: PlaybackInfoResponse } | null = null;
+  /** The receiver reported the playing track under way, so its end can be told from the status of a move to it. */
+  private castStarted = false;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
   private stems: StemMix | null = null;
@@ -707,15 +709,10 @@ export class AudioPlayerService {
         const paused = cast.isPaused();
         if (this.casting) this.onPlayState(!paused);
       });
-      // Only the end of the track playing here: a status that still reports the previous one is stale.
       effect(() => {
-        if (cast.ended() && this.casting && cast.receiverMedia()?.['itemId'] === this._track()?.itemId) void this.onMusicEnded();
-      });
-      effect(() => {
-        const sid = cast.receiverMedia()?.['sid'];
-        untracked(() => {
-          if (this.casting && this.castNext && sid === this.castNext.info.sessionId) this.onCastAdvanced();
-        });
+        const ended = cast.ended();
+        const media = cast.receiverMedia();
+        if (this._casting() && this._track()) untracked(() => this.onReceiverStatus(ended, media));
       });
       effect(() => {
         if (!cast.isConnected() && this.casting) void this.close();
@@ -725,6 +722,7 @@ export class AudioPlayerService {
   }
 
   private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number): Promise<void> {
+    this.castStarted = false;
     await this.nativeAudio?.stop().catch(() => undefined);
     this.injector.get(NowPlayingMetadataService).primeTracks([req]);
     const info = await this.injector.get(CastPlayerService).castTrack(req, autoplay, startAt);
@@ -866,10 +864,24 @@ export class AudioPlayerService {
     void this.refreshStems();
   }
 
+  /** A status names the media it reports: the queued track the receiver moved on to, the track playing here, or a stale one. */
+  private onReceiverStatus(ended: boolean, media: Record<string, unknown> | null): void {
+    if (!media) return;
+    if (this.castNext && media['sid'] === this.castNext.info.sessionId) return this.onCastAdvanced();
+    if (media['itemId'] !== this._track()?.itemId) return;
+    // The queue reports its move to a track as that track IDLE and finished: only an end after it played counts.
+    if (!ended) this.castStarted = true;
+    else if (this.castStarted) {
+      this.castStarted = false;
+      void this.onMusicEnded();
+    }
+  }
+
   /** The receiver moved on to the track queued on it: the queue follows, nothing reloads. */
   private onCastAdvanced(): void {
     const { req, info } = this.castNext!;
     this.retireTrack();
+    this.castStarted = false;
     this.castNext = null;
     this.preTried = null;
     this.mq.next(true);

@@ -70,7 +70,7 @@ describe('AudioPlayerService on the native player', () => {
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }), stopSessionRequest: () => ({ url: '/x', init: {} }) } },
         { provide: AuthService, useValue: { refreshAccessToken, user } },
-        { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false) } },
+        { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), ended: signal(false), receiverMedia: signal(null) } },
         { provide: CastPlayerService, useValue: {} },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x', directPlayProfiles: [] }), whenNativeProbed: async () => undefined } },
         { provide: MediaService, useValue: {} },

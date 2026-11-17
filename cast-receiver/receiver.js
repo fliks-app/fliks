@@ -40,8 +40,8 @@ console.log('[fliks-cast] receiver boot start');
 
 // --- Idle splash visibility ---------------------------------------------
 //
-// body.playing hides the splash from the first loaded media until the player is idle again (renderBar):
-// a LOAD replacing the media or the queue moving on keeps it hidden.
+// body.playing hides the splash from the first loaded media until the player stays idle (renderBar): a LOAD
+// replacing the media or the queue moving on passes through IDLE for a moment and keeps it hidden.
 
 playerManager.addEventListener(
   cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
@@ -490,6 +490,9 @@ const playerBinder = new cast.framework.ui.PlayerDataBinder(playerData);
 const BarState = cast.framework.ui.State;
 let barBandsKey = '';
 
+const SPLASH_IDLE_MS = 1500;
+let splashTimer = 0;
+
 const spinnerEl = document.getElementById('spinner');
 const stateIconEl = document.getElementById('state-icon');
 let iconState = null;
@@ -512,12 +515,16 @@ function renderBar() {
   renderStateIcon(st, spinning);
   spinnerEl.classList.toggle('show', spinning);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
-  if (idle) document.body.classList.remove('playing');
+  clearTimeout(splashTimer);
+  if (idle) splashTimer = setTimeout(() => document.body.classList.remove('playing'), SPLASH_IDLE_MS);
   const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
   const time = playerData.currentTime || 0;
   const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
   const music = document.body.classList.contains('music-on');
-  if (music) renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', pct(time));
+  if (music) {
+    renderMusicState(st);
+    renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', pct(time));
+  }
   // The music view shows its own progress.
   const show = !idle && !music && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
@@ -760,33 +767,42 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 // The sender pushes the document in chunks (`lyrics`) and drops it with `lyrics_clear`; the receiver follows its own clock.
 
 const lyricsEl = document.getElementById('lyrics');
-const lyricsState = { doc: null, sender: null, shown: -2, words: [], add: createAssembler() };
+const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], add: createAssembler() };
 
-function lyricLine(row, cls) {
-  const el = document.createElement('div');
-  el.className = 'lyric ' + cls;
-  if (row) el.textContent = row.text;
-  return el;
-}
-
-function renderLyrics(i) {
-  const rows = lyricsState.doc.rows;
-  lyricsEl.replaceChildren();
+/** Every line of the document in one column, words wrapped where a line has cues. */
+function buildLyrics(doc, timed) {
+  const list = document.createElement('div');
+  list.className = timed ? 'lyrics-list' : 'lyrics-list static';
+  lyricsState.rows = [];
   lyricsState.words = [];
-  const cur = i >= 0 ? lyricLine(null, 'cur') : null;
-  if (cur) {
-    const row = rows[i];
+  doc.rows.forEach((row) => {
+    const line = document.createElement('div');
+    line.className = 'lyric';
+    const words = [];
     for (const seg of row.cues && row.cues.length ? segments(row.text, row.cues) : [{ text: row.text, cue: null }]) {
       const span = document.createElement('span');
       span.textContent = seg.text;
       if (seg.cue !== null) {
         span.className = 'word';
-        lyricsState.words[seg.cue] = span;
+        words[seg.cue] = span;
       }
-      cur.appendChild(span);
+      line.appendChild(span);
     }
-  }
-  lyricsEl.append(lyricLine(rows[i - 1], 'prev'), cur || lyricLine(null, 'cur'), lyricLine(rows[i + 1], 'next'));
+    list.appendChild(line);
+    lyricsState.rows.push(line);
+    lyricsState.words.push(words);
+  });
+  lyricsEl.replaceChildren(list);
+  lyricsState.list = list;
+  lyricsState.built = doc;
+  lyricsState.shown = -2;
+}
+
+/** Scrolls the column so line `i` sits at the middle; before the first line, the first one waits there. */
+function showLine(i) {
+  lyricsState.rows.forEach((line, k) => line.classList.toggle('cur', k === i));
+  const line = lyricsState.rows[Math.max(i, 0)];
+  if (line) lyricsState.list.style.transform = `translateY(${-(line.offsetTop + line.offsetHeight / 2)}px)`;
 }
 
 function refreshLyrics() {
@@ -795,25 +811,28 @@ function refreshLyrics() {
   const visible = !!doc && doc.itemId === playingItemId() && document.body.classList.contains('playing');
   document.body.classList.toggle('lyrics-on', visible);
   if (!visible) return lyricsEl.classList.remove('show');
-  const pos = playerManager.getCurrentTimeSec() * 1000;
   const timed = doc.synced && doc.rows.every((r) => r.start !== undefined && r.start !== null);
-  const i = timed ? activeIndex(doc.rows, pos, doc.offset) : -1;
-  const shown = timed ? i : -1;
-  if (shown !== lyricsState.shown) {
-    lyricsState.shown = shown;
-    if (timed) renderLyrics(i);
-    else {
-      lyricsEl.replaceChildren(...doc.rows.slice(0, 12).map((r) => lyricLine(r, 'next')));
-    }
-  }
-  const cues = timed && i >= 0 ? doc.rows[i].cues : null;
-  if (cues) fills(cues, pos, doc.offset).forEach((f, k) => lyricsState.words[k] && lyricsState.words[k].style.setProperty('--fill', f + '%'));
+  if (lyricsState.built !== doc) buildLyrics(doc, timed);
   lyricsEl.classList.add('show');
+  if (!timed) return;
+  const pos = playerManager.getCurrentTimeSec() * 1000;
+  const i = activeIndex(doc.rows, pos, doc.offset);
+  if (i !== lyricsState.shown) {
+    lyricsState.shown = i;
+    showLine(i);
+  }
+  const cues = i >= 0 ? doc.rows[i].cues : null;
+  const words = lyricsState.words[i];
+  if (cues) fills(cues, pos, doc.offset).forEach((f, k) => words[k] && words[k].style.setProperty('--fill', f + '%'));
 }
 setInterval(refreshLyrics, 100);
 
 function dropLyrics() {
   lyricsState.doc = null;
+  lyricsState.built = null;
+  lyricsState.list = null;
+  lyricsState.rows = [];
+  lyricsState.words = [];
   lyricsState.shown = -2;
   lyricsState.add = createAssembler();
   lyricsEl.classList.remove('show');
@@ -827,10 +846,7 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   lyricsState.sender = event.senderId;
   if (msg.kind === 'lyrics_clear') return dropLyrics();
   const doc = lyricsState.add(msg);
-  if (doc) {
-    lyricsState.doc = doc;
-    lyricsState.shown = -2;
-  }
+  if (doc) lyricsState.doc = doc;
 });
 context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
   if (event.senderId === lyricsState.sender) {
@@ -887,7 +903,8 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
 const musicEl = document.getElementById('music');
 const musicBackdrop = musicEl.querySelector('.music-backdrop');
 const musicCover = musicEl.querySelector('.music-cover');
-const musicTitle = musicEl.querySelector('.music-title');
+const musicTitle = musicEl.querySelector('.music-title-text');
+const musicState = musicEl.querySelector('.music-state');
 const musicArtist = musicEl.querySelector('.music-artist');
 const musicElapsed = musicEl.querySelector('.music-elapsed');
 const musicTotal = musicEl.querySelector('.music-total');
@@ -908,10 +925,31 @@ function renderMusic() {
   if ((musicCover.getAttribute('src') || '') !== cover) {
     if (cover) musicCover.setAttribute('src', cover);
     else musicCover.removeAttribute('src');
-    musicBackdrop.style.backgroundImage = cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none';
+    paintBackdrop(cover);
   }
   musicTitle.textContent = meta.title || '';
   musicArtist.textContent = meta.subtitle || meta.artist || '';
+}
+
+/** The cover blurred once into a small canvas the page scales up: a CSS blur over the whole screen renders coarse on Cast. */
+function paintBackdrop(cover) {
+  musicBackdrop.classList.remove('shown');
+  if (!cover) return;
+  const img = new Image();
+  img.onload = () => {
+    if (musicCover.getAttribute('src') !== cover) return;
+    const ctx = musicBackdrop.getContext('2d');
+    const { width, height } = musicBackdrop;
+    const side = Math.max(width, height) * 1.4;
+    ctx.filter = 'blur(9px) saturate(1.5) brightness(0.62)';
+    ctx.drawImage(img, (width - side) / 2, (height - side) / 2, side, side);
+    musicBackdrop.classList.add('shown');
+  };
+  img.src = cover;
+}
+
+function renderMusicState(st) {
+  musicState.className = 'music-state ' + (st === BarState.PLAYING ? 'playing' : st === BarState.PAUSED ? 'paused' : 'waiting');
 }
 
 function renderMusicProgress(elapsed, total, played) {

@@ -423,17 +423,25 @@ describe('AudioPlayerService music mode', () => {
     prepareTrack.mockResolvedValue({ pi: { sessionId: 'cs2', mediaFileId: 20, durationSeconds: 120, playMethod: 'DirectPlay' }, media: { url: '/c/2' } });
     cast.isConnected.set(true);
     const audio = TestBed.inject(AudioPlayerService);
-    await audio.playTracks([track(1), track(2)]);
+    await audio.playTracks([track(1), track(2), track(3)]);
+    cast.receiverMedia.set({ itemId: 1, sid: 'cs1' });
     cast.currentTime.set(85);
     TestBed.tick();
     await vi.waitFor(() => expect(cast.queueNext).toHaveBeenCalledWith({ url: '/c/2' }));
     expect(prepareTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 2 }));
+    // CAF reports the move as the queued track IDLE and finished, then under way.
     cast.receiverMedia.set({ itemId: 2, sid: 'cs2' });
+    cast.ended.set(true);
     TestBed.tick();
     expect(audio.track()?.itemId).toBe(2);
     expect(audio.queueIndex()).toBe(1);
     expect(audio.duration()).toBe(120);
     expect(castTrack).toHaveBeenCalledTimes(1);
+    cast.ended.set(false);
+    TestBed.tick();
+    cast.ended.set(true);
+    TestBed.tick();
+    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 3 }), true, 0));
   });
 
   it('drops the queued track from the receiver when the queue changes under it', async () => {
@@ -460,6 +468,9 @@ describe('AudioPlayerService music mode', () => {
     TestBed.tick();
     expect(castTrack).toHaveBeenCalledTimes(1);
     cast.receiverMedia.set({ itemId: 1, sid: 'cs1' });
+    cast.ended.set(false);
+    TestBed.tick();
+    cast.ended.set(true);
     TestBed.tick();
     await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 2 }), true, 0));
   });
