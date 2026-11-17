@@ -32,7 +32,8 @@ function entryKey(mediaId: number, episodeId?: number, itemId?: number): string 
 }
 
 /** A 4xx other than auth, timeout and rate limit: retrying cannot succeed. */
-function refused(e: unknown): boolean {
+/** The server answered and will keep refusing: replaying the write can only fail again. */
+export function refused(e: unknown): boolean {
   const status = (e as { status?: number } | null)?.status ?? 0;
   return status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
 }

@@ -33,7 +33,7 @@ import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
-import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
+import { OfflinePlaybackSyncService, refused } from '../../core/services/offline-playback-sync.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService, type DownloadTask, type OfflineSubtitle } from '../../core/services/download-cache.service';
@@ -3817,6 +3817,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // escaped write here would stamp the film's row with the trailer's position.
     // The remote device reports its own progress.
     if (this.session.kind() === 'remote' || this.switchingItem) return;
+    // An errored player has nothing to report: its beats would only keep a dead session alive.
+    if (this.state.error()) return;
     if (!this.mediaId || this.preRollActive()) {
       console.warn('[player] savePosition: no active media or pre-roll in progress, skipping');
       return;
@@ -3965,7 +3967,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Keep the device's own resume point current on the happy path: /state is uncacheable, so an offline
         // replay has only this.
         this.offlineSync.record(offlinePayload);
-      } catch {
+      } catch (e) {
+        if (refused(e)) return;
         this.offlineSync.queue(offlinePayload);
         // The beat never landed, so the session's fate is unknown: re-run the resume path once online rather
         // than wait for a 410 on the next segment.
