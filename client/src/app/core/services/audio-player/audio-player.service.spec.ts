@@ -7,6 +7,7 @@ import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { AudioPlayerService } from './audio-player.service';
+import { MusicCastOutput } from './music-cast-output';
 import { PlaybackSession } from '../playback/playback-session';
 import { SessionSyncService } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
@@ -63,6 +64,7 @@ describe('AudioPlayerService', () => {
             stopSessionRequest: (sid: string) => ({ url: `/stop/${sid}`, init: { method: 'DELETE' } }),
           },
         },
+        { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: signal(false), hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },

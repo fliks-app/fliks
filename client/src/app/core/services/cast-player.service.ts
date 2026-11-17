@@ -1,15 +1,14 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource, type CastResumeState } from './cast.service';
+import { CastService, type CastResumeState } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.service';
-import { StreamingApiService, lostCurrentSession, type PlayMethod, type PlaybackInfoResponse } from './api/streaming-api.service';
+import { StreamingApiService, lostCurrentSession, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import type { StemKind } from './api/karaoke.models';
 import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
@@ -33,8 +32,6 @@ import type { Media } from './api/media.service';
 import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { ToastService } from './toast.service';
-
-export type CastTrack = { itemId: number; mediaId: number; title: string; artists: string; coverUrl: string | null };
 
 export interface CastSubtitleOption {
   id: string;
@@ -170,8 +167,6 @@ const RECEIVER_CAPS_LATEST = 3;
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
 
-/** The receiver mix of the karaoke stems of a file. */
-const mixId = (fileId: number) => `karaoke-${fileId}`;
 type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
 
 /** A sample of the previous load, still in flight when a reload minted a new sid. */
@@ -238,110 +233,6 @@ export class CastPlayerService {
       // The Cast receiver runs Shaka (seg-0 fetched on load-then-seek, real ABR); CAST traits leave the other flags undefined.
       ...ENGINE_TRAITS[EngineKind.CAST],
     };
-  }
-
-  /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
-  async castStem(
-    t: CastTrack,
-    fileId: number,
-    kind: StemKind,
-    contentType: string,
-    position: number,
-    autoplay: boolean,
-    current: () => boolean = () => true,
-  ): Promise<boolean> {
-    const url = await this.stemUrl(fileId, kind);
-    return !!url && current() && this.loadStem(t, fileId, url, contentType, kind, position, autoplay);
-  }
-
-  /** Replaces the receiver's media by its mix of the instrumental and the vocals of `t`, the vocals at `vocals`. */
-  async castMix(t: CastTrack, fileId: number, vocals: number, position: number, autoplay: boolean, current: () => boolean): Promise<boolean> {
-    const sources = await this.karaokeMix(fileId, vocals);
-    if (!sources || !current()) return false;
-    await this.cast.setMix(mixId(fileId), sources);
-    return current() && this.loadStem(t, fileId, castMixUrl(mixId(fileId)), 'audio/mp4', 'mix', position, autoplay);
-  }
-
-  /** A new vocal level for the mix the receiver plays: it remixes what it buffered, with no reload. */
-  async setMixVocals(fileId: number, vocals: number): Promise<void> {
-    const sources = await this.karaokeMix(fileId, vocals);
-    if (sources) await this.cast.setMix(mixId(fileId), sources);
-  }
-
-  private async karaokeMix(fileId: number, vocals: number): Promise<CastMixSource[] | null> {
-    const [instrumental, voice] = await Promise.all([this.stemUrl(fileId, 'instrumental/pcm'), this.stemUrl(fileId, 'vocals/pcm')]);
-    return instrumental && voice ? [{ url: instrumental, gain: 1 }, { url: voice, gain: vocals }] : null;
-  }
-
-  private async loadStem(t: CastTrack, fileId: number, url: string, contentType: string, stem: string, position: number, autoplay: boolean) {
-    this.cast.setCastStreamBase((await this.authService.getCastInfo()).streamBaseUrl);
-    try {
-      await this.cast.loadMedia({
-        url,
-        contentType,
-        title: t.title,
-        subtitle: t.artists,
-        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
-        mediaId: t.mediaId,
-        itemId: t.itemId,
-        stem,
-        mediaFileId: fileId,
-        userId: this.authService.user()?.id,
-        currentTime: position,
-        autoplay,
-      });
-      return true;
-    } catch (err) {
-      console.error('[cast] stem LOAD failed', err);
-      return false;
-    }
-  }
-
-  private async stemUrl(fileId: number, path: string): Promise<string | null> {
-    const token = await this.authService.ensureStreamToken(fileId);
-    return token && `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${path}`)}?token=${encodeURIComponent(token)}`;
-  }
-
-  /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
-  async castTrack(t: CastTrack, autoplay = true, startAt = 0, current: () => boolean = () => true) {
-    const { pi, media } = await this.prepareTrack(t, startAt);
-    if (!current()) {
-      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
-      return null;
-    }
-    try {
-      await this.cast.loadMedia({ ...media, autoplay });
-      return pi;
-    } catch (err) {
-      console.error('[cast] LOAD failed', err);
-      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
-      this.toast.error(this.translate.instant('cast.error.load_failed'));
-      return null;
-    }
-  }
-
-  /** The server's playback info of a music track and the receiver media that plays it. */
-  async prepareTrack(t: CastTrack, startAt = 0): Promise<{ pi: PlaybackInfoResponse; media: CastMediaInfo }> {
-    const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
-      this.authService.getCastInfo(),
-    ]);
-    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
-    const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
-    const media: CastMediaInfo = {
-      url,
-      contentType,
-      title: t.title,
-      subtitle: t.artists,
-      posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
-      mediaId: t.mediaId,
-      itemId: t.itemId,
-      mediaFileId: pi.mediaFileId,
-      sid: pi.sessionId,
-      userId: this.authService.user()?.id,
-      currentTime: startAt,
-    };
-    return { pi, media };
   }
 
   /** Conservative video side of the profile: only a v2 receiver, and only what its MSE reports; levels

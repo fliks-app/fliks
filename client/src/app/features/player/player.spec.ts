@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import type { PlaybackError } from '../../core/services/playback-engine/playback-error';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
@@ -16,6 +16,7 @@ import { SseService, RemoteCommand } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
+import { MusicCastOutput } from '../../core/services/audio-player/music-cast-output';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
@@ -265,6 +266,7 @@ function createHarness(opts: {
           play: vi.fn(),
         },
       },
+      { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: () => false, hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
       { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
       { provide: RemotePlaybackTarget, useValue: { isConnected: () => false, isObserving: () => false } },
       {

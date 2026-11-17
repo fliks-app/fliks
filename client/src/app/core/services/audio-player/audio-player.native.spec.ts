@@ -9,8 +9,7 @@ import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { AuthService } from '../auth.service';
-import { CastService } from '../cast.service';
-import { CastPlayerService } from '../cast-player.service';
+import { MusicCastOutput } from './music-cast-output';
 import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
 import { AudioPlayerService } from './audio-player.service';
 import { PlaybackSession } from '../playback/playback-session';
@@ -75,8 +74,7 @@ describe('AudioPlayerService on the native player', () => {
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }), stopSessionRequest: () => ({ url: '/x', init: {} }) } },
         { provide: AuthService, useValue: { refreshAccessToken, user } },
-        { provide: CastService, useValue: { isConnected: signal(false), currentTime: signal(0), isPaused: signal(true), buffering: signal(false), ended: signal(false), receiverMedia: signal(null) } },
-        { provide: CastPlayerService, useValue: {} },
+        { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: signal(false), hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({ deviceType: 'x', directPlayProfiles: [] }), whenNativeProbed: async () => undefined } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },

@@ -60,7 +60,6 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     setActiveAudioLanguage: vi.fn(async () => false),
     setCastStreamBase: vi.fn(),
     loadMedia: vi.fn(async (..._a: unknown[]) => {}),
-    setMix: vi.fn(async (..._a: unknown[]) => {}),
     currentTime: () => 0,
     duration: () => 0,
     isPaused: () => false,
@@ -88,7 +87,6 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     })),
     stopSession: vi.fn(async () => {}),
     buildAbsolutePlayUrl: vi.fn(() => ({ url: 'cast://x', contentType: 'application/x-mpegURL' })),
-    absoluteUrl: (p: string) => `http://srv${p}`,
     getAbsoluteSubtitleUrl: vi.fn((mf: number, id: number) => `ext/${mf}/${id}`),
     getAbsoluteEmbeddedSubtitleUrl: vi.fn((mf: number, idx: number) => `emb/${mf}/${idx}`),
     getSubtitleUrl: vi.fn(() => ''),
@@ -549,30 +547,6 @@ describe('cast quick start', () => {
     });
     expect(h.svc.activeSubtitleId()).toBeNull();
     expect(h.streamingApi.getPlaybackInfo.mock.calls[0][2]).toBeUndefined();
-  });
-});
-
-describe('karaoke mix on the receiver', () => {
-  afterEach(() => TestBed.resetTestingModule());
-  const t = { itemId: 5, mediaId: 3, title: 'T', artists: 'A', coverUrl: null };
-  const sources = (vocals: number) => [
-    { url: 'http://srv/api/media-files/77/stems/instrumental/pcm?token=st', gain: 1 },
-    { url: 'http://srv/api/media-files/77/stems/vocals/pcm?token=st', gain: vocals },
-  ];
-
-  it('declares the mix of the PCM stems before the LOAD that plays it', async () => {
-    const { svc, cast } = setup();
-    expect(await svc.castMix(t, 77, 0.25, 30, true, () => true)).toBe(true);
-    expect(cast.setMix).toHaveBeenCalledWith('karaoke-77', sources(0.25));
-    expect(cast.setMix.mock.invocationCallOrder[0]).toBeLessThan(cast.loadMedia.mock.invocationCallOrder[0]);
-    expect(cast.loadMedia).toHaveBeenCalledWith(expect.objectContaining({ url: 'fliks-mix:karaoke-77', contentType: 'audio/mp4', itemId: 5, stem: 'mix', currentTime: 30 }));
-  });
-
-  it('moves the vocal level with the mix alone, no LOAD', async () => {
-    const { svc, cast } = setup();
-    await svc.setMixVocals(77, 0.6);
-    expect(cast.setMix).toHaveBeenCalledWith('karaoke-77', sources(0.6));
-    expect(cast.loadMedia).not.toHaveBeenCalled();
   });
 });
 

@@ -1,7 +1,4 @@
-import { Injectable, Injector, computed, effect, inject, runInInjectionContext, signal, untracked } from '@angular/core';
-import { CastService } from '../cast.service';
-import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
-import { CastPlayerService } from '../cast-player.service';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { BrowserDeviceProfileService, type DeviceProfile } from '../browser-device-profile.service';
@@ -26,16 +23,15 @@ import {
   type NativeAudioTrackRequest,
 } from '../../plugins/audio-player.plugin';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
-import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { RemoteService } from '../remote.service';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
-import type { StemKind } from '../api/karaoke.models';
 import { FullPlayerState } from '../playback/full-player-state';
 import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
 import { PlayerStateService } from '../player-state.service';
+import { MusicCastOutput } from './music-cast-output';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
 import {
@@ -118,6 +114,7 @@ export class AudioPlayerService {
   private readonly session = inject(PlaybackSession);
   private readonly music = inject(MusicApiService);
   private readonly fullPlayer = inject(FullPlayerState);
+  private readonly castOut = inject(MusicCastOutput);
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -209,26 +206,13 @@ export class AudioPlayerService {
   private sleepTimer: ReturnType<typeof setInterval> | undefined;
   private lastPositionState = 0;
   private generation = 0;
-  /** True while the playing track is on a Cast receiver instead of the local elements. */
-  private readonly _casting = signal(false);
   /** A cast device plays the queue. */
-  readonly isCasting = this._casting.asReadonly();
-  private get casting(): boolean {
-    return this._casting();
-  }
-  private set casting(on: boolean) {
-    this._casting.set(on);
-  }
+  readonly isCasting = this.castOut.active;
   /** A music track this device plays itself, which a connected receiver can take over. */
-  readonly canMoveToCast = computed(() => this._musicMode() && this._track() !== null && !this._casting());
-  private cast: CastService | null = null;
+  readonly canMoveToCast = computed(() => this._musicMode() && this._track() !== null && !this.castOut.active());
   private readonly mq = new MusicQueue();
   private pre: { req: MusicTrackRequest; info: PlaybackInfoResponse; url: string; parts: PlayPart[] } | null = null;
   private preTried: MusicTrackRequest | null = null;
-  /** The next track, queued on the receiver after the playing one. */
-  private castNext: { req: MusicTrackRequest; info: PlaybackInfoResponse } | null = null;
-  /** The receiver reported the playing track under way, so its end can be told from the status of a move to it. */
-  private castStarted = false;
   private audioCtx: AudioContext | null = null;
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
   private stems: StemMix | null = null;
@@ -265,6 +249,26 @@ export class AudioPlayerService {
     if (typeof window === 'undefined') return;
     window.addEventListener('pagehide', (e) => this.beatOnExit(e.persisted));
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
+    this.castOut.attach({
+      current: () => (this._track() ? this.mq.current : null),
+      karaoke: () => ({ mode: this._stemMode(), level: this._vocalLevel() }),
+      playhead: () => ({ position: this._position(), playing: this._playing() }),
+      position: (t) => {
+        this._position.set(t);
+        this.preloadNear(t);
+      },
+      playState: (playing) => this.onPlayState(playing),
+      buffering: (on) => this._buffering.set(on),
+      ended: () => void this.onMusicEnded(),
+      advanced: (req, info) => this.onCastAdvanced(req, info),
+      reloaded: (info) => {
+        if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
+        this.info = info;
+        this.sessionId = info.sessionId;
+      },
+      stemsFailed: () => this.onStemsFailed(),
+      receiverGone: () => void this.returnFromCast(),
+    });
     if (this.nativeAudio) {
       void this.attachNative().catch(() => undefined);
       // Controls outside the app go to the party while one drives the audio.
@@ -545,12 +549,12 @@ export class AudioPlayerService {
   partyReady(): boolean {
     if (this.nativeOn) return !!this.info && !this._loading() && this.nativeReady;
     const el = this.el();
-    return !!el && !!this.info && !this._loading() && !this.casting && el.readyState >= 1;
+    return !!el && !!this.info && !this._loading() && !this.castOut.active() && el.readyState >= 1;
   }
 
   /** Plays the loaded track without going through the party. */
   resume(): void {
-    if (this.casting) return this.cast!.play();
+    if (this.castOut.active()) return this.castOut.play();
     if (this.nativeOn) return void this.nativeAudio!.play();
     void this.el()?.play().catch(() => undefined);
   }
@@ -579,7 +583,7 @@ export class AudioPlayerService {
 
   /** The speed the track actually plays at: a cast receiver and a party's server clock ignore the preference. */
   private effectiveRate(): number {
-    if (this.casting) return 1;
+    if (this.castOut.active()) return 1;
     return this._musicMode() ? this.playRate() : this.rate();
   }
 
@@ -644,7 +648,7 @@ export class AudioPlayerService {
     this._bookmarks.set([]);
     try {
       if (this.network.isOnline()) await this.sync.flush();
-      if (toCast && this.bindCast().isConnected()) {
+      if (toCast && this.castOut.isConnected()) {
         await this.startCast(req, generation, autoplay, startAt);
         return generation === this.generation && this._track() !== null;
       }
@@ -685,47 +689,13 @@ export class AudioPlayerService {
     }
   }
 
-  /** The Cast service, with its receiver signals followed from the first music track on. */
-  private bindCast(): CastService {
-    if (this.cast) return this.cast;
-    const cast = (this.cast = this.injector.get(CastService));
-    runInInjectionContext(this.injector, () => {
-      effect(() => {
-        const time = cast.currentTime();
-        if (!this.casting) return;
-        this._position.set(time);
-        untracked(() => this.preloadNear(time));
-      });
-      effect(() => {
-        const paused = cast.isPaused();
-        if (this.casting) this.onPlayState(!paused);
-      });
-      effect(() => {
-        const buffering = cast.buffering();
-        if (this.casting) this._buffering.set(buffering);
-      });
-      effect(() => {
-        const ended = cast.ended();
-        const media = cast.receiverMedia();
-        if (this._casting() && this._track()) untracked(() => this.onReceiverStatus(ended, media));
-      });
-      effect(() => {
-        if (!cast.isConnected() && this.casting) untracked(() => void this.returnFromCast());
-      });
-    });
-    return cast;
-  }
-
   private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number): Promise<void> {
-    this.castStarted = false;
     await this.nativeAudio?.stop().catch(() => undefined);
-    this.injector.get(NowPlayingMetadataService).primeTracks([req]);
-    const info = await this.injector.get(CastPlayerService).castTrack(req, autoplay, startAt);
+    const info = await this.castOut.load(req, autoplay, startAt, () => generation === this.generation);
     if (generation !== this.generation) return;
     if (!info) return void (await this.close());
     this.info = info;
     this.sessionId = info.sessionId;
-    this.casting = true;
     this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
     this.setupMediaSession(this._track()!);
     this.onPlayState(autoplay);
@@ -733,53 +703,17 @@ export class AudioPlayerService {
     void this.refreshStems();
   }
 
-  /** One switch at a time, each from the state when it runs: a second LOAD would replace the first and fail it. */
-  private switchCastStem(): Promise<void> {
-    return (this.castStemRun = this.castStemRun.then(() => this.applyCastStem()).catch(() => undefined));
-  }
-
-  /** On Cast a stem mode plays the receiver's mix of the instrumental and the vocals at the vocal level (a server without
-   *  stem PCM: the guide stem, else the instrumental); `original` the track again. */
-  private async applyCastStem(): Promise<void> {
-    const req = this.mq.current;
-    const file = this.castStemFile;
-    if (!req || file === null) return;
-    const mode = this._stemMode();
-    const mixed = this.injector.get(ServerVersionService).supports(SERVER_SINCE.stemPcm);
-    const kind = mode === 'original' ? null : mixed ? 'mix' : mode === 'guide' && 'guide' in this.castStemTypes ? 'guide' : 'instrumental';
-    const cast = this.injector.get(CastPlayerService);
-    if (kind === this.castKind) return kind === 'mix' ? cast.setMixVocals(file, this._vocalLevel()) : undefined;
-    // The LOAD below empties the receiver's queue.
-    this.dropPreload();
-    const generation = this.generation;
-    const position = this._position();
-    const autoplay = this._playing();
-    const current = () => generation === this.generation;
-    if (kind) {
-      const loaded = kind === 'mix'
-        ? await cast.castMix(req, file, this._vocalLevel(), position, autoplay, current)
-        : await cast.castStem(req, file, kind, this.castStemTypes[kind] ?? 'audio/ogg', position, autoplay, current);
-      if (!loaded) return void (current() && this.onStemsFailed());
-    } else {
-      const info = await cast.castTrack(req, autoplay, position, current);
-      if (!info) return void (current() && this.onStemsFailed());
-      if (this.sessionId) void this.streaming.stopSession(this.sessionId).catch(() => undefined);
-      this.info = info;
-      this.sessionId = info.sessionId;
-    }
-    if (generation === this.generation) this.castKind = kind;
-  }
-
   private preloadNear(position: number): void {
     const duration = this._duration();
-    if (this._musicMode() && !this.pre && !this.castNext && duration > 0 && duration - position < PRELOAD_S) this.preloadNext();
+    if (this._musicMode() && !this.pre && !this.castOut.hasNext() && duration > 0 && duration - position < PRELOAD_S) this.preloadNext();
   }
 
   /** Loads the next track's stream on the standby element, or queues it on the receiver, once the current one nears its end. */
   private preloadNext(): void {
     const next = this.mq.peekNext();
-    if (!next || this.routed({ type: 'drives' }) || this.preTried === next) return;
-    if (this.casting) return this.queueOnCast(next);
+    if (!next || this.routed({ type: 'drives' })) return;
+    if (this.castOut.active()) return this.castOut.queueNext(next);
+    if (this.preTried === next) return;
     if (this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
     this.preTried = next;
     const generation = this.generation;
@@ -810,36 +744,11 @@ export class AudioPlayerService {
       .catch(() => undefined);
   }
 
-  /** The receiver moves on to the queued track by itself at the end of this one, with no LOAD in between. */
-  private queueOnCast(next: MusicTrackRequest): void {
-    this.preTried = next;
-    const generation = this.generation;
-    this.injector.get(NowPlayingMetadataService).primeTracks([next]);
-    void this.injector
-      .get(CastPlayerService)
-      .prepareTrack(next)
-      .then(({ pi, media }) => {
-        // The receiver names the track it plays by its session: one without could not be followed.
-        if (generation !== this.generation || this.preTried !== next || !this.casting || !pi.sessionId) {
-          if (pi.sessionId) void this.streaming.stopSession(pi.sessionId).catch(() => undefined);
-          return;
-        }
-        this.castNext = { req: next, info: pi };
-        this.cast!.queueNext(media);
-      })
-      .catch(() => undefined);
-  }
-
   private dropPreload(): void {
     const pre = this.pre;
-    const queued = this.castNext;
     this.pre = null;
-    this.castNext = null;
     this.preTried = null;
-    if (queued) {
-      this.cast?.queueNext(null);
-      void this.streaming.stopSession(queued.info.sessionId!).catch(() => undefined);
-    }
+    this.castOut.dropNext();
     if (!pre) return;
     if (pre.info.sessionId) void this.streaming.stopSession(pre.info.sessionId).catch(() => undefined);
     const standby = this.els[1 - this.current];
@@ -867,26 +776,9 @@ export class AudioPlayerService {
     void this.refreshStems();
   }
 
-  /** A status names the media it reports: the queued track the receiver moved on to, the track playing here, or a stale one. */
-  private onReceiverStatus(ended: boolean, media: Record<string, unknown> | null): void {
-    if (!media) return;
-    if (this.castNext && media['sid'] === this.castNext.info.sessionId) return this.onCastAdvanced();
-    if (media['itemId'] !== this._track()?.itemId) return;
-    // The queue reports its move to a track as that track IDLE and finished: only an end after it played counts.
-    if (!ended) this.castStarted = true;
-    else if (this.castStarted) {
-      this.castStarted = false;
-      void this.onMusicEnded();
-    }
-  }
-
   /** The receiver moved on to the track queued on it: the queue follows, nothing reloads. */
-  private onCastAdvanced(): void {
-    const { req, info } = this.castNext!;
+  private onCastAdvanced(req: MusicTrackRequest, info: PlaybackInfoResponse): void {
     this.retireTrack();
-    this.castStarted = false;
-    this.castNext = null;
-    this.preTried = null;
     this.mq.next(true);
     this.syncQueue();
     this.takeTrack(req, info);
@@ -923,7 +815,7 @@ export class AudioPlayerService {
       return;
     }
     const t = this.mq.next(true);
-    if (t && this.mq.repeat === 'one' && !this.casting) {
+    if (t && this.mq.repeat === 'one' && !this.castOut.active()) {
       const el = this.el();
       if (el) {
         el.currentTime = 0;
@@ -1002,7 +894,7 @@ export class AudioPlayerService {
     this._stemMode.set(mode);
     if (mode !== 'original') this._vocalLevel.set(mode === 'guide' ? GUIDE_VOCAL_LEVEL : 0);
     this.applyGains();
-    if (this.casting) void this.switchCastStem();
+    if (this.castOut.active()) void this.castOut.applyStems();
   }
 
   /** Sets the vocal stem gain; from `original` it only stores the level for the next stem mode. */
@@ -1011,14 +903,14 @@ export class AudioPlayerService {
     this._vocalLevel.set(v);
     if (this._stemMode() !== 'original') this._stemMode.set(v === 0 ? 'instrumental' : 'guide');
     this.applyGains();
-    if (this.casting) void this.switchCastStem();
+    if (this.castOut.active()) void this.castOut.applyStems();
     this.reportSettled();
   }
 
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const itemId = this._musicMode() && (this.casting || !this.stemsNative) && this._pitch() === 0 ? this._track()?.itemId : undefined;
+    const itemId = this._musicMode() && (this.castOut.active() || !this.stemsNative) && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
       const api = this.injector.get(KaraokeApiService);
@@ -1026,9 +918,8 @@ export class AudioPlayerService {
       if (run !== this.stemsRun) return;
       const ready = state.state === 'ready' && !!state.stems.instrumental && !!state.stems.vocals;
       if (!ready) return this.dropStems();
-      if (this.casting) {
-        this.castStemFile = state.fileId;
-        this.castStemTypes = Object.fromEntries(Object.entries(state.stems).map(([k, v]) => [k, v.contentType]));
+      if (this.castOut.active()) {
+        this.castOut.setStemSource(state.fileId, Object.fromEntries(Object.entries(state.stems).map(([k, v]) => [k, v.contentType])));
         return this._stemsAvailable.set(true);
       }
       if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
@@ -1050,7 +941,7 @@ export class AudioPlayerService {
   async setPitch(semitones: number): Promise<void> {
     const n = Math.min(12, Math.max(-12, Math.round(semitones)));
     const req = this.mq.current;
-    if (n === this._pitch() || !req || !this._musicMode() || this.casting || this.nativeAudio) return;
+    if (n === this._pitch() || !req || !this._musicMode() || this.castOut.active() || this.nativeAudio) return;
     const generation = ++this.generation;
     const position = this._position();
     const autoplay = this._playing();
@@ -1082,7 +973,7 @@ export class AudioPlayerService {
   /** A Direct Play file the element reported it opens but cannot play: the track restarts as a transcode from the same position. */
   private async reopenTranscoded(): Promise<void> {
     const req = this.mq.current;
-    if (!req || !this._musicMode() || this.casting || this.nativeAudio) return;
+    if (!req || !this._musicMode() || this.castOut.active() || this.nativeAudio) return;
     const generation = ++this.generation;
     const position = this._position();
     const profile = { ...this.deviceProfile.getProfile(), rejectCopy: true };
@@ -1097,12 +988,6 @@ export class AudioPlayerService {
   }
 
   private nativeStemFile: number | null = null;
-  private castStemFile: number | null = null;
-  /** Content type of each stem the receiver may load. */
-  private castStemTypes: Partial<Record<StemKind, string>> = {};
-  /** What the receiver plays in place of the track: a stem, or its mix of the stems. */
-  private castKind: StemKind | 'mix' | null = null;
-  private castStemRun: Promise<void> = Promise.resolve();
 
   /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
   private pushNativeStems(): void {
@@ -1133,8 +1018,7 @@ export class AudioPlayerService {
   private dropStems(): void {
     this.stemsRun++;
     this._stemsAvailable.set(false);
-    this.castStemFile = null;
-    this.castKind = null;
+    this.castOut.clearStems();
     if (this.nativeStemFile !== null) {
       this.nativeStemFile = null;
       void this.nativeAudio?.clearStems().catch(() => undefined);
@@ -1147,7 +1031,7 @@ export class AudioPlayerService {
   toggle(): void {
     if (this.routed({ type: 'toggle' })) return;
     if (this.nativeOn) return void (this._playing() ? this.nativeAudio!.pause() : this.nativeAudio!.play());
-    if (this.casting) return this.cast!.togglePlayPause();
+    if (this.castOut.active()) return this.castOut.toggle();
     const el = this.el();
     if (!el) return;
     if (el.paused) void el.play().catch(() => undefined);
@@ -1156,7 +1040,7 @@ export class AudioPlayerService {
 
   pause(): void {
     if (this.nativeOn) return void this.nativeAudio!.pause();
-    if (this.casting) return this.cast!.pause();
+    if (this.castOut.active()) return this.castOut.pause();
     this.el()?.pause();
   }
 
@@ -1170,9 +1054,9 @@ export class AudioPlayerService {
   /** The seek itself, never routed to a party. */
   async seekLocal(target: number): Promise<void> {
     this._ended.set(false);
-    if (this.casting) {
+    if (this.castOut.active()) {
       this._position.set(target);
-      this.cast!.seek(target);
+      this.castOut.seek(target);
       return this.beat();
     }
     if (this.nativeOn) {
@@ -1270,7 +1154,7 @@ export class AudioPlayerService {
   async close(): Promise<void> {
     this.generation++;
     this._muted.set(false);
-    if (this.casting) this.cast?.stop();
+    this.castOut.stop();
     await this.release();
     this.stopRetired();
     void this.nativeAudio?.stop().catch(() => undefined);
@@ -1473,7 +1357,7 @@ export class AudioPlayerService {
 
   /** Web elements only: a native or cast output keeps its own volume. */
   private volumeReport() {
-    const supportsVolume = !this.nativeOn && !this.casting;
+    const supportsVolume = !this.nativeOn && !this.castOut.active();
     return { supportsVolume, ...(supportsVolume && { volume: this.volume(), muted: this._muted() }) };
   }
 
@@ -1604,7 +1488,7 @@ export class AudioPlayerService {
   }
 
   /** Web elements only: a native player or a cast keeps its own level. */
-  readonly canSetVolume = computed(() => !this.nativeAudio && !this._casting());
+  readonly canSetVolume = computed(() => !this.nativeAudio && !this.castOut.active());
 
   setVolume(level: number): void {
     this.setLevel(level, false);
@@ -1774,7 +1658,7 @@ export class AudioPlayerService {
     void fetch(url, { ...init, body: JSON.stringify({ ...b.payload, sessionId: undefined }) }).catch(() => undefined);
     // Native music and a cast keep playing across a WebView reload.
     if (persisted) return;
-    const sids = [...this.retiring.splice(0), ...(this.sessionId && !this.casting && !(this.nativeOn && this._musicMode()) ? [this.sessionId] : [])];
+    const sids = [...this.retiring.splice(0), ...(this.sessionId && !this.castOut.active() && !(this.nativeOn && this._musicMode()) ? [this.sessionId] : [])];
     for (const sid of sids) {
       const stop = this.streaming.stopSessionRequest(sid);
       void fetch(stop.url, stop.init).catch(() => undefined);
@@ -1785,7 +1669,7 @@ export class AudioPlayerService {
   private async release(next = false): Promise<void> {
     clearInterval(this.beatTimer);
     const el = this.el();
-    if ((el || this.casting || this.nativeOn) && this.info) {
+    if ((el || this.castOut.active() || this.nativeOn) && this.info) {
       if (!next) this._playing.set(false);
       this.beat(true);
     }
@@ -1807,7 +1691,7 @@ export class AudioPlayerService {
     this.parts = [];
     this.partIndex = 0;
     this.current = 0;
-    this.casting = false;
+    this.castOut.release();
     this._playing.set(false);
     this._ended.set(false);
     this._buffering.set(false);

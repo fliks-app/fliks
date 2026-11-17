@@ -7,9 +7,7 @@ import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
-import { CastService } from '../cast.service';
-import { CastPlayerService } from '../cast-player.service';
-import { ServerVersionService } from '../server-version.service';
+import { MusicCastOutput, type MusicCastHost } from './music-cast-output';
 import { AudioPlayerService } from './audio-player.service';
 import { PlaybackSession } from '../playback/playback-session';
 import type { MusicTrackRequest } from './music-queue';
@@ -44,25 +42,30 @@ describe('AudioPlayerService music mode', () => {
   let observedOwner: string | null = null;
   let ownerCanEnqueue = true;
   const stopSession = vi.fn();
-  const castTrack = vi.fn();
-  const castStem = vi.fn();
-  const prepareTrack = vi.fn();
-  const castMix = vi.fn();
-  const setMixVocals = vi.fn(async () => {});
-  let layeredServer = true;
+  const castLoad = vi.fn();
   const itemState = vi.fn();
-  const cast = {
+  let host: MusicCastHost;
+  const castOut = {
+    active: signal(false),
     isConnected: signal(false),
-    currentTime: signal(0),
-    isPaused: signal(true),
-    buffering: signal(false),
-    ended: signal(false),
-    togglePlayPause: vi.fn(),
+    load: async (...a: unknown[]) => {
+      const info = await castLoad(...a);
+      if (info) castOut.active.set(true);
+      return info;
+    },
+    play: vi.fn(),
     pause: vi.fn(),
+    toggle: vi.fn(),
     seek: vi.fn(),
-    stop: vi.fn(),
-    receiverMedia: signal<Record<string, unknown> | null>(null),
+    stop: vi.fn(() => castOut.active.set(false)),
+    release: vi.fn(() => castOut.active.set(false)),
     queueNext: vi.fn(),
+    hasNext: () => false,
+    dropNext: vi.fn(),
+    setStemSource: vi.fn(),
+    applyStems: vi.fn(async () => {}),
+    clearStems: vi.fn(),
+    attach: (h: MusicCastHost) => ((host = h), () => {}),
   };
   type Loader = (cmd: RemoteCommand) => Promise<void>;
   const loaders: Record<string, Loader> = {};
@@ -88,17 +91,10 @@ describe('AudioPlayerService music mode', () => {
     send.mockClear();
     remoting = false;
     trackRequests.mockClear();
-    cast.isConnected.set(false);
-    cast.currentTime.set(0);
-    cast.isPaused.set(true);
-    cast.ended.set(false);
-    cast.receiverMedia.set(null);
-    cast.queueNext.mockClear();
-    castMix.mockReset();
-    setMixVocals.mockClear();
-    layeredServer = true;
-    castTrack.mockReset();
-    prepareTrack.mockReset();
+    castOut.active.set(false);
+    castOut.isConnected.set(false);
+    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.setStemSource, castOut.clearStems]) f.mockClear();
+    castLoad.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
       playUrl: `/s/${itemId}`,
@@ -132,9 +128,7 @@ describe('AudioPlayerService music mode', () => {
             stopSessionRequest: () => ({ url: '/x', init: {} }),
           },
         },
-        { provide: CastService, useValue: cast },
-        { provide: CastPlayerService, useValue: { castTrack, castStem, prepareTrack, castMix, setMixVocals } },
-        { provide: ServerVersionService, useValue: { supports: () => layeredServer } },
+        { provide: MusicCastOutput, useValue: castOut },
         { provide: KaraokeApiService, useValue: { itemState } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
@@ -401,152 +395,88 @@ describe('AudioPlayerService music mode', () => {
     expect(audio.queue()).toEqual([]);
   });
 
+  const castInfo = (sessionId: string, mediaFileId: number, durationSeconds = 100) => ({ sessionId, mediaFileId, durationSeconds, playMethod: 'DirectPlay' });
+
   it('plays a track on the receiver when connected, and keeps the server session for the heartbeat', async () => {
-    cast.isConnected.set(true);
-    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs', 77));
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
-    expect(castTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 0);
+    expect(castLoad).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 0, expect.any(Function));
     expect(getItemPlaybackInfo).not.toHaveBeenCalled();
     expect(audio.playing()).toBe(true);
     audio.toggle();
-    expect(cast.togglePlayPause).toHaveBeenCalled();
+    expect(castOut.toggle).toHaveBeenCalled();
     await audio.seek(30);
-    expect(cast.seek).toHaveBeenCalledWith(30);
+    expect(castOut.seek).toHaveBeenCalledWith(30);
     expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 77, sessionId: 'cs', positionSeconds: 30 }));
     await audio.close();
-    expect(cast.stop).toHaveBeenCalled();
+    expect(castOut.stop).toHaveBeenCalled();
   });
 
   it('goes on here where the receiver was when the cast ends', async () => {
-    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
-    cast.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs', 10));
+    castOut.isConnected.set(true);
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
-    cast.currentTime.set(42);
-    cast.isPaused.set(false);
-    TestBed.tick();
-    cast.isConnected.set(false);
-    TestBed.tick();
+    host.position(42);
+    host.playState(true);
+    host.receiverGone();
     await vi.waitFor(() => expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 42 }));
     expect(audio.isCasting()).toBe(false);
     expect(audio.track()?.itemId).toBe(1);
-    expect(cast.stop).not.toHaveBeenCalled();
+    expect(castOut.stop).not.toHaveBeenCalled();
   });
 
   it('moves the track playing here to a receiver that connects, where it was', async () => {
-    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
+    castLoad.mockResolvedValue(castInfo('cs', 77));
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
     els(audio)[0].dispatchEvent(new Event('play'));
     await audio.seek(30);
     expect(audio.canMoveToCast()).toBe(true);
-    cast.isConnected.set(true);
+    castOut.isConnected.set(true);
     await audio.moveToCast();
-    expect(castTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 30);
+    expect(castLoad).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function));
     expect(audio.isCasting()).toBe(true);
     expect(audio.canMoveToCast()).toBe(false);
     expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
   });
 
-  it('queues the next track on the receiver near the end, then follows it there without a LOAD', async () => {
-    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
-    prepareTrack.mockResolvedValue({ pi: { sessionId: 'cs2', mediaFileId: 20, durationSeconds: 120, playMethod: 'DirectPlay' }, media: { url: '/c/2' } });
-    cast.isConnected.set(true);
+  it('queues the next track on its cast output near the end', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs1', 10));
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2), track(3)]);
-    cast.receiverMedia.set({ itemId: 1, sid: 'cs1' });
-    cast.currentTime.set(85);
-    TestBed.tick();
-    await vi.waitFor(() => expect(cast.queueNext).toHaveBeenCalledWith({ url: '/c/2' }));
-    expect(prepareTrack).toHaveBeenCalledWith(expect.objectContaining({ itemId: 2 }));
-    // CAF reports the move as the queued track IDLE and finished, then under way.
-    cast.receiverMedia.set({ itemId: 2, sid: 'cs2' });
-    cast.ended.set(true);
-    TestBed.tick();
+    host.position(85);
+    expect(castOut.queueNext).toHaveBeenCalledWith(expect.objectContaining({ itemId: 2 }));
+    expect(audio.position()).toBe(85);
+  });
+
+  it('follows an advance its cast output reports: cursor, duration, stems back to original', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs1', 10));
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2), track(3)]);
+    audio.setStemMode('guide');
+    host.advanced(track(2), castInfo('cs2', 20, 120) as never);
     expect(audio.track()?.itemId).toBe(2);
     expect(audio.queueIndex()).toBe(1);
     expect(audio.duration()).toBe(120);
-    expect(castTrack).toHaveBeenCalledTimes(1);
-    cast.ended.set(false);
-    TestBed.tick();
-    cast.ended.set(true);
-    TestBed.tick();
-    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 3 }), true, 0));
+    expect(audio.stemMode()).toBe('original');
+    expect(castLoad).toHaveBeenCalledTimes(1);
+    host.ended();
+    await vi.waitFor(() => expect(castLoad).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 3 }), true, 0, expect.any(Function)));
   });
 
-  it('drops the queued track from the receiver when the queue changes under it', async () => {
-    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
-    prepareTrack.mockResolvedValue({ pi: { sessionId: 'cs2', mediaFileId: 20, durationSeconds: 120, playMethod: 'DirectPlay' }, media: { url: '/c/2' } });
-    cast.isConnected.set(true);
+  it('drops the queued track from its cast output when the queue changes under it', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs1', 10));
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2), track(3)]);
-    cast.currentTime.set(85);
-    TestBed.tick();
-    await vi.waitFor(() => expect(cast.queueNext).toHaveBeenCalledTimes(1));
+    castOut.dropNext.mockClear();
     audio.removeFromQueue(1);
-    expect(cast.queueNext).toHaveBeenLastCalledWith(null);
-    expect(stopSession).toHaveBeenCalledWith('cs2');
-  });
-
-  it('ignores an end the receiver still reports for the previous track', async () => {
-    castTrack.mockResolvedValue({ sessionId: 'cs1', mediaFileId: 10, durationSeconds: 100, playMethod: 'DirectPlay' });
-    cast.isConnected.set(true);
-    const audio = TestBed.inject(AudioPlayerService);
-    await audio.playTracks([track(1), track(2)]);
-    cast.receiverMedia.set({ itemId: 7, sid: 'old' });
-    cast.ended.set(true);
-    TestBed.tick();
-    expect(castTrack).toHaveBeenCalledTimes(1);
-    cast.receiverMedia.set({ itemId: 1, sid: 'cs1' });
-    cast.ended.set(false);
-    TestBed.tick();
-    cast.ended.set(true);
-    TestBed.tick();
-    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 2 }), true, 0));
-  });
-
-  it('plays the receiver mix of the stems, moves its vocal level with no reload, and the track again on original', async () => {
-    cast.isConnected.set(true);
-    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
-    castMix.mockResolvedValue(true);
-    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: { contentType: 'audio/mpeg' }, guide: { contentType: 'audio/ogg' } } });
-    const audio = TestBed.inject(AudioPlayerService);
-    await audio.playTracks([track(1)]);
-    await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
-    cast.currentTime.set(30);
-    cast.isPaused.set(false);
-    TestBed.tick();
-    // The stage sets the mode and then the level: a second LOAD would replace the first and fail it.
-    audio.setStemMode('guide');
-    audio.setVocalLevel(0.4);
-    await vi.waitFor(() => expect(setMixVocals).toHaveBeenLastCalledWith(77, 0.4));
-    expect(castMix).toHaveBeenCalledTimes(1);
-    expect(castMix).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 0.4, 30, true, expect.any(Function));
-    const current = castMix.mock.calls[0][5] as () => boolean;
-    expect(current()).toBe(true);
-    audio.setVocalLevel(0.7);
-    await vi.waitFor(() => expect(setMixVocals).toHaveBeenLastCalledWith(77, 0.7));
-    expect(castMix).toHaveBeenCalledTimes(1);
-    audio.setStemMode('original');
-    await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function)));
-    expect(stopSession).toHaveBeenCalledWith('cs');
-    await audio.close();
-    expect(current()).toBe(false);
-  });
-
-  it('loads the guide stem alone on a server without stem PCM', async () => {
-    layeredServer = false;
-    cast.isConnected.set(true);
-    castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
-    castStem.mockResolvedValue(true);
-    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: { contentType: 'audio/mpeg' }, guide: { contentType: 'audio/ogg' } } });
-    const audio = TestBed.inject(AudioPlayerService);
-    await audio.playTracks([track(1)]);
-    await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
-    audio.setStemMode('guide');
-    await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'guide', 'audio/ogg', 0, true, expect.any(Function)));
-    expect(castMix).not.toHaveBeenCalled();
+    expect(castOut.dropNext).toHaveBeenCalled();
   });
 
   describe('driven by a party', () => {
@@ -761,7 +691,7 @@ describe('AudioPlayerService music mode', () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1)]);
       audio.setRate(1.5);
-      (audio as unknown as { casting: boolean }).casting = true;
+      castOut.active.set(true);
       updatePlaybackState.mockClear();
       (audio as unknown as { beat(): void }).beat();
       expect(updatePlaybackState.mock.calls.at(-1)![1].playbackRate).toBe(1);
