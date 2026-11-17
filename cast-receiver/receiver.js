@@ -20,7 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
-const { createAssembler, activeIndex, segments, claim, owns } = self.FliksLyrics;
+const { createAssembler, activeIndex, segments, createClock, claim, owns } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -784,13 +784,15 @@ const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: nul
 // A sung word is lit by two counter-moving layers: transforms only, so the compositor runs the wipe at full frame rate.
 const WIPE = [{ transform: 'translateX(-100%)' }, { transform: 'none' }];
 const WIPE_BACK = [{ transform: 'translateX(100%)' }, { transform: 'none' }];
-const WIPE_SLACK_MS = 50;
+const WIPE_SLACK_MS = 80;
+const lyricsClock = createClock(400);
 
-/** A cued word, its spaces left outside so the line still wraps between words. */
-function wordEl(line, text) {
+/** A timed word, or the text between two, its spaces left outside so the line still wraps between words. */
+function wordEl(line, text, className) {
   const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  if (!core) return void line.append(text);
   const word = document.createElement('span');
-  word.className = 'word';
+  word.className = className;
   word.textContent = core;
   const wipe = document.createElement('span');
   wipe.className = 'wipe';
@@ -807,16 +809,23 @@ function wordEl(line, text) {
 function buildLyrics(doc, timed) {
   stopWipes();
   const list = document.createElement('div');
-  list.className = timed ? 'lyrics-list' : 'lyrics-list static';
+  list.className = 'lyrics-list' + (timed ? '' : ' static') + (doc.stage ? ' stage' : '');
   lyricsState.rows = [];
   lyricsState.words = [];
   doc.rows.forEach((row) => {
     const line = document.createElement('div');
-    line.className = 'lyric';
+    const cues = row.cues && row.cues.length ? row.cues : null;
+    line.className = cues ? 'lyric cued' : 'lyric';
     const words = [];
-    for (const seg of row.cues && row.cues.length ? segments(row.text, row.cues) : [{ text: row.text, cue: null }]) {
-      if (seg.cue !== null) words[seg.cue] = wordEl(line, seg.text);
-      else line.append(seg.text);
+    let prev = null;
+    if (!cues) line.append(row.text);
+    for (const seg of cues ? segments(row.text, cues) : []) {
+      const cue = seg.cue === null ? null : cues[seg.cue];
+      // As on the phone, the text between words lights once the word before it is sung, a leading one with the first.
+      const start = cue ? cue.start : prev ? prev.end : cues[0].start;
+      const el = wordEl(line, seg.text, cue ? 'word' : 'word gap');
+      if (el) words.push({ start, end: cue ? cue.end : start, ...el });
+      if (cue) prev = cue;
     }
     list.appendChild(line);
     lyricsState.rows.push(line);
@@ -828,11 +837,20 @@ function buildLyrics(doc, timed) {
   lyricsState.shown = -2;
 }
 
-/** Scrolls the column so line `i` sits at the middle; before the first line, the first one waits there. */
-function showLine(i) {
-  lyricsState.rows.forEach((line, k) => line.classList.toggle('cur', k === i));
+/** Scrolls the column so line `i` sits at the middle, at once on a new document; before the first line, the first one waits there. */
+function showLine(i, instant) {
+  lyricsState.rows.forEach((line, k) => {
+    line.classList.toggle('cur', k === i);
+    line.classList.toggle('past', k < i);
+  });
   const line = lyricsState.rows[Math.max(i, 0)];
-  if (line) lyricsState.list.style.transform = `translateY(${-(line.offsetTop + line.offsetHeight / 2)}px)`;
+  const { list } = lyricsState;
+  if (!line) return;
+  if (instant) list.style.transition = 'none';
+  list.style.transform = `translateY(${-(line.offsetTop + line.offsetHeight / 2)}px)`;
+  if (!instant) return;
+  void list.offsetHeight;
+  list.style.transition = '';
 }
 
 function stopWipes() {
@@ -843,19 +861,16 @@ function stopWipes() {
 /** Arms the wipe of each word of line `i`; syncWipes keeps them on the media clock. */
 function wipeLine(i) {
   stopWipes();
-  const row = lyricsState.doc.rows[i];
-  (row && row.cues ? row.cues : []).forEach((cue, k) => {
-    const el = lyricsState.words[i][k];
-    if (!el) return;
-    const timing = { duration: Math.max(1, cue.end - cue.start), fill: 'both', easing: 'linear' };
-    lyricsState.wipes.push({ cue, duration: timing.duration, anims: [el.wipe.animate(WIPE, timing), el.fill.animate(WIPE_BACK, timing)] });
-  });
+  for (const w of lyricsState.words[i] || []) {
+    const timing = { duration: Math.max(1, w.end - w.start), fill: 'both', easing: 'linear' };
+    lyricsState.wipes.push({ start: w.start, duration: timing.duration, anims: [w.wipe.animate(WIPE, timing), w.fill.animate(WIPE_BACK, timing)] });
+  }
 }
 
 /** The wipes follow the playback state, and are moved only when they drift from the media clock `t`. */
 function syncWipes(t, playing) {
   for (const w of lyricsState.wipes) {
-    const at = Math.min(t - w.cue.start, w.duration);
+    const at = Math.min(t - w.start, w.duration);
     for (const a of w.anims) {
       if (playing && a.playState === 'paused') a.play();
       else if (!playing && a.playState !== 'paused') a.pause();
@@ -874,14 +889,16 @@ function refreshLyrics() {
   if (lyricsState.built !== doc) buildLyrics(doc, timed);
   lyricsEl.classList.add('show');
   if (!timed) return;
-  const pos = playerManager.getCurrentTimeSec() * 1000;
+  const playing = playerManager.getPlayerState() === cast.framework.messages.PlayerState.PLAYING;
+  const pos = lyricsClock(playerManager.getCurrentTimeSec() * 1000, performance.now(), playing);
   const i = activeIndex(doc.rows, pos, doc.offset);
   if (i !== lyricsState.shown) {
+    const fresh = lyricsState.shown === -2;
     lyricsState.shown = i;
-    showLine(i);
+    showLine(i, fresh);
     wipeLine(i);
   }
-  syncWipes(pos + (doc.offset || 0), playerManager.getPlayerState() === cast.framework.messages.PlayerState.PLAYING);
+  syncWipes(pos + (doc.offset || 0), playing);
 }
 setInterval(refreshLyrics, 100);
 

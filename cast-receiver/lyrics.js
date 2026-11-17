@@ -56,6 +56,20 @@
     return out;
   }
 
+  /** The media position from its reports, which jitter about 100 ms on a Cast device: wall time moves it,
+      each report pulls it a tenth of the way, and a jump (seek, stall) or a pause resets it. */
+  function createClock(jumpMs) {
+    let media = 0;
+    let at = null;
+    return function read(reported, now, playing) {
+      const predicted = at === null ? reported : media + (now - at);
+      const err = reported - predicted;
+      media = !playing || Math.abs(err) > jumpMs ? reported : predicted + err / 10;
+      at = now;
+      return media;
+    };
+  }
+
   /** The sender of the current LOAD owns the lyrics; true when another sender held them (its document is stale). */
   function claim(state, senderId) {
     const replaced = !!state.sender && state.sender !== senderId;
@@ -68,7 +82,7 @@
     return !state.sender || state.sender === senderId;
   }
 
-  const api = { createAssembler, activeIndex, segments, claim, owns };
+  const api = { createAssembler, activeIndex, segments, createClock, claim, owns };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FliksLyrics = api;
 })(typeof self !== 'undefined' ? self : this);

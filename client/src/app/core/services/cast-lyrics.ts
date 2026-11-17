@@ -40,19 +40,19 @@ export interface CastLyricsMessage {
   data: string;
 }
 
-/** The document the receiver draws: rows with word byte ranges, no pitch. */
-export function castLyricsJson(doc: StructuredLyrics): string {
+/** The document the receiver draws: rows with word byte ranges, no pitch; `stage` styles it as the karaoke view. */
+export function castLyricsJson(doc: StructuredLyrics, stage = false): string {
   const rows = toRows(doc).map((r) => ({
     start: r.start,
     end: r.end,
     text: r.text,
     ...(r.cues?.length ? { cues: r.cues.map((c) => ({ start: c.start, end: c.end, byteStart: c.byteStart, byteEnd: c.byteEnd })) } : {}),
   }));
-  return JSON.stringify({ rows, offset: doc.offset, synced: doc.synced });
+  return JSON.stringify({ rows, offset: doc.offset, synced: doc.synced, stage });
 }
 
 /** The document as `lyrics` messages; the receiver joins the parts of one `seq`. */
-export function chunkLyrics(doc: StructuredLyrics, itemId: number, seq: number): CastLyricsMessage[] {
-  const slices = sliceByBytes(castLyricsJson(doc), CAST_LYRICS_CHUNK);
+export function chunkLyrics(doc: StructuredLyrics, itemId: number, seq: number, stage = false): CastLyricsMessage[] {
+  const slices = sliceByBytes(castLyricsJson(doc, stage), CAST_LYRICS_CHUNK);
   return slices.map((data, part) => ({ kind: 'lyrics' as const, itemId, seq, part, parts: slices.length, data }));
 }
