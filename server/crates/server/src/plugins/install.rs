@@ -200,9 +200,10 @@ impl Plugins {
             == Some("true")
     }
 
-    /// Rule 15: an archive with no signer is exempt from the signer rules under `plugins.allow_unsigned`.
+    /// Rule 15: an archive with no signer is exempt from the signer rules under `plugins.allow_unsigned`,
+    /// in a debug build only (the dev stack): a release build keeps core namespaces official-only.
     pub async fn unsigned_ok(&self, signed_by: Option<&str>) -> bool {
-        signed_by.is_none() && self.allow_unsigned().await
+        cfg!(debug_assertions) && signed_by.is_none() && self.allow_unsigned().await
     }
 
     pub async fn inspect_bytes(&self, bytes: &[u8]) -> Result<Inspected, Refusal> {
