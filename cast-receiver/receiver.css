@@ -555,11 +555,12 @@ body.lyrics-on .music-track {
   opacity: 0.7;
 }
 
-/* Lyrics of a music track: one column beside the cover, scrolled so the current line sits at the middle. */
+/* Lyrics of a music track: a band of about five lines beside the cover, scrolled so the current line sits at its middle. */
 .lyrics {
   position: fixed;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  height: 52vh;
+  transform: translateY(-50%);
   left: 50%;
   right: 6%;
   z-index: 110;
@@ -567,8 +568,8 @@ body.lyrics-on .music-track {
   opacity: 0;
   transition: opacity 400ms ease-out;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
-  mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
 }
 
 .lyrics.show {
@@ -584,13 +585,13 @@ body.lyrics-on .music-track {
   will-change: transform;
 }
 
-/* Lines without timings read from the top. */
+/* Lines without timings read from the top of the band. */
 .lyrics-list.static {
-  top: 22%;
+  top: 12%;
 }
 
 .lyric {
-  margin-bottom: 2.6vh;
+  margin-bottom: 4.2vh;
   font-size: 4.6vh;
   font-weight: 700;
   line-height: 1.25;
