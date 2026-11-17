@@ -1,6 +1,7 @@
 import { EffectRef, Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
+import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { CastPlaybackTarget } from '../cast-playback-target';
@@ -52,10 +53,16 @@ export type PlaybackCommand =
   | { type: 'seek'; at: number }
   | { type: 'next' }
   | { type: 'prev' }
-  | { type: 'item'; index: number };
+  | { type: 'item'; index: number }
+  | { type: 'enqueue'; tracks: readonly MusicTrackRequest[]; where: 'next' | 'last' }
+  | { type: 'queue'; tracks: readonly MusicTrackRequest[] };
+
+/** `drives`: does a party drive that player; `external`: a start from outside the party, refused (and said) while one does. */
+export type PartyQuery = { type: 'drives' } | { type: 'external' };
+export type PartyPlayer = 'video' | 'audio';
 
 /** Takes a command for the active party; false when it did not. */
-export type PartyRouter = (c: PlaybackCommand) => boolean;
+export type PartyRouter = (c: PlaybackCommand | PartyQuery, player: PartyPlayer) => boolean;
 
 /** Owns where playback is happening: which output is active and where transport commands go. */
 @Injectable({ providedIn: 'root' })
@@ -79,7 +86,7 @@ export class PlaybackSession {
   private watchReturns: EffectRef | null = null;
   /** What the cast or remote output last held: once it is gone, its own position reads nothing. */
   private awaySnapshot: PlaybackSnapshot | null = null;
-  private partyRouter: PartyRouter | null = null;
+  private readonly partyRouter = signal<PartyRouter | null>(null);
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
 
@@ -172,15 +179,18 @@ export class PlaybackSession {
 
   /** The party sync registers how it takes commands; the disposer only clears its own registration. */
   setPartyRouter(router: PartyRouter): () => void {
-    this.partyRouter = router;
-    return () => {
-      if (this.partyRouter === router) this.partyRouter = null;
-    };
+    this.partyRouter.set(router);
+    return () => this.partyRouter.update((cur) => (cur === router ? null : cur));
+  }
+
+  /** The party's answer for a player; false when no party router is registered. */
+  toParty(c: PlaybackCommand | PartyQuery, player: PartyPlayer): boolean {
+    return this.partyRouter()?.(c, player) ?? false;
   }
 
   /** True when a party or a non-local output took the command; false leaves the local player to act on it. */
   command(c: PlaybackCommand): boolean {
-    if (this.partyActive() && this.partyRouter?.(c)) return true;
+    if (this.partyActive() && this.toParty(c, 'video')) return true;
     const o = this.output();
     if (!o || o === this.local()) return false;
     switch (c.type) {

@@ -40,7 +40,6 @@ function setup(media: unknown = album) {
     duckLevel: vi.fn(() => 1),
     setDuck: vi.fn(),
     close: vi.fn(),
-    setPartyRouter: vi.fn(() => () => undefined),
     openForParty: vi.fn().mockResolvedValue(undefined),
   };
   const toast = { error: vi.fn() };

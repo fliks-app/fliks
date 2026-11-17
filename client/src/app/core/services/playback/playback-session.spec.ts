@@ -205,7 +205,7 @@ describe('PlaybackSession', () => {
     session.setPartyRouter(router);
     party.drives.set(true);
     expect(session.command({ type: 'seek', at: 5 })).toBe(true);
-    expect(router).toHaveBeenCalledWith({ type: 'seek', at: 5 });
+    expect(router).toHaveBeenCalledWith({ type: 'seek', at: 5 }, 'video');
     expect(cast.seek).not.toHaveBeenCalled();
     party.drives.set(false);
     session.command({ type: 'seek', at: 6 });
@@ -223,6 +223,17 @@ describe('PlaybackSession', () => {
     session.command({ type: 'next' });
     expect(newer).toHaveBeenCalledTimes(1);
     expect(older).not.toHaveBeenCalled();
+  });
+
+  it('answers an audio command only through toParty', () => {
+    const { session, party } = setup();
+    const router = vi.fn(() => true);
+    session.setPartyRouter(router);
+    expect(session.toParty({ type: 'drives' }, 'audio')).toBe(true);
+    expect(router).toHaveBeenCalledWith({ type: 'drives' }, 'audio');
+    party.drives.set(true);
+    expect(session.command({ type: 'next' })).toBe(true);
+    expect(router).toHaveBeenLastCalledWith({ type: 'next' }, 'video');
   });
 
   describe('moveTo', () => {

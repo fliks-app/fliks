@@ -7,6 +7,7 @@ import { StreamingApiService } from '../api/streaming-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { StorageScopeService } from '../storage-scope.service';
 import { AudioPlayerService } from './audio-player.service';
+import { PlaybackSession } from '../playback/playback-session';
 import { SessionSyncService } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
 import { MusicApiService } from '../api/music-api.service';
@@ -27,12 +28,15 @@ const info = {
   ],
 };
 
+const partyRouter = signal<((c: never, p: string) => boolean) | null>(null);
+
 describe('AudioPlayerService', () => {
   const getItemPlaybackInfo = vi.fn();
   const updatePlaybackState = vi.fn();
   const stopSession = vi.fn();
 
   beforeEach(() => {
+    partyRouter.set(null);
     localStorage.clear();
     getItemPlaybackInfo.mockResolvedValue(info);
     updatePlaybackState.mockResolvedValue(null);
@@ -46,6 +50,7 @@ describe('AudioPlayerService', () => {
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
+        { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
         {
           provide: StreamingApiService,

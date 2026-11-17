@@ -12,7 +12,8 @@ import { AuthService } from '../auth.service';
 import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { NATIVE_AUDIO } from '../../plugins/audio-player.plugin';
-import { AudioPlayerService, type AudioPartyRouter } from './audio-player.service';
+import { AudioPlayerService } from './audio-player.service';
+import { PlaybackSession } from '../playback/playback-session';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
 import { RemoteService } from '../remote.service';
@@ -35,6 +36,8 @@ const track = (id: number): MusicTrackRequest => ({
   albumPeak: null,
 });
 
+const partyRouter = signal<((c: never, p: string) => boolean) | null>(null);
+
 describe('AudioPlayerService on the native player', () => {
   const handlers = new Map<string, (e: unknown) => void>();
   const plugin = Object.fromEntries(
@@ -49,6 +52,7 @@ describe('AudioPlayerService on the native player', () => {
   const emit = (event: string, e: unknown) => handlers.get(event)!(e);
 
   beforeEach(() => {
+    partyRouter.set(null);
     localStorage.clear();
     handlers.clear();
     for (const fn of Object.values(plugin)) fn.mockClear();
@@ -66,6 +70,7 @@ describe('AudioPlayerService on the native player', () => {
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
         provideZonelessChangeDetection(),
+        { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
         { provide: NATIVE_AUDIO, useValue: plugin },
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, updatePlaybackState, stopSession: vi.fn().mockResolvedValue(undefined), buildPlayUrl: (pi: { playUrl: string }) => pi.playUrl, positionRequest: () => ({ url: '/x', init: {} }), stopSessionRequest: () => ({ url: '/x', init: {} }) } },
@@ -212,11 +217,11 @@ describe('AudioPlayerService on the native player', () => {
   it('routes controls from outside the app to the party', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     const seen: string[] = [];
-    const router: AudioPartyRouter = (c) => {
+    const router = (c: { type: string }): boolean => {
       seen.push(c.type);
       return true;
     };
-    audio.setPartyRouter(router);
+    partyRouter.set(router);
     await vi.waitFor(() => expect(plugin['setRouted']).toHaveBeenCalledWith({ routed: true }));
     await audio.openForParty(track(1));
     emit('command', { command: 'next', value: 0 });

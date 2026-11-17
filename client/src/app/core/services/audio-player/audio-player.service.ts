@@ -34,6 +34,7 @@ import { KaraokeApiService } from '../api/karaoke-api.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import type { StemKind } from '../api/karaoke.models';
 import { FullPlayerState } from '../playback/full-player-state';
+import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
 import { PlayerStateService } from '../player-state.service';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
@@ -63,20 +64,6 @@ export interface AudioBookmark {
 
 /** Sleep timer: a wall-clock deadline, or the end of the chapter playing when it was set. */
 export type SleepTimer = { kind: 'duration'; endsAt: number; minutes: number } | { kind: 'chapter'; end: number };
-
-/** What a party driving the audio player intercepts; `drives` asks whether it does. */
-export type AudioPartyCommand =
-  | { type: 'drives' }
-  | { type: 'external' }
-  | { type: 'toggle' }
-  | { type: 'seek'; at: number }
-  | { type: 'next' }
-  | { type: 'prev' }
-  | { type: 'item'; index: number }
-  | { type: 'enqueue'; tracks: readonly MusicTrackRequest[]; where: 'next' | 'last' }
-  | { type: 'queue'; tracks: readonly MusicTrackRequest[] };
-
-export type AudioPartyRouter = (c: AudioPartyCommand) => boolean;
 
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 export const SKIP_STEPS = [10, 15, 30, 45, 60];
@@ -128,6 +115,7 @@ export class AudioPlayerService {
   private readonly auth = inject(AuthService);
   private readonly sessionSync = inject(SessionSyncService);
   private readonly remote = inject(RemoteService);
+  private readonly session = inject(PlaybackSession);
   private readonly music = inject(MusicApiService);
   private readonly fullPlayer = inject(FullPlayerState);
 
@@ -245,7 +233,6 @@ export class AudioPlayerService {
   private readonly gainNodes = new Map<HTMLAudioElement, GainNode>();
   private stems: StemMix | null = null;
   private stemsRun = 0;
-  private partyRouter: AudioPartyRouter | null = null;
   /** Voice-chat ducking factor, never persisted. */
   private duck = 1;
   /** The level the video player keeps too: one volume for the user, saved across sessions. */
@@ -261,7 +248,6 @@ export class AudioPlayerService {
   private nativeRate = 1;
   private nativeIndex = -1;
   private positionAt = 0;
-  private routedSent = false;
 
   /** Key of what a beat publishes besides the position; null while nothing is loaded to report. */
   private readonly published = computed(() => {
@@ -279,7 +265,15 @@ export class AudioPlayerService {
     if (typeof window === 'undefined') return;
     window.addEventListener('pagehide', (e) => this.beatOnExit(e.persisted));
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
-    if (this.nativeAudio) void this.attachNative().catch(() => undefined);
+    if (this.nativeAudio) {
+      void this.attachNative().catch(() => undefined);
+      // Controls outside the app go to the party while one drives the audio.
+      let sent = false;
+      effect(() => {
+        const routed = this.routed({ type: 'drives' });
+        if (routed !== sent) void this.nativeAudio!.setRouted({ routed: (sent = routed) });
+      });
+    }
     this.remote.registerLoader('audio', (cmd) => this.loadFromRemote(cmd));
     this.remote.validated.subscribe((cmd) => void this.applyRemote(cmd));
     this.sessionSync.registerResumer('audio', (s, positionSeconds) => this.resumeSession(s, positionSeconds));
@@ -529,18 +523,8 @@ export class AudioPlayerService {
     this.applyGains();
   }
 
-  /** The party's router for the audio player; the disposer only clears its own registration. */
-  setPartyRouter(router: AudioPartyRouter): () => void {
-    this.partyRouter = router;
-    this.syncRouting();
-    return () => {
-      if (this.partyRouter === router) this.partyRouter = null;
-      this.syncRouting();
-    };
-  }
-
-  private routed(c: AudioPartyCommand): boolean {
-    return this.partyRouter?.(c) ?? false;
+  private routed(c: PlaybackCommand | PartyQuery): boolean {
+    return this.session.toParty(c, 'audio');
   }
 
   private blockedByParty(): boolean {
@@ -555,7 +539,6 @@ export class AudioPlayerService {
     this.mq.repeat = 'off';
     this.syncQueue();
     await this.startMusic(req, false);
-    this.syncRouting();
   }
 
   /** True when the loaded track can be seeked: metadata is in and no load is in flight. */
@@ -1938,22 +1921,12 @@ export class AudioPlayerService {
     );
   }
 
-  /** Controls outside the app go to the party while one drives the audio. */
-  private syncRouting(): void {
-    if (!this.nativeAudio) return;
-    const routed = this.routed({ type: 'drives' });
-    if (routed === this.routedSent) return;
-    this.routedSent = routed;
-    void this.nativeAudio.setRouted({ routed });
-  }
-
   private async startNative(autoplay: boolean, startAt = 0): Promise<void> {
     const n = this.nativeAudio!;
     this.nativeOn = true;
     this.nativeIndex = this.mq.index;
     this.nativeEnded = false;
     this.nativeRate = this.playRate();
-    this.syncRouting();
     this.pushGain();
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });

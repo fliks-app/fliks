@@ -11,6 +11,7 @@ import { CastService } from '../cast.service';
 import { CastPlayerService } from '../cast-player.service';
 import { ServerVersionService } from '../server-version.service';
 import { AudioPlayerService } from './audio-player.service';
+import { PlaybackSession } from '../playback/playback-session';
 import type { MusicTrackRequest } from './music-queue';
 import { SessionSyncService } from '../session-sync.service';
 import { FullPlayerState } from '../playback/full-player-state';
@@ -34,6 +35,8 @@ const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRe
   albumPeak: null,
   ...extra,
 });
+
+const partyRouter = signal<((c: never, p: string) => boolean) | null>(null);
 
 describe('AudioPlayerService music mode', () => {
   const getItemPlaybackInfo = vi.fn();
@@ -76,6 +79,7 @@ describe('AudioPlayerService music mode', () => {
   const els = (a: AudioPlayerService) => (a as unknown as { els: HTMLAudioElement[] }).els;
 
   beforeEach(() => {
+    partyRouter.set(null);
     localStorage.clear();
     observedOwner = null;
     ownerCanEnqueue = true;
@@ -115,6 +119,7 @@ describe('AudioPlayerService music mode', () => {
       { provide: MusicApiService, useValue: { trackRequests } },
       { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
+        { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
         {
           provide: StreamingApiService,
@@ -547,7 +552,7 @@ describe('AudioPlayerService music mode', () => {
   describe('driven by a party', () => {
     const drive = (audio: AudioPlayerService, drives = true) => {
       const router = vi.fn((c: { type: string }) => c.type === 'drives' && drives);
-      audio.setPartyRouter(router as never);
+      partyRouter.set(router as never);
       return router;
     };
 
@@ -584,12 +589,12 @@ describe('AudioPlayerService music mode', () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
       const router = vi.fn((c: { type: string }) => c.type !== 'external');
-      audio.setPartyRouter(router as never);
+      partyRouter.set(router as never);
       audio.enqueueTracks([track(3)], 'last');
-      expect(router).toHaveBeenCalledWith({ type: 'enqueue', tracks: [expect.objectContaining({ itemId: 3 })], where: 'last' });
+      expect(router).toHaveBeenCalledWith({ type: 'enqueue', tracks: [expect.objectContaining({ itemId: 3 })], where: 'last' }, 'audio');
       expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
       audio.removeFromQueue(1);
-      expect(router).toHaveBeenCalledWith({ type: 'queue', tracks: [expect.objectContaining({ itemId: 1 })] });
+      expect(router).toHaveBeenCalledWith({ type: 'queue', tracks: [expect.objectContaining({ itemId: 1 })] }, 'audio');
       expect(audio.queue().map((t) => t.itemId)).toEqual([1]);
       audio.removeFromQueue(0);
       expect(audio.queue().map((t) => t.itemId)).toEqual([1]);
@@ -601,7 +606,7 @@ describe('AudioPlayerService music mode', () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
       const router = vi.fn((_c: { type: string }) => true);
-      audio.setPartyRouter(router);
+      partyRouter.set(router as never);
       (HTMLMediaElement.prototype.play as ReturnType<typeof vi.fn>).mockClear();
       audio.toggle();
       await audio.seek(30);
@@ -636,10 +641,10 @@ describe('AudioPlayerService music mode', () => {
     it('refuses an outside play while the party drives it', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       const router = vi.fn((_c: { type: string }) => true);
-      audio.setPartyRouter(router);
+      partyRouter.set(router as never);
       await audio.playTracks([track(1)]);
       expect(audio.track()).toBeNull();
-      expect(router).toHaveBeenCalledWith({ type: 'external' });
+      expect(router).toHaveBeenCalledWith({ type: 'external' }, 'audio');
     });
 
     it('ducks the element level without touching the prefs', async () => {
