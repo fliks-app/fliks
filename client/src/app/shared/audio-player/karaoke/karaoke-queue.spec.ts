@@ -29,7 +29,7 @@ describe('KaraokeQueueComponent', () => {
   it('lists the next rows with their singers', () => {
     const { el } = setup([row(1, 2), row(2, 3)]);
     const items = [...el.querySelectorAll('[data-testid="karaoke-queue-item"]')];
-    expect(items.map((i) => i.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['Song 1 cara', 'Song 2 bob']);
+    expect(items.map((i) => [...i.querySelectorAll('span')].map((x) => x.textContent))).toEqual([['Song 1', 'cara'], ['Song 2', 'bob']]);
   });
 
   it('is absent while nothing is waiting, and has no search', async () => {

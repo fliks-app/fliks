@@ -610,6 +610,10 @@ describe('PartySync programme as queue', () => {
 
   it('adds enqueued tracks to the programme, after the host-only gate', async () => {
     const { party, audio, toast } = setup({ joined: 3 });
+    const a = row(4, null, 'album', 70);
+    party.programme.set([a]);
+    party.live.set(live(a));
+    TestBed.tick();
     const tracks = [{ mediaId: 4, itemId: 70 }];
     expect(audio.router!({ type: 'enqueue', tracks, where: 'next' } as never)).toBe(true);
     expect(party.addToProgramme).toHaveBeenCalledWith(tracks, 'next');
