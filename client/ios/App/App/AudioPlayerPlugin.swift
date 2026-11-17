@@ -71,6 +71,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var generation = 0
     private var repeatMode = "off"
     private var rate: Float = 1
+    private var intendedPlaying = false
+    private var resumeRetry = false
     private var gainMode = "track"
     private var preamp = 0
     private var duck = 1.0
@@ -111,6 +113,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     public override func load() {
         Self.shared = self
+        NotificationCenter.default.addObserver(forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main) { [weak self] in
+            self?.rateChanged($0)
+        }
         deviceProfile = UserDefaults.standard.string(forKey: Self.profileKey)
         player.automaticallyWaitsToMinimizeStalling = true
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
@@ -684,6 +689,25 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
             }
             if run { if p.rate != rate { p.rate = rate } } else if p.rate != 0 { p.pause() }
+        }
+    }
+
+    /// WebKit's GPU process opens its own session for the mic and the system interrupts ours, dropping the rate
+    /// to 0 with no interruption end to resume from: play again when that was not the intent.
+    private func rateChanged(_ n: Notification) {
+        let reason = n.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
+        if reason != .audioSessionInterrupted, reason != .setRateFailed { intendedPlaying = player.rate != 0 }
+        if reason == .audioSessionInterrupted, intendedPlaying, player.rate == 0 {
+            resumeRetry = true
+            activateSession()
+            player.play()
+        } else if reason == .setRateFailed, resumeRetry, intendedPlaying {
+            resumeRetry = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard self?.intendedPlaying == true else { return }
+                self?.activateSession()
+                self?.player.play()
+            }
         }
     }
 
