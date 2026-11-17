@@ -5,6 +5,8 @@
 # `docker compose build client` after a package.json change.
 # The engine is the front door (:3000, --upstream server:3001), as in production; server has no published port.
 # The engine runs from the checkout at ${FLIKS_ENGINE_SRC:-../fliks-engine} (cargo watch); first build takes minutes.
+# The server builds against that same checkout without touching server/Cargo.lock: the patch and the
+# patched lock stay in the container. Once: `cp server/Cargo.lock .dev/server-Cargo.lock`.
 
 services:
   engine:
@@ -58,7 +60,10 @@ services:
     # Files it writes under ./.dev/data stay yours; volumes made before this line was added are
     # root-owned: `docker compose down -v` once.
     user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
-    command: cargo watch -x 'run -p fliks-server'
+    command: sh -c 'cp /repo-lock/Cargo.lock Cargo.lock && exec cargo watch -w . -w /engine/crates/core -x "run -p fliks-server"'
+    configs:
+      - source: engine-patch
+        target: /usr/local/cargo/config.toml
     environment:
       PORT: 3001
       FLIKS_CAST_DIR: /src/server/public
@@ -78,6 +83,9 @@ services:
       FLIKS_DATA_DIR: /src/data
     volumes:
       - ./server:/src/server
+      - ${FLIKS_ENGINE_SRC:-../fliks-engine}:/engine:ro
+      - ./server/Cargo.lock:/repo-lock/Cargo.lock:ro
+      - ./.dev/server-Cargo.lock:/src/server/Cargo.lock
       - ./.dev/downloads:/downloads
       - ./.dev/medias:/medias
       - ./.dev/data:/src/data
@@ -116,6 +124,12 @@ services:
       retries: 5
     volumes:
       - postgres:/var/lib/postgresql/18/docker
+
+configs:
+  engine-patch:
+    content: |
+      [patch."https://github.com/fliks-app/engine"]
+      fliks-engine-core = { path = "/engine/crates/core" }
 
 volumes:
   postgres:
