@@ -973,7 +973,8 @@ function renderMusicProgress(elapsed, total, played) {
 // A karaoke mode loads the instrumental stem (its customData has `stem`); the sender sends the vocals stem,
 // which plays here on the media element's clock at the level it sets, so the level changes with no reload.
 
-const VOCALS_DRIFT_S = 0.12;
+const VOCALS_SEEK_S = 0.3;
+const VOCALS_NUDGE_S = 0.04;
 const vocalsEl = document.createElement('audio');
 vocalsEl.preload = 'auto';
 let vocalsItem = null;
@@ -991,10 +992,15 @@ function syncVocals() {
   const item = musicItemId(info);
   if (item !== null && item !== vocalsItem) return dropVocals();
   const media = findMediaElement();
-  const over = !!media && item === vocalsItem && !!info.customData.stem;
+  const over = !!media && item === vocalsItem && !!info.customData.stem && vocalsEl.volume > 0;
   if (!over || media.paused || media.ended || media.readyState < 3) return void vocalsEl.pause();
-  if (vocalsEl.readyState >= 1 && Math.abs(vocalsEl.currentTime - media.currentTime) > VOCALS_DRIFT_S) vocalsEl.currentTime = media.currentTime;
-  if (vocalsEl.playbackRate !== media.playbackRate) vocalsEl.playbackRate = media.playbackRate;
+  // A seek outlasts the tolerance: seeking again before it lands would loop and starve the media element.
+  if (vocalsEl.seeking) return;
+  const drift = vocalsEl.currentTime - media.currentTime;
+  if (vocalsEl.paused || Math.abs(drift) > VOCALS_SEEK_S) vocalsEl.currentTime = media.currentTime;
+  // A small drift closes by rate, which a cut in the voice would not.
+  const nudge = Math.abs(drift) > VOCALS_NUDGE_S && Math.abs(drift) <= VOCALS_SEEK_S ? (drift > 0 ? 0.97 : 1.03) : 1;
+  vocalsEl.playbackRate = media.playbackRate * nudge;
   if (vocalsEl.paused) vocalsEl.play().catch(() => {});
 }
 setInterval(syncVocals, 250);

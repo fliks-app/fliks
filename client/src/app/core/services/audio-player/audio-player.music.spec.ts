@@ -82,6 +82,7 @@ describe('AudioPlayerService music mode', () => {
     trackRequests.mockClear();
     cast.isConnected.set(false);
     cast.currentTime.set(0);
+    cast.isPaused.set(true);
     cast.ended.set(false);
     cast.receiverMedia.set(null);
     cast.queueNext.mockClear();
@@ -485,17 +486,22 @@ describe('AudioPlayerService music mode', () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
     await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
-    (audio as unknown as { _position: { set(n: number): void } })._position.set(30);
+    cast.currentTime.set(30);
+    cast.isPaused.set(false);
+    TestBed.tick();
+    // The stage sets the mode and then the level: one LOAD, the level applied once it lands.
     audio.setStemMode('guide');
-    await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 'audio/mpeg', 30, true, expect.any(Function)));
+    audio.setVocalLevel(0.4);
+    await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', 0.4));
+    expect(castStem).toHaveBeenCalledTimes(1);
+    expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 'audio/mpeg', 30, true, expect.any(Function));
     const current = castStem.mock.calls[0][6] as () => boolean;
     expect(current()).toBe(true);
-    await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', 0.25));
     audio.setVocalLevel(0.6);
     await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', 0.6));
     expect(castStem).toHaveBeenCalledTimes(1);
     audio.setStemMode('original');
-    expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', null);
+    await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', null));
     await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function)));
     expect(stopSession).toHaveBeenCalledWith('cs');
     await audio.close();

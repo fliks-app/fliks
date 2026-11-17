@@ -738,8 +738,13 @@ export class AudioPlayerService {
     void this.refreshStems();
   }
 
+  /** One switch at a time, each from the state when it runs: a second LOAD would replace the first and fail it. */
+  private switchCastStem(): Promise<void> {
+    return (this.castStemRun = this.castStemRun.then(() => this.applyCastStem()).catch(() => undefined));
+  }
+
   /** On Cast a stem mode plays the instrumental stem, the receiver mixing the vocals over it at the vocal level; `original` the track again. */
-  private async switchCastStem(): Promise<void> {
+  private async applyCastStem(): Promise<void> {
     const req = this.mq.current;
     const file = this.castStemFile;
     if (!req || file === null) return;
@@ -1101,6 +1106,7 @@ export class AudioPlayerService {
   /** Content type of each stem the receiver may load. */
   private castStemTypes: Partial<Record<StemKind, string>> = {};
   private castKind: StemKind | null = null;
+  private castStemRun: Promise<void> = Promise.resolve();
 
   /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
   private pushNativeStems(): void {
