@@ -245,6 +245,8 @@ export class AudioPlayerComponent {
   /** The edit tools of the lyrics panel, opened from the menu. */
   protected readonly lyricsEdit = signal(false);
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
+  /** The side column fills the height and scrolls itself: the lyrics, or the desktop queue. */
+  protected readonly panelFills = computed(() => this.lyricsShown() || (this.audio.musicMode() && !this.asSheet()));
   /** The Karaoke toggle of the lyrics panel, kept across Lyrics being hidden and shown. */
   protected readonly karaokeStage = signal(false);
   /** The mounted lyrics panel: the Sing button and the translation entries read its state. */

@@ -243,7 +243,7 @@
         }
       </div>
 
-      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2" [class.overflow-hidden]="lyricsShown()" [class.overflow-y-auto]="!lyricsShown()" [class.short:min-h-0]="lyricsShown()" appTvSection>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2" [class.overflow-hidden]="panelFills()" [class.overflow-y-auto]="!panelFills()" [class.short:min-h-0]="panelFills()" appTvSection>
         <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
           <div class="player-cover flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 short:max-w-32 sm:max-w-64">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
@@ -264,12 +264,12 @@
           }
         </div>
 
-        <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="lyricsShown()" [class.flex-1]="lyricsShown()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
+        <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="panelFills()" [class.flex-1]="panelFills()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
           @if (audio.musicMode() && lyricsShown()) {
             <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" [(stage)]="karaokeStage" (found)="hasLyrics.set($event)" />
           } @else if (audio.musicMode()) {
             @if (!asSheet()) {
-              <section animate.enter="fade-up-in" class="scroll-ring-safe max-h-80 overflow-y-auto" appTvSection data-testid="audio-queue">
+              <section animate.enter="fade-up-in" class="scroll-ring-safe min-h-0 flex-1 overflow-y-auto" appTvSection data-testid="audio-queue">
                 <h3 class="menu-title flex items-center gap-2 px-0">
                   <svg lucideListMusic class="h-4 w-4"></svg>
                   {{ 'music_player.queue' | translate }}
