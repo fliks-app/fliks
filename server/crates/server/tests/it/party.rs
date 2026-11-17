@@ -3107,7 +3107,7 @@ async fn a_song_a_member_cannot_open_is_refused_and_names_them(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
+async fn a_choose_and_a_cancel_of_one_proposal_are_ordered(pool: PgPool) {
     let c = ctx(pool).await;
     album_tracks(&c).await;
     let (_alice, a) = c.user("alice", true).await;
@@ -3133,11 +3133,11 @@ async fn a_cancel_and_a_choose_of_one_song_never_both_win(pool: PgPool) {
         );
         let in_programme = programme_items(&c, &url).await.contains(&(5000 + n));
         assert_eq!(chosen.0 == 200, in_programme, "round {n}");
-        assert_ne!(
-            chosen.0 == 200,
-            cancelled.0 == 204,
-            "round {n}: exactly one wins"
+        assert!(
+            chosen.0 == 200 || chosen.0 == 404,
+            "round {n}: a choose after the cancel is a 404"
         );
+        assert_eq!(cancelled.0, 204, "round {n}");
     }
 }
 
