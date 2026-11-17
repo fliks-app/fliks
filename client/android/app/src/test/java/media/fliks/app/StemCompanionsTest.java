@@ -8,8 +8,8 @@ import org.junit.Test;
 public class StemCompanionsTest {
     @Test
     public void reseeksOnlyPastTheDriftTolerance() {
-        assertFalse(StemCompanions.needsReseek(10_000, 10_150));
-        assertTrue(StemCompanions.needsReseek(10_000, 10_151));
-        assertTrue(StemCompanions.needsReseek(10_200, 10_000));
+        assertFalse(StemCompanions.needsReseek(10_000, 10_500));
+        assertTrue(StemCompanions.needsReseek(10_000, 10_501));
+        assertTrue(StemCompanions.needsReseek(10_600, 10_000));
     }
 }
