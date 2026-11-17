@@ -406,10 +406,14 @@ export class MediaService {
     );
   }
 
-  getOne(id: number, opts: CacheRead = {}) {
+  /** `silent`: the caller reports a failure itself. */
+  getOne(id: number, opts: CacheRead & { silent?: boolean } = {}) {
     const headers = cacheHeaders(opts);
     return firstValueFrom(
-      this.http.get<Media>(`/api/media/${id}`, headers ? { headers } : {}),
+      this.http.get<Media>(`/api/media/${id}`, {
+        ...(headers && { headers }),
+        context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts.silent),
+      }),
     );
   }
 

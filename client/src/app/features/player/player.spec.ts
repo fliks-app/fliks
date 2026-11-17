@@ -3630,10 +3630,10 @@ describe('PlayerComponent next item warm-up', () => {
     h.component.outroMarker.set({ startSeconds: 80, endSeconds: 100 });
     h.state.currentTime.set(50);
     h.component.warmNext();
-    expect(getOne).not.toHaveBeenCalledWith(42);
+    expect(getOne).not.toHaveBeenCalledWith(42, { silent: true });
 
     h.state.currentTime.set(81);
     h.component.warmNext();
-    expect(getOne).toHaveBeenCalledWith(42);
+    expect(getOne).toHaveBeenCalledWith(42, { silent: true });
   });
 });

@@ -271,7 +271,7 @@ export class QueueController {
   /** Series-next items carry their file id; playlist items resolve it lazily from the media. */
   private async resolveItemFileId(item: QueueItem): Promise<number | null> {
     if (item.mediaFileId != null) return item.mediaFileId;
-    const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
+    const media = await this.mediaService.getOne(item.mediaId, { silent: true }).catch(() => null);
     return media ? (resolvePlayableFile(media, item.episodeId)?.id ?? null) : null;
   }
 

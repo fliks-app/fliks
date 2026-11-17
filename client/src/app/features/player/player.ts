@@ -44,7 +44,6 @@ import {
 } from '../../core/services/cast-player.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
-import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
@@ -296,7 +295,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
-  private readonly toast = inject(ToastService);
   private readonly navbar = inject(NavbarService);
   private readonly queue = inject(PlaybackQueueService);
   private readonly audioPlayer = inject(AudioPlayerService);
@@ -614,7 +612,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   warmNext(): void {
     const next = this.queueCtl.upNext();
     if (!next || !this.nearEnd() || this.isOfflinePlayback) return;
-    untracked(() => void this.mediaService.getOne(next.mediaId).catch(() => {}));
+    untracked(() => void this.mediaService.getOne(next.mediaId, { silent: true }).catch(() => {}));
   }
   /** Embedded chapters from playback-info (MKV/MP4). */
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
@@ -1253,7 +1251,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         : this.requireStreamToken();
       streamTokenPromise?.catch(() => {});
       // None needs the device probe: media, subtitle list and the EDL negotiatePlayback reads run alongside it.
-      const mediaPromise = this.mediaId && !this.isOfflinePlayback ? this.mediaService.getOne(this.mediaId) : null;
+      const mediaPromise = this.mediaId && !this.isOfflinePlayback ? this.mediaService.getOne(this.mediaId, { silent: true }) : null;
       mediaPromise?.catch(() => {});
       if (mediaPromise) void this.itemSubtitles(mediaPromise);
       if (!this.isOfflinePlayback) void this.hasMuteRanges(this.mediaFileId);
@@ -1267,7 +1265,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
-        // The launch failure path shows the server's reason in its own toast and card.
+        // The launch failure path shows the server's reason on its error card.
         playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, {
           skipErrorToast: true,
           preRollFirst: this.preRollMayRun(resumeTime),
@@ -1376,9 +1374,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return this.completePostLoadSetup();
       };
       if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, recovered)) {
-        const userMessage = this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
-        // preRollAdvanceEffect handles a pre-roll failure; this teardown would
-        // null the engine it needs, and the toast has no film-error to show.
+        this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
+        // preRollAdvanceEffect handles a pre-roll failure; this teardown would null the engine it needs.
         if (!this.preRollActive()) {
           // TV/native engines leave their surface parked over the error overlay
           // if they die during load(): tear it down so the card is visible.
@@ -1394,13 +1391,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.engine = null;
             this.isTizenEngine.set(false);
             this.isNativeEngine.set(false);
-          }
-          // Fixed z-[9999] on the always-mounted <app-toast-container>: survives
-          // even when the player-container itself isn't laying out correctly.
-          try {
-            this.toast.error(userMessage);
-          } catch {
-            /* toast service may not be ready during early init - ignore */
           }
         }
       }
@@ -2156,7 +2146,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private loadMediaAside(): void {
     if (!this.mediaId || !this.network.isOnline()) return;
     const fileId = this.mediaFileId;
-    void this.mediaService.getOne(this.mediaId).then(
+    void this.mediaService.getOne(this.mediaId, { silent: true }).then(
       (media) => {
         if (fileId !== this.mediaFileId) return;
         this.media = media;
@@ -2209,7 +2199,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // (a queue can cross media). Refresh the title/logo when it does.
       if (mediaId && mediaId !== this.mediaId) {
         this.mediaId = mediaId;
-        this.media = await this.mediaService.getOne(mediaId);
+        this.media = await this.mediaService.getOne(mediaId, { silent: true });
       }
       // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
@@ -3116,7 +3106,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.followItemInUrl(item);
     if (item.mediaId !== this.mediaId) {
       this.mediaId = item.mediaId;
-      const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
+      const media = await this.mediaService.getOne(item.mediaId, { silent: true }).catch(() => null);
       if (this.destroyed || this.mediaFileId !== item.fileId) return;
       if (media) {
         this.media = media;
