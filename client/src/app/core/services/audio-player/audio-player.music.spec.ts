@@ -43,6 +43,7 @@ describe('AudioPlayerService music mode', () => {
   const castTrack = vi.fn();
   const castStem = vi.fn();
   const prepareTrack = vi.fn();
+  const mixVocals = vi.fn(async () => {});
   const itemState = vi.fn();
   const cast = {
     isConnected: signal(false),
@@ -86,6 +87,7 @@ describe('AudioPlayerService music mode', () => {
     cast.queueNext.mockClear();
     castTrack.mockReset();
     prepareTrack.mockReset();
+    mixVocals.mockClear();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
       playUrl: `/s/${itemId}`,
@@ -119,7 +121,7 @@ describe('AudioPlayerService music mode', () => {
           },
         },
         { provide: CastService, useValue: cast },
-        { provide: CastPlayerService, useValue: { castTrack, castStem, prepareTrack } },
+        { provide: CastPlayerService, useValue: { castTrack, castStem, prepareTrack, mixVocals } },
         { provide: KaraokeApiService, useValue: { itemState } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
@@ -475,11 +477,11 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 2 }), true, 0));
   });
 
-  it('loads the stem on the receiver in a stem mode and the track again on original', async () => {
+  it('plays the instrumental with the vocals mixed on the receiver, sets their level without a reload, and the track again on original', async () => {
     cast.isConnected.set(true);
     castTrack.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
     castStem.mockResolvedValue(true);
-    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: {}, instrumental: { contentType: 'audio/mpeg' } } });
+    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { vocals: { contentType: 'audio/ogg' }, instrumental: { contentType: 'audio/mpeg' } } });
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
     await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));
@@ -488,7 +490,12 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(castStem).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'instrumental', 'audio/mpeg', 30, true, expect.any(Function)));
     const current = castStem.mock.calls[0][6] as () => boolean;
     expect(current()).toBe(true);
+    await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', 0.25));
+    audio.setVocalLevel(0.6);
+    await vi.waitFor(() => expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', 0.6));
+    expect(castStem).toHaveBeenCalledTimes(1);
     audio.setStemMode('original');
+    expect(mixVocals).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), 77, 'audio/ogg', null);
     await vi.waitFor(() => expect(castTrack).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function)));
     expect(stopSession).toHaveBeenCalledWith('cs');
     await audio.close();

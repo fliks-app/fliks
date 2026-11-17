@@ -247,10 +247,9 @@ export class CastPlayerService {
     autoplay: boolean,
     current: () => boolean = () => true,
   ): Promise<boolean> {
-    const [token, castInfo] = await Promise.all([this.authService.ensureStreamToken(fileId), this.authService.getCastInfo()]);
-    if (!token || !current()) return false;
+    const [url, castInfo] = await Promise.all([this.stemUrl(fileId, kind), this.authService.getCastInfo()]);
+    if (!url || !current()) return false;
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
-    const url = `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
     try {
       await this.cast.loadMedia({
         url,
@@ -260,6 +259,7 @@ export class CastPlayerService {
         posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
         mediaId: t.mediaId,
         itemId: t.itemId,
+        stem: kind,
         mediaFileId: fileId,
         userId: this.authService.user()?.id,
         currentTime: position,
@@ -270,6 +270,18 @@ export class CastPlayerService {
       console.error('[cast] stem LOAD failed', err);
       return false;
     }
+  }
+
+  /** Has the receiver play the vocals stem over the stem it plays of track `t`, at `level`; null drops them. */
+  async mixVocals(t: CastTrack, fileId: number, contentType: string, level: number | null): Promise<void> {
+    if (level === null) return this.cast.sendFliks({ kind: 'vocals', url: null });
+    const url = await this.stemUrl(fileId, 'vocals');
+    if (url) this.cast.sendFliks({ kind: 'vocals', itemId: t.itemId, url, contentType, level });
+  }
+
+  private async stemUrl(fileId: number, kind: StemKind): Promise<string | null> {
+    const token = await this.authService.ensureStreamToken(fileId);
+    return token && `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
   }
 
   /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */

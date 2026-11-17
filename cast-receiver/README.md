@@ -121,6 +121,7 @@ Sender sends, receiver reads:
   edlLabels?: { cut: string; commercial: string },  // notice texts, translated by the sender
   episodeId?: number,  // when applicable
   itemId?: number,     // the music track, whose media is the album
+  stem?: string,       // the karaoke stem a music LOAD plays instead of the track
 }
 ```
 
@@ -154,6 +155,14 @@ The sender follows the move from the media status, whose `customData.sid` turns 
 
 ```ts
 { kind: 'queue_next', media: { url: string, contentType: string, title: string, subtitle: string, posterUrl: string, customData: object } | null }
+```
+
+In a karaoke mode the sender loads the instrumental stem (`customData.stem`) and sends the vocals stem,
+which the receiver plays on the media element's clock at `level` (0 to 1) while a stem of `itemId` plays.
+A new `level` applies at once; `url: null` drops the vocals.
+
+```ts
+{ kind: 'vocals', itemId: number, url: string | null, contentType: string, level: number }
 ```
 
 A music track (a LOAD or queued item whose `customData` has an `itemId`) shows the music view: its
