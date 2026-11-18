@@ -60,6 +60,27 @@ describe('TvSpatialNavService focus rescue', () => {
     expect(document.activeElement).toBe(picked);
   });
 
+  it('lands on the first entry of a menu panel that replaced the pressed one, both ways', async () => {
+    TestBed.inject(TvSpatialNavService);
+    document.documentElement.classList.add('keyboard-modality');
+    const sheet = document.body.appendChild(document.createElement('div'));
+    sheet.setAttribute('data-tv-modal', '');
+    const swap = () => {
+      sheet.replaceChildren();
+      const panel = sheet.appendChild(document.createElement('div'));
+      return [button(panel, 0), button(panel, 50)];
+    };
+    const [, advanced] = swap();
+    advanced.focus();
+    const [back] = swap();
+    await flush();
+    expect(document.activeElement).toBe(back);
+
+    const [watch] = swap();
+    await flush();
+    expect(document.activeElement).toBe(watch);
+  });
+
   it('gives the focus back to a button re-enabled after a busy spell', async () => {
     TestBed.inject(TvSpatialNavService);
     document.documentElement.classList.add('keyboard-modality');
