@@ -4070,6 +4070,7 @@
   "session": {
     "another_device": "un autre appareil",
     "resume_here": "Reprendre ici",
+    "take_here": "Reprendre sur cet appareil",
     "listen_here": "Écouter sur cet appareil",
     "play_here": "Lire sur cet appareil",
     "error_no_session": "Aucune lecture à transférer.",

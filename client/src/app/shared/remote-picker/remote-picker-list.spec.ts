@@ -17,15 +17,11 @@ import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { RemotePickerListComponent } from './remote-picker-list';
 
 function setup(
-  over: { name?: string | null; canSetVolume?: boolean; card?: boolean; transferOnly?: boolean; volumeKnown?: boolean; sync?: object; remote?: object; session?: object } = {},
+  over: { name?: string | null; card?: boolean; transferOnly?: boolean; sync?: object; remote?: object; session?: object } = {},
 ) {
   const playing = {
     name: signal(over.name === undefined ? 'Living room' : over.name),
     icon: signal('tv'),
-    canSetVolume: signal(over.canSetVolume ?? true),
-    volume: signal(0.8),
-    volumeKnown: signal(over.volumeKnown ?? true),
-    setVolume: vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -68,24 +64,26 @@ describe('RemotePickerListComponent device card', () => {
     expect(setup({ name: null }).el.querySelector('[data-testid="device-card"]')).toBeNull();
   });
 
-  it('sends the slider level as a fraction to the device', () => {
-    const { el, playing } = setup();
-    const slider = el.querySelector<HTMLInputElement>('[data-testid="device-volume"]')!;
-    slider.value = '40';
-    slider.dispatchEvent(new Event('input'));
-    expect(playing.setVolume).toHaveBeenCalledWith(0.4);
+  const resumable = (playHere = vi.fn()) => ({
+    sync: { session: signal({ owner: { targetId: 'tv#1' }, state: 'playing', item: { kind: 'album', title: 'Album', subtitle: 'Track' } }), canPlayHere: signal(true), isReading: () => false, playHere },
+    session: { isLocal: signal(true) },
   });
 
-  it('shows no level, not a full one, until the device has reported its volume', () => {
-    const { el } = setup({ volumeKnown: false });
-    const slider = el.querySelector<HTMLInputElement>('[data-testid="device-volume"]')!;
-    expect(slider.disabled).toBe(true);
-    expect(slider.value).toBe('0');
+  it('is followed by the take-back button, which replaces the this-device row', () => {
+    const playHere = vi.fn();
+    const { el } = setup(resumable(playHere));
+    expect(el.querySelector('[data-testid="device-card"] [data-testid="picker-take-here"]')).toBeNull();
+    const button = el.querySelector<HTMLButtonElement>('[data-testid="picker-take-here"]')!;
+    expect(button).not.toBeNull();
+    expect(el.textContent).not.toContain('remote.this_device');
+    button.click();
+    expect(playHere).toHaveBeenCalled();
   });
 
-  it('hides the slider when the device cannot set its volume', () => {
-    const { el } = setup({ canSetVolume: false });
-    expect(el.querySelector('[data-testid="device-volume"]')).toBeNull();
+  it('shows the take-back button without a card too', () => {
+    const { el } = setup({ ...resumable(), card: false });
+    expect(el.querySelector('[data-testid="picker-take-here"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="device-card"]')).toBeNull();
   });
 });
 
