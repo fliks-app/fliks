@@ -781,9 +781,11 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 
 const lyricsEl = document.getElementById('lyrics');
 const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], wipes: [], add: createAssembler() };
-// A sung word is lit by two counter-moving layers: transforms only, so the compositor runs the wipe at full frame rate.
-const WIPE = [{ transform: 'translateX(-100%)' }, { transform: 'none' }];
-const WIPE_BACK = [{ transform: 'translateX(100%)' }, { transform: 'none' }];
+// A word is drawn twice, its sung copy clipped from the left and its coming copy from the right, each clip and its text
+// moving against each other: transforms only, so the compositor runs the wipe, and the copies never overlap.
+const LEFT = 'translateX(-100%)';
+const RIGHT = 'translateX(100%)';
+const WIPES = [[LEFT, 'none'], [RIGHT, 'none'], ['none', RIGHT], ['none', LEFT]].map(([a, b]) => [{ transform: a }, { transform: b }]);
 const WIPE_SLACK_MS = 80;
 const lyricsClock = createClock(400);
 
@@ -791,18 +793,11 @@ const lyricsClock = createClock(400);
 function wordEl(line, text, className) {
   const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
   if (!core) return void line.append(text);
-  const word = document.createElement('span');
-  word.className = className;
-  word.textContent = core;
-  const wipe = document.createElement('span');
-  wipe.className = 'wipe';
-  const fill = document.createElement('span');
-  fill.className = 'wipe-fill';
-  fill.textContent = core;
-  wipe.appendChild(fill);
-  word.appendChild(wipe);
-  line.append(lead, word, trail);
-  return { wipe, fill };
+  const el = document.createElement('span');
+  el.className = className;
+  el.textContent = core;
+  line.append(lead, el, trail);
+  return { el, text: core, gap: className !== 'word' };
 }
 
 /** Every line of the document in one column, words wrapped where a line has cues. */
@@ -854,16 +849,33 @@ function showLine(i, instant) {
 }
 
 function stopWipes() {
-  for (const w of lyricsState.wipes) w.anims.forEach((a) => a.cancel());
+  for (const w of lyricsState.wipes) {
+    w.anims.forEach((a) => a.cancel());
+    w.el.classList.remove('wiping');
+    w.el.textContent = w.text;
+  }
   lyricsState.wipes = [];
 }
 
-/** Arms the wipe of each word of line `i`; syncWipes keeps them on the media clock. */
+/** Gives the words of line `i` their two copies, only there since each is a layer, and arms their wipes on the
+    media clock (syncWipes). The karaoke stage never lights the text between words. */
 function wipeLine(i) {
   stopWipes();
   for (const w of lyricsState.words[i] || []) {
+    if (w.gap && lyricsState.doc.stage) continue;
+    const layers = [];
+    for (const side of ['sung', 'coming']) {
+      const clip = document.createElement('span');
+      clip.className = 'clip ' + side;
+      const copy = document.createElement('span');
+      copy.textContent = w.text;
+      clip.appendChild(copy);
+      w.el.appendChild(clip);
+      layers.push(clip, copy);
+    }
+    w.el.classList.add('wiping');
     const timing = { duration: Math.max(1, w.end - w.start), fill: 'both', easing: 'linear' };
-    lyricsState.wipes.push({ start: w.start, duration: timing.duration, anims: [w.wipe.animate(WIPE, timing), w.fill.animate(WIPE_BACK, timing)] });
+    lyricsState.wipes.push({ el: w.el, text: w.text, start: w.start, duration: timing.duration, anims: layers.map((el, k) => el.animate(WIPES[k], timing)) });
   }
 }
 

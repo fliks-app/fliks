@@ -608,7 +608,6 @@ body.lyrics-on .music-track {
 }
 
 .word {
-  position: relative;
   display: inline-block;
 }
 
@@ -620,19 +619,28 @@ body.lyrics-on .music-track {
   color: inherit;
 }
 
-/* The lit copy of a word, shown as far as its wipe went. */
-.wipe {
+.clip {
   position: absolute;
   inset: 0;
   overflow: hidden;
+}
+
+.clip > span {
+  display: block;
+  white-space: nowrap;
+}
+
+.clip.sung {
   transform: translateX(-100%);
 }
 
-.wipe-fill {
-  display: block;
-  white-space: nowrap;
-  color: #ecf9ff;
+.clip.sung > span {
   transform: translateX(100%);
+  color: #ecf9ff;
+}
+
+.clip.coming > span {
+  color: rgba(236, 249, 255, 0.4);
 }
 
 /* Karaoke, as the phone's stage: sung lines fade, coming ones stay readable, the sung part takes the primary colour. */
@@ -648,14 +656,17 @@ body.lyrics-on .music-track {
   opacity: 1;
 }
 
-.stage .lyric.cued .word {
-  color: inherit;
+.stage .lyric.cued .word,
+.stage .clip.coming > span {
+  color: #ecf9ff;
 }
 
-.stage .wipe-fill {
+.stage .clip.sung > span {
   color: #605dff;
 }
 
-.stage .gap .wipe {
-  display: none;
+/* A word being wiped: its own text only holds its place, its two copies draw it. */
+.lyric.cued .word.wiping {
+  position: relative;
+  color: transparent;
 }
