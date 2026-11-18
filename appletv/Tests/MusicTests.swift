@@ -109,6 +109,25 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(PartyItem.upNext(after: nil, in: rows).compactMap(\.itemId), [1, 2, 3])
     }
 
+    func testAlbumPageDecodesItsRelease() throws {
+        let json = #"""
+        {"id":370,"title":"Bad","year":null,"overview":null,"posterUrl":null,"fanartUrl":null,"genres":[],
+         "album":{"primaryType":"Album","secondaryTypes":[],"firstReleaseDate":"1987-01-01","isCompilation":false,
+          "orphaned":false,"artists":[{"id":1,"name":"A","creditedName":null,"joinPhrase":null}],
+          "release":{"albumGain":-3.5,"albumPeak":0.9,"barcode":null,"catalogNumber":"X 1","country":"JP",
+           "coverUrl":null,"disambiguation":null,"discCount":1,"label":"Epic","media":"cd","releaseDate":null,
+           "status":"official","title":null,"trackCount":1},
+          "versions":[],"sharedTracks":0,"releaseGroupId":"g",
+          "tracks":[{"itemId":9,"mediaFileId":4,"hasFile":true,"orphaned":false,"discNumber":1,"discTitle":null,
+           "position":1,"trackNumber":1,"label":null,"title":"T","durationSeconds":10,"explicit":false,"gain":null,
+           "peak":null,"artists":[],"credits":[],"favourite":false,"playCount":0,"lastPlayedAt":null}]}}
+        """#
+        let page = try JSONDecoder().decode(AlbumPage.self, from: Data(json.utf8))
+        XCTAssertEqual(page.album.release.label, "Epic")
+        XCTAssertEqual(page.queue.map(\.itemId), [9])
+        XCTAssertEqual(page.queue.first?.albumGain, -3.5)
+    }
+
     func testDurationFormat() {
         XCTAssertEqual(MusicFormat.duration(185), "3:05")
         XCTAssertEqual(MusicFormat.duration(3725), "1:02:05")

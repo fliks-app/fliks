@@ -192,6 +192,6 @@ final class MusicPartyDriver {
             page = fetched
         }
         guard let t = page.album.tracks.first(where: { $0.itemId == item.itemId }) else { return nil }
-        return QueueTrack(track: t, album: page, edition: page.album.editions.first { $0.id == t.editionId })
+        return QueueTrack(track: t, album: page)
     }
 }

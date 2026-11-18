@@ -109,7 +109,7 @@ import UIKit
         Task { @MainActor in
             do {
                 let page = try await MusicAPI.albumPage(mediaId)
-                let all = page.queue(edition: nil)
+                let all = page.queue
                 let wanted = cmd.queueItemIds ?? cmd.itemId.map { [$0] } ?? all.map(\.itemId)
                 let tracks = wanted.compactMap { id in all.first { $0.itemId == id } }
                 let current = cmd.queueIndex.flatMap { wanted.indices.contains($0) ? wanted[$0] : nil } ?? cmd.itemId

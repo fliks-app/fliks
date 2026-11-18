@@ -65,8 +65,8 @@ struct AlbumCard: Codable, Identifiable, Hashable {
     }
 }
 
-struct AlbumEdition: Codable, Hashable, Identifiable {
-    let id: Int
+/// The one release an album is.
+struct AlbumRelease: Codable, Hashable {
     let title: String?
     let country: String?
     let status: String?
@@ -80,9 +80,6 @@ struct AlbumEdition: Codable, Hashable, Identifiable {
     let albumGain: Double?
     let albumPeak: Double?
     let coverUrl: String?
-    let libraryId: Int?
-    let hasFiles: Bool
-    let orphaned: Bool
 }
 
 struct TrackArtist: Codable, Hashable {
@@ -102,7 +99,6 @@ struct TrackCredit: Codable, Hashable {
 
 struct Track: Codable, Hashable, Identifiable {
     let itemId: Int
-    let editionId: Int
     let mediaFileId: Int?
     let hasFile: Bool
     let orphaned: Bool
@@ -132,10 +128,9 @@ struct AlbumDetail: Codable, Hashable {
     let secondaryTypes: [String]
     let firstReleaseDate: String?
     let isCompilation: Bool
-    let targetEditionId: Int?
     let orphaned: Bool
     let artists: [AlbumArtist]
-    let editions: [AlbumEdition]
+    let release: AlbumRelease
     let tracks: [Track]
 }
 
@@ -234,22 +229,13 @@ struct Disc: Identifiable {
     var id: Int { number }
 }
 
-extension AlbumDetail {
-    /// The edition the page shows: the chosen one, else the target, else the first with files.
-    func edition(_ chosen: Int?) -> AlbumEdition? {
-        editions.first { $0.id == chosen } ?? editions.first { $0.id == targetEditionId }
-            ?? editions.first { $0.hasFiles } ?? editions.first
-    }
-
-}
-
 extension Disc {
-    /// The tracks of one edition by disc, in the order given.
-    static func group(_ tracks: [Track], edition editionId: Int?) -> [Disc] {
+    /// The tracks by disc, in the order given.
+    static func group(_ tracks: [Track]) -> [Disc] {
         var order: [Int] = []
         var byDisc: [Int: [Track]] = [:]
         var titles: [Int: String] = [:]
-        for t in tracks where editionId == nil || t.editionId == editionId {
+        for t in tracks {
             if byDisc[t.discNumber] == nil { order.append(t.discNumber) }
             byDisc[t.discNumber, default: []].append(t)
             if let title = t.discTitle, !title.isEmpty { titles[t.discNumber] = title }

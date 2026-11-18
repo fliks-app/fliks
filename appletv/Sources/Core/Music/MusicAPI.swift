@@ -53,11 +53,11 @@ enum MusicAPI {
 }
 
 extension QueueTrack {
-    init(track t: Track, album: AlbumPage, edition: AlbumEdition?) {
+    init(track t: Track, album: AlbumPage) {
         let artists = t.artists.isEmpty ? album.album.artists.map(\.name).joined(separator: ", ") : MusicFormat.artistLine(t.artists)
         self.init(itemId: t.itemId, mediaId: album.id, title: t.title, artists: artists, albumTitle: album.title,
-                  coverUrl: edition?.coverUrl ?? album.posterUrl, durationSeconds: t.durationSeconds, gain: t.gain,
-                  peak: t.peak, albumGain: edition?.albumGain, albumPeak: edition?.albumPeak)
+                  coverUrl: album.album.release.coverUrl ?? album.posterUrl, durationSeconds: t.durationSeconds, gain: t.gain,
+                  peak: t.peak, albumGain: album.album.release.albumGain, albumPeak: album.album.release.albumPeak)
     }
 
     init(row r: TrackRow) {
@@ -74,10 +74,6 @@ extension QueueTrack {
 }
 
 extension AlbumPage {
-    /// The tracks of one edition that have a file, ready for the player.
-    func queue(edition: AlbumEdition?) -> [QueueTrack] {
-        let id = edition?.id
-        return album.tracks.filter { $0.playable && (id == nil || $0.editionId == id) }
-            .map { QueueTrack(track: $0, album: self, edition: edition) }
-    }
+    /// The tracks that have a file, ready for the player.
+    var queue: [QueueTrack] { album.tracks.filter(\.playable).map { QueueTrack(track: $0, album: self) } }
 }
