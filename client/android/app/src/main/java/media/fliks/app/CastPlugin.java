@@ -73,6 +73,8 @@ public class CastPlugin extends Plugin {
     private boolean rejoining = false;
     /** A cast route picked while a failed resume still holds the route is dropped again: rejoin once it is the default. */
     private boolean rejoinOnDefault = false;
+    /** The SDK's resume the plugin ended itself at start-up: its end is not a disconnect. */
+    private CastSession droppedResume = null;
     /** Active scan for the saved receiver, bounded by HUNT_MS. */
     private boolean hunting = false;
     /** A connected session went through this process, so its end is a real stop. */
@@ -96,6 +98,12 @@ public class CastPlugin extends Plugin {
         @Override
         public void onSessionEnded(CastSession session, int error) {
             runOnMainThread(() -> {
+                if (session == droppedResume) {
+                    droppedResume = null;
+                    unlistenReceiver(session);
+                    rejoinAny(router());
+                    return;
+                }
                 sessionPending = false;
                 castSession = null;
                 unlistenReceiver(session);
@@ -133,12 +141,17 @@ public class CastPlugin extends Plugin {
         public void onSessionEnding(CastSession session) {}
         @Override
         public void onSessionResuming(CastSession session, String sessionId) {
-            sessionPending = true;
+            if (session != droppedResume) sessionPending = true;
         }
         @Override
         public void onSessionResumeFailed(CastSession session, int error) {
             Log.d(TAG, "session resume failed: " + CastStatusCodes.getStatusCodeString(error));
             runOnMainThread(() -> {
+                if (session == droppedResume) {
+                    droppedResume = null;
+                    rejoinAny(router());
+                    return;
+                }
                 sessionPending = false;
                 notifyJS("connected", false);
                 notifyPickerDismissed();
@@ -390,9 +403,15 @@ public class CastPlugin extends Plugin {
         if (!hasSavedCast()) {
             prefs().edit().clear().apply();
         } else if (current == null || !current.isConnected()) {
-            // No current session: CAF attempts no resume (app update), so rejoin right away.
-            rejoinArmed = current == null;
-            Log.d(TAG, "saved cast pending, active scan, rejoinArmed=" + rejoinArmed);
+            // The SDK's resume of a killed sender times out after 10 s where joining the saved route takes a fraction of
+            // a second: end it, the receiver playing on, and rejoin right away.
+            if (current != null) {
+                droppedResume = current;
+                sessionManager.endCurrentSession(false);
+                sessionPending = false;
+            }
+            rejoinArmed = true;
+            Log.d(TAG, "saved cast pending, active scan, rejoin armed");
             setHunting(true);
             mainHandler.postDelayed(() -> {
                 rejoinArmed = false;
@@ -400,6 +419,8 @@ public class CastPlugin extends Plugin {
             }, HUNT_MS);
         }
         startRouteDiscovery();
+        // A route this process already knows raises no route event.
+        if (rejoinArmed) rejoinAny(router());
         return true;
     }
 
