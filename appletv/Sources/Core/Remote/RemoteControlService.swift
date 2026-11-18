@@ -17,6 +17,8 @@ import UIKit
     /// Echoed by every beat as `lastCmdId`, the ack a controller waits on; a `load` is acked by the player it starts.
     @ObservationIgnored var lastAppliedCmdId: String?
 
+    /// An audio `load` was applied: the Now Playing screen opens.
+    var onOpenMusic: (() -> Void)?
     /// Wired by `RootView` to push a fresh player route: the app's existing
     /// "start playing this" entry point: for a `load` command.
     var onLoadRequested: ((_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?, _ startAt: Double, _ startPaused: Bool,
@@ -114,6 +116,8 @@ import UIKit
                 let tracks = wanted.compactMap { id in all.first { $0.itemId == id } }
                 let current = cmd.queueIndex.flatMap { wanted.indices.contains($0) ? wanted[$0] : nil } ?? cmd.itemId
                 let start = tracks.firstIndex { $0.itemId == current } ?? 0
+                lastAppliedCmdId = cmd.cmdId
+                onOpenMusic?()
                 MusicPlayer.shared.resume(tracks, from: start, shuffle: cmd.shuffle ?? false,
                                           repeatMode: cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? .off,
                                           position: cmd.positionSeconds ?? 0, autoplay: !(cmd.paused ?? false))
@@ -146,9 +150,29 @@ import UIKit
             return
         }
         guard let coordinator = activeCoordinator else {
+            if MusicPlayer.shared.current != nil { return applyMusic(cmd) }
             print("remote: no active player for \(cmd.action) (\(cmd.cmdId)), ignoring")
             return
         }
         coordinator.applyRemoteCommand(cmd)
+    }
+
+    /// The commands the music player supports; the others (volume, tracks, quality) are the video player's.
+    @MainActor
+    private func applyMusic(_ cmd: RemoteCommand) {
+        let player = MusicPlayer.shared
+        lastAppliedCmdId = cmd.cmdId
+        switch cmd.action {
+        case "play": player.perform(.play)
+        case "pause": player.perform(.pause)
+        case "playpause": player.togglePlayPause()
+        case "stop": player.stop()
+        case "seek": if let p = cmd.positionSeconds { player.perform(.seek(p)) }
+        case "next": player.perform(.next)
+        case "prev": player.previousTrack()
+        case "shuffle": player.setShuffle(cmd.shuffle ?? !player.shuffled)
+        case "repeat": player.setRepeat(cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? player.repeatMode.next)
+        default: print("remote: the music player ignores \(cmd.action) (\(cmd.cmdId))")
+        }
     }
 }

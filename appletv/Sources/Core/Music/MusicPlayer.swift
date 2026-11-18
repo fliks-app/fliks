@@ -83,6 +83,8 @@ enum MusicTransport: Equatable {
     @ObservationIgnored private var recoveredUid: UUID?
     @ObservationIgnored private var positionStamp = Date()
     @ObservationIgnored private var lastBeat = Date.distantPast
+    /// Where the track opened by `begin` starts: its first item change keeps it instead of zero.
+    @ObservationIgnored private var startPosition: Double = 0
     @ObservationIgnored private var artwork: (uid: UUID, art: MPMediaItemArtwork)?
     @ObservationIgnored private var observers: [NSKeyValueObservation] = []
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
@@ -194,6 +196,21 @@ enum MusicTransport: Equatable {
         begin(startAt: 0, autoplay: true)
     }
 
+    /// A remote "prev" means the previous track, not a restart of this one.
+    func previousTrack() {
+        if queue.previous() == nil { seek(to: 0) } else { begin(startAt: 0, autoplay: true) }
+    }
+
+    func setShuffle(_ on: Bool) {
+        guard on != queue.shuffled else { return }
+        toggleShuffle()
+    }
+
+    func setRepeat(_ mode: RepeatMode) {
+        queue.repeatMode = mode
+        queueChanged()
+    }
+
     func toggleShuffle() {
         queue.setShuffle(!queue.shuffled)
         queueChanged()
@@ -299,6 +316,7 @@ enum MusicTransport: Equatable {
         uidOfItem = [:]
         activateSession()
         position = startAt
+        startPosition = startAt
         duration = track.durationSeconds ?? 0
         publishNowPlaying()
         Task {
@@ -457,7 +475,8 @@ enum MusicTransport: Equatable {
         if let i = queue.tracks.firstIndex(where: { $0.uid == uid }) { queue.play(at: i) }
         let live = Set(player.items().map(ObjectIdentifier.init))
         uidOfItem = uidOfItem.filter { live.contains($0.key) }
-        position = 0
+        position = startPosition
+        startPosition = 0
         duration = current?.durationSeconds ?? 0
         applyGain()
         prefetchNext()
@@ -509,6 +528,8 @@ enum MusicTransport: Equatable {
         let itemId: Int
         let sessionId: String?
         let state: String
+        let targetId: String?
+        let lastCmdId: String?
     }
 
     private struct BeatAnswer: Decodable { let sessionLost: Bool? }
@@ -519,7 +540,9 @@ enum MusicTransport: Equatable {
         lastBeat = Date()
         let body = Beat(positionSeconds: at ?? position, durationSeconds: duration > 0 ? duration : (track.durationSeconds ?? 0),
                         mediaFileId: r.mediaFileId, itemId: track.itemId, sessionId: r.sessionId,
-                        state: state ?? (isPlaying ? "playing" : "paused"))
+                        state: state ?? (isPlaying ? "playing" : "paused"),
+                        targetId: RemoteControlService.shared.targetId,
+                        lastCmdId: RemoteControlService.shared.lastAppliedCmdId)
         Task {
             let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body)
             if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil }

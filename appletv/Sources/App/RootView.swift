@@ -42,6 +42,10 @@ struct RootView: View {
                                               episodeId: episodeId, startAt: startAt, startPaused: startPaused,
                                               launch: tracks))
                 }
+                RemoteControlService.shared.onOpenMusic = {
+                    path = NavigationPath()
+                    path.append(Route.nowPlaying)
+                }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
                 party.onGoHome = { path = NavigationPath() }
                 party.onOpenMusic = {
