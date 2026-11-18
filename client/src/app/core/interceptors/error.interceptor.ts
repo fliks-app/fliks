@@ -47,7 +47,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // Toasts for 400-499 except 408, plus 500 and 503 (an unreachable plugin); 401 is skipped since the auth guard already redirects.
       // A mutation on an unreachable or restarting server (engine 502/504) answers the user unless the chip already does; GETs degrade in place.
       const unreachable =
-        req.method !== 'GET' && isUnreachable(err) && !injector.get(SseService).unreachableChip();
+        req.method !== 'GET' && isUnreachable(err) && !injector.get(SseService).serverUnreachable();
       const showToast =
         unreachable ||
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||

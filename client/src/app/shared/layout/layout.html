@@ -194,25 +194,29 @@
       class="min-w-0 flex-1 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
     >
-      @if (sse.unreachableChip() && !isDownloadsRoute()) {
+      @if (sse.serverUnreachable() && !isDownloadsRoute()) {
         <div role="status"
              class="fixed inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
              style="top: var(--chrome-top, 1rem)">
-          <div class="pointer-events-auto flex items-center gap-1 rounded-full bg-warning text-warning-content shadow-lg pl-4 pr-1 py-1">
+          <div class="pointer-events-auto flex items-center gap-1 rounded-full bg-warning text-warning-content shadow-lg pl-4"
+               [class]="device.isTv() ? 'pr-4 py-2' : 'pr-1 py-1'">
             <svg lucideCloudOff class="h-4 w-4 shrink-0"></svg>
             <span class="text-sm font-medium px-1 whitespace-nowrap">{{ 'connectivity.server_unreachable' | translate }}</span>
-            <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-ghost btn-sm btn-circle text-warning-content"
-               [attr.aria-label]="'downloads.title' | translate">
-              <svg lucideDownload class="h-4 w-4"></svg>
-            </a>
-            <button class="btn btn-ghost btn-sm btn-circle text-warning-content" [disabled]="retrying()" (click)="retryConnection()"
-                    [attr.aria-label]="'common.retry' | translate">
-              @if (retrying()) {
-                <span class="loading loading-spinner loading-xs text-warning-content"></span>
-              } @else {
-                <svg lucideRotateCw class="h-4 w-4"></svg>
-              }
-            </button>
+            <!-- TV: no downloads, and the reconnect is automatic. -->
+            @if (!device.isTv()) {
+              <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-ghost btn-sm btn-circle text-warning-content"
+                 [attr.aria-label]="'downloads.title' | translate">
+                <svg lucideDownload class="h-4 w-4"></svg>
+              </a>
+              <button class="btn btn-ghost btn-sm btn-circle text-warning-content" [disabled]="retrying()" (click)="retryConnection()"
+                      [attr.aria-label]="'common.retry' | translate">
+                @if (retrying()) {
+                  <span class="loading loading-spinner loading-xs text-warning-content"></span>
+                } @else {
+                  <svg lucideRotateCw class="h-4 w-4"></svg>
+                }
+              </button>
+            }
           </div>
         </div>
       }
