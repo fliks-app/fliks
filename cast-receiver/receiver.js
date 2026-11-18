@@ -1191,16 +1191,17 @@ function startMix(id, sources, startS) {
   return m;
 }
 
-// A seek outside what the run streams starts it again from there.
+// A seek outside what is buffered (the played part is trimmed) or about to be starts the run again from there.
 playerManager.addEventListener(cast.framework.events.EventType.SEEKING, () => {
   const m = activeMix;
   const media = findMediaElement();
   if (!m || !m.sb || !media) return;
-  const at = media.currentTime * m.rate;
-  if (at < m.base || at > m.end + MIX_AHEAD_S * m.rate) {
-    mixOp(m, () => m.sb.remove(0, Infinity));
-    streamMix(m, media.currentTime);
-  }
+  const t = media.currentTime;
+  const { buffered } = m.sb;
+  for (let i = 0; i < buffered.length; i++) if (t >= buffered.start(i) && t < buffered.end(i)) return;
+  if (t >= m.end / m.rate && t <= m.end / m.rate + MIX_AHEAD_S) return;
+  mixOp(m, () => m.sb.remove(0, Infinity));
+  streamMix(m, t);
 });
 
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
