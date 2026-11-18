@@ -630,9 +630,11 @@ export class TvSpatialNavService {
       if (auto && isFocusCandidate(auto)) return auto;
     }
     let children = this.getNavigableChildren(c);
-    // Entering a row from above or below: try the children nearest the column
-    // the user was on first, so focus lands under the card it came from.
+    // Entering a row from above or below: its autofocus item (a hero's Play) if it has one, else
+    // the children nearest the column the user was on, so focus lands under the card it came from.
     if (alignCx !== undefined && c.orientation === 'horizontal') {
+      const auto = c.el.querySelector<HTMLElement>('[autofocus]');
+      if (auto && isFocusCandidate(auto)) return auto;
       const distance = (child: HTMLElement) => {
         const r = child.getBoundingClientRect();
         return Math.abs(r.left + r.width / 2 - alignCx);

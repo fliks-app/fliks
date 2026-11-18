@@ -65,6 +65,38 @@ describe('nearestDelta', () => {
   });
 });
 
+describe('TvSpatialNavService entering a row from below', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it("lands on the row's autofocus item, not the one under the middle of the wide row it leaves", () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as {
+      findNeighbor(dir: string): HTMLElement | null;
+      registerContainer(el: HTMLElement, options: { orientation: 'vertical' | 'horizontal' }): void;
+    };
+    const at = <T extends HTMLElement>(parent: HTMLElement, el: T, x: number, y: number, w: number, h: number): T => {
+      Object.defineProperty(el, 'offsetParent', { get: () => document.body });
+      el.getBoundingClientRect = () => ({ left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, x, y, toJSON: () => ({}) });
+      parent.append(el);
+      return el;
+    };
+    const page = at(document.body, document.createElement('div'), 0, 0, 1920, 1080);
+    const actions = at(page, document.createElement('div'), 467, 290, 1373, 60);
+    const list = at(page, document.createElement('div'), 72, 490, 1506, 500);
+    nav.registerContainer(page, { orientation: 'vertical' });
+    nav.registerContainer(actions, { orientation: 'horizontal' });
+    nav.registerContainer(list, { orientation: 'vertical' });
+    const play = at(actions, document.createElement('button'), 467, 290, 120, 60);
+    play.setAttribute('autofocus', '');
+    at(actions, document.createElement('button'), 790, 300, 40, 40);
+    const track = at(list, document.createElement('button'), 72, 490, 1506, 100);
+
+    track.focus();
+    expect(nav.findNeighbor('up')).toBe(play);
+  });
+});
+
 describe('TvSpatialNavService down from a seekbar', () => {
   afterEach(() => {
     document.body.innerHTML = '';
