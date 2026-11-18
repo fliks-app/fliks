@@ -26,7 +26,6 @@ describe('BookWorksRowComponent', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   function render() {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
     TestBed.configureTestingModule({ providers: bookSpecProviders() });
     TestBed.overrideComponent(BookWorksRowComponent, {
       remove: { imports: [MediaCardComponent] },

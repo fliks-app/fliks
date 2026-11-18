@@ -36,7 +36,6 @@ async function open(saved: unknown, prefs?: unknown) {
 
 describe('the reader on a comic', () => {
   beforeEach(() => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
     vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);

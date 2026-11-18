@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlbumPreviewComponent } from './album-preview.component';
 import { LibrariesApiService } from '../../../../core/services/api/libraries-api.service';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -60,7 +60,6 @@ async function settle(fixture: ReturnType<typeof setup>['fixture']) {
 }
 
 describe('AlbumPreviewComponent', () => {
-  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} }));
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.unstubAllGlobals();

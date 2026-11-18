@@ -16,7 +16,6 @@ describe('ArtistPageComponent', () => {
   });
 
   function setup(perms: string[] = []) {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     const playTracks = vi.fn();
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
@@ -81,7 +80,6 @@ describe('ArtistPageComponent', () => {
   });
 
   it('says the discography failed instead of no albums, and retries', async () => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ id: '4' })) } },

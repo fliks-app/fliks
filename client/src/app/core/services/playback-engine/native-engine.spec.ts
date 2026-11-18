@@ -16,15 +16,20 @@ const plugin = vi.hoisted(() => ({
   setMaxResolution: vi.fn((_options: unknown) => Promise.resolve()),
 }));
 
-// jsdom ships no ResizeObserver; init() observes the player container.
+// init() observes the player container; the stub hands its callback to the tests.
 let onResize = () => {};
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
-  constructor(cb: () => void) {
-    onResize = cb;
-  }
-  observe() {}
-  disconnect() {}
-};
+beforeEach(() =>
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(cb: () => void) {
+        onResize = cb;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  ),
+);
 
 // Loaded after the mock: other specs mock @capacitor/core differently and share the plugin module.
 let NativeEngine: typeof import('./native-engine').NativeEngine;

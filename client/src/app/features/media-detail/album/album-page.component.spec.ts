@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { Media } from '../../../core/services/api/media.service';
 import type { AlbumDetail, Track } from '../../../core/services/api/music.models';
@@ -58,7 +58,6 @@ function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}
 }
 
 describe('AlbumPageComponent', () => {
-  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
   afterEach(() => TestBed.resetTestingModule());
 
   it('lists the whole tracklist, greying the tracks nobody wants', () => {

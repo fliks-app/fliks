@@ -55,7 +55,6 @@ async function settle(fixture: ReturnType<typeof setup>['fixture']) {
 
 describe('BookPreviewComponent', () => {
   beforeEach(() => {
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
     // jsdom has no dialog methods.
     HTMLDialogElement.prototype.close ??= function () {};
   });

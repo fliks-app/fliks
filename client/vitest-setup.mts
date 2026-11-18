@@ -11,3 +11,10 @@ if (!frameKeepAlive.__frameKeepAlive) {
   const loop = (): number => raf(loop);
   loop();
 }
+
+// jsdom ships no ResizeObserver: one inert stub, which a spec's vi.stubGlobal is restored to.
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};

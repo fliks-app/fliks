@@ -60,11 +60,7 @@ function offer(id: string, versions: string[]): CatalogPluginEntry {
   };
 }
 
-// jsdom has no <dialog> methods nor ResizeObserver (the scroller rows).
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
+// jsdom has no <dialog> methods.
 HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
   this.open = true;
 };
