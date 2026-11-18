@@ -770,8 +770,9 @@ export class AuthService {
     }
     try {
       const res = await firstValueFrom(
-        this.http.post<TokenPairResponse>('/api/auth/refresh', {
-          refreshToken: refresh,
+        // Never the user's own action: the request or event stream it serves reports the failure.
+        this.http.post<TokenPairResponse>('/api/auth/refresh', { refreshToken: refresh }, {
+          context: new HttpContext().set(SKIP_ERROR_TOAST, true),
         }),
       );
       // Persisted first, with nothing awaited in between: the presented token
