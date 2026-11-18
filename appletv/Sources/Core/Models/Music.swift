@@ -253,28 +253,22 @@ struct ReleaseGroup: Identifiable {
 }
 
 extension Discography {
-    /// Albums by type; the ones the provider lists and the library lacks go last.
+    /// Albums by the web artist page's tabs, the library's first, then newest first.
     func groups() -> [ReleaseGroup] {
         func key(_ a: ArtistAlbum) -> String {
             let secondary = a.secondaryTypes.map { $0.lowercased() }
-            if secondary.contains("compilation") { return "music.group_compilation" }
-            if secondary.contains("live") { return "music.group_live" }
+            if secondary.contains("compilation") { return "music.tab_compilations" }
             switch a.primaryType?.lowercased() {
-            case "album": return "music.group_album"
-            case "ep": return "music.group_ep"
-            case "single": return "music.group_single"
-            default: return "music.group_other"
+            case "ep", "single": return "music.tab_singles_eps"
+            case "album" where secondary.isEmpty: return "music.tab_albums"
+            default: return "music.tab_live_other"
             }
         }
-        let order = ["music.group_album", "music.group_ep", "music.group_single", "music.group_compilation",
-                     "music.group_live", "music.group_other"]
-        let owned = albums.filter(\.owned)
-        var out = order.compactMap { k -> ReleaseGroup? in
-            let list = owned.filter { key($0) == k }.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+        let order = ["music.tab_albums", "music.tab_singles_eps", "music.tab_compilations", "music.tab_live_other"]
+        return order.compactMap { k in
+            let list = albums.filter { key($0) == k }
+                .sorted { ($0.owned ? 1 : 0, $0.year ?? 0) > ($1.owned ? 1 : 0, $1.year ?? 0) }
             return list.isEmpty ? nil : ReleaseGroup(key: k, albums: list)
         }
-        let missing = albums.filter { !$0.owned }
-        if !missing.isEmpty { out.append(ReleaseGroup(key: "music.group_missing", albums: missing)) }
-        return out
     }
 }

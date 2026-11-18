@@ -198,12 +198,17 @@ struct NowPlayingView: View {
                     ForEach(artists(t), id: \.id) { a in
                         Button { onSelectArtist(a.id) } label: { Label(a.creditedName ?? a.name, systemImage: "music.mic") }
                     }
-                    Picker(selection: $player.replayGain) {
-                        ForEach(ReplayGain.allCases, id: \.self) { Text(tr("music_player.replay_gain_mode_\($0.rawValue)")).tag($0) }
+                    Menu {
+                        ForEach(ReplayGain.allCases, id: \.self) { g in
+                            // A toggle shows the menu's check; a second Text is the item's subtitle.
+                            Toggle(isOn: Binding(get: { player.replayGain == g }, set: { if $0 { player.replayGain = g } })) {
+                                Text(tr("music_player.replay_gain_mode_\(g.rawValue)"))
+                                if g != .off { Text(tr("music_player.replay_gain_mode_\(g.rawValue)_hint")) }
+                            }
+                        }
                     } label: {
                         Label(tr("music_player.replay_gain"), systemImage: "speaker.wave.2")
                     }
-                    .pickerStyle(.menu)
                 }
             }
         }

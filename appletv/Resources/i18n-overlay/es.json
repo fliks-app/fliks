@@ -118,5 +118,7 @@
   "library.type.album": "Álbumes",
   "music.nothing_playing": "No hay nada en reproducción",
   "music.tab_albums": "Álbumes",
-  "karaoke.unavailable": "El karaoke no está disponible en este servidor."
+  "karaoke.unavailable": "El karaoke no está disponible en este servidor.",
+  "music_player.replay_gain_mode_track_hint": "Cada canción al mismo volumen percibido",
+  "music_player.replay_gain_mode_album_hint": "Mantiene las diferencias de volumen dentro de un álbum"
 }

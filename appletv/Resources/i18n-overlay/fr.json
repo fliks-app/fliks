@@ -114,5 +114,7 @@
   "library.type.album": "Albums",
   "music.nothing_playing": "Aucune lecture en cours",
   "music.tab_albums": "Albums",
-  "karaoke.unavailable": "Le karaoké n'est pas disponible sur ce serveur."
+  "karaoke.unavailable": "Le karaoké n'est pas disponible sur ce serveur.",
+  "music_player.replay_gain_mode_track_hint": "Chaque morceau au même volume perçu",
+  "music_player.replay_gain_mode_album_hint": "Garde les écarts de volume voulus au sein d’un album"
 }

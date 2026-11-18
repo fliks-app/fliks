@@ -113,5 +113,7 @@
   "library.type.album": "Alben",
   "music.nothing_playing": "Es läuft nichts",
   "music.tab_albums": "Alben",
-  "karaoke.unavailable": "Karaoke ist auf diesem Server nicht verfügbar."
+  "karaoke.unavailable": "Karaoke ist auf diesem Server nicht verfügbar.",
+  "music_player.replay_gain_mode_track_hint": "Jeder Titel in gleicher Lautstärke",
+  "music_player.replay_gain_mode_album_hint": "Behält die Lautstärkeunterschiede innerhalb eines Albums"
 }

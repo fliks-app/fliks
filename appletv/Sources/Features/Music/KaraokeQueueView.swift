@@ -15,7 +15,7 @@ struct KaraokeQueueView: View {
         let rows = party.upNext
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                Text(tr("karaoke.queue_title")).font(.headline)
+                Text(tr("party.programme")).font(.headline)
                 HStack(spacing: 40) {
                     ForEach(rows) { row in
                         VStack(alignment: .leading, spacing: 2) {
