@@ -5,6 +5,8 @@ import {
   FOCUSABLE_SELECTOR,
   SCROLLER_SELECTOR,
   SELECTED_MARKERS,
+  focusOverlayEntry,
+  initialOverlayFocus,
   isFocusCandidate,
   isRendered,
   wantsFocusRestore,
@@ -47,7 +49,7 @@ export class TvSpatialNavService {
   private readonly focusableCache = new Map<ParentNode, HTMLElement[]>();
   private focusObserver?: MutationObserver;
   /** The focused element, its parent and spot, to hand the focus on when a click swaps or disables it. */
-  private lastFocus: { el: HTMLElement; parent: HTMLElement | null; rect: DOMRect } | null = null;
+  private lastFocus: { el: HTMLElement; parent: HTMLElement | null; overlay: HTMLElement | null; rect: DOMRect } | null = null;
   private focusLostAt = 0;
 
   constructor() {
@@ -75,12 +77,13 @@ export class TvSpatialNavService {
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
     // Drop the lists a DOM change can affect; attribute filter avoids cosmetic churn.
+    // Rooted at <html>, not <body>: dropdowns and popover menus mount there.
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver((records) => {
         this.dropStaleFocusables(records);
         this.rescueFocus(records);
       });
-      this.focusObserver.observe(document.body, {
+      this.focusObserver.observe(document.documentElement, {
         childList: true,
         subtree: true,
         attributes: true,
@@ -184,24 +187,34 @@ export class TvSpatialNavService {
   private rememberFocus(): void {
     const el = document.activeElement as HTMLElement | null;
     if (!el || el === document.body) return;
-    this.lastFocus = { el, parent: el.parentElement, rect: el.getBoundingClientRect() };
+    this.lastFocus = {
+      el,
+      parent: el.parentElement,
+      overlay: el.closest<HTMLElement>('[data-tv-modal], dialog[open]'),
+      rect: el.getBoundingClientRect(),
+    };
     this.focusLostAt = 0;
   }
 
   /** A pressed button that vanished (swapped by an `@if`), moved (a keyed list reordering) or got disabled (busy) drops
    *  the focus on <body>: hand it to the menu's current choice, else back to the button, else to its nearest replacement
-   *  under the same parent. Keyboard/D-pad only. */
+   *  under the same parent, else (a menu panel swapped whole) to its overlay's entry. Keyboard/D-pad only. */
   private rescueFocus(records: MutationRecord[]): void {
     const last = this.lastFocus;
     if (!last || !wantsFocusRestore()) return;
-    const { el, parent, rect } = last;
+    const { el, parent, overlay, rect } = last;
     const gone = !el.isConnected;
     const moved = !gone && records.some((r) => Array.from(r.removedNodes).some((n) => n === el || n.contains(el)));
     // A blur on a button still there, in place and enabled was on purpose.
     if (!this.focusLostAt && (gone || moved || el.matches(':disabled'))) this.focusLostAt = Date.now();
     if (!this.focusLostAt || document.activeElement !== document.body) return;
-    if (Date.now() - this.focusLostAt > FOCUS_RESCUE_MS || !parent?.isConnected) {
+    if (Date.now() - this.focusLostAt > FOCUS_RESCUE_MS) {
       this.lastFocus = null;
+      return;
+    }
+    if (!parent?.isConnected) {
+      if (overlay?.isConnected) focusOverlayEntry(initialOverlayFocus(overlay));
+      else this.lastFocus = null;
       return;
     }
     // The option just picked in a single-choice menu is its current choice, wherever the list put it.

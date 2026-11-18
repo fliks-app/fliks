@@ -38,6 +38,7 @@ import {
   LucideSkipBack,
   LucideSkipForward,
   LucideSmartphone,
+  LucideTv,
   LucideTrash2,
   LucideCheck,
   LucideEllipsisVertical,
@@ -179,6 +180,7 @@ function writeFlag(key: string, on: boolean): void {
     LucideSkipBack,
     LucideSkipForward,
     LucideSmartphone,
+    LucideTv,
     LucideTrash2,
     LucideCheck,
     LucideEllipsisVertical,
@@ -234,6 +236,18 @@ export class AudioPlayerComponent {
   protected readonly tint = linkedSignal<string | null | undefined, string | null>({
     source: () => this.mini()?.uiTrack()?.coverUrl,
     computation: (url, prev) => (url ? (prev?.value ?? null) : null),
+  });
+  /** The full player's own tint: it can show another device's track than the bar. */
+  protected readonly fullTint = linkedSignal<string | null | undefined, string | null>({
+    source: () => this.audio.uiTrack()?.coverUrl,
+    computation: (url, prev) => (url ? (prev?.value ?? null) : null),
+  });
+  /** TV backs the full player with its cover's tint; a static gradient, since a blur costs the GPU every frame. */
+  protected readonly backdrop = computed(() => {
+    const t = this.isTv() ? this.fullTint() : null;
+    return t
+      ? `radial-gradient(ellipse 70% 90% at 15% 40%, color-mix(in srgb, ${t} 70%, transparent), transparent), linear-gradient(color-mix(in srgb, ${t} 45%, var(--color-base-100)), var(--color-base-100) 75%)`
+      : null;
   });
   private readonly likes = inject(LikesApiService);
   private readonly playlists = inject(AddToPlaylistService);
@@ -441,10 +455,10 @@ export class AudioPlayerComponent {
     if (this.audio.uiTrack()?.itemId === itemId) this.hasLyrics.set(found);
   }
 
-  protected async tintFrom(img: HTMLImageElement): Promise<void> {
+  protected async tintFrom(img: HTMLImageElement, into = this.tint): Promise<void> {
     const src = img.currentSrc;
     const tint = await coverTint(src);
-    if (img.isConnected && img.currentSrc === src) this.tint.set(tint);
+    if (img.isConnected && img.currentSrc === src) into.set(tint);
   }
 
   protected toggleSelected(q: MusicTrackRequest): void {

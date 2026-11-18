@@ -14,9 +14,12 @@
   (pointerleave)="onProgressLeave()"
   (keydown)="onKeydown($event)"
   (keyup)="onKeyup($event)"
+  (focus)="onFocus($event)"
+  (blur)="rest()"
 >
   <!-- Seek tooltip -->
   @if (showTooltip() && previewVisible() && duration()) {
+    @let chapter = scrubbing() ? previewChapter() : null;
     <div
       class="absolute bottom-full mb-3 pointer-events-none z-50"
       [style.left]="tooltipLeft()"
@@ -24,7 +27,7 @@
     >
       <div class="relative">
         <div class="bg-neutral/95 rounded-lg shadow-2xl overflow-hidden">
-          @if (spriteUrl() && spriteMetadata()) {
+          @if (spriteUrl() && spriteMetadata() && scrubbing()) {
             <div class="relative">
               <div
                 class="bg-no-repeat"
@@ -42,15 +45,15 @@
                     <span class="text-white/50">{{ formatDelta(previewDelta()) }}</span>
                   }
                 </span>
-                @if (previewChapter()) {
+                @if (chapter) {
                   <div class="text-white/50 text-sm leading-tight truncate drop-shadow">
-                    {{ previewChapter() }}
+                    {{ chapter }}
                   </div>
                 }
               </div>
             </div>
           } @else {
-            <div class="px-3 pt-1 text-center" [class.pb-1]="!previewChapter()">
+            <div class="px-3 pt-1 text-center" [class.pb-1]="!chapter">
               <span class="text-white text-base tabular-nums font-medium">
                 {{ formatTime(previewTime()) }}
                 @if (previewDelta()) {
@@ -58,9 +61,9 @@
                 }
               </span>
             </div>
-            @if (previewChapter()) {
+            @if (chapter) {
               <div class="px-3 pb-1 text-center text-white/50 text-sm leading-tight truncate max-w-[14rem]">
-                {{ previewChapter() }}
+                {{ chapter }}
               </div>
             }
           }

@@ -34,9 +34,11 @@
       data-sheet-handle
       class="sticky top-0 z-10 pb-1 mb-1 cursor-grab"
       [class]="fullHeight() ? 'bg-base-100 shrink-0' : 'bg-neutral'"
+      [class.tv:hidden]="fullHeight() && !heading()"
       [style.padding-top]="fullHeight() ? 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' : '0.75rem'"
     >
-      <div class="flex justify-center">
+      <!-- The grip only serves touch dragging. -->
+      <div class="flex justify-center tv:hidden">
         <div class="w-10 h-1 rounded-full bg-white/20"></div>
       </div>
       @if (heading()) {

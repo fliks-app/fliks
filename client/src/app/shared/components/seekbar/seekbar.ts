@@ -66,22 +66,24 @@ export class SeekbarComponent {
   /** A live player may clamp a seek outside its window, so the playhead never reaches the target; this bounds the wait. */
   private seekDeadline = 0;
 
-  /** Keeps the preview open after a key scrub: no parked cursor keeps it alive as in a pointer drag. */
+  /** Keyboard seekable state: thick, the time up, arrows seek. At rest the bar is thin and the first
+   *  arrow only arms it, so a stray press never seeks. Keyboard focus arms it; it rests after a pause. */
+  readonly armed = signal(false);
+  /** An arrow scrub in this armed run: the preview adds the sprite frame and chapter. */
   readonly keyScrubbing = signal(false);
-  private keyPreviewTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly KEY_PREVIEW_LINGER_MS = 2200;
+  private armTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly ARMED_MS = 5000;
 
-  /** Tooltip (time + sprite frame) is up while the user points at the bar,
-   *  drags it, or has just scrubbed it with the keyboard. */
-  readonly previewVisible = computed(
-    () => this.hovering() || this.dragging() || this.keyScrubbing(),
-  );
+  /** Pointing at, dragging or key-scrubbing the bar: the full preview, sprite frame and chapter. */
+  readonly scrubbing = computed(() => this.hovering() || this.dragging() || this.keyScrubbing());
+
+  readonly previewVisible = computed(() => this.scrubbing() || this.armed());
 
   /** The instant the preview describes: the drag target while scrubbing, the
-   *  committed target while the seek settles, the pointer otherwise. */
+   *  committed target while the seek settles, the pointer, else the playhead. */
   readonly previewTime = computed(() => {
     if (this.dragging()) return this.dragTime();
-    if (this.keyScrubbing()) return this.displayTime();
+    if (this.keyScrubbing() || !this.hovering()) return this.displayTime();
     return this.hoverTime();
   });
 
@@ -158,10 +160,30 @@ export class SeekbarComponent {
   /** The focusable track element (role=slider). */
   private readonly trackRoot = viewChild<ElementRef<HTMLElement>>('trackRoot');
 
-  /** Focus the seekbar track. Used when an arrow press wakes hidden controls so
-   *  subsequent D-pad presses scrub here instead of nudging another control. */
+  /** Focus the seekbar track, armed. Used when an arrow press wakes hidden controls so
+   *  that press and the next ones scrub here instead of nudging another control. */
   focus(): void {
     this.trackRoot()?.nativeElement.focus();
+    this.arm();
+  }
+
+  /** A pointer focus stays at rest. TV first: Tizen's Chromium 76 throws on `:focus-visible`. */
+  onFocus(e: FocusEvent): void {
+    if (this.tv.isTv() || (e.target as HTMLElement).matches(':focus-visible')) this.arm();
+  }
+
+  /** Every press restarts the pause, so a run of arrows keeps the bar armed. */
+  private arm(): void {
+    this.armed.set(true);
+    if (this.armTimer) clearTimeout(this.armTimer);
+    this.armTimer = setTimeout(() => this.rest(), SeekbarComponent.ARMED_MS);
+  }
+
+  rest(): void {
+    if (this.armTimer) clearTimeout(this.armTimer);
+    this.armTimer = null;
+    this.armed.set(false);
+    this.keyScrubbing.set(false);
   }
 
   readonly formatTime = formatTime;
@@ -222,12 +244,11 @@ export class SeekbarComponent {
   /** Position fill whenever media is loaded. Independent of `loading`/`seekPending`: mixing them races and drops the fill between seek end and resume. */
   readonly showPositionFill = computed(() => this.duration() > 0);
 
-  /** Track height + tint: `h-1` baseline, `h-2.5` while dragging, hovering or focused. Hover uses a signal, not `group-hover:`
+  /** Track height + tint: `h-1` baseline, `h-2.5` while dragging, hovering or armed. Hover uses a signal, not `group-hover:`
    *  (sticky after a tap on mobile); classes are built here since `[class.h-1]` can't express a dot. */
   readonly trackClass = computed(() => {
-    const thick = this.dragging() || this.hovering();
-    const base = `${this.variant() === 'cast' ? 'bg-base-300' : 'bg-white/20'} group-focus-visible:h-2.5`;
-    return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
+    const thick = this.dragging() || this.hovering() || this.armed();
+    return `${this.variant() === 'cast' ? 'bg-base-300' : 'bg-white/20'} ${thick ? 'h-2.5' : 'h-1'}`;
   });
 
   /** Sweep overlay classes: white over video in the player, foreground colour on theme surfaces in the cast card. */
@@ -282,7 +303,7 @@ export class SeekbarComponent {
   });
 
   readonly tooltipLeft = computed(() => {
-    const pct = this.dragging() || this.keyScrubbing() ? this.displayPercent() : this.hoverPercent();
+    const pct = this.dragging() || this.keyScrubbing() || !this.hovering() ? this.displayPercent() : this.hoverPercent();
     // Plain `%` only: Tizen's older Chromium ignores a CSS min()/calc() cap in `left`, leaving the preview off-centre.
     return `${pct}%`;
   });
@@ -294,7 +315,7 @@ export class SeekbarComponent {
 
     try { bar.setPointerCapture(event.pointerId); } catch {}
 
-    this.endKeyPreview();
+    this.keyScrubbing.set(false);
     // A pending key-scrub commit must not fire mid-drag and snap the thumb to
     // wherever the pointer happened to be when its 700ms window elapsed.
     this.cancelScrubTimer();
@@ -377,30 +398,29 @@ export class SeekbarComponent {
     if (!dur || this.disabled()) return;
 
     let direction = 0;
+    let edge: number | null = null;
     switch (e.key) {
       case 'ArrowLeft':  direction = -1; break;
       case 'ArrowRight': direction = 1; break;
-      case 'Home':
-        e.preventDefault();
-        e.stopPropagation();
-        this.cancelScrubTimer();
-        this.holdKeyPreview();
-        this.commitScrubTo(0);
-        return;
-      case 'End':
-        e.preventDefault();
-        e.stopPropagation();
-        this.cancelScrubTimer();
-        this.holdKeyPreview();
-        this.commitScrubTo(Math.max(0, dur - 1));
-        return;
+      case 'Home':       edge = 0; break;
+      case 'End':        edge = Math.max(0, dur - 1); break;
       default:
         return;
     }
 
     e.preventDefault();
     e.stopPropagation();
-    this.holdKeyPreview();
+    if (!this.armed()) {
+      this.arm();
+      return;
+    }
+    this.arm();
+    this.keyScrubbing.set(true);
+    if (edge !== null) {
+      this.cancelScrubTimer();
+      this.commitScrubTo(edge);
+      return;
+    }
 
     if (!this.dragging()) {
       this.scrubStartedAt = Date.now();
@@ -435,22 +455,6 @@ export class SeekbarComponent {
       this.scrubCommitTimer = null;
       this.commitScrub();
     }, SeekbarComponent.SCRUB_IDLE_MS);
-  }
-
-  /** Restart the linger on every press, so a run of arrows keeps one preview up. */
-  private holdKeyPreview() {
-    this.keyScrubbing.set(true);
-    if (this.keyPreviewTimer) clearTimeout(this.keyPreviewTimer);
-    this.keyPreviewTimer = setTimeout(
-      () => this.endKeyPreview(),
-      SeekbarComponent.KEY_PREVIEW_LINGER_MS,
-    );
-  }
-
-  private endKeyPreview() {
-    if (this.keyPreviewTimer) clearTimeout(this.keyPreviewTimer);
-    this.keyPreviewTimer = null;
-    this.keyScrubbing.set(false);
   }
 
   private cancelScrubTimer() {
