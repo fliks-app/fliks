@@ -18,16 +18,31 @@
       (scroll)="onScroll(track)"
     >
       @for (slide of slides(); track $index) {
-        <section class="w-full shrink-0 snap-center snap-always px-5 sm:px-6">
+        <section class="flex w-full shrink-0 snap-center snap-always flex-col px-5 sm:px-6">
+          <!-- Fixed heights keep the modal's size; a slide without a picture gives its text the room. -->
           @if (slide.image) {
-            <img
-              [src]="slide.image"
-              [alt]="slide.alt"
-              class="w-full aspect-video rounded-box object-cover bg-base-200"
-            />
+            <div
+              class="mx-auto aspect-video w-full max-w-[70dvh] shrink-0 rounded-box overflow-hidden bg-base-200"
+            >
+              <img
+                #pic
+                [src]="slide.image"
+                [alt]="slide.alt"
+                class="w-full h-full object-cover"
+                (error)="pic.hidden = true"
+              />
+            </div>
           }
-          <h4 class="mt-5 text-xl font-bold">{{ slide.title }}</h4>
-          <div class="changelog-md mt-1 opacity-75" [innerHTML]="slide.body | markdown"></div>
+          <div
+            class="overflow-y-auto scroll-ring-safe"
+            [class]="slide.image ? 'h-[max(12rem,30dvh)] mt-5' : 'flex-1 min-h-0'"
+          >
+            <h4 class="text-xl font-bold">{{ slide.title }}</h4>
+            <div
+              class="changelog-md mt-2 text-base-content/80 [&_h3]:text-primary [&_h3]:opacity-100"
+              [innerHTML]="slide.body | markdown"
+            ></div>
+          </div>
         </section>
       }
     </div>
