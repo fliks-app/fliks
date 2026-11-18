@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
+import { appleModelName } from '../utils/apple-model';
 import { detectOs } from '../utils/ua-parser';
 
 const MOBILE_OS: Record<string, string> = {
@@ -38,8 +39,8 @@ export class SystemInfoService {
     return this._systemName();
   }
 
-  /** User-assigned device/computer name, or '' when unavailable (web, or iOS
-   *  without the device-name entitlement, which reports the generic model name). */
+  /** User-assigned device/computer name; on iOS without the device-name entitlement, the iPhone
+   *  model ("iPhone XS"); '' when neither is known (web, an unlisted model). */
   deviceName(): string {
     return this._deviceName();
   }
@@ -67,7 +68,10 @@ export class SystemInfoService {
         const os = MOBILE_OS[info.operatingSystem] ?? info.operatingSystem;
         return {
           systemName: info.osVersion ? `${os} ${info.osVersion}` : os,
-          deviceName: info.name && info.name !== info.model && !GENERIC_NAMES.has(info.name.toLowerCase()) ? info.name : '',
+          deviceName:
+            info.name && info.name !== info.model && !GENERIC_NAMES.has(info.name.toLowerCase())
+              ? info.name
+              : (appleModelName(info.model) ?? ''),
         };
       } catch {
         /* fall through */
