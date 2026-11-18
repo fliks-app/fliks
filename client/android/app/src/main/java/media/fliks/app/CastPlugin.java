@@ -21,6 +21,7 @@ import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
 import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.MediaQueueItem;
 import com.google.android.gms.cast.MediaStatus;
 import com.google.android.gms.cast.MediaTrack;
 import com.google.android.gms.cast.framework.CastContext;
@@ -198,7 +199,8 @@ public class CastPlugin extends Plugin {
         CastDevice device = CastDevice.getFromBundle(route.getExtras());
         android.content.SharedPreferences p = prefs();
         if (device == null || !device.getDeviceId().equals(p.getString("deviceId", null))) return;
-        if (!String.valueOf(route.getDescription()).equals(p.getString("routeStatus", null))) return;
+        String status = String.valueOf(route.getDescription());
+        if (!status.equals(p.getString("routeStatus", null)) && !status.equals(p.getString("routeStatusNext", null))) return;
         rejoinArmed = false;
         rejoining = true;
         Log.d(TAG, "rejoin: selecting saved route " + route.getName());
@@ -417,16 +419,48 @@ public class CastPlugin extends Plugin {
         JSObject state = call.getObject("state");
         runOnMainThread(() -> {
             if (castSession != null && castSession.isConnected() && state != null) {
+                String status = String.valueOf(router().getSelectedRoute().getDescription());
+                RemoteMediaClient client = castSession.getRemoteMediaClient();
                 prefs().edit()
                     .putString("sessionId", castSession.getSessionId())
                     .putString("deviceId", castSession.getCastDevice().getDeviceId())
-                    .putString("routeStatus", String.valueOf(
-                        router().getSelectedRoute().getDescription()))
+                    .putString("routeStatus", status)
+                    .putString("routeStatusNext", client != null ? nextStatus(status, client) : null)
                     .putString("state", state.toString())
                     .apply();
             }
             call.resolve();
         });
+    }
+
+    /** The receiver moves on to its queued item by itself while no sender listens: the status it then shows is today's
+     *  with the title swapped; null when there is none or the status does not end with the title yet. */
+    private static String nextStatus(String status, RemoteMediaClient client) {
+        MediaStatus media = client.getMediaStatus();
+        MediaInfo info = client.getMediaInfo();
+        String title = info != null && info.getMetadata() != null ? info.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+        if (media == null || title == null || title.isEmpty() || !status.endsWith(title)) return null;
+        List<MediaQueueItem> items = media.getQueueItems();
+        for (int i = 0; i + 1 < items.size(); i++) {
+            if (items.get(i).getItemId() != media.getCurrentItemId()) continue;
+            MediaInfo next = items.get(i + 1).getMedia();
+            String nextTitle = next != null && next.getMetadata() != null ? next.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+            return nextTitle == null ? null : status.substring(0, status.length() - title.length()) + nextTitle;
+        }
+        return null;
+    }
+
+    /** Keeps the saved statuses on the receiver's while it plays, skipping a status that still names the previous title. */
+    private void refreshSavedStatus(RemoteMediaClient client) {
+        android.content.SharedPreferences p = prefs();
+        if (!castSession.getSessionId().equals(p.getString("sessionId", null))) return;
+        String status = String.valueOf(router().getSelectedRoute().getDescription());
+        MediaInfo info = client.getMediaInfo();
+        String title = info != null && info.getMetadata() != null ? info.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+        if (title == null || !status.endsWith(title)) return;
+        String next = nextStatus(status, client);
+        if (status.equals(p.getString("routeStatus", null)) && java.util.Objects.equals(next, p.getString("routeStatusNext", null))) return;
+        p.edit().putString("routeStatus", status).putString("routeStatusNext", next).apply();
     }
 
     /** Partial prefs (an older build's) never arm a rejoin. */
@@ -961,6 +995,7 @@ public class CastPlugin extends Plugin {
                         MediaInfo info = client.getMediaInfo();
                         notifyJSTime(time, duration, paused, buffering, volume, muted, ended, interrupted,
                             info != null ? receiverMediaJson(info) : null);
+                        refreshSavedStatus(client);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {
