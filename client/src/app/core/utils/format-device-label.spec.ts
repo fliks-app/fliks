@@ -11,13 +11,19 @@ describe('parseDeviceLabel', () => {
     expect(parseDeviceLabel('AppleTV11,1/26.4', null)?.key).toBe('system.device_apple_tv');
   });
 
+  it('names a mobile app by its model alone, else by its platform', () => {
+    expect(parseDeviceLabel('Mozilla/5.0 (Linux; Android 14; LE2113 Build/X; wv) AppleWebKit/537.36', null)).toEqual({
+      key: 'system.device_named',
+      params: { name: 'LE2113' },
+    });
+    expect(parseDeviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15', 'iOS 18.5')).toEqual({
+      key: 'system.device_named',
+      params: { name: 'iPhone' },
+    });
+    expect(parseDeviceLabel('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 wv', null)?.key).toBe('system.device_mobile_app_android');
+  });
+
   it('keeps the other native clients', () => {
-    expect(parseDeviceLabel('Mozilla/5.0 (Linux; Android 14; LE2113 Build/X; wv) AppleWebKit/537.36', null)?.key).toContain(
-      'mobile_app',
-    );
-    expect(parseDeviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15', 'iOS 18.5')?.key).toContain(
-      'mobile_app',
-    );
     expect(parseDeviceLabel('Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/537.36', null)?.key).toBe('system.device_samsung_tv');
     expect(parseDeviceLabel('Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36', null)?.key).toBe('system.device_lg_tv');
     expect(
