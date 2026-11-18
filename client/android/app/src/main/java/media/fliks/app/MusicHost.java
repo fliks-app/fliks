@@ -154,6 +154,8 @@ final class MusicHost {
     private boolean externalQueue;
     private int lastIndex = -1;
     @Nullable private Long previousItem;
+    /** The session of the track left at the last transition, ended at the next one. */
+    @Nullable private Resolved leaving;
     /** The track whose failed load was retried once; cleared when playback resumes. */
     private int recoveredAt = -1;
     private long lastBeat;
@@ -313,6 +315,7 @@ final class MusicHost {
             exo.clearMediaItems();
         });
         stopSessions();
+        endLeaving();
         previousItem = null;
         sessionKey = null;
         book = null;
@@ -437,6 +440,13 @@ final class MusicHost {
             String sid = e.getValue().sessionId;
             if (key != null) io.execute(() -> endSession(sid, key));
         }
+    }
+
+    private void endLeaving() {
+        Resolved r = leaving;
+        leaving = null;
+        String key = sessionKey;
+        if (r != null && key != null) io.execute(() -> endSession(r.sessionId, key));
     }
 
     // ---- events ----
@@ -715,11 +725,14 @@ final class MusicHost {
             if (index != lastIndex) {
                 beat(exo.getPlayWhenReady());
                 lastIndex = index;
-                // The next track resolves ahead of its turn; the previous one ends a track later, once the
-                // current one has claimed the account session, or its end would park it between tracks.
+                // The next track resolves ahead; the one left ends a track later (sooner would park the account
+                // session) and leaves the cache: a session that claimed once is ignored, so a return opens a new one.
                 Long next = exo.hasNextMediaItem() ? itemOf(exo.getMediaItemAt(exo.getNextMediaItemIndex())) : null;
                 Long current = itemOf(item);
-                stopSessions(current, next, previousItem);
+                Resolved left = previousItem == null || previousItem.equals(current) ? null : resolved.remove(previousItem);
+                stopSessions(current, next);
+                endLeaving();
+                leaving = left;
                 previousItem = current;
                 emitTrack();
             }
