@@ -678,6 +678,9 @@ export class CastService implements OnDestroy {
     this.cancelTextReapply();
     this.ended.set(false);
     this.wantedTextTrackId = info.activeSubtitleTrackId ?? 0;
+    // A LOAD reports the old media's time, then 0, before its start time: show the start time like a seek target.
+    this.pendingSeekTarget = info.currentTime ?? 0;
+    this.currentTime.set(this.pendingSeekTarget);
     const load = this.sendLoad(info);
     // Waiters on pendingLoad only need it settled; the failure goes to our caller.
     const settled = load.then(() => {}, () => {});
@@ -685,7 +688,10 @@ export class CastService implements OnDestroy {
     try {
       await load;
     } finally {
-      if (this.pendingLoad === settled) this.pendingLoad = null;
+      if (this.pendingLoad === settled) {
+        this.pendingLoad = null;
+        this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
+      }
     }
   }
 
@@ -898,8 +904,9 @@ export class CastService implements OnDestroy {
     this.remotePlayerController?.seek();
   }
 
-  /** Holds the pinned target while a settling seek still echoes the pre-seek position, until it arrives or the window elapses. */
+  /** Ignores a LOAD in flight, then holds the pinned target while the receiver still echoes another position, until it arrives or the window elapses. */
   private mirrorReceiverTime(t: number) {
+    if (this.pendingLoad) return;
     if (this.seekSettleUntil > 0) {
       const target = this.pendingSeekTarget;
       const arrived = target != null && Math.abs(t - target) <= CAST_SEEK_CONVERGE_TOL;
