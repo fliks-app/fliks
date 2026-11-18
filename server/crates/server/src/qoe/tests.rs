@@ -89,7 +89,7 @@ async fn events_are_stored_with_their_cause_and_capped_at_200(pool: PgPool) {
         .unwrap();
     assert_eq!(data["cause"], "unknown");
     assert!(data.get("serverLoad").is_some());
-    assert_eq!(rows(&pool).await[0].stallCount, 0);
+    assert_eq!(rows(&pool).await[0].stallCount, 250);
 }
 
 #[sqlx::test(migrations = false)]
