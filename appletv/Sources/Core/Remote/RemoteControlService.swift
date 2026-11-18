@@ -170,9 +170,13 @@ import UIKit
         case "seek": if let p = cmd.positionSeconds { player.perform(.seek(p)) }
         case "next": player.perform(.next)
         case "prev": player.previousTrack()
-        case "shuffle": player.setShuffle(cmd.shuffle ?? !player.shuffled)
-        case "repeat": player.setRepeat(cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? player.repeatMode.next)
-        default: print("remote: the music player ignores \(cmd.action) (\(cmd.cmdId))")
+        case "shuffle": player.setShuffle(cmd.shuffle ?? !player.shuffled); player.acknowledge()
+        case "repeat":
+            player.setRepeat(cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? player.repeatMode.next)
+            player.acknowledge()
+        default:
+            print("remote: the music player ignores \(cmd.action) (\(cmd.cmdId))")
+            player.acknowledge()
         }
     }
 }

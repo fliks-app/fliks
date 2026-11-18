@@ -530,9 +530,15 @@ enum MusicTransport: Equatable {
         let state: String
         let targetId: String?
         let lastCmdId: String?
+        /// The TV's own remote sets the volume: the music player takes no volume command.
+        let supportsVolume = false
     }
 
     private struct BeatAnswer: Decodable { let sessionLost: Bool? }
+
+    /// A beat now for a remote command that changes no playback state, so its ack beats the controller's
+    /// timeout instead of waiting for the periodic beat.
+    func acknowledge() { beat() }
 
     /// One state beat for `track` (the current one by default): the server derives plays and history.
     private func beat(_ track: QueueTrack? = nil, position at: Double? = nil, state: String? = nil) {
