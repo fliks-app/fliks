@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
@@ -109,6 +109,9 @@ export class KaraokeStageComponent {
   });
 
   private frame = 0;
+  /** Read off the frame loop: a per-frame read forces a style and layout pass on slow TVs. */
+  private size = { w: 0, h: 0 };
+  private colours = { ink: '', primary: '' };
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -119,6 +122,14 @@ export class KaraokeStageComponent {
       restored = true;
       // The preset is this browser's: another device's session keeps its own mix.
       if (!this.output()) untracked(() => this.setMode(this.saved!.mode));
+    });
+    afterNextRender(() => {
+      const ro = new ResizeObserver(([e]) => {
+        this.size = { w: e.contentRect.width, h: e.contentRect.height };
+        this.readColours();
+      });
+      ro.observe(this.canvas().nativeElement);
+      destroyRef.onDestroy(() => ro.disconnect());
     });
     destroyRef.onDestroy(() => {
       clearInterval(timer);
@@ -142,7 +153,12 @@ export class KaraokeStageComponent {
     });
   }
 
+  private readColours(): void {
+    this.colours = { ink: getComputedStyle(this.canvas().nativeElement).color, primary: getComputedStyle(this.primary().nativeElement).color };
+  }
+
   private refresh(): void {
+    this.readColours();
     this.rows.set(this.karaoke.results(this.doc()));
     const dur = this.audio.duration();
     if (dur > 0 && this.audio.position() >= dur - 1.5) this.karaoke.finish(this.doc(), this.title());
@@ -208,8 +224,7 @@ export class KaraokeStageComponent {
   private draw(): void {
     const cv = this.canvas().nativeElement;
     const dpr = window.devicePixelRatio || 1;
-    const w = cv.clientWidth;
-    const h = cv.clientHeight;
+    const { w, h } = this.size;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
       cv.width = Math.round(w * dpr);
       cv.height = Math.round(h * dpr);
@@ -217,7 +232,7 @@ export class KaraokeStageComponent {
     const ctx = cv.getContext('2d');
     if (ctx && w > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.paint(ctx, w, h, getComputedStyle(cv).color, getComputedStyle(this.primary().nativeElement).color);
+      this.paint(ctx, w, h, this.colours.ink, this.colours.primary);
     }
     this.frame = requestAnimationFrame(() => this.draw());
   }
