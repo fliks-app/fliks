@@ -33,6 +33,12 @@ enum MusicAPI {
         return try await api.get("/api/tracks", query: query)
     }
 
+    /// The readable tracks of `ids`, in that order: how a remote queue names its tracks.
+    static func tracks(ids: [Int]) async throws -> [TrackRow] {
+        guard !ids.isEmpty else { return [] }
+        return try await api.get("/api/tracks", query: ["ids": ids.prefix(500).map(String.init).joined(separator: ",")])
+    }
+
     static func artists(libraryId: Int? = nil, q: String? = nil, page: Int = 1, limit: Int = 60) async throws -> [MusicPersonRow] {
         var query = ["role": "artist", "page": String(page), "limit": String(limit)]
         if let libraryId { query["libraryId"] = String(libraryId) }

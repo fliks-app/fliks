@@ -44,6 +44,21 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(q.current?.itemId, 3)
     }
 
+    func testAdoptKeepsTheOwnersOrderAndOnlyFlagsShuffle() {
+        var q = MusicQueue()
+        q.adopt([5, 2, 9].map { track($0) }, start: 1, shuffled: true)
+        XCTAssertEqual(q.tracks.map(\.itemId), [5, 2, 9])
+        XCTAssertEqual(q.current?.itemId, 2)
+        XCTAssertTrue(q.shuffled)
+    }
+
+    func testEnqueueCommandDecodesItsTracksAndPlace() throws {
+        let json = #"{"cmdId":"c","expiresAt":1,"action":"enqueue","itemIds":[4,7],"where":"next"}"#
+        let cmd = try JSONDecoder().decode(RemoteCommand.self, from: Data(json.utf8))
+        XCTAssertEqual(cmd.itemIds, [4, 7])
+        XCTAssertEqual(cmd.enqueueAt, "next")
+    }
+
     func testRepeatAllWrapsAndOffStops() {
         var q = MusicQueue()
         q.set([track(1), track(2)], start: 1)

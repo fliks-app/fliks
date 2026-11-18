@@ -119,10 +119,10 @@ enum MusicTransport: Equatable {
         begin(startAt: 0, autoplay: true)
     }
 
-    /// Starts a transferred session: the queue at `start`, at `position`, with its shuffle and repeat.
+    /// Starts a transferred session: the queue as its owner played it, at `start` and `position`.
     func resume(_ tracks: [QueueTrack], from start: Int, shuffle: Bool, repeatMode: RepeatMode, position: Double, autoplay: Bool) {
         guard !tracks.isEmpty else { return }
-        queue.set(tracks, start: start, shuffle: shuffle)
+        queue.adopt(tracks, start: start, shuffled: shuffle)
         queue.repeatMode = repeatMode
         begin(startAt: position, autoplay: autoplay)
     }
@@ -189,6 +189,14 @@ enum MusicTransport: Equatable {
     func open(_ track: QueueTrack, startAt: Double = 0, autoplay: Bool) {
         queue.set([track])
         begin(startAt: startAt, autoplay: autoplay)
+    }
+
+    /// A controller's queue: the playing track goes on when it stays the current one.
+    func replaceQueue(_ tracks: [QueueTrack], from start: Int, shuffle: Bool) {
+        guard tracks.indices.contains(start) else { return }
+        let goesOn = tracks[start].itemId == current?.itemId
+        queue.adopt(tracks, start: start, shuffled: shuffle)
+        if goesOn { queueChanged() } else { begin(startAt: 0, autoplay: true) }
     }
 
     func skip(to index: Int) {
@@ -341,6 +349,7 @@ enum MusicTransport: Equatable {
         for item in player.items().dropFirst() { player.remove(item) }
         prefetchNext()
         publishNowPlaying()
+        beat()
     }
 
     private func nextTrack() -> QueueTrack? { queue.repeatMode == .one ? current : queue.peekNext() }
@@ -532,6 +541,29 @@ enum MusicTransport: Equatable {
         let lastCmdId: String?
         /// The TV's own remote sets the volume: the music player takes no volume command.
         let supportsVolume = false
+        let queue: QueueBeat?
+    }
+
+    /// `queue` of a beat (`heartbeat.md` rule 25): the play order, at most 500 ids around the current track.
+    private struct QueueBeat: Encodable, Equatable {
+        let itemIds: [Int]
+        let index: Int
+        let shuffle: Bool
+        let `repeat`: String
+    }
+
+    /// What the last beat carried: the queue goes out on a session's first beat and when it changes.
+    @ObservationIgnored private var queueSent: (sid: String?, queue: QueueBeat)?
+
+    private func queueToSend(sid: String?) -> QueueBeat? {
+        let ids = queue.tracks.map(\.itemId)
+        guard !ids.isEmpty, queue.index >= 0 else { return nil }
+        let start = max(0, min(queue.index - 250, ids.count - 500))
+        let q = QueueBeat(itemIds: Array(ids[start..<min(start + 500, ids.count)]), index: queue.index - start,
+                          shuffle: queue.shuffled, repeat: queue.repeatMode.rawValue)
+        if let sent = queueSent, sent.sid == sid, sent.queue == q { return nil }
+        queueSent = (sid, q)
+        return q
     }
 
     private struct BeatAnswer: Decodable { let sessionLost: Bool? }
@@ -548,10 +580,11 @@ enum MusicTransport: Equatable {
                         mediaFileId: r.mediaFileId, itemId: track.itemId, sessionId: r.sessionId,
                         state: state ?? (isPlaying ? "playing" : "paused"),
                         targetId: RemoteControlService.shared.targetId,
-                        lastCmdId: RemoteControlService.shared.lastAppliedCmdId)
+                        lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
+                        queue: queueToSend(sid: r.sessionId))
         Task {
             let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body)
-            if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil }
+            if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil; queueSent = nil }
         }
     }
 

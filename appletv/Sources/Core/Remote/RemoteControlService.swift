@@ -110,12 +110,9 @@ import UIKit
         }
         Task { @MainActor in
             do {
-                let page = try await MusicAPI.albumPage(mediaId)
-                let all = page.queue
+                let all = try await MusicAPI.albumPage(mediaId).queue
                 let wanted = cmd.queueItemIds ?? cmd.itemId.map { [$0] } ?? all.map(\.itemId)
-                let tracks = wanted.compactMap { id in all.first { $0.itemId == id } }
-                let current = cmd.queueIndex.flatMap { wanted.indices.contains($0) ? wanted[$0] : nil } ?? cmd.itemId
-                let start = tracks.firstIndex { $0.itemId == current } ?? 0
+                let (tracks, start) = try await Self.queueTracks(wanted, at: cmd.queueIndex ?? 0, known: all)
                 lastAppliedCmdId = cmd.cmdId
                 onOpenMusic?()
                 MusicPlayer.shared.resume(tracks, from: start, shuffle: cmd.shuffle ?? false,
@@ -125,6 +122,22 @@ import UIKit
                 print("remote: audio load \(cmd.cmdId) failed: \(error)")
             }
         }
+    }
+
+    /// The tracks of `ids` in order, `at` mapped onto them: `known` ones as they are (their album gain
+    /// included), the others fetched by id, an unreadable one left out.
+    private static func queueTracks(_ ids: [Int], at index: Int, known: [QueueTrack]) async throws -> ([QueueTrack], Int) {
+        let missing = Array(Set(ids).subtracting(known.map(\.itemId)))
+        let fetched = try await MusicAPI.tracks(ids: missing).map(QueueTrack.init(row:))
+        var pool: [Int: QueueTrack] = [:]
+        for t in known + fetched where pool[t.itemId] == nil { pool[t.itemId] = t }
+        var tracks: [QueueTrack] = []
+        var start = 0
+        for (i, id) in ids.enumerated() {
+            if i == index { start = tracks.count }
+            if let t = pool[id] { tracks.append(t) }
+        }
+        return (tracks, min(start, max(tracks.count - 1, 0)))
     }
 
     /// `PlayerCoordinator` is `@MainActor`-isolated (it drives `AVPlayer` and
@@ -170,6 +183,23 @@ import UIKit
         case "seek": if let p = cmd.positionSeconds { player.perform(.seek(p)) }
         case "next": player.perform(.next)
         case "prev": player.previousTrack()
+        case "queue":
+            guard let ids = cmd.queueItemIds, let index = cmd.queueIndex else { return player.acknowledge() }
+            if ids == player.queue.tracks.map(\.itemId) { return player.skip(to: index) }
+            Task { @MainActor in
+                if let q = try? await Self.queueTracks(ids, at: index, known: player.queue.tracks) {
+                    player.replaceQueue(q.0, from: q.1, shuffle: cmd.shuffle ?? player.shuffled)
+                } else {
+                    player.acknowledge()
+                }
+            }
+        case "enqueue":
+            guard let ids = cmd.itemIds, let at = cmd.enqueueAt else { return player.acknowledge() }
+            Task { @MainActor in
+                let tracks = (try? await Self.queueTracks(ids, at: 0, known: []).0) ?? []
+                if at == "next" { player.addNext(tracks) } else { player.addLast(tracks) }
+                player.acknowledge()
+            }
         case "shuffle": player.setShuffle(cmd.shuffle ?? !player.shuffled); player.acknowledge()
         case "repeat":
             player.setRepeat(cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? player.repeatMode.next)

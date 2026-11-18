@@ -653,6 +653,9 @@ struct RemoteCommand: Decodable {
     let itemId: Int?
     let queueItemIds: [Int]?
     let queueIndex: Int?
+    /// `enqueue` only: the tracks to add, `next` (after the playing one) or `last`.
+    let itemIds: [Int]?
+    let enqueueAt: String?
     let shuffle: Bool?
     let repeatMode: String?
     /// The key was sent: a nil `subtitleId` is then an explicit Off rather than no pick.
@@ -664,8 +667,9 @@ struct RemoteCommand: Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case cmdId, expiresAt, action, positionSeconds, level, muted, trackId, subtitleId, qualityId
-        case mediaFileId, mediaId, episodeId, paused, kind, itemId, queue, shuffle
+        case mediaFileId, mediaId, episodeId, paused, kind, itemId, queue, itemIds, shuffle
         case repeatMode = "repeat"
+        case enqueueAt = "where"
     }
 
     init(from decoder: Decoder) throws {
@@ -690,6 +694,8 @@ struct RemoteCommand: Decodable {
         let q = try c.decodeIfPresent(Queue.self, forKey: .queue)
         queueItemIds = q?.itemIds
         queueIndex = q?.index
+        itemIds = try c.decodeIfPresent([Int].self, forKey: .itemIds)
+        enqueueAt = try c.decodeIfPresent(String.self, forKey: .enqueueAt)
         shuffle = try c.decodeIfPresent(Bool.self, forKey: .shuffle)
         repeatMode = try c.decodeIfPresent(String.self, forKey: .repeatMode)
     }
