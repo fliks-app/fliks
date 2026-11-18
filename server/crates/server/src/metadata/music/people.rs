@@ -24,7 +24,7 @@ pub fn various_artists() -> Credited {
 }
 
 /// The person holding this MusicBrainz id (live or alias), else the one of this name, else a new one.
-/// A person that holds another artist id is someone else, and so is one known only from films or series.
+/// An id-less credit takes the name's person, identified or not; one with an id never takes a person holding another.
 pub async fn person(
     c: &mut PgConnection,
     name: &str,
@@ -71,8 +71,8 @@ async fn find_or_create(
                           OR EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c."mediaId"
                                       WHERE c."personId" = p.id AND m.type IN ('book', 'comic', 'album'))
                           OR EXISTS (SELECT 1 FROM item_credits c WHERE c."personId" = p.id))
-                     AND NOT EXISTS (SELECT 1 FROM person_external_ids x
-                                      WHERE x."personId" = p.id AND x.provider = $2 AND x.value <> COALESCE($3, ''))
+                     AND ($3::text IS NULL OR NOT EXISTS (SELECT 1 FROM person_external_ids x
+                                      WHERE x."personId" = p.id AND x.provider = $2 AND x.value <> $3))
                    ORDER BY p.id LIMIT 1"#,
             )
             .bind(name)
@@ -216,5 +216,28 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(n, 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_id_less_credit_takes_the_identified_artist_of_its_name(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let mut c = db.acquire().await.unwrap();
+        let known = person(&mut c, "Ana Placeholder", Some("mbid-a"), None)
+            .await
+            .unwrap();
+        assert_eq!(
+            person(&mut c, "Ana Placeholder", None, None).await.unwrap(),
+            known
+        );
+        assert_eq!(
+            person(&mut c, "Ana Placeholder", Some("mbid-a"), None)
+                .await
+                .unwrap(),
+            known
+        );
+        let other = person(&mut c, "Ana Placeholder", Some("mbid-b"), None)
+            .await
+            .unwrap();
+        assert_ne!(other, known);
     }
 }
