@@ -48,8 +48,8 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly ready = computed(
     () => this.cast.isConnected() && this.cp.hasMedia() && !this.cp.reloading() && this.cast.duration() > 0,
   );
-  readonly item = computed(() => ({ mediaId: this.cp.mediaId(), episodeId: this.cp.episodeId(), itemId: this.cp.itemId() }), {
-    equal: (a, b) => a.mediaId === b.mediaId && a.episodeId === b.episodeId && a.itemId === b.itemId,
+  readonly item = computed(() => ({ mediaId: this.cp.mediaId(), episodeId: this.cp.episodeId() }), {
+    equal: (a, b) => a.mediaId === b.mediaId && a.episodeId === b.episodeId,
   });
   readonly sync: PlaybackSync = { slackS: CAST_DRIFT_IGNORE_S, drift: { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS } };
   readonly muted = this.cast.muted;

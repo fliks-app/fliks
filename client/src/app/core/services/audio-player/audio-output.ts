@@ -10,6 +10,8 @@ export interface AudioOutput {
   /** What the players show: the track a skip moves to, before it has loaded. */
   readonly uiTrack: Signal<AudioRequest | null>;
   readonly playing: Signal<boolean>;
+  /** The playhead waits for data while playing: a clock run between position reports holds. */
+  readonly buffering: Signal<boolean>;
   /** What the play button shows: a start in flight counts as playing. */
   readonly uiPlaying: Signal<boolean>;
   readonly position: Signal<number>;

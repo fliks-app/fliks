@@ -33,14 +33,13 @@ function setup(media: unknown = album) {
     position: signal(0),
     partyReady: vi.fn(() => true),
     seekLocal: vi.fn().mockResolvedValue(undefined),
-    resume: vi.fn(),
+    playLoaded: vi.fn(),
     pause: vi.fn(),
     elementRate: vi.fn(() => 1),
     setElementRate: vi.fn(),
     duckLevel: vi.fn(() => 1),
     setDuck: vi.fn(),
     close: vi.fn(),
-    setPartyRouter: vi.fn(() => () => undefined),
     openForParty: vi.fn().mockResolvedValue(undefined),
   };
   const toast = { error: vi.fn() };
@@ -82,7 +81,7 @@ describe('AudioPartyHost output', () => {
     out.play();
     await out.pause();
     expect(audio.seekLocal).toHaveBeenCalledWith(12);
-    expect(audio.resume).toHaveBeenCalled();
+    expect(audio.playLoaded).toHaveBeenCalled();
     expect(audio.pause).toHaveBeenCalled();
   });
 

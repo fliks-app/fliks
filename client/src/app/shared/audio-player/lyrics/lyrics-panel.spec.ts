@@ -30,6 +30,7 @@ async function create(structuredLyrics: unknown[] = [], output?: unknown, state?
     vocalLevel: signal(1),
     position: signal(0),
     playing: signal(false),
+    buffering: signal(false),
     rate: signal(1),
     refreshStems: vi.fn(),
     setStemMode: vi.fn(),
@@ -114,7 +115,7 @@ describe('LyricsPanelComponent karaoke', () => {
   });
 
   it('sends the return to the original mix to the displayed output', async () => {
-    const out = { musicMode: signal(true), track: signal({ itemId: 7 }), position: signal(0), playing: signal(false), rate: signal(1), supports: () => true, setStemMode: vi.fn() };
+    const out = { musicMode: signal(true), track: signal({ itemId: 7 }), position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), supports: () => true, setStemMode: vi.fn() };
     const { panel, audio } = await create([], out, { ...none, state: 'ready' });
     panel.sing();
     panel.sing();
@@ -139,7 +140,7 @@ describe('LyricsPanelComponent karaoke', () => {
   });
 
   it('hides Sing in remote view when the device cannot apply stems', async () => {
-    const remote = (can: boolean) => ({ musicMode: signal(true), track: signal({ itemId: 7 }), position: signal(0), playing: signal(false), rate: signal(1), supports: () => can, setStemMode: vi.fn() });
+    const remote = (can: boolean) => ({ musicMode: signal(true), track: signal({ itemId: 7 }), position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), supports: () => can, setStemMode: vi.fn() });
     const on = await create([], remote(true));
     expect((on.f.componentInstance as unknown as { karaokeOn(): boolean }).karaokeOn()).toBe(true);
     TestBed.resetTestingModule();

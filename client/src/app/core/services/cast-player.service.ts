@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService } from './cast.service';
+import { CastService, type CastResumeState } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
@@ -9,7 +9,6 @@ import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.ser
 import { StreamingApiService, lostCurrentSession, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import type { StemKind } from './api/karaoke.models';
 import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
@@ -33,8 +32,6 @@ import type { Media } from './api/media.service';
 import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { ToastService } from './toast.service';
-
-export type CastTrack = { itemId: number; mediaId: number; title: string; artists: string; coverUrl: string | null };
 
 export interface CastSubtitleOption {
   id: string;
@@ -139,11 +136,10 @@ export function castBurnInId(subtitles: SubtitleOption[], activeId: string | nul
 }
 
 /** Everything {@link CastPlayerService} needs to take a session over again. */
-interface CastResumeState {
+interface VideoCastState {
   mediaFileId: number;
   mediaId: number;
   episodeId: number | undefined;
-  itemId?: number;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
   playbackId?: string | null;
@@ -170,6 +166,7 @@ const RECEIVER_CAPS_LATEST = 3;
 
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
+
 type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
 
 /** A sample of the previous load, still in flight when a reload minted a new sid. */
@@ -236,77 +233,6 @@ export class CastPlayerService {
       // The Cast receiver runs Shaka (seg-0 fetched on load-then-seek, real ABR); CAST traits leave the other flags undefined.
       ...ENGINE_TRAITS[EngineKind.CAST],
     };
-  }
-
-  /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
-  async castStem(
-    t: CastTrack,
-    fileId: number,
-    kind: StemKind,
-    contentType: string,
-    position: number,
-    autoplay: boolean,
-    current: () => boolean = () => true,
-  ): Promise<boolean> {
-    const [token, castInfo] = await Promise.all([this.authService.ensureStreamToken(fileId), this.authService.getCastInfo()]);
-    if (!token || !current()) return false;
-    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
-    const url = `${this.streamingApi.absoluteUrl(`/api/media-files/${fileId}/stems/${kind}`)}?token=${encodeURIComponent(token)}`;
-    try {
-      await this.cast.loadMedia({
-        url,
-        contentType,
-        title: t.title,
-        subtitle: t.artists,
-        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
-        mediaId: t.mediaId,
-        itemId: t.itemId,
-        mediaFileId: fileId,
-        userId: this.authService.user()?.id,
-        currentTime: position,
-        autoplay,
-      });
-      return true;
-    } catch (err) {
-      console.error('[cast] stem LOAD failed', err);
-      return false;
-    }
-  }
-
-  /** Loads one music track on the receiver; returns the server's playback info, or null when the load failed. */
-  async castTrack(t: CastTrack, autoplay = true, startAt = 0, current: () => boolean = () => true) {
-    const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getItemPlaybackInfo(t.itemId, this.getCastDeviceProfile(), { startAt }),
-      this.authService.getCastInfo(),
-    ]);
-    if (!current()) {
-      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
-      return null;
-    }
-    this.cast.setCastStreamBase(castInfo.streamBaseUrl);
-    const { url, contentType } = this.streamingApi.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
-    try {
-      await this.cast.loadMedia({
-        url,
-        contentType,
-        title: t.title,
-        subtitle: t.artists,
-        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
-        mediaId: t.mediaId,
-        itemId: t.itemId,
-        mediaFileId: pi.mediaFileId,
-        sid: pi.sessionId,
-        userId: this.authService.user()?.id,
-        currentTime: startAt,
-        autoplay,
-      });
-      return pi;
-    } catch (err) {
-      console.error('[cast] LOAD failed', err);
-      if (pi.sessionId) void this.streamingApi.stopSession(pi.sessionId).catch(() => undefined);
-      this.toast.error(this.translate.instant('cast.error.load_failed'));
-      return null;
-    }
   }
 
   /** Conservative video side of the profile: only a v2 receiver, and only what its MSE reports; levels
@@ -419,8 +345,6 @@ export class CastPlayerService {
   readonly mediaFileId = signal(0);
   readonly mediaId = signal(0);
   readonly episodeId = signal<number | undefined>(undefined);
-  /** Set only while a music track plays. */
-  readonly itemId = signal<number | undefined>(undefined);
   readonly playbackMode = signal<PlaybackMode>('transcode');
   /** Markers, chapters and EDL of the file on the receiver, from its playback-info. */
   readonly timeline = signal<PlaybackTimeline>(NO_TIMELINE);
@@ -472,7 +396,6 @@ export class CastPlayerService {
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
-    this.itemId.set(undefined);
     this.playbackMode.set(opts.playbackMode);
     this.selectionFileId = opts.mediaFileId;
     this.activeQualityId.set(opts.activeQualityId);
@@ -509,12 +432,11 @@ export class CastPlayerService {
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
-  private resumeState(): CastResumeState {
+  private resumeState(): VideoCastState {
     return {
       mediaFileId: this.mediaFileId(),
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
-      itemId: this.itemId(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
       playbackId: this.playbackId,
@@ -530,12 +452,11 @@ export class CastPlayerService {
   }
 
   /** What a LOAD's customData carries; the track and quality lists are rebuilt by the next reload. */
-  private stateFromReceiver(d: Record<string, unknown>): CastResumeState {
+  private stateFromReceiver(d: Record<string, unknown>): VideoCastState {
     return {
       mediaFileId: d['mediaFileId'] as number,
       mediaId: d['mediaId'] as number,
       episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
-      itemId: typeof d['itemId'] === 'number' ? d['itemId'] : undefined,
       playbackMode: 'transcode',
       liveSessionId: typeof d['sid'] === 'string' && !this.controlOnly() ? d['sid'] : null,
       playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
@@ -550,15 +471,9 @@ export class CastPlayerService {
     };
   }
 
-  /** Restores the session a native or desktop sender kept alive; the player route awaits this before it launches locally. */
-  async adoptSurvivingSession(): Promise<void> {
-    await this.cast.settled;
-    this.adoptResumed();
-  }
-
-  private adoptResumed(): void {
-    const state = this.cast.resumedState() as CastResumeState | null;
-    if (state && !this.hasMedia()) this.restore(state);
+  /** Takes over the video session a native or desktop sender kept alive. */
+  adopt(state: CastResumeState): void {
+    if (!this.hasMedia()) this.restore(state as unknown as VideoCastState);
   }
 
   /** The receiver plays a session another user's sender loaded: this sender is a remote control and makes no
@@ -570,18 +485,18 @@ export class CastPlayerService {
 
   private followReceiver(data: Record<string, unknown> | null): void {
     if (!data || !this.cast.isConnected() || this.reloading()) return;
-    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number') {
+    // A music track (its LOAD carries an `itemId`) belongs to the audio player.
+    if (typeof data['mediaFileId'] !== 'number' || typeof data['mediaId'] !== 'number' || typeof data['itemId'] === 'number') {
       if (this.hasMedia()) this.clear();
     } else if (!this.hasMedia() || data['mediaFileId'] !== this.mediaFileId()) {
       this.restore(this.stateFromReceiver(data));
     }
   }
 
-  private restore(s: CastResumeState): void {
+  private restore(s: VideoCastState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
-    this.itemId.set(s.itemId);
     this.playbackMode.set(s.playbackMode);
     this.setLiveSession(s.liveSessionId);
     this.playbackId = s.playbackId ?? null;
@@ -618,11 +533,10 @@ export class CastPlayerService {
     this.setLiveSession(null);
     this.playbackId = null;
     this.hasMedia.set(false);
-    this.cast.clearResumeState();
+    this.cast.clearResumeState('video');
     this.mediaFileId.set(0);
     this.mediaId.set(0);
     this.episodeId.set(undefined);
-    this.itemId.set(undefined);
     this.timeline.set(NO_TIMELINE);
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
@@ -646,10 +560,6 @@ export class CastPlayerService {
         }, CastPlayerService.DISCONNECT_GRACE_MS);
       }
     });
-    effect(() => {
-      this.cast.resumedState();
-      untracked(() => this.adoptResumed());
-    });
     // The receiver is the source of truth: a tab reload rejoins its media, another sender's LOAD replaces ours.
     effect(() => {
       const data = this.cast.receiverMedia();
@@ -659,7 +569,7 @@ export class CastPlayerService {
     // taken over as it was left without reloading the receiver.
     effect(() => {
       if (!this.hasMedia()) return;
-      this.cast.saveResumeState(this.resumeState());
+      this.cast.saveResumeState('video', this.resumeState());
     });
     // Probe is a no-op when the cache already covers the device.
     effect(() => {

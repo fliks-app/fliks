@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
-import { GAP_GRACE_MS, GAP_MIN_MS, activeIndices, cueFills, cueSegments, layerAligned, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
+import { GAP_GRACE_MS, GAP_MIN_MS, activeIndices, cueFills, cueSegments, layerAligned, mainLyrics, tapBack, tapLines, tapStamp, tapStart, toRows } from './lyrics-logic';
 
 const doc = (o: Partial<StructuredLyrics>): StructuredLyrics =>
   ({ id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [], ...o }) as StructuredLyrics;
@@ -9,6 +9,16 @@ const activeIndex = (...a: Parameters<typeof activeIndices>) => activeIndices(..
 
 describe('lyrics logic', () => {
   const rows = toRows(doc({ line: [{ start: 1000, value: 'a' }, { start: 3000, value: 'b' }, { start: 5000, value: 'c' }] }));
+
+  it('picks the word-synced main text for karaoke, the plain one otherwise, each falling back to the other', () => {
+    const plain = doc({ id: 1 });
+    const words = doc({ id: 2, cueLine: [{ index: 0, start: 0, end: 1, value: 'a', cue: [] }] });
+    const layer = doc({ id: 3, kind: 'translation' });
+    expect(mainLyrics([layer, plain, words], true)).toBe(words);
+    expect(mainLyrics([words, plain], false)).toBe(plain);
+    expect(mainLyrics([plain], true)).toBe(plain);
+    expect(mainLyrics([layer], false)).toBeNull();
+  });
 
   it('finds the active line, honouring the offset', () => {
     expect(activeIndex(rows, 500, 0)).toBe(-1);

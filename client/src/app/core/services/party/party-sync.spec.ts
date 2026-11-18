@@ -15,6 +15,7 @@ import { PlayerStateService } from '../player-state.service';
 import { MediaService } from '../api/media.service';
 import { PlayerSettingsService } from '../player-settings.service';
 import { PlaybackSession } from '../playback/playback-session';
+import { MusicCastOutput } from '../audio-player/music-cast-output';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { ToastService } from '../toast.service';
 import { LocalPlaybackOutput, type LocalOutputHost } from '../../../features/player/local-playback-output';
@@ -48,6 +49,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     nextRequested$: new Subject<void>(),
     sendFliks: vi.fn(),
     isConnected: signal(false),
+    resumedState: signal(null),
     isPaused: signal(true),
     buffering: signal(false),
     ended: signal(false),
@@ -72,11 +74,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   };
   const openItem = vi.fn().mockResolvedValue(opts.opens ?? true);
   const audio = {
-    route: vi.fn((r: unknown) => {
-      audio.router = r as (c: { type: string }) => boolean;
-      return () => undefined;
-    }),
-    router: null as null | ((c: { type: string }) => boolean),
+    router: null as unknown as (c: { type: string }) => boolean,
     openItem: vi.fn().mockResolvedValue(true),
     requests: vi.fn().mockResolvedValue([]),
     adopt: vi.fn(),
@@ -114,6 +112,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
       { provide: PlaybackQueueService, useValue: queue },
       { provide: VoiceService, useValue: { duck: signal(false), othersSpeaking: signal(false), joined: signal(false) } },
       { provide: CastService, useValue: cast },
+      { provide: MusicCastOutput, useValue: { hasMedia: signal(false), active: signal(false) } },
       { provide: CastPlayerService, useValue: { timeline: signal({ intro: null, outro: null, chapters: [], edl: [] }), mediaFileId: signal(10), hasMedia: signal(true), reloading: signal(false), mediaId: signal(1), episodeId: signal(undefined), itemId: signal(undefined), availableQualities: signal([]), activeAudioStreamIndex: signal(undefined), activeSubtitleId: signal(null) } },
       CastPlaybackTarget,
       { provide: RemotePlaybackTarget, useValue: { isConnected: signal(false), isObserving: signal(false) } },
@@ -147,6 +146,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     resume: vi.fn(),
   } as unknown as PartyHost & LocalOutputHost;
   const session = TestBed.inject(PlaybackSession);
+  audio.router = (c) => session.toParty(c as never, 'audio');
   const detachLocal = session.attachLocal(new LocalPlaybackOutput(host, state));
   const detach = ctl.attach(host);
   return { closed, ctl, party, state, engine, host, queue, toast, cast, router, session, detachLocal, detach, openItem, audio };
@@ -465,7 +465,7 @@ describe('PartySync with a track item', () => {
     const { party, host, audio } = setup();
     party.live.set(live('paused'));
     TestBed.tick();
-    expect(audio.route).toHaveBeenCalledTimes(1);
+    expect(audio.router({ type: 'drives' })).toBe(true);
     expect(host.onBack).toHaveBeenCalled();
   });
 
@@ -481,7 +481,7 @@ describe('PartySync with a track item', () => {
     const { party, audio } = setup();
     party.live.set(live('playing'));
     TestBed.tick();
-    const route = audio.router!;
+    const route = audio.router;
     expect(route({ type: 'drives' })).toBe(true);
     expect(route({ type: 'toggle' })).toBe(true);
     expect(party.sendIntent).toHaveBeenCalledWith('play');
@@ -498,7 +498,7 @@ describe('PartySync with a track item', () => {
     const { party, audio, toast } = setup();
     party.live.set(live('paused'));
     TestBed.tick();
-    expect(audio.router!({ type: 'external' })).toBe(true);
+    expect(audio.router({ type: 'external' })).toBe(true);
     expect(toast.info).toHaveBeenCalledWith('party.audio_busy');
   });
 
@@ -517,12 +517,21 @@ describe('PartySync with a track item', () => {
     const { party, audio } = setup();
     party.live.set(live('paused'));
     TestBed.tick();
-    expect(audio.route).toHaveBeenCalledTimes(1);
+    expect(audio.router({ type: 'drives' })).toBe(true);
     party.active.set(false);
     TestBed.tick();
     expect(audio.onBack).not.toHaveBeenCalled();
     expect(party.openPlayer).not.toHaveBeenCalled();
-    expect(audio.router!({ type: 'next' })).toBe(false);
+    expect(audio.router({ type: 'next' })).toBe(false);
+    expect(audio.router({ type: 'drives' })).toBe(false);
+  });
+
+  it('leaves the audio player alone while a film hosts the party', () => {
+    const { party, audio } = setup({ film: true });
+    party.live.set(live('paused', { mediaId: 1, itemId: 9, episodeId: null, mediaType: 'movie' }));
+    TestBed.tick();
+    expect(audio.router({ type: 'drives' })).toBe(false);
+    expect(audio.router({ type: 'external' })).toBe(false);
   });
 
   it('closes the audio player and opens the film when the group moves to a film', () => {
@@ -582,7 +591,7 @@ describe('PartySync programme as queue', () => {
     party.live.set(live(t));
     TestBed.tick();
     audio.rowAt.mockReturnValue({ mediaId: 4, itemId: 71 });
-    expect(audio.router!({ type: 'item', index: 1 } as never)).toBe(true);
+    expect(audio.router({ type: 'item', index: 1 } as never)).toBe(true);
     await vi.waitFor(() => expect(party.sendIntent).toHaveBeenCalledWith('setItem', { item: { mediaId: 4, itemId: 71 } }));
   });
 
@@ -604,7 +613,7 @@ describe('PartySync programme as queue', () => {
     party.programme.set([a]);
     party.live.set(live(a));
     TestBed.tick();
-    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }] } as never);
+    audio.router({ type: 'queue', tracks: [{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }] } as never);
     await vi.waitFor(() => expect(party.setProgramme).toHaveBeenCalledWith([{ mediaId: 4, itemId: 71 }, { mediaId: 4, itemId: 70 }]));
   });
 
@@ -615,10 +624,10 @@ describe('PartySync programme as queue', () => {
     party.live.set(live(a));
     TestBed.tick();
     const tracks = [{ mediaId: 4, itemId: 70 }];
-    expect(audio.router!({ type: 'enqueue', tracks, where: 'next' } as never)).toBe(true);
+    expect(audio.router({ type: 'enqueue', tracks, where: 'next' } as never)).toBe(true);
     expect(party.addToProgramme).toHaveBeenCalledWith(tracks, 'next');
     party.canControl.set(false);
-    expect(audio.router!({ type: 'enqueue', tracks, where: 'last' } as never)).toBe(true);
+    expect(audio.router({ type: 'enqueue', tracks, where: 'last' } as never)).toBe(true);
     expect(party.addToProgramme).toHaveBeenCalledTimes(1);
     expect(toast.info).toHaveBeenCalled();
   });
@@ -630,12 +639,12 @@ describe('PartySync programme as queue', () => {
     party.programme.set([a, b]);
     party.live.set(live(a));
     TestBed.tick();
-    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }] } as never);
+    audio.router({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }] } as never);
     await vi.waitFor(() => expect(party.removeFromProgramme).toHaveBeenCalledWith(71));
     expect(party.setProgramme).not.toHaveBeenCalled();
     party.isHost.set(true);
     party.programme.set([a, row(1, 5)]);
-    audio.router!({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 73 }] } as never);
+    audio.router({ type: 'queue', tracks: [{ mediaId: 4, itemId: 70 }, { mediaId: 4, itemId: 73 }] } as never);
     await Promise.resolve();
     expect(party.setProgramme).not.toHaveBeenCalled();
     expect(party.removeFromProgramme).toHaveBeenCalledTimes(1);

@@ -32,6 +32,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 - `edl.js`: EDL skip/mute policy (port of `client/src/app/core/utils/edl-policy.ts`).
 - `cues.js`: skip cue and progress band policy.
 - `lyrics.js`: joins the chunked lyrics document and finds the active line and each word's fill (`node --test lyrics.test.js`).
+- `mixer.js`: sums 16-bit PCM sources at their gains and frames the mix as uncompressed FLAC in fragmented MP4 for MSE (`node --test mixer.test.js`; its decode test needs ffmpeg).
 - `captions.js`: the sender's text track style as CSS for the receiver's own caption layer.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
@@ -135,17 +136,42 @@ because a plain-HTTP NAS cannot serve images to the HTTPS receiver. Test from De
 ```ts
 { kind: 'party_reaction', emoji: string, username: string, img: string | null }
 { kind: 'party_chat', id: number | string, username: string, text: string, sep: string }
+{ kind: 'party_on' } // a party is on: the receiver loads its emoji font ahead of the first reaction
 ```
 
 Lyrics of the playing music track, sent by the same sender (`karaoke.md` rule 28). The document is cut
 at 40 000 characters so each message stays under the 64 KiB limit; a lower `seq` than the one held is ignored.
-Lyrics hide while nothing plays, and `lyrics_clear` (or the sender leaving) drops them.
+Lyrics show only while their `itemId` plays, and `lyrics_clear` (or the sender leaving) drops them.
 
 ```ts
 { kind: 'lyrics', itemId: number, seq: number, part: number, parts: number, data: string }
 // the parts of one seq joined parse as { rows: {start?, end?, text, cues?: {start, end, byteStart, byteEnd}[]}[], offset: number, synced: boolean }
 { kind: 'lyrics_clear' }
 ```
+
+The next music track, queued by the sender about 20 s before the end of the playing one: the receiver
+holds it as the one item after the current, preloads it and moves on to it with no IDLE in between.
+A new `queue_next` replaces it, `media: null` drops it, and a LOAD starts a new queue without it.
+The sender follows the move from the media status, whose `customData.sid` turns to the queued one.
+
+```ts
+{ kind: 'queue_next', media: { url: string, contentType: string, title: string, subtitle: string, posterUrl: string, customData: object } | null }
+```
+
+A mix plays several 16-bit PCM sources summed at their gains in the one media element, through MSE: a Cast
+device runs one media element at a time and its Web Audio output does not keep real time. The sender declares
+the mix, then LOADs `fliks-mix:<id>` (the token-bearing URLs stay out of `customData`). Each `url` takes
+`from=<seconds>&to=<seconds>` and answers `audio/L16; rate=<r>; channels=<c>`, all sources alike, exposing
+`Content-Range` for the length. The receiver asks for about 2 s at a time: Chrome buffers a whole response
+in the page however slowly it is read, which on a Cast device leaves too little memory for the compositor. A `mix` with the same id and URLs changes the gains: the receiver remixes what it buffered
+ahead (about 3 s) from just past the playhead, with no reload.
+
+```ts
+{ kind: 'mix', id: string, sources: { url: string, gain: number }[] }
+```
+
+A music track (a LOAD or queued item whose `customData` has an `itemId`) shows the music view: its
+cover, title, artist and progress over its artwork blurred, its lyrics beside it.
 
 Reserved for upcoming features (skip-intro markers, queue auto-next,
 watch-next on STOP). Add fields here and parse them in `receiver.js`'s

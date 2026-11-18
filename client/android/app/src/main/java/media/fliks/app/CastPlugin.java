@@ -17,10 +17,12 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.gms.cast.CastDevice;
+import com.google.android.gms.cast.CastStatusCodes;
 import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
 import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.MediaQueueItem;
 import com.google.android.gms.cast.MediaStatus;
 import com.google.android.gms.cast.MediaTrack;
 import com.google.android.gms.cast.framework.CastContext;
@@ -69,6 +71,10 @@ public class CastPlugin extends Plugin {
     /** A dead process left a cast behind and CAF is not resuming it: join the receiver by hand. */
     private boolean rejoinArmed = false;
     private boolean rejoining = false;
+    /** A cast route picked while a failed resume still holds the route is dropped again: rejoin once it is the default. */
+    private boolean rejoinOnDefault = false;
+    /** The SDK's resume the plugin ended itself at start-up: its end is not a disconnect. */
+    private CastSession droppedResume = null;
     /** Active scan for the saved receiver, bounded by HUNT_MS. */
     private boolean hunting = false;
     /** A connected session went through this process, so its end is a real stop. */
@@ -92,6 +98,12 @@ public class CastPlugin extends Plugin {
         @Override
         public void onSessionEnded(CastSession session, int error) {
             runOnMainThread(() -> {
+                if (session == droppedResume) {
+                    droppedResume = null;
+                    unlistenReceiver(session);
+                    rejoinAny(router());
+                    return;
+                }
                 sessionPending = false;
                 castSession = null;
                 unlistenReceiver(session);
@@ -117,6 +129,7 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionStartFailed(CastSession session, int error) {
+            Log.d(TAG, "session start failed: " + CastStatusCodes.getStatusCodeString(error));
             runOnMainThread(() -> {
                 sessionPending = false;
                 rejoining = false;
@@ -128,11 +141,17 @@ public class CastPlugin extends Plugin {
         public void onSessionEnding(CastSession session) {}
         @Override
         public void onSessionResuming(CastSession session, String sessionId) {
-            sessionPending = true;
+            if (session != droppedResume) sessionPending = true;
         }
         @Override
         public void onSessionResumeFailed(CastSession session, int error) {
+            Log.d(TAG, "session resume failed: " + CastStatusCodes.getStatusCodeString(error));
             runOnMainThread(() -> {
+                if (session == droppedResume) {
+                    droppedResume = null;
+                    rejoinAny(router());
+                    return;
+                }
                 sessionPending = false;
                 notifyJS("connected", false);
                 notifyPickerDismissed();
@@ -140,7 +159,12 @@ public class CastPlugin extends Plugin {
                     Log.d(TAG, "rejoin armed after resume failure");
                     rejoinArmed = true;
                     MediaRouter router = router();
-                    for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
+                    if (router.getSelectedRoute().isDefault()) {
+                        rejoinAny(router);
+                    } else {
+                        rejoinOnDefault = true;
+                        router.selectRoute(router.getDefaultRoute());
+                    }
                 }
             });
         }
@@ -157,6 +181,8 @@ public class CastPlugin extends Plugin {
         boolean rejoined = rejoining;
         rejoining = false;
         RemoteMediaClient client = session.getRemoteMediaClient();
+        Log.d(TAG, "connected " + session.getSessionId() + ", saved state " + (resume != null) + ", rejoined " + rejoined
+            + ", media " + (client != null && client.getMediaInfo() != null));
         if (resume == null || client == null) {
             // A rejoin that found another cast than ours has nothing to take back.
             if (rejoined) {
@@ -183,12 +209,17 @@ public class CastPlugin extends Plugin {
     }
 
     private void handBack(RemoteMediaClient client, JSObject resume) {
+        Log.d(TAG, "hand back: media " + (client.getMediaInfo() != null));
         if (client.getMediaInfo() == null) {
             notifyJS("connected", true);
             return;
         }
         startMediaPolling(client);
         notifyResumed(resume);
+    }
+
+    private void rejoinAny(MediaRouter router) {
+        for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
     }
 
     /** Selecting a route launches the receiver when it is not running, so only join a device
@@ -198,7 +229,8 @@ public class CastPlugin extends Plugin {
         CastDevice device = CastDevice.getFromBundle(route.getExtras());
         android.content.SharedPreferences p = prefs();
         if (device == null || !device.getDeviceId().equals(p.getString("deviceId", null))) return;
-        if (!String.valueOf(route.getDescription()).equals(p.getString("routeStatus", null))) return;
+        String status = String.valueOf(route.getDescription());
+        if (!status.equals(p.getString("routeStatus", null)) && !status.equals(p.getString("routeStatusNext", null))) return;
         rejoinArmed = false;
         rejoining = true;
         Log.d(TAG, "rejoin: selecting saved route " + route.getName());
@@ -220,6 +252,12 @@ public class CastPlugin extends Plugin {
         @Override
         public void onRouteRemoved(MediaRouter router, MediaRouter.RouteInfo route) {
             notifyRoutesChanged();
+        }
+        @Override
+        public void onRouteSelected(MediaRouter router, MediaRouter.RouteInfo route) {
+            if (!rejoinOnDefault || !route.isDefault()) return;
+            rejoinOnDefault = false;
+            rejoinAny(router);
         }
     };
 
@@ -365,9 +403,15 @@ public class CastPlugin extends Plugin {
         if (!hasSavedCast()) {
             prefs().edit().clear().apply();
         } else if (current == null || !current.isConnected()) {
-            // No current session: CAF attempts no resume (app update), so rejoin right away.
-            rejoinArmed = current == null;
-            Log.d(TAG, "saved cast pending, active scan, rejoinArmed=" + rejoinArmed);
+            // The SDK's resume of a killed sender times out after 10 s where joining the saved route takes a fraction of
+            // a second: end it, the receiver playing on, and rejoin right away.
+            if (current != null) {
+                droppedResume = current;
+                sessionManager.endCurrentSession(false);
+                sessionPending = false;
+            }
+            rejoinArmed = true;
+            Log.d(TAG, "saved cast pending, active scan, rejoin armed");
             setHunting(true);
             mainHandler.postDelayed(() -> {
                 rejoinArmed = false;
@@ -375,6 +419,8 @@ public class CastPlugin extends Plugin {
             }, HUNT_MS);
         }
         startRouteDiscovery();
+        // A route this process already knows raises no route event.
+        if (rejoinArmed) rejoinAny(router());
         return true;
     }
 
@@ -417,16 +463,48 @@ public class CastPlugin extends Plugin {
         JSObject state = call.getObject("state");
         runOnMainThread(() -> {
             if (castSession != null && castSession.isConnected() && state != null) {
+                String status = String.valueOf(router().getSelectedRoute().getDescription());
+                RemoteMediaClient client = castSession.getRemoteMediaClient();
                 prefs().edit()
                     .putString("sessionId", castSession.getSessionId())
                     .putString("deviceId", castSession.getCastDevice().getDeviceId())
-                    .putString("routeStatus", String.valueOf(
-                        router().getSelectedRoute().getDescription()))
+                    .putString("routeStatus", status)
+                    .putString("routeStatusNext", client != null ? nextStatus(status, client) : null)
                     .putString("state", state.toString())
                     .apply();
             }
             call.resolve();
         });
+    }
+
+    /** The receiver moves on to its queued item by itself while no sender listens: the status it then shows is today's
+     *  with the title swapped; null when there is none or the status does not end with the title yet. */
+    private static String nextStatus(String status, RemoteMediaClient client) {
+        MediaStatus media = client.getMediaStatus();
+        MediaInfo info = client.getMediaInfo();
+        String title = info != null && info.getMetadata() != null ? info.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+        if (media == null || title == null || title.isEmpty() || !status.endsWith(title)) return null;
+        List<MediaQueueItem> items = media.getQueueItems();
+        for (int i = 0; i + 1 < items.size(); i++) {
+            if (items.get(i).getItemId() != media.getCurrentItemId()) continue;
+            MediaInfo next = items.get(i + 1).getMedia();
+            String nextTitle = next != null && next.getMetadata() != null ? next.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+            return nextTitle == null ? null : status.substring(0, status.length() - title.length()) + nextTitle;
+        }
+        return null;
+    }
+
+    /** Keeps the saved statuses on the receiver's while it plays, skipping a status that still names the previous title. */
+    private void refreshSavedStatus(RemoteMediaClient client) {
+        android.content.SharedPreferences p = prefs();
+        if (!castSession.getSessionId().equals(p.getString("sessionId", null))) return;
+        String status = String.valueOf(router().getSelectedRoute().getDescription());
+        MediaInfo info = client.getMediaInfo();
+        String title = info != null && info.getMetadata() != null ? info.getMetadata().getString(MediaMetadata.KEY_TITLE) : null;
+        if (title == null || !status.endsWith(title)) return;
+        String next = nextStatus(status, client);
+        if (status.equals(p.getString("routeStatus", null)) && java.util.Objects.equals(next, p.getString("routeStatusNext", null))) return;
+        p.edit().putString("routeStatus", status).putString("routeStatusNext", next).apply();
     }
 
     /** Partial prefs (an older build's) never arm a rejoin. */
@@ -961,6 +1039,7 @@ public class CastPlugin extends Plugin {
                         MediaInfo info = client.getMediaInfo();
                         notifyJSTime(time, duration, paused, buffering, volume, muted, ended, interrupted,
                             info != null ? receiverMediaJson(info) : null);
+                        refreshSavedStatus(client);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

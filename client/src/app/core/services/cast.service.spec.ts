@@ -235,6 +235,41 @@ describe('CastService LOAD failure', () => {
   });
 });
 
+describe('CastService up next', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('sends the track to queue with the customData of a LOAD, and null to drop it', () => {
+    const svc = make(null);
+    const sent = vi.spyOn(svc, 'sendFliks').mockImplementation(() => {});
+    svc.queueNext({ ...load(), itemId: 4, sid: 's4' });
+    expect(sent).toHaveBeenCalledWith({
+      kind: 'queue_next',
+      media: expect.objectContaining({ url: load().url, customData: expect.objectContaining({ itemId: 4, sid: 's4', title: 't' }) }),
+    });
+    svc.queueNext(null);
+    expect(sent).toHaveBeenLastCalledWith({ kind: 'queue_next', media: null });
+  });
+});
+
+describe('CastService receiver mix', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('declares a mix on the Fliks namespace, settled once the bridge has sent it', async () => {
+    const svc = make(null);
+    const sendMessage = vi.fn(async () => {});
+    (svc as unknown as { hasCastBridge: boolean; bridge: unknown }).hasCastBridge = true;
+    (svc as unknown as { bridge: unknown }).bridge = { sendMessage };
+    await svc.setMix('m1', [{ url: 'u', gain: 0.5 }]);
+    expect(sendMessage).toHaveBeenCalledWith({ namespace: 'urn:x-cast:media.fliks.app', message: JSON.stringify({ kind: 'mix', id: 'm1', sources: [{ url: 'u', gain: 0.5 }] }) });
+  });
+});
+
 describe('CastService receiver messages', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -359,5 +394,35 @@ describe('CastService web sender script', () => {
     localStorage.setItem('fliks.deviceOverride', 'tv');
     make(null);
     expect(sender().length).toBe(0);
+  });
+});
+
+describe('CastService resume state', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const withBridge = () => {
+    const svc = make(null);
+    const setResumeState = vi.fn(async (_o: { state: unknown }) => {});
+    Object.assign(svc, { hasCastBridge: true, bridge: { setResumeState } });
+    return { svc, setResumeState };
+  };
+
+  it('tags a saved state with its kind and reads an untagged one as video', () => {
+    const { svc, setResumeState } = withBridge();
+    (svc as unknown as { resumed(r: object): void }).resumed({ mediaFileId: 4 });
+    expect(svc.resumedState()).toEqual({ mediaFileId: 4, kind: 'video' });
+    svc.saveResumeState('music', { itemId: 2 });
+    expect(setResumeState).toHaveBeenCalledWith({ state: { itemId: 2, kind: 'music' } });
+  });
+
+  it('clears the slot only for the kind that saved it last', () => {
+    const { svc, setResumeState } = withBridge();
+    svc.saveResumeState('video', { a: 1 });
+    svc.saveResumeState('music', { b: 1 });
+    setResumeState.mockClear();
+    svc.clearResumeState('video');
+    expect(setResumeState).not.toHaveBeenCalled();
+    svc.clearResumeState('music');
+    expect(setResumeState).toHaveBeenCalledWith({ state: null });
   });
 });

@@ -8,6 +8,14 @@ export interface LyricsRow {
   cues?: LyricsCue[];
 }
 
+/** Karaoke shows the word-synced text (the only kind with a fill), the plain view the other; either falls back to what exists. */
+export function mainLyrics(docs: readonly StructuredLyrics[], karaoke: boolean): StructuredLyrics | null {
+  const mains = docs.filter((d) => d.kind === 'main');
+  const wordSynced = mains.find((d) => d.cueLine?.length);
+  const plain = mains.find((d) => !d.cueLine?.length);
+  return (karaoke ? (wordSynced ?? plain) : (plain ?? wordSynced)) ?? null;
+}
+
 /** One row per line; the enhanced cue lines replace the plain ones when present. */
 export function toRows(doc: StructuredLyrics): LyricsRow[] {
   const byIndex = new Map((doc.cueLine ?? []).map((c) => [c.index, c]));

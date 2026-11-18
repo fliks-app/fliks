@@ -10,7 +10,7 @@ describe('LyricsViewComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('marks the active line and seeks on click', () => {
-    const player = { position: signal(3.2), playing: signal(false), rate: signal(1), seek: vi.fn(async () => {}) };
+    const player = { position: signal(3.2), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn(async () => {}) };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const doc = { id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 1000, value: 'a' }, { start: 3000, value: 'b' }] } as StructuredLyrics;
@@ -23,7 +23,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('lights overlapping lines, marks the singers and fills each line on its own cues', () => {
-    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(2), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const cl = (index: number, start: number, end: number, agentId: string) => ({ index, start, end, value: 'x', agentId, cue: [{ start, end, value: 'x', byteStart: 0, byteEnd: 1 }] });
@@ -41,7 +41,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('paints the words being sung without touching the template until a word ends', () => {
-    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(2), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const cl = (index: number, start: number, end: number) => ({ index, start, end, value: 'x', cue: [{ start, end, value: 'x', byteStart: 0, byteEnd: 1 }] });
@@ -62,7 +62,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('shows no mark on a duet line nobody tagged, and keeps the text column', () => {
-    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const cl = (index: number, agentId?: string) => ({ index, start: index * 1000, end: index * 1000 + 900, value: 'x', ...(agentId ? { agentId } : {}), cue: [] });
@@ -78,7 +78,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('shows untimed lines as static text', () => {
-    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     f.componentRef.setInput('doc', { id: 1, kind: 'main', lang: 'und', synced: false, offset: 0, line: [{ value: 'x' }] });
@@ -87,7 +87,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('keeps the text between words', () => {
-    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const cue = (start: number, end: number, byteStart: number, byteEnd: number, value: string) => ({ start, end, value, byteStart, byteEnd });
@@ -100,7 +100,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('scrolls back to the top when the document changes', () => {
-    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const mk = (id: number) => ({ id, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 5000, value: 'a' }, { start: 6000, value: 'b' }] }) as StructuredLyrics;
@@ -115,7 +115,7 @@ describe('LyricsViewComponent', () => {
   });
 
   it('dims a guessed word in parentheses and sweeps the others', () => {
-    const player = { position: signal(2), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(2), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }] });
     const f = TestBed.createComponent(LyricsViewComponent);
     const cue = (value: string, byteStart: number, guessed?: boolean) => ({ start: 0, end: 4000, value, byteStart, byteEnd: byteStart + value.length, ...(guessed ? { guessed } : {}) });
@@ -129,7 +129,7 @@ describe('LyricsViewComponent', () => {
     expect(el.querySelector('[data-testid="lyrics-guessed"]')?.textContent).toBe('(so)');
   });
   it('locks manual scrolling in the large (karaoke) view and keeps room to centre the first and last line', () => {
-    const player = { position: signal(0), playing: signal(false), rate: signal(1), seek: vi.fn() };
+    const player = { position: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), seek: vi.fn() };
     TestBed.configureTestingModule({ providers: [{ provide: AudioPlayerService, useValue: player }, provideTranslateService()] });
     const f = TestBed.createComponent(LyricsViewComponent);
     f.componentRef.setInput('doc', { id: 1, kind: 'main', lang: 'en', synced: true, offset: 0, line: [{ start: 0, value: 'a' }] } as StructuredLyrics);

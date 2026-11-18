@@ -12,7 +12,7 @@ import { PartyService } from '../../../core/services/party/party.service';
 import { KaraokeStageComponent } from './karaoke-stage';
 
 function remoteOutput(mode: string, level: number) {
-  return { stemMode: signal(mode), vocalLevel: signal(level), stemsAvailable: signal(true), pitch: signal(0), position: signal(0), duration: signal(0), playing: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
+  return { stemMode: signal(mode), vocalLevel: signal(level), stemsAvailable: signal(true), pitch: signal(0), position: signal(0), duration: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
 }
 
 function create(output?: ReturnType<typeof remoteOutput>) {
@@ -24,6 +24,7 @@ function create(output?: ReturnType<typeof remoteOutput>) {
     position: signal(0),
     duration: signal(0),
     playing: signal(false),
+    buffering: signal(false),
     rate: signal(1),
     setStemMode: vi.fn(),
     setVocalLevel: vi.fn(),
@@ -104,7 +105,7 @@ describe('KaraokeStageComponent mix bar', () => {
 
   it('reads and drives the displayed output in remote view', () => {
     const { f, el, audio } = create();
-    const out = { stemMode: signal('guide'), vocalLevel: signal(0.3), stemsAvailable: signal(true), pitch: signal(2), position: signal(0), duration: signal(0), playing: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
+    const out = { stemMode: signal('guide'), vocalLevel: signal(0.3), stemsAvailable: signal(true), pitch: signal(2), position: signal(0), duration: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
     f.componentRef.setInput('output', out);
     f.detectChanges();
     el.querySelector<HTMLButtonElement>('[data-testid="karaoke-mode-instrumental"]')!.click();

@@ -20,7 +20,7 @@ const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 const { activeCue, cueText, bandGeometry } = self.FliksCues;
-const { createAssembler, activeIndex, segments, fills, claim, owns } = self.FliksLyrics;
+const { createAssembler, activeIndex, segments, createClock, claim, owns } = self.FliksLyrics;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -32,22 +32,24 @@ const FLIKS_NAMESPACE = 'urn:x-cast:media.fliks.app';
 const CAST_CMCD = true;
 const QOE_INTERVAL_MS = 5000;
 
-// Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
-// receiver, the only practical way to diagnose a Cast freeze or load
-// failure on a real device.
-context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG);
+// DEBUG keeps every message payload in the console, tens of MB on a Cast device: diagnose by running
+// context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG) from chrome://inspect instead.
+context.setLoggerLevel(cast.framework.LoggerLevel.WARNING);
 console.log('[fliks-cast] receiver boot start');
 
 // --- Idle splash visibility ---------------------------------------------
 //
-// CAF doesn't expose a "media is showing" flag directly — we infer it from
-// LOAD_START → ENDED transitions. body.playing toggles the splash via CSS.
+// body.playing hides the splash from the first loaded media until the player stays idle (renderBar): a LOAD
+// replacing the media or the queue moving on passes through IDLE for a moment and keeps it hidden.
 
 playerManager.addEventListener(
   cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
   () => {
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
+    const current = playerManager.getQueueManager().getCurrentItem();
+    if (current && current.itemId === upNext) upNext = null;
+    renderMusic(playerManager.getMediaInformation());
     qoeLoaded();
     publishAudioTracks();
     startEdl();
@@ -55,16 +57,14 @@ playerManager.addEventListener(
   },
 );
 
+// The queue moving on switches the media before the next track has loaded.
+playerManager.addEventListener(cast.framework.events.EventType.MEDIA_STATUS, () => renderMusic(playerManager.getMediaInformation()));
+
 [
   cast.framework.events.EventType.MEDIA_FINISHED,
   cast.framework.events.EventType.ABORT,
   cast.framework.events.EventType.ENDED,
-].forEach((evt) => {
-  playerManager.addEventListener(evt, () => {
-    document.body.classList.remove('playing');
-    stopEdl();
-  });
-});
+].forEach((evt) => playerManager.addEventListener(evt, stopEdl));
 
 // Surface any player error on the device's DevTools console with the full
 // CAF event payload (detailedErrorCode, reason, shaka-side error data).
@@ -72,7 +72,6 @@ playerManager.addEventListener(
   cast.framework.events.EventType.ERROR,
   (event) => {
     console.error('[fliks-cast] ERROR', JSON.stringify(event));
-    document.body.classList.remove('playing');
     stopEdl();
     // Forward to web senders so they can refresh the sid and resume; the
     // sender classifies recoverable (network / 410) vs dead-end errors.
@@ -493,6 +492,9 @@ const playerBinder = new cast.framework.ui.PlayerDataBinder(playerData);
 const BarState = cast.framework.ui.State;
 let barBandsKey = '';
 
+const SPLASH_IDLE_MS = 1500;
+let splashTimer = 0;
+
 const spinnerEl = document.getElementById('spinner');
 const stateIconEl = document.getElementById('state-icon');
 let iconState = null;
@@ -515,14 +517,22 @@ function renderBar() {
   renderStateIcon(st, spinning);
   spinnerEl.classList.toggle('show', spinning);
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
-  const show = !idle && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
+  clearTimeout(splashTimer);
+  if (idle) splashTimer = setTimeout(() => document.body.classList.remove('playing'), SPLASH_IDLE_MS);
+  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
+  const time = playerData.currentTime || 0;
+  const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
+  const music = document.body.classList.contains('music-on');
+  if (music) {
+    renderMusicState(st);
+    renderMusicProgress(formatClock(time), duration ? formatClock(duration) : '', duration ? Math.min(1, time / duration) : 0);
+  }
+  // The music view shows its own progress.
+  const show = !idle && !music && (playerData.displayStatus || playerData.isSeeking || st === BarState.PAUSED);
   barEl.classList.toggle('show', show);
   document.body.classList.toggle('bar-on', show);
   if (barPlayer) barPlayer.classList.toggle('bar-on', show);
   if (!show) return;
-  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
-  const time = playerData.currentTime || 0;
-  const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
   // An episode leads with its own label (`subtitle`), the series name under it; any other subtitle (artists) stays below.
   const info = playerManager.getMediaInformation();
   const episode = !!(playerData.subtitle && info && info.customData && info.customData.episodeId);
@@ -567,6 +577,21 @@ playerManager.setMessageInterceptor(
       loadRequest.media?.contentType,
     );
     const media = loadRequest.media;
+    // CAF runs this for the queued track it preloads too: the playing track and its mix stay as they are.
+    if (media && upNextUrl && media.contentId === upNextUrl && playerManager.getPlayerState() !== cast.framework.messages.PlayerState.IDLE) return loadRequest;
+    // A LOAD starts a new queue: the up-next item went with the old one.
+    upNext = null;
+    upNextUrl = null;
+    if (activeMix) closeMix(activeMix);
+    const mixId = media && typeof media.contentId === 'string' && media.contentId.startsWith(MIX_SCHEME) ? media.contentId.slice(MIX_SCHEME.length) : null;
+    if (mixId && mixSpecs.has(mixId)) {
+      activeMix = startMix(mixId, mixSpecs.get(mixId), loadRequest.currentTime || 0);
+      media.contentUrl = activeMix.url;
+      media.contentType = 'audio/mp4';
+    }
+    renderMusic(media);
+    // A track's view needs nothing loaded: it replaces the splash while the audio buffers.
+    if (document.body.classList.contains('music-on')) document.body.classList.add('playing');
     if (media) {
       prepareEdl(media, loadRequest);
       cueState.fileId = media.customData ? media.customData.mediaFileId ?? null : null;
@@ -690,7 +715,9 @@ const partyLayer = document.getElementById('party-layer');
 const reactionBox = partyLayer.querySelector('.party-reactions');
 const bubbleBox = partyLayer.querySelector('.party-bubbles');
 
-const dropOnEnd = (el) => el.addEventListener('animationend', () => el.remove());
+// Shown only while it holds something: even empty, a full-screen layer costs the Cast compositor its memory.
+const syncPartyLayer = () => partyLayer.classList.toggle('busy', reactionBox.childElementCount + bubbleBox.childElementCount > 0);
+const dropOnEnd = (el) => el.addEventListener('animationend', () => { el.remove(); syncPartyLayer(); });
 const trim = (box, max) => { while (box.children.length > max) box.firstChild.remove(); };
 
 // The bundled copy works over HTTPS; the sender's URL covers anything not bundled.
@@ -710,12 +737,14 @@ function emojiNode(emoji, img) {
   return node;
 }
 
-const emojiFont = document.fonts.load('1em "Fliks Emoji"', '\u{1F600}').catch(() => {});
+// A 10 MB font, so not loaded at boot: memory is what a Cast device lacks. The sender's `party_on` loads it ahead.
+let emojiFont = null;
+const loadEmojiFont = () => (emojiFont ??= document.fonts.load('1em "Fliks Emoji"', '\u{1F600}').catch(() => {}));
 
 function partyFloat(msg) {
   if (!msg || typeof msg !== 'object') return;
-  // Waits for the emoji font (preloaded at boot) so the first emoji is not drawn as tofu.
-  emojiFont.then(() => showParty(msg));
+  // Waits for the emoji font so the first emoji is not drawn as tofu.
+  loadEmojiFont().then(() => showParty(msg));
 }
 self.partyFloat = partyFloat;
 
@@ -728,6 +757,7 @@ function showParty(msg) {
     dropOnEnd(el);
     reactionBox.appendChild(el);
     trim(reactionBox, MAX_REACTIONS);
+    syncPartyLayer();
   } else if (msg.kind === 'party_chat' && typeof msg.text === 'string') {
     const el = document.createElement('div');
     el.className = 'party-bubble';
@@ -739,6 +769,7 @@ function showParty(msg) {
     dropOnEnd(el);
     bubbleBox.appendChild(el);
     trim(bubbleBox, MAX_BUBBLES);
+    syncPartyLayer();
   }
 }
 
@@ -757,57 +788,147 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 // The sender pushes the document in chunks (`lyrics`) and drops it with `lyrics_clear`; the receiver follows its own clock.
 
 const lyricsEl = document.getElementById('lyrics');
-const lyricsState = { doc: null, sender: null, shown: -2, words: [], add: createAssembler() };
+const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], wipes: [], add: createAssembler() };
+// A word is drawn twice, its sung copy clipped from the left and its coming copy from the right, each clip and its text
+// moving against each other: transforms only, so the compositor runs the wipe, and the copies never overlap.
+const LEFT = 'translateX(-100%)';
+const RIGHT = 'translateX(100%)';
+const WIPES = [[LEFT, 'none'], [RIGHT, 'none'], ['none', RIGHT], ['none', LEFT]].map(([a, b]) => [{ transform: a }, { transform: b }]);
+const WIPE_SLACK_MS = 80;
+const lyricsClock = createClock(400);
 
-function lyricLine(row, cls) {
-  const el = document.createElement('div');
-  el.className = 'lyric ' + cls;
-  if (row) el.textContent = row.text;
-  return el;
+/** A timed word, or the text between two, its spaces left outside so the line still wraps between words. */
+function wordEl(line, text, className) {
+  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  if (!core) return void line.append(text);
+  const el = document.createElement('span');
+  el.className = className;
+  el.textContent = core;
+  line.append(lead, el, trail);
+  return { el, text: core, gap: className !== 'word' };
 }
 
-function renderLyrics(i) {
-  const rows = lyricsState.doc.rows;
-  lyricsEl.replaceChildren();
+/** Every line of the document in one column, words wrapped where a line has cues. */
+function buildLyrics(doc, timed) {
+  stopWipes();
+  const list = document.createElement('div');
+  list.className = 'lyrics-list' + (timed ? '' : ' static') + (doc.stage ? ' stage' : '');
+  lyricsState.rows = [];
   lyricsState.words = [];
-  const cur = i >= 0 ? lyricLine(null, 'cur') : null;
-  if (cur) {
-    const row = rows[i];
-    for (const seg of row.cues && row.cues.length ? segments(row.text, row.cues) : [{ text: row.text, cue: null }]) {
-      const span = document.createElement('span');
-      span.textContent = seg.text;
-      if (seg.cue !== null) {
-        span.className = 'word';
-        lyricsState.words[seg.cue] = span;
-      }
-      cur.appendChild(span);
+  doc.rows.forEach((row) => {
+    const line = document.createElement('div');
+    const cues = row.cues && row.cues.length ? row.cues : null;
+    line.className = cues ? 'lyric cued' : 'lyric';
+    const words = [];
+    let prev = null;
+    if (!cues) line.append(row.text);
+    for (const seg of cues ? segments(row.text, cues) : []) {
+      const cue = seg.cue === null ? null : cues[seg.cue];
+      // As on the phone, the text between words lights once the word before it is sung, a leading one with the first.
+      const start = cue ? cue.start : prev ? prev.end : cues[0].start;
+      const el = wordEl(line, seg.text, cue ? 'word' : 'word gap');
+      if (el) words.push({ start, end: cue ? cue.end : start, ...el });
+      if (cue) prev = cue;
+    }
+    list.appendChild(line);
+    lyricsState.rows.push(line);
+    lyricsState.words.push(words);
+  });
+  lyricsEl.replaceChildren(list);
+  lyricsState.list = list;
+  lyricsState.built = doc;
+  lyricsState.shown = -2;
+}
+
+/** Scrolls the column so line `i` sits at the middle, at once on a new document; before the first line, the first one waits there. */
+function showLine(i, instant) {
+  lyricsState.rows.forEach((line, k) => {
+    line.classList.toggle('cur', k === i);
+    line.classList.toggle('past', k < i);
+  });
+  const line = lyricsState.rows[Math.max(i, 0)];
+  const { list } = lyricsState;
+  if (!line) return;
+  if (instant) list.style.transition = 'none';
+  list.style.transform = `translateY(${-(line.offsetTop + line.offsetHeight / 2)}px)`;
+  if (!instant) return;
+  void list.offsetHeight;
+  list.style.transition = '';
+}
+
+function stopWipes() {
+  for (const w of lyricsState.wipes) {
+    w.anims.forEach((a) => a.cancel());
+    w.el.classList.remove('wiping');
+    w.el.textContent = w.text;
+  }
+  lyricsState.wipes = [];
+}
+
+/** Gives the words of line `i` their two copies, only there since each is a layer, and arms their wipes on the
+    media clock (syncWipes). The karaoke stage never lights the text between words. */
+function wipeLine(i) {
+  stopWipes();
+  for (const w of lyricsState.words[i] || []) {
+    if (w.gap && lyricsState.doc.stage) continue;
+    const layers = [];
+    for (const side of ['sung', 'coming']) {
+      const clip = document.createElement('span');
+      clip.className = 'clip ' + side;
+      const copy = document.createElement('span');
+      copy.textContent = w.text;
+      clip.appendChild(copy);
+      w.el.appendChild(clip);
+      layers.push(clip, copy);
+    }
+    w.el.classList.add('wiping');
+    const timing = { duration: Math.max(1, w.end - w.start), fill: 'both', easing: 'linear' };
+    lyricsState.wipes.push({ el: w.el, text: w.text, start: w.start, duration: timing.duration, anims: layers.map((el, k) => el.animate(WIPES[k], timing)) });
+  }
+}
+
+/** The wipes follow the playback state, and are moved only when they drift from the media clock `t`. */
+function syncWipes(t, playing) {
+  for (const w of lyricsState.wipes) {
+    const at = Math.min(t - w.start, w.duration);
+    for (const a of w.anims) {
+      if (playing && a.playState === 'paused') a.play();
+      else if (!playing && a.playState !== 'paused') a.pause();
+      if (Math.abs(a.currentTime - at) > WIPE_SLACK_MS) a.currentTime = at;
     }
   }
-  lyricsEl.append(lyricLine(rows[i - 1], 'prev'), cur || lyricLine(null, 'cur'), lyricLine(rows[i + 1], 'next'));
 }
 
 function refreshLyrics() {
   const { doc } = lyricsState;
-  if (!doc || !document.body.classList.contains('playing')) return lyricsEl.classList.remove('show');
-  const pos = playerManager.getCurrentTimeSec() * 1000;
+  // A document belongs to its track: the next one's arrives just after the queue moves on.
+  const visible = !!doc && doc.itemId === playingItemId() && document.body.classList.contains('playing');
+  document.body.classList.toggle('lyrics-on', visible);
+  if (!visible) return lyricsEl.classList.remove('show');
   const timed = doc.synced && doc.rows.every((r) => r.start !== undefined && r.start !== null);
-  const i = timed ? activeIndex(doc.rows, pos, doc.offset) : -1;
-  const shown = timed ? i : -1;
-  if (shown !== lyricsState.shown) {
-    lyricsState.shown = shown;
-    if (timed) renderLyrics(i);
-    else {
-      lyricsEl.replaceChildren(...doc.rows.slice(0, 12).map((r) => lyricLine(r, 'next')));
-    }
-  }
-  const cues = timed && i >= 0 ? doc.rows[i].cues : null;
-  if (cues) fills(cues, pos, doc.offset).forEach((f, k) => lyricsState.words[k] && lyricsState.words[k].style.setProperty('--fill', f + '%'));
+  if (lyricsState.built !== doc) buildLyrics(doc, timed);
   lyricsEl.classList.add('show');
+  if (!timed) return;
+  const playing = playerManager.getPlayerState() === cast.framework.messages.PlayerState.PLAYING;
+  const pos = lyricsClock(playerManager.getCurrentTimeSec() * 1000, performance.now(), playing);
+  const i = activeIndex(doc.rows, pos, doc.offset);
+  if (i !== lyricsState.shown) {
+    const fresh = lyricsState.shown === -2;
+    lyricsState.shown = i;
+    showLine(i, fresh);
+    wipeLine(i);
+  }
+  syncWipes(pos + (doc.offset || 0), playing);
 }
 setInterval(refreshLyrics, 100);
 
 function dropLyrics() {
+  stopWipes();
   lyricsState.doc = null;
+  lyricsState.built = null;
+  lyricsState.list = null;
+  lyricsState.rows = [];
+  lyricsState.words = [];
   lyricsState.shown = -2;
   lyricsState.add = createAssembler();
   lyricsEl.classList.remove('show');
@@ -821,16 +942,303 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   lyricsState.sender = event.senderId;
   if (msg.kind === 'lyrics_clear') return dropLyrics();
   const doc = lyricsState.add(msg);
-  if (doc) {
-    lyricsState.doc = doc;
-    lyricsState.shown = -2;
-  }
+  if (doc) lyricsState.doc = doc;
 });
 context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
   if (event.senderId === lyricsState.sender) {
     lyricsState.sender = null;
     dropLyrics();
   }
+});
+
+// --- Up next ----------------------------------------------------------------
+// The sender queues the next music track ahead of the end of the current one; CAF moves on to it by itself,
+// with no IDLE in between. One item at most: a new one replaces it, `media: null` drops it.
+
+const UP_NEXT_PRELOAD_S = 15;
+let upNext = null;
+let upNextUrl = null;
+
+function queuedMedia(m) {
+  const media = new cast.framework.messages.MediaInformation();
+  media.contentId = m.url;
+  media.contentUrl = m.url;
+  media.contentType = m.contentType;
+  media.streamType = cast.framework.messages.StreamType.BUFFERED;
+  media.hlsSegmentFormat = cast.framework.messages.HlsSegmentFormat.FMP4;
+  const meta = new cast.framework.messages.GenericMediaMetadata();
+  meta.title = m.title || '';
+  meta.subtitle = m.subtitle || '';
+  if (m.posterUrl) meta.images = [new cast.framework.messages.Image(m.posterUrl)];
+  media.metadata = meta;
+  media.customData = m.customData || {};
+  return media;
+}
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || msg.kind !== 'queue_next') return;
+  const queue = playerManager.getQueueManager();
+  const current = queue.getCurrentItem();
+  // The queue may already have moved on to it: never drop the playing item.
+  if (upNext !== null && (!current || current.itemId !== upNext)) queue.removeItems([upNext]);
+  upNext = null;
+  upNextUrl = msg.media ? msg.media.url : null;
+  if (!msg.media) return;
+  const item = new cast.framework.messages.QueueItem();
+  item.media = queuedMedia(msg.media);
+  item.autoplay = true;
+  item.preloadTime = UP_NEXT_PRELOAD_S;
+  queue.insertItems([item]);
+  const items = queue.getItems() || [];
+  upNext = items.length ? items[items.length - 1].itemId : null;
+  console.log('[fliks-cast] up next', upNext, msg.media.title);
+});
+
+// --- Music view -------------------------------------------------------------
+// A music track (its LOAD carries an `itemId`) shows its cover over its own artwork blurred, the lyrics beside it.
+
+const musicEl = document.getElementById('music');
+const musicBackdrop = musicEl.querySelector('.music-backdrop');
+const musicCover = musicEl.querySelector('.music-cover');
+const musicTitle = musicEl.querySelector('.music-title-text');
+const musicState = musicEl.querySelector('.music-state');
+const musicArtist = musicEl.querySelector('.music-artist');
+const musicElapsed = musicEl.querySelector('.music-elapsed');
+const musicTotal = musicEl.querySelector('.music-total');
+const musicPlayed = musicEl.querySelector('.music-played');
+
+function musicItemId(info) {
+  const id = info && info.customData ? info.customData.itemId : undefined;
+  return typeof id === 'number' ? id : null;
+}
+
+function playingItemId() {
+  return musicItemId(playerManager.getMediaInformation());
+}
+
+/** Shows the view of `info` from its LOAD on, so the video bar never shows first; a status without media keeps it. */
+function renderMusic(info) {
+  if (!info) return;
+  const music = musicItemId(info) !== null;
+  document.body.classList.toggle('music-on', music);
+  if (!music) return;
+  const meta = info.metadata || {};
+  const cover = meta.images && meta.images.length ? meta.images[0].url : '';
+  if ((musicCover.getAttribute('src') || '') !== cover) {
+    if (cover) musicCover.setAttribute('src', cover);
+    else musicCover.removeAttribute('src');
+    paintBackdrop(cover);
+  }
+  musicTitle.textContent = meta.title || '';
+  musicArtist.textContent = meta.subtitle || meta.artist || '';
+}
+
+/** The cover blurred once into a small canvas the page scales up: a CSS blur over the whole screen renders coarse on Cast. */
+function paintBackdrop(cover) {
+  musicBackdrop.classList.remove('shown');
+  if (!cover) return;
+  const img = new Image();
+  img.onload = () => {
+    if (musicCover.getAttribute('src') !== cover) return;
+    const ctx = musicBackdrop.getContext('2d');
+    const { width, height } = musicBackdrop;
+    const side = Math.max(width, height) * 1.4;
+    ctx.filter = 'blur(9px) saturate(1.5) brightness(0.62)';
+    ctx.drawImage(img, (width - side) / 2, (height - side) / 2, side, side);
+    musicBackdrop.classList.add('shown');
+  };
+  img.src = cover;
+}
+
+function renderMusicState(st) {
+  musicState.className = 'music-state ' + (st === BarState.PLAYING ? 'playing' : st === BarState.PAUSED ? 'paused' : 'waiting');
+}
+
+/** Text only when it changes and the bar by transform: the player data changes many times a second. */
+function renderMusicProgress(elapsed, total, fraction) {
+  if (musicElapsed.textContent !== elapsed) musicElapsed.textContent = elapsed;
+  if (musicTotal.textContent !== total) musicTotal.textContent = total;
+  musicPlayed.style.transform = `scaleX(${fraction})`;
+}
+
+// --- Mixes ------------------------------------------------------------------
+// A sender declares a mix (`mix`: 16-bit PCM sources, each with its gain) and LOADs `fliks-mix:<id>`. The receiver
+// streams the sources, sums them and feeds the media element through MSE (mixer.js): a gain change remixes what is
+// buffered ahead, with no reload.
+
+const { BLOCK, mix, flacFrame, initSegment, mediaSegment } = self.FliksMixer;
+const MIX_SCHEME = 'fliks-mix:';
+const MIX_AHEAD_S = 3;
+const MIX_REMIX_LEAD_S = 0.3;
+const MIX_KEEP_S = 10;
+const MIX_SEGMENT_BLOCKS = 6;
+// Four segments per request: a window of each source stays a few hundred KB in the page.
+const MIX_WINDOW_S = (BLOCK * MIX_SEGMENT_BLOCKS * 4) / 48000;
+const mixSpecs = new Map();
+let activeMix = null;
+
+/** One SourceBuffer operation at a time, in order. */
+function mixOp(m, fn) {
+  m.ops = m.ops.then(() => {
+    if (m.closed) return;
+    fn();
+    return m.sb.updating ? new Promise((r) => m.sb.addEventListener('updateend', r, { once: true })) : undefined;
+  }).catch((e) => console.warn('[fliks-cast] mix op', e));
+  return m.ops;
+}
+
+/** Appends the mix of `raw` (per-source samples from frame `start`) as segments of whole blocks. */
+function appendMix(m, start, raw) {
+  const frames = raw[0].length / m.channels;
+  const mixed = mix(raw, m.gains);
+  for (let at = 0; at < frames; at += BLOCK * MIX_SEGMENT_BLOCKS) {
+    const list = [];
+    const durations = [];
+    for (let f = at; f < Math.min(frames, at + BLOCK * MIX_SEGMENT_BLOCKS); f += BLOCK) {
+      const chunk = mixed.subarray(f * m.channels, Math.min(frames, f + BLOCK) * m.channels);
+      list.push(flacFrame(chunk, m.channels, m.rate, start + f));
+      durations.push(chunk.length / m.channels);
+    }
+    const segment = mediaSegment(++m.seq, start + at, list, durations);
+    mixOp(m, () => m.sb.appendBuffer(segment));
+  }
+}
+
+/** Every source's PCM from `fromS` to `toS` seconds, in parallel; one window at a time, since the browser buffers a whole
+    response however slowly the page reads it. */
+async function fetchWindow(m, fromS, toS, signal) {
+  const rs = await Promise.all(m.sources.map((src) =>
+    fetch(src.url + (src.url.includes('?') ? '&' : '?') + 'from=' + fromS.toFixed(6) + '&to=' + toS.toFixed(6), { signal })));
+  const range = /bytes (\d+)-\d+\/(\d+)/.exec(rs[0].headers.get('content-range') || '');
+  return { type: rs[0].headers.get('content-type') || '', range, data: await Promise.all(rs.map((r) => r.arrayBuffer())) };
+}
+
+/** Streams the sources in from `fromS`, a window ahead of the playhead, until they end or a newer run starts. */
+async function runMix(m, fromS) {
+  const run = ++m.run;
+  m.abort.abort();
+  m.abort = new AbortController();
+  const { signal } = m.abort;
+  let w = await fetchWindow(m, fromS, fromS + MIX_WINDOW_S, signal);
+  if (run !== m.run) return;
+  const format = /rate=(\d+);\s*channels=(\d+)/.exec(w.type);
+  if (!format || !w.range) throw new Error('not a ranged PCM source');
+  const frameBytes = 2 * +format[2];
+  const total = +w.range[2] / frameBytes;
+  if (!m.sb) {
+    m.rate = +format[1];
+    m.channels = +format[2];
+    m.sb = m.ms.addSourceBuffer('audio/mp4; codecs="flac"');
+    // The length before the init segment: CAF seeks to the LOAD's position once the metadata is in.
+    m.ms.duration = total / m.rate;
+    mixOp(m, () => m.sb.appendBuffer(initSegment(m.rate, m.channels)));
+  }
+  m.base = +w.range[1] / frameBytes;
+  m.end = m.base;
+  m.raw = [];
+  const media = findMediaElement();
+  // Ahead of the playhead, or of the run's start while the element has not seeked there yet.
+  const ahead = () => m.end / m.rate - Math.max(media ? media.currentTime : 0, m.base / m.rate);
+  // Mid-frame seconds, so the server's floor lands on the frame.
+  const at = (frame) => (frame + 0.5) / m.rate;
+  for (;;) {
+    const frames = Math.floor(Math.min(...w.data.map((d) => d.byteLength)) / frameBytes);
+    if (frames <= 0) break;
+    const raw = w.data.map((d) => new Int16Array(d, 0, frames * m.channels));
+    appendMix(m, m.end, raw);
+    // The element waits where nothing was appended: it starts with the run.
+    if (m.end === m.base && media) mixOp(m, () => { if (media.currentTime < m.base / m.rate) media.currentTime = m.base / m.rate; });
+    m.raw.push({ start: m.end, raw });
+    m.end += frames;
+    const played = media ? Math.floor(media.currentTime * m.rate) : 0;
+    while (m.raw.length && m.raw[0].start + m.raw[0].raw[0].length / m.channels <= played) m.raw.shift();
+    if (media && media.currentTime > MIX_KEEP_S) mixOp(m, () => m.sb.remove(0, media.currentTime - MIX_KEEP_S));
+    if (m.end >= total) break;
+    while (ahead() > MIX_AHEAD_S && run === m.run) await new Promise((r) => setTimeout(r, 200));
+    if (run !== m.run) return;
+    w = await fetchWindow(m, at(m.end), at(m.end + MIX_WINDOW_S * m.rate), signal);
+    if (run !== m.run) return;
+  }
+  mixOp(m, () => { if (m.ms.readyState === 'open') m.ms.endOfStream(); });
+}
+
+/** Streams the mix from `fromS`; a failure that is not a newer run ends it in a network error, which CAF reports. */
+function streamMix(m, fromS) {
+  runMix(m, fromS).catch((e) => {
+    if (e.name === 'AbortError' || m.closed) return;
+    console.warn('[fliks-cast] mix', e);
+    if (m.ms.readyState === 'open') m.ms.endOfStream('network');
+  });
+}
+
+/** New gains apply from a block boundary just ahead of the playhead: what is buffered past it is remixed. */
+function remix(m) {
+  const media = findMediaElement();
+  if (!media || !m.sb || !m.raw.length) return;
+  const lead = Math.ceil((media.currentTime + MIX_REMIX_LEAD_S) * m.rate);
+  const first = m.raw.findIndex((c) => c.start + c.raw[0].length / m.channels > lead);
+  if (first < 0) return;
+  const chunk = m.raw[first];
+  const from = chunk.start + Math.max(0, Math.ceil((lead - chunk.start) / BLOCK) * BLOCK);
+  mixOp(m, () => m.sb.remove(from / m.rate, Infinity));
+  m.raw.slice(first).forEach((c) => {
+    const skip = Math.max(0, from - c.start) * m.channels;
+    if (skip < c.raw[0].length) appendMix(m, c.start + skip / m.channels, c.raw.map((r) => r.subarray(skip)));
+  });
+}
+
+function closeMix(m) {
+  if (m.closed) return;
+  m.closed = true;
+  m.run++;
+  m.abort.abort();
+  clearTimeout(m.remixTimer);
+  URL.revokeObjectURL(m.url);
+  if (activeMix === m) activeMix = null;
+}
+
+function startMix(id, sources, startS) {
+  const ms = new MediaSource();
+  const m = { id, ms, url: URL.createObjectURL(ms), sources, gains: sources.map((s) => +s.gain || 0), sb: null, ops: Promise.resolve(),
+    abort: new AbortController(), run: 0, seq: 0, rate: 0, channels: 0, base: 0, end: 0, raw: [], closed: false, remixTimer: 0 };
+  ms.addEventListener('sourceopen', () => streamMix(m, startS), { once: true });
+  ms.addEventListener('sourceclose', () => closeMix(m));
+  return m;
+}
+
+// A seek outside what is buffered (the played part is trimmed) or about to be starts the run again from there.
+playerManager.addEventListener(cast.framework.events.EventType.SEEKING, () => {
+  const m = activeMix;
+  const media = findMediaElement();
+  if (!m || !m.sb || !media) return;
+  const t = media.currentTime;
+  const { buffered } = m.sb;
+  for (let i = 0; i < buffered.length; i++) if (t >= buffered.start(i) && t < buffered.end(i)) return;
+  if (t >= m.end / m.rate && t <= m.end / m.rate + MIX_AHEAD_S) return;
+  mixOp(m, () => m.sb.remove(0, Infinity));
+  streamMix(m, t);
+});
+
+context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
+  const msg = event.data;
+  if (!msg || msg.kind !== 'mix' || typeof msg.id !== 'string' || !Array.isArray(msg.sources)) return;
+  mixSpecs.delete(msg.id);
+  mixSpecs.set(msg.id, msg.sources);
+  if (mixSpecs.size > 4) mixSpecs.delete(mixSpecs.keys().next().value);
+  const m = activeMix;
+  if (!m || m.id !== msg.id) return;
+  if (msg.sources.some((s, i) => !m.sources[i] || s.url !== m.sources[i].url)) {
+    m.sources = msg.sources;
+    m.gains = msg.sources.map((s) => +s.gain || 0);
+    const media = findMediaElement();
+    if (m.sb) mixOp(m, () => m.sb.remove(0, Infinity));
+    return streamMix(m, media ? media.currentTime : 0);
+  }
+  m.gains = msg.sources.map((s) => +s.gain || 0);
+  // A slider sends a burst of levels: one remix for it.
+  clearTimeout(m.remixTimer);
+  m.remixTimer = setTimeout(() => remix(m), 120);
 });
 
 // --- Boot ---------------------------------------------------------------

@@ -1,7 +1,10 @@
 import { EffectRef, Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
+import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { StreamingApiService } from '../api/streaming-api.service';
+import { AudioPlayerService } from '../audio-player/audio-player.service';
+import { MusicCastOutput, type MusicCastState } from '../audio-player/music-cast-output';
 import { CastPlaybackTarget } from '../cast-playback-target';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService } from '../cast.service';
@@ -16,7 +19,7 @@ import { parseDeviceLabel } from '../../utils/format-device-label';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
 import { launchTracksToWire, RemoteService, snapshotToWire } from '../remote.service';
 import { ToastService } from '../toast.service';
-import type { LocalOutput, PlaybackOutput, PlaybackSnapshot } from './playback-output';
+import type { LocalOutput, MusicSnapshot, PlaybackOutput, PlaybackSnapshot, VideoHandoff } from './playback-output';
 
 const CONNECT_WAIT_MS = 30_000;
 
@@ -44,6 +47,9 @@ export interface PlayOptions {
   expand?: boolean;
 }
 
+/** What the cast or remote output last held, by the kind of player it came from. */
+type Away = { kind: 'video'; snapshot: PlaybackSnapshot } | { kind: 'music'; snapshot: MusicSnapshot };
+
 export type OutputKind = 'local' | 'cast' | 'remote';
 
 export type PlaybackCommand =
@@ -51,10 +57,16 @@ export type PlaybackCommand =
   | { type: 'seek'; at: number }
   | { type: 'next' }
   | { type: 'prev' }
-  | { type: 'item'; index: number };
+  | { type: 'item'; index: number }
+  | { type: 'enqueue'; tracks: readonly MusicTrackRequest[]; where: 'next' | 'last' }
+  | { type: 'queue'; tracks: readonly MusicTrackRequest[] };
+
+/** `drives`: does a party drive that player; `external`: a start from outside the party, refused (and said) while one does. */
+export type PartyQuery = { type: 'drives' } | { type: 'external' };
+export type PartyPlayer = 'video' | 'audio';
 
 /** Takes a command for the active party; false when it did not. */
-export type PartyRouter = (c: PlaybackCommand) => boolean;
+export type PartyRouter = (c: PlaybackCommand | PartyQuery, player: PartyPlayer) => boolean;
 
 /** Owns where playback is happening: which output is active and where transport commands go. */
 @Injectable({ providedIn: 'root' })
@@ -64,6 +76,8 @@ export class PlaybackSession {
   private readonly party = () => this.injector.get(PartyService);
   private readonly castSvc = () => this.injector.get(CastService);
   private readonly castPlayer = () => this.injector.get(CastPlayerService);
+  private readonly audio = () => this.injector.get(AudioPlayerService);
+  private readonly musicCast = () => this.injector.get(MusicCastOutput);
   private readonly remoteSvc = () => this.injector.get(RemoteService);
   private readonly router = () => this.injector.get(Router);
   private readonly sync = () => this.injector.get(SessionSyncService);
@@ -76,8 +90,8 @@ export class PlaybackSession {
   private releasing = false;
   private watchReturns: EffectRef | null = null;
   /** What the cast or remote output last held: once it is gone, its own position reads nothing. */
-  private awaySnapshot: PlaybackSnapshot | null = null;
-  private partyRouter: PartyRouter | null = null;
+  private away: Away | null = null;
+  private readonly partyRouter = signal<PartyRouter | null>(null);
   /** File the output already holds, set by whoever opens the player route on it. */
   private opened = 0;
 
@@ -146,6 +160,10 @@ export class PlaybackSession {
         if (casting) this.onCastConnected();
       });
     });
+    // A session that outlived the renderer is rejoined as soon as a bridge hands its state back.
+    effect(() => {
+      if (this.castSvc().resumedState()) untracked(() => this.rejoin());
+    });
     // An audio view follows an owner that now plays a video into the video player.
     effect(() => {
       if (this.fullPlayer.open() !== 'audio' || !this.fullPlayer.remote()) return;
@@ -170,15 +188,18 @@ export class PlaybackSession {
 
   /** The party sync registers how it takes commands; the disposer only clears its own registration. */
   setPartyRouter(router: PartyRouter): () => void {
-    this.partyRouter = router;
-    return () => {
-      if (this.partyRouter === router) this.partyRouter = null;
-    };
+    this.partyRouter.set(router);
+    return () => this.partyRouter.update((cur) => (cur === router ? null : cur));
+  }
+
+  /** The party's answer for a player; false when no party router is registered. */
+  toParty(c: PlaybackCommand | PartyQuery, player: PartyPlayer): boolean {
+    return this.partyRouter()?.(c, player) ?? false;
   }
 
   /** True when a party or a non-local output took the command; false leaves the local player to act on it. */
   command(c: PlaybackCommand): boolean {
-    if (this.partyActive() && this.partyRouter?.(c)) return true;
+    if (this.partyActive() && this.toParty(c, 'video')) return true;
     const o = this.output();
     if (!o || o === this.local()) return false;
     switch (c.type) {
@@ -216,8 +237,22 @@ export class PlaybackSession {
   /** Whether the playing item can be loaded on `deviceId`; only a remote target can refuse it. */
   canMoveTo(kind: OutputKind, deviceId?: string): boolean {
     if (kind !== 'remote' || !deviceId) return true;
+    if (this.transfersTo(deviceId)) return true;
+    if (this.isLocal() && !this.local() && this.audio().holds()) return false;
     const fileId = this.output()?.snapshot()?.item.fileId;
     return !fileId || this.remoteSvc().canLoad(deviceId, fileId);
+  }
+
+  /** Whether a move to `deviceId` hands the account session over, which carries the queue: music held here,
+   *  or a session this device follows or controls. Video loads on the device directly. */
+  transfersTo(deviceId: string): boolean {
+    const sync = this.sync();
+    const remote = this.remoteSvc();
+    const s = sync.session();
+    if (!s || !sync.canTransfer() || this.local() || this.viewing() || !remote.canLoad(deviceId, s.item.mediaFileId)) return false;
+    if (!sync.parked() && s.owner.targetId === deviceId) return false;
+    if (this.audio().holds()) return !this.toParty({ type: 'drives' }, 'audio');
+    return sync.role() === 'observer' && (this.isLocal() || (s.state !== 'parked' && s.owner.targetId === remote.selectedTargetId()));
   }
 
   /** The only handoff between outputs. False when refused (TV, nothing to hand over, a target that takes no load) or failed. */
@@ -231,7 +266,9 @@ export class PlaybackSession {
     const run =
       kind === 'local'
         ? this.toLocal()
-        : switching
+        : kind === 'remote' && deviceId && this.transfersTo(deviceId)
+          ? this.transfer(deviceId)
+          : switching
           ? this.switchAway(kind, deviceId)
           : kind === 'cast'
             ? this.toCast(deviceId)
@@ -347,12 +384,21 @@ export class PlaybackSession {
     return fileId && mediaId ? { fileId, mediaId, episodeId } : null;
   });
 
+  private activeLocal(): LocalOutput | AudioPlayerService {
+    return this.local() ?? this.audio();
+  }
+
   private async toCast(deviceId?: string): Promise<boolean> {
     const cast = this.castSvc();
     if (!cast.isConnected() && !(await this.connectCast(deviceId))) return false;
-    const local = this.local();
-    const handoff = await local?.release();
-    if (!local || !handoff) return true;
+    // No video player mounted (opening one closes the audio player): the audio player is what plays here.
+    const handoff = await this.activeLocal().release();
+    if (!handoff) return true;
+    await (handoff.kind === 'music' ? this.musicCast().start(handoff) : this.castVideo(handoff));
+    return true;
+  }
+
+  private async castVideo(handoff: VideoHandoff): Promise<void> {
     const cp = this.castPlayer();
     if (handoff.resolveSubtitle) {
       const sub = await cp.resolveStartSubtitle(
@@ -366,6 +412,10 @@ export class PlaybackSession {
     await cp.reloadCastStream(position, !paused, handoff.cast.activeQualityId);
     const sid = handoff.localSessionId;
     if (sid && sid !== cp.liveSessionId()) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
+  }
+
+  private async transfer(deviceId: string): Promise<boolean> {
+    await this.sync().transferTo(deviceId);
     return true;
   }
 
@@ -430,7 +480,7 @@ export class PlaybackSession {
     const local = this.local();
     const from = this.output();
     if (!local || !from || from === local) return false;
-    const snap = from.snapshot() ?? this.awaySnapshot;
+    const snap = from.snapshot() ?? (this.away?.kind === 'video' ? this.away.snapshot : null);
     if (!snap) return false;
     // The account session's owner is superseded instead of stopped: it stays open as the view of this device.
     const sync = this.sync();
@@ -474,25 +524,41 @@ export class PlaybackSession {
     });
   }
 
+  /** Restores the session a native or desktop sender kept alive; the player route awaits this before it launches locally. */
+  async rejoinCast(): Promise<void> {
+    await this.castSvc().settled;
+    this.rejoin();
+  }
+
+  private rejoin(): void {
+    const state = this.castSvc().resumedState();
+    if (!state) return;
+    if (state.kind === 'music') this.musicCast().adopt(state as unknown as MusicCastState);
+    else this.castPlayer().adopt(state);
+  }
+
+  private receiverBusy(): boolean {
+    return this.castPlayer().hasMedia() || this.musicCast().hasMedia();
+  }
+
   private onCastConnected(): void {
-    const local = this.local();
-    if (!local || this.moving || local.item().mediaId === 0) return;
+    this.watchReturns ??= this.watchReturnsToLocal();
+    this.rejoin();
+    const local = this.activeLocal();
+    if (this.moving || !local.holds()) return;
     // A receiver that already plays keeps its media: only this device falls silent.
-    if (this.castPlayer().hasMedia()) local.stepAside();
+    if (this.receiverBusy()) local.stepAside();
     else void this.moveTo('cast');
   }
 
   /** Any way back to this device that `moveTo` did not take (receiver lost, "stop controlling", the mini-bar's
-   *  close) restarts the local player where the other output was. Created on first attach: it reads the targets. */
+   *  close) restarts the local player where the other output was. Created on first attach or connect: it reads the targets. */
   private watchReturnsToLocal() {
     return effect(
       () => {
         const away = this.kind() !== 'local';
         const o = this.output();
-        if (away && o) {
-          const s = o.snapshot();
-          if (s) this.awaySnapshot = { ...s, position: s.position || this.awaySnapshot?.position || 0 };
-        }
+        if (away && o) this.away = this.awayState(o);
         untracked(() => {
           if (away === this.wasAway) return;
           this.wasAway = away;
@@ -503,13 +569,25 @@ export class PlaybackSession {
     );
   }
 
+  /** Music on the receiver is read fresh every time (null once it is closed); a video keeps its last position. */
+  private awayState(o: PlaybackOutput): Away | null {
+    const music = this.musicCast();
+    if (music.active()) {
+      const snapshot = music.snapshot();
+      return snapshot && { kind: 'music', snapshot };
+    }
+    const prev = this.away?.kind === 'video' ? this.away : null;
+    const s = o.snapshot();
+    return s ? { kind: 'video', snapshot: { ...s, position: s.position || prev?.snapshot.position || 0 } } : prev;
+  }
+
   private onBackToLocal(): void {
     const releasing = this.releasing;
     this.releasing = false;
-    const snap = this.awaySnapshot;
-    this.awaySnapshot = null;
-    const local = this.local();
-    if (!local || !snap || this.moving || releasing) return;
-    void local.resume(snap);
+    const away = this.away;
+    this.away = null;
+    if (!away || this.moving || releasing) return;
+    if (away.kind === 'music') void this.audio().resume(away.snapshot);
+    else void this.local()?.resume(away.snapshot);
   }
 }

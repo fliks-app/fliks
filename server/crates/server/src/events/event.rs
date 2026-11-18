@@ -825,7 +825,7 @@ mod tests {
             json!({"type":"party.state","partyId":1,"rev":2,"state":"playing","item":{"mediaId":1},"anchor":{"position":1.5,"serverTimeMs":3},"whenMs":null,"by":{"userId":1,"username":"u"},"action":"play"}),
             json!({"type":"party.members","partyId":1,"rev":2,"members":[]}),
             json!({"type":"party.settings","partyId":1,"rev":2,"name":"n","policy":"host_only",
-                "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"public":true}),
+                "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"rotation":false,"public":true}),
             json!({"type":"party.message","partyId":1,"message":{"id":1}}),
             json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
             json!({"type":"party.closed","partyId":1,"reason":"expired","by":null}),

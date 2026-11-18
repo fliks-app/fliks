@@ -2093,6 +2093,20 @@
         }
       }
     },
+    "/api/media-files/{mediaFileId}/stems/{kind}/pcm": {
+      "get": {
+        "tags": [
+          "crate::karaoke"
+        ],
+        "summary": "Rule 20a.",
+        "operationId": "stem_pcm",
+        "responses": {
+          "200": {},
+          "206": {},
+          "404": {}
+        }
+      }
+    },
     "/api/media-servers": {
       "get": {
         "tags": [

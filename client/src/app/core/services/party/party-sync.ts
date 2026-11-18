@@ -12,10 +12,9 @@ import { ToastService } from '../toast.service';
 import { VoiceService } from './voice.service';
 import { VoiceDucker, type DuckEngine } from './party-ducking';
 import { AudioPartyHost } from './audio-party-host';
-import type { AudioPartyCommand } from '../audio-player/audio-player.service';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
 import { isTrack, itemIn, sameItem, type PartyPlayable } from './party-item';
-import { PlaybackSession, type PlaybackCommand } from '../playback/playback-session';
+import { PlaybackSession, type PartyRouter, type PlaybackCommand } from '../playback/playback-session';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { DRIFT_CHECK_MS, driftAction, driftProfile, groupPosition } from './party-drift';
 
@@ -61,7 +60,6 @@ export class PartySync {
     (level) => this.isAudio() || this.state.noteDuckWrite(level),
   );
   private audioHost: AudioPartyHost | null = null;
-  private unroute: (() => void) | null = null;
 
   private generation = 0;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,7 +75,7 @@ export class PartySync {
   private readonly resuming = signal(false);
 
   constructor() {
-    this.session.setPartyRouter(this.takeCommand);
+    this.session.setPartyRouter(this.route);
     const drift = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     inject(DestroyRef).onDestroy(() => clearInterval(drift));
   }
@@ -96,26 +94,27 @@ export class PartySync {
     return this.audioHost !== null && this.host() === this.audioHost;
   }
 
-  /** The audio player takes the party's transport while it is the host. */
-  private readonly takeAudio = (c: AudioPartyCommand): boolean => {
-    if (!this.party.active()) return false;
-    if (c.type === 'drives') return true;
-    if (c.type === 'external') {
-      this.toast.info(this.translate.instant('party.audio_busy'));
-      return true;
+  /** Routes the commands of both players; the audio player's only while it hosts the party. */
+  private readonly route: PartyRouter = (c, player) => {
+    if (player === 'audio' && !(this.party.active() && this.isAudio())) return false;
+    switch (c.type) {
+      case 'drives':
+        return true;
+      case 'external':
+        this.toast.info(this.translate.instant('party.audio_busy'));
+        return true;
+      case 'enqueue':
+        if (this.gate()) void this.party.addToProgramme(c.tracks.map((t) => ({ mediaId: t.mediaId, itemId: t.itemId })), c.where);
+        return true;
+      case 'queue':
+        void this.editProgramme(c.tracks);
+        return true;
+      default:
+        return this.takeCommand(c);
     }
-    if (c.type === 'enqueue') {
-      if (this.gate()) void this.party.addToProgramme(c.tracks.map((t) => ({ mediaId: t.mediaId, itemId: t.itemId })), c.where);
-      return true;
-    }
-    if (c.type === 'queue') {
-      void this.editProgramme(c.tracks);
-      return true;
-    }
-    return this.takeCommand(c);
   };
 
-  private readonly takeCommand = (c: PlaybackCommand): boolean => {
+  private readonly takeCommand = (c: Exclude<PlaybackCommand, { type: 'enqueue' | 'queue' }>): boolean => {
     switch (c.type) {
       case 'toggle':
         return this.togglePlay();
@@ -313,7 +312,6 @@ export class PartySync {
       const prev = this.host();
       if (prev === audio) return;
       this.host.set(audio);
-      this.unroute = audio.route(this.takeAudio);
       prev?.onBack();
       return;
     }
@@ -328,8 +326,6 @@ export class PartySync {
   private releaseAudio(): void {
     if (!this.isAudio()) return;
     this.ducker.stop();
-    this.unroute?.();
-    this.unroute = null;
     this.host.set(null);
   }
 

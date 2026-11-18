@@ -38,4 +38,9 @@ describe('cast lyrics', () => {
     expect(msgs[0].data).not.toContain('pitch');
     expect(JSON.parse(msgs[0].data).rows[0].cues[0].byteEnd).toBe(2);
   });
+
+  it('marks a karaoke document for the stage styling', () => {
+    expect(JSON.parse(castLyricsJson(doc(1))).stage).toBe(false);
+    expect(JSON.parse(chunkLyrics(doc(1), 1, 1, true)[0].data).stage).toBe(true);
+  });
 });

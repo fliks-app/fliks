@@ -62,6 +62,8 @@ export interface CastMediaInfo {
   episodeId?: number;
   /** The music track, whose media is the album. */
   itemId?: number;
+  /** The karaoke stem a music LOAD plays instead of the track. */
+  stem?: string;
   /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
@@ -79,6 +81,15 @@ export interface CastMediaInfo {
   /** Intro and credits ranges, kept in `customData` so a rejoining sender rebuilds its cues. */
   intro?: { startSeconds: number; endSeconds: number };
   outro?: { startSeconds: number; endSeconds: number };
+}
+
+/** The content id a LOAD of the receiver mix `id` carries. */
+export const castMixUrl = (id: string) => `fliks-mix:${id}`;
+
+/** A source of a receiver mix: 16-bit PCM (`audio/L16`) at `url`, which takes `from=<seconds>`, summed at `gain`. */
+export interface CastMixSource {
+  url: string;
+  gain: number;
 }
 
 interface NativeCastLoadOpts {
@@ -190,6 +201,12 @@ function sameReceiverMedia(a: Record<string, unknown> | null, b: Record<string, 
   return a === b || (!!a && !!b && RECEIVER_MEDIA_KEYS.every((k) => a[k] === b[k]));
 }
 
+export type CastMediaKind = 'video' | 'music';
+/** Handed back by a native or desktop bridge; an untagged state (older app) is video. */
+export type CastResumeState = { kind: CastMediaKind } & Record<string, unknown>;
+
+const tagged = (raw: object): CastResumeState => ({ ...raw, kind: (raw as { kind?: unknown }).kind === 'music' ? 'music' : 'video' });
+
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
   /** A receiver is reachable right now, not merely "the SDK loaded": the Cast
@@ -198,7 +215,8 @@ export class CastService implements OnDestroy {
   readonly isConnected = signal(false);
   /** Set when a session survived a WebView reload or a process restart: the state
    *  the player saved with {@link saveResumeState}. */
-  readonly resumedState = signal<unknown>(null);
+  readonly resumedState = signal<CastResumeState | null>(null);
+  private savedKind: CastMediaKind | null = null;
   /** The LOAD `customData` of the media the receiver reports, whoever loaded it: `{}` for media without any
    *  (another app), null until a status says. */
   readonly receiverMedia = signal<Record<string, unknown> | null>(null, { equal: sameReceiverMedia });
@@ -307,14 +325,23 @@ export class CastService implements OnDestroy {
 
   // ---- Initialization ----
 
-  /** A stopped or cleared session must not be re-adopted by a reloaded renderer. */
-  clearResumeState(): void {
-    this.resumedState.set(null);
+  /** A stopped or cleared session must not be re-adopted by a reloaded renderer; the slot is left to the other kind that saved it last. */
+  clearResumeState(kind: CastMediaKind): void {
+    if (this.resumedState()?.kind === kind) this.resumedState.set(null);
+    if (this.savedKind && this.savedKind !== kind) return;
+    this.savedKind = null;
     if (this.hasCastBridge) void this.bridge.setResumeState?.({ state: null }).catch(() => {});
   }
 
-  saveResumeState(state: unknown): void {
-    if (this.hasCastBridge) void this.bridge.setResumeState?.({ state }).catch(() => {});
+  saveResumeState(kind: CastMediaKind, state: object): void {
+    this.savedKind = kind;
+    if (this.hasCastBridge) void this.bridge.setResumeState?.({ state: { ...state, kind } }).catch(() => {});
+  }
+
+  private resumed(raw: object): void {
+    const state = tagged(raw);
+    this.savedKind = state.kind;
+    this.resumedState.set(state);
   }
 
   saveHeartbeat(opts: { url: string; token: string; body: Record<string, unknown> }): void {
@@ -326,14 +353,14 @@ export class CastService implements OnDestroy {
       const { available, connected, resume, device } = await this.bridge.initialize({ appId: CAST_APP_ID });
       this.isAvailable.set(available || !!connected);
       if (connected) this.isConnected.set(true);
-      if (resume) this.resumedState.set(resume);
+      if (resume) this.resumed(resume);
       this.applyDeviceUpdate(device);
       if (available) void this.getCastDevices();
 
       // Listen for native Cast events
       window.addEventListener('castStateChanged', ((e: CustomEvent) => {
         const connected = e.detail?.connected ?? false;
-        if (e.detail?.resume) this.resumedState.set(e.detail.resume);
+        if (e.detail?.resume) this.resumed(e.detail.resume);
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
         else {
@@ -662,15 +689,34 @@ export class CastService implements OnDestroy {
     }
   }
 
-  private async sendLoad(info: CastMediaInfo): Promise<void> {
-    // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
-    const customData = {
+  /** Puts `info` after the media playing on the receiver, which moves on to it by itself; null drops it. */
+  queueNext(info: CastMediaInfo | null): void {
+    const media = info && {
+      url: info.url,
+      contentType: info.contentType,
+      title: info.title,
+      subtitle: info.subtitle ?? '',
+      posterUrl: info.posterUrl ?? '',
+      customData: this.loadCustomData(info),
+    };
+    this.sendFliks({ kind: 'queue_next', media });
+  }
+
+  /** Declares or updates the receiver mix `id`, which a LOAD of `castMixUrl(id)` plays; settles once sent. */
+  setMix(id: string, sources: CastMixSource[]): Promise<void> {
+    return this.send({ kind: 'mix', id, sources });
+  }
+
+  // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
+  private loadCustomData(info: CastMediaInfo) {
+    return {
       title: info.title,
       subtitle: info.subtitle,
       posterUrl: info.posterUrl,
       mediaId: info.mediaId,
       episodeId: info.episodeId,
       itemId: info.itemId,
+      stem: info.stem,
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
       sid: info.sid,
@@ -681,7 +727,10 @@ export class CastService implements OnDestroy {
       intro: info.intro,
       outro: info.outro,
     };
+  }
 
+  private async sendLoad(info: CastMediaInfo): Promise<void> {
+    const customData = this.loadCustomData(info);
     const subtitleStyle = this.castSettings.get().subtitleStyle;
 
     if (this.hasCastBridge) {
@@ -785,13 +834,14 @@ export class CastService implements OnDestroy {
 
   /** A message on the Fliks namespace to the receiver; dropped when nothing is connected. */
   sendFliks(msg: object): void {
+    void this.send(msg);
+  }
+
+  private async send(msg: object): Promise<void> {
     const message = JSON.stringify(msg);
-    if (this.hasCastBridge) {
-      void this.bridge.sendMessage?.({ namespace: FLIKS_CAST_NAMESPACE, message }).catch(() => {});
-      return;
-    }
     try {
-      void Promise.resolve(cast.framework.CastContext.getInstance().getCurrentSession?.()?.sendMessage(FLIKS_CAST_NAMESPACE, message)).catch(() => {});
+      if (this.hasCastBridge) await this.bridge.sendMessage?.({ namespace: FLIKS_CAST_NAMESPACE, message });
+      else await cast.framework.CastContext.getInstance().getCurrentSession?.()?.sendMessage(FLIKS_CAST_NAMESPACE, message);
     } catch { /* no session */ }
   }
 

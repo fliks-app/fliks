@@ -1,4 +1,4 @@
-/* Lyrics of the receiver: the sender's chunked document, the active line and each word's fill. */
+/* Lyrics of the receiver: the sender's chunked document, the active line and its words. */
 (function (root) {
   'use strict';
 
@@ -56,10 +56,18 @@
     return out;
   }
 
-  /** Fill 0..100 of each cue at `posMs`. */
-  function fills(cues, posMs, offset) {
-    const t = posMs + (offset || 0);
-    return cues.map((c) => (t <= c.start ? 0 : t >= c.end || c.end <= c.start ? 100 : ((t - c.start) / (c.end - c.start)) * 100));
+  /** The media position from its reports, which jitter about 100 ms on a Cast device: wall time moves it,
+      each report pulls it a tenth of the way, and a jump (seek, stall) or a pause resets it. */
+  function createClock(jumpMs) {
+    let media = 0;
+    let at = null;
+    return function read(reported, now, playing) {
+      const predicted = at === null ? reported : media + (now - at);
+      const err = reported - predicted;
+      media = !playing || Math.abs(err) > jumpMs ? reported : predicted + err / 10;
+      at = now;
+      return media;
+    };
   }
 
   /** The sender of the current LOAD owns the lyrics; true when another sender held them (its document is stale). */
@@ -74,7 +82,7 @@
     return !state.sender || state.sender === senderId;
   }
 
-  const api = { createAssembler, activeIndex, segments, fills, claim, owns };
+  const api = { createAssembler, activeIndex, segments, createClock, claim, owns };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FliksLyrics = api;
 })(typeof self !== 'undefined' ? self : this);

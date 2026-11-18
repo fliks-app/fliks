@@ -5,7 +5,7 @@ import { asAlbumMedia } from '../../../features/media-detail/album/album-media';
 import { MediaService } from '../api/media.service';
 import type { PartyItem, PartyItemIn } from '../api/party-api.service';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
-import { AudioPlayerService, type AudioPartyRouter } from '../audio-player/audio-player.service';
+import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { ToastService } from '../toast.service';
 import type { DuckEngine } from './party-ducking';
 import { isTrack, type PartyPlayable } from './party-item';
@@ -52,7 +52,7 @@ export class AudioPartyHost implements PartyHost {
     seekLocked: this.never,
     position: () => this.audio.position(),
     seek: (t) => void this.audio.seekLocal(t),
-    play: () => this.audio.resume(),
+    play: () => this.audio.playLoaded(),
     pause: async () => this.audio.pause(),
     sync: {
       slackS: 0.5,
@@ -90,10 +90,6 @@ export class AudioPartyHost implements PartyHost {
   onBack(): void {
     this.albums.clear();
     void this.audio.close();
-  }
-
-  route(router: AudioPartyRouter): () => void {
-    return this.audio.setPartyRouter(router);
   }
 
   /** One load per track at a time: the party's start and its first state both ask for it. */
