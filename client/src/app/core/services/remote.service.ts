@@ -11,6 +11,7 @@ import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
+import { FullPlayerState } from './playback/full-player-state';
 import { deviceIdOf, sameTarget } from './remote-target-id';
 import type { LaunchTracks } from './track-manager.service';
 import { parseAudioIndex } from '../utils/player.utils';
@@ -157,6 +158,7 @@ export class RemoteService {
   private readonly cast = inject(CastService);
   private readonly translate = inject(TranslateService);
   private readonly sessionSync = inject(SessionSyncService);
+  private readonly fullPlayer = inject(FullPlayerState);
 
   // ── Controllee ──
 
@@ -173,8 +175,6 @@ export class RemoteService {
   readonly selectedTargetId = signal<string | null>(null);
   /** Read back from storage; becomes the selection only once a listing confirms the device is online. */
   private restoredTargetId: string | null = this.readSelectedTarget();
-  /** The last session owner seen, through any parked gap; a selection that was it yields to the next owner. */
-  private lastOwner: string | null = null;
   readonly pendingAction = signal<RemoteAction | null>(null);
   /** Target is rebuilding its stream at the same place; derived from the command in flight so it closes with the ack. */
   readonly restarting = computed(() => this.pendingAction() === 'quality');
@@ -206,6 +206,12 @@ export class RemoteService {
     const held = this.sessionSync.session();
     const holds = !!fileId && !!held?.owner.targetId && deviceIdOf(held.owner.targetId) === deviceIdOf(targetId) && held.item.mediaFileId === fileId;
     return targetCanLoad(faceOf(this.targets(), targetId), holds);
+  }
+  /** Whether `targetId` owns the account session's playback: that device is watched, never selected. */
+  ownsSession(targetId: string): boolean {
+    const s = this.sessionSync.session();
+    const owner = this.sessionSync.observableOwner();
+    return !!s && !!owner && !this.sessionSync.isReading(s) && sameTarget(owner, targetId);
   }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
@@ -405,14 +411,13 @@ export class RemoteService {
       untracked(() => this.syncTicker());
     });
 
-    // One device per account: the selection goes when a session it owned moves to another device.
+    // The device that owns the account session is watched, not selected: an open video player becomes its view.
     effect(() => {
-      const owner = this.sessionSync.observedOwnerTargetId();
       const selected = this.selectedTargetId();
+      if (!selected || !this.ownsSession(selected)) return;
       untracked(() => {
-        if (!owner) return;
-        if (selected && owner !== selected && this.lastOwner === selected) this.selectTarget(null);
-        else this.lastOwner = owner;
+        this.fullPlayer.handTo('video', true);
+        this.selectTarget(null);
       });
     });
 
@@ -644,12 +649,13 @@ export class RemoteService {
   }
 
   selectTarget(targetId: string | null): void {
-    this.lastOwner = this.sessionSync.observedOwnerTargetId();
+    const observed = this.observedTargetId();
     if (targetId) this.startedHere.next();
     // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
-    this.reportedState.set(null);
+    // Still reading the same device (the selection became the watch of its session): its reading holds.
+    if (this.observedTargetId() !== observed) this.reportedState.set(null);
     this.stoppedUntilReport = false;
     this.selectedRow.set(this.targets().find((t) => t.targetId === targetId) ?? null);
     this.clearOffline();

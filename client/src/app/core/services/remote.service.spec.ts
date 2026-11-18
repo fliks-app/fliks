@@ -10,6 +10,7 @@ import { RemoteService, snapshotFromWire, snapshotToWire, targetCanLoad, targetS
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
 import { SessionSyncService } from './session-sync.service';
+import { FullPlayerState } from './playback/full-player-state';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 function frame(over: Partial<RemoteState> = {}): RemoteState {
@@ -40,8 +41,12 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
   };
 }
 
-function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number } } = {}) {
+function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number }; family?: string } = {}) {
   const owner = signal<string | null>(null);
+  const session = () => {
+    if (opts.held) return { owner: { targetId: opts.held.targetId }, item: { mediaFileId: opts.held.mediaFileId, family: 'video' } };
+    return owner() ? { owner: { targetId: owner() }, item: { mediaFileId: 2, family: opts.family ?? 'video' } } : null;
+  };
   const remoteState = signal<RemoteState | null>(null);
   const sse = {
     commands: new Subject<RemoteCommand>(),
@@ -58,7 +63,7 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, session: () => (opts.held ? { owner: { targetId: opts.held.targetId }, item: { mediaFileId: opts.held.mediaFileId } } : null), setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, observableOwner: owner, session, isReading: (s: { item: { family: string } }) => s.item.family === 'text', setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
@@ -88,7 +93,7 @@ describe('RemoteService observation', () => {
     expect(service.selectedTargetId()).toBe('tv#1');
   });
 
-  it('replaces a selection whose session another device took over: one device per account', () => {
+  it('follows the next owner once the session leaves a device it watches', () => {
     const { service, remoteState, owner } = setup({ selected: 'tv#1' });
     owner.set('tv#1');
     TestBed.tick();
@@ -99,17 +104,6 @@ describe('RemoteService observation', () => {
     expect(service.selectedTargetId()).toBeNull();
     expect(service.observedTargetId()).toBe('pc#1');
     expect(service.targetState()?.mediaTitle).toBe('A series');
-  });
-
-  it('replaces a selection that owned the session across a parked gap', () => {
-    const { service, owner } = setup({ selected: 'tv#1' });
-    owner.set('tv#1');
-    TestBed.tick();
-    owner.set(null);
-    TestBed.tick();
-    owner.set('pc#1');
-    TestBed.tick();
-    expect(service.selectedTargetId()).toBeNull();
   });
 
   it('keeps a restored selection while another device owns the session', async () => {
@@ -129,6 +123,24 @@ describe('RemoteService observation', () => {
     }
   });
 
+  it('watches a restored selection that owns the session', async () => {
+    localStorage.setItem('fliks.remote.target', 'tv#1');
+    try {
+      const { service, owner } = setup({ selected: null });
+      owner.set('tv#1');
+      TestBed.tick();
+      const http = TestBed.inject(HttpTestingController);
+      const refreshing = service.refreshTargets();
+      http.match((r) => r.url === '/api/remote/targets').forEach((r) => r.flush([{ targetId: 'tv#1', nowPlaying: null }]));
+      await refreshing;
+      TestBed.tick();
+      expect(service.selectedTargetId()).toBeNull();
+      expect(service.observedTargetId()).toBe('tv#1');
+    } finally {
+      localStorage.removeItem('fliks.remote.target');
+    }
+  });
+
   it('keeps a selection made while another device owned the session', () => {
     const { service, owner } = setup({ selected: null });
     owner.set('pc#1');
@@ -139,8 +151,41 @@ describe('RemoteService observation', () => {
     expect(service.selectedTargetId()).toBe('tv#1');
   });
 
-  it('keeps a selection that is the session owner', () => {
-    const { service, owner } = setup({ selected: 'tv#1' });
+  it('watches a selected device once it owns the session, keeping its reading', () => {
+    const { service, remoteState, owner } = setup({ selected: 'tv#1' });
+    remoteState.set(frame());
+    service.ingestState();
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.isRemoting()).toBe(false);
+    expect(service.observedTargetId()).toBe('tv#1');
+    expect(service.targetState()?.mediaTitle).toBe('A series');
+    expect(localStorage.getItem('fliks.remote.target')).toBeNull();
+  });
+
+  it('turns the open video player of a selected device into the view of its session', () => {
+    const { owner } = setup({ selected: 'tv#1' });
+    const full = TestBed.inject(FullPlayerState);
+    full.show('video', false);
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(full.open()).toBe('video');
+    expect(full.remote()).toBe(true);
+  });
+
+  it('watches the session owner instead of selecting it, the native face included', () => {
+    const { service, owner } = setup({ selected: null });
+    owner.set('tv#native');
+    TestBed.tick();
+    service.selectTarget('tv#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.ownsSession('tv#1')).toBe(true);
+  });
+
+  it('keeps the selection of a device that holds a reading position', () => {
+    const { service, owner } = setup({ selected: 'tv#1', family: 'text' });
     owner.set('tv#1');
     TestBed.tick();
     expect(service.selectedTargetId()).toBe('tv#1');
@@ -613,7 +658,7 @@ describe('RemoteService mirrors navigation to a target', () => {
           { path: 'settings', children: [] },
         ]),
         { provide: SseService, useValue: sse },
-        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
+        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), observableOwner: signal(null), session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
         { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],
