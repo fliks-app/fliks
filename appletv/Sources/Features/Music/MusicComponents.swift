@@ -198,3 +198,39 @@ private struct TrackLineStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
+
+/// A circular icon button: ghost by default, filled with the primary colour for the main action, a pale disc while `active`.
+struct RoundButton: View {
+    let symbol: String
+    let size: CGFloat
+    var filled = false
+    var active = false
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size * 0.4, weight: .medium))
+        }
+        .buttonStyle(RoundButtonStyle(size: size, filled: filled, active: active))
+        .accessibilityLabel(label)
+    }
+}
+
+private struct RoundButtonStyle: ButtonStyle {
+    let size: CGFloat
+    let filled: Bool
+    let active: Bool
+    @Environment(\.isFocused) private var focused
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(filled ? Color.white : active ? Color.fliks(nil) : Color.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(filled ? Color.fliks(nil) : .white.opacity(focused ? 0.28 : active ? 0.12 : 0)))
+            .overlay(Circle().stroke(.white, lineWidth: focused ? 4 : 0))
+            .scaleEffect(focused ? 1.12 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.easeOut(duration: 0.12), value: focused)
+    }
+}

@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// Full-screen Now Playing: cover, transport, seek, queue and volume levelling.
+/// Full-screen Now Playing: cover, lyrics or queue, seek bar and a row of round transport buttons.
 struct NowPlayingView: View {
     var onClose: () -> Void
 
     @State private var player = MusicPlayer.shared
     @State private var party = PartyService.shared
-    @State private var showQueue = false
     @State private var favourite: Bool?
     @State private var lyrics: StructuredLyrics?
-    @State private var showLyrics = false
+    @State private var showLyrics = true
     @State private var showKaraoke = false
     @State private var karaokeReady = false
     @State private var hasCdg = false
     @FocusState private var focus: Control?
     @Environment(Backdrop.self) private var backdrop
+    @Environment(PlaylistPicker.self) private var picker
 
     private enum Control: Hashable { case play, seek }
 
@@ -28,7 +28,6 @@ struct NowPlayingView: View {
         }
         .onAppear { focus = .play; player.nowPlayingOpen = true }
         .onDisappear { player.nowPlayingOpen = false }
-        .sheet(isPresented: $showQueue) { QueueSheet() }
         .fullScreenCover(isPresented: $showKaraoke) {
             if let id = player.current?.itemId { KaraokeView(itemId: id, lyrics: lyrics) { showKaraoke = false } }
         }
@@ -45,67 +44,89 @@ struct NowPlayingView: View {
     }
 
     private func content(_ t: QueueTrack) -> some View {
-        let cover: CGFloat = showLyrics ? 420 : 640
-        return HStack(spacing: 70) {
-            PosterImage(path: t.coverUrl, size: .full)
-                .frame(width: cover, height: cover)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(radius: 30)
-            if showLyrics, let lyrics {
-                VStack(alignment: .leading, spacing: 18) {
-                    LyricsView(lyrics: lyrics)
-                    HStack(spacing: 36) {
-                        transport
-                        Button { showLyrics = false } label: { Image(systemName: "xmark") }
-                            .accessibilityLabel(tr("lyrics.close_full"))
-                            .buttonStyle(.bordered)
-                    }
-                }
-            } else {
-            VStack(alignment: .leading, spacing: 22) {
-                Spacer(minLength: 0)
-                Text(t.title).font(.system(size: 54, weight: .bold)).lineLimit(2)
-                Text(t.artists).font(.title3).foregroundStyle(.secondary).lineLimit(1)
-                Text(t.albumTitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                seekBar.padding(.top, 14)
-                transport
-                options(t)
-                Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            VStack(spacing: 4) {
+                Text(tr("music_player.playing_from_album")).font(.callout).foregroundStyle(.secondary)
+                Text(t.albumTitle).font(.headline).lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
+            HStack(alignment: .top, spacing: 72) {
+                trackColumn(t)
+                sidePane
             }
+            Spacer(minLength: 16)
+            seekBar
+            transport(t)
+                .padding(.top, 10)
         }
-        .padding(.horizontal, 80)
-        .padding(.vertical, 50)
+        .padding(.horizontal, 77)
+        .padding(.vertical, 20)
+        .ignoresSafeArea(edges: .horizontal)
         .onAppear { backdrop.url = t.coverUrl }
         .onChange(of: t.uid) { _, _ in favourite = nil; backdrop.url = t.coverUrl }
         .task(id: t.itemId) {
             lyrics = nil
             lyrics = await LyricsAPI.main(itemId: t.itemId)
-            if lyrics == nil { showLyrics = false }
+        }
+    }
+
+    private func trackColumn(_ t: QueueTrack) -> some View {
+        let liked = favourite ?? false
+        return VStack(alignment: .leading, spacing: 18) {
+            PosterImage(path: t.coverUrl, size: .full)
+                .frame(width: 520, height: 520)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t.title).font(.system(size: 34, weight: .semibold)).lineLimit(1)
+                    Text(t.artists).font(.system(size: 28)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                RoundButton(symbol: "text.badge.plus", size: 64, label: tr("playlists.add_to_playlist_title")) {
+                    picker.open(mediaId: t.mediaId, itemId: t.itemId)
+                }
+                RoundButton(symbol: liked ? "heart.fill" : "heart", size: 64,
+                            label: tr(liked ? "music.unfavourite" : "music.favourite")) {
+                    favourite = !liked
+                    Task { if (try? await MusicAPI.setFavourite(!liked, mediaId: t.mediaId, itemId: t.itemId)) == nil { favourite = liked } }
+                }
+            }
+        }
+        .frame(width: 520)
+        .focusSection()
+    }
+
+    /// The lyrics when shown and available, else the queue.
+    @ViewBuilder private var sidePane: some View {
+        if showLyrics, let lyrics {
+            LyricsView(lyrics: lyrics)
+                .frame(maxWidth: .infinity, maxHeight: 560)
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.2),
+                                             .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
+        } else {
+            QueueList().frame(maxWidth: .infinity, maxHeight: 560).focusSection()
         }
     }
 
     /// Left and right step the position; the bar is focusable on its own.
     private var seekBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25))
+                    Capsule().fill(.white.opacity(0.2))
                     Capsule().fill(.white)
                         .frame(width: geo.size.width * (player.duration > 0 ? min(player.position / player.duration, 1) : 0))
                 }
             }
-            .frame(height: focus == .seek ? 16 : 10)
+            .frame(height: focus == .seek ? 16 : 8)
             HStack {
                 Text(MusicFormat.duration(player.position))
                 Spacer()
-                Text(MusicFormat.duration(player.duration))
+                Text("-" + MusicFormat.duration(max(player.duration - player.position, 0)))
             }
             .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .padding(18)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(focus == .seek ? 0.12 : 0)))
         .focusable()
         .focused($focus, equals: .seek)
         .onMoveCommand { direction in
@@ -118,72 +139,54 @@ struct NowPlayingView: View {
         .animation(.easeOut(duration: 0.12), value: focus)
     }
 
-    private var transport: some View {
-        HStack(spacing: 36) {
-            Button { player.toggleShuffle() } label: {
-                Image(systemName: "shuffle").foregroundStyle(player.shuffled ? Color.accentColor : .primary)
+    private func transport(_ t: QueueTrack) -> some View {
+        let karaoke = karaokeReady && (lyrics?.cueLine?.isEmpty == false || hasCdg)
+        return ZStack {
+            HStack(spacing: 40) {
+                RoundButton(symbol: "shuffle", size: 80, active: player.shuffled, label: tr("music_player.shuffle")) {
+                    player.toggleShuffle()
+                }
+                RoundButton(symbol: "backward.fill", size: 80, label: tr("music_player.previous")) { player.perform(.previous) }
+                RoundButton(symbol: player.isPlaying ? "pause.fill" : "play.fill", size: 112, filled: true,
+                            label: tr(player.isPlaying ? "audio_player.pause" : "audio_player.play")) {
+                    player.togglePlayPause()
+                }
+                .focused($focus, equals: .play)
+                RoundButton(symbol: "forward.fill", size: 80, label: tr("music_player.next")) { player.perform(.next) }
+                RoundButton(symbol: player.repeatMode == .one ? "repeat.1" : "repeat", size: 80,
+                            active: player.repeatMode != .off, label: tr("music_player.repeat_\(player.repeatMode.rawValue)")) {
+                    player.cycleRepeat()
+                }
             }
-            .accessibilityLabel(tr("music_player.shuffle"))
-            Button { player.perform(.previous) } label: { Image(systemName: "backward.fill") }
-                .accessibilityLabel(tr("music_player.previous"))
-            Button { player.togglePlayPause() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").frame(width: 60)
-            }
-            .focused($focus, equals: .play)
-            .accessibilityLabel(tr(player.isPlaying ? "audio_player.pause" : "audio_player.play"))
-            Button { player.perform(.next) } label: { Image(systemName: "forward.fill") }
-                .accessibilityLabel(tr("music_player.next"))
-            Button { player.cycleRepeat() } label: {
-                Image(systemName: player.repeatMode == .one ? "repeat.1" : "repeat")
-                    .foregroundStyle(player.repeatMode == .off ? Color.primary : Color.accentColor)
-            }
-            .accessibilityLabel(tr("music_player.repeat_\(player.repeatMode.rawValue)"))
-        }
-        .font(.title2)
-        .focusSection()
-    }
-
-    private func options(_ t: QueueTrack) -> some View {
-        let liked = favourite ?? false
-        return HStack(spacing: 28) {
-            Button {
-                favourite = !liked
-                Task { if (try? await MusicAPI.setFavourite(!liked, mediaId: t.mediaId, itemId: t.itemId)) == nil { favourite = liked } }
-            } label: { Image(systemName: liked ? "heart.fill" : "heart") }
-                .accessibilityLabel(tr(liked ? "music.unfavourite" : "music.favourite"))
-            if lyrics != nil {
-                Button { showLyrics.toggle() } label: { Image(systemName: "quote.bubble") }
-                    .accessibilityLabel(tr("lyrics.title"))
-            }
-            if karaokeReady, lyrics?.cueLine?.isEmpty == false || hasCdg {
-                Button { showKaraoke = true } label: { Image(systemName: "music.mic") }
-                    .accessibilityLabel(tr("karaoke.title"))
-            }
-            Button { showQueue = true } label: { Image(systemName: "list.bullet") }
-                .accessibilityLabel(tr("music_player.queue"))
-            Button { player.replayGain = player.replayGain.next } label: {
-                Image(systemName: player.replayGain.symbol)
-            }
-            .accessibilityLabel(tr(player.replayGain.labelKey))
-            if party.active {
-                Button { Task { await party.leaveToHome() } } label: { Image(systemName: "person.2.slash") }
-                    .accessibilityLabel(tr("party.leave"))
+            HStack(spacing: 20) {
+                Spacer()
+                if party.active {
+                    RoundButton(symbol: "person.2.slash", size: 72, label: tr("party.leave")) { Task { await party.leaveToHome() } }
+                }
+                RoundButton(symbol: player.replayGain.symbol, size: 72, label: tr(player.replayGain.labelKey)) {
+                    player.replayGain = player.replayGain.next
+                }
+                if karaoke {
+                    RoundButton(symbol: "music.mic", size: 72, label: tr("karaoke.title")) { showKaraoke = true }
+                }
+                if lyrics != nil {
+                    RoundButton(symbol: "quote.bubble", size: 72, active: showLyrics, label: tr("lyrics.title")) { showLyrics.toggle() }
+                }
+                RoundButton(symbol: "list.bullet", size: 72, active: !(showLyrics && lyrics != nil), label: tr("music_player.queue")) {
+                    showLyrics = false
+                }
             }
         }
-        .font(.title3)
-        .buttonStyle(.bordered)
         .focusSection()
     }
 }
 
-/// The queue: tap to jump, long press to remove.
-private struct QueueSheet: View {
+/// The upcoming and past tracks: tap to jump, long press to remove.
+private struct QueueList: View {
     @State private var player = MusicPlayer.shared
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text(tr("music_player.queue")).font(.title.bold())
+        ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(Array(player.queue.tracks.enumerated()), id: \.element.id) { i, t in
@@ -191,16 +194,13 @@ private struct QueueSheet: View {
                                   duration: MusicFormat.duration(t.durationSeconds), playing: i == player.queue.index,
                                   onRemove: { player.remove(at: i) }) {
                             player.skip(to: i)
-                            dismiss()
                         }
+                        .id(t.id)
                     }
                 }
-                .padding(.horizontal, 24).padding(.vertical, 20)
+                .padding(.vertical, 8)
             }
-            Button(tr("common.cancel")) { dismiss() }
+            .onAppear { if let id = player.current?.id { proxy.scrollTo(id, anchor: .top) } }
         }
-        .padding(60)
-        .frame(maxWidth: 1100)
-        .focusSection()
     }
 }
