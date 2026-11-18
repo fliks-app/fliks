@@ -149,24 +149,6 @@ struct MusicQueue {
 enum ReplayGain: String, CaseIterable {
     case off, track, album
 
-    var next: ReplayGain {
-        switch self {
-        case .off: .track
-        case .track: .album
-        case .album: .off
-        }
-    }
-
-    var labelKey: String { "music_player.replay_gain_\(rawValue)" }
-
-    var symbol: String {
-        switch self {
-        case .off: "speaker.slash"
-        case .track: "speaker.wave.2"
-        case .album: "opticaldisc"
-        }
-    }
-
     /// Linear volume of a track: never a boost (AVPlayer has no gain stage), and album gain only for one album.
     static func volume(_ mode: ReplayGain, _ t: QueueTrack, oneAlbum: Bool) -> Float {
         guard mode != .off else { return 1 }

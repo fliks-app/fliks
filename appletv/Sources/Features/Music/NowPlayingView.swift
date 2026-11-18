@@ -3,10 +3,14 @@ import SwiftUI
 /// Full-screen Now Playing: cover, lyrics or queue, seek bar and a row of round transport buttons.
 struct NowPlayingView: View {
     var onClose: () -> Void
+    var onSelectAlbum: (Int) -> Void
+    var onSelectArtist: (Int) -> Void
 
     @State private var player = MusicPlayer.shared
     @State private var party = PartyService.shared
     @State private var favourite: Bool?
+    /// The current track's album, for its favourite flag and artist ids.
+    @State private var page: AlbumPage?
     @State private var lyrics: StructuredLyrics?
     @State private var showLyrics = true
     @State private var showKaraoke = false
@@ -68,10 +72,27 @@ struct NowPlayingView: View {
             lyrics = nil
             lyrics = await LyricsAPI.main(itemId: t.itemId)
         }
+        .task(id: t.mediaId) {
+            page = nil
+            page = try? await MusicAPI.albumPage(t.mediaId)
+        }
+    }
+
+    private func pageTrack(_ t: QueueTrack) -> Track? {
+        page?.id == t.mediaId ? page?.album.tracks.first { $0.itemId == t.itemId } : nil
+    }
+
+    /// The track's credited artists, else the album's.
+    private func artists(_ t: QueueTrack) -> [AlbumArtist] {
+        guard let page, page.id == t.mediaId else { return [] }
+        let credited = pageTrack(t)?.artists.compactMap { a in
+            a.id.map { AlbumArtist(id: $0, name: a.name, creditedName: a.creditedName, joinPhrase: nil) }
+        } ?? []
+        return credited.isEmpty ? page.album.artists : credited
     }
 
     private func trackColumn(_ t: QueueTrack) -> some View {
-        let liked = favourite ?? false
+        let liked = favourite ?? pageTrack(t)?.favourite ?? false
         return VStack(alignment: .leading, spacing: 18) {
             PosterImage(path: t.coverUrl, size: .full)
                 .frame(width: 520, height: 520)
@@ -163,9 +184,6 @@ struct NowPlayingView: View {
                 if party.active {
                     RoundButton(symbol: "person.2.slash", size: 72, label: tr("party.leave")) { Task { await party.leaveToHome() } }
                 }
-                RoundButton(symbol: player.replayGain.symbol, size: 72, label: tr(player.replayGain.labelKey)) {
-                    player.replayGain = player.replayGain.next
-                }
                 if karaoke {
                     RoundButton(symbol: "music.mic", size: 72, label: tr("karaoke.title")) { showKaraoke = true }
                 }
@@ -174,6 +192,18 @@ struct NowPlayingView: View {
                 }
                 RoundButton(symbol: "list.bullet", size: 72, active: !(showLyrics && lyrics != nil), label: tr("music_player.queue")) {
                     showLyrics = false
+                }
+                RoundMenu(symbol: "ellipsis", size: 72, label: tr("common.more")) {
+                    Button { onSelectAlbum(t.mediaId) } label: { Label(tr("music.open_album"), systemImage: "square.stack") }
+                    ForEach(artists(t), id: \.id) { a in
+                        Button { onSelectArtist(a.id) } label: { Label(a.creditedName ?? a.name, systemImage: "music.mic") }
+                    }
+                    Picker(selection: $player.replayGain) {
+                        ForEach(ReplayGain.allCases, id: \.self) { Text(tr("music_player.replay_gain_mode_\($0.rawValue)")).tag($0) }
+                    } label: {
+                        Label(tr("music_player.replay_gain"), systemImage: "speaker.wave.2")
+                    }
+                    .pickerStyle(.menu)
                 }
             }
         }
