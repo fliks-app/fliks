@@ -1832,6 +1832,7 @@
       "reload_subtitles_on": "Burned-in subtitles enabled ({{lang}})",
       "reload_subtitles_off": "Burned-in subtitles disabled",
       "reload_subtitles_hls": "Subtitles loaded through HLS ({{lang}})",
+      "reload_direct_fallback": "Direct play fell back to a remux",
       "reload_remux_fallback": "Remux fell back to transcoding",
       "reload_audio_fallback": "Audio fallback: {{codec}} failed to decode on the device, transcoded",
       "reload_other": "Stream reload",

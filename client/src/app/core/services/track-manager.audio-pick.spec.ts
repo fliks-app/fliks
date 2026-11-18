@@ -193,6 +193,21 @@ describe('audio track <-> stream index mapping', () => {
     expect(streamIndexForTrack('audio-1', foldedTracks, streams, 0)).toBe(1);
   });
 
+  it('maps by language when the engine reorders tracks of distinct languages', () => {
+    // webOS lists the DEFAULT rendition first: here the second stream.
+    const reordered = [{ id: 'audio-0', language: 'eng' }, { id: 'audio-1', language: 'ita' }];
+    const file = [{ language: 'ita', channels: 2 }, { language: 'eng', channels: 2 }];
+    expect(trackForStreamIndex(1, file, reordered)?.id).toBe('audio-0');
+    expect(streamIndexForTrack('audio-0', reordered, file)).toBe(1);
+    expect(streamIndexForTrack('audio-1', reordered, file)).toBe(0);
+  });
+
+  it('keeps the position for same-language tracks the engine lists one by one', () => {
+    const aligned = [{ id: 'a0', language: 'eng' }, { id: 'a1', language: 'fra' }, { id: 'a2', language: 'fra' }];
+    expect(trackForStreamIndex(2, streams, aligned)?.id).toBe('a2');
+    expect(streamIndexForTrack('a1', aligned, streams)).toBe(1);
+  });
+
   it('knows nothing of an unknown track or a file without streamInfo', () => {
     expect(streamIndexForTrack('nope', foldedTracks, streams)).toBeUndefined();
     expect(streamIndexForTrack('audio-1', foldedTracks, [])).toBeUndefined();

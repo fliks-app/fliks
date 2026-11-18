@@ -8,7 +8,7 @@ import type { MediaProgressSubject } from '../sse.service';
 
 export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error';
 export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
-export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'audio_fallback' | 'other';
+export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'direct_fallback' | 'remux_fallback' | 'audio_fallback' | 'other';
 /** What forced a recovery: the server forgot the session, refused the stream, or the picture froze. */
 export type QoeRecoveryReason = 'session_lost' | 'session_expired' | 'stall' | 'other';
 

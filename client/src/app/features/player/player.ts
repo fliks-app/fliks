@@ -826,10 +826,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
 
-  /** `deviceProfileService.getProfile()` with `rejectCopy` forced and failed audio codecs dropped when
-   *  {@link CopyFallbackController} flagged the file, and HDR off once an AirPlay receiver refused it. */
+  /** `deviceProfileService.getProfile()` without DirectPlay, with `rejectCopy` forced or failed audio codecs dropped
+   *  when {@link CopyFallbackController} flagged the file, and HDR off once an AirPlay receiver refused it. */
   private deviceProfileFor(mediaFileId: number, passthrough = true): DeviceProfile {
     let profile = this.deviceProfileService.getProfile({ passthrough });
+    if (this.copyFallback.shouldForceRemux(mediaFileId)) {
+      profile = { ...profile, supportsDirectPlay: false };
+    }
     if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
       profile = { ...profile, rejectCopy: true };
     }
@@ -1760,11 +1763,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private describeAudioTracks(raw: AudioTrack[]): (AudioOption & { selected: boolean })[] {
     const streams = this.audioStreamInfo();
     return raw.map((t, i) => {
-      const parts = streams[i] ? formatAudioParts(streams[i], this.translate, i + 1) : null;
+      const si = streamIndexForTrack(t.id, raw, streams, this.activeAudioStreamIndex) ?? i;
+      const parts = streams[si] ? formatAudioParts(streams[si], this.translate, si + 1) : null;
       const fallback = t.label || this.translate.instant('player.audio_track_n', { index: i + 1 });
       return {
         id: t.id,
-        label: streams[i] ? formatAudioLabel(streams[i], this.translate, i + 1) : fallback,
+        label: streams[si] ? formatAudioLabel(streams[si], this.translate, si + 1) : fallback,
         menuHead: parts?.head ?? fallback,
         menuSub: parts?.sub ?? '',
         language: normalizeLangCode(t.language),
@@ -1784,7 +1788,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const tracks = this.describeAudioTracks(raw);
     if (!tracks.length) return;
     const existing = this.availableAudioTracks();
-    const sameList = tracks.length === existing.length && tracks.every((t, i) => t.id === existing[i].id && t.supported === existing[i].supported);
+    const sameList = tracks.length === existing.length && tracks.every((t, i) => t.id === existing[i].id && t.language === existing[i].language && t.supported === existing[i].supported);
     if (tracks.length >= existing.length && !sameList) this.availableAudioTracks.set(tracks);
     const list = this.availableAudioTracks();
     const active = tracks.find((t) => t.selected)?.id ?? null;

@@ -134,6 +134,7 @@ pub fn parse_events(raw: &Value, now: f64, sent_at: Option<f64>) -> Vec<QoeEvent
                     "audio",
                     "subtitles",
                     "quality",
+                    "direct_fallback",
                     "remux_fallback",
                     "audio_fallback",
                     "other",

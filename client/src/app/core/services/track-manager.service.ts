@@ -330,17 +330,20 @@ export class TrackManagerService {
   }
 }
 
-/** Maps a `streams`-order index to its engine track: by position when the lists align,
- *  else by language (webOS folds same-language streams into one track). */
+/** Maps a `streams`-order index to its engine track: by language when it is unique on both sides (webOS lists the
+ *  DEFAULT rendition first and folds same-language streams), else by position when the lists align. */
 export function trackForStreamIndex<T extends { id: string; language: string }>(
   idx: number,
   streams: AudioStreamChoice[],
   tracks: T[],
 ): T | undefined {
   if (!streams[idx]) return undefined;
-  if (streams.length === tracks.length) return tracks[idx];
   const lang = normalizeLangCode(streams[idx].language);
-  return tracks.find((t) => normalizeLangCode(t.language) === lang);
+  const sameLang = tracks.filter((t) => normalizeLangCode(t.language) === lang);
+  const streamsOfLang = streams.filter((s) => normalizeLangCode(s.language) === lang).length;
+  if (sameLang.length === 1 && streamsOfLang === 1) return sameLang[0];
+  if (streams.length === tracks.length) return tracks[idx];
+  return sameLang[0];
 }
 
 /** Reverse of {@link trackForStreamIndex}: the `streams` index a track plays; `hint` wins when the folded track covers it. Undefined if unknown. */
@@ -352,11 +355,13 @@ export function streamIndexForTrack(
 ): number | undefined {
   const pos = tracks.findIndex((t) => t.id === trackId);
   if (pos < 0 || !streams.length) return undefined;
-  if (streams.length === tracks.length) return pos;
   const lang = normalizeLangCode(tracks[pos].language);
   const same = streams
     .map((s, i) => (normalizeLangCode(s.language) === lang ? i : -1))
     .filter((i) => i >= 0);
+  const tracksOfLang = tracks.filter((t) => normalizeLangCode(t.language) === lang).length;
+  if (same.length === 1 && tracksOfLang === 1) return same[0];
+  if (streams.length === tracks.length) return pos;
   return hint != null && same.includes(hint) ? hint : same[0];
 }
 

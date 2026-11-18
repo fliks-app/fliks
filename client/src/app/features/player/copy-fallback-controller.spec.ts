@@ -217,3 +217,30 @@ describe('CopyFallbackController: audio decoder failure', () => {
     expect(controller.maybeFallback({ ...AUDIO, audioCodec: 'ac3' }, 12)).toBe(true);
   });
 });
+
+describe('CopyFallbackController: DirectPlay steps down to a remux', () => {
+  it('renegotiates without DirectPlay first, keeping the copy', async () => {
+    const host = createHost({ playbackMode: () => 'direct', hasServerFeature: () => false });
+    const controller = createController(host);
+    expect(controller.maybeFallback({ source: 'media', code: 4 }, 5)).toBe(true);
+    expect(controller.shouldForceRemux(1)).toBe(true);
+    expect(controller.shouldForceRejectCopy(1)).toBe(false);
+    await flush();
+    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(5, { reason: 'direct_fallback' });
+  });
+
+  it('rejects the copy once the remux fails in turn', async () => {
+    let mode: 'direct' | 'remux' = 'direct';
+    let sid = 'sid-1';
+    const host = createHost({ playbackMode: () => mode, currentSid: () => sid });
+    const controller = createController(host);
+    controller.maybeFallback(UNDECODABLE, 0);
+    await flush();
+    mode = 'remux';
+    sid = 'sid-2';
+    expect(controller.maybeFallback(UNDECODABLE, 0)).toBe(true);
+    await flush();
+    expect(controller.shouldForceRejectCopy(1)).toBe(true);
+    expect(host.reloadStream).toHaveBeenLastCalledWith(0, { reason: 'remux_fallback' });
+  });
+});

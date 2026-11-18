@@ -233,7 +233,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         // Preferred path: native resume + start-bitrate via mediaOption.
         await this.attachAndPlay(url, start, true);
       } catch (e) {
-        // Only a mediaOption schema rejection merits a plain-src retry; a load timeout means a slow stream, so surface it (a retry burns another 30s).
+        // A refused <source> (mediaOption schema, a type canPlayType rejects such as MKV) retries with plain src;
+        // a load timeout means a slow stream, so surface it (a retry burns another 30s).
         if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
         await this.attachAndPlay(url, start, false);
       }
@@ -283,6 +284,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         const source = document.createElement('source');
         source.src = url;
         source.setAttribute('type', webOsSourceType(url, startTime, this.directMime));
+        // A skipped <source> errors on itself only: the <video> just waits for another one.
+        source.addEventListener('error', onErr);
         v.appendChild(source);
       } else {
         v.src = url;
@@ -437,8 +440,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const tracks: AudioTrack[] = [];
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
-      // Position, never `t.id`: webOS numbers tracks from the demuxer stream
-      // id (1-based), and the player reads this suffix as a streamInfo index.
+      // Position, never `t.id` (the 1-based demuxer stream id). The order is webOS's own, DEFAULT
+      // rendition first, so the player maps tracks to streamInfo by language.
       tracks.push({
         id: 'audio-' + i,
         language: t.language || 'und',
