@@ -18,6 +18,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     isOnline: () => online,
     hasMedia: () => true,
     isPaused: () => false,
+    isHidden: () => false,
     isLoading: () => false,
     reloadInFlight: () => false,
     lastSeekAt: () => 0,
@@ -97,6 +98,36 @@ describe('RecoveryController', () => {
     expect(host.reloadSession).toHaveBeenCalledTimes(3);
     expect(engine.unload).toHaveBeenCalled();
     expect(host.showFailure).toHaveBeenCalledExactlyOnceWith({ thrown: new Error('gone') });
+  });
+
+  it('a session lost while paused reports no wait', async () => {
+    const { ctl, host } = setup({ isPaused: () => true });
+    vi.advanceTimersByTime(40_000);
+    await ctl.recoverFromLostSession('session_lost', Date.now() - 30_000);
+    expect(host.reportRecovery).toHaveBeenCalledWith(100, { reason: 'session_lost', durationMs: 0 });
+  });
+
+  it('a session lost within a heartbeat of resuming reports no wait', async () => {
+    let paused = true;
+    const { ctl, host } = setup({ isPaused: () => paused });
+    ctl.armClock();
+    vi.advanceTimersByTime(1_000);
+    ctl.tickClockWatch();
+    paused = false;
+    vi.advanceTimersByTime(3_000);
+    await ctl.recoverFromLostSession('session_expired');
+    expect(host.reportRecovery).toHaveBeenLastCalledWith(100, { reason: 'session_expired', durationMs: 0 });
+  });
+
+  it('a wake clamps the wait to the time since the wake', async () => {
+    const { ctl, host } = setup();
+    ctl.armClock();
+    vi.advanceTimersByTime(10 * 60_000);
+    ctl.tickClockWatch();
+    await flush();
+    vi.advanceTimersByTime(4_000);
+    await ctl.recoverFromLostSession('session_lost', Date.now() - 10 * 60_000);
+    expect(host.reportRecovery).toHaveBeenCalledWith(100, { reason: 'session_lost', durationMs: 4_000 });
   });
 
   it('with the card up, nothing retries any more', async () => {

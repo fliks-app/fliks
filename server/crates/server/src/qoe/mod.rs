@@ -82,6 +82,13 @@ fn playing() -> PlayState {
     PlayState::Playing
 }
 
+/// The engine rejected the copy before this session, so it was served transcoded.
+pub(crate) fn copy_rejected(reasons: &Value) -> bool {
+    reasons
+        .as_array()
+        .is_some_and(|a| a.iter().any(|r| r == "ClientRejectedCopy"))
+}
+
 impl From<&LiveSession> for SessionRef {
     fn from(s: &LiveSession) -> Self {
         Self {
@@ -503,7 +510,8 @@ impl Qoe {
     }
 
     fn to_row(t: &Tracker) -> QoeRow {
-        let s = t.agg.summary();
+        let mut s = t.agg.summary();
+        s.copy_rejected = copy_rejected(&t.session.transcode_reasons);
         let live = t.session.kind == Kind::Live;
         let d = diagnose(&s, live);
         let ses = &t.session;
@@ -558,6 +566,13 @@ impl Qoe {
             sampleCount: clamp_int(s.sample_count),
             stallCauseMs: s.stall_cause_ms.and_then(|c| serde_json::to_value(c).ok()),
             stallReasonMs: s.stall_reason_ms.and_then(|c| serde_json::to_value(c).ok()),
+            startupMs: opt(s.startup_ms),
+            startupCause: s.startup_cause.and_then(|c| {
+                serde_json::to_value(c)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+            }),
+            fallbackReloads: clamp_int(s.fallback_reloads),
             pipeline: t.agg.pipeline().and_then(|p| serde_json::to_value(p).ok()),
             verdict: v.clone(),
             confidence: c.clone(),

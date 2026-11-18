@@ -1676,6 +1676,7 @@
     "setting_retention": "Retenção (dias)",
     "settings_saved": "Definições guardadas",
     "verdict_breakdown": "Diagnósticos",
+    "verdict_unmeasured": "Sem medição",
     "empty": "Ainda sem dados.",
     "filter_verdict": "Diagnóstico",
     "filter_all_verdicts": "Todos os diagnósticos",
@@ -1724,7 +1725,9 @@
       "healthy": "Nenhum problema detetado.",
       "cmcd_missing": "O cliente declara CMCD mas o servidor não recebeu nenhum.",
       "session_lost": "Cortes: o servidor já não conhecia a sessão e o leitor teve de a recriar.",
-      "session_expired": "Cortes: o servidor recusou o resto do fluxo e o leitor teve de o reiniciar."
+      "session_expired": "Cortes: o servidor recusou o resto do fluxo e o leitor teve de o reiniciar.",
+      "copy_fallback": "O leitor não conseguiu reproduzir o fluxo original e reiniciou com uma alternativa.",
+      "slow_start": "A primeira imagem demorou mais de 10 segundos a aparecer."
     },
     "filter_all_devices": "Todos os dispositivos",
     "sessions_count": "{{count}} sessões",
@@ -1817,6 +1820,7 @@
       "reload_direct_fallback": "A reprodução direta passou para remux",
       "reload_remux_fallback": "O remux passou para a transcodificação",
       "reload_audio_fallback": "Alternativa de áudio: {{codec}} não descodificado pelo dispositivo, transcodificado",
+      "reload_sdr_fallback": "Recarregado em SDR: o recetor AirPlay não conseguia mostrar HDR",
       "reload_other": "Recarga do fluxo",
       "recovery_after": "Retomado após {{duration}}"
     },
@@ -1841,7 +1845,8 @@
       "error_plain": "Erro de reprodução",
       "unreported_one": "1 paragem de {{duration}} sem detalhes recebidos",
       "unreported_many": "{{count}} paragens, {{duration}} no total, sem detalhes recebidos",
-      "rung_eco": "{{rung}} baixo consumo"
+      "rung_eco": "{{rung}} baixo consumo",
+      "start": "Primeira imagem após {{duration}}"
     },
     "throughput_measured": "Débito medido",
     "bitrate_video": "Bitrate do vídeo",

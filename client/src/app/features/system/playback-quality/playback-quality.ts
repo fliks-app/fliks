@@ -32,6 +32,7 @@ import {
   LucideCast,
   LucideCircleStop,
   LucideCircleX,
+  LucidePlay,
   LucideRefreshCw,
   LucideRotateCcw,
   LucideTriangleAlert,
@@ -69,6 +70,7 @@ type Tab = (typeof TABS)[number];
     LucideCast,
     LucideCircleStop,
     LucideCircleX,
+    LucidePlay,
     LucideRefreshCw,
     LucideRotateCcw,
     LucideTriangleAlert,
@@ -289,6 +291,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return v == null ? '-' : this.percent(Math.round(v), 0);
   }
 
+  /** An ok verdict with no sample behind it says nothing about the playback. */
+  verdictText(row: Pick<QoeSessionRow, 'verdict' | 'sampleCount'>): string {
+    return this.translate.instant(row.verdict === 'ok' && row.sampleCount === 0 ? 'qoe.verdict_unmeasured' : `qoe.verdict.${row.verdict}`);
+  }
+
   dotClass(row: QoeSessionRow): string {
     return qoeDotClass(row);
   }
@@ -386,6 +393,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
       return this.change('qoe.transition.quality_switch', formatMbps(d.fromBitrate, this.fmt), formatMbps(d.toBitrate, this.fmt));
     }
     if (e.type === 'reload') return this.reloadLines(d);
+    if (e.type === 'start') return { title: this.translate.instant('qoe.block.start', { duration: this.seconds(d.durationMs ?? 0) }) };
     return { title: this.translate.instant('qoe.transition.recovery') };
   }
 
@@ -494,10 +502,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
   /** The marker of a change: what changed, not just that something did. */
   changeIcon(
     type: string, reason?: string, cast = false,
-  ): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'fallback' | 'cast' | 'other' {
+  ): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'fallback' | 'cast' | 'start' | 'other' {
     if (cast) return 'cast';
-    if (reason === 'direct_fallback' || reason === 'remux_fallback' || reason === 'audio_fallback') return 'fallback';
+    if (reason?.endsWith('_fallback')) return 'fallback';
     if (type === 'quality_switch') return 'quality';
+    if (type === 'start') return 'start';
     if (type === 'recovery') return 'recovery';
     if (type === 'reload') return reason === 'audio' ? 'audio' : reason === 'subtitles' ? 'subtitles' : 'reload';
     return 'other';
@@ -550,6 +559,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
         return title('qoe.transition.reload_direct_fallback');
       case 'remux_fallback':
         return title('qoe.transition.reload_remux_fallback');
+      case 'sdr_fallback':
+        return title('qoe.transition.reload_sdr_fallback');
       case 'audio_fallback':
         return title('qoe.transition.reload_audio_fallback', { codec: (d.from ?? '-').toUpperCase() });
       default:

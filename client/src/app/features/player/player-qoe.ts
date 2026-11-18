@@ -12,6 +12,8 @@ export interface ReloadWhy {
 /** Buffering blips shorter than this are decoder hiccups, not a stall the viewer saw. */
 export const MIN_STALL_MS = 250;
 export const SAMPLE_TIMEOUT_MS = 500;
+/** Giving up on a spinner this long counts as a slow start. */
+const ABANDONED_START_MS = 10_000;
 
 /** Engine-agnostic stall accounting; an episode flagged `ignored` (seek, reload) is never counted. */
 export class StallTracker {
@@ -147,16 +149,27 @@ export class PlayerQoe {
   private refreshing = false;
   private generation = 0;
   private sid: string | undefined;
+  /** Start of the wait the viewer asked for, and the time a refused autoplay held it. */
+  private loadAt: number;
+  private heldMs = 0;
+  private heldSince: number | null = null;
+  private started = false;
   /** One per viewing: survives sid changes, renewed by {@link reset}. */
   playbackId = newPlaybackId();
 
   constructor(
     private readonly reporter: QoeReporter,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.loadAt = this.now();
+  }
 
   /** New media: counters restart, the session's events stay with their own sid. */
   reset(): void {
+    this.loadAt = this.now();
+    this.heldMs = 0;
+    this.heldSince = null;
+    this.started = false;
     this.stalls.reset();
     this.recoveryReloads = 0;
     this.last = null;
@@ -250,8 +263,45 @@ export class PlayerQoe {
 
   /** A rung change already records its own quality_switch, so it adds nothing here. */
   onReload(sessionId: string | undefined, position: number, why: ReloadWhy): void {
+    // A fallback or recovery reload is the stream's doing: the viewer's wait carries on.
+    if (!this.started && !why.reason.endsWith('_fallback')) {
+      this.loadAt = this.now();
+      this.heldMs = 0;
+    }
     if (!sessionId || why.reason === 'quality') return;
     this.record(sessionId, { type: 'reload', position, reason: why.reason, from: why.from, to: why.to }, true);
+  }
+
+  /** Time spent waiting for the picture, without the stretch a refused autoplay held. */
+  private startupMs(): number {
+    const held = this.heldMs + (this.heldSince === null ? 0 : this.now() - this.heldSince);
+    return Math.max(0, this.now() - this.loadAt - held);
+  }
+
+  holdStartup(held: boolean): void {
+    if (held && this.heldSince === null) this.heldSince = this.now();
+    else if (!held && this.heldSince !== null) {
+      this.heldMs += this.now() - this.heldSince;
+      this.heldSince = null;
+    }
+  }
+
+  /** One `start` per playback, at the first frame. */
+  onFirstFrame(sessionId: string | undefined): void {
+    this.sendStart(sessionId);
+  }
+
+  /** Leaving before the first frame after a long wait reads as a slow start, not as nothing. */
+  onTeardown(sessionId: string | undefined): void {
+    if (this.startupMs() > ABANDONED_START_MS) this.sendStart(sessionId);
+  }
+
+  private sendStart(sessionId: string | undefined): void {
+    if (this.started) return;
+    this.started = true;
+    if (sessionId) {
+      this.record(sessionId, { type: 'start', position: null, durationMs: Math.round(this.startupMs()) });
+    }
   }
 
   /** Re-reads the engine for the next heartbeat; never awaited by it, so a slow engine delays nothing. */

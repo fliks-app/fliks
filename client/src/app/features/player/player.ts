@@ -95,7 +95,6 @@ interface AudioOption {
 /** Long enough to fold a start-up burst into one report, short enough that a
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
-const HEARTBEAT_MS = 10_000;
 const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
 
 
@@ -115,7 +114,7 @@ import { ControlsVisibilityService } from './controls/controls-visibility';
 import { type ControlsModel, outputModel } from './controls/controls-model';
 import { NO_NOW_PLAYING, NowPlayingMetadataService, describeNowPlaying, mediaSessionText, type NowPlayingMetadata } from '../../core/services/playback/now-playing-metadata.service';
 import { CopyFallbackController } from './copy-fallback-controller';
-import { RecoveryController } from './recovery-controller';
+import { HEARTBEAT_MS, RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
@@ -518,6 +517,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.prewarmCurrentStream();
     },
     beat: () => this.savePosition(),
+    isHidden: () => typeof document !== 'undefined' && document.hidden,
     dropStall: () => this.qoe.dropStall(),
     closeStall: () => this.qoe.closeStall(this.activeSessionId()),
     reportRecovery: (pos, wait) => this.qoe.onRecovery(this.activeSessionId(), pos, wait),
@@ -1453,6 +1453,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     if (this.session.isLocal()) {
+      this.qoe.onTeardown(this.activeSessionId());
       this.qoe.flushKeepalive(this.activeSessionId());
     }
     // Stopping the session kills the server's streams: Shaka must have aborted its requests first, or a failing one
@@ -2180,6 +2181,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.engine.resetRecoveryGuard();
     const previousSessionId = this.playbackInfo?.sessionId;
     this.qoe.setStalled(false, { sessionId: previousSessionId, position: this.engine.currentTime });
+    this.qoe.onTeardown(previousSessionId);
     this.qoe.flushKeepalive(previousSessionId);
     let startTime: number | undefined;
     try {
@@ -2323,10 +2325,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.state.videoStarted()) return;
     untracked(() => {
       if (this.engine && this.session.isLocal()) {
+        this.qoe.onFirstFrame(this.activeSessionId());
         void this.qoe.refresh(this.engine, this.activeSessionId());
       }
       void this.savePosition(true);
     });
+  });
+
+  /** A refused autoplay waits on the viewer, not on the stream. */
+  private readonly qoeAutoplayHoldEffect = effect(() => {
+    const held = this.autoplayBlocked();
+    untracked(() => this.qoe.holdStartup(held));
   });
 
   /** Buffering after the first frame that no seek, load or quality switch explains. */
@@ -2932,7 +2941,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
       this.state.setRecovering(true);
-      await this.reloadStream(this.engine.currentTime, { reason: 'other' });
+      await this.reloadStream(this.engine.currentTime, { reason: 'sdr_fallback' });
     } catch (e) {
       if (!this.state.error()) this.state.failWith(e);
     } finally {
@@ -3482,6 +3491,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.keepalivePositionSave();
     if (this.session.isLocal()) {
+      this.qoe.onTeardown(this.activeSessionId());
       this.qoe.flushKeepalive(this.activeSessionId());
       this.fireAndForgetStopSessions(this.activeSessionId());
     }

@@ -20,6 +20,8 @@ export interface RecoveryHost {
   isOnline(): boolean;
   hasMedia(): boolean;
   isPaused(): boolean;
+  /** The tab or app is in the background. */
+  isHidden(): boolean;
   isLoading(): boolean;
   /** A user reload (switch, episode swap, far seek) owns the engine. */
   reloadInFlight(): boolean;
@@ -52,6 +54,7 @@ export interface RecoveryHost {
 /** A 1 s tick this late means the process was frozen (sleep, throttled tab); `visibilitychange` doesn't
  *  fire for a sleep, so the clock gap is the signal. */
 const WAKE_GAP_MS = 5_000;
+export const HEARTBEAT_MS = 10_000;
 const STALL_TIMEOUT_MS = 15_000;
 /** A backward seek can trigger a 10-30s backend respawn with a frozen-but-healthy playhead. */
 const SEEK_STALL_GRACE_MS = 32_000;
@@ -68,7 +71,7 @@ export class RecoveryController {
   /** Only one recovery at a time, so a slow one can't race the next heartbeat's `sessionLost`. */
   private recovering = false;
   /** The recovery in progress: what triggered it and when the picture froze, kept across retries. */
-  private episode: { reason: QoeRecoveryReason; since: number } | null = null;
+  private episode: { reason: QoeRecoveryReason; since: number; quiet: boolean } | null = null;
   /** Attempts in this loss episode, cleared only once a reload sustains playback, so a quick re-fail keeps
    *  counting toward the cap. */
   private attempts = 0;
@@ -93,6 +96,9 @@ export class RecoveryController {
   private lastProgressAt = 0;
 
   private lastTickAt = 0;
+  private lastWakeAt = 0;
+  /** Last tick the viewer could not have seen the picture (paused or in the background). */
+  private idleAt = 0;
   /** A heartbeat lost on the network (e.g. right after a wake) leaves the session state unknown; retry the
    *  resume path once online. */
   private resumeDue = false;
@@ -140,7 +146,9 @@ export class RecoveryController {
     const now = Date.now();
     const gap = now - this.lastTickAt;
     this.lastTickAt = now;
+    if (this.host.isPaused() || this.host.isHidden()) this.idleAt = now;
     if (gap > WAKE_GAP_MS) {
+      this.lastWakeAt = now;
       // A frozen interval is not a frozen playhead: skip the stall watchdog's black-screen reload this tick.
       this.resetStallWatchdog();
       void this.resumeAfterGap();
@@ -292,7 +300,12 @@ export class RecoveryController {
       const since =
         openSince ??
         (counted ? Date.now() : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())));
-      this.episode = { reason, since };
+      // A session the server dropped while nobody watched froze nothing the viewer saw.
+      const quiet =
+        reason !== 'stall' &&
+        reason !== 'other' &&
+        (this.host.isPaused() || this.host.isHidden() || Date.now() - this.idleAt < HEARTBEAT_MS);
+      this.episode = { reason, since: Math.max(since, this.lastWakeAt), quiet };
     }
     this.recovering = true;
     // Suppress the fatal-error overlay the engine tears off during the reload: it should read as buffering.
@@ -309,7 +322,9 @@ export class RecoveryController {
       this.episode = null;
       this.host.reportRecovery(
         pos,
-        episode ? { reason: episode.reason, durationMs: Date.now() - episode.since } : undefined,
+        episode
+          ? { reason: episode.reason, durationMs: episode.quiet ? 0 : Date.now() - episode.since }
+          : undefined,
       );
       this.awaitConfirm();
     } catch (e) {

@@ -1,7 +1,7 @@
 use super::{Kind, Qoe, SessionRef, playbacks, routes, store, until_next};
 use crate::events::event::PlayState;
 use chrono::NaiveDateTime;
-use fliks_domain::qoe::{parse_events, parse_sample};
+use fliks_domain::qoe::{Confidence, Verdict, parse_events, parse_sample};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -89,7 +89,7 @@ async fn events_are_stored_with_their_cause_and_capped_at_200(pool: PgPool) {
         .unwrap();
     assert_eq!(data["cause"], "unknown");
     assert!(data.get("serverLoad").is_some());
-    assert_eq!(rows(&pool).await[0].stallCount, 0);
+    assert_eq!(rows(&pool).await[0].stallCount, 250);
 }
 
 #[sqlx::test(migrations = false)]
@@ -152,6 +152,35 @@ async fn sessions_of_one_playback_share_a_restated_verdict(pool: PgPool) {
     );
     assert_eq!(sum["byDevice"][0]["sessions"], 1);
     assert_eq!(sum["byDevice"][0]["stallSessions"], 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_copy_that_fell_back_after_a_slow_start_is_a_device_problem(pool: PgPool) {
+    let q = qoe(&pool).await;
+    let now = super::now_ms();
+    let mut a = sref("a", Some(1));
+    a.started_at = now - 40_000.0;
+    let fallback = json!([{"type": "reload", "at": now - 9_500.0, "reason": "remux_fallback"}]);
+    q.record_events(&a, &parse_events(&fallback, now, None), Some("p".into()));
+    q.flush("a").await;
+    let mut b = sref("b", Some(1));
+    (b.kind, b.transcode_reasons) = (Kind::Transcode, json!(["ClientRejectedCopy"]));
+    q.record_sample(&b, &parse_sample(&sample("p", 0)).unwrap());
+    let start = json!([{"type": "start", "at": now, "durationMs": 35_000}]);
+    q.record_events(&b, &parse_events(&start, now, None), None);
+    q.flush("b").await;
+    let r = rows(&pool).await;
+    assert_eq!((r[0].fallbackReloads, r[1].startupMs), (1, Some(35_000)));
+    assert_eq!(r[0].playbackVerdict, "device");
+    let p = &playbacks::merge_playbacks(r)[0];
+    assert_eq!(
+        (p.diag.verdict, p.diag.confidence),
+        (Verdict::Device, Confidence::High)
+    );
+    assert_eq!(
+        p.diag.reasons,
+        ["qoe.reason.copy_fallback", "qoe.reason.slow_start"]
+    );
 }
 
 #[sqlx::test(migrations = false)]

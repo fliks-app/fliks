@@ -137,6 +137,7 @@ pub fn parse_events(raw: &Value, now: f64, sent_at: Option<f64>) -> Vec<QoeEvent
                     "direct_fallback",
                     "remux_fallback",
                     "audio_fallback",
+                    "sdr_fallback",
                     "other",
                 ];
                 ev.reason = Some(reason(o, &r));
