@@ -2301,6 +2301,12 @@ describe('PlayerComponent audio target', () => {
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });
 
+  it('lists the engine audio tracks in file order whatever order the engine reports', () => {
+    const h = audioHarness();
+    (h.component as any).adoptAudioTracks([engineTrack('audio-0', 'fra', true), engineTrack('audio-1', 'eng')]);
+    expect(h.component.availableAudioTracks().map((t: { id: string }) => t.id)).toEqual(['audio-1', 'audio-0']);
+  });
+
   it('configures the engine with the target language before every load, not the session-start one', async () => {
     const h = audioHarness();
     h.component.activeAudioStreamIndex = 1;

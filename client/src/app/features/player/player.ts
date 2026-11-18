@@ -1761,10 +1761,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Engine tracks labelled from streamInfo (engines list them in its order), so
    *  the menu reads like the media-detail header. */
+  /** In file order: webOS lists the DEFAULT rendition first, so its own order flips with every audio reload. */
   private describeAudioTracks(raw: AudioTrack[]): (AudioOption & { selected: boolean })[] {
     const streams = this.audioStreamInfo();
-    return raw.map((t, i) => {
-      const si = streamIndexForTrack(t.id, raw, streams, this.activeAudioStreamIndex) ?? i;
+    const indexed = raw.map((t, i) => ({ t, i, si: streamIndexForTrack(t.id, raw, streams, this.activeAudioStreamIndex) ?? i }));
+    return indexed.sort((a, b) => a.si - b.si).map(({ t, i, si }) => {
       const parts = streams[si] ? formatAudioParts(streams[si], this.translate, si + 1) : null;
       const fallback = t.label || this.translate.instant('player.audio_track_n', { index: i + 1 });
       return {
