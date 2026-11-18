@@ -566,7 +566,10 @@ enum MusicTransport: Equatable {
         return q
     }
 
-    private struct BeatAnswer: Decodable { let sessionLost: Bool? }
+    private struct BeatAnswer: Decodable { let sessionLost: Bool?; let superseded: Bool? }
+
+    /// Whether `sessionId` is one of this player's stream sessions: another device claiming it stops the music.
+    func holds(sessionId: String) -> Bool { resolved.values.contains { $0.sessionId == sessionId } }
 
     /// A beat now for a remote command that changes no playback state, so its ack beats the controller's
     /// timeout instead of waiting for the periodic beat.
@@ -584,6 +587,7 @@ enum MusicTransport: Equatable {
                         queue: queueToSend(sid: r.sessionId))
         Task {
             let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body)
+            if answer?.superseded == true, let sid = r.sessionId, holds(sessionId: sid) { return stop() }
             if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil; queueSent = nil }
         }
     }
