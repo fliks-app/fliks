@@ -488,6 +488,26 @@
           </app-dropdown-menu>
         }
         <span class="flex-1"></span>
+        @if (showVolume()) {
+          <button type="button" class="btn btn-ghost btn-circle" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" data-testid="audio-mute">
+            @if (audio.muted() || audio.volume() === 0) {
+              <svg lucideVolumeX class="h-5 w-5"></svg>
+            } @else {
+              <svg lucideVolume2 class="h-5 w-5"></svg>
+            }
+          </button>
+          <input
+            type="range"
+            class="range range-xs w-28"
+            [attr.aria-label]="'player.volume' | translate"
+            min="0"
+            max="1"
+            step="0.05"
+            [value]="audio.muted() ? 0 : audio.volume()"
+            (input)="audio.setVolume(+$any($event.target).value)"
+            data-testid="audio-volume"
+          />
+        }
         @if (lyricsPanel(); as p) {
           @if (p.karaokeOn() && !p.stemsNative()) {
             @if (p.singKind(); as kind) {
@@ -536,26 +556,6 @@
           <button type="button" class="btn btn-ghost btn-circle" (click)="queueOpen.set(true)" [attr.aria-label]="'music_player.queue' | translate" data-testid="audio-queue-open">
             <svg lucideListMusic class="h-5 w-5"></svg>
           </button>
-        }
-        @if (showVolume()) {
-          <button type="button" class="btn btn-ghost btn-circle" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" data-testid="audio-mute">
-            @if (audio.muted() || audio.volume() === 0) {
-              <svg lucideVolumeX class="h-5 w-5"></svg>
-            } @else {
-              <svg lucideVolume2 class="h-5 w-5"></svg>
-            }
-          </button>
-          <input
-            type="range"
-            class="range range-xs w-28"
-            [attr.aria-label]="'player.volume' | translate"
-            min="0"
-            max="1"
-            step="0.05"
-            [value]="audio.muted() ? 0 : audio.volume()"
-            (input)="audio.setVolume(+$any($event.target).value)"
-            data-testid="audio-volume"
-          />
         }
       </div>
       </div>
