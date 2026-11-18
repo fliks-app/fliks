@@ -4181,6 +4181,7 @@
     "no_notes": "No release notes available.",
     "downloading": "Downloading… {{percent}} %",
     "installing": "Installing and restarting…",
+    "pwa_installing": "Installing an update, Fliks will restart…",
     "install": "Install",
     "open_release": "View release",
     "error": "Update failed",

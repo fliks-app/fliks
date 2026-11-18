@@ -4158,6 +4158,7 @@
     "no_notes": "No hay notas de versión disponibles.",
     "downloading": "Descargando… {{percent}} %",
     "installing": "Instalando y reiniciando…",
+    "pwa_installing": "Instalando una actualización, Fliks se reiniciará…",
     "install": "Instalar",
     "open_release": "Ver la versión",
     "error": "Error de la actualización",

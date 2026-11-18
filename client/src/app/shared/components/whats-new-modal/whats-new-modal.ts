@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideRocket } from '@lucide/angular';
+import { SwUpdate } from '@angular/service-worker';
 import { environment } from '../../../../environments/environment';
 import { DeviceService } from '../../../core/services/device.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
@@ -80,6 +81,7 @@ async function fetchText(url: string): Promise<string | null> {
 export class WhatsNewModalComponent {
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
+  private readonly swUpdate = inject(SwUpdate, { optional: true });
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
 
@@ -94,7 +96,7 @@ export class WhatsNewModalComponent {
   private async showIfNew(): Promise<void> {
     const current = environment.version;
     const seen = localStorage.getItem(SEEN_KEY);
-    if (!this.device.isDesktop() || seen === current) return;
+    if (!this.device.isDesktop() || seen === current || (await this.updatePending())) return;
     const root = new URL('whats-new/', document.baseURI).href;
     const lang = this.translate.currentLang() || 'en';
     const slides: WhatsNewSlide[] = [];
@@ -113,6 +115,14 @@ export class WhatsNewModalComponent {
     if (!slides.length) return;
     this.slides.set(slides);
     this.dialog()?.nativeElement.showModal();
+  }
+
+  /** True when the PWA is about to reload into a newer version: its own notes will show then. */
+  private async updatePending(): Promise<boolean> {
+    if (!this.swUpdate?.isEnabled) return false;
+    // A page with no controlling worker yet waits for one: give up after a few seconds.
+    const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000));
+    return Promise.race([this.swUpdate.checkForUpdate().catch(() => false), timeout]);
   }
 
   /** True on the first slide of a version after another one: the dots leave a gap there. */
