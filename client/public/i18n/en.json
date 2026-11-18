@@ -4181,11 +4181,18 @@
     "no_notes": "No release notes available.",
     "downloading": "Downloading… {{percent}} %",
     "installing": "Installing and restarting…",
+    "pwa_installing": "Installing an update, Fliks will restart…",
     "install": "Install",
     "open_release": "View release",
     "error": "Update failed",
     "ahead_of_server": "This version is newer than your server ({{server}}). Some features may not work until the server is updated.",
     "hide_until_server": "Hide until the server updates"
+  },
+  "whats_new": {
+    "title": "What's new in Fliks {{version}}",
+    "previous": "Previous",
+    "next": "Next",
+    "done": "Got it"
   },
   "plugin_view": {
     "unavailable_title": "This page isn't available",

@@ -4,3 +4,7 @@
 <app-folder-picker-modal />
 <app-select-picker />
 <router-outlet />
+<app-blocking-overlay
+  [open]="pwaAutoUpdate.installing()"
+  [message]="'update.pwa_installing' | translate"
+/>

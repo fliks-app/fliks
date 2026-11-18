@@ -34,13 +34,15 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 import { RemoteService } from './core/services/remote.service';
 import { TIZEN_MEDIA_KEYS } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
-import { TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
 
 @Component({
   selector: 'app-root',
   imports: [
     BackgroundComponent,
-    RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent],
+    RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent,
+    BlockingOverlayComponent, TranslatePipe],
   templateUrl: './app.html',
 })
 export class App implements OnInit, OnDestroy {
@@ -62,7 +64,7 @@ export class App implements OnInit, OnDestroy {
   private readonly dismissStack = inject(DismissableStackService);
   private readonly navbar = inject(NavbarService);
   private readonly backGesture = inject(BackGestureService);
-  private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
+  protected readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
   private readonly appResume = inject(AppResumeService);
   /** Injected so the offline playback queue is flushed on start, not only when
    *  some page happens to instantiate the service. */

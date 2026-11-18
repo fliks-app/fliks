@@ -23,7 +23,8 @@
             "assets": [
               {
                 "glob": "**/*",
-                "input": "public"
+                "input": "public",
+                "ignore": ["**/CLAUDE.md"]
               },
               {
                 "glob": "pdf.worker.min.mjs",
