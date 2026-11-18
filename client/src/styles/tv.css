@@ -29,6 +29,11 @@ html.keyboard-modality {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
+/* A full-height sheet covers the page: skip painting it (its animations and will-change layers cost GPU time). */
+html.sheet-covers .drawer-content,
+html.sheet-covers app-background {
+  visibility: hidden;
+}
 /* Pointerless TVs: neutralise daisyUI's two ungated `:hover` backgrounds so a latched hover leaves no phantom highlight. */
 html.tv-host:not(.tv-webos) .menu li > :hover,
 html.tv-host:not(.tv-webos) .select option:hover {
