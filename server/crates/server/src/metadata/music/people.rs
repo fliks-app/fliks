@@ -222,22 +222,37 @@ mod tests {
     async fn an_id_less_credit_takes_the_identified_artist_of_its_name(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         let mut c = db.acquire().await.unwrap();
-        let known = person(&mut c, "Ana Placeholder", Some("mbid-a"), None)
-            .await
-            .unwrap();
+        let known = person(
+            &mut c,
+            "Ana Placeholder",
+            Some("00000000-0000-0000-0000-00000000000a"),
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(
             person(&mut c, "Ana Placeholder", None, None).await.unwrap(),
             known
         );
         assert_eq!(
-            person(&mut c, "Ana Placeholder", Some("mbid-a"), None)
-                .await
-                .unwrap(),
+            person(
+                &mut c,
+                "Ana Placeholder",
+                Some("00000000-0000-0000-0000-00000000000a"),
+                None
+            )
+            .await
+            .unwrap(),
             known
         );
-        let other = person(&mut c, "Ana Placeholder", Some("mbid-b"), None)
-            .await
-            .unwrap();
+        let other = person(
+            &mut c,
+            "Ana Placeholder",
+            Some("00000000-0000-0000-0000-00000000000b"),
+            None,
+        )
+        .await
+        .unwrap();
         assert_ne!(other, known);
     }
 }
