@@ -33,7 +33,7 @@ function setup(
       provideZonelessChangeDetection(),
       provideRouter([]),
       { provide: PlaybackDevice, useValue: playing },
-      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), observedTargetId: signal(null), observedTarget: signal(null), refreshTargets: vi.fn(), canLoad: vi.fn(() => true), ...over.remote } },
+      { provide: RemoteService, useValue: { targets: signal([]), selectedTargetId: signal(null), observedTargetId: signal(null), observedTarget: signal(null), refreshTargets: vi.fn(), canLoad: vi.fn(() => true), ownsSession: () => false, ...over.remote } },
       { provide: CastService, useValue: { enumerates: false, isAvailable: signal(false), isConnected: signal(false), castDevices: signal([]), getCastDevices: vi.fn() } },
       { provide: AirPlayService, useValue: { available: signal(false) } },
       { provide: CastPlaybackTarget, useValue: {} },
@@ -138,12 +138,29 @@ describe('RemotePickerListComponent while controlling a device', () => {
     const owned = { owner: { targetId: 'tv#1' }, state: 'playing', item: { title: 'Film', subtitle: null } };
     const { component } = setup({
       sync: { session: signal(owned), role: signal('observer'), observedOwnerTargetId: () => 'tv#1', isReading: () => false, positionNow: () => 0, line: () => '', parked: () => false },
-      remote: { selectTarget },
+      remote: { selectTarget, ownsSession: (id: string) => id === 'tv#1' },
     });
     (TestBed.inject(PlaybackSurface) as unknown as { open: typeof open }).open = open;
     component.selectRow({ kind: 'remote', id: 'tv#1', icon: 'tv', label: 'TV', subtitle: null, connected: false });
     expect(open).toHaveBeenCalledWith(owned);
     expect(selectTarget).not.toHaveBeenCalled();
+  });
+
+  it('never selects the device that owns the session, even when its player cannot open here', () => {
+    const selectTarget = vi.fn();
+    const moveTo = vi.fn();
+    const owned = { owner: { targetId: 'tv#1' }, state: 'playing', item: { title: 'Film', subtitle: null } };
+    const { component } = setup({
+      sync: { session: signal(owned), role: signal('observer'), observedOwnerTargetId: () => null, isReading: () => false, positionNow: () => 0, line: () => '', parked: () => false },
+      remote: { selectTarget, ownsSession: (id: string) => id === 'tv#1' },
+      session: { moveTo },
+    });
+    const surface = TestBed.inject(PlaybackSurface) as unknown as { canOpen: () => boolean; open: ReturnType<typeof vi.fn> };
+    surface.canOpen = () => false;
+    component.selectRow({ kind: 'remote', id: 'tv#1', icon: 'tv', label: 'TV', subtitle: null, connected: false });
+    expect(surface.open).not.toHaveBeenCalled();
+    expect(selectTarget).not.toHaveBeenCalled();
+    expect(moveTo).not.toHaveBeenCalled();
   });
 
   it('selects the device when the session does not move there', () => {

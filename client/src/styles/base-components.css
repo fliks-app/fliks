@@ -533,32 +533,6 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   }
 }
 
-/* A block that opens its own room in a `gap-4` column as it fades in, and closes it as it leaves; clipped only while it moves. */
-.reveal-in {
-  animation: reveal 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.reveal-out {
-  animation: reveal 200ms ease-in reverse forwards;
-}
-.reveal-in > *,
-.reveal-out > * {
-  overflow: hidden;
-}
-@keyframes reveal {
-  from {
-    grid-template-rows: 0fr;
-    margin-top: -1rem;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .reveal-in,
-  .reveal-out { animation-duration: 1ms; }
-}
-
 /* The player's action strip (reactions, mic) fades in and out with the layer it belongs to. */
 .action-strip-in {
   animation: action-strip-in 180ms ease-out;

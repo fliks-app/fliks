@@ -255,8 +255,8 @@ export class RemotePickerListComponent {
     }
     // The device that owns the account session is watched, not selected: the full player opens on it.
     const owned = this.sync.session();
-    if (row.kind === 'remote' && owned && row.id === this.sync.observedOwnerTargetId() && this.surface.canOpen(owned)) {
-      this.surface.open(owned);
+    if (row.kind === 'remote' && owned && this.remote.ownsSession(row.id)) {
+      if (this.surface.canOpen(owned)) this.surface.open(owned);
       return;
     }
     // The account session moves to the device with its queue, instead of a second device being selected.

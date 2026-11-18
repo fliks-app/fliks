@@ -425,16 +425,19 @@
       </div>
 
       @if (audio.musicMode()) {
-      @let canListenHere = remoteView() && !parkedView() && sync.canPlayHere();
+      <!-- Touch layouts take it from the device menu: their transport row has no room beside it. -->
+      @let canListenHere = remoteView() && !parkedView() && sync.canPlayHere() && !isTouch();
       <!-- TV: the actions share the transport row, leaving the height to the lyrics. -->
       <div [class]="isTv() ? 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center' : 'contents'">
-      @if (isTv() && canListenHere) {
-        <button type="button" animate.enter="fade-up-in" class="btn btn-primary col-start-1 row-start-1 justify-self-start" (click)="listenHere()">
-          <svg lucideTv class="h-5 w-5"></svg>
+      <!-- Elsewhere the button and the transport make a grid of their own, above the actions. -->
+      <div [class]="isTv() ? 'contents' : 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center'">
+      @if (canListenHere) {
+        <button type="button" animate.enter="fade-up-in" class="btn btn-primary col-start-1 row-start-1 justify-self-start max-sm:hidden" (click)="listenHere()" data-testid="audio-listen-here">
+          <app-device-icon [icon]="isTv() ? 'tv' : 'monitor'" />
           {{ 'session.listen_here' | translate }}
         </button>
       }
-      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" [class.col-start-2]="isTv()" [class.row-start-1]="isTv()" appTvRow>
+      <div class="col-start-2 row-start-1 flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" appTvRow>
         <button
           type="button"
           class="btn btn-ghost btn-circle [--size:2.5rem]"
@@ -476,32 +479,13 @@
           }
         </button>
       </div>
+      </div>
       <div class="flex items-center gap-1" [class.col-start-3]="isTv()" [class.justify-self-end]="isTv()" appTvRow>
         @if (!isTv()) {
           <app-dropdown-menu placement="top-start">
             <app-device-chip trigger (click)="refreshDevices()" />
             <app-remote-picker-list [card]="true" [transferOnly]="true" />
           </app-dropdown-menu>
-        }
-        @if (showVolume()) {
-          <button type="button" class="btn btn-ghost btn-circle" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" data-testid="audio-mute">
-            @if (audio.muted() || audio.volume() === 0) {
-              <svg lucideVolumeX class="h-5 w-5"></svg>
-            } @else {
-              <svg lucideVolume2 class="h-5 w-5"></svg>
-            }
-          </button>
-          <input
-            type="range"
-            class="range range-xs w-28"
-            [attr.aria-label]="'player.volume' | translate"
-            min="0"
-            max="1"
-            step="0.05"
-            [value]="audio.muted() ? 0 : audio.volume()"
-            (input)="audio.setVolume(+$any($event.target).value)"
-            data-testid="audio-volume"
-          />
         }
         <span class="flex-1"></span>
         @if (lyricsPanel(); as p) {
@@ -553,18 +537,28 @@
             <svg lucideListMusic class="h-5 w-5"></svg>
           </button>
         }
+        @if (showVolume()) {
+          <button type="button" class="btn btn-ghost btn-circle" (click)="audio.toggleMute()" [attr.aria-label]="'player.volume' | translate" data-testid="audio-mute">
+            @if (audio.muted() || audio.volume() === 0) {
+              <svg lucideVolumeX class="h-5 w-5"></svg>
+            } @else {
+              <svg lucideVolume2 class="h-5 w-5"></svg>
+            }
+          </button>
+          <input
+            type="range"
+            class="range range-xs w-28"
+            [attr.aria-label]="'player.volume' | translate"
+            min="0"
+            max="1"
+            step="0.05"
+            [value]="audio.muted() ? 0 : audio.volume()"
+            (input)="audio.setVolume(+$any($event.target).value)"
+            data-testid="audio-volume"
+          />
+        }
       </div>
       </div>
-      @if (!isTv() && canListenHere) {
-        <div class="grid" animate.enter="reveal-in" animate.leave="reveal-out">
-          <div class="flex min-h-0 flex-col">
-            <button type="button" class="btn btn-primary" (click)="listenHere()">
-              <svg lucideSmartphone class="h-5 w-5"></svg>
-              {{ 'session.listen_here' | translate }}
-            </button>
-          </div>
-        </div>
-      }
       } @else {
       <div class="flex items-center justify-center gap-1 sm:gap-3" appTvRow>
         <button type="button" class="btn btn-ghost btn-circle" (click)="local.previousChapter()" [attr.aria-label]="'audio_player.previous_chapter' | translate">

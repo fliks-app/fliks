@@ -245,7 +245,7 @@ export class PlaybackSession {
   }
 
   /** Whether a move to `deviceId` hands the account session over, which carries the queue: music held here,
-   *  or a session this device follows or controls. Video loads on the device directly. */
+   *  or a session this device follows. Video loads on the device directly. */
   transfersTo(deviceId: string): boolean {
     const sync = this.sync();
     const remote = this.remoteSvc();
@@ -253,7 +253,7 @@ export class PlaybackSession {
     if (!s || !sync.canTransfer() || this.local() || this.viewing() || !remote.canLoad(deviceId, s.item.mediaFileId)) return false;
     if (!sync.parked() && s.owner.targetId === deviceId) return false;
     if (this.audio().holds()) return !this.toParty({ type: 'drives' }, 'audio');
-    return sync.role() === 'observer' && (this.isLocal() || (s.state !== 'parked' && s.owner.targetId === remote.selectedTargetId()));
+    return sync.role() === 'observer' && this.isLocal();
   }
 
   /** The only handoff between outputs. False when refused (TV, nothing to hand over, a target that takes no load) or failed. */
