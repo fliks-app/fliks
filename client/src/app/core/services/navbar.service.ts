@@ -1,5 +1,5 @@
 import { Location } from '@angular/common';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, TemplateRef, computed, inject, signal } from '@angular/core';
 import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
@@ -14,6 +14,8 @@ export class NavbarService {
   readonly heroLogoUrl = signal<string | null>(null);
   /** Opens the page's actions menu from the mobile navbar, in place of the user menu; null when the page has none. */
   readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
+  /** Now-playing bars the TV navbar renders in place of the bottom of the screen, which the D-pad reaches last. */
+  readonly tvBars = signal<readonly TemplateRef<unknown>[]>([]);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
   /** Non-hero pages can opt into the layout's desktop back button by setting

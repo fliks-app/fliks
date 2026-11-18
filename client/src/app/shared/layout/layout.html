@@ -11,7 +11,8 @@
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
     <nav
       appTvRow
-      class="navbar fixed left-0 right-0 z-30 transition-all duration-300 border-base-100/20 tv:px-[var(--page-p)] tv:static"
+      data-tv-nav
+      class="navbar fixed left-0 right-0 z-30 transition duration-300 border-base-100/20 tv:px-[var(--page-p)] tv:static"
       [style.transition]="restorePending() ? 'none' : null"
       [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
       [class.top-0]="!tv.isTv() || tv.isTizen()"
@@ -45,7 +46,7 @@
           </label>
         }
       </div>
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0 tv:flex-none">
         @if (tv.isTv()) {
           <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
                entries live here, one ↑ away from the first rail. -->
@@ -56,6 +57,7 @@
                 <a
                   [routerLink]="item.route"
                   routerLinkActive
+                  ariaCurrentWhenActive="page"
                   #tab="routerLinkActive"
                   [routerLinkActiveOptions]="{ exact: item.exact }"
                   [state]="{ rootEntry: true }"
@@ -92,7 +94,8 @@
           }
         }
       </div>
-      <div class="flex-none flex items-center gap-1 md:gap-1.5">
+      <!-- TV: the tabs keep their width and the now-playing bar takes what is left. -->
+      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:min-w-0 tv:flex-1 tv:justify-end tv:pl-2">
         @if (appUpdate.available()) {
           <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
                   [attr.aria-label]="'update.title' | translate">
@@ -118,6 +121,9 @@
           }
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
+        }
+        @for (bar of navbar.tvBars(); track bar) {
+          <ng-container [ngTemplateOutlet]="bar" />
         }
         @if (navbar.heroMenu(); as openMenu) {
           <button #heroMore type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openMenu(heroMore)">
