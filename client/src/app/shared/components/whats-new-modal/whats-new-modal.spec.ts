@@ -33,12 +33,12 @@ describe('parseWhatsNew', () => {
 describe('versionsToShow', () => {
   const index = ['5.2.0', '6.0.0', '7.0.0', '7.1.0', '8.0.0'];
 
-  it('shows every version after the last seen one up to the current, newest first', () => {
-    expect(versionsToShow(index, '5.4.1', '7.0.3')).toEqual(['7.0.0', '6.0.0']);
+  it('shows every version after the last seen one up to the current, oldest first', () => {
+    expect(versionsToShow(index, '5.4.1', '7.0.3')).toEqual(['6.0.0', '7.0.0']);
   });
 
-  it('caps a long jump at three versions', () => {
-    expect(versionsToShow(index, '5.0.0', '8.0.0')).toEqual(['8.0.0', '7.1.0', '7.0.0']);
+  it('caps a long jump at the latest three versions', () => {
+    expect(versionsToShow(index, '5.0.0', '8.0.0')).toEqual(['7.0.0', '7.1.0', '8.0.0']);
   });
 
   it('shows only the newest notes when nothing was seen', () => {

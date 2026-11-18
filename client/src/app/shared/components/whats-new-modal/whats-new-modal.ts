@@ -53,13 +53,16 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** Versions with notes to show, newest first: those after `seen` up to `current`, or the newest one when nothing was seen. */
+/** Versions with notes to show, oldest first: the latest three after `seen` up to `current`, or the newest one when nothing was seen. */
 export function versionsToShow(index: string[], seen: string | null, current: string): string[] {
   const upToCurrent = index
     .filter((v) => compareVersions(v, current) <= 0)
     .sort((a, b) => compareVersions(b, a));
   if (seen === null) return upToCurrent.slice(0, 1);
-  return upToCurrent.filter((v) => compareVersions(v, seen) > 0).slice(0, MAX_VERSIONS);
+  return upToCurrent
+    .filter((v) => compareVersions(v, seen) > 0)
+    .slice(0, MAX_VERSIONS)
+    .reverse();
 }
 
 /** Text of `url`, or null when missing; a server's SPA fallback answers a missing file with index.html. */

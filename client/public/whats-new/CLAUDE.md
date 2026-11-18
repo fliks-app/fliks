@@ -6,7 +6,7 @@ The desktop and web clients show these notes once, in a carousel, on the first l
 
 - `index.json`: every version that has notes. A version missing here is never shown, so add it with its folder.
 - `<version>/<lang>.md` for the six app languages (`en fr de es it pt`, English is the fallback), and the pictures next to them.
-- One modal chains the versions missed since the last one seen, newest first, at most three.
+- One modal chains the versions missed since the last one seen, oldest first, at most the latest three.
 
 ## Writing
 
