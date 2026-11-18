@@ -1659,7 +1659,6 @@
     "col_log_level": "Livello",
     "col_log_context": "Contesto",
     "col_log_message": "Messaggio",
-    "device_mobile_app_named": "{{name}} (App mobile)",
     "device_named": "{{name}}",
     "device_apple_tv": "Apple TV ({{os}})",
     "backup_failed": "Backup non riuscito",

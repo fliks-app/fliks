@@ -40,9 +40,9 @@ export function parseDeviceLabel(
     (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua));
   if (isMobileApp) {
     // The device's own model identifies it far better than its OS does, so it
-    // leads when the UA states one. Falls back to naming the platform.
+    // names it alone when the UA states one. Falls back to naming the platform.
     const model = detectDeviceModel(ua);
-    if (model) return { key: 'system.device_mobile_app_named', params: { name: model } };
+    if (model) return { key: 'system.device_named', params: { name: model } };
     if (systemName) return { key: 'system.device_mobile_app_on_os', params: { os: systemName } };
     return /Android/.test(ua)
       ? { key: 'system.device_mobile_app_android' }
