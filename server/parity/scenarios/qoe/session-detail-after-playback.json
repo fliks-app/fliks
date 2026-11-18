@@ -390,7 +390,7 @@
               "engine": null,
               "hwDecoderPct": null,
               "sessions": 1,
-              "stallSessions": 0,
+              "stallSessions": 1,
               "systemName": null,
               "topVerdict": "ok"
             }
