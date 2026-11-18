@@ -75,6 +75,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesAudioInPlace: false,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

@@ -452,14 +452,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     return tracks;
   }
 
-  /** LG's AudioTrack API is a mute/unmute switch: the picked track goes
-   *  `enabled = true`, every other one false (webOS TV 3.0+). */
-  async selectAudioTrack(id: string): Promise<void> {
-    const list = this.audioTrackList();
-    if (!list) return;
-    for (let i = 0; i < list.length; i++) {
-      list[i].enabled = 'audio-' + i === id;
-    }
+  /** The player reloads instead (`switchesAudioInPlace: false`): toggling `enabled` only mutes. */
+  async selectAudioTrack(_id: string): Promise<void> {
+    throw new Error('webOS switches audio by reload, never in place');
   }
 
   private audioTrackList(): (AudioTrack & { enabled: boolean; id: string })[] | null {

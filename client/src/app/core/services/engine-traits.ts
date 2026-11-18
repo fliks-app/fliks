@@ -38,6 +38,8 @@ export interface EngineTraits {
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
   supportsDirectPlay?: boolean;
+  /** Engine switches audio tracks in place; `false` reloads with the pick as the DEFAULT rendition. Unset = true. */
+  switchesAudioInPlace?: boolean;
   /** Client-side ABR (variant switching mid-playback). Client-only, so a plain required boolean. */
   supportsAbr: boolean;
 }
@@ -124,6 +126,8 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    // AudioTrack.enabled = true changes nothing and false on the playing track mutes it (LG C2, webOS TV 26).
+    switchesAudioInPlace: false,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

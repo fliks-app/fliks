@@ -588,11 +588,10 @@ export class BrowserDeviceProfileService {
       probesSegZero: traits.probesSegZero,
       // Every shipping engine opens a raw progressive file (Tizen AVPlay demuxes MKV itself).
       supportsDirectPlay: traits.supportsDirectPlay,
-      // Only web probes it (every other engine switches natively); skip Firefox,
-      // whose `audioTracks` toggle doesn't switch what plays.
+      // Web probes it, skipping Firefox whose `audioTracks` toggle doesn't switch what plays; webOS can't switch at all.
       switchesDirectPlayAudio: isWeb
         ? 'audioTracks' in HTMLMediaElement.prototype && detectBrowser(navigator.userAgent) !== 'Firefox'
-        : undefined,
+        : traits.switchesAudioInPlace,
       // False only for the desktop mpv engine (see engine-traits.ts).
       supportsAbr: traits.supportsAbr,
     };

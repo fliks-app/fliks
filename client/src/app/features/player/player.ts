@@ -1779,6 +1779,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  private switchesAudioInPlace(): boolean {
+    return this.deviceProfileService.engineTraits().switchesAudioInPlace !== false;
+  }
+
   private isAudioPlayable(trackId: string): boolean {
     return this.availableAudioTracks().find((t) => t.id === trackId)?.supported !== false;
   }
@@ -1807,7 +1811,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.activeAudioTrackId.set(target.id);
     if (engineActive === target.id) this.audioSwitchPending = null;
-    else if (engineActive && this.audioSwitchPending !== target.id) {
+    else if (engineActive && this.audioSwitchPending !== target.id && this.switchesAudioInPlace()) {
       this.applyAudioTrack(target.id).catch((e) => console.warn('[player] audio reconcile failed', e));
     }
   }
@@ -3434,9 +3438,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (index != null) this.activeAudioStreamIndex = index;
     this.audioSwitchPending = trackId;
 
-    // si-* tracks are the streamInfo fallback shown before the engine surfaces switchable tracks, so only a
-    // backend reload marking the new audio index DEFAULT can honour them. Offline: nothing to reload.
-    if (trackId.startsWith('si-')) {
+    // si-* tracks (the streamInfo fallback) and an engine that can't switch in place only follow a backend
+    // reload marking the new audio index DEFAULT. Offline: nothing to reload.
+    if (trackId.startsWith('si-') || !this.switchesAudioInPlace()) {
       this.audioSwitchPending = null;
       if (this.isOfflinePlayback) {
         console.warn('[player] applyAudioTrack: no backend to reload for offline playback', trackId);

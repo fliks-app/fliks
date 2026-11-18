@@ -1772,6 +1772,25 @@ describe('PlayerComponent reload QoE event', () => {
     });
   });
 
+  it('reloads an engine track pick on an engine that cannot switch in place, never toggling the track', async () => {
+    const { h, spy } = spied();
+    (TestBed.inject(BrowserDeviceProfileService) as any).engineTraits = () => ENGINE_TRAITS[EngineKind.WEBOS];
+    h.component.availableAudioTracks.set([
+      { id: 'audio-0', label: 'Italiano', language: 'it' },
+      { id: 'audio-1', label: 'English', language: 'en' },
+    ]);
+    h.component.activeAudioTrackId.set('audio-0');
+
+    await h.component.onSelectAudioTrack('audio-1');
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('sid-old', expect.any(Number), {
+      reason: 'audio',
+      from: 'Italiano',
+      to: 'English',
+    });
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+  });
+
   it('flags a burn-in switch with its language, and its removal without one', async () => {
     const { h, spy } = spied();
     h.component.subs.availableSubtitles.set([
