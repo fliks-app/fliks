@@ -51,6 +51,7 @@ import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { AudioPlayerComponent } from '../audio-player/audio-player';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
+import { WhatsNewModalComponent } from '../components/whats-new-modal/whats-new-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
@@ -105,6 +106,7 @@ const PAIRING_TTL_MS = 600_000;
     OptimizeModalComponent,
     UserMenuComponent,
     AppUpdateModalComponent,
+    WhatsNewModalComponent,
     LucideIconComponent,
     NavIconComponent,
     TvRowDirective,

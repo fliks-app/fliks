@@ -4164,6 +4164,12 @@
     "ahead_of_server": "Diese Version ist neuer als dein Server ({{server}}). Manche Funktionen gehen erst nach einem Server-Update.",
     "hide_until_server": "Bis zum Server-Update ausblenden"
   },
+  "whats_new": {
+    "title": "Neu in Fliks {{version}}",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "done": "Los geht's"
+  },
   "plugin_view": {
     "unavailable_title": "Diese Seite ist nicht verfügbar",
     "unknown_plugin": "Das Plugin, zu dem diese Seite gehört, ist nicht installiert.",
