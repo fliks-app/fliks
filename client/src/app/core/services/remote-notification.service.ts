@@ -38,8 +38,8 @@ export class RemoteNotificationService {
       const t = this.target;
       // Each remote report re-syncs the extrapolated position.
       this.remote.targetState();
-      // iOS holds the audio session while shown, so only a target this phone selected qualifies.
-      const watched = ios ? this.remote.isRemoting() : this.remote.isObserving();
+      // iOS holds the audio session while shown, so only a device this phone drives qualifies.
+      const watched = ios ? this.remote.controlling() : this.remote.isObserving();
       if (!watched || t.isIdle()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;

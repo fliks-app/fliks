@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
 import { RemoteService, snapshotFromWire, snapshotToWire, targetCanLoad, targetSupports, type RemoteTarget } from './remote.service';
@@ -48,12 +48,14 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
     return owner() ? { owner: { targetId: owner() }, item: { mediaFileId: 2, family: opts.family ?? 'video' } } : null;
   };
   const remoteState = signal<RemoteState | null>(null);
+  const connectionId = signal<string | null>(null);
   const sse = {
     commands: new Subject<RemoteCommand>(),
     stopped: new Subject<{ targetId: string; sessionId: string | null }>(),
     remoteState,
     lastEvent: signal(null),
-    connectionId: signal<string | null>(null),
+    connectionId,
+    connected: computed(() => connectionId() !== null),
     targetId: signal<string | null>('phone#1'),
   };
   TestBed.configureTestingModule({
@@ -236,6 +238,72 @@ describe('RemoteService observation', () => {
     service.ingestState();
     expect(service.isObserving()).toBe(false);
     expect(service.targetState()).toBeNull();
+  });
+});
+
+describe('RemoteService play target', () => {
+  const row = (targetId: string, actions?: string[]): RemoteTarget => ({
+    targetId, userAgent: null, deviceName: null, systemName: null, formFactor: null, tvPlatform: null, nowPlaying: null, ...(actions && { actions }),
+  });
+
+  function online(opts: { selected?: string | null; family?: string } = {}) {
+    const ctx = setup({ selected: opts.selected ?? null, family: opts.family });
+    ctx.sse.connectionId.set('conn-1');
+    ctx.service.targets.set([row('pc#1'), row('tv#1')]);
+    return ctx;
+  }
+
+  it('sends plays to the selected device, else to the online owner of the session', () => {
+    const { service, owner } = online({ selected: 'pc#1' });
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.playTarget()).toBe('pc#1');
+    service.selectTarget(null);
+    expect(service.playTarget()).toBe('tv#1');
+  });
+
+  it('plays here when the owner is not listed or takes no load, or this device is offline', () => {
+    const { service, owner, sse } = online();
+    owner.set('tv#2');
+    expect(service.playTarget()).toBeNull();
+    service.targets.set([row('tv#2', ['play', 'pause', 'resume'])]);
+    expect(service.playTarget()).toBeNull();
+    service.targets.set([row('tv#2')]);
+    expect(service.playTarget()).toBe('tv#2');
+    sse.connectionId.set(null);
+    expect(service.playTarget()).toBeNull();
+  });
+
+  it('plays here while the session is a reading position', () => {
+    const { service, owner } = online({ family: 'text' });
+    owner.set('tv#1');
+    expect(service.playTarget()).toBeNull();
+  });
+
+  it('drives the owner it started until another device takes the session', () => {
+    const { service, owner } = online();
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.controlling()).toBe(false);
+    void service.send('tv#1', { action: 'play' });
+    TestBed.tick();
+    expect(service.controlling()).toBe(true);
+    owner.set('pc#1');
+    TestBed.tick();
+    expect(service.controlling()).toBe(false);
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.controlling()).toBe(false);
+  });
+
+  it('keeps driving a selected device once it takes the session it was sent', () => {
+    const { service, owner } = online({ selected: 'tv#1' });
+    void service.send('tv#1', { action: 'load', mediaFileId: 9 });
+    expect(service.controlling()).toBe(true);
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.controlling()).toBe(true);
   });
 });
 

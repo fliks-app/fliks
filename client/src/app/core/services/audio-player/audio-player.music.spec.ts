@@ -75,7 +75,7 @@ describe('AudioPlayerService music mode', () => {
   let validated = new Subject<RemoteCommand>();
   const markApplied = vi.fn();
   const send = vi.fn(async (_id: string, _input: RemoteCommandInput) => undefined);
-  let remoting = false;
+  let playTarget: string | null = null;
   const trackRequests = vi.fn(async (ids: readonly number[]) => ids.map((i) => track(i)));
   const cmd = (action: RemoteCommand['action'], extra: Partial<RemoteCommand> = {}): RemoteCommand => ({
     type: 'remote.command', cmdId: 'c1', expiresAt: Date.now() + 10_000, byTargetId: null, action, ...extra,
@@ -90,7 +90,7 @@ describe('AudioPlayerService music mode', () => {
     validated = new Subject<RemoteCommand>();
     markApplied.mockClear();
     send.mockClear();
-    remoting = false;
+    playTarget = null;
     trackRequests.mockClear();
     castOut.active.set(false);
     castOut.isConnected.set(false);
@@ -112,7 +112,7 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), isRemoting: () => remoting, selectedTargetId: () => 'tv#1', send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: () => playTarget, send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
       { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
@@ -840,9 +840,9 @@ describe('AudioPlayerService music mode', () => {
       await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalledTimes(1));
     });
 
-    it('sends a play to the selected device, in the shuffled order, and starts nothing here', async () => {
+    it('sends a play to the device plays go to, in the shuffled order, and starts nothing here', async () => {
       const audio = TestBed.inject(AudioPlayerService);
-      remoting = true;
+      playTarget = 'tv#1';
       await audio.playTracks([track(1), track(2), track(3)], 1, { shuffle: true });
       expect(send).toHaveBeenCalledWith('tv#1', expect.objectContaining({
         action: 'load', kind: 'album', itemId: 2, shuffle: true, queue: expect.objectContaining({ index: 0 }),

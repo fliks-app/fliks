@@ -26,7 +26,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   readonly position = this.remote.interpolatedPosition;
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
-  /** Selected: this device's plays go there. Observing without selecting follows it without taking its screen. */
+  /** Selected: the output this device drives. Observing follows the account session's owner without taking its screen. */
   readonly isConnected = this.remote.isRemoting;
   readonly isObserving = this.remote.isObserving;
   /** A selected target is present even with nothing playing: releasing it is
