@@ -54,6 +54,7 @@ Ein einziger Leser für EPUB, EPUB mit festem Layout, PDF und CBZ.
 - Speichern Sie Hörbücher für unterwegs auf Ihrem Gerät.
 
 ## Comics
+![Comic-Band](comics.webp)
 
 ### Bände und Ausgaben
 - Ein Band enthält seine Ausgaben, Jahresbände und Sonderhefte. Ein Variant-Cover wird zu einer weiteren Version derselben Ausgabe.

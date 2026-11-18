@@ -54,6 +54,7 @@ Un único lector para EPUB, EPUB de diseño fijo, PDF y CBZ.
 - Guarde audiolibros en su dispositivo para el camino.
 
 ## Cómics
+![Volumen de cómic](comics.webp)
 
 ### Volúmenes y números
 - Un volumen agrupa sus números, anuales y especiales. Una portada alternativa se convierte en otra versión del mismo número.

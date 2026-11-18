@@ -54,6 +54,7 @@ Un solo lettore per EPUB, EPUB a layout fisso, PDF e CBZ.
 - Salva gli audiolibri sul tuo dispositivo per il viaggio.
 
 ## Fumetti
+![Volume a fumetti](comics.webp)
 
 ### Volumi e numeri
 - Un volume raccoglie i suoi numeri, annuali e speciali. Una copertina variant diventa un'altra versione dello stesso numero.

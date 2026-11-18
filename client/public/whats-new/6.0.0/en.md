@@ -54,6 +54,7 @@ One reader for EPUB, fixed-layout EPUB, PDF and CBZ.
 - Save audiobooks on your device for the road.
 
 ## Comics
+![Comic volume](comics.webp)
 
 ### Volumes and issues
 - A volume holds its issues, annuals and specials. A variant cover becomes another version of the same issue.

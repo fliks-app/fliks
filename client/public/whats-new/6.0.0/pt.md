@@ -54,6 +54,7 @@ Um único leitor para EPUB, EPUB de disposição fixa, PDF e CBZ.
 - Guarde audiolivros no dispositivo para a estrada.
 
 ## Banda desenhada
+![Volume de banda desenhada](comics.webp)
 
 ### Volumes e números
 - Um volume agrupa os seus números, anuais e especiais. Uma capa variante torna-se outra versão do mesmo número.

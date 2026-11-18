@@ -54,6 +54,7 @@ Une seule liseuse pour l'EPUB, l'EPUB à mise en page fixe, le PDF et le CBZ.
 - Enregistrez vos livres audio sur l'appareil pour la route.
 
 ## Bandes dessinées
+![Volume de BD](comics.webp)
 
 ### Volumes et numéros
 - Un volume regroupe ses numéros, annuels et hors-séries. Une couverture variante devient une autre version du même numéro.
