@@ -427,6 +427,14 @@ describe('RemoteService stop handling', () => {
     service.ingestState();
     expect(service.targetState()?.volume).toBe(0.9);
   });
+
+  it('never invents a level for a device that reports none', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame({ volume: null }));
+    service.ingestState();
+    service.pinVolume(0.9);
+    expect(service.targetState()?.volume).toBeNull();
+  });
 });
 
 describe('RemoteService applyLoad', () => {

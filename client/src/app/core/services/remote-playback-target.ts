@@ -207,12 +207,16 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   private readonly introMarker = signal<TimeMarker | null>(null);
   private readonly outroMarker = signal<TimeMarker | null>(null);
 
-  /** Same range tests the local player applies, against the interpolated
-   *  position, so the offer appears and retracts at the same instants. */
-  readonly canSetVolume = computed(() => (this.remote.targetState()?.supportsVolume ?? true) && this.remote.observedCan('volume') && this.remote.observedCan('mute'));
+  /** Offered on the device's own report: before it, nothing says the device takes a level. */
+  readonly canSetVolume = computed(() => {
+    const s = this.remote.targetState();
+    return !!s && s.supportsVolume !== false && this.remote.observedCan('volume') && this.remote.observedCan('mute');
+  });
 
   /** A remote report carries no markers, so the seekbar shows none. */
   readonly timeline = computed(() => NO_TIMELINE);
+  /** Same range tests the local player applies, against the interpolated
+   *  position, so the offer appears and retracts at the same instants. */
   readonly skipCue = computed<{ labelKey: string } | null>(() => {
     const at = this.remote.interpolatedPosition();
     if (inIntroRange(this.introMarker(), at)) return { labelKey: 'player.skip_intro' };

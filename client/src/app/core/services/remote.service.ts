@@ -258,7 +258,8 @@ export class RemoteService {
   readonly targetState = computed(() => {
     const s = this.reportedState();
     const pinned = this.pinnedVolume();
-    if (!s || pinned === null) return s;
+    // The pin holds a level over the device's own; a device that reports none has no level to show.
+    if (!s || pinned === null || s.volume == null) return s;
     return { ...s, volume: pinned };
   });
 
