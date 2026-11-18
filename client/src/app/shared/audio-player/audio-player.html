@@ -67,7 +67,7 @@
   <ol cdkDropList [cdkDropListSortPredicate]="sortAllowed" (cdkDropListDropped)="onQueueDrop($event)" class="flex flex-col">
     @for (q of upcoming(); track q; let r = $index) {
       @let i = r + queueStart();
-      <li cdkDrag [cdkDragData]="i" [cdkDragDisabled]="isTv() || queueLocked() || i === audio.queueIndex()" class="queue-row relative overflow-hidden rounded-lg" [class]="i === audio.queueIndex() ? 'mb-1 border-b border-base-content/10 rounded-b-none' : ''" appTvRow>
+      <li cdkDrag [cdkDragData]="i" [cdkDragDisabled]="isTv() || queueLocked() || i === audio.queueIndex()" class="queue-row relative rounded-lg" [class.overflow-hidden]="isTouch()" [class]="i === audio.queueIndex() ? 'mb-1 border-b border-base-content/10 rounded-b-none' : ''" appTvRow>
         <div class="absolute inset-0 flex items-center justify-end bg-error pr-5 text-error-content opacity-[var(--swipe,0)]" aria-hidden="true">
           <svg lucideTrash2 class="h-5 w-5"></svg>
         </div>
@@ -116,8 +116,8 @@
             </button>
           }
           @if (i === audio.queueIndex()) {
-            <!-- Only the sheet hides the main controls; the inline desktop queue sits next to them. -->
-            @if (asSheet()) {
+            <!-- Only the sheet hides the main controls; the inline queue sits next to them. -->
+            @if (!queueInline()) {
               <button type="button" class="btn btn-primary btn-circle btn-sm mx-1 shrink-0" [disabled]="!canToggle()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
                 @if (audio.uiPlaying()) {
                   <svg lucidePause class="h-4 w-4"></svg>
@@ -168,8 +168,9 @@
             }
           </button>
         }
-        @if (remoteView() && !parkedView()) {
-          <span class="w-12 shrink-0"></span>
+        @if (drivingRemote() && !remoteMenu()) {
+          <!-- Balances the collapse button; the fullscreen button does it where it shows. -->
+          <span class="w-12 shrink-0" [class.lg:hidden]="!asSheet()"></span>
         } @else {
           <button #menuBtn type="button" class="btn btn-ghost btn-circle" (click)="menuOpen.set(true)" [attr.aria-label]="'common.more' | translate" [attr.aria-expanded]="menuOpen()" data-testid="audio-menu">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
@@ -216,22 +217,24 @@
                     {{ 'lyrics.edit' | translate }}
                   </button>
                 }
-                <button #levelBtn type="button" class="dropdown-item" aria-haspopup="menu" [attr.aria-expanded]="levelOpen()" (click)="levelOpen.set(true)" data-testid="replay-gain-menu">
-                  <svg lucideVolume2 class="h-4 w-4"></svg>
-                  <span class="min-w-0 flex-1 truncate text-left">{{ 'music_player.replay_gain' | translate }}</span>
-                  <span class="text-base-content/60">{{ 'music_player.replay_gain_mode_' + local.replayGain() | translate }}</span>
-                  <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
-                </button>
-                @if (!asSheet()) {
-                  <app-popover-menu [open]="levelOpen()" [anchor]="levelBtn" placement="right-start" [submenu]="true" (closed)="levelOpen.set(false)">
-                    <ng-container *ngTemplateOutlet="levelOptions" />
-                  </app-popover-menu>
-                }
-                @if (local.replayGain() !== 'off') {
-                  <button type="button" class="dropdown-item" (click)="cyclePreamp(); closeMenu()">
-                    <svg lucideGauge class="h-4 w-4"></svg>
-                    {{ 'music_player.preamp' | translate }}: {{ local.preamp() > 0 ? '+' : '' }}{{ local.preamp() }} dB
+                @if (!drivingRemote()) {
+                  <button #levelBtn type="button" class="dropdown-item" aria-haspopup="menu" [attr.aria-expanded]="levelOpen()" (click)="levelOpen.set(true)" data-testid="replay-gain-menu">
+                    <svg lucideVolume2 class="h-4 w-4"></svg>
+                    <span class="min-w-0 flex-1 truncate text-left">{{ 'music_player.replay_gain' | translate }}</span>
+                    <span class="text-base-content/60">{{ 'music_player.replay_gain_mode_' + local.replayGain() | translate }}</span>
+                    <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
                   </button>
+                  @if (!asSheet()) {
+                    <app-popover-menu [open]="levelOpen()" [anchor]="levelBtn" placement="right-start" [submenu]="true" (closed)="levelOpen.set(false)">
+                      <ng-container *ngTemplateOutlet="levelOptions" />
+                    </app-popover-menu>
+                  }
+                  @if (local.replayGain() !== 'off') {
+                    <button type="button" class="dropdown-item" (click)="cyclePreamp(); closeMenu()">
+                      <svg lucideGauge class="h-4 w-4"></svg>
+                      {{ 'music_player.preamp' | translate }}: {{ local.preamp() > 0 ? '+' : '' }}{{ local.preamp() }} dB
+                    </button>
+                  }
                 }
               }
               @if (canStartParty()) {
@@ -256,10 +259,12 @@
                   {{ (party.isHost() ? 'party.end' : 'party.leave') | translate }}
                 </button>
               }
-              <button type="button" class="dropdown-item" (click)="stop(); closeMenu()">
-                <svg lucideX class="h-4 w-4"></svg>
-                {{ 'audio_player.close' | translate }}
-              </button>
+              @if (!drivingRemote()) {
+                <button type="button" class="dropdown-item" (click)="stop(); closeMenu()">
+                  <svg lucideX class="h-4 w-4"></svg>
+                  {{ 'audio_player.close' | translate }}
+                </button>
+              }
             }
           </app-popover-menu>
         }
@@ -413,7 +418,9 @@
       </div>
 
       @if (audio.musicMode()) {
-      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" appTvRow>
+      <!-- TV: the actions share the transport row, leaving the height to the lyrics. -->
+      <div [class]="isTv() ? 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center' : 'contents'">
+      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" [class.col-start-2]="isTv()" appTvRow>
         <button
           type="button"
           class="btn btn-ghost btn-circle [--size:2.5rem]"
@@ -429,7 +436,7 @@
         <button type="button" class="btn btn-ghost btn-circle" [disabled]="!controllable()" (click)="audio.previous()" [attr.aria-label]="'music_player.previous' | translate">
           <svg lucideSkipBack class="h-6 w-6"></svg>
         </button>
-        <button type="button" class="btn btn-primary btn-circle btn-lg [--size:4.25rem]" data-morph="toggle" [disabled]="!canToggle()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+        <button type="button" class="btn btn-primary btn-circle btn-lg [--size:4.25rem]" data-morph="toggle" [attr.autofocus]="isTv() ? '' : null" [disabled]="!canToggle()" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
           @if (audio.uiPlaying()) {
             <svg lucidePause class="h-7 w-7"></svg>
           } @else {
@@ -455,7 +462,7 @@
           }
         </button>
       </div>
-      <div class="flex items-center gap-1" appTvRow>
+      <div class="flex items-center gap-1" [class.col-start-3]="isTv()" [class.justify-self-end]="isTv()" appTvRow>
         @if (!isTv()) {
           <app-dropdown-menu placement="top-start">
             <app-device-chip trigger (click)="refreshDevices()" />
@@ -527,11 +534,12 @@
             <svg lucideMessageSquareQuote class="h-5 w-5"></svg>
           </button>
         }
-        @if (asSheet()) {
+        @if (asSheet() && !queueInline()) {
           <button type="button" class="btn btn-ghost btn-circle" (click)="queueOpen.set(true)" [attr.aria-label]="'music_player.queue' | translate" data-testid="audio-queue-open">
             <svg lucideListMusic class="h-5 w-5"></svg>
           </button>
         }
+      </div>
       </div>
       @if (remoteView() && !parkedView() && sync.canPlayHere()) {
         <div class="grid" animate.enter="reveal-in" animate.leave="reveal-out">
@@ -551,7 +559,7 @@
         <button type="button" class="btn btn-ghost btn-circle" (click)="local.skip(-local.skipBack())" [attr.aria-label]="'audio_player.skip_back' | translate: { s: local.skipBack() }">
           <svg lucideRotateCcw class="h-6 w-6"></svg>
         </button>
-        <button type="button" class="btn btn-primary btn-circle btn-lg" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
+        <button type="button" class="btn btn-primary btn-circle btn-lg" [attr.autofocus]="isTv() ? '' : null" (click)="audio.toggle()" [attr.aria-label]="(audio.uiPlaying() ? 'audio_player.pause' : 'audio_player.play') | translate">
           @if (audio.uiPlaying()) {
             <svg lucidePause class="h-7 w-7"></svg>
           } @else {

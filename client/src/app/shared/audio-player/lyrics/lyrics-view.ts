@@ -1,6 +1,7 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
+import { DeviceService } from '../../../core/services/device.service';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
@@ -21,6 +22,8 @@ const SWEEP = 'whitespace-pre-wrap bg-clip-text [-webkit-text-fill-color:transpa
 })
 export class LyricsViewComponent {
   private readonly local = inject(AudioPlayerService);
+  /** On TV the lines follow the song only: no D-pad focus on them, no manual scroll. */
+  protected readonly tv = inject(DeviceService).isTv;
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
   readonly doc = input.required<StructuredLyrics>();
