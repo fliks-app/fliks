@@ -425,15 +425,15 @@
       </div>
 
       @if (audio.musicMode()) {
-      <!-- Touch layouts take it from the device menu: their transport row has no room beside it. -->
-      @let canListenHere = remoteView() && !parkedView() && sync.canPlayHere() && !isTouch();
+      <!-- Outside TV the device menu offers it; a TV player has no device menu. -->
+      @let canListenHere = isTv() && remoteView() && !parkedView() && sync.canPlayHere();
       <!-- TV: the actions share the transport row, leaving the height to the lyrics. -->
       <div [class]="isTv() ? 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center' : 'contents'">
       <!-- Elsewhere the button and the transport make a grid of their own, above the actions. -->
       <div [class]="isTv() ? 'contents' : 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center'">
       @if (canListenHere) {
-        <button type="button" animate.enter="fade-up-in" class="btn btn-primary col-start-1 row-start-1 justify-self-start max-sm:hidden" (click)="listenHere()" data-testid="audio-listen-here">
-          <app-device-icon [icon]="isTv() ? 'tv' : 'monitor'" />
+        <button type="button" animate.enter="fade-up-in" class="btn btn-primary col-start-1 row-start-1 justify-self-start" (click)="listenHere()" data-testid="audio-listen-here">
+          <app-device-icon icon="tv" />
           {{ 'session.listen_here' | translate }}
         </button>
       }
