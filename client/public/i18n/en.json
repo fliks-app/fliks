@@ -1694,6 +1694,7 @@
     "setting_retention": "Retention (days)",
     "settings_saved": "Settings saved",
     "verdict_breakdown": "Verdicts",
+    "verdict_unmeasured": "No measurement",
     "empty": "No data yet.",
     "filter_verdict": "Verdict",
     "filter_all_verdicts": "All verdicts",
@@ -1742,7 +1743,9 @@
       "healthy": "No issue detected.",
       "cmcd_missing": "The client declares CMCD but the server received none.",
       "session_lost": "Stalls: the server no longer knew the session and the player had to recreate it.",
-      "session_expired": "Stalls: the server refused the rest of the stream and the player had to restart it."
+      "session_expired": "Stalls: the server refused the rest of the stream and the player had to restart it.",
+      "copy_fallback": "The player could not play the original stream and restarted on a fallback.",
+      "slow_start": "The first image took more than 10 seconds to appear."
     },
     "filter_all_devices": "All devices",
     "sessions_count": "{{count}} sessions",
@@ -1835,6 +1838,7 @@
       "reload_direct_fallback": "Direct play fell back to a remux",
       "reload_remux_fallback": "Remux fell back to transcoding",
       "reload_audio_fallback": "Audio fallback: {{codec}} failed to decode on the device, transcoded",
+      "reload_sdr_fallback": "Reloaded in SDR: the AirPlay receiver could not show HDR",
       "reload_other": "Stream reload",
       "recovery_after": "Resumed after {{duration}}"
     },
@@ -1859,7 +1863,8 @@
       "error_plain": "Playback error",
       "unreported_one": "1 stall of {{duration}} with no details received",
       "unreported_many": "{{count}} stalls, {{duration}} in total, with no details received",
-      "rung_eco": "{{rung}} low bandwidth"
+      "rung_eco": "{{rung}} low bandwidth",
+      "start": "First image after {{duration}}"
     },
     "throughput_measured": "Measured throughput",
     "bitrate_video": "Video bitrate",

@@ -1676,6 +1676,7 @@
     "setting_retention": "Aufbewahrung (Tage)",
     "settings_saved": "Einstellungen gespeichert",
     "verdict_breakdown": "Befunde",
+    "verdict_unmeasured": "Keine Messung",
     "empty": "Noch keine Daten.",
     "filter_verdict": "Befund",
     "filter_all_verdicts": "Alle Befunde",
@@ -1724,7 +1725,9 @@
       "healthy": "Kein Problem erkannt.",
       "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten.",
       "session_lost": "Unterbrechungen: Der Server kannte die Sitzung nicht mehr, der Player musste sie neu erstellen.",
-      "session_expired": "Unterbrechungen: Der Server hat den weiteren Stream verweigert, der Player musste ihn neu starten."
+      "session_expired": "Unterbrechungen: Der Server hat den weiteren Stream verweigert, der Player musste ihn neu starten.",
+      "copy_fallback": "Der Player konnte den Original-Stream nicht abspielen und ist auf eine Ausweichlösung gewechselt.",
+      "slow_start": "Das erste Bild brauchte mehr als 10 Sekunden."
     },
     "filter_all_devices": "Alle Geräte",
     "sessions_count": "{{count}} Sitzungen",
@@ -1817,6 +1820,7 @@
       "reload_direct_fallback": "Direktwiedergabe auf Remux zurückgefallen",
       "reload_remux_fallback": "Remux auf Transkodierung zurückgefallen",
       "reload_audio_fallback": "Audio-Ausweichlösung: {{codec}} vom Gerät nicht dekodiert, transkodiert",
+      "reload_sdr_fallback": "In SDR neu geladen: Der AirPlay-Empfänger konnte kein HDR anzeigen",
       "reload_other": "Stream neu geladen",
       "recovery_after": "Fortgesetzt nach {{duration}}"
     },
@@ -1841,7 +1845,8 @@
       "error_plain": "Wiedergabefehler",
       "unreported_one": "1 Aussetzer von {{duration}} ohne übermittelte Details",
       "unreported_many": "{{count}} Aussetzer, {{duration}} insgesamt, ohne übermittelte Details",
-      "rung_eco": "{{rung}} geringer Verbrauch"
+      "rung_eco": "{{rung}} geringer Verbrauch",
+      "start": "Erstes Bild nach {{duration}}"
     },
     "throughput_measured": "Gemessener Durchsatz",
     "bitrate_video": "Bitrate des Videos",

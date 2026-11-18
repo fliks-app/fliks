@@ -121,7 +121,7 @@
                     @for (s of sessions(); track s.sessionId) {
                       <tr class="hover cursor-pointer" tabindex="0" (click)="openDetail(s)" (keydown.enter)="openDetail(s)">
                         <td><span class="inline-block h-2.5 w-2.5 rounded-full" [class]="dotClass(s)"></span></td>
-                        <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
+                        <td>{{ verdictText(s) }}</td>
                         <td>{{ userName(s.userId) }}</td>
                         <td>{{ deviceText(s) }}</td>
                         <td class="max-w-56">
@@ -255,7 +255,7 @@
       <div class="mt-3 rounded-lg border border-base-200 p-3 text-sm">
         <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
           <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
-          <span class="font-semibold">{{ 'qoe.verdict.' + d.verdict | translate }}</span>
+          <span class="font-semibold">{{ verdictText(d) }}</span>
           @if (d.confidence === 'low') {
             <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
           }
@@ -343,6 +343,7 @@
                         @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
                         @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
                         @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('start') { <svg lucidePlay class="h-4 w-4 text-base-content/50"></svg> }
                         @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
                       }
                       }
@@ -380,7 +381,7 @@
                       </span>
                       <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
                         <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
-                        {{ 'qoe.verdict.' + step.block.session.verdict | translate }}
+                        {{ verdictText(step.block.session) }}
                       </span>
                     </div>
                     @if (change?.detail; as detail) {

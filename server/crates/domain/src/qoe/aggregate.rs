@@ -109,6 +109,10 @@ pub struct QoeAggregator {
     last: Option<StallLast>,
     pipeline: Option<QoePipeline>,
     error_count: f64,
+    event_stalls: f64,
+    event_stall_ms: f64,
+    fallback_reloads: f64,
+    startup: Option<(f64, StallCause)>,
     /// An error with no recovery or sample after it, in arrival order.
     error_open: bool,
 }
@@ -177,25 +181,80 @@ impl QoeAggregator {
         let mut classified = None;
         let recovery_wait = e.kind == EventType::Recovery && e.duration_ms.unwrap_or(0.0) > 0.0;
         if e.kind == EventType::Stall || recovery_wait {
-            let fresh = |at: Option<f64>| at.is_some_and(|a| now - a <= MAX_SAMPLE_AGE_MS);
-            let buffer = e
-                .buffer_ahead_s
-                .or(fresh(self.buffer_ahead_at)
-                    .then_some(self.buffer_ahead)
-                    .flatten())
-                .or(fresh(self.cmcd_buffer_at)
-                    .then_some(self.cmcd_buffer)
-                    .flatten());
+            let (c, buffer) = self.classify(e, now, live, load, recovery_wait);
             if let Some(b) = buffer {
                 push(&mut self.stall_buffers, b, MAX_KEPT);
             }
             if let Some(b) = e.bandwidth_bps {
                 push(&mut self.stall_bandwidths, b, MAX_KEPT);
             }
-            if recovery_wait {
-                classified = recovery_cause(e);
+            // A low-confidence cause counts half, so a sure one outweighs a guess.
+            let half = if c.confidence == Confidence::Low {
+                0.5
+            } else {
+                1.0
+            };
+            let w = e.duration_ms.unwrap_or(0.0).max(1.0) * half;
+            *self.cause_ms.get_or_insert_default().get_mut(c.cause) += w;
+            self.reason_ms.get_or_insert_default().add(&c.reason, w);
+            self.event_stalls += 1.0;
+            self.event_stall_ms += e.duration_ms.unwrap_or(0.0);
+            self.last = Some(StallLast {
+                at: e.at,
+                duration_ms: e.duration_ms.unwrap_or(0.0),
+                cause: c.cause,
+                reason: c.reason.clone(),
+            });
+            classified = Some(c);
+        }
+        if e.kind == EventType::Start
+            && self.startup.is_none()
+            && let Some(ms) = e.duration_ms
+        {
+            let (c, _) = self.classify(e, now, live, load, false);
+            self.startup = Some((ms, c.cause));
+            classified = Some(c);
+        }
+        if e.kind == EventType::Reload
+            && e.reason
+                .as_deref()
+                .is_some_and(|r| r.ends_with("_fallback"))
+        {
+            self.fallback_reloads += 1.0;
+        }
+        match e.kind {
+            EventType::Error => {
+                self.error_count += 1.0;
+                self.error_open = true;
             }
-            let c = classified.get_or_insert_with(|| {
+            EventType::Recovery => self.error_open = false,
+            _ => {}
+        }
+        classified
+    }
+
+    /// The cause of a freeze or of a slow start, and the buffer it was judged against.
+    fn classify(
+        &self,
+        e: &QoeEvent,
+        now: f64,
+        live: bool,
+        load: Option<&ServerLoad>,
+        recovery_wait: bool,
+    ) -> (StallClassification, Option<f64>) {
+        let fresh = |at: Option<f64>| at.is_some_and(|a| now - a <= MAX_SAMPLE_AGE_MS);
+        let buffer = e
+            .buffer_ahead_s
+            .or(fresh(self.buffer_ahead_at)
+                .then_some(self.buffer_ahead)
+                .flatten())
+            .or(fresh(self.cmcd_buffer_at)
+                .then_some(self.cmcd_buffer)
+                .flatten());
+        let c = recovery_wait
+            .then(|| recovery_cause(e))
+            .flatten()
+            .unwrap_or_else(|| {
                 let ctx = StallContext {
                     live,
                     load: load.cloned(),
@@ -208,31 +267,7 @@ impl QoeAggregator {
                 };
                 classify_stall(&e.into(), &ctx)
             });
-            // A low-confidence cause counts half, so a sure one outweighs a guess.
-            let half = if c.confidence == Confidence::Low {
-                0.5
-            } else {
-                1.0
-            };
-            let w = e.duration_ms.unwrap_or(0.0).max(1.0) * half;
-            *self.cause_ms.get_or_insert_default().get_mut(c.cause) += w;
-            self.reason_ms.get_or_insert_default().add(&c.reason, w);
-            self.last = Some(StallLast {
-                at: e.at,
-                duration_ms: e.duration_ms.unwrap_or(0.0),
-                cause: c.cause,
-                reason: c.reason.clone(),
-            });
-        }
-        match e.kind {
-            EventType::Error => {
-                self.error_count += 1.0;
-                self.error_open = true;
-            }
-            EventType::Recovery => self.error_open = false,
-            _ => {}
-        }
-        classified
+        (c, buffer)
     }
 
     pub fn set_pipeline(&mut self, p: Option<QoePipeline>) {
@@ -302,8 +337,12 @@ impl QoeAggregator {
             decoder_name: self.decoder_name.clone(),
             hw_decoder: self.hw_decoder,
             watched_ms: self.watched_ms,
-            stall_count: self.stalls.total().unwrap_or(0.0),
-            stall_ms: self.stall_ms.total().unwrap_or(0.0),
+            stall_count: self.stalls.total().unwrap_or(0.0).max(self.event_stalls),
+            stall_ms: self
+                .stall_ms
+                .total()
+                .unwrap_or(0.0)
+                .max(self.event_stall_ms),
             dropped_frames: self.dropped.total(),
             decoded_frames: self.decoded.total(),
             recovery_reloads: self.reloads.total().unwrap_or(0.0),
@@ -326,6 +365,10 @@ impl QoeAggregator {
             sample_count: self.sample_count,
             stall_cause_ms: self.cause_ms.clone(),
             stall_reason_ms: self.reason_ms.clone(),
+            startup_ms: self.startup.map(|s| s.0),
+            startup_cause: self.startup.map(|s| s.1),
+            fallback_reloads: self.fallback_reloads,
+            copy_rejected: false,
         }
     }
 }
@@ -372,6 +415,7 @@ pub fn merge_summaries(parts: &[QoeSessionSummary]) -> Option<QoeSessionSummary>
             unknown: sum(|c| c.unknown),
         }
     });
+    let first_start = parts.iter().find(|p| p.startup_ms.is_some());
     let mut reasons = ReasonMs::default();
     for (k, v) in parts
         .iter()
@@ -414,6 +458,10 @@ pub fn merge_summaries(parts: &[QoeSessionSummary]) -> Option<QoeSessionSummary>
         sample_count: total(|p| p.sample_count),
         stall_cause_ms: cause_ms,
         stall_reason_ms: (!reasons.0.is_empty()).then_some(reasons),
+        startup_ms: first_start.and_then(|p| p.startup_ms),
+        startup_cause: first_start.and_then(|p| p.startup_cause),
+        fallback_reloads: total(|p| p.fallback_reloads),
+        copy_rejected: parts.iter().any(|p| p.copy_rejected),
     })
 }
 
@@ -431,4 +479,54 @@ fn recovery_cause(e: &QoeEvent) -> Option<StallClassification> {
         evidence: Default::default(),
         hints: vec![],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ev(kind: EventType, ms: Option<f64>, reason: Option<&str>) -> QoeEvent {
+        serde_json::from_value(serde_json::json!({
+            "type": kind, "at": 1000.0, "position": null, "durationMs": ms, "reason": reason
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn events_alone_count_stalls_and_fallbacks_and_the_first_start_wins() {
+        let mut a = QoeAggregator::new();
+        a.add_event(
+            &ev(EventType::Stall, Some(1500.0), None),
+            1000.0,
+            false,
+            None,
+        );
+        a.add_event(
+            &ev(EventType::Reload, None, Some("remux_fallback")),
+            1000.0,
+            false,
+            None,
+        );
+        a.add_event(
+            &ev(EventType::Reload, None, Some("audio")),
+            1000.0,
+            false,
+            None,
+        );
+        a.add_event(
+            &ev(EventType::Start, Some(30_000.0), None),
+            1000.0,
+            false,
+            None,
+        );
+        a.add_event(&ev(EventType::Start, Some(5.0), None), 1000.0, false, None);
+        let s = a.summary();
+        assert_eq!(
+            (s.stall_count, s.stall_ms, s.fallback_reloads),
+            (1.0, 1500.0, 1.0)
+        );
+        assert_eq!(s.startup_ms, Some(30_000.0));
+        let w = s.stall_cause_ms.unwrap();
+        assert_eq!(w.server + w.network + w.device + w.unknown, 750.0);
+    }
 }

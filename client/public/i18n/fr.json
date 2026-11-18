@@ -1694,6 +1694,7 @@
     "setting_retention": "Rétention (jours)",
     "settings_saved": "Réglages enregistrés",
     "verdict_breakdown": "Verdicts",
+    "verdict_unmeasured": "Aucune mesure",
     "empty": "Aucune donnée pour le moment.",
     "filter_verdict": "Verdict",
     "filter_all_verdicts": "Tous les verdicts",
@@ -1742,7 +1743,9 @@
       "healthy": "Aucun problème détecté.",
       "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun.",
       "session_lost": "Coupures : le serveur ne connaissait plus la session et le lecteur a dû la recréer.",
-      "session_expired": "Coupures : le serveur a refusé la suite du flux et le lecteur a dû le relancer."
+      "session_expired": "Coupures : le serveur a refusé la suite du flux et le lecteur a dû le relancer.",
+      "copy_fallback": "Le lecteur n'a pas pu lire le flux original et a relancé la lecture sur un repli.",
+      "slow_start": "La première image a mis plus de 10 secondes à s'afficher."
     },
     "filter_all_devices": "Tous les appareils",
     "sessions_count": "{{count}} sessions",
@@ -1835,6 +1838,7 @@
       "reload_direct_fallback": "Repli de la lecture directe vers le remux",
       "reload_remux_fallback": "Repli du remux vers le transcodage",
       "reload_audio_fallback": "Repli audio : {{codec}} non décodé par l'appareil, transcodé",
+      "reload_sdr_fallback": "Relancé en SDR : le récepteur AirPlay ne pouvait pas afficher le HDR",
       "reload_other": "Rechargement du flux",
       "recovery_after": "Reprise après {{duration}}"
     },
@@ -1859,7 +1863,8 @@
       "error_plain": "Erreur de lecture",
       "unreported_one": "1 coupure de {{duration}} sans détail reçu",
       "unreported_many": "{{count}} coupures, {{duration}} au total, sans détail reçu",
-      "rung_eco": "{{rung}} faible consommation"
+      "rung_eco": "{{rung}} faible consommation",
+      "start": "Première image après {{duration}}"
     },
     "throughput_measured": "Débit mesuré",
     "bitrate_video": "Bitrate de la vidéo",

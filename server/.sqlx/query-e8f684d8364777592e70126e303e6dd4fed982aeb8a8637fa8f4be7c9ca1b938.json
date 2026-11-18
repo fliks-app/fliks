@@ -508,6 +508,39 @@
             "name": "playbackConfidence"
           }
         }
+      },
+      {
+        "ordinal": 46,
+        "name": "startupMs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "startupMs"
+          }
+        }
+      },
+      {
+        "ordinal": 47,
+        "name": "startupCause",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "startupCause"
+          }
+        }
+      },
+      {
+        "ordinal": 48,
+        "name": "fallbackReloads",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "fallbackReloads"
+          }
+        }
       }
     ],
     "parameters": {
@@ -561,6 +594,9 @@
       false,
       false,
       false,
+      false,
+      true,
+      true,
       false
     ]
   },

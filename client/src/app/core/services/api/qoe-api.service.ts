@@ -7,8 +7,8 @@ import type { MediaProgressSubject } from '../sse.service';
 // reads is mapped here, so a backend adjustment touches this file only.
 
 export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error';
-export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
-export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'direct_fallback' | 'remux_fallback' | 'audio_fallback' | 'other';
+export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload' | 'start';
+export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'direct_fallback' | 'remux_fallback' | 'audio_fallback' | 'sdr_fallback' | 'other';
 /** What forced a recovery: the server forgot the session, refused the stream, or the picture froze. */
 export type QoeRecoveryReason = 'session_lost' | 'session_expired' | 'stall' | 'other';
 
@@ -101,6 +101,8 @@ export interface QoeSessionRow extends QoeDiagnosis {
   recoveryReloads: number;
   errorCount: number;
   medianTranscodeSpeed: number | null;
+  /** Heartbeat samples received; 0 means nothing measured the playback. */
+  sampleCount?: number;
   /** Derived client-side for the shared badge. */
   droppedPct: number | null;
   bandwidthBps: number | null;

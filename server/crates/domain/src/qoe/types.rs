@@ -51,6 +51,7 @@ pub enum EventType {
     Recovery,
     QualitySwitch,
     Reload,
+    Start,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -338,4 +339,14 @@ pub struct QoeSessionSummary {
     pub sample_count: f64,
     pub stall_cause_ms: Option<CauseMs>,
     pub stall_reason_ms: Option<ReasonMs>,
+    /// Time from the user's load to the first frame; `None` until a `start` event.
+    #[serde(default)]
+    pub startup_ms: Option<f64>,
+    #[serde(default)]
+    pub startup_cause: Option<StallCause>,
+    #[serde(default)]
+    pub fallback_reloads: f64,
+    /// The server transcoded because the client had already rejected the copy.
+    #[serde(default)]
+    pub copy_rejected: bool,
 }

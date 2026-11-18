@@ -52,6 +52,9 @@ pub struct QoeRow {
     pub sampleCount: i32,
     pub stallCauseMs: Option<Value>,
     pub stallReasonMs: Option<Value>,
+    pub startupMs: Option<i32>,
+    pub startupCause: Option<String>,
+    pub fallbackReloads: i32,
     pub pipeline: Option<Value>,
     pub verdict: String,
     pub confidence: String,
@@ -98,8 +101,8 @@ pub struct PageFilter<'a> {
 
 pub async fn upsert(db: &PgPool, r: &QoeRow) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"INSERT INTO playback_qoe_sessions ("sessionId", "playbackId", "userId", "mediaFileId", "mediaTitle", "startedAt", "lastSeenAt", "endedAt", "deviceLabel", "systemName", "appVersion", "engine", "cmcd", "cmcdClaimed", "playMethod", "quality", "transcodeReasons", "videoCodec", "width", "height", "decoderName", "hwDecoder", "watchedMs", "stallCount", "stallMs", "droppedFrames", "decodedFrames", "avgBandwidthBps", "minBandwidthBps", "avgVariantBitrate", "recoveryReloads", "errorCount", "medianTranscodeSpeed", "stallBufferAheadS", "stallBandwidthBps", "cmcdThroughputBps", "unrecoveredError", "sampleCount", "stallCauseMs", "stallReasonMs", "pipeline", "verdict", "confidence", "reasons", "playbackVerdict", "playbackConfidence")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46)
+        r#"INSERT INTO playback_qoe_sessions ("sessionId", "playbackId", "userId", "mediaFileId", "mediaTitle", "startedAt", "lastSeenAt", "endedAt", "deviceLabel", "systemName", "appVersion", "engine", "cmcd", "cmcdClaimed", "playMethod", "quality", "transcodeReasons", "videoCodec", "width", "height", "decoderName", "hwDecoder", "watchedMs", "stallCount", "stallMs", "droppedFrames", "decodedFrames", "avgBandwidthBps", "minBandwidthBps", "avgVariantBitrate", "recoveryReloads", "errorCount", "medianTranscodeSpeed", "stallBufferAheadS", "stallBandwidthBps", "cmcdThroughputBps", "unrecoveredError", "sampleCount", "stallCauseMs", "stallReasonMs", "startupMs", "startupCause", "fallbackReloads", "pipeline", "verdict", "confidence", "reasons", "playbackVerdict", "playbackConfidence")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
            ON CONFLICT ("sessionId") DO UPDATE SET "playbackId" = EXCLUDED."playbackId",
                "userId" = EXCLUDED."userId",
                "mediaFileId" = EXCLUDED."mediaFileId",
@@ -139,6 +142,9 @@ pub async fn upsert(db: &PgPool, r: &QoeRow) -> sqlx::Result<()> {
                "sampleCount" = EXCLUDED."sampleCount",
                "stallCauseMs" = EXCLUDED."stallCauseMs",
                "stallReasonMs" = EXCLUDED."stallReasonMs",
+               "startupMs" = EXCLUDED."startupMs",
+               "startupCause" = EXCLUDED."startupCause",
+               "fallbackReloads" = EXCLUDED."fallbackReloads",
                "pipeline" = EXCLUDED."pipeline",
                "verdict" = EXCLUDED."verdict",
                "confidence" = EXCLUDED."confidence",
@@ -185,6 +191,9 @@ pub async fn upsert(db: &PgPool, r: &QoeRow) -> sqlx::Result<()> {
         r.sampleCount,
         r.stallCauseMs.as_ref(),
         r.stallReasonMs.as_ref(),
+        r.startupMs,
+        r.startupCause.as_deref(),
+        r.fallbackReloads,
         r.pipeline.as_ref(),
         &r.verdict,
         &r.confidence,

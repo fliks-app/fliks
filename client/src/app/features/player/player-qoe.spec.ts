@@ -121,6 +121,58 @@ describe('PlayerQoe', () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  describe('start event', () => {
+    const starts = () => reporter.record.mock.calls.filter((c) => c[1].type === 'start').map((c) => c[1]);
+
+    it('is sent once at the first frame with the wait since the load', () => {
+      now = 4200;
+      qoe.onFirstFrame('s');
+      qoe.onFirstFrame('s');
+      expect(starts()).toEqual([expect.objectContaining({ durationMs: 4200, position: null })]);
+    });
+
+    it('restarts on a user reload but not on a fallback', () => {
+      now = 3000;
+      qoe.onReload('s', 0, { reason: 'remux_fallback' });
+      now = 5000;
+      qoe.onReload('s', 0, { reason: 'audio' });
+      now = 9000;
+      qoe.onReload('s', 0, { reason: 'direct_fallback' });
+      now = 12_000;
+      qoe.onFirstFrame('s');
+      expect(starts()[0].durationMs).toBe(7000);
+    });
+
+    it('leaves out the time a refused autoplay held', () => {
+      now = 1000;
+      qoe.holdStartup(true);
+      now = 31_000;
+      qoe.holdStartup(false);
+      now = 32_000;
+      qoe.onFirstFrame('s');
+      expect(starts()[0].durationMs).toBe(2000);
+    });
+
+    it('is sent on teardown only after a long wait and never twice', () => {
+      now = 10_000;
+      qoe.onTeardown('s');
+      expect(starts()).toEqual([]);
+      now = 10_001;
+      qoe.onTeardown('s');
+      qoe.onFirstFrame('s');
+      expect(starts()).toEqual([expect.objectContaining({ durationMs: 10_001 })]);
+    });
+
+    it('a new playback starts a new wait', () => {
+      now = 2000;
+      qoe.onFirstFrame('s');
+      qoe.reset();
+      now = 5000;
+      qoe.onFirstFrame('t');
+      expect(starts().map((e) => e.durationMs)).toEqual([2000, 3000]);
+    });
+  });
+
   it('emits a stall event with the latest sample context', async () => {
     await qoe.refresh(engine(async () => raw));
     now = 1000;

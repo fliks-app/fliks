@@ -1,21 +1,21 @@
 //! Playbacks: a user's sessions sharing a playbackId, merged and re-diagnosed (`qoe.md` rules 24-27).
 use super::store::{QoeRow, SummaryRow};
 use fliks_domain::qoe::{
-    CauseMs, Engine, QoeDiagnosis, QoeSessionSummary, ReasonMs, diagnose, merge_summaries,
+    CauseMs, Engine, QoeDiagnosis, QoeSessionSummary, ReasonMs, StallCause, diagnose,
+    merge_summaries,
 };
 use serde_json::{Map, Value, json, to_value};
 use std::collections::HashMap;
 
-const DROPPED_KEYS: [&str; 7] = [
+const DROPPED_KEYS: [&str; 6] = [
     "stallBufferAheadS",
     "stallBandwidthBps",
     "cmcdThroughputBps",
     "unrecoveredError",
-    "sampleCount",
     "stallCauseMs",
     "stallReasonMs",
 ];
-const MERGED_KEYS: [&str; 19] = [
+const MERGED_KEYS: [&str; 23] = [
     "engine",
     "cmcd",
     "cmcdClaimed",
@@ -35,6 +35,10 @@ const MERGED_KEYS: [&str; 19] = [
     "recoveryReloads",
     "errorCount",
     "medianTranscodeSpeed",
+    "startupMs",
+    "startupCause",
+    "fallbackReloads",
+    "sampleCount",
 ];
 const VERDICTS: [&str; 5] = ["ok", "network", "device", "server", "error"];
 
@@ -90,6 +94,13 @@ fn summary_of(r: &QoeRow) -> QoeSessionSummary {
             .stallReasonMs
             .clone()
             .and_then(|v| serde_json::from_value::<ReasonMs>(v).ok()),
+        startup_ms: f(r.startupMs),
+        startup_cause: r
+            .startupCause
+            .clone()
+            .and_then(|c| serde_json::from_value::<StallCause>(c.into()).ok()),
+        fallback_reloads: f64::from(r.fallbackReloads),
+        copy_rejected: super::copy_rejected(&r.transcodeReasons),
     }
 }
 

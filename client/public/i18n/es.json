@@ -1676,6 +1676,7 @@
     "setting_retention": "Retención (días)",
     "settings_saved": "Ajustes guardados",
     "verdict_breakdown": "Diagnósticos",
+    "verdict_unmeasured": "Sin medición",
     "empty": "Aún no hay datos.",
     "filter_verdict": "Diagnóstico",
     "filter_all_verdicts": "Todos los diagnósticos",
@@ -1724,7 +1725,9 @@
       "healthy": "No se detectó ningún problema.",
       "cmcd_missing": "El cliente declara CMCD pero el servidor no recibió ninguno.",
       "session_lost": "Cortes: el servidor ya no conocía la sesión y el reproductor tuvo que recrearla.",
-      "session_expired": "Cortes: el servidor rechazó el resto del flujo y el reproductor tuvo que reiniciarlo."
+      "session_expired": "Cortes: el servidor rechazó el resto del flujo y el reproductor tuvo que reiniciarlo.",
+      "copy_fallback": "El reproductor no pudo reproducir el flujo original y reinició con una alternativa.",
+      "slow_start": "La primera imagen tardó más de 10 segundos en aparecer."
     },
     "filter_all_devices": "Todos los dispositivos",
     "sessions_count": "{{count}} sesiones",
@@ -1817,6 +1820,7 @@
       "reload_direct_fallback": "La reproducción directa pasó a remux",
       "reload_remux_fallback": "El remux pasó a transcodificación",
       "reload_audio_fallback": "Alternativa de audio: {{codec}} no decodificado por el dispositivo, transcodificado",
+      "reload_sdr_fallback": "Recargado en SDR: el receptor AirPlay no podía mostrar HDR",
       "reload_other": "Recarga del flujo",
       "recovery_after": "Reanudado tras {{duration}}"
     },
@@ -1841,7 +1845,8 @@
       "error_plain": "Error de reproducción",
       "unreported_one": "1 corte de {{duration}} sin detalles recibidos",
       "unreported_many": "{{count}} cortes, {{duration}} en total, sin detalles recibidos",
-      "rung_eco": "{{rung}} bajo consumo"
+      "rung_eco": "{{rung}} bajo consumo",
+      "start": "Primera imagen tras {{duration}}"
     },
     "throughput_measured": "Caudal medido",
     "bitrate_video": "Bitrate del vídeo",

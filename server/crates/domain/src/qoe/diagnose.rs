@@ -12,6 +12,11 @@ pub const DROPPED_RATIO: f64 = 0.05;
 /// Below this many decoded frames a dropped ratio is noise.
 pub const MIN_DECODED_FRAMES: f64 = 300.0;
 
+/// A first frame later than this reads as a slow start.
+pub const SLOW_START_MS: f64 = 10_000.0;
+/// Stalls totalling less than this are not a verdict.
+pub const MIN_STALL_MS: f64 = 1_000.0;
+
 const TEN_MIN_MS: f64 = 600_000.0;
 
 fn result(verdict: Verdict, confidence: Confidence, reasons: &[&str]) -> QoeDiagnosis {
@@ -104,7 +109,19 @@ pub fn diagnose(s: &QoeSessionSummary, live: bool) -> QoeDiagnosis {
     if s.cmcd_claimed && !s.cmcd {
         d.reasons.push("qoe.reason.cmcd_missing".into());
     }
+    let mut extra = |cond: bool, r: &str| {
+        let r = format!("qoe.reason.{r}");
+        if cond && !d.reasons.contains(&r) {
+            d.reasons.push(r);
+        }
+    };
+    extra(s.fallback_reloads > 0.0 || s.copy_rejected, "copy_fallback");
+    extra(slow_start(s), "slow_start");
     d
+}
+
+fn slow_start(s: &QoeSessionSummary) -> bool {
+    s.startup_ms.is_some_and(|m| m >= SLOW_START_MS)
 }
 
 fn decide(s: &QoeSessionSummary, live: bool) -> QoeDiagnosis {
@@ -116,6 +133,7 @@ fn decide(s: &QoeSessionSummary, live: bool) -> QoeDiagnosis {
         d => d,
     };
     let stalling = s.stall_count > 0.0
+        && s.stall_ms >= MIN_STALL_MS
         && (s.stall_count / per_10_min >= STALLS_PER_10_MIN
             || s.stall_ms / s.watched_ms.max(1.0) >= STALL_RATIO);
     if stalling {
@@ -168,10 +186,127 @@ fn decide(s: &QoeSessionSummary, live: bool) -> QoeDiagnosis {
     {
         return device(s, Confidence::High, "dropped_frames");
     }
+    if s.fallback_reloads > 0.0 {
+        return device(s, Confidence::High, "copy_fallback");
+    }
+    if slow_start(s) {
+        return match s.startup_cause {
+            Some(StallCause::Server) => result(Verdict::Server, Confidence::High, &["slow_start"]),
+            _ => result(Verdict::Network, Confidence::Low, &["slow_start"]),
+        };
+    }
     let conf = if s.watched_ms >= MIN_WATCHED_MS && (s.sample_count > 0.0 || s.cmcd) {
         Confidence::High
     } else {
         Confidence::Low
     };
     result(Verdict::Ok, conf, &["healthy"])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base() -> QoeSessionSummary {
+        serde_json::from_value(serde_json::json!({
+            "engine": null, "cmcd": false, "cmcdClaimed": false, "videoCodec": null,
+            "width": null, "height": null, "decoderName": null, "hwDecoder": null,
+            "watchedMs": 120000.0, "stallCount": 0.0, "stallMs": 0.0, "droppedFrames": null,
+            "decodedFrames": null, "recoveryReloads": 0.0, "errorCount": 0.0,
+            "unrecoveredError": false, "bandwidthBps": null, "variantBitrate": null,
+            "bufferAheadS": null, "avgBandwidthBps": null, "minBandwidthBps": null,
+            "avgVariantBitrate": null, "stallBufferAheadS": null, "stallBandwidthBps": null,
+            "cmcdThroughputBps": null, "medianTranscodeSpeed": null, "sampleCount": 5.0,
+            "stallCauseMs": null, "stallReasonMs": null
+        }))
+        .unwrap()
+    }
+
+    fn verdict(s: &QoeSessionSummary) -> (Verdict, Confidence, Vec<String>) {
+        let d = diagnose(s, false);
+        (d.verdict, d.confidence, d.reasons)
+    }
+
+    #[test]
+    fn a_fallback_is_a_device_verdict() {
+        let s = QoeSessionSummary {
+            fallback_reloads: 1.0,
+            ..base()
+        };
+        let (v, c, r) = verdict(&s);
+        assert_eq!((v, c), (Verdict::Device, Confidence::High));
+        assert_eq!(r, ["qoe.reason.copy_fallback"]);
+    }
+
+    #[test]
+    fn a_slow_start_maps_its_cause() {
+        let slow = |cause| QoeSessionSummary {
+            startup_ms: Some(SLOW_START_MS),
+            startup_cause: cause,
+            ..base()
+        };
+        let (v, c, r) = verdict(&slow(Some(StallCause::Server)));
+        assert_eq!(
+            (v, c, r),
+            (
+                Verdict::Server,
+                Confidence::High,
+                vec!["qoe.reason.slow_start".into()]
+            )
+        );
+        let (v, c, _) = verdict(&slow(Some(StallCause::Unknown)));
+        assert_eq!((v, c), (Verdict::Network, Confidence::Low));
+        let fast = QoeSessionSummary {
+            startup_ms: Some(SLOW_START_MS - 1.0),
+            ..base()
+        };
+        assert_eq!(verdict(&fast).0, Verdict::Ok);
+    }
+
+    #[test]
+    fn both_reasons_are_listed_when_an_earlier_rule_wins() {
+        let s = QoeSessionSummary {
+            unrecovered_error: true,
+            fallback_reloads: 1.0,
+            startup_ms: Some(20_000.0),
+            ..base()
+        };
+        let (v, _, r) = verdict(&s);
+        assert_eq!(v, Verdict::Error);
+        assert_eq!(
+            r,
+            [
+                "qoe.reason.fatal_error",
+                "qoe.reason.copy_fallback",
+                "qoe.reason.slow_start"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_rejected_copy_without_fallback_only_adds_a_reason() {
+        let s = QoeSessionSummary {
+            copy_rejected: true,
+            ..base()
+        };
+        let (v, _, r) = verdict(&s);
+        assert_eq!(v, Verdict::Ok);
+        assert_eq!(r, ["qoe.reason.healthy", "qoe.reason.copy_fallback"]);
+    }
+
+    #[test]
+    fn under_a_second_of_stalls_is_not_stalling() {
+        let s = QoeSessionSummary {
+            stall_count: 5.0,
+            stall_ms: 999.0,
+            ..base()
+        };
+        assert_eq!(verdict(&s).0, Verdict::Ok);
+        let s = QoeSessionSummary {
+            stall_count: 5.0,
+            stall_ms: 1000.0,
+            ..base()
+        };
+        assert_ne!(verdict(&s).0, Verdict::Ok);
+    }
 }
