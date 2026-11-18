@@ -19,6 +19,7 @@ describe('SeekbarComponent keyboard preview', () => {
     bar = fixture.componentInstance;
     fixture.componentRef.setInput('duration', 600);
     fixture.componentRef.setInput('currentTime', 100);
+    bar.focus();
   });
 
   afterEach(() => {
@@ -40,7 +41,46 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(bar.previewVisible()).toBe(true);
     expect(bar.previewTime()).toBe(110);
 
-    vi.advanceTimersByTime(1600);
+    vi.advanceTimersByTime(4300);
+    expect(bar.previewVisible()).toBe(false);
+  });
+
+  it('rests thin after a pause, then its first arrow only arms it', () => {
+    const seeks: number[] = [];
+    bar.seek.subscribe((t) => seeks.push(t));
+    vi.advanceTimersByTime(5000);
+    expect(bar.armed()).toBe(false);
+    expect(bar.previewVisible()).toBe(false);
+    expect(bar.trackClass()).toContain('h-1');
+
+    bar.onKeydown(arrow('ArrowRight'));
+    bar.onKeyup(arrow('ArrowRight'));
+    vi.advanceTimersByTime(800);
+    expect(bar.armed()).toBe(true);
+    expect(bar.trackClass()).toContain('h-2.5');
+    expect(bar.dragging()).toBe(false);
+    expect(seeks).toEqual([]);
+
+    bar.onKeydown(arrow('ArrowRight'));
+    bar.onKeyup(arrow('ArrowRight'));
+    vi.advanceTimersByTime(800);
+    expect(seeks).toEqual([110]);
+  });
+
+  it('a keyboard focus arms the bar with the playhead time alone', () => {
+    bar.rest();
+    bar.onFocus({ target: { matches: () => true } } as unknown as FocusEvent);
+    expect(bar.armed()).toBe(true);
+    expect(bar.scrubbing()).toBe(false);
+    expect(bar.previewTime()).toBe(100);
+  });
+
+  it('a pointer focus leaves the bar at rest, and a blur puts it back', () => {
+    bar.rest();
+    bar.onFocus({ target: { matches: () => false } } as unknown as FocusEvent);
+    expect(bar.armed()).toBe(false);
+    bar.focus();
+    bar.rest();
     expect(bar.previewVisible()).toBe(false);
   });
 
@@ -107,7 +147,7 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(seeks).toEqual([130]);
     // Still up past the commit, then retires.
     expect(bar.previewVisible()).toBe(true);
-    vi.advanceTimersByTime(1600);
+    vi.advanceTimersByTime(4200);
     expect(bar.previewVisible()).toBe(false);
   });
 });
@@ -130,6 +170,7 @@ describe('SeekbarComponent pointer drag vs pending key scrub', () => {
     bar = fixture.componentInstance;
     fixture.componentRef.setInput('duration', 600);
     fixture.componentRef.setInput('currentTime', 100);
+    bar.focus();
   });
 
   afterEach(() => {
@@ -196,6 +237,7 @@ describe('SeekbarComponent chapters', () => {
     fixture.componentRef.setInput('duration', 600);
     fixture.componentRef.setInput('currentTime', 100);
     fixture.componentRef.setInput('chapters', CHAPTERS);
+    bar.focus();
   });
 
   afterEach(() => {
