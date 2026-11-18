@@ -110,6 +110,10 @@ function setup() {
     observedOwnerTargetId: signal<string | null>('tv-1'),
     observableOwner: signal<string | null>(null),
     handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
+    canTransfer: signal(true),
+    parked: () => false,
+    role: signal('owner'),
+    transferTo: vi.fn(async (_id: string) => {}),
     isReading: (s: any) => s.item.family === 'text',
     isAudio: (s: any) => s.item.family === 'audio',
     videoItem: SessionSyncService.prototype.videoItem,
@@ -353,6 +357,31 @@ describe('PlaybackSession', () => {
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('dev-9');
       expect(remoteSvc.send).toHaveBeenCalledWith('dev-9', { action: 'load', mediaId: 3, mediaFileId: 7, episodeId: 9, positionSeconds: 120, trackId: 'audio-1', subtitleId: 'sub-2' });
       expect(local.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('moves music to another device through the account-session transfer, video through a direct load', async () => {
+      const { session, local, syncSvc, remoteSvc, audio } = setup();
+      syncSvc.session.set({ owner: { targetId: 'me' }, state: 'playing', item: { mediaFileId: 70 } });
+      audio.holds.mockReturnValue(true);
+      expect(session.canMoveTo('remote', 'dev-9')).toBe(true);
+      expect(await session.moveTo('remote', 'dev-9')).toBe(true);
+      expect(syncSvc.transferTo).toHaveBeenCalledWith('dev-9');
+      expect(remoteSvc.send).not.toHaveBeenCalled();
+      syncSvc.transferTo.mockClear();
+      session.attachLocal(local);
+      expect(await session.moveTo('remote', 'dev-9')).toBe(true);
+      expect(syncSvc.transferTo).not.toHaveBeenCalled();
+      expect(remoteSvc.send).toHaveBeenCalled();
+    });
+
+    it('does not transfer a party track, nor to the device that owns the session', async () => {
+      const { session, syncSvc, audio } = setup();
+      syncSvc.session.set({ owner: { targetId: 'dev-9' }, state: 'playing', item: { mediaFileId: 70 } });
+      audio.holds.mockReturnValue(true);
+      expect(session.transfersTo('dev-9')).toBe(false);
+      expect(session.transfersTo('dev-8')).toBe(true);
+      session.setPartyRouter(() => true);
+      expect(session.transfersTo('dev-8')).toBe(false);
     });
 
     it('refuses on a TV', async () => {

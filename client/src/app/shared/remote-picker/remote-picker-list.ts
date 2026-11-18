@@ -220,14 +220,7 @@ export class RemotePickerListComponent {
 
   /** Another device of the account can take the session over, unless it already plays it. */
   protected canTransfer(row: PickerRow): boolean {
-    const s = this.sync.session();
-    return row.kind === 'remote' && !!s && this.sync.canTransfer() && this.remote.canLoad(row.id, s.item.mediaFileId) && (this.sync.parked() || s.owner.targetId !== row.id);
-  }
-
-  /** This device observes the session itself, or controls the device that owns it. */
-  private observesSession(): boolean {
-    const s = this.sync.session();
-    return this.session.isLocal() || (!!s && s.state !== 'parked' && s.owner.targetId === this.remote.selectedTargetId());
+    return row.kind === 'remote' && this.session.transfersTo(row.id);
   }
 
   protected pressable(row: PickerRow): boolean {
@@ -236,19 +229,7 @@ export class RemotePickerListComponent {
     return !(this.transferOnly() && row.kind === 'remote' && !this.canTransfer(row));
   }
 
-  protected async transfer(row: PickerRow): Promise<void> {
-    try {
-      await this.sync.transferTo(row.id);
-    } catch (err) {
-      console.warn('[remote-picker] transfer failed', row.id, err);
-    }
-  }
-
   selectRow(row: PickerRow): void {
-    if (this.transferOnly() && row.kind === 'remote') {
-      if (this.canTransfer(row)) void this.transfer(row);
-      return;
-    }
     // The system picker is also where AirPlay is left, so `connected` changes
     // nothing here.
     if (row.kind === 'airplay') {
@@ -278,9 +259,9 @@ export class RemotePickerListComponent {
       this.surface.open(owned);
       return;
     }
-    // Another device plays the account session (the one controlled here included): a press moves it there instead of selecting a second one.
-    if (row.kind === 'remote' && this.sync.role() === 'observer' && this.observesSession() && this.canTransfer(row)) {
-      void this.transfer(row);
+    // The account session moves to the device with its queue, instead of a second device being selected.
+    if (row.kind === 'remote' && this.canTransfer(row)) {
+      void this.session.moveTo('remote', row.id);
       return;
     }
     if (row.kind === 'cast' || row.kind === 'cast-web') {

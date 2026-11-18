@@ -237,8 +237,22 @@ export class PlaybackSession {
   /** Whether the playing item can be loaded on `deviceId`; only a remote target can refuse it. */
   canMoveTo(kind: OutputKind, deviceId?: string): boolean {
     if (kind !== 'remote' || !deviceId) return true;
+    if (this.transfersTo(deviceId)) return true;
+    if (this.isLocal() && !this.local() && this.audio().holds()) return false;
     const fileId = this.output()?.snapshot()?.item.fileId;
     return !fileId || this.remoteSvc().canLoad(deviceId, fileId);
+  }
+
+  /** Whether a move to `deviceId` hands the account session over, which carries the queue: music held here,
+   *  or a session this device follows or controls. Video loads on the device directly. */
+  transfersTo(deviceId: string): boolean {
+    const sync = this.sync();
+    const remote = this.remoteSvc();
+    const s = sync.session();
+    if (!s || !sync.canTransfer() || this.local() || this.viewing() || !remote.canLoad(deviceId, s.item.mediaFileId)) return false;
+    if (!sync.parked() && s.owner.targetId === deviceId) return false;
+    if (this.audio().holds()) return !this.toParty({ type: 'drives' }, 'audio');
+    return sync.role() === 'observer' && (this.isLocal() || (s.state !== 'parked' && s.owner.targetId === remote.selectedTargetId()));
   }
 
   /** The only handoff between outputs. False when refused (TV, nothing to hand over, a target that takes no load) or failed. */
@@ -252,7 +266,9 @@ export class PlaybackSession {
     const run =
       kind === 'local'
         ? this.toLocal()
-        : switching
+        : kind === 'remote' && deviceId && this.transfersTo(deviceId)
+          ? this.transfer(deviceId)
+          : switching
           ? this.switchAway(kind, deviceId)
           : kind === 'cast'
             ? this.toCast(deviceId)
@@ -396,6 +412,11 @@ export class PlaybackSession {
     await cp.reloadCastStream(position, !paused, handoff.cast.activeQualityId);
     const sid = handoff.localSessionId;
     if (sid && sid !== cp.liveSessionId()) void this.injector.get(StreamingApiService).stopSession(sid).catch(() => {});
+  }
+
+  private async transfer(deviceId: string): Promise<boolean> {
+    await this.sync().transferTo(deviceId);
+    return true;
   }
 
   private async toRemote(targetId?: string): Promise<boolean> {
