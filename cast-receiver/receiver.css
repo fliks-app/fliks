@@ -621,13 +621,28 @@ body.lyrics-on .music-track {
   color: inherit;
 }
 
-/* The current line's words, as on the phone: one gradient clipped to the glyphs, its stop at the sung share. */
-.lyric.cued.cur .word {
-  --p: 0%;
-  background-image: linear-gradient(90deg, #ecf9ff var(--p), rgba(236, 249, 255, 0.4) var(--p));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+.clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.clip > span {
+  display: block;
+  white-space: nowrap;
+}
+
+.clip.sung {
+  transform: translateX(-100%);
+}
+
+.clip.sung > span {
+  transform: translateX(100%);
+  color: #ecf9ff;
+}
+
+.clip.coming > span {
+  color: rgba(236, 249, 255, 0.4);
 }
 
 /* Karaoke, as the phone's stage: sung lines fade, coming ones stay readable, the sung part takes the primary colour. */
@@ -643,15 +658,17 @@ body.lyrics-on .music-track {
   opacity: 1;
 }
 
-.stage .lyric.cued .word {
+.stage .lyric.cued .word,
+.stage .clip.coming > span {
   color: #ecf9ff;
 }
 
-.stage .lyric.cued.cur .word {
-  background-image: linear-gradient(90deg, #605dff var(--p), #ecf9ff var(--p));
+.stage .clip.sung > span {
+  color: #605dff;
 }
 
-.stage .lyric.cued.cur .gap {
-  background-image: none;
-  -webkit-text-fill-color: currentColor;
+/* A word being wiped: its own text only holds its place, its two copies draw it. */
+.lyric.cued .word.wiping {
+  position: relative;
+  color: transparent;
 }
