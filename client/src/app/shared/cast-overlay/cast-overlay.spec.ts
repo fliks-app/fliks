@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideTranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeviceService } from '../../core/services/device.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
@@ -249,8 +250,11 @@ describe('CastOverlayComponent', () => {
       expect(setup({ local: true, live: false, account: accountSession({ state: 'parked', playing: false }) }).strip).toBeNull();
     });
 
-    it('is hidden on a TV, and for the owner', () => {
-      expect(setup({ local: true, tv: true, account: accountSession() }).el.querySelector('button')).toBeNull();
+    it('docks in the TV navbar instead of the page, and is hidden for the owner', () => {
+      const tv = setup({ local: true, tv: true, account: accountSession() });
+      TestBed.tick();
+      expect(tv.el.querySelector('button')).toBeNull();
+      expect(TestBed.inject(NavbarService).tvBars()).toHaveLength(1);
       TestBed.resetTestingModule();
       expect(setup({ local: true }).el.querySelector('button')).toBeNull();
     });

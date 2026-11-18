@@ -10,7 +10,6 @@ import { deviceIdOf, sameTarget } from './remote-target-id';
 import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
 import { ClockService } from './party/clock.service';
-import { DeviceService } from './device.service';
 import { SseService, type SessionEvent } from './sse.service';
 
 export type SessionState = 'playing' | 'paused' | 'buffering' | 'parked';
@@ -76,7 +75,6 @@ export class SessionSyncService {
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly device = inject(DeviceService);
   private readonly clock = inject(ClockService);
   private readonly translate = inject(TranslateService);
   private liveSource: () => LiveReport | null = () => null;
@@ -104,13 +102,13 @@ export class SessionSyncService {
     return s.state === 'parked' ? deviceIdOf(owner) === deviceIdOf(me) : sameTarget(owner, me);
   });
 
-  /** The device to read state from and send commands to without selecting it; null on a TV, which only ever owns. */
+  /** The device to read state from and send commands to without selecting it. */
   readonly observedOwnerTargetId = computed<string | null>(() => (this.localPlaying() ? null : this.observableOwner()));
 
   /** The owner another device holds live, whether or not a local player is busy. */
   readonly observableOwner = computed<string | null>(() => {
     const s = this._session();
-    if (!s || this.role() !== 'observer' || s.state === 'parked' || this.device.isTv()) return null;
+    if (!s || this.role() !== 'observer' || s.state === 'parked') return null;
     return s.owner.targetId;
   });
 
