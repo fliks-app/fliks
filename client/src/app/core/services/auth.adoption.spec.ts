@@ -8,6 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthService, type User } from './auth.service';
 import { SessionStoreService } from './session-store.service';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 const user = { id: 1, username: 'u', avatar: null, permissions: [] } as unknown as User;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -56,6 +57,7 @@ describe('AuthService refresh token adoption', () => {
     await settle();
     const request = http.expectOne('/api/auth/refresh');
     expect(request.request.body.refreshToken).toBe('T3');
+    expect(request.request.context.get(SKIP_ERROR_TOAST)).toBe(true);
     request.flush({ accessToken: 'a', refreshToken: 'T4' });
     await refresh;
   });
