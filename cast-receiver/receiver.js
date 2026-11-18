@@ -576,9 +576,12 @@ playerManager.setMessageInterceptor(
       'contentType=',
       loadRequest.media?.contentType,
     );
+    const media = loadRequest.media;
+    // CAF runs this for the queued track it preloads too: the playing track and its mix stay as they are.
+    if (media && upNextUrl && media.contentId === upNextUrl && playerManager.getPlayerState() !== cast.framework.messages.PlayerState.IDLE) return loadRequest;
     // A LOAD starts a new queue: the up-next item went with the old one.
     upNext = null;
-    const media = loadRequest.media;
+    upNextUrl = null;
     if (activeMix) closeMix(activeMix);
     const mixId = media && typeof media.contentId === 'string' && media.contentId.startsWith(MIX_SCHEME) ? media.contentId.slice(MIX_SCHEME.length) : null;
     if (mixId && mixSpecs.has(mixId)) {
@@ -954,6 +957,7 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 
 const UP_NEXT_PRELOAD_S = 15;
 let upNext = null;
+let upNextUrl = null;
 
 function queuedMedia(m) {
   const media = new cast.framework.messages.MediaInformation();
@@ -979,6 +983,7 @@ context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   // The queue may already have moved on to it: never drop the playing item.
   if (upNext !== null && (!current || current.itemId !== upNext)) queue.removeItems([upNext]);
   upNext = null;
+  upNextUrl = msg.media ? msg.media.url : null;
   if (!msg.media) return;
   const item = new cast.framework.messages.QueueItem();
   item.media = queuedMedia(msg.media);
