@@ -409,9 +409,9 @@
         </div>
       </ng-template>
 
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1" appTvRow>
         <app-seekbar
-          variant="cast"
+          [variant]="isTv() ? 'player' : 'cast'"
           [currentTime]="audio.position()"
           [duration]="audio.duration()"
           [showBuffered]="false"
