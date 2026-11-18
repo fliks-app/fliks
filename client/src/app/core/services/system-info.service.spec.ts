@@ -15,8 +15,12 @@ async function deviceName(info: Record<string, string>): Promise<string> {
 }
 
 describe('SystemInfoService', () => {
-  it('treats the product class iOS reports as a name as no name', async () => {
-    expect(await deviceName({ name: 'iPhone', model: 'iPhone11,2' })).toBe('');
+  it('names an iPhone by its model when iOS withholds the name it was given', async () => {
+    expect(await deviceName({ name: 'iPhone', model: 'iPhone11,2' })).toBe('iPhone XS');
+  });
+
+  it('treats the product class as no name when the model is not listed', async () => {
+    expect(await deviceName({ name: 'iPhone', model: 'iPhone99,1' })).toBe('');
   });
 
   it('keeps a name its owner chose', async () => {
