@@ -1,4 +1,5 @@
 import { fromEvent, startWith } from 'rxjs';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   inject,
@@ -87,7 +88,7 @@ const PAIRING_TTL_MS = 600_000;
 @Component({
   selector: 'app-layout',
   imports: [
-    CachedSrcDirective,
+    CachedSrcDirective, NgTemplateOutlet,
     RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     LucideCloudOff, LucideDownload, LucideRotateCw,

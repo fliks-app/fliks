@@ -1,10 +1,12 @@
+<ng-template #bar>
 <div
   appTvRow
   animate.enter="mini-player-in"
   animate.leave="mini-player-out"
-  class="fixed inset-x-2 z-40 flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 p-1 pb-1.5 pr-2 shadow-xl backdrop-blur-sm transition-colors duration-300 lg:inset-x-auto lg:right-4 lg:w-[27rem]"
+  class="flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 p-1 pb-1.5 pr-2 transition-colors duration-300"
+  [class]="docked ? 'relative w-80' : 'fixed inset-x-2 z-40 shadow-xl backdrop-blur-sm lg:inset-x-auto lg:right-4 lg:w-[27rem]'"
   [style.display]="visible() ? null : 'none'"
-  [style.bottom]="raised() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'"
+  [style.bottom]="docked ? null : raised() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'"
   [style.background-color]="tint()"
   [style.border-color]="tint()"
   [style.--color-base-content]="tint() ? 'oklch(97% 0 0)' : null"
@@ -34,3 +36,7 @@
     </div>
   }
 </div>
+</ng-template>
+@if (!docked) {
+  <ng-container [ngTemplateOutlet]="bar" />
+}

@@ -281,6 +281,8 @@ export class App implements OnInit, OnDestroy {
       this.navbar.goBack();
       return;
     }
+    // A TV root page first brings focus back to its nav (and the now-playing bar there); the next Return leaves.
+    if (this.tv.isTv() && this.focusTvNav()) return;
     // Top level without in-app history: leave the app; Return was preventDefault'd, so fire Tizen's application.exit / webOS's platformBack.
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen') {
@@ -311,6 +313,16 @@ export class App implements OnInit, OnDestroy {
         /* platformBack unavailable on some firmware — ignore */
       }
     }
+  }
+
+  private focusTvNav(): boolean {
+    const nav = document.querySelector<HTMLElement>('[data-tv-nav]');
+    if (!nav || nav.contains(document.activeElement)) return false;
+    const tab = nav.querySelector<HTMLElement>('[aria-current="page"]') ?? nav.querySelector<HTMLElement>('a[href]');
+    if (!tab) return false;
+    window.scrollTo({ top: 0 });
+    tab.focus({ preventScroll: true });
+    return true;
   }
 
   ngOnDestroy() {
