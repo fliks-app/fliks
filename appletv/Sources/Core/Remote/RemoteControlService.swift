@@ -94,6 +94,7 @@ import UIKit
     /// Another device claimed the account session: the player closes, silently. The server skips the superseded session's saves.
     @MainActor
     func sessionSuperseded(sessionId: String) {
+        if MusicPlayer.shared.holds(sessionId: sessionId) { return MusicPlayer.shared.stop() }
         guard let coordinator = activeCoordinator,
               supersededGate.accept(sessionId, current: coordinator.playback.sessionId) else { return }
         coordinator.onStopRequested?()
