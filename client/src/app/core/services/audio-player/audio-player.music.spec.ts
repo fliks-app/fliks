@@ -419,7 +419,7 @@ describe('AudioPlayerService music mode', () => {
     castOut.isConnected.set(true);
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1), track(2)]);
-    await audio.resume({ track: track(1), position: 42, paused: false });
+    await audio.resume({ track: track(1), position: 42, paused: false, karaoke: { mode: 'original', level: 0 } });
     expect(getItemPlaybackInfo).toHaveBeenLastCalledWith(1, {}, { startAt: 42 });
     expect(audio.isCasting()).toBe(false);
     expect(audio.track()?.itemId).toBe(1);
@@ -435,12 +435,46 @@ describe('AudioPlayerService music mode', () => {
     await audio.seek(30);
     expect(audio.holds()).toBe(true);
     const handoff = await audio.release();
-    expect(handoff).toEqual({ kind: 'music', snapshot: { track: expect.objectContaining({ itemId: 1 }), position: 30, paused: false } });
+    expect(handoff).toEqual({ kind: 'music', snapshot: { track: expect.objectContaining({ itemId: 1 }), position: 30, paused: false, karaoke: { mode: 'original', level: 0 } } });
     castOut.isConnected.set(true);
     await host.startOnCast(handoff!.snapshot);
     expect(castLoad).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1 }), true, 30, expect.any(Function));
     expect(audio.isCasting()).toBe(true);
     expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2]);
+  });
+
+  it('keeps the stem mode and vocal level when the receiver takes the track', async () => {
+    castLoad.mockResolvedValue(castInfo('cs', 77));
+    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { instrumental: { contentType: 'audio/ogg' }, vocals: { contentType: 'audio/ogg' } } });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    audio.setStemMode('guide');
+    audio.setVocalLevel(0.4);
+    const handoff = await audio.release();
+    expect(handoff?.snapshot.karaoke).toEqual({ mode: 'guide', level: 0.4 });
+    castOut.isConnected.set(true);
+    castOut.active.set(true);
+    await host.startOnCast(handoff!.snapshot);
+    await vi.waitFor(() => expect(castOut.applyStems).toHaveBeenCalled());
+    expect(audio.stemMode()).toBe('guide');
+    expect(audio.vocalLevel()).toBe(0.4);
+  });
+
+  it('starts a new track on the receiver in the original mix', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue(castInfo('cs', 77));
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    audio.setStemMode('guide');
+    await audio.playTracks([track(2)]);
+    expect(audio.stemMode()).toBe('original');
+  });
+
+  it('resumes here in the stem mode the receiver played', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.resume({ track: track(1), position: 5, paused: false, karaoke: { mode: 'instrumental', level: 0 } });
+    expect(audio.stemMode()).toBe('instrumental');
+    expect(audio.vocalLevel()).toBe(0);
   });
 
   it('releases nothing for an audiobook, a party track or while loading', async () => {

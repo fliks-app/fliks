@@ -5,6 +5,7 @@ import type { CastPlayerService } from '../cast-player.service';
 import type { CastSubtitleStyle } from '../cast-settings.service';
 import type { LaunchTracks } from '../track-manager.service';
 import type { MusicTrackRequest } from '../audio-player/music-queue';
+import type { StemMode } from '../audio-player/stem-mix';
 
 /** Minimal shape the playback surfaces need for a track/quality row. */
 export interface PlaybackOption {
@@ -132,6 +133,7 @@ export interface MusicSnapshot {
   track: MusicTrackRequest;
   position: number;
   paused: boolean;
+  karaoke: { mode: StemMode; level: number };
 }
 
 /** What the video player gives up when playback leaves this device. */

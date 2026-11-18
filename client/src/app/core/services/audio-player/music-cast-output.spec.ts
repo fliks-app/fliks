@@ -238,7 +238,7 @@ describe('MusicCastOutput', () => {
     const out = TestBed.inject(MusicCastOutput);
     expect(out.snapshot()).toBeNull();
     out.attach(host as MusicCastHost);
-    expect(out.snapshot()).toEqual({ track: track(1), position: 30, paused: false });
+    expect(out.snapshot()).toEqual({ track: track(1), position: 30, paused: false, karaoke: { mode: 'original', level: 0 } });
     current = null;
     expect(out.snapshot()).toBeNull();
   });
@@ -246,7 +246,7 @@ describe('MusicCastOutput', () => {
   it('starts a music hand-over through its host', async () => {
     const out = TestBed.inject(MusicCastOutput);
     out.attach(host as MusicCastHost);
-    const snapshot = { track: track(1), position: 12, paused: true };
+    const snapshot = { track: track(1), position: 12, paused: true, karaoke: { mode: 'original' as const, level: 0 } };
     await out.start({ kind: 'music', snapshot });
     expect(host.startOnCast).toHaveBeenCalledWith(snapshot);
   });

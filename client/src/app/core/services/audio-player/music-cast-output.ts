@@ -178,7 +178,7 @@ export class MusicCastOutput {
     const track = host?.current();
     if (!host || !track) return null;
     const { position, playing } = host.playhead();
-    return { track, position, paused: !playing };
+    return { track, position, paused: !playing, karaoke: host.karaoke() };
   }
 
   start(h: MusicHandoff): Promise<void> {

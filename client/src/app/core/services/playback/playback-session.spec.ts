@@ -602,7 +602,7 @@ describe('PlaybackSession', () => {
       expect(castPlayer.reloadCastStream).not.toHaveBeenCalled();
     });
 
-    const musicSnapshot: MusicSnapshot = { track: { itemId: 1 } as MusicSnapshot['track'], position: 42, paused: false };
+    const musicSnapshot: MusicSnapshot = { track: { itemId: 1 } as MusicSnapshot['track'], position: 42, paused: false, karaoke: { mode: 'guide', level: 0.25 } };
 
     it('hands the playing music over when no video player is mounted', async () => {
       const { cast, audio, musicCast } = setup();

@@ -266,7 +266,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         this.sessionId = info.sessionId;
       },
       stemsFailed: () => this.onStemsFailed(),
-      startOnCast: async (s) => void (await this.startMusic(s.track, !s.paused, s.position, true)),
+      startOnCast: async (s) => void (await this.startMusic(s.track, !s.paused, s.position, true, s.karaoke)),
       queue: () => (this._musicMode() ? { itemIds: this._queue().map((t) => t.itemId), index: this._queueIndex(), shuffle: this._shuffle(), repeat: this._repeat() } : null),
       adopt: (a) => this.adoptCast(a),
       adopted: () => void this.refreshStems(),
@@ -634,7 +634,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   async release(): Promise<MusicHandoff | null> {
     const req = this.mq.current;
     if (!this._musicMode() || !req || this._loading() || this.castOut.active() || this.blockedByParty()) return null;
-    const snapshot: MusicSnapshot = { track: req, position: this._position(), paused: !this._playing() };
+    const snapshot: MusicSnapshot = { track: req, position: this._position(), paused: !this._playing(), karaoke: { mode: this._stemMode(), level: this._vocalLevel() } };
     await this.teardown(true);
     return { kind: 'music', snapshot };
   }
@@ -647,14 +647,18 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
 
   /** Plays the snapshot's track here, where and as it played elsewhere. */
   async resume(s: MusicSnapshot): Promise<void> {
-    await this.startMusic(s.track, !s.paused, s.position, false);
+    await this.startMusic(s.track, !s.paused, s.position, false, s.karaoke);
   }
 
   /** False when the start was overtaken by another one or failed. A paused open stays here unless `toCast`: the party opens its track paused on this device. */
-  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0, toCast = autoplay): Promise<boolean> {
+  private async startMusic(req: MusicTrackRequest, autoplay = true, startAt = 0, toCast = autoplay, karaoke?: MusicSnapshot['karaoke']): Promise<boolean> {
     const generation = ++this.generation;
     await this.teardown(true);
     this._pitch.set(0);
+    if (karaoke) {
+      this._stemMode.set(karaoke.mode);
+      this._vocalLevel.set(karaoke.level);
+    }
     this._musicMode.set(true);
     this._track.set(this.audioOf(req));
     this.markStarting(autoplay);
@@ -666,7 +670,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     try {
       if (this.network.isOnline()) await this.sync.flush();
       if (toCast && this.castOut.isConnected()) {
-        await this.startCast(req, generation, autoplay, startAt);
+        await this.startCast(req, generation, autoplay, startAt, !!karaoke);
         return generation === this.generation && this._track() !== null;
       }
       if (this.nativeAudio) {
@@ -736,7 +740,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     return true;
   }
 
-  private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number): Promise<void> {
+  private async startCast(req: MusicTrackRequest, generation: number, autoplay: boolean, startAt: number, keepKaraoke: boolean): Promise<void> {
     await this.nativeAudio?.stop().catch(() => undefined);
     const info = await this.castOut.load(req, autoplay, startAt, () => generation === this.generation);
     if (generation !== this.generation) return;
@@ -746,7 +750,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this._duration.set(info.durationSeconds ?? req.durationSeconds ?? 0);
     this.setupMediaSession(this._track()!);
     this.onPlayState(autoplay);
-    this._stemMode.set('original');
+    if (!keepKaraoke) this._stemMode.set('original');
     void this.refreshStems();
   }
 
@@ -967,7 +971,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
       if (!ready) return this.dropStems();
       if (this.castOut.active()) {
         this.castOut.setStemSource(state.fileId, Object.fromEntries(Object.entries(state.stems).map(([k, v]) => [k, v.contentType])));
-        return this._stemsAvailable.set(true);
+        this._stemsAvailable.set(true);
+        return this._stemMode() === 'original' ? undefined : this.castOut.applyStems();
       }
       if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
       if (run !== this.stemsRun) return;
