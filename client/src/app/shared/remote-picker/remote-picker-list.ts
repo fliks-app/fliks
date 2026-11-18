@@ -53,7 +53,7 @@ export class RemotePickerListComponent {
   readonly picked = output<PickerRow>();
   /** The main press of a device row moves the account session to it instead of selecting it. */
   readonly transferOnly = input(false);
-  /** Shows the device playing now above the rows, with its volume. */
+  /** Shows the device playing now above the rows. */
   readonly card = input(false);
 
   protected readonly remote = inject(RemoteService);
@@ -106,32 +106,37 @@ export class RemotePickerListComponent {
   /** What the selected output plays; a parked account session is never shown as it. */
   protected readonly cardTrack = computed(() => nowPlayingLine(this.session.nowPlaying()) || null);
 
-  protected onVolume(event: Event): void {
-    this.playing.setVolume(+(event.target as HTMLInputElement).value / 100);
-  }
-
   private readPercent(s: { positionSeconds: number; durationSeconds: number | null }): number {
     return Math.round(Math.min(1, s.positionSeconds / (s.durationSeconds || 1)) * 100);
   }
 
+  /** This device's row; while it can take the account session back it shows as the primary button instead. */
+  private readonly localRow = computed<PickerRow>(() => ({
+    kind: 'local',
+    id: 'local',
+    icon: this.device.isTouch() ? 'phone' : 'monitor',
+    label: this.translate.instant('remote.this_device'),
+    subtitle: null,
+    connected: this.session.isLocal() && !this.session.observing() && !this.resumable(),
+    disabled: this.surface.here() && this.session.isLocal(),
+  }));
+
+  private readonly resumable = computed(() => this.sync.canPlayHere() && this.session.isLocal() && !this.surface.here());
+
+  /** The label of the take-back button, under the device that plays. */
+  protected readonly takeHere = computed(() => {
+    const session = this.sync.session();
+    if (!this.resumable() || !session) return null;
+    return this.translate.instant(this.sync.isReading(session) ? 'session.open_here' : 'session.take_here') as string;
+  });
+
+  protected takeBack(): void {
+    this.selectRow(this.localRow());
+  }
+
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
-    const session = this.sync.session();
-    const resumable = this.sync.canPlayHere() && this.session.isLocal() && !this.surface.here();
-    rows.push({
-      kind: 'local',
-      id: 'local',
-      icon: this.device.isTouch() ? 'phone' : 'monitor',
-      label: this.translate.instant('remote.this_device'),
-      subtitle:
-        resumable && session
-          ? this.sync.isReading(session)
-            ? this.translate.instant('session.open_here')
-            : this.translate.instant('session.resume_here')
-          : null,
-      connected: this.session.isLocal() && !this.session.observing() && !resumable,
-      disabled: this.surface.here() && this.session.isLocal(),
-    });
+    if (!this.takeHere()) rows.push(this.localRow());
     if (!this.enumerates) {
       const connected = this.castService.isConnected();
       rows.push({

@@ -4047,6 +4047,7 @@
   "session": {
     "another_device": "otro dispositivo",
     "resume_here": "Reanudar aquí",
+    "take_here": "Reanudar en este dispositivo",
     "listen_here": "Escuchar en este dispositivo",
     "play_here": "Reproducir en este dispositivo",
     "error_no_session": "No hay reproducción que transferir.",

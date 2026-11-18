@@ -71,10 +71,11 @@
         <div class="absolute inset-0 flex items-center justify-end bg-error pr-5 text-error-content opacity-[var(--swipe,0)]" aria-hidden="true">
           <svg lucideTrash2 class="h-5 w-5"></svg>
         </div>
-        <div appSwipeRemove [swipeDisabled]="queueEditing() || !canRemove(q, i)" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1">
+        <!-- The hover covers the whole row, its buttons included, while the row can be picked. -->
+        <div appSwipeRemove [swipeDisabled]="queueEditing() || !canRemove(q, i)" (swiped)="local.removeFromQueue(i)" class="relative flex items-center gap-1 rounded-lg has-[>button:first-child:enabled]:hover:bg-white/5">
           <button
             type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left enabled:cursor-pointer enabled:hover:bg-white/5"
+            class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left enabled:cursor-pointer"
             [attr.aria-current]="i === audio.queueIndex() ? 'true' : null"
             [attr.aria-pressed]="queueEditing() && i !== audio.queueIndex() ? selected().has(q) : null"
             [disabled]="!canPickRow()"

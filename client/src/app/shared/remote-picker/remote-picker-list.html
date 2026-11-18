@@ -14,7 +14,9 @@
 </div>
 
 @if (card() && playing.name(); as deviceName) {
-  <div class="mx-1 mb-2 rounded-box bg-base-300/60 px-3 py-3 text-white" data-testid="device-card">
+  <!-- The take-back button follows the card, so the separator moves under it. -->
+  <div class="mb-1 border-white/10 px-1 pb-2" [class.border-b]="!takeHere()">
+  <div class="rounded-box bg-base-300/60 px-3 py-3 text-white" data-testid="device-card">
     <div class="flex items-center gap-3">
       <app-device-icon [icon]="playing.icon()" iconClass="h-6 w-6 shrink-0 text-info" />
       <div class="min-w-0 flex-1">
@@ -27,30 +29,23 @@
         <button type="button" class="btn btn-ghost btn-sm shrink-0 text-white" (click)="leave()">{{ 'remote.disconnect_row' | translate }}</button>
       }
     </div>
-    @if (playing.canSetVolume()) {
-      <input
-        type="range"
-        class="range range-info range-xs mt-3 w-full"
-        min="0"
-        max="100"
-        [value]="playing.volumeKnown() ? playing.volume() * 100 : 0"
-        [disabled]="!playing.volumeKnown()"
-        [class.opacity-40]="!playing.volumeKnown()"
-        (input)="onVolume($event)"
-        [attr.aria-label]="'player.volume' | translate"
-        data-testid="device-volume"
-      />
-    }
+  </div>
   </div>
 }
 
 @if (followed(); as f) {
-  <div class="px-3 py-2 mb-1 border-b border-white/10 text-white">
+  <div class="px-3 py-2 mb-1 border-white/10 text-white" [class.border-b]="!takeHere()">
     <p class="text-sm opacity-60">{{ 'session.current' | translate }}</p>
     <p class="truncate font-semibold">{{ f.title }}</p>
     <p class="truncate text-sm opacity-60">
       {{ f.line }} · {{ f.detail }}
     </p>
+  </div>
+}
+
+@if (takeHere(); as label) {
+  <div class="px-1 pb-2 mb-1 border-b border-white/10">
+    <button type="button" class="btn btn-primary btn-sm btn-block" (click)="takeBack()" data-testid="picker-take-here">{{ label }}</button>
   </div>
 }
 

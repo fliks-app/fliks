@@ -4047,6 +4047,7 @@
   "session": {
     "another_device": "ein anderes Gerät",
     "resume_here": "Hier fortsetzen",
+    "take_here": "Auf diesem Gerät fortsetzen",
     "listen_here": "Auf diesem Gerät hören",
     "play_here": "Auf diesem Gerät abspielen",
     "error_no_session": "Keine Wiedergabe zum Übertragen.",
