@@ -655,21 +655,21 @@ export class RemoteService {
     // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
-    // Still reading the same device (the selection became the watch of its session): its reading holds.
-    if (this.observedTargetId() !== observed) this.reportedState.set(null);
-    this.stoppedUntilReport = false;
     this.selectedRow.set(this.targets().find((t) => t.targetId === targetId) ?? null);
     this.clearOffline();
+    try {
+      if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
+      else localStorage.removeItem(SELECTED_TARGET_KEY);
+    } catch { /* blocked storage: selection is per-session only */ }
+    // Still reading the same device (the selection became the watch of its session): its reading and command in flight hold.
+    if (this.observedTargetId() === observed) return;
+    this.reportedState.set(null);
+    this.stoppedUntilReport = false;
     this.expectedMediaFileId = null;
     // Reports from a deselected target are dropped, so its pending ack can never land.
     this.pendingCmdId = null;
     this.pendingAction.set(null);
     if (this.ackTimer) clearTimeout(this.ackTimer);
-    try {
-      if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
-      else localStorage.removeItem(SELECTED_TARGET_KEY);
-    } catch { /* blocked storage: selection is per-session only */ }
-
   }
 
   /** Absent from a listing or a command it never took: one countdown covers both. A powered-off device never returns under the same id (nonce per tab), so offer the local fallback, then release. */

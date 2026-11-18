@@ -164,6 +164,20 @@ describe('RemoteService observation', () => {
     expect(localStorage.getItem('fliks.remote.target')).toBeNull();
   });
 
+  it('keeps the load in flight to a selected device that takes the session', async () => {
+    const { service, remoteState, owner } = setup({ selected: 'tv#1' });
+    void service.send('tv#1', { action: 'load', mediaFileId: 9 });
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.pendingAction()).toBe('load');
+    remoteState.set(frame({ mediaFileId: 2 }));
+    service.ingestState();
+    expect(service.targetState()).toBeNull();
+    remoteState.set(frame({ mediaFileId: 9 }));
+    service.ingestState();
+    expect(service.targetState()?.mediaFileId).toBe(9);
+  });
+
   it('turns the open video player of a selected device into the view of its session', () => {
     const { owner } = setup({ selected: 'tv#1' });
     const full = TestBed.inject(FullPlayerState);
