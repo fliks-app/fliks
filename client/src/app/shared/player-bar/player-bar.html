@@ -4,7 +4,7 @@
   animate.enter="mini-player-in"
   animate.leave="mini-player-out"
   class="flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 transition-colors duration-300"
-  [class]="docked ? 'relative h-11 w-80 min-w-28 pl-0.5 pr-1' : 'fixed inset-x-2 z-40 p-1 pb-1.5 pr-2 shadow-xl backdrop-blur-sm lg:inset-x-auto lg:right-4 lg:w-[27rem]'"
+  [class]="docked ? 'relative h-11 w-80 min-w-28' : 'fixed inset-x-2 z-40 p-1 pb-1.5 pr-2 shadow-xl backdrop-blur-sm lg:inset-x-auto lg:right-4 lg:w-[27rem]'"
   [style.display]="visible() ? null : 'none'"
   [style.bottom]="docked ? null : raised() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'"
   [style.background-color]="tint()"
@@ -14,13 +14,14 @@
   [attr.aria-busy]="busy() || null"
   [attr.data-player-bar]="opens()"
 >
-  <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box px-1 text-left disabled:cursor-default" [class.py-1]="!docked" [disabled]="openDisabled()" [attr.aria-label]="openLabel() || null" (click)="opened.emit()">
+  <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-box px-1 text-left disabled:cursor-default" [class]="docked ? 'self-stretch' : 'py-1'" [disabled]="openDisabled()" [attr.aria-label]="openLabel() || null" (click)="opened.emit()">
     <div data-morph="cover" [class]="docked ? 'h-9 w-9' : 'h-10 w-10'" class="relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-base-300 text-base-content/20">
       <ng-content select="[barCover]" />
     </div>
     <ng-content />
   </button>
-  @if (playing() !== null) {
+  <!-- TV: the whole bar is one focus stop; the remote's play key covers the toggle. -->
+  @if (playing() !== null && !docked) {
     <button type="button" class="btn btn-ghost btn-circle" data-morph="toggle" [attr.aria-label]="(playing() ? 'player.pause' : 'player.play') | translate" (click)="toggled.emit()">
       @if (playing()) {
         <svg lucidePause class="h-5 w-5"></svg>
@@ -29,7 +30,9 @@
       }
     </button>
   }
-  <ng-content select="[barActions]" />
+  @if (!docked) {
+    <ng-content select="[barActions]" />
+  }
   @if (percent() !== null) {
     <div class="pointer-events-none absolute inset-x-3 -bottom-px h-[3px] overflow-hidden rounded-full bg-base-content/15" aria-hidden="true" data-testid="player-bar-progress">
       <div class="h-full rounded-full bg-base-content transition-[width] duration-300 ease-linear" [style.width.%]="percent()"></div>
