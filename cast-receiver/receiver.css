@@ -61,6 +61,8 @@ html, body {
    PLAYER_LOAD_COMPLETE / PLAYER_PRELOAD events. */
 body.playing .splash {
   opacity: 0;
+  visibility: hidden;
+  transition: opacity 240ms ease-out, visibility 0s 240ms;
 }
 
 /* Subtitle styling — overrides CAF's default. Matches the in-app
@@ -106,7 +108,7 @@ body.playing .splash {
   display: none;
 }
 
-body.playing .party-layer {
+body.playing .party-layer.busy {
   display: block;
 }
 

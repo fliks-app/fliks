@@ -713,7 +713,9 @@ const partyLayer = document.getElementById('party-layer');
 const reactionBox = partyLayer.querySelector('.party-reactions');
 const bubbleBox = partyLayer.querySelector('.party-bubbles');
 
-const dropOnEnd = (el) => el.addEventListener('animationend', () => el.remove());
+// Shown only while it holds something: even empty, a full-screen layer costs the Cast compositor its memory.
+const syncPartyLayer = () => partyLayer.classList.toggle('busy', reactionBox.childElementCount + bubbleBox.childElementCount > 0);
+const dropOnEnd = (el) => el.addEventListener('animationend', () => { el.remove(); syncPartyLayer(); });
 const trim = (box, max) => { while (box.children.length > max) box.firstChild.remove(); };
 
 // The bundled copy works over HTTPS; the sender's URL covers anything not bundled.
@@ -751,6 +753,7 @@ function showParty(msg) {
     dropOnEnd(el);
     reactionBox.appendChild(el);
     trim(reactionBox, MAX_REACTIONS);
+    syncPartyLayer();
   } else if (msg.kind === 'party_chat' && typeof msg.text === 'string') {
     const el = document.createElement('div');
     el.className = 'party-bubble';
@@ -762,6 +765,7 @@ function showParty(msg) {
     dropOnEnd(el);
     bubbleBox.appendChild(el);
     trim(bubbleBox, MAX_BUBBLES);
+    syncPartyLayer();
   }
 }
 
