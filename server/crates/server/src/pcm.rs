@@ -70,17 +70,21 @@ pub async fn rendition(
     Ok(out)
 }
 
-/// The rendition from `from` seconds to its end; any origin may read it, the token in the URL being the credential.
-pub async fn serve(path: &Path, from: f64) -> Result<Response, AppError> {
+/// The rendition from the frame of `from` to the frame of `to` excluded (its end when `None`); any origin may read it,
+/// the token in the URL being the credential.
+pub async fn serve(path: &Path, from: f64, to: Option<f64>) -> Result<Response, AppError> {
     let len = tokio::fs::metadata(path)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?
         .len();
     let frame = 2 * u64::from(CHANNELS);
-    let offset = ((from.max(0.0) * f64::from(RATE)) as u64 * frame).min(len.saturating_sub(frame));
+    let byte = |s: f64| (s.max(0.0) * f64::from(RATE)) as u64 * frame;
+    let offset = byte(from).min(len.saturating_sub(frame));
+    let end = to.map(|t| byte(t).max(offset + frame).min(len));
     let mut req = Request::builder();
-    if offset > 0 {
-        req = req.header(header::RANGE, format!("bytes={offset}-"));
+    if offset > 0 || end.is_some() {
+        let last = end.map_or(String::new(), |e| (e - 1).to_string());
+        req = req.header(header::RANGE, format!("bytes={offset}-{last}"));
     }
     let req = req
         .body(Body::empty())
@@ -171,7 +175,7 @@ mod tests {
         let dir = scratch();
         let p = dir.join("x.s16le");
         std::fs::write(&p, (0..384_000u32).map(|i| i as u8).collect::<Vec<_>>()).unwrap();
-        let res = serve(&p, 1.0).await.unwrap();
+        let res = serve(&p, 1.0, None).await.unwrap();
         assert_eq!(res.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
         assert!(
             res.headers()[header::CONTENT_TYPE]
@@ -183,8 +187,18 @@ mod tests {
             res.headers()[header::CONTENT_RANGE],
             "bytes 192000-383999/384000"
         );
-        let whole = serve(&p, 0.0).await.unwrap();
+        let whole = serve(&p, 0.0, None).await.unwrap();
         assert_eq!(whole.status(), axum::http::StatusCode::OK);
+        let span = serve(&p, 0.5, Some(1.0)).await.unwrap();
+        assert_eq!(
+            span.headers()[header::CONTENT_RANGE],
+            "bytes 96000-191999/384000"
+        );
+        let tail = serve(&p, 1.5, Some(9.0)).await.unwrap();
+        assert_eq!(
+            tail.headers()[header::CONTENT_RANGE],
+            "bytes 288000-383999/384000"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

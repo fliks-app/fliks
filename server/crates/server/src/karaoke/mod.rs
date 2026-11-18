@@ -537,6 +537,7 @@ pub async fn stem(
 #[derive(Deserialize)]
 pub struct PcmQuery {
     from: Option<f64>,
+    to: Option<f64>,
 }
 
 /// Rule 20a.
@@ -550,7 +551,7 @@ pub async fn stem_pcm(
     let from = q.from.unwrap_or(0.0);
     let path = stem_path(&st, auth, file, &kind, from <= 0.0).await?;
     let pcm = crate::pcm::rendition(&st, file, std::path::Path::new(&path)).await?;
-    crate::pcm::serve(&pcm, from).await
+    crate::pcm::serve(&pcm, from, q.to).await
 }
 
 /// The stem file of `kind` for `file`, after the credential and track checks of rule 20.

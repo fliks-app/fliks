@@ -1073,6 +1073,8 @@ const MIX_AHEAD_S = 3;
 const MIX_REMIX_LEAD_S = 0.3;
 const MIX_KEEP_S = 10;
 const MIX_SEGMENT_BLOCKS = 6;
+// Four segments per request: a window of each source stays a few hundred KB in the page.
+const MIX_WINDOW_S = (BLOCK * MIX_SEGMENT_BLOCKS * 4) / 48000;
 const mixSpecs = new Map();
 let activeMix = null;
 
@@ -1103,20 +1105,27 @@ function appendMix(m, start, raw) {
   }
 }
 
-/** Opens the sources from `fromS` and streams them in until they end or a newer run starts. */
+/** Every source's PCM from `fromS` to `toS` seconds, in parallel; one window at a time, since the browser buffers a whole
+    response however slowly the page reads it. */
+async function fetchWindow(m, fromS, toS, signal) {
+  const rs = await Promise.all(m.sources.map((src) =>
+    fetch(src.url + (src.url.includes('?') ? '&' : '?') + 'from=' + fromS.toFixed(6) + '&to=' + toS.toFixed(6), { signal })));
+  const range = /bytes (\d+)-\d+\/(\d+)/.exec(rs[0].headers.get('content-range') || '');
+  return { type: rs[0].headers.get('content-type') || '', range, data: await Promise.all(rs.map((r) => r.arrayBuffer())) };
+}
+
+/** Streams the sources in from `fromS`, a window ahead of the playhead, until they end or a newer run starts. */
 async function runMix(m, fromS) {
   const run = ++m.run;
   m.abort.abort();
   m.abort = new AbortController();
-  const from = fromS.toFixed(3);
-  const responses = await Promise.all(m.sources.map((src) =>
-    fetch(src.url + (src.url.includes('?') ? '&' : '?') + 'from=' + from, { signal: m.abort.signal })));
+  const { signal } = m.abort;
+  let w = await fetchWindow(m, fromS, fromS + MIX_WINDOW_S, signal);
   if (run !== m.run) return;
-  const format = /rate=(\d+);\s*channels=(\d+)/.exec(responses[0].headers.get('content-type') || '');
-  if (!format) throw new Error('not a PCM source');
+  const format = /rate=(\d+);\s*channels=(\d+)/.exec(w.type);
+  if (!format || !w.range) throw new Error('not a ranged PCM source');
   const frameBytes = 2 * +format[2];
-  const range = /\/(\d+)$/.exec(responses[0].headers.get('content-range') || '');
-  const total = (range ? +range[1] : +responses[0].headers.get('content-length')) / frameBytes;
+  const total = +w.range[2] / frameBytes;
   if (!m.sb) {
     m.rate = +format[1];
     m.channels = +format[2];
@@ -1125,46 +1134,31 @@ async function runMix(m, fromS) {
     m.ms.duration = total / m.rate;
     mixOp(m, () => m.sb.appendBuffer(initSegment(m.rate, m.channels)));
   }
-  const readers = responses.map((r) => ({ reader: r.body.getReader(), buf: new Uint8Array(0), done: false }));
-  const take = async (src, bytes) => {
-    while (src.buf.length < bytes && !src.done) {
-      const { done, value } = await src.reader.read();
-      if (done) src.done = true;
-      else {
-        const joined = new Uint8Array(src.buf.length + value.length);
-        joined.set(src.buf);
-        joined.set(value, src.buf.length);
-        src.buf = joined;
-      }
-    }
-    const out = new Int16Array(bytes / 2);
-    const n = Math.min(bytes, src.buf.length);
-    out.set(new Int16Array(src.buf.buffer.slice(src.buf.byteOffset, src.buf.byteOffset + n - (n % 2))));
-    src.buf = src.buf.subarray(n);
-    return out;
-  };
-  m.base = Math.floor(+from * m.rate);
+  m.base = +w.range[1] / frameBytes;
   m.end = m.base;
   m.raw = [];
   const media = findMediaElement();
   // Ahead of the playhead, or of the run's start while the element has not seeked there yet.
   const ahead = () => m.end / m.rate - Math.max(media ? media.currentTime : 0, m.base / m.rate);
+  // Mid-frame seconds, so the server's floor lands on the frame.
+  const at = (frame) => (frame + 0.5) / m.rate;
   for (;;) {
-    while (ahead() > MIX_AHEAD_S && run === m.run) await new Promise((r) => setTimeout(r, 200));
-    if (run !== m.run) return;
-    const want = BLOCK * MIX_SEGMENT_BLOCKS;
-    const left = Math.min(want, total - m.end);
-    if (left <= 0) break;
-    const raw = await Promise.all(readers.map((src) => take(src, left * frameBytes)));
-    if (run !== m.run) return;
+    const frames = Math.floor(Math.min(...w.data.map((d) => d.byteLength)) / frameBytes);
+    if (frames <= 0) break;
+    const raw = w.data.map((d) => new Int16Array(d, 0, frames * m.channels));
     appendMix(m, m.end, raw);
     // The element waits where nothing was appended: it starts with the run.
     if (m.end === m.base && media) mixOp(m, () => { if (media.currentTime < m.base / m.rate) media.currentTime = m.base / m.rate; });
     m.raw.push({ start: m.end, raw });
-    m.end += left;
+    m.end += frames;
     const played = media ? Math.floor(media.currentTime * m.rate) : 0;
     while (m.raw.length && m.raw[0].start + m.raw[0].raw[0].length / m.channels <= played) m.raw.shift();
     if (media && media.currentTime > MIX_KEEP_S) mixOp(m, () => m.sb.remove(0, media.currentTime - MIX_KEEP_S));
+    if (m.end >= total) break;
+    while (ahead() > MIX_AHEAD_S && run === m.run) await new Promise((r) => setTimeout(r, 200));
+    if (run !== m.run) return;
+    w = await fetchWindow(m, at(m.end), at(m.end + MIX_WINDOW_S * m.rate), signal);
+    if (run !== m.run) return;
   }
   mixOp(m, () => { if (m.ms.readyState === 'open') m.ms.endOfStream(); });
 }

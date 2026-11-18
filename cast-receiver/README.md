@@ -161,8 +161,9 @@ The sender follows the move from the media status, whose `customData.sid` turns 
 A mix plays several 16-bit PCM sources summed at their gains in the one media element, through MSE: a Cast
 device runs one media element at a time and its Web Audio output does not keep real time. The sender declares
 the mix, then LOADs `fliks-mix:<id>` (the token-bearing URLs stay out of `customData`). Each `url` takes
-`from=<seconds>` and answers `audio/L16; rate=<r>; channels=<c>`, all sources alike, exposing `Content-Range`
-for the length. A `mix` with the same id and URLs changes the gains: the receiver remixes what it buffered
+`from=<seconds>&to=<seconds>` and answers `audio/L16; rate=<r>; channels=<c>`, all sources alike, exposing
+`Content-Range` for the length. The receiver asks for about 2 s at a time: Chrome buffers a whole response
+in the page however slowly it is read, which on a Cast device leaves too little memory for the compositor. A `mix` with the same id and URLs changes the gains: the receiver remixes what it buffered
 ahead (about 3 s) from just past the playhead, with no reload.
 
 ```ts
