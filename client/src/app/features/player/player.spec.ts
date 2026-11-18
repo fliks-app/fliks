@@ -1772,6 +1772,25 @@ describe('PlayerComponent reload QoE event', () => {
     });
   });
 
+  it('reloads an engine track pick on an engine that cannot switch in place, never toggling the track', async () => {
+    const { h, spy } = spied();
+    (TestBed.inject(BrowserDeviceProfileService) as any).engineTraits = () => ENGINE_TRAITS[EngineKind.WEBOS];
+    h.component.availableAudioTracks.set([
+      { id: 'audio-0', label: 'Italiano', language: 'it' },
+      { id: 'audio-1', label: 'English', language: 'en' },
+    ]);
+    h.component.activeAudioTrackId.set('audio-0');
+
+    await h.component.onSelectAudioTrack('audio-1');
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('sid-old', expect.any(Number), {
+      reason: 'audio',
+      from: 'Italiano',
+      to: 'English',
+    });
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+  });
+
   it('flags a burn-in switch with its language, and its removal without one', async () => {
     const { h, spy } = spied();
     h.component.subs.availableSubtitles.set([
@@ -2280,6 +2299,12 @@ describe('PlayerComponent audio target', () => {
 
     expect(h.engine.selectAudioTrack).toHaveBeenCalledWith(second);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  it('lists the engine audio tracks in file order whatever order the engine reports', () => {
+    const h = audioHarness();
+    (h.component as any).adoptAudioTracks([engineTrack('audio-0', 'fra', true), engineTrack('audio-1', 'eng')]);
+    expect(h.component.availableAudioTracks().map((t: { id: string }) => t.id)).toEqual(['audio-1', 'audio-0']);
   });
 
   it('configures the engine with the target language before every load, not the session-start one', async () => {

@@ -438,13 +438,17 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const list = this.audioTrackList();
     if (!list) return [];
     const tracks: AudioTrack[] = [];
+    const ranks = new Map<string, number>();
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
-      // Position, never `t.id` (the 1-based demuxer stream id). The order is webOS's own, DEFAULT
-      // rendition first, so the player maps tracks to streamInfo by language.
+      const language = t.language || 'und';
+      const rank = ranks.get(language) ?? 0;
+      ranks.set(language, rank + 1);
+      // Language and rank within it, never position or `t.id` (the demuxer stream id): webOS lists the DEFAULT
+      // rendition first, so only these name the same track across reloads.
       tracks.push({
-        id: 'audio-' + i,
-        language: t.language || 'und',
+        id: `audio-${language}-${rank}`,
+        language,
         label: t.label || t.language || '',
         selected: !!t.enabled,
       });
@@ -452,14 +456,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     return tracks;
   }
 
-  /** LG's AudioTrack API is a mute/unmute switch: the picked track goes
-   *  `enabled = true`, every other one false (webOS TV 3.0+). */
-  async selectAudioTrack(id: string): Promise<void> {
-    const list = this.audioTrackList();
-    if (!list) return;
-    for (let i = 0; i < list.length; i++) {
-      list[i].enabled = 'audio-' + i === id;
-    }
+  /** The player reloads instead (`switchesAudioInPlace: false`): toggling `enabled` only mutes. */
+  async selectAudioTrack(_id: string): Promise<void> {
+    throw new Error('webOS switches audio by reload, never in place');
   }
 
   private audioTrackList(): (AudioTrack & { enabled: boolean; id: string })[] | null {

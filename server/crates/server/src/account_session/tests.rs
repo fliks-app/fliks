@@ -150,6 +150,56 @@ async fn a_replaced_session_of_the_same_device_keeps_the_epoch_and_is_not_supers
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_reload_moves_the_row_to_the_new_sid_without_parking_it(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    assert!(s.replacing(u, "s1").await);
+    s.ended(&st, "s1").await;
+    s.sweep(&st).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(
+        r.state,
+        State::Playing,
+        "the replaced sid's end and silence park nothing"
+    );
+    s.replaced(&st, u, "s1", "s2").await;
+    alive(&st, "s2");
+    s.sweep(&st).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(
+        (r.session_id.as_str(), r.state, r.epoch),
+        ("s2", State::Playing, 1)
+    );
+    assert_eq!(s.beat(&st, beat(u, "s2", "tA", i)).await, Verdict::Current);
+    assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Ignored);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_failed_replacement_leaves_the_row_to_the_usual_rules(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    assert!(s.replacing(u, "s1").await);
+    s.replace_failed("s1").await;
+    s.ended(&st, "s1").await;
+    assert_eq!(row(&st, u).await.unwrap().state, State::Parked);
+}
+
+#[sqlx::test(migrations = false)]
+async fn only_the_sid_of_the_accounts_live_row_is_replaced(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let v = user(&pool, "b", true, None).await;
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    assert!(!s.replacing(v, "s1").await, "another account's sid");
+    assert!(!s.replacing(u, "nope").await, "a sid that never claimed");
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_option_off_or_another_kind_or_no_target_leaves_no_row(pool: PgPool) {
     let st = state(&pool).await;
     let i = item(&pool).await;

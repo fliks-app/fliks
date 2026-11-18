@@ -172,6 +172,8 @@ struct Claim {
     ended_at: Option<i64>,
     /// Another owner took the row over from this sid, whichever device it was on.
     superseded: bool,
+    /// A playback-info replacing this sid is opening (rule 14): its end or silence parks nothing.
+    replacing: bool,
 }
 
 #[derive(Default)]
@@ -338,6 +340,7 @@ impl AccountSessions {
                 target: row.owner.target_id.clone(),
                 ended_at: Some(now),
                 superseded: false,
+                replacing: false,
             };
             g.claimed.insert(row.session_id.clone(), claim);
         }
@@ -482,6 +485,7 @@ impl AccountSessions {
             target: b.owner.target_id.clone(),
             ended_at: None,
             superseded: false,
+            replacing: false,
         };
         g.claimed.insert(b.sid.clone(), claim);
         let prior = g.rows.remove(&b.account);
@@ -665,12 +669,61 @@ impl AccountSessions {
         }
     }
 
+    /// A playback-info of `account` replaces `old` (rule 14): true when `old` holds the account's live row, which
+    /// then waits for [`Self::replaced`] or [`Self::replace_failed`] instead of parking.
+    pub async fn replacing(&self, account: i32, old: &str) -> bool {
+        let mut g = self.0.lock().await;
+        let live = g
+            .rows
+            .get(&account)
+            .is_some_and(|e| e.row.session_id == old && e.row.state != State::Parked);
+        let claim = g.claimed.get_mut(old).filter(|c| c.account == account);
+        match claim {
+            Some(c) if live => {
+                c.replacing = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The engine opened `new` in place of `old`: the row moves to `new`, which claims for the same account and target.
+    pub async fn replaced(&self, st: &AppState, account: i32, old: &str, new: &str) {
+        let mut g = self.0.lock().await;
+        let Some(c) = g.claimed.get_mut(old) else {
+            return;
+        };
+        c.replacing = false;
+        let claim = Claim {
+            account: c.account,
+            target: c.target.clone(),
+            ended_at: None,
+            superseded: false,
+            replacing: false,
+        };
+        g.claimed.insert(new.to_owned(), claim);
+        if let Some(e) = g.rows.get_mut(&account).filter(|e| e.row.session_id == old) {
+            e.row.session_id = new.to_owned();
+            persist(st, e).await;
+        }
+    }
+
+    /// The replacing open failed: `old` is judged as usual again.
+    pub async fn replace_failed(&self, old: &str) {
+        if let Some(c) = self.0.lock().await.claimed.get_mut(old) {
+            c.replacing = false;
+        }
+    }
+
     /// The engine session `sid` ended: its row is parked and the claim kept for the revive window (rule 14b).
     pub async fn ended(&self, st: &AppState, sid: &str) {
         let mut g = self.0.lock().await;
         g.unscoped.remove(sid);
         if let Some(c) = g.claimed.get_mut(sid) {
             c.ended_at = Some(now_ms() as i64);
+            if c.replacing {
+                return;
+            }
         }
         let live = g
             .rows
@@ -737,6 +790,10 @@ impl AccountSessions {
             .filter(|(user, e)| {
                 e.row.state != State::Parked
                     && only.is_none_or(|u| u == **user)
+                    && !g
+                        .claimed
+                        .get(&e.row.session_id)
+                        .is_some_and(|c| c.replacing)
                     && st
                         .presence
                         .peek(&e.row.session_id)

@@ -4,6 +4,7 @@ import { DefaultFocusService } from './default-focus.service';
 import {
   FOCUSABLE_SELECTOR,
   SCROLLER_SELECTOR,
+  SELECTED_MARKERS,
   isFocusCandidate,
   isRendered,
   wantsFocusRestore,
@@ -77,7 +78,7 @@ export class TvSpatialNavService {
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver((records) => {
         this.dropStaleFocusables(records);
-        this.rescueFocus();
+        this.rescueFocus(records);
       });
       this.focusObserver.observe(document.body, {
         childList: true,
@@ -187,18 +188,26 @@ export class TvSpatialNavService {
     this.focusLostAt = 0;
   }
 
-  /** A pressed button that vanished (swapped by an `@if`) or got disabled (busy) drops the focus on <body>: hand it
-   *  back to the button once re-enabled, or to its nearest replacement under the same parent. Keyboard/D-pad only. */
-  private rescueFocus(): void {
+  /** A pressed button that vanished (swapped by an `@if`), moved (a keyed list reordering) or got disabled (busy) drops
+   *  the focus on <body>: hand it to the menu's current choice, else back to the button, else to its nearest replacement
+   *  under the same parent. Keyboard/D-pad only. */
+  private rescueFocus(records: MutationRecord[]): void {
     const last = this.lastFocus;
     if (!last || !wantsFocusRestore()) return;
     const { el, parent, rect } = last;
     const gone = !el.isConnected;
-    // A blur on a button still there and enabled was on purpose: only a removal or a disable counts as lost.
-    if (!this.focusLostAt && (gone || el.matches(':disabled'))) this.focusLostAt = Date.now();
+    const moved = !gone && records.some((r) => Array.from(r.removedNodes).some((n) => n === el || n.contains(el)));
+    // A blur on a button still there, in place and enabled was on purpose.
+    if (!this.focusLostAt && (gone || moved || el.matches(':disabled'))) this.focusLostAt = Date.now();
     if (!this.focusLostAt || document.activeElement !== document.body) return;
     if (Date.now() - this.focusLostAt > FOCUS_RESCUE_MS || !parent?.isConnected) {
       this.lastFocus = null;
+      return;
+    }
+    // The option just picked in a single-choice menu is its current choice, wherever the list put it.
+    const picked = SELECTED_MARKERS.map((m) => parent.querySelector<HTMLElement>(m)).find((c) => c && isFocusCandidate(c));
+    if (picked) {
+      picked.focus({ preventScroll: true });
       return;
     }
     if (!gone) {

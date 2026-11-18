@@ -302,7 +302,6 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             try {
               this._duration = (webapis.avplay.getDuration() ?? 0) / 1000;
             } catch { this._duration = 0; }
-            try { this.populateAudioTracks(); } catch { /* tracks not ready */ }
             try { this.applyDisplayRect(); } catch { /* ok */ }
             if (!this._paused) {
               try { webapis.avplay.play(); } catch (e) {
@@ -312,6 +311,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             } else {
               this.emit('stateChanged', { state: 'paused' });
             }
+            // After play(): an AUDIO setSelectTrack made in READY is dropped, so the player's start pick lands here.
+            try { this.populateAudioTracks(); } catch { /* tracks not ready */ }
             if (startTime && startTime > 0) this._currentTime = startTime;
             this.muteGate.sync();
             this._preparing = false;

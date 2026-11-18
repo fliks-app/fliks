@@ -32,6 +32,34 @@ describe('TvSpatialNavService focus rescue', () => {
     expect(far).not.toBe(document.activeElement);
   });
 
+  it('keeps the focus on an option a keyed list moved, landing on the current choice', async () => {
+    TestBed.inject(TvSpatialNavService);
+    document.documentElement.classList.add('keyboard-modality');
+    const menu = document.body.appendChild(document.createElement('div'));
+    const first = button(menu, 0);
+    const last = button(menu, 10);
+    last.focus();
+    last.setAttribute('aria-disabled', 'true');
+    menu.insertBefore(last, first);
+    expect(document.activeElement).toBe(document.body);
+    await flush();
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('hands a removed option to the current choice of its menu, not the nearest row', async () => {
+    TestBed.inject(TvSpatialNavService);
+    document.documentElement.classList.add('keyboard-modality');
+    const menu = document.body.appendChild(document.createElement('div'));
+    const picked = button(menu, 100);
+    picked.setAttribute('aria-disabled', 'true');
+    const row = button(menu, 0);
+    row.focus();
+    row.remove();
+    button(menu, 5);
+    await flush();
+    expect(document.activeElement).toBe(picked);
+  });
+
   it('gives the focus back to a button re-enabled after a busy spell', async () => {
     TestBed.inject(TvSpatialNavService);
     document.documentElement.classList.add('keyboard-modality');

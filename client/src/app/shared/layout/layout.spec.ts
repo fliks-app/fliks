@@ -144,7 +144,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
           connectionId: f.connectionId ?? (() => null),
           connect: () => {},
-          serverUnreachable: () => false, unreachableChip: () => false, connected: () => true,
+          serverUnreachable: () => false, connected: () => true,
         },
       },
       { provide: DownloadManagerService, useValue: {} },

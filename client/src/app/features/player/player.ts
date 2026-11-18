@@ -1761,10 +1761,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Engine tracks labelled from streamInfo (engines list them in its order), so
    *  the menu reads like the media-detail header. */
+  /** In file order: webOS lists the DEFAULT rendition first, so its own order flips with every audio reload. */
   private describeAudioTracks(raw: AudioTrack[]): (AudioOption & { selected: boolean })[] {
     const streams = this.audioStreamInfo();
-    return raw.map((t, i) => {
-      const si = streamIndexForTrack(t.id, raw, streams, this.activeAudioStreamIndex) ?? i;
+    const indexed = raw.map((t, i) => ({ t, i, si: streamIndexForTrack(t.id, raw, streams, this.activeAudioStreamIndex) ?? i }));
+    return indexed.sort((a, b) => a.si - b.si).map(({ t, i, si }) => {
       const parts = streams[si] ? formatAudioParts(streams[si], this.translate, si + 1) : null;
       const fallback = t.label || this.translate.instant('player.audio_track_n', { index: i + 1 });
       return {
@@ -1777,6 +1778,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         supported: t.supported,
       };
     });
+  }
+
+  private switchesAudioInPlace(): boolean {
+    return this.deviceProfileService.engineTraits().switchesAudioInPlace !== false;
   }
 
   private isAudioPlayable(trackId: string): boolean {
@@ -1807,7 +1812,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.activeAudioTrackId.set(target.id);
     if (engineActive === target.id) this.audioSwitchPending = null;
-    else if (engineActive && this.audioSwitchPending !== target.id) {
+    else if (engineActive && this.audioSwitchPending !== target.id && this.switchesAudioInPlace()) {
       this.applyAudioTrack(target.id).catch((e) => console.warn('[player] audio reconcile failed', e));
     }
   }
@@ -3434,9 +3439,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (index != null) this.activeAudioStreamIndex = index;
     this.audioSwitchPending = trackId;
 
-    // si-* tracks are the streamInfo fallback shown before the engine surfaces switchable tracks, so only a
-    // backend reload marking the new audio index DEFAULT can honour them. Offline: nothing to reload.
-    if (trackId.startsWith('si-')) {
+    // si-* tracks (the streamInfo fallback) and an engine that can't switch in place only follow a backend
+    // reload marking the new audio index DEFAULT. Offline: nothing to reload.
+    if (trackId.startsWith('si-') || !this.switchesAudioInPlace()) {
       this.audioSwitchPending = null;
       if (this.isOfflinePlayback) {
         console.warn('[player] applyAudioTrack: no backend to reload for offline playback', trackId);

@@ -32,7 +32,7 @@ describe('errorInterceptor', () => {
   let http: HttpTestingController;
   let client: HttpClient;
   let toast: ToastService;
-  const unreachableChip = signal(false);
+  const serverUnreachable = signal(false);
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -40,7 +40,7 @@ describe('errorInterceptor', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
-        { provide: SseService, useValue: { unreachableChip } },
+        { provide: SseService, useValue: { serverUnreachable } },
         provideTranslateService({
           lang: 'en',
           fallbackLang: 'en',
@@ -55,7 +55,7 @@ describe('errorInterceptor', () => {
 
   afterEach(() => {
     http.verify();
-    unreachableChip.set(false);
+    serverUnreachable.set(false);
   });
 
   /** Fires a GET and flushes the given response; the interceptor rethrows
@@ -226,7 +226,7 @@ describe('errorInterceptor', () => {
   });
 
   it('leaves an unreachable mutation to the chip when it is on screen', () => {
-    unreachableChip.set(true);
+    serverUnreachable.set(true);
     client.post('/api/a', {}).subscribe({ error: () => {} });
     http.expectOne('/api/a').flush(null, { status: 0, statusText: 'x' });
     expect(toast.toasts()).toEqual([]);
