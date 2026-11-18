@@ -32,6 +32,7 @@ La musique rejoint les films, séries et livres, de l'acquisition à l'écoute.
 - Fliks parle OpenSubsonic : connectez une application musicale compatible avec un jeton de votre compte.
 
 ## Karaoké
+![Vue karaoké](karaoke.webp)
 Chantez sur n'importe quel titre de votre bibliothèque. Un admin active le karaoké et installe un modèle de séparation des voix depuis la page Karaoké.
 
 ### Préparé par Fliks

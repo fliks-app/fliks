@@ -32,6 +32,7 @@ La música se une a las películas, las series y los libros, desde la adquisici�
 - Fliks habla OpenSubsonic: conecte una aplicación de música compatible con un token de su cuenta.
 
 ## Karaoke
+![Vista de karaoke](karaoke.webp)
 Cante cualquier pista de su biblioteca. Un administrador activa el karaoke e instala un modelo de separación de voz desde la página Karaoke.
 
 ### Preparado por Fliks
