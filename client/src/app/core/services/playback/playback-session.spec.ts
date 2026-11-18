@@ -109,6 +109,7 @@ function setup() {
     session: signal<any>(null),
     observedOwnerTargetId: signal<string | null>('tv-1'),
     observableOwner: signal<string | null>(null),
+    claimPending: signal(false),
     handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
     canTransfer: signal(true),
     parked: () => false,
@@ -863,6 +864,16 @@ describe('PlaybackSession', () => {
       syncSvc.session.set(item('video'));
       syncSvc.observedOwnerTargetId.set(null);
       expect(session.viewEnd()).toBe('none');
+    });
+
+    it('keeps the view while this device claims the session, whose load replaces it', () => {
+      const { session, syncSvc } = setup();
+      TestBed.inject(FullPlayerState).show('video', true);
+      syncSvc.session.set(item('video'));
+      syncSvc.observedOwnerTargetId.set(null);
+      expect(session.viewEnd()).toBe('none');
+      syncSvc.claimPending.set(true);
+      expect(session.viewEnd()).toBeNull();
     });
 
     it('has no verdict outside a video view', () => {

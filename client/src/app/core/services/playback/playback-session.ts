@@ -117,8 +117,9 @@ export class PlaybackSession {
   );
   /** What an open video view does once the account session moves on: `audio` hands over to the audio player, `none` closes; null follows the item. */
   readonly viewEnd = computed<'audio' | 'none' | null>(() => {
-    if (!this.viewing()) return null;
     const sync = this.sync();
+    // A claim in flight is replacing the view: closing it would cancel that navigation.
+    if (!this.viewing() || sync.claimPending()) return null;
     const s = sync.session();
     if (!s || !sync.observedOwnerTargetId() || sync.isReading(s)) return 'none';
     if (sync.isAudio(s)) return 'audio';

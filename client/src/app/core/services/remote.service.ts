@@ -510,9 +510,12 @@ export class RemoteService {
     const loader = this.loaderFor(cmd);
     if (loader) {
       this.lastAppliedCmdId.set(cmd.cmdId);
-      if (overPlayer) await this.router.navigateByUrl('/', { replaceUrl: true });
-      this.releaseSelection();
-      return this.sessionSync.claim(() => loader(cmd));
+      // Claimed before the bounce: a view this device shows must not close over the load.
+      return this.sessionSync.claim(async () => {
+        if (overPlayer) await this.router.navigateByUrl('/', { replaceUrl: true });
+        this.releaseSelection();
+        await loader(cmd);
+      });
     }
     if (!cmd.mediaFileId) {
       console.warn('[remote] load without a mediaFileId', cmd.cmdId);
@@ -523,9 +526,9 @@ export class RemoteService {
     if (cmd.mediaId) queryParams['mediaId'] = cmd.mediaId;
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
-    if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
-    this.releaseSelection();
     await this.sessionSync.claim(async () => {
+      if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
+      this.releaseSelection();
       await this.router.navigate(['/watch', cmd.mediaFileId], {
         queryParams,
         replaceUrl: overPlayer,
