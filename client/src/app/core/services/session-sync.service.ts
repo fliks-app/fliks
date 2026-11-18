@@ -280,6 +280,11 @@ export class SessionSyncService {
   async handOver(start: () => Promise<void> | void): Promise<void> {
     const skip = new Set([...this.players].map((p) => p.sessionId()));
     this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
+    await this.claim(start);
+  }
+
+  /** A start that makes this device the owner: until its first beat does, its player is no idle surface of the session. */
+  async claim(start: () => Promise<void> | void): Promise<void> {
     this.claiming.set(true);
     if (this.claimTimer) clearTimeout(this.claimTimer);
     this.claimTimer = setTimeout(() => this.releaseClaim(), HANDOFF_TTL_MS);

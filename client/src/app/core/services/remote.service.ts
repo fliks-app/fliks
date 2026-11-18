@@ -512,7 +512,7 @@ export class RemoteService {
       this.lastAppliedCmdId.set(cmd.cmdId);
       if (overPlayer) await this.router.navigateByUrl('/', { replaceUrl: true });
       this.releaseSelection();
-      return loader(cmd);
+      return this.sessionSync.claim(() => loader(cmd));
     }
     if (!cmd.mediaFileId) {
       console.warn('[remote] load without a mediaFileId', cmd.cmdId);
@@ -525,10 +525,12 @@ export class RemoteService {
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
     if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
     this.releaseSelection();
-    await this.router.navigate(['/watch', cmd.mediaFileId], {
-      queryParams,
-      replaceUrl: overPlayer,
-      state: { snapshot: snapshotFromWire(cmd) },
+    await this.sessionSync.claim(async () => {
+      await this.router.navigate(['/watch', cmd.mediaFileId], {
+        queryParams,
+        replaceUrl: overPlayer,
+        state: { snapshot: snapshotFromWire(cmd) },
+      });
     });
   }
 

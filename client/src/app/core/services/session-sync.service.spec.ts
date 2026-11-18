@@ -201,6 +201,17 @@ describe('SessionSyncService one surface', () => {
     await taking;
   });
 
+  it('keeps the paused copy a load sent here started, before its first beat owns the session', async () => {
+    const { service, flush } = setup();
+    const { p, yielded } = held(5);
+    await flush(session());
+    await service.claim(() => {
+      service.registerPlayer(p);
+    });
+    TestBed.tick();
+    expect(yielded).not.toHaveBeenCalled();
+  });
+
   it('keeps a playing local player, one with no account item, and every player of a parked session', async () => {
     const { service, flush } = setup();
     const playing = held(5, true);
