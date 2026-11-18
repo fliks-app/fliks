@@ -70,6 +70,8 @@ public class CastPlugin extends Plugin {
     /** A dead process left a cast behind and CAF is not resuming it: join the receiver by hand. */
     private boolean rejoinArmed = false;
     private boolean rejoining = false;
+    /** A failed resume hands the route back to the device by default: a cast route picked before that is dropped again. */
+    private boolean rejoinOnDefault = false;
     /** Active scan for the saved receiver, bounded by HUNT_MS. */
     private boolean hunting = false;
     /** A connected session went through this process, so its end is a real stop. */
@@ -141,7 +143,8 @@ public class CastPlugin extends Plugin {
                     Log.d(TAG, "rejoin armed after resume failure");
                     rejoinArmed = true;
                     MediaRouter router = router();
-                    for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
+                    if (router.getSelectedRoute().isDefault()) rejoinAny(router);
+                    else rejoinOnDefault = true;
                 }
             });
         }
@@ -192,6 +195,10 @@ public class CastPlugin extends Plugin {
         notifyResumed(resume);
     }
 
+    private void rejoinAny(MediaRouter router) {
+        for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
+    }
+
     /** Selecting a route launches the receiver when it is not running, so only join a device
      *  whose status still reads what it read while we cast. */
     private void tryRejoin(MediaRouter router, MediaRouter.RouteInfo route) {
@@ -222,6 +229,12 @@ public class CastPlugin extends Plugin {
         @Override
         public void onRouteRemoved(MediaRouter router, MediaRouter.RouteInfo route) {
             notifyRoutesChanged();
+        }
+        @Override
+        public void onRouteSelected(MediaRouter router, MediaRouter.RouteInfo route) {
+            if (!rejoinOnDefault || !route.isDefault()) return;
+            rejoinOnDefault = false;
+            rejoinAny(router);
         }
     };
 
