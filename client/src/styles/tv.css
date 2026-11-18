@@ -24,6 +24,13 @@ html.tv-host {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
+/* The Android TV keyboard covers the bottom ~45%: the focused field scrolls into the top part, with room below to get there. */
+html.tv-ime-open {
+  scroll-padding-bottom: 55vh;
+}
+html.tv-ime-open body {
+  padding-bottom: 55vh;
+}
 /* Same focus-into-view breathing room for keyboard navigation in the browser, scoped so mouse scrolling is untouched. */
 html.keyboard-modality {
   scroll-padding-top: 96px;

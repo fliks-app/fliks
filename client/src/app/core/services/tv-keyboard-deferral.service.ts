@@ -30,13 +30,22 @@ export class TvKeyboardDeferralService {
       }
     };
 
+    // Android TV's keyboard overlays the WebView without shrinking it (MainActivity's `ime` reports height 0).
+    const onIme = (e: Event) => {
+      const { visible } = (e as CustomEvent<{ visible: boolean }>).detail;
+      document.documentElement.classList.toggle('tv-ime-open', visible);
+      if (visible) document.activeElement?.scrollIntoView({ block: 'nearest' });
+    };
+
     document.addEventListener('focusin', defer, true);
     document.addEventListener('click', release, true);
     document.addEventListener('keydown', onKey, true);
+    addEventListener('ime', onIme);
     this.destroyRef.onDestroy(() => {
       document.removeEventListener('focusin', defer, true);
       document.removeEventListener('click', release, true);
       document.removeEventListener('keydown', onKey, true);
+      removeEventListener('ime', onIme);
     });
   }
 
