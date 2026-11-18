@@ -233,7 +233,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         // Preferred path: native resume + start-bitrate via mediaOption.
         await this.attachAndPlay(url, start, true);
       } catch (e) {
-        // Only a mediaOption schema rejection merits a plain-src retry; a load timeout means a slow stream, so surface it (a retry burns another 30s).
+        // A refused <source> (mediaOption schema, a type canPlayType rejects such as MKV) retries with plain src;
+        // a load timeout means a slow stream, so surface it (a retry burns another 30s).
         if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
         await this.attachAndPlay(url, start, false);
       }
@@ -283,6 +284,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         const source = document.createElement('source');
         source.src = url;
         source.setAttribute('type', webOsSourceType(url, startTime, this.directMime));
+        // A skipped <source> errors on itself only: the <video> just waits for another one.
+        source.addEventListener('error', onErr);
         v.appendChild(source);
       } else {
         v.src = url;

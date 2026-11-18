@@ -104,6 +104,23 @@ describe('WebOsEngine load failures', () => {
     expect(isUndecodableError({ ...classifyPlaybackError(e), message: e.message })).toBe(true);
   });
 
+  it('retries a <source> the browser skips with a plain src at once', async () => {
+    const listeners: Record<string, () => void> = {};
+    const v = {
+      ...loading(),
+      src: '',
+      play: () => Promise.resolve(),
+      addEventListener: (e: string, fn: () => void) => (listeners[e] = fn),
+      appendChild: (s: HTMLSourceElement) => queueMicrotask(() => s.dispatchEvent(new Event('error'))),
+      load: vi.fn(() => v.src && queueMicrotask(() => listeners['loadedmetadata']())),
+    };
+    const engine = new WebOsEngine();
+    (engine as unknown as { video: unknown }).video = v;
+    await engine.load('/api/stream/1/direct', 0, 'video/x-matroska');
+    expect(v.src).toBe('/api/stream/1/direct');
+    expect(v.load).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects a load timeout the same way, without a second attempt', async () => {
     vi.useFakeTimers();
     try {
