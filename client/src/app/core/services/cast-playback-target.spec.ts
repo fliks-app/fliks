@@ -32,7 +32,7 @@ function setup(autoPlayNext = true, partyActive = false) {
       provideZonelessChangeDetection(),
       { provide: CastService, useValue: cast },
       { provide: CastPlayerService, useValue: cp },
-      { provide: MusicCastOutput, useValue: { hasMedia: signal(false) } },
+      { provide: MusicCastOutput, useValue: { hasMedia: signal(false), active: signal(false) } },
       { provide: AudioPlayerService, useValue: { holds: () => false } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },

@@ -150,7 +150,7 @@ export class MusicCastOutput {
     effect(() => {
       const connected = this.cast.isConnected();
       untracked(() => {
-        if (wasConnected && !connected) this.pending.set(null);
+        if (wasConnected && !connected) this.dropPending();
         wasConnected = connected;
       });
     });
@@ -163,13 +163,20 @@ export class MusicCastOutput {
 
   /** Loads `t` on the receiver; null when the load failed or `current` went false meanwhile. */
   async load(t: MusicTrackRequest, autoplay: boolean, startAt: number, current: () => boolean): Promise<PlaybackInfoResponse | null> {
-    this.generation++;
+    const generation = ++this.generation;
     this.started = false;
     this.seen = false;
     this.nowPlaying.primeTracks([t]);
     const info = await this.loadTrack(t, autoplay, startAt, current);
-    if (info) this._active.set(true);
-    return info;
+    if (!info) return null;
+    if (current() && generation === this.generation) {
+      this._active.set(true);
+      return info;
+    }
+    // The caller moved on: end the orphan LOAD, unless a newer load of this output owns the receiver.
+    if (info.sessionId) void this.streaming.stopSession(info.sessionId).catch(() => undefined);
+    if (!this.active()) this.cast.stop();
+    return null;
   }
 
   /** The queue track with the receiver's position and play state, as the audio player last saw them. */
@@ -214,6 +221,12 @@ export class MusicCastOutput {
     this.seen = false;
     this.pending.set(null);
     this.loaded.set(null);
+    this.cast.clearResumeState('music');
+  }
+
+  /** An armed state that cannot match is dropped with the saved one, which `rejoin` would arm again. */
+  private dropPending(): void {
+    this.pending.set(null);
     this.cast.clearResumeState('music');
   }
 
@@ -327,12 +340,18 @@ export class MusicCastOutput {
   private async follow(host: MusicCastHost, pending: MusicCastState, media: Record<string, unknown> | null): Promise<void> {
     const itemId = media?.['itemId'];
     const mediaFileId = media?.['mediaFileId'];
-    if (!media || typeof itemId !== 'number' || typeof mediaFileId !== 'number' || media['userId'] !== this.auth.user()?.id) return;
-    this.pending.set(null);
+    if (!media) return;
+    if (typeof itemId !== 'number' || typeof mediaFileId !== 'number' || media['userId'] !== this.auth.user()?.id) return this.dropPending();
     const same = itemId === pending.itemId;
+    const q = pending.queue;
+    const upNext = q && (q.itemIds[q.index + 1] ?? (q.repeat === 'all' ? q.itemIds[0] : undefined));
+    if (!same && itemId !== upNext) return this.dropPending();
+    this.pending.set(null);
     const sid = same ? pending.sid : typeof media['sid'] === 'string' ? media['sid'] : null;
     const stemMode = same ? pending.stemMode : 'original';
-    if (!(await host.adopt({ itemId, sid, mediaFileId, queue: pending.queue, stemMode, vocalLevel: same ? pending.vocalLevel : 0 }))) return;
+    const adopted = await host.adopt({ itemId, sid, mediaFileId, queue: pending.queue, stemMode, vocalLevel: same ? pending.vocalLevel : 0 });
+    if (!adopted) return;
+    if (!this.cast.isConnected()) return host.lost();
     this.seen = true;
     this.started = false;
     this.stemKind.set(same ? pending.stem : null);

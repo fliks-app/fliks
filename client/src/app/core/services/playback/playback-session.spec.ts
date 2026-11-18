@@ -120,7 +120,7 @@ function setup() {
   };
   const device = { isTv: signal(false) };
   const audio = { holds: vi.fn(() => false), release: vi.fn(async (): Promise<unknown> => null), stepAside: vi.fn(), resume: vi.fn(async (_s: MusicSnapshot) => {}) };
-  const musicCast = { hasMedia: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}), adopt: vi.fn() };
+  const musicCast = { hasMedia: signal(false), active: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}), adopt: vi.fn() };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
   const media = { id: 3, title: 'Show', logoUrl: '/logo.png', fanartUrl: '/f.jpg', seasons: [{ seasonNumber: 1, episodes: [{ id: 9, episodeNumber: 2, title: 'Pilot' }] }] };
@@ -679,6 +679,7 @@ describe('PlaybackSession', () => {
       await vi.waitFor(() => expect(audio.release).toHaveBeenCalled());
       await new Promise((r) => setTimeout(r));
       musicCast.hasMedia.set(true);
+      musicCast.active.set(true);
       musicCast.snapshot.mockReturnValue(musicSnapshot);
       TestBed.tick();
       cast.isConnected.set(false);
@@ -695,9 +696,11 @@ describe('PlaybackSession', () => {
       await vi.waitFor(() => expect(audio.release).toHaveBeenCalled());
       await new Promise((r) => setTimeout(r));
       musicCast.hasMedia.set(true);
+      musicCast.active.set(true);
       musicCast.snapshot.mockReturnValue(musicSnapshot);
       TestBed.tick();
       musicCast.hasMedia.set(false);
+      musicCast.active.set(false);
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
@@ -708,6 +711,20 @@ describe('PlaybackSession', () => {
       const { session, cast, local, castPlayer } = setup();
       cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
       castPlayer.hasMedia.mockReturnValue(true);
+      session.attachLocal(local);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      cast.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
+    });
+
+    it('resumes a video here when an armed music state never matched the receiver', () => {
+      const { session, cast, local, castPlayer, musicCast } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.hasMedia.mockReturnValue(true);
+      musicCast.hasMedia.set(true);
       session.attachLocal(local);
       TestBed.tick();
       cast.isConnected.set(true);

@@ -234,6 +234,18 @@ describe('MusicCastOutput', () => {
     expect(out.hasMedia()).toBe(false);
   });
 
+  it('ends a LOAD whose caller moved on meanwhile instead of turning the output on', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    out.attach(host as MusicCastHost);
+    let live = true;
+    getItemPlaybackInfo.mockImplementationOnce(async () => info('s1', 10));
+    cast.loadMedia.mockImplementationOnce(async () => void (live = false));
+    expect(await out.load(track(1), true, 0, () => live)).toBeNull();
+    expect(out.active()).toBe(false);
+    expect(stopSession).toHaveBeenCalledWith('s1');
+    expect(cast.stop).toHaveBeenCalled();
+  });
+
   it('snapshots the receiver position and play state with the queue track', () => {
     const out = TestBed.inject(MusicCastOutput);
     expect(out.snapshot()).toBeNull();
@@ -333,12 +345,50 @@ describe('MusicCastOutput', () => {
       expect(out.hasMedia()).toBe(false);
     });
 
-    it('disarms on a disconnect', () => {
+    it('disarms on a disconnect and forgets the saved state', () => {
       const out = arm();
       TestBed.tick();
       cast.isConnected.set(false);
       TestBed.tick();
       expect(out.hasMedia()).toBe(false);
+      expect(cast.clearResumeState).toHaveBeenCalledWith('music');
+    });
+
+    it('drops the armed state when the receiver shows something that cannot be ours', () => {
+      const out = arm();
+      cast.receiverMedia.set({ mediaId: 5, mediaFileId: 50 });
+      TestBed.tick();
+      expect(out.hasMedia()).toBe(false);
+      expect(cast.clearResumeState).toHaveBeenCalledWith('music');
+    });
+
+    it('drops the armed state when the receiver plays another track than the saved or next one', () => {
+      const out = arm();
+      cast.receiverMedia.set({ itemId: 7, mediaId: 3, mediaFileId: 70, sid: 's7', userId: 1 });
+      TestBed.tick();
+      expect(host.adopt).not.toHaveBeenCalled();
+      expect(out.hasMedia()).toBe(false);
+      expect(cast.clearResumeState).toHaveBeenCalledWith('music');
+    });
+
+    it('adopts the first track when repeat-all wrapped past the last one', async () => {
+      arm({ ...saved, itemId: 2, queue: { itemIds: [1, 2], index: 1, shuffle: false, repeat: 'all' } });
+      cast.receiverMedia.set({ itemId: 1, mediaId: 3, mediaFileId: 10, sid: 's1', userId: 1 });
+      TestBed.tick();
+      await vi.waitFor(() => expect(host.adopt).toHaveBeenCalled());
+    });
+
+    it('tells the host the receiver is lost when it disconnects during the adoption', async () => {
+      let done!: (ok: boolean) => void;
+      host.adopt.mockImplementationOnce(() => new Promise<boolean>((r) => (done = r)));
+      const out = arm();
+      cast.receiverMedia.set({ itemId: 1, mediaFileId: 10, userId: 1 });
+      TestBed.tick();
+      await vi.waitFor(() => expect(host.adopt).toHaveBeenCalled());
+      cast.isConnected.set(false);
+      done(true);
+      await vi.waitFor(() => expect(host.lost).toHaveBeenCalled());
+      expect(out.active()).toBe(false);
     });
 
     it('gives the receiver up when another sender\'s media replaces its own', async () => {

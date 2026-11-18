@@ -572,7 +572,7 @@ export class PlaybackSession {
   /** Music on the receiver is read fresh every time (null once it is closed); a video keeps its last position. */
   private awayState(o: PlaybackOutput): Away | null {
     const music = this.musicCast();
-    if (music.hasMedia()) {
+    if (music.active()) {
       const snapshot = music.snapshot();
       return snapshot && { kind: 'music', snapshot };
     }
