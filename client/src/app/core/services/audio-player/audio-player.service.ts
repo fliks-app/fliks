@@ -1297,24 +1297,33 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   /** Puts the part holding `position` on the active element and starts it there. */
   private async load(position: number, autoplay: boolean): Promise<void> {
     const { index, local } = locate(this.parts, position);
-    if (this.nativeAudio) return this.loadNativeParts(index, local, autoplay);
-    this.ensureElements();
-    this.partIndex = index;
-    this.preloaded = -1;
-    const el = this.els[this.current];
-    const part = this.parts[index];
-    el.playbackRate = this._musicMode() ? this.playRate() : this.rate();
-    this.applyGain(el, this._musicMode() ? this.mq.current : null, part.url);
-    if (this.info?.playMethod === 'DirectPlay') {
-      el.src = part.url;
-      this.startAt(el, local, autoplay);
-    } else if (this.native(el)) {
-      el.src = part.url;
-      this.startAt(el, position, autoplay);
+    if (this.nativeAudio) {
+      await this.loadNativeParts(index, local, autoplay);
     } else {
-      await this.attachHls(el, part.url, position);
-      if (autoplay) void el.play().catch(() => undefined);
+      this.ensureElements();
+      this.partIndex = index;
+      this.preloaded = -1;
+      const el = this.els[this.current];
+      const part = this.parts[index];
+      el.playbackRate = this._musicMode() ? this.playRate() : this.rate();
+      this.applyGain(el, this._musicMode() ? this.mq.current : null, part.url);
+      if (this.info?.playMethod === 'DirectPlay') {
+        el.src = part.url;
+        this.startAt(el, local, autoplay);
+      } else if (this.native(el)) {
+        el.src = part.url;
+        this.startAt(el, position, autoplay);
+      } else {
+        await this.attachHls(el, part.url, position);
+        if (autoplay) void el.play().catch(() => undefined);
+      }
     }
+    this.pausedStart(autoplay);
+  }
+
+  /** A paused start fires no play event, yet its owner must beat like any paused player or the session parks. */
+  private pausedStart(autoplay: boolean): void {
+    if (!autoplay) this.onPlayState(false);
   }
 
   /** False once the user seeks: the resume point still waiting for metadata must not undo it. */
@@ -1474,8 +1483,6 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
       const req = await this.audiobookRequest(s.item.mediaId, s.item.id);
       loaded = !!req && (await this.play(req, { startAt: positionSeconds, paused }));
     }
-    // A paused load reports no play state: its first beat is what claims the session.
-    if (paused && loaded) this.onPlayState(false);
     if (loaded) this.fullPlayer.handTo('audio', false);
   }
 
@@ -1878,6 +1885,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
     await n.setQueue({ tracks: await this.nativeTracks(this.mq.tracks), index: this.mq.index, autoplay, ...(startAt > 0 && { startAt }) });
+    this.pausedStart(autoplay);
     void this.refreshStems();
   }
 

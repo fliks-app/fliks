@@ -59,7 +59,7 @@ export class PlaybackSurface {
     const s = this.sync.session();
     const state = this.state();
     // Only another device's live playback, which the bar can pause; it replaces a paused local track.
-    if (!s || state !== 'remote' || this.sync.isReading(s) || this.device.isTv() || !this.session.isLocal() || this.session.partyActive()) return null;
+    if (!s || state !== 'remote' || this.sync.isReading(s) || !this.session.isLocal() || this.session.partyActive()) return null;
     return s;
   });
 

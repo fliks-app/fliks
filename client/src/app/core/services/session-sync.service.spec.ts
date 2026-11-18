@@ -8,7 +8,6 @@ import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
 import { ConfirmationService } from './confirmation.service';
-import { DeviceService } from './device.service';
 import { ClockService } from './party/clock.service';
 import { SessionSyncService, type AccountSession, type SessionPlayer } from './session-sync.service';
 import { SseService, type SessionEvent } from './sse.service';
@@ -28,7 +27,7 @@ function session(over: Partial<AccountSession> = {}): AccountSession {
   };
 }
 
-function setup(opts: { enabled?: boolean; tv?: boolean; confirm?: boolean } = {}) {
+function setup(opts: { enabled?: boolean; confirm?: boolean } = {}) {
   const sse = {
     sessionEvents: new Subject<SessionEvent>(),
     connectionId: signal<string | null>('conn-1'),
@@ -43,7 +42,6 @@ function setup(opts: { enabled?: boolean; tv?: boolean; confirm?: boolean } = {}
       provideRouter([]),
       { provide: SseService, useValue: sse },
       { provide: AuthService, useValue: { user } },
-      { provide: DeviceService, useValue: { isTv: () => !!opts.tv } },
       { provide: ClockService, useValue: { serverNow: () => Date.now() } },
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
@@ -159,12 +157,6 @@ describe('SessionSyncService observation', () => {
     expect(service.role()).toBe('observer');
     expect(service.observedOwnerTargetId()).toBeNull();
   });
-
-  it('observes nothing on a TV, which only ever owns', async () => {
-    const { service, flush } = setup({ tv: true });
-    await flush(session());
-    expect(service.observedOwnerTargetId()).toBeNull();
-  });
 });
 
 describe('SessionSyncService one surface', () => {
@@ -207,6 +199,17 @@ describe('SessionSyncService one surface', () => {
     expect(yielded).not.toHaveBeenCalled();
     done();
     await taking;
+  });
+
+  it('keeps the paused copy a load sent here started, before its first beat owns the session', async () => {
+    const { service, flush } = setup();
+    const { p, yielded } = held(5);
+    await flush(session());
+    await service.claim(() => {
+      service.registerPlayer(p);
+    });
+    TestBed.tick();
+    expect(yielded).not.toHaveBeenCalled();
   });
 
   it('keeps a playing local player, one with no account item, and every player of a parked session', async () => {

@@ -3234,6 +3234,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.navbar.markAsBackNavigation();
     const prev = this.navHistory.originUrl;
     void this.animateClose().then(() => {
+      // A load that replaced this player during the animation must not be navigated back over.
+      if (this.destroyed) return;
       if (prev && prev.split('?')[0] === target.split('?')[0]) {
         history.back();
         return;

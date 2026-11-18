@@ -77,7 +77,8 @@ export class RemoteAudioOutput implements AudioOutput {
   });
   readonly track = computed<AudioRequest | null>(() => {
     const s = this.session();
-    if (!s) return null;
+    // A video session has no track: read as one, the open video view would fetch lyrics for an episode.
+    if (!s || !this.sync.isAudio(s)) return null;
     const pending = this.pending();
     const next = pending === null ? null : this.rows()[pending]?.row;
     if (next) {

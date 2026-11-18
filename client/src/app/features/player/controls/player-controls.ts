@@ -586,6 +586,13 @@ export class PlayerControlsComponent {
     this.subtitlesPanel.set('tracks');
   }
 
+  /** As app-dropdown-menu does: any button pressed in the device list closes it, whether or not the list delegated the row here. */
+  protected onDeviceListPress(e: Event): void {
+    if (!(e.target as Element | null)?.closest('button')) return;
+    if (this.activeSheet() === 'devices') this.closeSheet();
+    else this.closeDropdown();
+  }
+
   /** Closes the open dropdown on Escape or KEYCODE_BACK; captured so Back doesn't leave the player while a panel is open. */
   @HostListener('window:keydown', ['$event'])
   onWindowKey(e: KeyboardEvent) {

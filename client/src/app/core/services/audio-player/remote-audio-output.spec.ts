@@ -49,6 +49,7 @@ async function setup(account: AccountSession | null, live = true) {
     liveReport: computed(() => (live ? { mediaFileId: 9, durationSeconds: 200 } : null)),
     positionNow: (s: AccountSession) => (live ? 70 : s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0)),
     durationNow: (s: AccountSession) => (live ? 200 : (s.durationSeconds ?? 0)),
+    isAudio: SessionSyncService.prototype.isAudio,
   };
   const primeTracks = vi.fn();
   const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
@@ -93,7 +94,7 @@ describe('RemoteAudioOutput', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null) } },
+        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
         { provide: RemotePlaybackTarget, useValue: {} },
         { provide: RemoteService, useValue: {} },
         { provide: NowPlayingMetadataService, useValue: { primeTracks: vi.fn() } },
@@ -101,6 +102,11 @@ describe('RemoteAudioOutput', () => {
       ],
     });
     expect(TestBed.inject(RemoteAudioOutput).track()).toMatchObject({ title: 'Track A', artist: undefined });
+  });
+
+  it('has no track for a video session, which the video view shows', async () => {
+    const { out } = await setup(session({ item: { ...session().item, kind: 'series', family: 'video', episodeId: 7 } }));
+    expect(out.track()).toBeNull();
   });
 
   it('primes the metadata service with the rows it loads', async () => {
