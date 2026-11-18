@@ -19,11 +19,6 @@ import { ServerVersionService } from '../../core/services/server-version.service
 import { SseService } from '../../core/services/sse.service';
 import { CastOverlayComponent } from './cast-overlay';
 
-// jsdom has no ResizeObserver (the title marquee).
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
 
 function accountSession(over: Partial<AccountSession> = {}): AccountSession {
   return {

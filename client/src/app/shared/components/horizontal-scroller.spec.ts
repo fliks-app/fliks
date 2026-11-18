@@ -24,14 +24,6 @@ class HostStub {}
 /** A detached subtree loses its scroll offset and the reattach runs no lifecycle
  *  hook, so the row came back at zero on every return. */
 describe('HorizontalScrollerComponent', () => {
-  beforeAll(() => {
-    // jsdom ships no ResizeObserver, and ngAfterViewInit observes the rail.
-    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
-      observe() {}
-      disconnect() {}
-    };
-  });
-
   /** Returns the rail's stubbed scrollTo after parking an offset on it and
    *  driving one detach / reattach cycle through the reuse cache. */
   async function reattachWith(navigatedBack: boolean) {

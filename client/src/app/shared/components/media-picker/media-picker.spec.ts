@@ -56,12 +56,7 @@ class Host {
   readonly out: MediaPick[][] = [];
 }
 
-// jsdom ships neither: the synopsis observes its size, and the open row scrolls into view.
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
+// jsdom has no scrollIntoView: the open row scrolls into view.
 Element.prototype.scrollIntoView ??= () => {};
 
 // Mirrors the subset of public/i18n/en.json the picker renders.

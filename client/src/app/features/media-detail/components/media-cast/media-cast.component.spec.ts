@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MediaCastEntry } from '../../../../core/services/api/media.service';
 import { bookSpecProviders } from '../../book/book-test-setup';
 import { MediaCastComponent, libraryCast, providerCast } from './media-cast.component';
@@ -18,7 +18,6 @@ function render(cast: MediaCastEntry[]) {
 }
 
 describe('MediaCastComponent', () => {
-  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} }));
   afterEach(() => vi.unstubAllGlobals());
 
   it('links each member to their person page, under a divider and a folding heading', () => {
