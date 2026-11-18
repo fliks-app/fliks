@@ -424,6 +424,8 @@ export class PlaybackSession {
     if (!targetId || !local) return false;
     const handoff = await local.release();
     if (!handoff) return false;
+    // Until the target reports, what it was handed is the way back here.
+    this.away = { kind: 'video', snapshot: handoff.snapshot };
     const remote = this.remoteSvc();
     remote.selectTarget(targetId);
     void remote.send(targetId, snapshotToWire(handoff.snapshot));

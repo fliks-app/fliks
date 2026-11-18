@@ -431,6 +431,16 @@ describe('PlaybackSession', () => {
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
+    it('takes the playback back where it was sent when the remote device never reported', async () => {
+      const { session, remote, local } = setup();
+      session.attachLocal(local);
+      expect(await session.moveTo('remote', 'dev-9')).toBe(true);
+      remote.isConnected.set(true);
+      TestBed.tick();
+      expect(await session.moveTo('local')).toBe(true);
+      expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 120 }));
+    });
+
     it('takes the account session over from its owner instead of stopping it', async () => {
       const { session, remote, local, syncSvc } = setup();
       syncSvc.observableOwner.set('tv-1');
