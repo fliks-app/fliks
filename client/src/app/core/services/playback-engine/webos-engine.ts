@@ -440,10 +440,10 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const tracks: AudioTrack[] = [];
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
-      // Position, never `t.id` (the 1-based demuxer stream id). The order is webOS's own, DEFAULT
-      // rendition first, so the player maps tracks to streamInfo by language.
+      // By language, never position or `t.id` (the demuxer stream id): webOS lists the DEFAULT rendition first and
+      // keeps one track per language, so only the language names the same track across reloads.
       tracks.push({
-        id: 'audio-' + i,
+        id: 'audio-' + (t.language || i),
         language: t.language || 'und',
         label: t.label || t.language || '',
         selected: !!t.enabled,

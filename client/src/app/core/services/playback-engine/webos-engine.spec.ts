@@ -137,3 +137,13 @@ describe('WebOsEngine load failures', () => {
     }
   });
 });
+
+describe('WebOsEngine audio tracks', () => {
+  it('names a track by its language, so the DEFAULT-first reorder of a reload keeps its id', () => {
+    const before = engineWith({ audioTracks: [{ language: 'eng', enabled: true }, { language: 'ita', enabled: false }] });
+    const after = engineWith({ audioTracks: [{ language: 'ita', enabled: true }, { language: 'eng', enabled: false }] });
+    const idOf = (e: WebOsEngine, lang: string) => e.getAudioTracks().find((t) => t.language === lang)?.id;
+    expect(idOf(after, 'ita')).toBe(idOf(before, 'ita'));
+    expect(idOf(after, 'ita')).not.toBe(idOf(after, 'eng'));
+  });
+});
