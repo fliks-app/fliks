@@ -44,6 +44,21 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(q.current?.itemId, 3)
     }
 
+    func testAdoptKeepsTheOwnersOrderAndOnlyFlagsShuffle() {
+        var q = MusicQueue()
+        q.adopt([5, 2, 9].map { track($0) }, start: 1, shuffled: true)
+        XCTAssertEqual(q.tracks.map(\.itemId), [5, 2, 9])
+        XCTAssertEqual(q.current?.itemId, 2)
+        XCTAssertTrue(q.shuffled)
+    }
+
+    func testEnqueueCommandDecodesItsTracksAndPlace() throws {
+        let json = #"{"cmdId":"c","expiresAt":1,"action":"enqueue","itemIds":[4,7],"where":"next"}"#
+        let cmd = try JSONDecoder().decode(RemoteCommand.self, from: Data(json.utf8))
+        XCTAssertEqual(cmd.itemIds, [4, 7])
+        XCTAssertEqual(cmd.enqueueAt, "next")
+    }
+
     func testRepeatAllWrapsAndOffStops() {
         var q = MusicQueue()
         q.set([track(1), track(2)], start: 1)
@@ -107,6 +122,25 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(PartyItem.upNext(after: rows[1], in: rows).compactMap(\.itemId), [3, 4, 5])
         XCTAssertEqual(PartyItem.upNext(after: rows[5], in: rows), [])
         XCTAssertEqual(PartyItem.upNext(after: nil, in: rows).compactMap(\.itemId), [1, 2, 3])
+    }
+
+    func testAlbumPageDecodesItsRelease() throws {
+        let json = #"""
+        {"id":370,"title":"Bad","year":null,"overview":null,"posterUrl":null,"fanartUrl":null,"genres":[],
+         "album":{"primaryType":"Album","secondaryTypes":[],"firstReleaseDate":"1987-01-01","isCompilation":false,
+          "orphaned":false,"artists":[{"id":1,"name":"A","creditedName":null,"joinPhrase":null}],
+          "release":{"albumGain":-3.5,"albumPeak":0.9,"barcode":null,"catalogNumber":"X 1","country":"JP",
+           "coverUrl":null,"disambiguation":null,"discCount":1,"label":"Epic","media":"cd","releaseDate":null,
+           "status":"official","title":null,"trackCount":1},
+          "versions":[],"sharedTracks":0,"releaseGroupId":"g",
+          "tracks":[{"itemId":9,"mediaFileId":4,"hasFile":true,"orphaned":false,"discNumber":1,"discTitle":null,
+           "position":1,"trackNumber":1,"label":null,"title":"T","durationSeconds":10,"explicit":false,"gain":null,
+           "peak":null,"artists":[],"credits":[],"favourite":false,"playCount":0,"lastPlayedAt":null}]}}
+        """#
+        let page = try JSONDecoder().decode(AlbumPage.self, from: Data(json.utf8))
+        XCTAssertEqual(page.album.release.label, "Epic")
+        XCTAssertEqual(page.queue.map(\.itemId), [9])
+        XCTAssertEqual(page.queue.first?.albumGain, -3.5)
     }
 
     func testDurationFormat() {

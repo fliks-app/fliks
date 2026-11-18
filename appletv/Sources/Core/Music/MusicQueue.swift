@@ -64,6 +64,14 @@ struct MusicQueue {
         set(list, start: start, shuffle: shuffle, using: &rng)
     }
 
+    /// Another player's queue as it plays it: the order kept, shuffle only flagged.
+    mutating func adopt(_ list: [QueueTrack], start: Int, shuffled on: Bool) {
+        original = list.map { $0.copy() }
+        tracks = original
+        index = tracks.isEmpty ? -1 : min(max(0, start), tracks.count - 1)
+        shuffled = on
+    }
+
     /// Shuffling keeps the current track first; turning it off restores the original order around it.
     mutating func setShuffle(_ on: Bool, using rng: inout some RandomNumberGenerator) {
         let cur = current
@@ -148,24 +156,6 @@ struct MusicQueue {
 
 enum ReplayGain: String, CaseIterable {
     case off, track, album
-
-    var next: ReplayGain {
-        switch self {
-        case .off: .track
-        case .track: .album
-        case .album: .off
-        }
-    }
-
-    var labelKey: String { "music_player.replay_gain_\(rawValue)" }
-
-    var symbol: String {
-        switch self {
-        case .off: "speaker.slash"
-        case .track: "speaker.wave.2"
-        case .album: "opticaldisc"
-        }
-    }
 
     /// Linear volume of a track: never a boost (AVPlayer has no gain stage), and album gain only for one album.
     static func volume(_ mode: ReplayGain, _ t: QueueTrack, oneAlbum: Bool) -> Float {

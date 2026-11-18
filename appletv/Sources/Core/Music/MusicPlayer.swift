@@ -83,6 +83,8 @@ enum MusicTransport: Equatable {
     @ObservationIgnored private var recoveredUid: UUID?
     @ObservationIgnored private var positionStamp = Date()
     @ObservationIgnored private var lastBeat = Date.distantPast
+    /// Where the track opened by `begin` starts: its first item change keeps it instead of zero.
+    @ObservationIgnored private var startPosition: Double = 0
     @ObservationIgnored private var artwork: (uid: UUID, art: MPMediaItemArtwork)?
     @ObservationIgnored private var observers: [NSKeyValueObservation] = []
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
@@ -117,10 +119,10 @@ enum MusicTransport: Equatable {
         begin(startAt: 0, autoplay: true)
     }
 
-    /// Starts a transferred session: the queue at `start`, at `position`, with its shuffle and repeat.
+    /// Starts a transferred session: the queue as its owner played it, at `start` and `position`.
     func resume(_ tracks: [QueueTrack], from start: Int, shuffle: Bool, repeatMode: RepeatMode, position: Double, autoplay: Bool) {
         guard !tracks.isEmpty else { return }
-        queue.set(tracks, start: start, shuffle: shuffle)
+        queue.adopt(tracks, start: start, shuffled: shuffle)
         queue.repeatMode = repeatMode
         begin(startAt: position, autoplay: autoplay)
     }
@@ -189,9 +191,32 @@ enum MusicTransport: Equatable {
         begin(startAt: startAt, autoplay: autoplay)
     }
 
+    /// A controller's queue: the playing track goes on when it stays the current one.
+    func replaceQueue(_ tracks: [QueueTrack], from start: Int, shuffle: Bool) {
+        guard tracks.indices.contains(start) else { return }
+        let goesOn = tracks[start].itemId == current?.itemId
+        queue.adopt(tracks, start: start, shuffled: shuffle)
+        if goesOn { queueChanged() } else { begin(startAt: 0, autoplay: true) }
+    }
+
     func skip(to index: Int) {
         guard queue.play(at: index) != nil else { return }
         begin(startAt: 0, autoplay: true)
+    }
+
+    /// A remote "prev" means the previous track, not a restart of this one.
+    func previousTrack() {
+        if queue.previous() == nil { seek(to: 0) } else { begin(startAt: 0, autoplay: true) }
+    }
+
+    func setShuffle(_ on: Bool) {
+        guard on != queue.shuffled else { return }
+        toggleShuffle()
+    }
+
+    func setRepeat(_ mode: RepeatMode) {
+        queue.repeatMode = mode
+        queueChanged()
     }
 
     func toggleShuffle() {
@@ -299,6 +324,7 @@ enum MusicTransport: Equatable {
         uidOfItem = [:]
         activateSession()
         position = startAt
+        startPosition = startAt
         duration = track.durationSeconds ?? 0
         publishNowPlaying()
         Task {
@@ -323,6 +349,7 @@ enum MusicTransport: Equatable {
         for item in player.items().dropFirst() { player.remove(item) }
         prefetchNext()
         publishNowPlaying()
+        beat()
     }
 
     private func nextTrack() -> QueueTrack? { queue.repeatMode == .one ? current : queue.peekNext() }
@@ -457,7 +484,8 @@ enum MusicTransport: Equatable {
         if let i = queue.tracks.firstIndex(where: { $0.uid == uid }) { queue.play(at: i) }
         let live = Set(player.items().map(ObjectIdentifier.init))
         uidOfItem = uidOfItem.filter { live.contains($0.key) }
-        position = 0
+        position = startPosition
+        startPosition = 0
         duration = current?.durationSeconds ?? 0
         applyGain()
         prefetchNext()
@@ -509,9 +537,40 @@ enum MusicTransport: Equatable {
         let itemId: Int
         let sessionId: String?
         let state: String
+        let targetId: String?
+        let lastCmdId: String?
+        /// The TV's own remote sets the volume: the music player takes no volume command.
+        let supportsVolume = false
+        let queue: QueueBeat?
+    }
+
+    /// `queue` of a beat (`heartbeat.md` rule 25): the play order, at most 500 ids around the current track.
+    private struct QueueBeat: Encodable, Equatable {
+        let itemIds: [Int]
+        let index: Int
+        let shuffle: Bool
+        let `repeat`: String
+    }
+
+    /// What the last beat carried: the queue goes out on a session's first beat and when it changes.
+    @ObservationIgnored private var queueSent: (sid: String?, queue: QueueBeat)?
+
+    private func queueToSend(sid: String?) -> QueueBeat? {
+        let ids = queue.tracks.map(\.itemId)
+        guard !ids.isEmpty, queue.index >= 0 else { return nil }
+        let start = max(0, min(queue.index - 250, ids.count - 500))
+        let q = QueueBeat(itemIds: Array(ids[start..<min(start + 500, ids.count)]), index: queue.index - start,
+                          shuffle: queue.shuffled, repeat: queue.repeatMode.rawValue)
+        if let sent = queueSent, sent.sid == sid, sent.queue == q { return nil }
+        queueSent = (sid, q)
+        return q
     }
 
     private struct BeatAnswer: Decodable { let sessionLost: Bool? }
+
+    /// A beat now for a remote command that changes no playback state, so its ack beats the controller's
+    /// timeout instead of waiting for the periodic beat.
+    func acknowledge() { beat() }
 
     /// One state beat for `track` (the current one by default): the server derives plays and history.
     private func beat(_ track: QueueTrack? = nil, position at: Double? = nil, state: String? = nil) {
@@ -519,10 +578,13 @@ enum MusicTransport: Equatable {
         lastBeat = Date()
         let body = Beat(positionSeconds: at ?? position, durationSeconds: duration > 0 ? duration : (track.durationSeconds ?? 0),
                         mediaFileId: r.mediaFileId, itemId: track.itemId, sessionId: r.sessionId,
-                        state: state ?? (isPlaying ? "playing" : "paused"))
+                        state: state ?? (isPlaying ? "playing" : "paused"),
+                        targetId: RemoteControlService.shared.targetId,
+                        lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
+                        queue: queueToSend(sid: r.sessionId))
         Task {
             let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body)
-            if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil }
+            if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil; queueSent = nil }
         }
     }
 

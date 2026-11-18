@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// An album: editions, discs, tracks and credits. A tap on a track plays the album from it.
+/// An album: discs, tracks and credits. A tap on a track plays the album from it.
 struct AlbumView: View {
     let mediaId: Int
     var onSelectArtist: (Int) -> Void
@@ -9,7 +9,6 @@ struct AlbumView: View {
 
     @State private var state: LoadState = .loading
     @State private var tracks: [Track] = []
-    @State private var editionId: Int?
     @Environment(Backdrop.self) private var backdrop
     @Environment(PlaylistPicker.self) private var picker
     @Environment(PartyService.self) private var party
@@ -35,18 +34,17 @@ struct AlbumView: View {
     }
 
     private func content(_ page: AlbumPage) -> some View {
-        let edition = page.album.edition(editionId)
-        let discs = Disc.group(tracks, edition: edition?.id)
+        let discs = Disc.group(tracks)
         return ScrollView {
             VStack(alignment: .leading, spacing: 36) {
-                header(page, edition)
+                header(page)
                 ForEach(discs) { disc in
                     VStack(alignment: .leading, spacing: 10) {
                         if discs.count > 1 {
                             Text([trp("music.disc", ["n": String(disc.number)]), disc.title].compactMap { $0 }.joined(separator: " · "))
                                 .font(.title3.bold())
                         }
-                        ForEach(disc.tracks) { t in line(t, page, edition) }
+                        ForEach(disc.tracks) { t in line(t, page) }
                     }
                     .focusSection()
                 }
@@ -58,19 +56,19 @@ struct AlbumView: View {
         .onAppear { backdrop.url = page.fanartUrl ?? page.posterUrl }
     }
 
-    private func header(_ page: AlbumPage, _ edition: AlbumEdition?) -> some View {
+    private func header(_ page: AlbumPage) -> some View {
         HStack(alignment: .top, spacing: 48) {
-            PosterImage(path: edition?.coverUrl ?? page.posterUrl, size: .full)
+            PosterImage(path: page.album.release.coverUrl ?? page.posterUrl, size: .full)
                 .frame(width: 380, height: 380)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 18) {
                 Text(page.title).font(.system(size: 48, weight: .bold)).lineLimit(2)
                 artistButtons(page)
-                Text(facts(page, edition)).font(.callout).foregroundStyle(.secondary)
+                Text(facts(page)).font(.callout).foregroundStyle(.secondary)
                 if let overview = page.overview, !overview.isEmpty {
                     Text(overview).font(.body).lineLimit(3).frame(maxWidth: 900, alignment: .leading)
                 }
-                actions(page, edition)
+                actions(page)
             }
         }
     }
@@ -90,8 +88,8 @@ struct AlbumView: View {
         }
     }
 
-    private func actions(_ page: AlbumPage, _ edition: AlbumEdition?) -> some View {
-        let queue = playable(page, edition)
+    private func actions(_ page: AlbumPage) -> some View {
+        let queue = playable(page)
         return HStack(spacing: 24) {
             Button { player.play(queue) } label: { Label(tr("music.play"), systemImage: "play.fill") }
                 .buttonStyle(.borderedProminent)
@@ -107,31 +105,25 @@ struct AlbumView: View {
                 } label: { Label(tr("party.watch_together"), systemImage: "person.2.fill") }
                     .buttonStyle(.bordered)
             }
-            if page.album.editions.count > 1 {
-                Picker(tr("music.editions"), selection: Binding(get: { edition?.id ?? 0 }, set: { editionId = $0 })) {
-                    ForEach(page.album.editions) { e in Text(editionLabel(e)).tag(e.id) }
-                }
-                .pickerStyle(.menu)
-            }
         }
         .focusSection()
     }
 
-    private func line(_ t: Track, _ page: AlbumPage, _ edition: AlbumEdition?) -> some View {
-        let queue = playable(page, edition)
+    private func line(_ t: Track, _ page: AlbumPage) -> some View {
+        let queue = playable(page)
         let albumArtists = page.album.artists.map(\.name).joined(separator: ", ")
         let own = MusicFormat.artistLine(t.artists)
         return TrackLine(number: t.trackNumber.map(String.init) ?? t.label, title: t.title,
                          subtitle: own == albumArtists ? nil : own,
                          duration: MusicFormat.duration(t.durationSeconds), explicit: t.explicit, favourite: t.favourite,
                          playing: player.current?.itemId == t.itemId, disabled: !t.playable,
-                         actions: actions(t, page, edition)) {
+                         actions: actions(t, page)) {
             player.play(queue, from: queue.firstIndex { $0.itemId == t.itemId } ?? 0)
         }
     }
 
-    private func actions(_ t: Track, _ page: AlbumPage, _ edition: AlbumEdition?) -> TrackActions {
-        let item = QueueTrack(track: t, album: page, edition: edition)
+    private func actions(_ t: Track, _ page: AlbumPage) -> TrackActions {
+        let item = QueueTrack(track: t, album: page)
         return TrackActions(
             favourite: t.favourite,
             onFavourite: { toggleFavourite(t, page) },
@@ -161,25 +153,20 @@ struct AlbumView: View {
 
     // MARK: - Data
 
-    private func playable(_ page: AlbumPage, _ edition: AlbumEdition?) -> [QueueTrack] {
-        tracks.filter { $0.playable && (edition == nil || $0.editionId == edition?.id) }
-            .map { QueueTrack(track: $0, album: page, edition: edition) }
+    private func playable(_ page: AlbumPage) -> [QueueTrack] {
+        tracks.filter(\.playable).map { QueueTrack(track: $0, album: page) }
     }
 
-    private func facts(_ page: AlbumPage, _ edition: AlbumEdition?) -> String {
+    private func facts(_ page: AlbumPage) -> String {
         var parts: [String] = []
         if let y = page.year ?? page.album.firstReleaseDate.flatMap({ Int($0.prefix(4)) }) { parts.append(String(y)) }
         if let type = page.album.primaryType { parts.append(type) }
-        let list = tracks.filter { edition == nil || $0.editionId == edition?.id }
-        parts.append(trp(list.count == 1 ? "music.track_count_one" : "music.track_count_other", ["count": String(list.count)]))
-        let seconds = list.compactMap(\.durationSeconds).reduce(0, +)
+        parts.append(trp(tracks.count == 1 ? "music.track_count_one" : "music.track_count_other", ["count": String(tracks.count)]))
+        let seconds = tracks.compactMap(\.durationSeconds).reduce(0, +)
         if seconds > 0 { parts.append(MusicFormat.duration(seconds)) }
+        let r = page.album.release
+        parts += [r.label, r.country, r.media, r.catalogNumber].compactMap { $0 }.filter { !$0.isEmpty }
         return parts.joined(separator: " · ")
-    }
-
-    private func editionLabel(_ e: AlbumEdition) -> String {
-        [e.title, e.country, e.media, e.releaseDate.map { String($0.prefix(4)) }].compactMap { $0 }.filter { !$0.isEmpty }
-            .joined(separator: " · ")
     }
 
     private func load() async {

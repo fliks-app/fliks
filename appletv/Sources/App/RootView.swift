@@ -42,6 +42,10 @@ struct RootView: View {
                                               episodeId: episodeId, startAt: startAt, startPaused: startPaused,
                                               launch: tracks))
                 }
+                RemoteControlService.shared.onOpenMusic = {
+                    path = NavigationPath()
+                    path.append(Route.nowPlaying)
+                }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
                 party.onGoHome = { path = NavigationPath() }
                 party.onOpenMusic = {
@@ -174,7 +178,9 @@ struct RootView: View {
                     case let .artist(id):
                         ArtistView(personId: id, onSelectAlbum: { path.append(Route.album(id: $0)) })
                     case .nowPlaying:
-                        NowPlayingView(onClose: { if !path.isEmpty { path.removeLast() } })
+                        NowPlayingView(onClose: { if !path.isEmpty { path.removeLast() } },
+                                       onSelectAlbum: { path.append(Route.album(id: $0)) },
+                                       onSelectArtist: { path.append(Route.artist(id: $0)) })
                     case let .player(mediaFileId, mediaId, episodeId, startAt, startPaused, launch):
                         PlayerView(
                             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,

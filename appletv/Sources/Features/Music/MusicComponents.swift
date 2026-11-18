@@ -198,3 +198,58 @@ private struct TrackLineStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
+
+/// A native circular button: prominent in the app colour for the main action, the symbol tinted while `active`.
+struct RoundButton: View {
+    let symbol: String
+    let size: CGFloat
+    var filled = false
+    var active = false
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if filled {
+                button.buttonStyle(.borderedProminent).tint(Color.fliks(nil))
+            } else {
+                button.buttonStyle(.bordered)
+            }
+        }
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(label)
+    }
+
+    private var button: some View {
+        Button(action: action) { RoundSymbol(symbol: symbol, size: size, active: active) }
+    }
+}
+
+/// A `RoundButton` that opens a menu.
+struct RoundMenu<Content: View>: View {
+    let symbol: String
+    let size: CGFloat
+    let label: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        Menu(content: content) { RoundSymbol(symbol: symbol, size: size, active: false) }
+            .menuStyle(.button)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel(label)
+    }
+}
+
+private struct RoundSymbol: View {
+    let symbol: String
+    let size: CGFloat
+    let active: Bool
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.4, weight: .medium))
+            .foregroundStyle(active ? AnyShapeStyle(Color.fliks(nil)) : AnyShapeStyle(.foreground))
+            .frame(width: size * 0.55, height: size * 0.55)
+    }
+}
