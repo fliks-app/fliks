@@ -3,16 +3,16 @@
 Musik gesellt sich zu Filmen, Serien und Büchern, von der Beschaffung bis zur Wiedergabe.
 
 ### Alben, wie sie erschienen sind
-- Ein Album ist eine MusicBrainz-Veröffentlichung, mit seinem Cover aus dem Cover Art Archive. Andere Versionen desselben Albums werden auf seiner Seite in einer Zeile zusammengefasst.
+- Ein Album ist eine MusicBrainz-Veröffentlichung, mit seinem Cover aus dem Cover Art Archive und Künstlerbildern von Fanart.tv. Beides kommt über mit Fliks installierte Plugins. Andere Versionen desselben Albums werden auf seiner Seite in einer Zeile zusammengefasst.
 - Folgen Sie einem Künstler, um die neuen Alben seiner Diskografie zu erhalten, gefiltert nach den Typen, die Ihre Bibliothek akzeptiert (Alben, EPs, Singles, Live...).
-- Folgen Sie Listen von ListenBrainz, Last.fm, Spotify, Deezer oder MusicBrainz.
+- Folgen Sie Listen von ListenBrainz, Last.fm, Spotify, Deezer oder MusicBrainz mit dem Plugin Music lists aus dem Katalog.
 
 ### Importieren Sie, was Sie schon haben
 - Fliks liest Ihre Tags: Der Ordner ist das Album, Disc-Ordner werden zusammengeführt, und MusicBrainz-IDs entscheiden über die Zuordnung.
 - Das Zurückschreiben von Tags in Ihre Dateien ist optional. Eine Lidarr-Bibliothek kann importiert werden.
 
 ### Songtexte
-- Aus Ihren Dateien (eingebettet oder .lrc, .elrc, .ttml, .srt, .txt neben dem Titel), von LRCLIB oder von Ihnen selbst geschrieben mit einem Editor, in dem Sie per Tippen synchronisieren.
+- Aus Ihren Dateien (eingebettet oder .lrc, .elrc, .ttml, .srt, .txt neben dem Titel), von LRCLIB (ein mit Fliks installiertes Plugin) oder von Ihnen selbst geschrieben mit einem Editor, in dem Sie per Tippen synchronisieren.
 - Wort für Wort getimte Songtexte, wenn die Quelle sie hat. Ordnen Sie die Songtext-Quellen neu oder schalten Sie sie aus.
 
 ## Suchen, hören, mitnehmen

@@ -3,16 +3,16 @@
 La musica si unisce a film, serie e libri, dall'acquisizione alla riproduzione.
 
 ### Album come sono stati pubblicati
-- Un album è una release di MusicBrainz, con la sua copertina dal Cover Art Archive. Le altre versioni dello stesso album si raccolgono in una riga nella sua pagina.
+- Un album è una release di MusicBrainz, con la sua copertina dal Cover Art Archive e le immagini degli artisti da Fanart.tv. Entrambe arrivano tramite plugin installati con Fliks. Le altre versioni dello stesso album si raccolgono in una riga nella sua pagina.
 - Segui un artista per ricevere i nuovi album della sua discografia, filtrati per i tipi che la tua libreria accetta (album, EP, singoli, live...).
-- Segui le liste di ListenBrainz, Last.fm, Spotify, Deezer o MusicBrainz.
+- Segui le liste di ListenBrainz, Last.fm, Spotify, Deezer o MusicBrainz con il plugin Music lists, dal catalogo.
 
 ### Importa ciò che hai già
 - Fliks legge i tuoi tag: la cartella è l'album, le cartelle dei dischi vengono unite e gli id MusicBrainz decidono la corrispondenza.
 - La scrittura dei tag nei tuoi file è facoltativa. Si può importare una libreria Lidarr.
 
 ### Testi
-- Dai tuoi file (incorporati o .lrc, .elrc, .ttml, .srt, .txt accanto al brano), da LRCLIB, o scritti da te con un editor in cui sincronizzi con un tocco.
+- Dai tuoi file (incorporati o .lrc, .elrc, .ttml, .srt, .txt accanto al brano), da LRCLIB (un plugin installato con Fliks), o scritti da te con un editor in cui sincronizzi con un tocco.
 - Testi parola per parola quando la fonte li ha. Riordina o disattiva le fonti dei testi.
 
 ## Cerca, ascolta, portala con te

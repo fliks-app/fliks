@@ -1,4 +1,4 @@
-import { parseWhatsNew } from './whats-new-modal';
+import { parseWhatsNew, versionsToShow } from './whats-new-modal';
 
 describe('parseWhatsNew', () => {
   const base = 'https://fliks.test/whats-new/7.0.0/';
@@ -27,5 +27,25 @@ describe('parseWhatsNew', () => {
 
   it('returns nothing for a file without sections', () => {
     expect(parseWhatsNew('Just a line.', base)).toEqual([]);
+  });
+});
+
+describe('versionsToShow', () => {
+  const index = ['5.2.0', '6.0.0', '7.0.0', '7.1.0', '8.0.0'];
+
+  it('shows every version after the last seen one up to the current, newest first', () => {
+    expect(versionsToShow(index, '5.4.1', '7.0.3')).toEqual(['7.0.0', '6.0.0']);
+  });
+
+  it('caps a long jump at three versions', () => {
+    expect(versionsToShow(index, '5.0.0', '8.0.0')).toEqual(['8.0.0', '7.1.0', '7.0.0']);
+  });
+
+  it('shows only the newest notes when nothing was seen', () => {
+    expect(versionsToShow(index, null, '7.0.2')).toEqual(['7.0.0']);
+  });
+
+  it('compares numerically and ignores a pre-release suffix', () => {
+    expect(versionsToShow(['6.10.0', '6.9.0'], '6.9.0', '6.10.0-beta.2')).toEqual(['6.10.0']);
   });
 });

@@ -8,12 +8,14 @@ E-Books und Hörbücher gibt es jetzt in Fliks, neben Ihren Filmen und Serien.
 - Filtern Sie nach Format, Sprache, Autor, Sprecher oder angefangenen Büchern.
 
 ### Metadaten aus offenen Quellen
-- Open Library, die BnF und Google Books für E-Books, Audible und Audnexus für Hörbücher. Sie bestimmen die Reihenfolge.
+- Open Library, die BnF und Google Books für E-Books, Audible und Audnexus für Hörbücher. Jede Quelle ist ein mit Fliks installiertes Plugin: Sie bestimmen die Reihenfolge oder schalten eine ab.
 - Eine Reihe kann auch von Hand festgelegt werden.
 
 ### Bücher beschaffen
 - Nutzer fordern eine Ausgabe in der gewünschten Sprache an, im Rahmen ihrer Kontingente.
 - Importieren Sie eine bestehende Bibliothek auf einmal, oder kopieren und verschieben Sie Dateien über die Seite für den manuellen Import.
+- Downloads laufen über das Plugin Download aus dem Plugin-Katalog.
+- Fügen Sie kostenlose E-Books von Project Gutenberg und kostenlose Hörbücher von LibriVox mit ihren Plugins aus dem Katalog hinzu.
 - Senden Sie ein Buch per E-Mail an einen Kindle, einen PocketBook oder eine beliebige Adresse.
 
 ## In Fliks lesen
@@ -56,7 +58,7 @@ Ein einziger Leser für EPUB, EPUB mit festem Layout, PDF und CBZ.
 ### Bände und Ausgaben
 - Ein Band enthält seine Ausgaben, Jahresbände und Sonderhefte. Ein Variant-Cover wird zu einer weiteren Version derselben Ausgabe.
 - Fliks liest die ComicInfo.xml aus CBZ-, CB7-, CBR- und PDF-Dateien. Ihre eigenen Änderungen bleiben bei erneuten Scans erhalten.
-- Metron und Comic Vine ergänzen die Details, mit Ihrem eigenen API-Schlüssel.
+- Metron und Comic Vine ergänzen die Details. Beide sind Plugins aus dem Katalog, mit Ihrem eigenen API-Schlüssel.
 
 ### Fehlende Ausgaben
 - Fliks kann nach den Ausgaben suchen, die einem Band fehlen, eine Ausgabe nach der anderen.

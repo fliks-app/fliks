@@ -3,16 +3,16 @@
 A música junta-se aos filmes, séries e livros, da aquisição à reprodução.
 
 ### Álbuns tal como foram lançados
-- Um álbum é um lançamento do MusicBrainz, com a sua capa do Cover Art Archive. As outras versões do mesmo álbum agrupam-se numa linha na sua página.
+- Um álbum é um lançamento do MusicBrainz, com a sua capa do Cover Art Archive e imagens de artistas do Fanart.tv. Ambas chegam através de plugins instalados com o Fliks. As outras versões do mesmo álbum agrupam-se numa linha na sua página.
 - Siga um artista para receber os novos álbuns da sua discografia, filtrados pelos tipos que a sua biblioteca aceita (álbuns, EP, singles, ao vivo...).
-- Siga listas do ListenBrainz, Last.fm, Spotify, Deezer ou MusicBrainz.
+- Siga listas do ListenBrainz, Last.fm, Spotify, Deezer ou MusicBrainz com o plugin Music lists, do catálogo.
 
 ### Importe o que já tem
 - O Fliks lê as suas etiquetas: a pasta é o álbum, as pastas de disco são juntadas e os ids do MusicBrainz decidem a correspondência.
 - Gravar as etiquetas de volta nos seus ficheiros é opcional. Pode importar-se uma biblioteca Lidarr.
 
 ### Letras
-- A partir dos seus ficheiros (incorporadas ou .lrc, .elrc, .ttml, .srt, .txt junto à faixa), do LRCLIB, ou escritas por si com um editor onde sincroniza com um toque.
+- A partir dos seus ficheiros (incorporadas ou .lrc, .elrc, .ttml, .srt, .txt junto à faixa), do LRCLIB (um plugin instalado com o Fliks), ou escritas por si com um editor onde sincroniza com um toque.
 - Letras palavra a palavra quando a fonte as tem. Reordene ou desative as fontes de letras.
 
 ## Pesquisar, ouvir, levar consigo

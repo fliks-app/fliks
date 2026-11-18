@@ -8,7 +8,9 @@
     <app-modal-header flush>
       <div class="flex items-center gap-2">
         <svg lucideRocket class="h-5 w-5 text-primary"></svg>
-        <h3 class="text-lg font-bold">{{ 'whats_new.title' | translate: { version } }}</h3>
+        <h3 class="text-lg font-bold">
+          {{ 'whats_new.title' | translate: { version: version() } }}
+        </h3>
       </div>
     </app-modal-header>
 
@@ -61,6 +63,7 @@
             <button
               class="h-2 rounded-full transition-all"
               [class]="$index === index() ? 'w-6 bg-primary' : 'w-2 bg-base-content/40'"
+              [class.ml-3]="startsGroup($index)"
               [attr.aria-label]="slide.title"
               [attr.aria-current]="$index === index()"
               (click)="go($index)"

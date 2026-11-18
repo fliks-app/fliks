@@ -8,12 +8,14 @@ Ebook e audiolibri arrivano in Fliks, accanto ai tuoi film e alle tue serie.
 - Filtra per formato, lingua, autore, narratore o libri in corso.
 
 ### Metadati da fonti aperte
-- Open Library, la BnF e Google Books per gli ebook, Audible e Audnexus per gli audiolibri. Scegli tu l'ordine.
+- Open Library, la BnF e Google Books per gli ebook, Audible e Audnexus per gli audiolibri. Ogni fonte è un plugin installato con Fliks: scegli tu l'ordine o disattivane una.
 - Una serie può anche essere definita a mano.
 
 ### Ottenere libri
 - Gli utenti richiedono un'edizione nella lingua che vogliono, entro i limiti delle loro quote.
 - Importa una libreria esistente in un colpo solo, oppure copia e sposta i file dalla pagina di importazione manuale.
+- I download passano dal plugin Download, dal catalogo dei plugin.
+- Aggiungi ebook gratuiti da Project Gutenberg e audiolibri gratuiti da LibriVox con i loro plugin, dal catalogo.
 - Invia un libro per e-mail a un Kindle, a un PocketBook o a qualsiasi indirizzo.
 
 ## Leggere in Fliks
@@ -56,7 +58,7 @@ Un solo lettore per EPUB, EPUB a layout fisso, PDF e CBZ.
 ### Volumi e numeri
 - Un volume raccoglie i suoi numeri, annuali e speciali. Una copertina variant diventa un'altra versione dello stesso numero.
 - Fliks legge il ComicInfo.xml dei file CBZ, CB7, CBR e PDF. Le tue modifiche restano dopo le nuove scansioni.
-- Metron e Comic Vine completano i dettagli, con la tua chiave API.
+- Metron e Comic Vine completano i dettagli. Sono due plugin da installare dal catalogo, con la tua chiave API.
 
 ### Numeri mancanti
 - Fliks può cercare i numeri che mancano a un volume, uno alla volta.

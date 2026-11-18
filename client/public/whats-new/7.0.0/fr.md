@@ -3,16 +3,16 @@
 La musique rejoint les films, séries et livres, de l'acquisition à l'écoute.
 
 ### Les albums tels qu'ils sont sortis
-- Un album correspond à une sortie MusicBrainz, avec sa pochette issue de la Cover Art Archive. Les autres versions du même album se replient dans une rangée sur sa page.
+- Un album correspond à une sortie MusicBrainz, avec sa pochette issue de la Cover Art Archive et les images d'artistes de Fanart.tv. Tous deux passent par des plugins installés avec Fliks. Les autres versions du même album se replient dans une rangée sur sa page.
 - Suivez un artiste pour recevoir les nouveaux albums de sa discographie, filtrés selon les types acceptés par votre bibliothèque (albums, EP, singles, live...).
-- Suivez des listes ListenBrainz, Last.fm, Spotify, Deezer ou MusicBrainz.
+- Suivez des listes ListenBrainz, Last.fm, Spotify, Deezer ou MusicBrainz avec le plugin Music lists, depuis le catalogue.
 
 ### Importer ce que vous avez déjà
 - Fliks lit vos tags : le dossier est l'album, les dossiers de disques sont fusionnés, et les identifiants MusicBrainz décident de l'association.
 - L'écriture des tags dans vos fichiers est à activer. Une bibliothèque Lidarr peut être importée.
 
 ### Paroles
-- Depuis vos fichiers (intégrées, ou .lrc, .elrc, .ttml, .srt, .txt à côté du morceau), depuis LRCLIB, ou écrites par vous avec un éditeur de synchronisation au toucher.
+- Depuis vos fichiers (intégrées, ou .lrc, .elrc, .ttml, .srt, .txt à côté du morceau), depuis LRCLIB (un plugin installé avec Fliks), ou écrites par vous avec un éditeur de synchronisation au toucher.
 - Paroles mot par mot quand la source les fournit. Réordonnez ou désactivez les sources de paroles.
 
 ## Chercher, écouter, emporter
