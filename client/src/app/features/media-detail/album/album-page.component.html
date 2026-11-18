@@ -87,7 +87,8 @@
 </ng-template>
 
 <ng-template #bar>
-  <div class="h-0.5 w-full basis-full" data-testid="album-progress">
+  <!-- Last in the hero row: the hero appends its like, playlist and menu buttons after this page's actions. -->
+  <div class="order-last h-0.5 w-full basis-full" data-testid="album-progress">
     @if (albumProgress() !== undefined) {
       <progress class="progress progress-primary block h-0.5 w-full" [attr.value]="albumProgress()" max="100" [attr.aria-label]="(albumProgress() == null ? 'downloads.downloading' : 'music.download_percent') | translate: { percent: albumProgress() }"></progress>
     }
