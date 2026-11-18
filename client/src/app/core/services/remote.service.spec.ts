@@ -159,6 +159,18 @@ describe('RemoteService observation', () => {
     expect(service.targetState()?.mediaTitle).toBe('Other');
   });
 
+  it('reads the frame a new owner sent just before it became the observed target', () => {
+    const { service, remoteState, owner } = setup({ selected: null });
+    owner.set('tv#1');
+    TestBed.tick();
+    remoteState.set(frame({ targetId: 'pc#1', mediaTitle: 'Other' }));
+    TestBed.tick();
+    expect(service.targetState()).toBeNull();
+    owner.set('pc#1');
+    TestBed.tick();
+    expect(service.targetState()?.mediaTitle).toBe('Other');
+  });
+
   it('observes nothing without a selection or an owner', () => {
     const { service, remoteState } = setup({ selected: null });
     remoteState.set(frame());

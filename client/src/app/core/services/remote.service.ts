@@ -393,6 +393,8 @@ export class RemoteService {
         if (id === observed) return;
         observed = id;
         if (!id || id !== this.selectedTargetId()) this.reportedState.set(null);
+        // Its frame can land just before it becomes the observed target (a takeover settles after its beat).
+        this.ingestState();
         if (id) void this.refreshTargets();
       });
     });

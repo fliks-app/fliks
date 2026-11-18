@@ -242,6 +242,35 @@ fn remote_sees_connection_bound_sessions_with_stale_now_playing_omitted() {
 }
 
 #[test]
+fn now_playing_carries_what_the_last_beat_told_the_card() {
+    let mut s = LiveSession::from_snapshot(&snap("a", None, 1000.0, 50_000.0));
+    s.apply(
+        &Beat {
+            media_id: Some(4),
+            episode_id: Some(Some(9)),
+            duration: Some(Some(1200.0)),
+            episode_label: Some(Some("S1:E2".into())),
+            item_id: Some(11),
+            ..Beat::default()
+        },
+        55_000.0,
+    );
+    let live = live_at(vec![s], 60_000.0, 30_000.0);
+    let np = live[0].now_playing.as_ref().unwrap();
+    assert_eq!(
+        (
+            np.session_id.as_str(),
+            np.media_id,
+            np.episode_id,
+            np.item_id
+        ),
+        ("a", Some(4), Some(9), Some(11))
+    );
+    assert_eq!(np.episode_label.as_deref(), Some("S1:E2"));
+    assert_eq!(np.duration_seconds.as_ref().map(|d| d.0), Some(1200.0));
+}
+
+#[test]
 fn streams_follow_the_engine_list_else_the_ttl() {
     let a = LiveSession::from_snapshot(&snap("a", None, 1.0, 59_000.0));
     let b = LiveSession::from_snapshot(&snap("b", None, 1.0, 10_000.0));

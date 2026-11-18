@@ -145,9 +145,14 @@ fn presence_beat(
     b: &Value,
     sse: Option<String>,
     owner: Option<Identity>,
-    item_id: Option<i32>,
+    (media_id, item_id): (Option<i32>, Option<i32>),
 ) -> Beat {
     Beat {
+        media_id,
+        episode_id: nullable(b, "episodeId", |v| {
+            v.as_i64().and_then(|n| i32::try_from(n).ok())
+        }),
+        duration: nullable(b, "durationSeconds", Value::as_f64),
         position: num(b, "positionSeconds"),
         state: play_state(b),
         quality: text(b, "quality"),
@@ -587,7 +592,7 @@ pub async fn heartbeat(
             Some(true) => None,
             _ => st
                 .presence
-                .heartbeat(sid, &presence_beat(&body, conn, owner, item)),
+                .heartbeat(sid, &presence_beat(&body, conn, owner, (Some(media), item))),
         };
         attributed = updated.as_ref().and_then(|u| u.attributed_user_id);
         state_changed = updated.is_some()
@@ -749,6 +754,9 @@ mod tests {
             state: PlayState::Playing,
             episode_label: None,
             item_id: None,
+            media_id: None,
+            episode_id: None,
+            duration: None,
             supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
@@ -781,7 +789,7 @@ mod tests {
 
     #[test]
     fn the_karaoke_report_keeps_valid_values_and_a_null_clears() {
-        let b = |v: Value| presence_beat(&v, None, None, None);
+        let b = |v: Value| presence_beat(&v, None, None, (None, None));
         let ok = b(json!({"stemMode":"guide","vocalLevel":0.5,"pitch":-3,"stemsAvailable":true}));
         assert_eq!(
             (ok.stem_mode, ok.vocal_level, ok.pitch, ok.stems_available),
@@ -1024,10 +1032,10 @@ mod tests {
             play_state(&json!({"state": "paused"})),
             Some(PlayState::Paused)
         );
-        let b = presence_beat(&json!({"supportsVolume": null}), None, None, None);
+        let b = presence_beat(&json!({"supportsVolume": null}), None, None, (None, None));
         assert_eq!(b.supports_volume, Some(None));
         assert_eq!(
-            presence_beat(&json!({}), None, None, None).supports_volume,
+            presence_beat(&json!({}), None, None, (None, None)).supports_volume,
             None
         );
     }
