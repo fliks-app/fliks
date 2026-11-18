@@ -6,7 +6,9 @@ JOIN persons q ON name_key(q.name) = name_key(p.name) AND q.id <> p.id
 WHERE NOT EXISTS (SELECT 1 FROM person_external_ids x WHERE x."personId" = p.id)
   AND NOT EXISTS (SELECT 1 FROM person_external_id_aliases x WHERE x."personId" = p.id)
   AND NOT EXISTS (SELECT 1 FROM media_credits c JOIN media m ON m.id = c."mediaId"
-                   WHERE c."personId" = p.id AND m.type IN ('movie', 'series'))
+                   WHERE c."personId" = p.id AND m.type <> 'album')
+  AND NOT EXISTS (SELECT 1 FROM item_credits c JOIN items i ON i.id = c."itemId" JOIN media m ON m.id = i."mediaId"
+                   WHERE c."personId" = p.id AND m.type <> 'album')
 GROUP BY p.id
 HAVING count(*) = 1;
 
