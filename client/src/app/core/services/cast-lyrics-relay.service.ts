@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, untracked } from '@angular/core';
 import { LyricsApiService } from './api/lyrics-api.service';
 import { AudioPlayerService } from './audio-player/audio-player.service';
+import { KaraokeService } from './karaoke/karaoke.service';
 import { CastService } from './cast.service';
 import { chunkLyrics } from './cast-lyrics';
 import { mainLyrics } from '../../shared/audio-player/lyrics/lyrics-logic';
@@ -11,15 +12,15 @@ export class CastLyricsRelayService {
   private readonly api = inject(LyricsApiService);
   private readonly audio = inject(AudioPlayerService);
   private readonly cast = inject(CastService);
+  private readonly karaoke = inject(KaraokeService);
   private seq = 0;
   /** Each push rebuilds the receiver's lyrics: only a new track or a karaoke switch sends one. */
   private readonly itemId = computed(() => (this.cast.isConnected() && this.audio.musicMode() ? this.audio.track()?.itemId : undefined));
-  private readonly karaoke = computed(() => this.audio.stemMode() !== 'original');
 
   constructor() {
     effect(() => {
       const itemId = this.itemId();
-      const karaoke = this.karaoke();
+      const karaoke = this.karaoke.stage();
       untracked(() => void this.push(itemId, karaoke));
     });
   }

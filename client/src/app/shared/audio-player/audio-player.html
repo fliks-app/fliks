@@ -291,7 +291,7 @@
         @if (!queueInline() || lyricsShown()) {
           <div class="flex min-w-0 flex-col gap-4 sm:flex-1" [class.min-h-0]="panelFills()" [class.flex-1]="panelFills()" [class.max-sm:hidden]="audio.musicMode() && !lyricsShown() && asSheet()">
             @if (audio.musicMode() && lyricsShown()) {
-              <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" data-relayout="lyrics" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" [(stage)]="karaokeStage" (found)="hasLyrics.set($event)" />
+              <app-lyrics-panel animate.enter="fade-up-in" class="min-h-0 flex-1" data-relayout="lyrics" [itemId]="t.itemId" [edit]="lyricsEdit()" [output]="remoteView() ? audio : null" [seekable]="controllable()" [(stage)]="karaoke.stage" (found)="hasLyrics.set($event)" />
             } @else if (!audio.musicMode()) {
             <section class="scroll-ring-safe max-h-56 overflow-y-auto" appTvSection>
               <h3 class="menu-title px-0">{{ 'audio_player.chapters' | translate }}</h3>

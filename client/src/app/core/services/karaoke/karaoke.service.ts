@@ -40,6 +40,8 @@ export class KaraokeService {
   private readonly device = inject(DeviceService);
 
   readonly store = new FrameStore();
+  /** The karaoke view of the full player, kept while the lyrics are hidden; the cast receiver follows it. */
+  readonly stage = signal(false);
   readonly singing = signal(false);
   readonly micIssue = signal<'denied' | 'unavailable' | null>(null);
   readonly latencyMs = signal(Number(readStored(LATENCY_KEY)) || 0);
