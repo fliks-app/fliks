@@ -271,12 +271,12 @@
       </div>
 
       <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2" [class.overflow-hidden]="panelFills()" [class.overflow-y-auto]="!panelFills()" [class.short:min-h-0]="panelFills()" appTvSection>
-        <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
-          <div data-morph="cover" class="player-cover relative flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 short:max-w-32 sm:max-w-64">
+        <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64 tv:w-[22rem]" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
+          <div data-morph="cover" class="player-cover relative flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 short:max-w-32 sm:max-w-64 tv:max-w-none">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
               @if (!coverFailed()) {
                 @for (c of [cover]; track c) {
-                  <img [cachedSrc]="c" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" (error)="coverFailed.set(true)" />
+                  <img [cachedSrc]="c" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" (load)="isTv() && tintFrom($any($event.target), fullTint)" (error)="coverFailed.set(true)" />
                 }
               } @else {
                 <svg lucideMusic class="h-16 w-16" [strokeWidth]="1.5"></svg>
@@ -285,6 +285,10 @@
               <svg lucideMusic class="h-16 w-16" [strokeWidth]="1.5"></svg>
             }
           </div>
+          <!-- TV: the title sits under the cover, leaving the height to the lyrics. -->
+          @if (audio.musicMode() && isTv()) {
+            <ng-container *ngTemplateOutlet="trackMeta" />
+          }
           @if (!audio.musicMode()) {
             <div class="text-center">
               <div class="text-sm text-base-content/60">{{ t.artist }}</div>
@@ -355,8 +359,11 @@
       </div>
 
       <div class="contents short:col-start-2 short:row-span-2 short:row-start-1 short:flex short:flex-col short:justify-between short:gap-2">
-      @if (audio.musicMode()) {
-        <div class="flex items-center gap-3">
+      @if (audio.musicMode() && !isTv()) {
+        <ng-container *ngTemplateOutlet="trackMeta" />
+      }
+      <ng-template #trackMeta>
+        <div class="flex w-full items-center gap-3">
           @if (lyricsShown()) {
             <div animate.enter="fade-up-in" class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-base-300 text-base-content/20 sm:hidden">
               @if (t.coverUrl | resolveUrl: 'thumb'; as cover) {
@@ -373,7 +380,7 @@
           <div class="min-w-0 flex-1">
             @for (k of [t.title + '|' + t.artist]; track k) {
               <div animate.enter="fade-up-in">
-                <app-marquee class="text-xl font-semibold" [text]="t.title" data-morph="title" />
+                <app-marquee class="text-xl font-semibold tv:text-2xl" [text]="t.title" data-morph="title" />
                 @if (artistId(); as id) {
                   <a class="block text-base-content/60 hover:underline" [routerLink]="['/artists', id]" (click)="audio.collapse()" data-testid="audio-artist" data-morph="artist">
                     <app-marquee [text]="t.artist ?? ''" />
@@ -400,7 +407,7 @@
             </button>
           </div>
         </div>
-      }
+      </ng-template>
 
       <div class="flex flex-col gap-1">
         <app-seekbar
@@ -411,16 +418,23 @@
           [disabled]="!controllable()"
           (seek)="audio.seek($event)"
         />
-        <div class="flex justify-between text-sm tabular-nums text-base-content/60">
+        <div class="flex justify-between text-sm tabular-nums text-base-content/60 tv:text-base">
           <span>{{ clock(audio.position()) }}</span>
           <span>-{{ clock(audio.duration() - audio.position()) }}</span>
         </div>
       </div>
 
       @if (audio.musicMode()) {
+      @let canListenHere = remoteView() && !parkedView() && sync.canPlayHere();
       <!-- TV: the actions share the transport row, leaving the height to the lyrics. -->
       <div [class]="isTv() ? 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center' : 'contents'">
-      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" [class.col-start-2]="isTv()" appTvRow>
+      @if (isTv() && canListenHere) {
+        <button type="button" animate.enter="fade-up-in" class="btn btn-primary col-start-1 row-start-1 justify-self-start" (click)="listenHere()">
+          <svg lucideTv class="h-5 w-5"></svg>
+          {{ 'session.listen_here' | translate }}
+        </button>
+      }
+      <div class="flex items-center justify-between px-4 sm:mx-auto sm:w-full sm:max-w-sm sm:px-0" [class.col-start-2]="isTv()" [class.row-start-1]="isTv()" appTvRow>
         <button
           type="button"
           class="btn btn-ghost btn-circle [--size:2.5rem]"
@@ -541,7 +555,7 @@
         }
       </div>
       </div>
-      @if (remoteView() && !parkedView() && sync.canPlayHere()) {
+      @if (!isTv() && canListenHere) {
         <div class="grid" animate.enter="reveal-in" animate.leave="reveal-out">
           <div class="flex min-h-0 flex-col">
             <button type="button" class="btn btn-primary" (click)="listenHere()">
@@ -604,7 +618,7 @@
 
 @if (asSheet()) {
   <app-bottom-sheet [open]="sheetOpen()" [fullHeight]="true" [showBackdrop]="false" (closed)="audio.collapse()">
-    <div class="flex min-h-0 flex-1 flex-col px-4 pb-4">
+    <div class="flex min-h-0 flex-1 flex-col px-4 pb-4 tv:px-[var(--page-p)] tv:py-[calc(var(--page-p)/2)]" [style.background]="backdrop()">
       <ng-container *ngTemplateOutlet="full" />
     </div>
   </app-bottom-sheet>

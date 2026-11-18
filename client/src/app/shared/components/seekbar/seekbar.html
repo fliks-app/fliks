@@ -103,7 +103,7 @@
     @if (showPositionFill()) {
       <div
         class="absolute inset-y-0 left-0 rounded-l-full"
-        [class]="variant() === 'player' ? 'bg-white' : 'bg-base-content'"
+        [class]="fillClass()"
         [style.width.%]="displayPercent()"
       ></div>
     }

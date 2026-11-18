@@ -226,9 +226,15 @@ export class SeekbarComponent {
    *  (sticky after a tap on mobile); classes are built here since `[class.h-1]` can't express a dot. */
   readonly trackClass = computed(() => {
     const thick = this.dragging() || this.hovering();
-    const base = `${this.variant() === 'cast' ? 'bg-base-300' : 'bg-white/20'} group-focus-visible:h-2.5`;
-    return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
+    // A base-300 track on a base-100 sheet is invisible from the couch.
+    const tvCast = this.tv.isTv() && this.variant() === 'cast';
+    const base = `${tvCast ? 'bg-base-content/15' : this.variant() === 'cast' ? 'bg-base-300' : 'bg-white/20'} group-focus-visible:h-2.5`;
+    return `${base} ${thick ? 'h-2.5' : tvCast ? 'h-2' : 'h-1'}`;
   });
+
+  readonly fillClass = computed(() =>
+    this.variant() === 'player' ? 'bg-white' : this.tv.isTv() ? 'bg-primary' : 'bg-base-content',
+  );
 
   /** Sweep overlay classes: white over video in the player, foreground colour on theme surfaces in the cast card. */
   readonly loadingSweepClass = computed(() => {

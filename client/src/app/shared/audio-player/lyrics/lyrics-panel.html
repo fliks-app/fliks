@@ -34,7 +34,7 @@
         @if (loading() && !res()) {
           <!-- Nothing until the lyrics land, so "no lyrics" never flashes. -->
         } @else if (shown(); as d) {
-          <app-lyrics-view animate.enter="fade-up-in" class="block h-full sm:h-80 sm:max-h-full lg:h-[28rem]" [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
+          <app-lyrics-view animate.enter="fade-up-in" class="block h-full sm:h-80 sm:max-h-full lg:h-[28rem] tv:h-full" [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
         } @else if (res()?.instrumental) {
           <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
         } @else {

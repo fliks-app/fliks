@@ -1,6 +1,6 @@
 <div
   #scroller
-  class="scroll-ring-safe relative flex h-full flex-col gap-3 short:gap-0 [mask-image:linear-gradient(to_bottom,transparent,#000_8%,#000_92%,transparent)]"
+  class="scroll-ring-safe relative flex h-full flex-col gap-3 short:gap-0 [mask-image:linear-gradient(to_bottom,transparent,#000_8%,#000_92%,transparent)] tv:[mask-image:linear-gradient(to_bottom,transparent,#000_15%,#000_85%,transparent)]"
   [class.overflow-y-auto]="!large() && !tv()"
   [class.overflow-hidden]="large() || tv()"
   appTvSection
@@ -14,7 +14,7 @@
       <button
         type="button"
         class="block w-full rounded-lg px-2 py-1 text-left short:py-0 transition-opacity disabled:cursor-default"
-        [class]="(bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : ' text-2xl font-bold sm:text-4xl compact:sm:text-2xl short:text-xl short:sm:text-xl') + ' ' + rowOpacity(i, r)"
+        [class]="(bgAgents().has(r.agentId ?? '') ? (large() ? ' text-xl' : ' text-base') : tv() ? ' text-[2.5rem]/tight font-bold' : ' text-2xl font-bold sm:text-4xl compact:sm:text-2xl short:text-xl short:sm:text-xl') + ' ' + rowOpacity(i, r)"
         [attr.aria-current]="activeSet().has(i) ? 'true' : null"
         [disabled]="!timed() || !seekable() || tv()"
         [style.color]="style(r.agentId)?.colour"
