@@ -47,6 +47,7 @@ playerManager.addEventListener(
   () => {
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
+    if (loadHold) Object.assign(loadHold, { loaded: true, until: Date.now() + LOAD_HOLD_SETTLE_MS });
     const current = playerManager.getQueueManager().getCurrentItem();
     if (current && current.itemId === upNext) upNext = null;
     renderMusic(playerManager.getMediaInformation());
@@ -511,6 +512,17 @@ function renderStateIcon(st, spinning) {
   if (resumed) iconTimer = setTimeout(() => stateIconEl.classList.remove('show'), 600);
 }
 
+// A LOAD of the playing file (a stem switch) reports the old media's time, then 0, until its start time:
+// the views hold that time and the file's duration meanwhile.
+const LOAD_HOLD_MS = 15000;
+const LOAD_HOLD_SETTLE_MS = 2000;
+let loadHold = null;
+function heldLoad() {
+  const h = loadHold;
+  if (h && (Date.now() > h.until || (h.loaded && Math.abs(playerManager.getCurrentTimeSec() - h.at) <= 1.5))) loadHold = null;
+  return loadHold;
+}
+
 function renderBar() {
   const st = playerData.state;
   const spinning = st === BarState.LOADING || st === BarState.BUFFERING;
@@ -519,8 +531,10 @@ function renderBar() {
   const idle = !st || st === BarState.IDLE || st === BarState.LAUNCHING;
   clearTimeout(splashTimer);
   if (idle) splashTimer = setTimeout(() => document.body.classList.remove('playing'), SPLASH_IDLE_MS);
-  const duration = Number.isFinite(playerData.duration) && playerData.duration > 0 ? playerData.duration : 0;
-  const time = playerData.currentTime || 0;
+  const hold = heldLoad();
+  const rawDuration = hold ? hold.duration : playerData.duration;
+  const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
+  const time = hold ? hold.at : playerData.currentTime || 0;
   const pct = (v) => (duration ? Math.min(100, (v / duration) * 100) : 0) + '%';
   const music = document.body.classList.contains('music-on');
   if (music) {
@@ -582,6 +596,9 @@ playerManager.setMessageInterceptor(
     // A LOAD starts a new queue: the up-next item went with the old one.
     upNext = null;
     upNextUrl = null;
+    const prevFile = fileOf(playerManager.getMediaInformation());
+    const prevDuration = playerData.duration;
+    loadHold = null;
     if (activeMix) closeMix(activeMix);
     const mixId = media && typeof media.contentId === 'string' && media.contentId.startsWith(MIX_SCHEME) ? media.contentId.slice(MIX_SCHEME.length) : null;
     if (mixId && mixSpecs.has(mixId)) {
@@ -594,6 +611,9 @@ playerManager.setMessageInterceptor(
     if (document.body.classList.contains('music-on')) document.body.classList.add('playing');
     if (media) {
       prepareEdl(media, loadRequest);
+      if (prevFile !== null && fileOf(media) === prevFile) {
+        loadHold = { at: loadRequest.currentTime || 0, duration: prevDuration, loaded: false, until: Date.now() + LOAD_HOLD_MS };
+      }
       cueState.fileId = media.customData ? media.customData.mediaFileId ?? null : null;
       cueState.sender = loadRequest.senderId || null;
       if (cueState.sender && claim(lyricsState, cueState.sender)) dropLyrics();
@@ -910,7 +930,8 @@ function refreshLyrics() {
   lyricsEl.classList.add('show');
   if (!timed) return;
   const playing = playerManager.getPlayerState() === cast.framework.messages.PlayerState.PLAYING;
-  const pos = lyricsClock(playerManager.getCurrentTimeSec() * 1000, performance.now(), playing);
+  const hold = heldLoad();
+  const pos = lyricsClock((hold ? hold.at : playerManager.getCurrentTimeSec()) * 1000, performance.now(), playing);
   const i = activeIndex(doc.rows, pos, doc.offset);
   if (i !== lyricsState.shown) {
     const fresh = lyricsState.shown === -2;
@@ -1010,6 +1031,11 @@ const musicPlayed = musicEl.querySelector('.music-played');
 
 function musicItemId(info) {
   const id = info && info.customData ? info.customData.itemId : undefined;
+  return typeof id === 'number' ? id : null;
+}
+
+function fileOf(info) {
+  const id = info && info.customData ? info.customData.mediaFileId : undefined;
   return typeof id === 'number' ? id : null;
 }
 

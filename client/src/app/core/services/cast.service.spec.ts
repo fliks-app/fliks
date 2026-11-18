@@ -135,6 +135,24 @@ describe('CastService text track picks', () => {
     expect(lastActive(editTracksInfo)).toEqual([]);
   });
 
+  it('shows the start time of a LOAD until the receiver reaches it', async () => {
+    const { session } = stubCastSdk(TEXT_TRACKS);
+    let finish!: () => void;
+    session.loadMedia.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    const svc = make(session);
+    const loading = svc.loadMedia({ ...load(), currentTime: 62 });
+
+    svc.applyMediaUpdate({ currentTime: 61.8 });
+    svc.applyMediaUpdate({ currentTime: 0 });
+    expect(svc.currentTime()).toBe(62);
+    finish();
+    await loading;
+    svc.applyMediaUpdate({ currentTime: 0 });
+    expect(svc.currentTime()).toBe(62);
+    svc.applyMediaUpdate({ currentTime: 62.4 });
+    expect(svc.currentTime()).toBe(62.4);
+  });
+
   it('lets the latest of two picks made during a LOAD win', async () => {
     const { session, editTracksInfo } = stubCastSdk([
       ...TEXT_TRACKS,
