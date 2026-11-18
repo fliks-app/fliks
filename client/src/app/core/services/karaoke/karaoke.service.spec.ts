@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LyricsCue, StructuredLyrics } from '../api/lyrics.models';
 import { AudioPlayerService } from '../audio-player/audio-player.service';
 import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
@@ -38,10 +38,12 @@ function setup() {
       { provide: TranslateService, useValue: { instant: (k: string, p: { n: number }) => `${k}${p?.n ?? ''}` } },
     ],
   });
-  return { karaoke: TestBed.inject(KaraokeService), received, track, pitch, remoteView };
+  return { karaoke: TestBed.inject(KaraokeService), received, track, pitch, remoteView, remote };
 }
 
 describe('KaraokeService', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('follows the displayed output for the media time and the key', () => {
     const { karaoke, received, remoteView } = setup();
     remoteView.set(true);
@@ -50,6 +52,56 @@ describe('KaraokeService', () => {
     received.next({ userId: 5, frames: take(65) });
     remoteView.set(false);
     expect(karaoke.results(doc)[0].score).toBe(10000);
+  });
+
+  describe('media clock', () => {
+    function clock() {
+      const t = { now: 1000 };
+      vi.spyOn(performance, 'now').mockImplementation(() => t.now);
+      const s = setup();
+      s.remoteView.set(true);
+      TestBed.tick();
+      const report = (wall: number, seconds: number) => {
+        t.now = wall;
+        s.remote.position.set(seconds);
+        TestBed.tick();
+      };
+      return { ...s, t, report };
+    }
+
+    it('keeps free-running through 200 ms position steps at irregular wall times', () => {
+      const { karaoke, t, report } = clock();
+      report(1000, 90);
+      let last = karaoke.mediaMs();
+      [[1178, 90.2], [1380, 90.4], [1560, 90.6], [1774, 90.8]].forEach(([wall, pos]) => {
+        report(wall, pos);
+        t.now = wall;
+        const now = karaoke.mediaMs();
+        expect(now).toBeGreaterThanOrEqual(last);
+        expect(now - last).toBeLessThan(250);
+        last = now;
+      });
+      // Slewed toward the reported 90.8 s, never snapped to it.
+      expect(karaoke.mediaMs()).toBeGreaterThan(90774);
+      expect(karaoke.mediaMs()).toBeLessThan(90790);
+    });
+
+    it('re-anchors on a seek', () => {
+      const { karaoke, t, report } = clock();
+      report(1000, 90);
+      report(1500, 30);
+      t.now = 1600;
+      expect(karaoke.mediaMs()).toBeCloseTo(30100, 0);
+    });
+
+    it('re-anchors on pause and resume', () => {
+      const { karaoke, remote, t, report } = clock();
+      report(1000, 90);
+      remote.playing.set(false);
+      report(1100, 90.1);
+      t.now = 2000;
+      expect(karaoke.mediaMs()).toBeCloseTo(90100, 0);
+    });
   });
 
   it('scores a frame against the key it was sung in, not the key now', () => {

@@ -6,6 +6,7 @@ import { NowPlayingMetadataService } from '../playback/now-playing-metadata.serv
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
+import { FullPlayerState } from '../playback/full-player-state';
 import type { MusicTrackRequest } from './music-queue';
 import { RemoteAudioOutput } from './remote-audio-output';
 
@@ -196,6 +197,32 @@ describe('RemoteAudioOutput', () => {
     out.expand();
     sync.role.set('observer');
     sync.session.set(null);
+    TestBed.tick();
+    expect(out.expanded()).toBe(false);
+  });
+
+  it('hands its open view back to the local player when the session comes back to this device', async () => {
+    const { out, sync } = await setup(session());
+    out.expand();
+    TestBed.tick();
+    expect(out.expanded()).toBe(true);
+    sync.role.set('owner');
+    TestBed.tick();
+    expect(out.expanded()).toBe(false);
+    expect(TestBed.inject(FullPlayerState).open()).toBe('audio');
+  });
+
+  it('keeps its view while this device yields and still reads as owner, until the session comes back', async () => {
+    const { out, sync } = await setup(session());
+    sync.role.set('owner');
+    TestBed.tick();
+    TestBed.inject(FullPlayerState).show('audio', true);
+    TestBed.tick();
+    expect(out.expanded()).toBe(true);
+    sync.role.set('observer');
+    TestBed.tick();
+    expect(out.expanded()).toBe(true);
+    sync.role.set('owner');
     TestBed.tick();
     expect(out.expanded()).toBe(false);
   });

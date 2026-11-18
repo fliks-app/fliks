@@ -49,3 +49,25 @@ describe('nearestDelta', () => {
     expect(nearestDelta(100, 700, 0, 500)).toBe(100);
   });
 });
+
+describe('TvSpatialNavService down from a seekbar', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('prefers the button aligned with the seekbar among a row at the same height', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as { findNeighbor(dir: string): HTMLElement | null };
+    const at = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
+      Object.defineProperty(el, 'offsetParent', { get: () => document.body });
+      el.getBoundingClientRect = () => ({ left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, x, y, toJSON: () => ({}) });
+      document.body.append(el);
+      return el;
+    };
+    const seek = at(document.createElement('button'), 24, 780, 1872, 30);
+    const side = at(document.createElement('button'), 672, 891, 60, 60);
+    const play = at(document.createElement('button'), 909, 870, 102, 102);
+    seek.focus();
+    expect(nav.findNeighbor('down')).toBe(play);
+    expect(side).not.toBe(play);
+  });
+});

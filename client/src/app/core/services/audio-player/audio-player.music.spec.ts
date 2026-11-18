@@ -18,6 +18,7 @@ import { MusicApiService } from '../api/music-api.service';
 import type { RemoteCommand } from '../sse.service';
 import { Subject } from 'rxjs';
 import { PlayerStateService } from '../player-state.service';
+import { TvService } from '../tv.service';
 
 const track = (id: number, extra: Partial<MusicTrackRequest> = {}): MusicTrackRequest => ({
   itemId: id,
@@ -309,6 +310,20 @@ describe('AudioPlayerService music mode', () => {
     expect(updatePlaybackState).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ sessionId: 'sid2', state: 'playing' }));
   });
 
+  it('does not load the next track on a second element on webOS, then plays it at ended', async () => {
+    TestBed.overrideProvider(TvService, { useValue: new Proxy({}, { get: (_, k) => () => k === 'isWebOs' }) });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2)]);
+    const [a, b] = els(audio);
+    a.dispatchEvent(new Event('play'));
+    a.currentTime = 90;
+    a.dispatchEvent(new Event('timeupdate'));
+    await Promise.resolve();
+    expect(b.getAttribute('src')).toBeNull();
+    a.dispatchEvent(new Event('ended'));
+    await vi.waitFor(() => expect(audio.track()?.itemId).toBe(2));
+  });
+
   it('stops at the end of the queue with repeat off and wraps with repeat all', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.playTracks([track(1)]);
@@ -458,6 +473,18 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(castOut.applyStems).toHaveBeenCalled());
     expect(audio.stemMode()).toBe('guide');
     expect(audio.vocalLevel()).toBe(0.4);
+  });
+
+  it('offers stems on webOS, which plays them as buffers', async () => {
+    itemState.mockResolvedValue({ state: 'ready', fileId: 77, stems: { instrumental: { contentType: 'audio/ogg' }, vocals: { contentType: 'audio/ogg' } } });
+    vi.stubGlobal('AudioContext', class { destination = {}; createGain = () => ({ gain: { value: 0 }, connect: vi.fn() }); });
+    TestBed.overrideProvider(TvService, { useValue: new Proxy({}, { get: (_, k) => () => k === 'isWebOs' }) });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    await audio.refreshStems();
+    vi.unstubAllGlobals();
+    expect(itemState).toHaveBeenCalled();
+    expect(audio.stemsAvailable()).toBe(true);
   });
 
   it('starts a new track on the receiver in the original mix', async () => {

@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, linkedSignal, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, linkedSignal, signal, untracked } from '@angular/core';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
@@ -148,6 +148,15 @@ export class RemoteAudioOutput implements AudioOutput {
     // The view ends with the observation; a takeover by this device is handed over by the player component.
     effect(() => {
       if (this.expanded() && !this.session()) this.fullPlayer.hide();
+    });
+    // The session came back to this device (a load sent from elsewhere, a local resume): the open player follows it here.
+    // Only on the change to owner: right after yielding, this device still reads as owner until the new one is announced.
+    let owner = this.sync.role() === 'owner';
+    effect(() => {
+      const now = this.sync.role() === 'owner';
+      const back = now && !owner;
+      owner = now;
+      if (back && untracked(() => this.expanded())) this.fullPlayer.handTo('audio', false);
     });
   }
 

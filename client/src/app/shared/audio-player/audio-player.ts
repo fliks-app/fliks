@@ -222,6 +222,8 @@ export class AudioPlayerComponent {
   protected readonly mini = computed<AudioOutput | null>(() => (this.local.track() ? this.local : this.surface.parkedMusic() ? this.remoteOut : null));
   /** The full player of a parked music session: it reads as this device's, paused, and play takes it here. */
   protected readonly parkedView = computed(() => this.remoteView() && this.remoteOut.parked());
+  /** Driving another device's live session: entries that act on this device's player are left out. */
+  protected readonly drivingRemote = computed(() => this.remoteView() && !this.parkedView());
 
   /** Reset by every new cover: a cover that fails to load shows the placeholder, not a broken image. */
   protected readonly coverFailed = linkedSignal<string | null | undefined, boolean>({
@@ -295,13 +297,17 @@ export class AudioPlayerComponent {
   /** The edit tools of the lyrics panel, opened from the menu. */
   protected readonly lyricsEdit = signal(false);
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
-  /** The side column fills the height and scrolls itself: the lyrics, or the desktop queue. */
-  /** Desktop lists the queue inline: in place of the lyrics, or beside them when fullscreen has the room. */
-  protected readonly queueInline = computed(() => this.audio.musicMode() && !this.asSheet() && (!this.lyricsShown() || this.fullscreen()));
-  protected readonly panelFills = computed(() => this.lyricsShown() || (this.audio.musicMode() && !this.asSheet()));
+  /** Desktop and TV list the queue inline in place of the lyrics; desktop fullscreen has room for both. */
+  protected readonly queueInline = computed(
+    () => this.audio.musicMode() && (this.isTv() || !this.asSheet()) && (!this.lyricsShown() || (this.fullscreen() && !this.isTv())),
+  );
+  /** The side column fills the height and scrolls itself: the lyrics, or the inline queue. */
+  protected readonly panelFills = computed(() => this.lyricsShown() || this.queueInline());
   protected readonly karaoke = inject(KaraokeService);
   /** The mounted lyrics panel: the Sing button and the translation entries read its state. */
   protected readonly lyricsPanel = viewChild(LyricsPanelComponent);
+  /** What the menu still offers while driving another device: lyrics layers and editing, the party. */
+  protected readonly remoteMenu = computed(() => this.canEditLyrics || !!this.lyricsPanel()?.layers().length || this.party.active());
   protected readonly singKeys = SING_KEYS;
   protected readonly queueOpen = signal(false);
   protected readonly queueEditing = signal(false);

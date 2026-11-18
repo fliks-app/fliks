@@ -38,7 +38,7 @@ describe('scrolledBetween', () => {
 @Component({
   imports: [BottomSheetComponent],
   template: `
-    <app-bottom-sheet [open]="open()">
+    <app-bottom-sheet [open]="open()" [fullHeight]="full()">
       <div #list style="overflow-y: auto">
         <button #row type="button" aria-current="true">current</button>
       </div>
@@ -47,6 +47,7 @@ describe('scrolledBetween', () => {
 })
 class SheetHost {
   readonly open = signal(false);
+  readonly full = signal(false);
   readonly list = viewChild.required<ElementRef<HTMLElement>>('list');
   readonly row = viewChild.required<ElementRef<HTMLElement>>('row');
   readonly sheet = viewChild.required(BottomSheetComponent);
@@ -78,6 +79,59 @@ describe('BottomSheetComponent: scroll to the current choice', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 470, behavior: 'instant' });
     expect(document.activeElement).not.toBe(row);
+  });
+
+  it('scopes D-pad navigation to the open sheet', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SheetHost);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const modal = fixture.nativeElement.querySelector('[data-tv-modal]') as HTMLElement;
+    expect(modal.contains(fixture.componentInstance.row().nativeElement)).toBe(true);
+  });
+});
+
+describe('BottomSheetComponent: page cover', () => {
+  async function host(tv: boolean, full: boolean) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => tv } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SheetHost);
+    fixture.componentInstance.full.set(full);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return fixture;
+  }
+  const covers = () => document.documentElement.classList.contains('sheet-covers');
+
+  it('hides the page while a full-height sheet is open on TV and restores it on close', async () => {
+    const fixture = await host(true, true);
+    expect(covers()).toBe(true);
+    fixture.componentInstance.open.set(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(covers()).toBe(false);
+  });
+
+  it('leaves the page alone off TV or for a regular sheet', async () => {
+    await host(false, true);
+    expect(covers()).toBe(false);
+    TestBed.resetTestingModule();
+    await host(true, false);
+    expect(covers()).toBe(false);
   });
 });
 

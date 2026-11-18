@@ -18,6 +18,10 @@ const LATENCY_KEY = 'karaoke.latency';
 const DIFFICULTY_KEY = 'karaoke.difficulty';
 const FLUSH_MS = 250;
 const HISTORY_MAX = 50;
+/** Above the 200 ms steps webOS reports currentTime in, so only a real jump re-anchors the clock. */
+const REANCHOR_DRIFT_MS = 250;
+/** Share of the gap to the reported position closed per update: drift is absorbed without a visible step. */
+const SLEW = 0.1;
 
 export interface BoardRow extends SingerResult {
   name: string;
@@ -55,6 +59,7 @@ export class KaraokeService {
   private pending: PitchFrame[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private anchor = { pos: 0, at: 0 };
+  private anchoredState: { playing: boolean; rate: number; itemId: number | undefined } | null = null;
 
   /** What the full player shows: another device's session in remote view, else the local player. */
   private get audio(): AudioOutput {
@@ -71,8 +76,19 @@ export class KaraokeService {
       });
     });
     effect(() => {
-      this.audio.playing();
-      this.anchor = { pos: this.audio.position() * 1000, at: performance.now() };
+      const state = { playing: this.audio.playing(), rate: this.audio.rate(), itemId: this.audio.track()?.itemId };
+      const pos = this.audio.position() * 1000;
+      untracked(() => {
+        const prev = this.anchoredState;
+        const free = prev && prev.playing === state.playing && prev.rate === state.rate && prev.itemId === state.itemId;
+        const now = this.mediaMs();
+        if (free && state.playing && Math.abs(pos - now) <= REANCHOR_DRIFT_MS) {
+          this.anchor = { pos: now + (pos - now) * SLEW, at: performance.now() };
+          return;
+        }
+        this.anchoredState = state;
+        this.anchor = { pos, at: performance.now() };
+      });
     });
   }
 

@@ -65,6 +65,7 @@ export class BottomSheetComponent {
   private scrollLocked = false;
   private registered = false;
   private focusTrapActive = false;
+  private coversPage = false;
   /** Element focused when the sheet opened — restored on close. */
   private prevFocused: HTMLElement | null = null;
 
@@ -114,6 +115,10 @@ export class BottomSheetComponent {
             this.prevFocused = document.activeElement as HTMLElement | null;
             document.addEventListener('focusin', this.onFocusIn);
             this.focusTrapActive = true;
+            if (this.fullHeight()) {
+              coverPage(true);
+              this.coversPage = true;
+            }
             // Move focus into the sheet on open, else the D-pad still acts on the background. queueMicrotask, not rAF, so the halo isn't painted on the wrong element.
             queueMicrotask(() => {
               if (!this.open()) return;
@@ -230,6 +235,10 @@ export class BottomSheetComponent {
     if (this.focusTrapActive && typeof document !== 'undefined') {
       document.removeEventListener('focusin', this.onFocusIn);
       this.focusTrapActive = false;
+      if (this.coversPage) {
+        coverPage(false);
+        this.coversPage = false;
+      }
       restoreOpenerFocus(this.prevFocused);
       this.prevFocused = null;
     }
@@ -239,6 +248,14 @@ export class BottomSheetComponent {
 /** Shared by every open sheet: nested sheets release out of order (a child torn down after its parent closed), so only the last one restores. */
 let scrollLocks = 0;
 let savedOverflow: { body: string; html: string } | null = null;
+
+let pageCovers = 0;
+
+/** A full-height sheet is opaque, so the page behind is hidden to spare the TV's GPU; counted for stacked sheets. */
+function coverPage(on: boolean): void {
+  pageCovers = Math.max(0, pageCovers + (on ? 1 : -1));
+  document.documentElement.classList.toggle('sheet-covers', pageCovers > 0);
+}
 
 /** TV scrolls on html (body is scaled); elsewhere locking html shifts the pinned drawer. */
 function lockPageScroll(tv: boolean): void {

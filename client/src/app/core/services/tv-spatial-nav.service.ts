@@ -445,7 +445,7 @@ export class TvSpatialNavService {
       : null;
 
     // Three passes: in-line (same row/column, closest), 45 degree cone, then any candidate in the half-plane as last resort.
-    const inLine: { el: HTMLElement; primary: number }[] = [];
+    const inLine: { el: HTMLElement; primary: number; cross: number }[] = [];
     const offLine: { el: HTMLElement; score: number }[] = [];
     const anywhere: { el: HTMLElement; score: number }[] = [];
 
@@ -474,7 +474,7 @@ export class TvSpatialNavService {
 
       if (sameRowOrCol) {
         // Same-band candidates are global so Left from a row's first card reaches the sidebar.
-        inLine.push({ el, primary });
+        inLine.push({ el, primary, cross });
       } else if (activeScroller && !activeScroller.contains(el)) {
         // Off-line candidates outside the active row scroller would let
         // Right on the last card jump to a card in a row below. Skip.
@@ -488,7 +488,8 @@ export class TvSpatialNavService {
     }
 
     if (inLine.length) {
-      inLine.sort((a, b) => a.primary - b.primary);
+      // Ties on the step axis (a row of buttons under a seekbar) go to the one aligned with the active element.
+      inLine.sort((a, b) => a.primary - b.primary || a.cross - b.cross);
       return inLine[0].el;
     }
     if (offLine.length) {
