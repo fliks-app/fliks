@@ -41,6 +41,10 @@ pub struct LiveSession {
     pub episode_label: Option<String>,
     /// The catalog item the heartbeat names; a file spanning several episodes cannot tell.
     pub item_id: Option<i32>,
+    /// The item's media and episode, and the length its last beat gave (`presence.md` rules 3, 7).
+    pub media_id: Option<i32>,
+    pub episode_id: Option<i32>,
+    pub duration: Option<f64>,
     pub supports_volume: Option<bool>,
     pub subtitle_id: Option<String>,
     pub audio_track_index: Option<i32>,
@@ -73,6 +77,8 @@ pub struct Facts<'a> {
     /// The tags sent to the engine at open ([`to_tags`]).
     pub tags: &'a BTreeMap<String, String>,
     pub position_s: f64,
+    pub media_id: Option<i32>,
+    pub episode_id: Option<i32>,
 }
 
 /// `DirectPlay` -> directplay, `DirectStream` -> remux, else transcode.
@@ -124,6 +130,9 @@ pub struct Beat {
     pub has_next: Option<bool>,
     pub episode_label: Option<Option<String>>,
     pub item_id: Option<i32>,
+    pub media_id: Option<i32>,
+    pub episode_id: Option<Option<i32>>,
+    pub duration: Option<Option<f64>>,
     pub supports_volume: Option<Option<bool>>,
     pub subtitle_id: Option<Option<String>>,
     pub audio_track_index: Option<Option<i32>>,
@@ -182,6 +191,9 @@ impl LiveSession {
             state: PlayState::Playing,
             episode_label: None,
             item_id: None,
+            media_id: f.media_id,
+            episode_id: f.episode_id,
+            duration: None,
             supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
@@ -217,6 +229,8 @@ impl LiveSession {
                 client: &s.client,
                 tags: &s.tags,
                 position_s: s.position_s,
+                media_id: None,
+                episode_id: None,
             },
             s.opened_at_ms,
         );
@@ -246,6 +260,8 @@ impl LiveSession {
             autoplay_blocked,
             has_next,
             episode_label,
+            episode_id,
+            duration,
             supports_volume,
             subtitle_id,
             audio_track_index,
@@ -259,6 +275,9 @@ impl LiveSession {
         );
         if let Some(r) = b.playback_rate {
             self.playback_rate = r;
+        }
+        if let Some(m) = b.media_id {
+            self.media_id = Some(m);
         }
         if b.item_id.is_some() {
             self.item_id = b.item_id;

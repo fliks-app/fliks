@@ -147,18 +147,38 @@ pub struct Live {
     pub now_playing: Option<NowPlaying>,
 }
 
+/// The `remote.state` payload read from the session (`remote.md` rule 5), so a picked target shows its card at once.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NowPlaying {
+    pub session_id: String,
+    pub media_id: Option<i64>,
     pub media_file_id: i64,
+    pub episode_id: Option<i64>,
+    pub item_id: Option<i64>,
     pub media_title: Option<String>,
     pub media_type: Option<String>,
+    pub episode_label: Option<String>,
     pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
     pub position_seconds: Num,
+    pub duration_seconds: Option<Num>,
     pub state: crate::events::event::PlayState,
     pub volume: Option<Num>,
     pub muted: Option<bool>,
+    pub playback_rate: Num,
+    pub stem_mode: Option<crate::events::event::StemMode>,
+    pub vocal_level: Option<Num>,
+    pub pitch: Option<i64>,
+    pub stems_available: Option<bool>,
     pub supports_volume: Option<bool>,
+    pub subtitle_id: Option<String>,
+    pub quality: Option<String>,
+    pub qualities: Option<Vec<crate::events::event::QualityRung>>,
+    pub autoplay_blocked: bool,
+    pub has_next: bool,
+    pub audio_track_index: Option<i64>,
+    pub subtitle_track_index: Option<i64>,
 }
 
 /// Sessions with an SSE connection id, oldest first; the swap point for `live_sessions` in remote.
@@ -176,15 +196,34 @@ fn live_at(sessions: Vec<LiveSession>, now: f64, ttl: f64) -> Vec<Live> {
                 connection_id,
                 system_name: s.system_name.clone(),
                 now_playing: fresh.then(|| NowPlaying {
+                    session_id: s.session_id,
+                    media_id: s.media_id.map(i64::from),
                     media_file_id: i64::from(s.media_file_id),
+                    episode_id: s.episode_id.map(i64::from),
+                    item_id: s.item_id.map(i64::from),
                     media_title: s.media_title,
                     media_type: s.media_type,
+                    episode_label: s.episode_label,
                     poster_url: s.poster_url,
+                    fanart_url: s.fanart_url,
                     position_seconds: Num(s.position),
+                    duration_seconds: s.duration.map(Num),
                     state: s.state,
                     volume: s.volume.map(Num),
                     muted: s.muted,
+                    playback_rate: Num(s.playback_rate),
+                    stem_mode: s.stem_mode,
+                    vocal_level: s.vocal_level.map(Num),
+                    pitch: s.pitch.map(i64::from),
+                    stems_available: s.stems_available,
                     supports_volume: s.supports_volume,
+                    subtitle_id: s.subtitle_id,
+                    quality: s.quality,
+                    qualities: s.qualities,
+                    autoplay_blocked: s.autoplay_blocked,
+                    has_next: s.has_next,
+                    audio_track_index: s.audio_track_index.map(i64::from),
+                    subtitle_track_index: s.subtitle_track_index.map(i64::from),
                 }),
             })
         })

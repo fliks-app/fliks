@@ -553,6 +553,8 @@ fn register_live(
             client,
             tags,
             position_s: position,
+            media_id: file.media_id,
+            episode_id: file.episode_id,
         },
         now_ms(),
     ));
