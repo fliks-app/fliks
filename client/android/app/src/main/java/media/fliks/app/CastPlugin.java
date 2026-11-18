@@ -17,6 +17,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.gms.cast.CastDevice;
+import com.google.android.gms.cast.CastStatusCodes;
 import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
@@ -70,7 +71,7 @@ public class CastPlugin extends Plugin {
     /** A dead process left a cast behind and CAF is not resuming it: join the receiver by hand. */
     private boolean rejoinArmed = false;
     private boolean rejoining = false;
-    /** A failed resume hands the route back to the device by default: a cast route picked before that is dropped again. */
+    /** A cast route picked while a failed resume still holds the route is dropped again: rejoin once it is the default. */
     private boolean rejoinOnDefault = false;
     /** Active scan for the saved receiver, bounded by HUNT_MS. */
     private boolean hunting = false;
@@ -120,6 +121,7 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionStartFailed(CastSession session, int error) {
+            Log.d(TAG, "session start failed: " + CastStatusCodes.getStatusCodeString(error));
             runOnMainThread(() -> {
                 sessionPending = false;
                 rejoining = false;
@@ -135,6 +137,7 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionResumeFailed(CastSession session, int error) {
+            Log.d(TAG, "session resume failed: " + CastStatusCodes.getStatusCodeString(error));
             runOnMainThread(() -> {
                 sessionPending = false;
                 notifyJS("connected", false);
@@ -143,8 +146,12 @@ public class CastPlugin extends Plugin {
                     Log.d(TAG, "rejoin armed after resume failure");
                     rejoinArmed = true;
                     MediaRouter router = router();
-                    if (router.getSelectedRoute().isDefault()) rejoinAny(router);
-                    else rejoinOnDefault = true;
+                    if (router.getSelectedRoute().isDefault()) {
+                        rejoinAny(router);
+                    } else {
+                        rejoinOnDefault = true;
+                        router.selectRoute(router.getDefaultRoute());
+                    }
                 }
             });
         }
@@ -161,6 +168,8 @@ public class CastPlugin extends Plugin {
         boolean rejoined = rejoining;
         rejoining = false;
         RemoteMediaClient client = session.getRemoteMediaClient();
+        Log.d(TAG, "connected " + session.getSessionId() + ", saved state " + (resume != null) + ", rejoined " + rejoined
+            + ", media " + (client != null && client.getMediaInfo() != null));
         if (resume == null || client == null) {
             // A rejoin that found another cast than ours has nothing to take back.
             if (rejoined) {
@@ -187,6 +196,7 @@ public class CastPlugin extends Plugin {
     }
 
     private void handBack(RemoteMediaClient client, JSObject resume) {
+        Log.d(TAG, "hand back: media " + (client.getMediaInfo() != null));
         if (client.getMediaInfo() == null) {
             notifyJS("connected", true);
             return;
