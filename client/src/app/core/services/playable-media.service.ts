@@ -95,7 +95,7 @@ export class PlayableMediaService {
     );
 
     // The queue drives only the local player: another output plays the launched item alone.
-    if (this.session.isLocal()) this.queue.start(resolved, index, { source: 'playlist', sourceId: playlistId, autoplay });
+    if (this.session.playsHere()) this.queue.start(resolved, index, { source: 'playlist', sourceId: playlistId, autoplay });
     else this.queue.clear();
     await this.session.play(
       {

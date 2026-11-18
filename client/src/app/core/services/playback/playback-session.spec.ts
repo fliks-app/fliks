@@ -87,6 +87,8 @@ function setup() {
   const remoteSvc = {
     isRemoting: remote.isConnected,
     selectedTargetId: signal<string | null>(null),
+    liveOwner: signal<string | null>(null),
+    playTarget: () => remoteSvc.selectedTargetId() ?? remoteSvc.liveOwner(),
     observedTargetId: () => remoteSvc.selectedTargetId() ?? 'tv-1',
     targetState: signal<{ mediaFileId: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
@@ -774,6 +776,25 @@ describe('PlaybackSession', () => {
 
   describe('play', () => {
     const item = { fileId: 7, mediaId: 3, episodeId: 9 };
+
+    it('sends a play to the live owner of the session, opening no player here', async () => {
+      const { session, remoteSvc, router } = setup();
+      remoteSvc.liveOwner.set('tv-1');
+      expect(session.playsHere()).toBe(false);
+      expect(await session.play({ ...item, positionSeconds: 30 })).toBe('remote');
+      expect(remoteSvc.send).toHaveBeenCalledWith('tv-1', expect.objectContaining({ action: 'load', mediaFileId: 7, positionSeconds: 30 }));
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('plays a party item here while another device owns the session', async () => {
+      const { session, remoteSvc, router, party } = setup();
+      remoteSvc.liveOwner.set('tv-1');
+      party.drives.set(true);
+      expect(session.playsHere()).toBe(true);
+      expect(await session.play(item)).toBe('local');
+      expect(remoteSvc.send).not.toHaveBeenCalled();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+    });
 
     it('navigates to the player when playing locally', async () => {
       const { session, router, castPlayer } = setup();

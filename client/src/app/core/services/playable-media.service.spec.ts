@@ -15,8 +15,9 @@ import { RemotePlaybackTarget } from './remote-playback-target';
 describe('PlayableMediaService.play', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(over: { cast?: boolean; target?: string | null } = {}) {
+  function setup(over: { cast?: boolean; target?: string | null; owner?: string } = {}) {
     const navigate = vi.fn();
+    const queue = { clear: vi.fn(), start: vi.fn() };
     const quickStart = vi.fn(async (_opts: { tracks?: unknown }) => {});
     const send = vi.fn(async (_target: string, _cmd: Record<string, unknown>) => {});
     TestBed.configureTestingModule({
@@ -30,14 +31,14 @@ describe('PlayableMediaService.play', () => {
           provide: MediaService,
           useValue: { getOne: () => Promise.resolve({}), getCast: () => Promise.resolve([]), getCrew: () => Promise.resolve([]) },
         },
-        { provide: PlaybackQueueService, useValue: { clear: vi.fn() } },
-        { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, observedTargetId: () => over.target ?? null, send } },
+        { provide: PlaybackQueueService, useValue: queue },
+        { provide: RemoteService, useValue: { selectedTargetId: () => over.target ?? null, observedTargetId: () => over.target ?? null, playTarget: () => over.target ?? over.owner ?? null, send } },
         { provide: PartyService, useValue: { party: () => null, active: () => false, drives: () => false } },
         { provide: CastPlaybackTarget, useValue: { isConnected: () => !!over.cast } },
         { provide: RemotePlaybackTarget, useValue: { isConnected: () => !!over.target, isObserving: () => false } },
       ],
     });
-    return { service: TestBed.inject(PlayableMediaService), navigate, quickStart, send };
+    return { service: TestBed.inject(PlayableMediaService), navigate, quickStart, send, queue };
   }
 
   const tracks = { fileId: 7, audioStreamIndex: 1, subtitleId: null };
@@ -60,6 +61,21 @@ describe('PlayableMediaService.play', () => {
     await service.play(ctx, false);
     const cmd = send.mock.calls[0][1];
     expect(cmd).toMatchObject({ action: 'load', mediaFileId: 7, trackId: 'audio-1', subtitleId: null });
+  });
+
+  it('sends a play to the live owner of the session without opening a player here', async () => {
+    const { service, send, navigate } = setup({ owner: 'tv#1' });
+    await service.play(ctx, false);
+    expect(send).toHaveBeenCalledWith('tv#1', expect.objectContaining({ action: 'load', mediaFileId: 7 }));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps no local queue for a playlist the session owner plays', async () => {
+    const { service, send, queue } = setup({ owner: 'tv#1' });
+    TestBed.inject(MediaService).getOne = vi.fn(async () => ({ id: 1, files: [{ id: 7, episodeId: null }] })) as never;
+    expect(await service.playFromPlaylist(3, [{ mediaId: 1 } as never], 0, true)).toBe(true);
+    expect(queue.start).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith('tv#1', expect.objectContaining({ action: 'load', mediaFileId: 7 }));
   });
 
   it('sends no pick to a remote target when it was made on another file', async () => {

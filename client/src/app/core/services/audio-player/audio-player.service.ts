@@ -399,19 +399,20 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   /** Plays a track queue from `startIndex`, always from 0:00. */
   async playTracks(tracks: readonly MusicTrackRequest[], startIndex = 0, opts?: { shuffle?: boolean }): Promise<void> {
     if (!tracks.length || this.blockedByParty()) return;
-    if (this.remote.isRemoting()) return this.playOnRemote(tracks, startIndex, opts?.shuffle ?? this._shuffle());
+    const target = this.remote.playTarget();
+    if (target) return this.playOnRemote(target, tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.set(tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.repeat = this._repeat();
     this.syncQueue();
     await this.startMusic(this.mq.current!);
   }
 
-  /** The selected device plays the queue, in the order this one drew; nothing starts here. */
-  private async playOnRemote(tracks: readonly MusicTrackRequest[], startIndex: number, shuffle: boolean): Promise<void> {
+  /** The device plays go to plays the queue, in the order this one drew; nothing starts here. */
+  private async playOnRemote(targetId: string, tracks: readonly MusicTrackRequest[], startIndex: number, shuffle: boolean): Promise<void> {
     const q = new MusicQueue();
     q.set(tracks, startIndex, shuffle);
     const first = q.current!;
-    await this.remote.send(this.remote.selectedTargetId()!, {
+    await this.remote.send(targetId, {
       action: 'load',
       kind: 'album',
       mediaId: first.mediaId,

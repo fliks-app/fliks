@@ -293,15 +293,23 @@ export class PlaybackSession {
     this.local()?.disconnect();
   }
 
-  /** Opens an item on the active output: loaded there without a local engine, else the player route. */
+  /** The device `play` loads on (`RemoteService.playTarget`); a party plays on this device or the output it drives. */
+  private playTarget(): string | null {
+    return this.kind() === 'local' && this.partyActive() ? null : this.remoteSvc().playTarget();
+  }
+
+  /** A play started now stays on this device. */
+  playsHere(): boolean {
+    return this.isLocal() && !this.playTarget();
+  }
+
+  /** Opens an item where this device's plays go: a remote device, the cast receiver, else the player route here. */
   async play(item: PlayItem, opts: PlayOptions = {}): Promise<OutputKind> {
     const kind = this.kind();
     const startAt = opts.fromStart ? 0 : undefined;
-    if (kind === 'remote') {
-      const remote = this.remoteSvc();
-      const targetId = remote.observedTargetId();
-      if (!targetId) return kind;
-      void remote.send(targetId, {
+    const targetId = this.playTarget();
+    if (targetId) {
+      void this.remoteSvc().send(targetId, {
         action: 'load',
         mediaId: item.mediaId,
         mediaFileId: item.fileId,
@@ -320,7 +328,7 @@ export class PlaybackSession {
         startTime: startAt,
         tracks: item.tracks,
       });
-    } else {
+    } else if (kind === 'local') {
       const query: Record<string, number> = { mediaId: item.mediaId, ...opts.query };
       if (item.episodeId) query['episodeId'] = item.episodeId;
       if (opts.fromStart) query['t'] = 0;
@@ -330,8 +338,9 @@ export class PlaybackSession {
         state: { backdropUrl: item.backdropUrl ?? null, tracks: item.tracks ?? null },
       });
     }
+    // A play sent to the session's owner from here opens no player: the bar follows that device.
     if (kind !== 'local' && (opts.expand ?? true)) this.openPlayer(item);
-    return kind;
+    return targetId ? 'remote' : kind;
   }
 
   /** Opens the video player on the account session's owner, without selecting its device. */

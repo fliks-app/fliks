@@ -207,16 +207,38 @@ export class RemoteService {
     const holds = !!fileId && !!held?.owner.targetId && deviceIdOf(held.owner.targetId) === deviceIdOf(targetId) && held.item.mediaFileId === fileId;
     return targetCanLoad(faceOf(this.targets(), targetId), holds);
   }
+  /** The owner of the account session while it plays on another device; a reading position has none. */
+  private readonly sessionOwner = computed(() => {
+    const s = this.sessionSync.session();
+    return s && !this.sessionSync.isReading(s) ? this.sessionSync.observableOwner() : null;
+  });
   /** Whether `targetId` owns the account session's playback: that device is watched, never selected. */
   ownsSession(targetId: string): boolean {
-    const s = this.sessionSync.session();
-    const owner = this.sessionSync.observableOwner();
-    return !!s && !!owner && !this.sessionSync.isReading(s) && sameTarget(owner, targetId);
+    const owner = this.sessionOwner();
+    return !!owner && sameTarget(owner, targetId);
   }
+  /** The listed face of that owner, while this device is online with no Cast session and the owner takes a load. */
+  private readonly liveOwner = computed(() => {
+    const owner = this.sessionOwner();
+    if (!owner || !this.sse.connected() || this.cast.isConnected()) return null;
+    const face = faceOf(this.targets(), owner);
+    return face && targetSupports(face, 'load') ? face.targetId : null;
+  });
+  /** Where a play started on this device goes, music and video alike: the selected device, else the account session's
+   *  live owner, which stays the active device until a play here takes the session back. Null plays here. */
+  readonly playTarget = computed(() => this.selectedTargetId() ?? this.liveOwner());
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
-  /** Following a device, selected or not; only a selection sends this device's next plays there. */
+  /** Following a device, selected or not. */
   readonly isObserving = computed(() => this.observedTargetId() !== null);
+  /** The device this one last asked to start, kept while it owns the session it took. */
+  private readonly startedOn = signal<string | null>(null);
+  /** This device drives the playback it follows: a selection, or the owner it started. */
+  readonly controlling = computed(() => {
+    const started = this.startedOn();
+    const owner = this.sessionOwner();
+    return this.isRemoting() || (!!started && !!owner && sameTarget(owner, started));
+  });
 
   private stateAt = 0;
   /** The session a stop retired, so only its own farewell heartbeat is ignored. */
@@ -410,6 +432,18 @@ export class RemoteService {
       this.reportedState();
       this.observedTargetId();
       untracked(() => this.syncTicker());
+    });
+
+    // A device started from here that lost the session is no longer driven from here, should it take it back on its own.
+    let drove: string | null = null;
+    effect(() => {
+      const started = this.startedOn();
+      const owner = this.sessionOwner();
+      const drives = !!started && !!owner && sameTarget(owner, started);
+      untracked(() => {
+        if (!drives && drove !== null && drove === started) this.startedOn.set(null);
+        drove = drives ? started : null;
+      });
     });
 
     // The device that owns the account session is watched, not selected: an open video player becomes its view.
@@ -721,7 +755,10 @@ export class RemoteService {
   private async dispatch(targetId: string, input: RemoteCommandInput, retry: boolean): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
-    if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') this.startedHere.next();
+    if (input.action === 'load' || input.action === 'play' || input.action === 'playpause') {
+      this.startedOn.set(targetId);
+      this.startedHere.next();
+    }
     // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
     // `next` moves to another file; a quality change keeps file and position.
     const moves = input.action === 'load' || input.action === 'next';
