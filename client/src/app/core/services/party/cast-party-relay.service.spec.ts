@@ -8,12 +8,12 @@ import { CastPartyRelayService } from './cast-party-relay.service';
 import { PartyService, type PartyFloated } from './party.service';
 import { ReactionsService } from './reactions.service';
 
-function setup(over: { connected?: boolean; reactions?: boolean; partyReactions?: boolean; chat?: boolean } = {}) {
+function setup(over: { connected?: boolean; reactions?: boolean; partyReactions?: boolean; chat?: boolean; active?: boolean } = {}) {
   const floated = new Subject<PartyFloated>();
   const sendFliks = vi.fn();
   TestBed.configureTestingModule({
     providers: [
-      { provide: PartyService, useValue: { floated, reactionsEnabled: () => over.partyReactions ?? true, chatEnabled: () => over.chat ?? true } },
+      { provide: PartyService, useValue: { floated, active: () => over.active ?? false, reactionsEnabled: () => over.partyReactions ?? true, chatEnabled: () => over.chat ?? true } },
       { provide: ReactionsService, useValue: { enabled: signal(over.reactions ?? true), animationPath: (e: string) => (e === '🔥' ? '/api/emoji/1f525.webp' : null) } },
       { provide: CastService, useValue: { isConnected: () => over.connected ?? true, castStreamBaseUrl: () => 'http://nas:3000', sendFliks } },
       { provide: TranslateService, useValue: { instant: () => ': ' } },
@@ -26,6 +26,12 @@ function setup(over: { connected?: boolean; reactions?: boolean; partyReactions?
 const chat: PartyFloated = { kind: 'chat', message: { id: 4, userId: 2, username: 'b', text: 'hi', system: null, sentAtMs: 0 } };
 
 describe('CastPartyRelayService', () => {
+  it('tells the receiver a party is on, so it loads its emoji font before the first reaction', () => {
+    const { sendFliks } = setup({ active: true });
+    TestBed.tick();
+    expect(sendFliks).toHaveBeenCalledWith({ kind: 'party_on' });
+  });
+
   it('sends a reaction with its asset on the cast base, null for a static emoji', () => {
     const { floated, sendFliks } = setup();
     floated.next({ kind: 'reaction', emoji: '🔥', username: 'b' });

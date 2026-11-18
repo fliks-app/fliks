@@ -32,10 +32,9 @@ const FLIKS_NAMESPACE = 'urn:x-cast:media.fliks.app';
 const CAST_CMCD = true;
 const QOE_INTERVAL_MS = 5000;
 
-// Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
-// receiver, the only practical way to diagnose a Cast freeze or load
-// failure on a real device.
-context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG);
+// DEBUG keeps every message payload in the console, tens of MB on a Cast device: diagnose by running
+// context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG) from chrome://inspect instead.
+context.setLoggerLevel(cast.framework.LoggerLevel.WARNING);
 console.log('[fliks-cast] receiver boot start');
 
 // --- Idle splash visibility ---------------------------------------------
@@ -735,12 +734,14 @@ function emojiNode(emoji, img) {
   return node;
 }
 
-const emojiFont = document.fonts.load('1em "Fliks Emoji"', '\u{1F600}').catch(() => {});
+// A 10 MB font, so not loaded at boot: memory is what a Cast device lacks. The sender's `party_on` loads it ahead.
+let emojiFont = null;
+const loadEmojiFont = () => (emojiFont ??= document.fonts.load('1em "Fliks Emoji"', '\u{1F600}').catch(() => {}));
 
 function partyFloat(msg) {
   if (!msg || typeof msg !== 'object') return;
-  // Waits for the emoji font (preloaded at boot) so the first emoji is not drawn as tofu.
-  emojiFont.then(() => showParty(msg));
+  // Waits for the emoji font so the first emoji is not drawn as tofu.
+  loadEmojiFont().then(() => showParty(msg));
 }
 self.partyFloat = partyFloat;
 

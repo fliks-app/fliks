@@ -136,6 +136,7 @@ because a plain-HTTP NAS cannot serve images to the HTTPS receiver. Test from De
 ```ts
 { kind: 'party_reaction', emoji: string, username: string, img: string | null }
 { kind: 'party_chat', id: number | string, username: string, text: string, sep: string }
+{ kind: 'party_on' } // a party is on: the receiver loads its emoji font ahead of the first reaction
 ```
 
 Lyrics of the playing music track, sent by the same sender (`karaoke.md` rule 28). The document is cut

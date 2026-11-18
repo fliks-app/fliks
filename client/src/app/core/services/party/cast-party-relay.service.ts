@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, effect, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from '../cast.service';
 import { PartyService } from './party.service';
@@ -13,6 +13,10 @@ export class CastPartyRelayService {
   private readonly translate = inject(TranslateService);
 
   constructor() {
+    // The receiver loads its emoji font ahead of the first reaction once it knows a party is on.
+    effect(() => {
+      if (this.cast.isConnected() && this.party.active()) this.cast.sendFliks({ kind: 'party_on' });
+    });
     this.party.floated.subscribe((f) => {
       if (!this.cast.isConnected()) return;
       if (f.kind === 'reaction') {
