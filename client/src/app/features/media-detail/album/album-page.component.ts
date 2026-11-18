@@ -29,6 +29,7 @@ import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-r
 import { DetailHeroComponent } from '../../../shared/components/detail-hero/detail-hero';
 import { heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
+import { HorizontalScrollerComponent } from '../../../shared/components/horizontal-scroller';
 import { FactsGridComponent, type Fact } from '../../../shared/components/facts-grid/facts-grid';
 import { LikeController } from '../../../shared/utils/like-controller';
 import {
@@ -54,7 +55,7 @@ interface DiscView {
 @Component({
   selector: 'app-album-page',
   imports: [
-    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, FactsGridComponent,
+    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, HorizontalScrollerComponent, FactsGridComponent,
     ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent,
     LucideCircleAlert, LucideClock, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle, LucideEllipsisVertical,
   ],
