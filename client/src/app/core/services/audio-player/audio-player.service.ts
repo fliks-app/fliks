@@ -27,6 +27,7 @@ import { RemoteService } from '../remote.service';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
+import { TvService } from '../tv.service';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import { FullPlayerState } from '../playback/full-player-state';
 import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
@@ -116,6 +117,9 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private readonly music = inject(MusicApiService);
   private readonly fullPlayer = inject(FullPlayerState);
   private readonly castOut = inject(MusicCastOutput);
+  private readonly tv = inject(TvService);
+  /** webOS plays one media element at a time: a second one that loads or plays takes the pipeline from the first. */
+  private readonly singlePipeline = this.tv.isWebOs();
 
   private readonly _track = signal<AudioRequest | null>(null);
   private readonly _playing = signal(false);
@@ -764,7 +768,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     const next = this.mq.peekNext();
     if (!next || this.routed({ type: 'drives' })) return;
     if (this.castOut.active()) return this.castOut.queueNext(next);
-    if (this.preTried === next) return;
+    if (this.singlePipeline || this.preTried === next) return;
     if (this.info?.playMethod !== 'DirectPlay' || this._pitch() !== 0) return;
     this.preTried = next;
     const generation = this.generation;
@@ -900,8 +904,13 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.applyStemGains();
   }
 
+  private decodeStems(): void {
+    if (this._stemMode() !== 'original') this.stems?.decode();
+  }
+
   private applyStemGains(): void {
     if (this.nativeAudio) return this.pushNativeStems();
+    this.decodeStems();
     if (!this.stems?.loaded) return;
     this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck * this.userLevel());
     void this.audioCtx?.resume().catch(() => undefined);
@@ -961,7 +970,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   /** Looks the playing track's stems up again, e.g. once a preparation finished. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const itemId = this._musicMode() && (this.castOut.active() || !this.stemsNative) && this._pitch() === 0 ? this._track()?.itemId : undefined;
+    const localStems = !this.stemsNative;
+    const itemId = this._musicMode() && (this.castOut.active() || localStems) && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
       const api = this.injector.get(KaraokeApiService);
@@ -981,9 +991,10 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         this._stemsAvailable.set(true);
         return this.pushNativeStems();
       }
-      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed());
+      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed(), this.singlePipeline);
       if (!this.stems.load(state.fileId)) return this.dropStems();
       this._stemsAvailable.set(true);
+      this.decodeStems();
     } catch {
       if (run === this.stemsRun) this.dropStems();
     }
@@ -1241,7 +1252,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
       el.addEventListener('ended', mine(() => void this.onEnded()));
       el.addEventListener('error', mine(() => this.onError()));
       el.addEventListener('waiting', mine(() => this._buffering.set(true)));
-      for (const e of ['play', 'pause', 'playing', 'waiting', 'seeked', 'ratechange', 'timeupdate'] as const) {
+      for (const e of ['play', 'pause', 'playing', 'waiting', 'seeking', 'seeked', 'ratechange', 'timeupdate'] as const) {
         el.addEventListener(e, mine(() => this.stems?.sync(el)));
       }
       for (const e of ['playing', 'canplay', 'pause', 'emptied'] as const) el.addEventListener(e, mine(() => this._buffering.set(false)));
@@ -1342,7 +1353,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     const sleep = this._sleep();
     if (sleep?.kind === 'chapter' && position >= sleep.end - 0.3) this.fireSleep();
     const next = this.parts[this.partIndex + 1];
-    if (next && this.preloaded !== this.partIndex + 1 && part.duration - el.currentTime < PRELOAD_S) {
+    if (next && !this.singlePipeline && this.preloaded !== this.partIndex + 1 && part.duration - el.currentTime < PRELOAD_S) {
       this.preloaded = this.partIndex + 1;
       const standby = this.els[1 - this.current];
       standby.src = next.url;
