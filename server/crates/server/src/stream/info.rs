@@ -390,6 +390,11 @@ async fn run(
         user_agent,
     };
     let audio_count = file.info.as_ref().map_or(0, |i| i.audio.len());
+    // Marked before the open: the engine ends the replaced session inside it (`session.md` rule 14).
+    let replacing = match q.replaces.as_deref() {
+        Some(old) if st.account_sessions.replacing(a.user.id, old).await => Some(old.to_owned()),
+        _ => None,
+    };
     let request = OpenSessionRequest {
         decide: DecideRequest {
             media: DecideMedia {
@@ -447,8 +452,18 @@ async fn run(
         side_reads(st, a, &file, fps, early_pre_roll, item.as_ref())
     );
     let open = match open {
-        Ok(o) => o,
+        Ok(o) => {
+            if let Some(old) = &replacing {
+                st.account_sessions
+                    .replaced(st, a.user.id, old, &o.session_id)
+                    .await;
+            }
+            o
+        }
         Err(e) => {
+            if let Some(old) = &replacing {
+                st.account_sessions.replace_failed(old).await;
+            }
             if let (Some(t), Some(u)) = (&target, attributed) {
                 st.hub.claim_attribution(t, u, i64::from(file.id));
             }
