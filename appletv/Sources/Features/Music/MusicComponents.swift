@@ -199,7 +199,7 @@ private struct TrackLineStyle: ButtonStyle {
     }
 }
 
-/// A circular icon button: ghost by default, filled with the primary colour for the main action, a pale disc while `active`.
+/// A native circular button: prominent in the app colour for the main action, the symbol tinted while `active`.
 struct RoundButton: View {
     let symbol: String
     let size: CGFloat
@@ -209,28 +209,23 @@ struct RoundButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: size * 0.4, weight: .medium))
+        Group {
+            if filled {
+                button.buttonStyle(.borderedProminent).tint(Color.fliks(nil))
+            } else {
+                button.buttonStyle(.bordered)
+            }
         }
-        .buttonStyle(RoundButtonStyle(size: size, filled: filled, active: active))
+        .buttonBorderShape(.circle)
         .accessibilityLabel(label)
     }
-}
 
-private struct RoundButtonStyle: ButtonStyle {
-    let size: CGFloat
-    let filled: Bool
-    let active: Bool
-    @Environment(\.isFocused) private var focused
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(filled ? Color.white : active ? Color.fliks(nil) : Color.white)
-            .frame(width: size, height: size)
-            .background(Circle().fill(filled ? Color.fliks(nil) : .white.opacity(focused ? 0.28 : active ? 0.12 : 0)))
-            .overlay(Circle().stroke(.white, lineWidth: focused ? 4 : 0))
-            .scaleEffect(focused ? 1.12 : 1)
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .animation(.easeOut(duration: 0.12), value: focused)
+    private var button: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.4, weight: .medium))
+                .foregroundStyle(active ? AnyShapeStyle(Color.fliks(nil)) : AnyShapeStyle(.foreground))
+                .frame(width: size * 0.55, height: size * 0.55)
+        }
     }
 }
