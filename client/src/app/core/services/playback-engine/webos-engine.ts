@@ -438,13 +438,17 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const list = this.audioTrackList();
     if (!list) return [];
     const tracks: AudioTrack[] = [];
+    const ranks = new Map<string, number>();
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
-      // By language, never position or `t.id` (the demuxer stream id): webOS lists the DEFAULT rendition first and
-      // keeps one track per language, so only the language names the same track across reloads.
+      const language = t.language || 'und';
+      const rank = ranks.get(language) ?? 0;
+      ranks.set(language, rank + 1);
+      // Language and rank within it, never position or `t.id` (the demuxer stream id): webOS lists the DEFAULT
+      // rendition first, so only these name the same track across reloads.
       tracks.push({
-        id: 'audio-' + (t.language || i),
-        language: t.language || 'und',
+        id: `audio-${language}-${rank}`,
+        language,
         label: t.label || t.language || '',
         selected: !!t.enabled,
       });

@@ -146,4 +146,10 @@ describe('WebOsEngine audio tracks', () => {
     expect(idOf(after, 'ita')).toBe(idOf(before, 'ita'));
     expect(idOf(after, 'ita')).not.toBe(idOf(after, 'eng'));
   });
+
+  it('tells apart two tracks of the same language', () => {
+    const engine = engineWith({ audioTracks: [{ language: 'eng' }, { language: 'eng' }, { language: 'fra' }] });
+    const ids = engine.getAudioTracks().map((t) => t.id);
+    expect(new Set(ids).size).toBe(3);
+  });
 });
