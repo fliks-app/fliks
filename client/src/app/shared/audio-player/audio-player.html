@@ -270,7 +270,7 @@
         }
       </div>
 
-      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2" [class.overflow-hidden]="panelFills()" [class.overflow-y-auto]="!panelFills()" [class.short:min-h-0]="panelFills()" appTvSection>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 scroll-ring-safe sm:flex-row short:col-start-1 short:row-start-2 tv:gap-12" [class.overflow-hidden]="panelFills()" [class.overflow-y-auto]="!panelFills()" [class.short:min-h-0]="panelFills()" appTvSection>
         <div class="player-cover-col fade-up-in flex shrink-0 flex-col items-center justify-center gap-3 max-sm:flex-1 sm:w-64 tv:w-[22rem]" [class.max-sm:hidden]="lyricsShown()" [class.short:hidden]="lyricsShown()">
           <div data-morph="cover" class="player-cover relative flex aspect-square w-full max-w-80 items-center justify-center overflow-hidden rounded-xl bg-base-300 text-base-content/20 short:max-w-32 sm:max-w-64 tv:max-w-none">
             @if (t.coverUrl | resolveUrl: 'medium'; as cover) {
