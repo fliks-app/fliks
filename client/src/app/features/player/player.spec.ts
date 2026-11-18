@@ -1894,21 +1894,23 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(h.state.error()).toBeNull();
   });
 
-  it('reloadStream: a load-time fatal on DirectPlay also re-negotiates with rejectCopy (not remux-only)', async () => {
+  it('reloadStream: a load-time fatal on DirectPlay re-negotiates a remux, keeping the copy', async () => {
     const h = createHarness();
     h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-old' });
     h.state.playbackMode.set('direct');
     h.engine.currentTime = 12;
     h.streamingApi.getPlaybackInfo
       .mockResolvedValueOnce(buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-new' }))
-      .mockResolvedValueOnce(TRANSCODE_PI());
+      .mockResolvedValueOnce(REMUX_PI('sid-remux'));
     failFirstLoad(h);
 
     await h.component.reloadStream();
 
     await vi.waitFor(() => expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() => expect(h.state.playbackMode()).toBe('transcode'));
-    expect(rejectCopyOf(h, 1)).toBe(true);
+    await vi.waitFor(() => expect(h.state.playbackMode()).toBe('remux'));
+    const profile = (h.streamingApi.getPlaybackInfo.mock.calls[1] as any[])[1];
+    expect(profile.supportsDirectPlay).toBe(false);
+    expect(profile.rejectCopy).toBeUndefined();
     expect(h.state.error()).toBeNull();
   });
 
