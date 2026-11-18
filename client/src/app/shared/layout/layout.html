@@ -46,7 +46,7 @@
           </label>
         }
       </div>
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0 tv:flex-none">
         @if (tv.isTv()) {
           <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
                entries live here, one ↑ away from the first rail. -->
@@ -94,7 +94,8 @@
           }
         }
       </div>
-      <div class="flex-none flex items-center gap-1 md:gap-1.5">
+      <!-- TV: the tabs keep their width and the now-playing bar takes what is left. -->
+      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:min-w-0 tv:flex-1 tv:justify-end tv:pl-2">
         @if (appUpdate.available()) {
           <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
                   [attr.aria-label]="'update.title' | translate">

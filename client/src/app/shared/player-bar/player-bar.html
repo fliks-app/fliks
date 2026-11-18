@@ -4,7 +4,7 @@
   animate.enter="mini-player-in"
   animate.leave="mini-player-out"
   class="flex items-center gap-1 rounded-box border border-base-300 bg-base-200/95 transition-colors duration-300"
-  [class]="docked ? 'relative h-11 w-80 pl-0.5 pr-1' : 'fixed inset-x-2 z-40 p-1 pb-1.5 pr-2 shadow-xl backdrop-blur-sm lg:inset-x-auto lg:right-4 lg:w-[27rem]'"
+  [class]="docked ? 'relative h-11 w-80 min-w-28 pl-0.5 pr-1' : 'fixed inset-x-2 z-40 p-1 pb-1.5 pr-2 shadow-xl backdrop-blur-sm lg:inset-x-auto lg:right-4 lg:w-[27rem]'"
   [style.display]="visible() ? null : 'none'"
   [style.bottom]="docked ? null : raised() ? 'calc(max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px)) + 4.25rem)' : 'max(var(--chrome-bottom, 1rem), env(safe-area-inset-bottom, 0px))'"
   [style.background-color]="tint()"
