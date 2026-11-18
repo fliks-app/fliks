@@ -881,6 +881,19 @@ describe('AudioPlayerService music mode', () => {
       expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     });
 
+    it('keeps beating a paused load sent here, which reports no play state', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        await loaders['audio'](cmd('load', { kind: 'album', itemId: 2, queue: { itemIds: [1, 2, 3], index: 1 }, positionSeconds: 75, paused: true }));
+        TestBed.tick();
+        updatePlaybackState.mockClear();
+        vi.advanceTimersByTime(15_000);
+        expect(updatePlaybackState).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ itemId: 2, state: 'paused' }));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('replaces the queue under the running track without restarting it', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2)]);
