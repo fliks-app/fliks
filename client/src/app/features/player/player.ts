@@ -826,10 +826,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
 
-  /** `deviceProfileService.getProfile()` with `rejectCopy` forced and failed audio codecs dropped when
-   *  {@link CopyFallbackController} flagged the file, and HDR off once an AirPlay receiver refused it. */
+  /** `deviceProfileService.getProfile()` without DirectPlay, with `rejectCopy` forced or failed audio codecs dropped
+   *  when {@link CopyFallbackController} flagged the file, and HDR off once an AirPlay receiver refused it. */
   private deviceProfileFor(mediaFileId: number, passthrough = true): DeviceProfile {
     let profile = this.deviceProfileService.getProfile({ passthrough });
+    if (this.copyFallback.shouldForceRemux(mediaFileId)) {
+      profile = { ...profile, supportsDirectPlay: false };
+    }
     if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
       profile = { ...profile, rejectCopy: true };
     }

@@ -1832,6 +1832,7 @@
       "reload_subtitles_on": "Sous-titres incrustés activés ({{lang}})",
       "reload_subtitles_off": "Sous-titres incrustés désactivés",
       "reload_subtitles_hls": "Sous-titres chargés via HLS ({{lang}})",
+      "reload_direct_fallback": "Repli de la lecture directe vers le remux",
       "reload_remux_fallback": "Repli du remux vers le transcodage",
       "reload_audio_fallback": "Repli audio : {{codec}} non décodé par l'appareil, transcodé",
       "reload_other": "Rechargement du flux",

@@ -22,7 +22,8 @@ const DEVICE_PROFILE_EXTENSIONS_FEATURE = 'deviceProfileExtensions';
 const RELOAD_IDLE_WAIT_MS = 3_000;
 
 /** Copy fallback: an undecodable copy is rejected once per session and reloaded, with the failed audio codec
- *  dropped from the profile when the engine names it, else with `rejectCopy`. One per player, bound via {@link attach}. */
+ *  dropped from the profile when the engine names it, else one step down: DirectPlay to a remux, a remux to
+ *  `rejectCopy`. One per player, bound via {@link attach}. */
 @Injectable()
 export class CopyFallbackController {
   private host!: CopyFallbackHost;
@@ -30,6 +31,8 @@ export class CopyFallbackController {
   /** Files whose copy this device failed to decode: every later playback-info
    *  for them asks `rejectCopy`, so no reload bounces back onto that copy. */
   private readonly rejectCopyFileIds = new Set<number>();
+  /** Files whose raw file this device failed to play: renegotiated without DirectPlay, so the copy survives. */
+  private readonly remuxFileIds = new Set<number>();
   /** Audio codecs this device failed to decode, per file: dropped from every later profile for it. */
   private readonly rejectedAudio = new Map<number, Set<string>>();
   /** Session the fallback already retried once for. Keyed by sid (not a plain
@@ -54,6 +57,10 @@ export class CopyFallbackController {
     );
   }
 
+  shouldForceRemux(mediaFileId: number): boolean {
+    return this.remuxFileIds.has(mediaFileId);
+  }
+
   rejectedAudioCodecs(mediaFileId: number): ReadonlySet<string> {
     return this.rejectedAudio.get(mediaFileId) ?? new Set();
   }
@@ -69,8 +76,9 @@ export class CopyFallbackController {
     );
   }
 
-  /** An undecodable copy: reject it and reload once per session through `reloadStream`. A copied audio codec
-   *  the engine names is dropped in any mode, else DirectPlay/remux gets `rejectCopy`; neither can loop. True when handled. */
+  /** An undecodable copy: reject it and reload once per session through `reloadStream`. A copied audio codec the
+   *  engine names is dropped in any mode, else DirectPlay steps to a remux, a remux to `rejectCopy`; none can loop.
+   *  True when handled. */
   maybeFallback(
     err: { source?: PlaybackError['source']; code?: number; message?: string; audioCodec?: string },
     position: number,
@@ -93,9 +101,13 @@ export class CopyFallbackController {
       this.rejectedAudio.set(fileId, rejected.add(audio));
       why = { reason: 'audio_fallback', from: audio };
       console.warn(`[player] ${audio} audio failed to decode, retrying without it`);
+    } else if (this.host.playbackMode() === 'direct') {
+      // A raw file that fails says nothing of its codecs: the remux keeps them, and its own failure transcodes.
+      this.remuxFileIds.add(fileId);
+      why = { reason: 'direct_fallback' };
+      console.warn('[player] direct play failed, retrying as a remux');
     } else {
-      const mode = this.host.playbackMode();
-      if (mode !== 'remux' && mode !== 'direct') return false;
+      if (this.host.playbackMode() !== 'remux') return false;
       if (!this.host.hasServerFeature(DEVICE_PROFILE_EXTENSIONS_FEATURE)) return false;
       this.rejectCopyFileIds.add(fileId);
       why = { reason: 'remux_fallback' };

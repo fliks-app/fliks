@@ -1814,6 +1814,7 @@
       "reload_subtitles_on": "Eingebrannte Untertitel aktiviert ({{lang}})",
       "reload_subtitles_off": "Eingebrannte Untertitel deaktiviert",
       "reload_subtitles_hls": "Untertitel über HLS geladen ({{lang}})",
+      "reload_direct_fallback": "Direktwiedergabe auf Remux zurückgefallen",
       "reload_remux_fallback": "Remux auf Transkodierung zurückgefallen",
       "reload_audio_fallback": "Audio-Ausweichlösung: {{codec}} vom Gerät nicht dekodiert, transkodiert",
       "reload_other": "Stream neu geladen",

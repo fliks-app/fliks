@@ -496,7 +496,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     type: string, reason?: string, cast = false,
   ): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'fallback' | 'cast' | 'other' {
     if (cast) return 'cast';
-    if (reason === 'remux_fallback' || reason === 'audio_fallback') return 'fallback';
+    if (reason === 'direct_fallback' || reason === 'remux_fallback' || reason === 'audio_fallback') return 'fallback';
     if (type === 'quality_switch') return 'quality';
     if (type === 'recovery') return 'recovery';
     if (type === 'reload') return reason === 'audio' ? 'audio' : reason === 'subtitles' ? 'subtitles' : 'reload';
@@ -546,6 +546,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
       case 'subtitles':
         if (d.from === 'hls') return title('qoe.transition.reload_subtitles_hls', { lang: lang(d.to) });
         return d.to ? title('qoe.transition.reload_subtitles_on', { lang: lang(d.to) }) : title('qoe.transition.reload_subtitles_off');
+      case 'direct_fallback':
+        return title('qoe.transition.reload_direct_fallback');
       case 'remux_fallback':
         return title('qoe.transition.reload_remux_fallback');
       case 'audio_fallback':
