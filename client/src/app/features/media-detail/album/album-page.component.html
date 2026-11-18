@@ -204,14 +204,12 @@
     </section>
   }
   @if (otherVersions().length) {
-    <app-detail-section [heading]="'music.other_versions' | translate" [collapsible]="false">
-      <ul class="flex gap-3 overflow-x-auto scroll-ring-safe" data-testid="versions">
+    <app-detail-section [heading]="'music.other_versions' | translate" persistKey="albumVersions">
+      <app-horizontal-scroller data-testid="versions">
         @for (v of otherVersions(); track v.id) {
-          <li class="w-36 shrink-0" data-testid="version-link-item">
-            <app-media-card [square]="true" widthClass="w-36" [title]="v.title" [subtitle]="v.subtitle" [badge]="v.missing ? 'missing' : null" [hideStatusBar]="true" [link]="v.link" />
-          </li>
+          <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [square]="true" [title]="v.title" [subtitle]="v.subtitle" [badge]="v.missing ? 'missing' : null" [hideStatusBar]="true" [link]="v.link" />
         }
-      </ul>
+      </app-horizontal-scroller>
     </app-detail-section>
   }
   <dialog #detailsDialog class="modal" role="dialog" aria-modal="true">
