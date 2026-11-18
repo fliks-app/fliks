@@ -75,12 +75,13 @@ export class TvSpatialNavService {
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
     // Drop the lists a DOM change can affect; attribute filter avoids cosmetic churn.
+    // Rooted at <html>, not <body>: dropdowns and popover menus mount there.
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver((records) => {
         this.dropStaleFocusables(records);
         this.rescueFocus(records);
       });
-      this.focusObserver.observe(document.body, {
+      this.focusObserver.observe(document.documentElement, {
         childList: true,
         subtree: true,
         attributes: true,

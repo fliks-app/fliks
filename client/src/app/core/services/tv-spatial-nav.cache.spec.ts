@@ -34,6 +34,21 @@ describe('TvSpatialNavService focusable cache', () => {
     await flush();
     expect(nav.focusablesIn(grid)).toHaveLength(2);
   });
+
+  it('drops the list of an overlay mounted under <html> when its content swaps', async () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as { focusablesIn(root: ParentNode): HTMLElement[] };
+    const overlay = document.documentElement.appendChild(document.createElement('div'));
+    button(overlay, 0);
+    await flush();
+    expect(nav.focusablesIn(overlay)).toHaveLength(1);
+
+    overlay.replaceChildren();
+    button(overlay, 0);
+    button(overlay, 50);
+    await flush();
+    expect(nav.focusablesIn(overlay)).toHaveLength(2);
+    overlay.remove();
+  });
 });
 
 describe('nearestDelta', () => {
