@@ -89,7 +89,7 @@
           }
           @if (!isMobileTouch()) {
             <div class="dropdown-content bg-neutral/95 rounded-2xl shadow-2xl min-w-64 max-h-[60vh] overflow-y-auto p-1 mt-2">
-              <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event); closeDropdown()" />
+              <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event)" (click)="onDeviceListPress($event)" />
             </div>
           }
         </div>
@@ -383,7 +383,7 @@
 
 <app-bottom-sheet [open]="activeSheet() === 'devices'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
   <div class="px-2 pb-4">
-    <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event); closeSheet()" />
+    <app-remote-picker-list [delegate]="true" [card]="true" (picked)="pickDevice.emit($event)" (click)="onDeviceListPress($event)" />
   </div>
 </app-bottom-sheet>
 
