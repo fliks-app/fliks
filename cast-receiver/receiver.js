@@ -784,14 +784,12 @@ context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (e
 // The sender pushes the document in chunks (`lyrics`) and drops it with `lyrics_clear`; the receiver follows its own clock.
 
 const lyricsEl = document.getElementById('lyrics');
-const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], wipes: [], add: createAssembler() };
-// A word is drawn twice, its sung copy clipped from the left and its coming copy from the right, each clip and its text
-// moving against each other: transforms only, so the compositor runs the wipe, and the copies never overlap.
-const LEFT = 'translateX(-100%)';
-const RIGHT = 'translateX(100%)';
-const WIPES = [[LEFT, 'none'], [RIGHT, 'none'], ['none', RIGHT], ['none', LEFT]].map(([a, b]) => [{ transform: a }, { transform: b }]);
-const WIPE_SLACK_MS = 80;
+const lyricsState = { doc: null, sender: null, shown: -2, built: null, list: null, rows: [], words: [], filling: [], add: createAssembler() };
 const lyricsClock = createClock(400);
+// The last clock reading, which the frames in between extrapolate. A word is one gradient on its glyphs, never a layer:
+// layers per word exhaust the Cast compositor's tile memory, which then drops and redraws the whole screen.
+let lyricsAt = { t: 0, at: 0, playing: false };
+let fillFrame = 0;
 
 /** A timed word, or the text between two, its spaces left outside so the line still wraps between words. */
 function wordEl(line, text, className) {
@@ -801,12 +799,12 @@ function wordEl(line, text, className) {
   el.className = className;
   el.textContent = core;
   line.append(lead, el, trail);
-  return { el, text: core, gap: className !== 'word' };
+  return { el, gap: className !== 'word' };
 }
 
 /** Every line of the document in one column, words wrapped where a line has cues. */
 function buildLyrics(doc, timed) {
-  stopWipes();
+  lyricsState.filling = [];
   const list = document.createElement('div');
   list.className = 'lyrics-list' + (timed ? '' : ' static') + (doc.stage ? ' stage' : '');
   lyricsState.rows = [];
@@ -852,47 +850,34 @@ function showLine(i, instant) {
   list.style.transition = '';
 }
 
-function stopWipes() {
-  for (const w of lyricsState.wipes) {
-    w.anims.forEach((a) => a.cancel());
-    w.el.classList.remove('wiping');
-    w.el.textContent = w.text;
-  }
-  lyricsState.wipes = [];
+/** The words of line `i` take their sung share from the clock (the karaoke stage never lights the text between them). */
+function fillLine(i) {
+  const stage = lyricsState.doc.stage;
+  lyricsState.filling = (lyricsState.words[i] || []).filter((w) => !(w.gap && stage)).map((w) => ({ ...w, p: -1 }));
 }
 
-/** Gives the words of line `i` their two copies, only there since each is a layer, and arms their wipes on the
-    media clock (syncWipes). The karaoke stage never lights the text between words. */
-function wipeLine(i) {
-  stopWipes();
-  for (const w of lyricsState.words[i] || []) {
-    if (w.gap && lyricsState.doc.stage) continue;
-    const layers = [];
-    for (const side of ['sung', 'coming']) {
-      const clip = document.createElement('span');
-      clip.className = 'clip ' + side;
-      const copy = document.createElement('span');
-      copy.textContent = w.text;
-      clip.appendChild(copy);
-      w.el.appendChild(clip);
-      layers.push(clip, copy);
+/** Sets each word's share at the extrapolated clock, writing only the ones that moved; true while some still fills. */
+function paintFills() {
+  const { t, at, playing } = lyricsAt;
+  const now = playing ? t + (performance.now() - at) : t;
+  let left = false;
+  for (const w of lyricsState.filling) {
+    const p = now <= w.start ? 0 : now >= w.end ? 100 : Math.round(((now - w.start) / (w.end - w.start)) * 1000) / 10;
+    if (p < 100) left = true;
+    if (p !== w.p) {
+      w.p = p;
+      w.el.style.setProperty('--p', p + '%');
     }
-    w.el.classList.add('wiping');
-    const timing = { duration: Math.max(1, w.end - w.start), fill: 'both', easing: 'linear' };
-    lyricsState.wipes.push({ el: w.el, text: w.text, start: w.start, duration: timing.duration, anims: layers.map((el, k) => el.animate(WIPES[k], timing)) });
   }
+  return left;
 }
 
-/** The wipes follow the playback state, and are moved only when they drift from the media clock `t`. */
-function syncWipes(t, playing) {
-  for (const w of lyricsState.wipes) {
-    const at = Math.min(t - w.start, w.duration);
-    for (const a of w.anims) {
-      if (playing && a.playState === 'paused') a.play();
-      else if (!playing && a.playState !== 'paused') a.pause();
-      if (Math.abs(a.currentTime - at) > WIPE_SLACK_MS) a.currentTime = at;
-    }
-  }
+/** Repaints every frame while the current line has words left to sing and the track plays. */
+function requestFills() {
+  if (fillFrame) return;
+  fillFrame = requestAnimationFrame(function step() {
+    fillFrame = paintFills() && lyricsAt.playing ? requestAnimationFrame(step) : 0;
+  });
 }
 
 function refreshLyrics() {
@@ -900,7 +885,10 @@ function refreshLyrics() {
   // A document belongs to its track: the next one's arrives just after the queue moves on.
   const visible = !!doc && doc.itemId === playingItemId() && document.body.classList.contains('playing');
   document.body.classList.toggle('lyrics-on', visible);
-  if (!visible) return lyricsEl.classList.remove('show');
+  if (!visible) {
+    lyricsAt.playing = false;
+    return lyricsEl.classList.remove('show');
+  }
   const timed = doc.synced && doc.rows.every((r) => r.start !== undefined && r.start !== null);
   if (lyricsState.built !== doc) buildLyrics(doc, timed);
   lyricsEl.classList.add('show');
@@ -912,14 +900,15 @@ function refreshLyrics() {
     const fresh = lyricsState.shown === -2;
     lyricsState.shown = i;
     showLine(i, fresh);
-    wipeLine(i);
+    fillLine(i);
   }
-  syncWipes(pos + (doc.offset || 0), playing);
+  lyricsAt = { t: pos + (doc.offset || 0), at: performance.now(), playing };
+  requestFills();
 }
 setInterval(refreshLyrics, 100);
 
 function dropLyrics() {
-  stopWipes();
+  lyricsState.filling = [];
   lyricsState.doc = null;
   lyricsState.built = null;
   lyricsState.list = null;
