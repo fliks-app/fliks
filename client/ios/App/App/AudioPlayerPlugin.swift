@@ -134,9 +134,12 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Plugin methods
 
     @objc func configure(_ call: CAPPluginCall) {
-        deviceProfile = call.getString("deviceProfile")
-        UserDefaults.standard.set(deviceProfile, forKey: Self.profileKey)
-        call.resolve()
+        let profile = call.getString("deviceProfile")
+        DispatchQueue.main.async {
+            self.deviceProfile = profile
+            UserDefaults.standard.set(profile, forKey: Self.profileKey)
+            call.resolve()
+        }
     }
 
     @objc func attach(_ call: CAPPluginCall) {
@@ -717,7 +720,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let session = AVAudioSession.sharedInstance()
         let voice = (bridge?.plugin(withName: "NativePlayer") as? NativePlayerPlugin)?.voiceActive ?? false
         let options: AVAudioSession.CategoryOptions = voice ? [.mixWithOthers, .allowAirPlay, .allowBluetoothA2DP] : [.allowAirPlay, .allowBluetoothA2DP]
-        try? session.setCategory(.playback, mode: .default, options: options)
+        if KaraokeMicPlugin.capturing {
+            try? session.setCategory(.playAndRecord, mode: .default, options: KaraokeMicPlugin.sessionOptions)
+        } else {
+            try? session.setCategory(.playback, mode: .default, options: options)
+        }
         try? session.setActive(true)
     }
 

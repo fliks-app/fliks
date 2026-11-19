@@ -366,7 +366,7 @@ enum MusicTransport: Equatable {
         let nextUid = next.uid
         Task {
             guard case .success(let item) = await makeItem(index), mine == generation, uid == current?.uid,
-                  queue.tracks.contains(where: { $0.uid == nextUid }), player.items().count < 2 else { return }
+                  nextTrack()?.uid == nextUid, player.items().count < 2 else { return }
             uidOfItem[ObjectIdentifier(item)] = nextUid
             player.insert(item, after: player.items().last)
         }

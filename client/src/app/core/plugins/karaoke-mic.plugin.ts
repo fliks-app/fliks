@@ -6,5 +6,9 @@ interface KaraokeMicPlugin {
   stop(): Promise<void>;
   /** Mono samples as little-endian 16-bit PCM, base64. */
   addListener(event: 'block', cb: (e: { data: string }) => void): Promise<PluginListenerHandle>;
+  /** The capture restarted after an interruption or a route change, possibly at another rate. */
+  addListener(event: 'rate', cb: (e: { sampleRate: number }) => void): Promise<PluginListenerHandle>;
+  /** The capture could not restart. */
+  addListener(event: 'ended', cb: () => void): Promise<PluginListenerHandle>;
 }
 export const KaraokeMic = registerPlugin<KaraokeMicPlugin>('KaraokeMic');

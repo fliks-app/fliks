@@ -145,7 +145,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func loadImage(_ path: String, into item: CPListItem) {
         guard let server = AudioPlayerPlugin.shared?.session()?.server,
-              let url = URL(string: path.hasPrefix("/") ? server + path + (path.contains("?") ? "&" : "?") + "size=thumb" : path) else { return }
+              let url = URL(string: path.hasPrefix("/") ? server + path + (path.hasPrefix("/api/images/") ? (path.contains("?") ? "&" : "?") + "size=thumb" : "") : path) else { return }
         let key = url.absoluteString as NSString
         if let cached = images.object(forKey: key) { return item.setImage(cached) }
         Task {

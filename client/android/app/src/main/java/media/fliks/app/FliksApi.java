@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** The fliks API from native code, with the session the web layer stores in Capacitor
- *  Preferences. A web layer that declared itself ready is asked to refresh first. */
+ *  Preferences. A web layer that is loaded is asked to refresh first. */
 final class FliksApi {
     /** The kinds of the bundled web registry (`KIND_REGISTRY`), declared to the server. */
     private static final String KINDS = "movie,series,book,comic,album";
@@ -46,10 +46,12 @@ final class FliksApi {
         }
     }
 
-    private static final long REFRESH_WAIT_MS = 10_000;
+    private static final long ADOPT_WAIT_MS = 2_000;
     private static final long STREAM_TOKEN_MIN_LIFE_MS = 30 * 60 * 1000;
 
     private final SharedPreferences prefs;
+    /** How long a loaded web layer has to answer a refresh request before native rotates itself. */
+    long refreshWaitMs = 10_000;
     private volatile boolean webOwnsRefresh;
     @Nullable private volatile Runnable refreshRequest;
     private final Map<String, StreamToken> streamTokens = new HashMap<>();
@@ -72,7 +74,7 @@ final class FliksApi {
         this.prefs = prefs;
     }
 
-    /** While a WebView exists it owns token rotation; `request` asks it to refresh through this. */
+    /** While a WebView is loaded, `request` asks it to refresh through this before native rotates. */
     void setWebOwnsRefresh(boolean owns, @Nullable Runnable request) {
         webOwnsRefresh = owns;
         refreshRequest = request;
@@ -136,15 +138,20 @@ final class FliksApi {
                 + android.net.Uri.encode(streamToken(mediaFileId, boundKey));
     }
 
-    private synchronized String streamToken(long mediaFileId, String boundKey) throws IOException {
+    private String streamToken(long mediaFileId, String boundKey) throws IOException {
         String id = boundKey + "#" + mediaFileId;
-        StreamToken known = streamTokens.get(id);
+        StreamToken known;
+        synchronized (streamTokens) {
+            known = streamTokens.get(id);
+        }
         if (known != null && known.expiresAt - System.currentTimeMillis() > STREAM_TOKEN_MIN_LIFE_MS) return known.token;
         try {
             JSONObject res = new JSONObject(request("POST", "/api/auth/stream-token",
                     new JSONObject().put("mediaFileId", mediaFileId).toString(), boundKey));
             StreamToken minted = new StreamToken(res.getString("streamToken"), res.getLong("expiresAt"));
-            streamTokens.put(id, minted);
+            synchronized (streamTokens) {
+                streamTokens.put(id, minted);
+            }
             return minted.token;
         } catch (JSONException e) {
             throw new IOException(e);
@@ -231,19 +238,19 @@ final class FliksApi {
         return null;
     }
 
-    /** True once the session `key` holds a token other than `sent`, the one that was rejected: another
-     *  caller or the web layer already rotated it. Otherwise the web layer, when it declared it can
-     *  refresh, is asked and awaited outside the lock; failing that the stored pair is rotated here.
-     *  A refresh that fails for a transient reason throws, so callers do not read it as a sign-out. */
+    /** Asks the web layer first when it is loaded; else, or when it stays silent, rotates the stored pair. */
     private boolean refresh(String key, String sent) throws IOException {
-        if (webOwnsRefresh && awaitWeb(key, sent)) return true;
-        return rotateIfStale(key, sent);
+        if (webOwnsRefresh) {
+            Runnable ask = refreshRequest;
+            if (ask != null) ask.run();
+            if (awaitChange(key, sent, refreshWaitMs)) return true;
+        }
+        return rotateIfStale(key, sent) || awaitChange(key, sent, ADOPT_WAIT_MS);
     }
 
-    private boolean awaitWeb(String key, String sent) throws IOException {
-        Runnable ask = refreshRequest;
-        if (ask != null) ask.run();
-        long deadline = System.currentTimeMillis() + REFRESH_WAIT_MS;
+    /** True once the session `key` holds a token other than `sent` (or is gone), within `waitMs`. */
+    private boolean awaitChange(String key, String sent, long waitMs) throws IOException {
+        long deadline = System.currentTimeMillis() + waitMs;
         while (System.currentTimeMillis() < deadline) {
             try {
                 Thread.sleep(200);

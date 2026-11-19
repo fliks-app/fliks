@@ -23,7 +23,7 @@ export class PitchWindow {
 export class MicCapture {
   private stream: MediaStream | null = null;
   private ctx: AudioContext | null = null;
-  private native: PluginListenerHandle | null = null;
+  private native: PluginListenerHandle[] = [];
 
   /** `now` is the clock the frames are stamped with: host media time in ms. */
   async start(onFrame: (f: PitchFrame) => void, now: () => number): Promise<void> {
@@ -51,11 +51,14 @@ export class MicCapture {
     const win = new PitchWindow();
     const smooth = new PitchSmoother();
     let rate = 48000;
-    this.native = await KaraokeMic.addListener('block', ({ data }) => {
+    const block = await KaraokeMic.addListener('block', ({ data }) => {
       const pcm = new Int16Array(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)).buffer);
       // The pitch comes from the window ending at this block: stamp the middle of it, where the sound was.
       onFrame({ t: now() - (WINDOW / 2 / rate) * 1000, midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
     });
+    const restarted = await KaraokeMic.addListener('rate', (e) => (rate = e.sampleRate));
+    const ended = await KaraokeMic.addListener('ended', () => this.stop());
+    this.native = [block, restarted, ended];
     try {
       rate = (await KaraokeMic.start()).sampleRate;
     } catch (err) {
@@ -67,9 +70,9 @@ export class MicCapture {
   stop(): void {
     // Native stop is idempotent and must also cancel a start still waiting on the permission prompt.
     if (['android', 'ios'].includes(Capacitor.getPlatform())) void KaraokeMic.stop().catch(() => undefined);
-    if (this.native) {
-      void this.native.remove();
-      this.native = null;
+    if (this.native.length) {
+      this.native.forEach((h) => void h.remove());
+      this.native = [];
     }
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;

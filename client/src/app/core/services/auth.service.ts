@@ -806,7 +806,12 @@ export class AuthService {
       }
       // Another tab may have rotated meanwhile: then our token was merely
       // stale, not dead — adopt the new one and let the caller retry.
-      const stored = await this.readStoredRefreshToken();
+      // The native shell persists its rotation a moment after the server accepts it: allow it ~2 s.
+      let stored = await this.readStoredRefreshToken();
+      for (let i = 0; i < 5 && !(stored.token && stored.version > sentVersion) && err instanceof HttpErrorResponse && err.status === 401; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        stored = await this.readStoredRefreshToken();
+      }
       if (stored.token && stored.version > sentVersion) {
         this.adoptRefreshToken(stored);
         if (!this.cookieAuth) {

@@ -1,6 +1,7 @@
 package media.fliks.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -13,6 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -31,6 +33,7 @@ public class FliksApiTest {
     private final Map<String, String> store = new HashMap<>();
     private final List<String> calls = new CopyOnWriteArrayList<>();
     private FliksApi api;
+    private volatile int refreshStatus = 200;
 
     @Before
     public void start() throws Exception {
@@ -67,6 +70,14 @@ public class FliksApiTest {
                             if (l.toLowerCase().startsWith("authorization:")) auth = l.substring(14).trim();
                         }
                         calls.add(path + " " + auth);
+                        if (path.startsWith("/api/auth/refresh")) {
+                            String ok = "{\"accessToken\":\"new\",\"refreshToken\":\"r2\"}";
+                            String body = refreshStatus == 200 ? ok : "";
+                            c.getOutputStream().write(("HTTP/1.1 " + refreshStatus + " X\r\nContent-Length: "
+                                    + body.length() + "\r\nConnection: close\r\n\r\n" + body)
+                                    .getBytes(StandardCharsets.UTF_8));
+                            continue;
+                        }
                         boolean old = "Bearer old".equals(auth);
                         if (old) onOldToken.run();
                         String body = old ? "" : "{\"ok\":true}";
@@ -119,6 +130,23 @@ public class FliksApiTest {
         assertTrue(api.postJson("/api/x", "{}", base + "::7").getBoolean("ok"));
         assertEquals("/api/x Bearer new", calls.get(calls.size() - 1));
         assertTrue(calls.stream().noneMatch(c -> c.startsWith("/api/auth/refresh")));
+    }
+
+    @Test
+    public void rotatesNativelyWhenTheWebLayerStaysSilent() throws Exception {
+        serve(() -> { });
+        api.refreshWaitMs = 300;
+        api.setWebOwnsRefresh(true, () -> { });
+        assertTrue(api.postJson("/api/x", "{}", base + "::7").getBoolean("ok"));
+        assertEquals(List.of("/api/x Bearer old", "/api/auth/refresh null", "/api/x Bearer new"), new ArrayList<>(calls));
+    }
+
+    @Test
+    public void aTransientRefreshFailureIsNotAnExpiredSession() throws Exception {
+        serve(() -> { });
+        refreshStatus = 503;
+        IOException e = assertThrows(IOException.class, () -> api.postJson("/api/x", "{}", base + "::7"));
+        assertFalse(e instanceof FliksApi.HttpError);
     }
 
     /** A SharedPreferences over a map: strings only, which is all the session store holds. */
