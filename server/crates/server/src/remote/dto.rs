@@ -13,7 +13,8 @@ use serde::{Deserialize, Deserializer};
 const ACTIONS_MAX: usize = 32;
 
 /// Most items a remote queue carries.
-const QUEUE_MAX: usize = 500;
+/// Most items a queue carries (`remote.md` rule 35).
+pub const QUEUE_MAX: usize = 500;
 
 fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     d: D,

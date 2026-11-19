@@ -118,11 +118,7 @@ impl Presence {
 /// Tells the owner's account and household that `live` stopped (`remote.stopped`, then the target list).
 pub fn announce_stopped(st: &AppState, live: &LiveSession) {
     let Some(user) = live.user_id else { return };
-    let target = st
-        .hub
-        .target_id_for(live.sse_connection_id.as_deref())
-        .or_else(|| live.target_id().map(str::to_owned));
-    match target {
+    match live.target_id().map(str::to_owned) {
         Some(target_id) => st.hub.emit_to_user(
             user,
             SseEvent::RemoteStopped {

@@ -1,6 +1,6 @@
 //! Watch party (`docs/spec/watch-party.md`): routes, the in-memory registry and its tick.
 mod cover;
-mod db;
+pub(crate) mod db;
 mod dto;
 mod karaoke_ws;
 mod programme;

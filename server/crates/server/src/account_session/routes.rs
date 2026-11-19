@@ -2,7 +2,14 @@
 use super::{QueueState, Row, State, continues, store};
 use crate::{
     events::{Num, SseEvent, event::Queue},
-    http::{AppError, auth::SessionAuthed, json::iso_ms, validate::ValidJson},
+    http::{
+        AppError,
+        auth::{Authed, SessionAuthed},
+        json::iso_ms,
+        validate::ValidJson,
+    },
+    libraries::accessible_library_ids,
+    party::db::items_open,
     remote::{authorize_target, dto::Command, ensure_supported, send},
     state::AppState,
 };
@@ -109,6 +116,12 @@ async fn current(st: &AppState, user: i32) -> Result<Option<(Row, store::Shown)>
     Ok(Some((row, shown)))
 }
 
+/// Whether the caller can still open the row's item: access lost since the claim hides the row.
+async fn readable(st: &AppState, a: &Authed, row: &Row) -> Result<bool, AppError> {
+    let acl = accessible_library_ids(&st.db, a).await?;
+    Ok(items_open(&st.db, &[row.item_id], &acl).await?)
+}
+
 /// `session.md` rule 20: a device whose stream just registered as `connection` is sent the live
 /// owner's last `remote.state`, unless the owner is this device itself (rule 6) or out of scope.
 pub async fn observe(st: &AppState, user: i32, connection: &str, me: &str) -> Option<()> {
@@ -158,7 +171,12 @@ pub async fn show(
     AxumState(st): AxumState<AppState>,
     SessionAuthed(a): SessionAuthed,
 ) -> Result<Json<Option<AccountSessionDto>>, AppError> {
-    Ok(Json(current(&st, a.user.id).await?.map(|(r, s)| dto(r, s))))
+    let Some((row, shown)) = current(&st, a.user.id).await? else {
+        return Ok(Json(None));
+    };
+    Ok(Json(
+        readable(&st, &a, &row).await?.then(|| dto(row, shown)),
+    ))
 }
 
 #[utoipa::path(delete, path = "/api/session", responses((status = 204), (status = 409)))]
@@ -195,6 +213,9 @@ pub async fn transfer(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let no_session = || AppError::not_found("session.error_no_session");
     let (row, shown) = current(&st, a.user.id).await?.ok_or_else(no_session)?;
+    if !readable(&st, &a, &row).await? {
+        return Err(no_session());
+    }
     let (owner, conn) = authorize_target(&st, &a, &body.to_target_id).await?;
     let held = row.state != State::Parked;
     if held && row.owner.target_id.as_deref() == Some(&body.to_target_id) {

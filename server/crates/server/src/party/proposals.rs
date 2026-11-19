@@ -263,24 +263,15 @@ async fn add_proposals(
     let mut targets = Vec::with_capacity(items.len());
     for item in &items {
         assert_media_accessible(&st.db, item.media_id, &ids).await?;
-        super::routes::check_item(st, item, &ids).await?;
-        let target: i32 = sqlx::query_scalar("SELECT COALESCE($1, item_of($2, $3))")
-            .bind(item.item_id)
-            .bind(item.media_id)
-            .bind(item.episode_id)
-            .fetch_one(&st.db)
-            .await?;
-        targets.push(target);
+        targets.push(super::routes::check_item(st, item, &ids).await?);
     }
     let mut tx = st.db.begin().await?;
     // The party row lock serializes the counts and the insert.
-    sqlx::query(
-        r#"SELECT 1 FROM watch_parties WHERE id = $1 AND status IN ('scheduled', 'live') FOR UPDATE"#,
-    )
-    .bind(id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_not_scheduled"))?;
+    sqlx::query(r#"SELECT 1 FROM watch_parties WHERE id = $1 AND status = 'scheduled' FOR UPDATE"#)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_not_scheduled"))?;
     let mut added = 0;
     for &target in &targets {
         let existing: Option<i32> = sqlx::query_scalar(

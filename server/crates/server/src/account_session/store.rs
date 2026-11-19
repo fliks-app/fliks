@@ -56,6 +56,20 @@ pub async fn upsert(db: &PgPool, r: &Row) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+pub fn is_fk_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .is_some_and(|c| c == "23503")
+}
+
+pub async fn file_exists(db: &PgPool, file: i32) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM media_files WHERE id = $1)")
+        .bind(file)
+        .fetch_one(db)
+        .await
+        .unwrap_or(true)
+}
+
 pub async fn delete(db: &PgPool, user: i32) -> Result<(), sqlx::Error> {
     sqlx::query!(r#"DELETE FROM account_sessions WHERE "userId" = $1"#, user)
         .execute(db)

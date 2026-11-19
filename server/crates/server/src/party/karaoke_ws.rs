@@ -5,6 +5,7 @@ use crate::{
     events::credential,
     http::{AppError, auth::SessionAuthed, validate::PathParams},
     state::AppState,
+    sync::MutexExt,
 };
 use axum::{
     extract::{
@@ -42,7 +43,7 @@ struct Slot(Relay, (i32, i32));
 
 impl Drop for Slot {
     fn drop(&mut self) {
-        let mut all = self.0.1.lock().unwrap();
+        let mut all = self.0.1.lock_clean();
         if let Some(n) = all.get_mut(&self.1) {
             *n -= 1;
             if *n == 0 {
@@ -54,7 +55,7 @@ impl Drop for Slot {
 
 impl Relay {
     fn open(&self, party: i32, user: i32) -> Option<Slot> {
-        let mut all = self.1.lock().unwrap();
+        let mut all = self.1.lock_clean();
         let n = all.entry((party, user)).or_default();
         if *n >= MAX_SOCKETS {
             return None;
@@ -73,7 +74,7 @@ impl Relay {
     }
 
     fn remove(&self, party: i32, id: u64) {
-        let mut all = self.0.lock().unwrap();
+        let mut all = self.0.lock_clean();
         if let Some(v) = all.get_mut(&party) {
             v.retain(|(i, _)| *i != id);
             if v.is_empty() {
@@ -84,7 +85,7 @@ impl Relay {
 
     /// A slow display drops batches rather than slowing the singers.
     fn send(&self, party: i32, text: &str) {
-        for (_, tx) in self.0.lock().unwrap().get(&party).into_iter().flatten() {
+        for (_, tx) in self.0.lock_clean().get(&party).into_iter().flatten() {
             let _ = tx.try_send(text.to_owned());
         }
     }

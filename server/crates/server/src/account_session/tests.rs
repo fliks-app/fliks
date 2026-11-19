@@ -796,3 +796,69 @@ async fn a_device_is_held_by_its_newest_row_only(pool: PgPool) {
     assert!(st.account_sessions.holds(&[a, b], "dev#native", 8).await);
     assert!(!st.account_sessions.holds(&[a, b], "dev#native", 7).await);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_reload_of_a_superseded_sid_stays_superseded(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "dev#a", i)).await;
+    {
+        let mut g = s.0.lock().await;
+        g.claimed.get_mut("s1").unwrap().superseded = true;
+        g.rows.get_mut(&u).unwrap().row.session_id = "s1".into();
+    }
+    s.replaced(&st, u, "s1", "s2").await;
+    assert!(s.is_superseded("s2").await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_dropped_replacement_clears_its_mark(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    assert!(s.replacing(u, "s1").await);
+    drop(ReplaceGuard::new(&st, "s1"));
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while s.0.lock().await.claimed["s1"].replacing {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("mark cleared");
+    assert!(s.replacing(u, "s1").await);
+    let guard = ReplaceGuard::new(&st, "s1");
+    assert_eq!(guard.disarm(), "s1");
+    tokio::task::yield_now().await;
+    assert!(s.0.lock().await.claimed["s1"].replacing, "disarmed: kept");
+}
+
+#[test]
+fn a_transfer_record_is_keyed_by_device_not_by_face() {
+    let mut g = Inner::default();
+    g.handoffs
+        .insert((1, device_id_of("dev#tab").to_owned()), (7, 2_000));
+    assert!(g.take_handoff(1, Some("dev#native"), 7, 1_000));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_replaced_while_playing_is_dropped_from_the_row_and_the_row_still_stores(
+    pool: PgPool,
+) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "tA", i);
+    b.file = Some(999_999);
+    s.beat(&st, b).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(r.media_file_id, None, "the missing file is unlinked");
+    assert!(
+        store::all(&st.db)
+            .await
+            .unwrap()
+            .iter()
+            .any(|r| r.user_id == u)
+    );
+}
