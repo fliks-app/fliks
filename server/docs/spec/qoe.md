@@ -1,6 +1,6 @@
 # Spec: QoE (playback quality of experience)
 
-Core in `fliks_domain::qoe`, service and routes in `fliks-server`. Tables: `playback_qoe_sessions`, `playback_qoe_events` (`server/migrations/1786300000000_create-playback-qoe.sql`; `startupMs`, `startupCause`, `fallbackReloads` from `1789000001070_qoe-startup-fallbacks.sql`, which backfills `fallbackReloads` from stored reload events and leaves stored verdicts as they are).
+Core in `fliks_domain::qoe`, service and routes in `fliks-server`. Tables: `playback_qoe_sessions`, `playback_qoe_events` (`server/migrations/1786300000000_create-playback-qoe.sql`; `startupMs`, `startupCause`, `fallbackReloads` from `1789000000970_karaoke-session-party.sql`, which backfills `fallbackReloads` from stored reload events and leaves stored verdicts as they are).
 
 Related: the heartbeat's QoE sample step is `heartbeat.md` rule 10; presence and engine events feed the trackers (Rules 40-41).
 

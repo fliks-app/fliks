@@ -4,6 +4,8 @@ CREATE TABLE "acquisition_queue" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
   "finishedAt" timestamptz,
+  -- History rows the user deleted stay as tombstones, so a provider reporting a finished transfer again does not revive them.
+  "deletedAt" timestamptz,
   "pluginId" text NOT NULL,
   "ref" text NOT NULL,
   "mediaId" integer NOT NULL REFERENCES "media"("id") ON DELETE CASCADE,
@@ -26,7 +28,8 @@ CREATE TABLE "acquisition_queue" (
     ('queued', 'active', 'stalled', 'paused', 'importing', 'import_failed', 'imported', 'failed', 'removed')),
   CONSTRAINT "CK_acquisition_queue_method" CHECK ("method" IN ('manual', 'auto', 'rss')),
   CONSTRAINT "CK_acquisition_queue_closed" CHECK (
-    ("finishedAt" IS NULL) = ("state" IN ('queued', 'active', 'stalled', 'paused', 'importing', 'import_failed')))
+    ("finishedAt" IS NULL) = ("state" IN ('queued', 'active', 'stalled', 'paused', 'importing', 'import_failed'))),
+  CONSTRAINT "CK_acquisition_queue_deleted" CHECK ("deletedAt" IS NULL OR "finishedAt" IS NOT NULL)
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON "acquisition_queue" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -34,4 +37,15 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON "acquisition_queue" FOR EACH ROW 
 -- A provider's open transfer is found by its ref; the open rows of a media are the in-flight read.
 CREATE UNIQUE INDEX "UQ_acquisition_queue_open_ref" ON "acquisition_queue" ("pluginId", "ref") WHERE "finishedAt" IS NULL;
 CREATE INDEX "IDX_acquisition_queue_media" ON "acquisition_queue" ("mediaId", "finishedAt");
-CREATE INDEX "IDX_acquisition_queue_history" ON "acquisition_queue" ("finishedAt" DESC, "id" DESC) WHERE "finishedAt" IS NOT NULL;
+-- The history lists skip tombstones.
+CREATE INDEX "IDX_acquisition_queue_history" ON "acquisition_queue" ("finishedAt" DESC, "id" DESC)
+  WHERE "finishedAt" IS NOT NULL AND "deletedAt" IS NULL;
+
+-- `queue.manage` (rule 73) is kept by the roles that could manage the download plugin's queue.
+ALTER TABLE "roles" DISABLE TRIGGER set_updated_at;
+UPDATE "roles"
+       SET "permissions" = ("permissions"::jsonb || '["queue.manage"]'::jsonb)::text
+       WHERE ("permissions"::jsonb ? 'manage:plugin:fliks.download:queue-control'
+              OR "permissions"::jsonb ? 'plugin:fliks.download:queue-control')
+         AND NOT ("permissions"::jsonb ? 'queue.manage');
+ALTER TABLE "roles" ENABLE TRIGGER set_updated_at;

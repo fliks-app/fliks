@@ -8,9 +8,8 @@ CREATE INDEX "IDX_media_libraryId_createdAt" ON "media" ("libraryId", "createdAt
 CREATE INDEX "IDX_playback_states_history" ON "playback_states" ("userId", "playedAt" DESC)
   WHERE "playedAt" IS NOT NULL;
 
--- Track list: default title sort and the `q` ILIKE filter.
+-- Track list: default title sort.
 CREATE INDEX "IDX_items_title_lower" ON "items" (lower("title"), "id");
-CREATE INDEX "IDX_items_title_trgm" ON "items" USING gin ("title" gin_trgm_ops);
 
 -- Strict prefixes of `IDX_item_parts_mediaFileId_mediaId`, `IDX_items_mediaId_editionId` and the grid indexes above.
 DROP INDEX "IDX_item_parts_mediaFileId";
@@ -82,10 +81,10 @@ BEGIN
   NEW."searchText" := track_search_text(NEW."itemId", NEW.label);
   RETURN NEW;
 END $$;
-CREATE TRIGGER track_details_search_text BEFORE INSERT OR UPDATE OF "itemId", label ON "track_details"
+CREATE TRIGGER track_details_search_text BEFORE INSERT OR UPDATE OF "itemId", "mediaId", label ON "track_details"
   FOR EACH ROW EXECUTE FUNCTION track_details_search_text();
 
--- `media` passes its own id; `items` and `media_credits` their "mediaId".
+-- `media` passes its own id, `media_credits` its "mediaId".
 CREATE FUNCTION track_search_text_refresh() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_TABLE_NAME = 'media' THEN
@@ -100,14 +99,23 @@ BEGIN
 END $$;
 CREATE TRIGGER track_search_text AFTER UPDATE OF title ON "media"
   FOR EACH ROW WHEN (OLD.title IS DISTINCT FROM NEW.title) EXECUTE FUNCTION track_search_text_refresh();
-CREATE TRIGGER track_search_text AFTER UPDATE OF title ON "items"
-  FOR EACH ROW WHEN (OLD.title IS DISTINCT FROM NEW.title) EXECUTE FUNCTION track_search_text_refresh();
 CREATE TRIGGER track_search_text_insert AFTER INSERT ON "media_credits"
   FOR EACH ROW WHEN (NEW.role = 'artist') EXECUTE FUNCTION track_search_text_refresh();
 CREATE TRIGGER track_search_text_delete AFTER DELETE ON "media_credits"
   FOR EACH ROW WHEN (OLD.role = 'artist') EXECUTE FUNCTION track_search_text_refresh();
 CREATE TRIGGER track_search_text_update AFTER UPDATE ON "media_credits"
   FOR EACH ROW WHEN (OLD.role = 'artist' OR NEW.role = 'artist') EXECUTE FUNCTION track_search_text_refresh();
+
+-- A track retitled or moved to another album recomputes its own row only.
+CREATE FUNCTION items_track_search_text() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE track_details SET "searchText" = track_search_text("itemId", label)
+   WHERE "itemId" = NEW.id AND "searchText" IS DISTINCT FROM track_search_text("itemId", label);
+  RETURN NULL;
+END $$;
+CREATE TRIGGER track_search_text AFTER UPDATE OF title, "mediaId" ON "items"
+  FOR EACH ROW WHEN (OLD.title IS DISTINCT FROM NEW.title OR OLD."mediaId" IS DISTINCT FROM NEW."mediaId")
+  EXECUTE FUNCTION items_track_search_text();
 
 CREATE FUNCTION persons_track_search_text() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
