@@ -3,6 +3,7 @@
 **/.angular
 **/.git
 **/*.md
+!client/public/whats-new/**/*.md
 **/coverage
 client/android
 client/ios
