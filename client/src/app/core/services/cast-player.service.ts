@@ -941,6 +941,7 @@ export class CastPlayerService {
         durationSeconds: dur || 0,
         mediaFileId: mfId,
         episodeId: this.episodeId(),
+        castDevice: this.cast.deviceName() ?? undefined,
         ...heartbeat,
       };
       const token = (await this.authService.ensureStreamToken(mfId)) ?? this.authService.accessToken;

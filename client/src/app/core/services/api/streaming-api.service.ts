@@ -683,6 +683,8 @@ export class StreamingApiService {
       queue?: { itemIds: number[]; index: number; shuffle: boolean; repeat: 'off' | 'all' | 'one' };
       /** The session was started to take the account session over on purpose: the old owner stops silently. */
       handoff?: boolean;
+      /** The Cast receiver this playback plays on: the account session shows it as the owner. */
+      castDevice?: string;
       qoe?: QoeSample;
     },
   ) {

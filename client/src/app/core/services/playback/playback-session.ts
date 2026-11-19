@@ -143,9 +143,11 @@ export class PlaybackSession {
     const kind = this.kind();
     const translate = this.injector.get(TranslateService);
     if (kind === 'cast') {
-      return this.castSvc().castDevices().find((d) => d.connected)?.name ?? 'Chromecast';
+      return this.castSvc().deviceName();
     }
     if (kind !== 'remote' && !this.observing()) return null;
+    const cast = this.remoteSvc().observedCast();
+    if (cast) return cast;
     const t = this.remoteSvc().observedTarget();
     const label = t && parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
     return label ? translate.instant(label.key, label.params) : null;

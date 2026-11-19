@@ -444,7 +444,7 @@ impl AccountSessions {
             e.row.kind,
             e.row.state,
             e.row.queue.clone(),
-            e.row.owner.target_id.clone(),
+            e.row.owner.clone(),
         );
         let r = &mut e.row;
         (r.item_id, r.media_file_id, r.kind, r.state) = (b.item, b.file, b.kind, b.state);
@@ -466,7 +466,7 @@ impl AccountSessions {
             r.kind,
             r.state,
             r.queue.clone(),
-            r.owner.target_id.clone(),
+            r.owner.clone(),
         );
         let changed = was != now;
         let due = now_ms() as i64 - e.persisted_at >= PERSIST_EVERY_MS;

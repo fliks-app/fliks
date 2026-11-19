@@ -49,6 +49,7 @@ describe('AudioPlayerService music mode', () => {
   const castOut = {
     active: signal(false),
     isConnected: signal(false),
+    deviceName: signal<string | null>('Living room'),
     load: async (...a: unknown[]) => {
       const info = await castLoad(...a);
       if (info) castOut.active.set(true);
@@ -424,7 +425,7 @@ describe('AudioPlayerService music mode', () => {
     expect(castOut.toggle).toHaveBeenCalled();
     await audio.seek(30);
     expect(castOut.seek).toHaveBeenCalledWith(30);
-    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 77, sessionId: 'cs', positionSeconds: 30 }));
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(1, expect.objectContaining({ itemId: 1, mediaFileId: 77, sessionId: 'cs', positionSeconds: 30, castDevice: 'Living room' }));
     await audio.close();
     expect(castOut.stop).toHaveBeenCalled();
   });

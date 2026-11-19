@@ -196,6 +196,12 @@ export class RemoteService {
     if (!id) return null;
     return faceOf(this.targets(), id) ?? (id === this.selectedTargetId() ? this.selectedRow() : null);
   });
+  /** The Cast receiver the observed device plays on, as the account session names it (`heartbeat.md` rule 22b). */
+  readonly observedCast = computed(() => {
+    const owner = this.sessionSync.session()?.owner;
+    const id = this.observedTargetId();
+    return owner?.formFactor === 'cast' && owner.targetId && id && sameTarget(owner.targetId, id) ? owner.deviceName : null;
+  });
   /** Whether the observed target takes `action`; reads the listing, so a computed over it follows. */
   observedCan(action: RemoteAction): boolean {
     return targetSupports(this.observedTarget(), action);

@@ -1653,6 +1653,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         playbackRate: this.effectiveRate(),
         ...(this._musicMode() && { stemMode: this._stemMode(), vocalLevel: this._vocalLevel(), pitch: this._pitch(), stemsAvailable: this._stemsAvailable() }),
         ...this.volumeReport(),
+        ...(this.castOut.active() && { castDevice: this.castOut.deviceName() ?? undefined }),
       } satisfies BeatBody,
     } as { mediaId: number; payload: BeatBody };
   }
