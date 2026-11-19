@@ -33,7 +33,7 @@ export interface PlayItem {
   /** Loading-screen backdrop of the local player, before its media has loaded. */
   backdropUrl?: string | null;
   streamInfo?: any;
-  /** Where the caller knows playback stopped; only a remote target uses it. */
+  /** Where the caller knows playback stopped; a remote target and the cast receiver start there. */
   positionSeconds?: number;
   /** Picks made on the detail header; the target honours them once, whichever it is. */
   tracks?: LaunchTracks;
@@ -143,9 +143,11 @@ export class PlaybackSession {
     const kind = this.kind();
     const translate = this.injector.get(TranslateService);
     if (kind === 'cast') {
-      return this.castSvc().castDevices().find((d) => d.connected)?.name ?? 'Chromecast';
+      return this.castSvc().deviceName();
     }
     if (kind !== 'remote' && !this.observing()) return null;
+    const cast = this.remoteSvc().observedCast();
+    if (cast) return cast;
     const t = this.remoteSvc().observedTarget();
     const label = t && parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
     return label ? translate.instant(label.key, label.params) : null;
@@ -325,7 +327,7 @@ export class PlaybackSession {
         episodeId: item.episodeId,
         media: item.media,
         streamInfo: item.streamInfo,
-        startTime: startAt,
+        startTime: startAt ?? item.positionSeconds,
         tracks: item.tracks,
       });
     } else if (kind === 'local') {
@@ -403,7 +405,12 @@ export class PlaybackSession {
     if (!cast.isConnected() && !(await this.connectCast(deviceId))) return false;
     // No video player mounted (opening one closes the audio player): the audio player is what plays here.
     const handoff = await this.activeLocal().release();
-    if (!handoff) return true;
+    if (!handoff) {
+      // Nothing plays here: the account session starts on the receiver as it would here, unless it already plays there.
+      const sync = this.sync();
+      if (sync.canPlayHere() && sync.canTransfer() && !this.receiverBusy()) await sync.playHere();
+      return true;
+    }
     await (handoff.kind === 'music' ? this.musicCast().start(handoff) : this.castVideo(handoff));
     return true;
   }

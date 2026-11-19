@@ -1,4 +1,4 @@
-import { Injectable, InjectionToken, inject, signal, OnDestroy } from '@angular/core';
+import { Injectable, InjectionToken, computed, inject, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { environment } from '../../../environments/environment';
@@ -244,6 +244,12 @@ export class CastService implements OnDestroy {
   /** Cast devices visible to native discovery. Always empty on web: the
    *  Chrome Cast SDK exposes no enumeration API (see getCastDevices()). */
   readonly castDevices = signal<CastDevice[]>([]);
+  /** The Web SDK session's receiver, which no listing names. */
+  private readonly webDeviceName = signal<string | null>(null);
+  /** The connected receiver's name, null while not connected. */
+  readonly deviceName = computed(() =>
+    this.isConnected() ? (this.castDevices().find((d) => d.connected)?.name ?? this.webDeviceName() ?? 'Chromecast') : null,
+  );
 
   // ── Seek coalescing (see CAST_SEEK_* above) ──
   private seekCoalesceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -515,6 +521,7 @@ export class CastService implements OnDestroy {
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
       : null;
+    this.webDeviceName.set(this.session?.getCastDevice?.()?.friendlyName ?? null);
     if (connected && this.remotePlayer) {
       this.volume.set(this.remotePlayer.volumeLevel ?? 1);
       this.muted.set(this.remotePlayer.isMuted ?? false);

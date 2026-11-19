@@ -278,6 +278,31 @@ async fn a_second_device_takes_the_session_and_the_first_is_told_once(pool: PgPo
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_cast_beat_shows_the_receiver_as_the_owner_and_keeps_the_sender_target(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (mut a, conn_a) = c.device("A#t").await;
+    c.presence("s1", &conn_a);
+    c.beat("s1", 10.0, json!({})).await;
+    drain(&mut a).await;
+
+    c.beat("s1", 20.0, json!({"castDevice": "Living room"}))
+        .await;
+    let (_, cast) = c.call("GET", "/api/session", None).await;
+    assert_eq!(
+        cast["owner"],
+        json!({"targetId": "A#t", "deviceName": "Living room", "formFactor": "cast"})
+    );
+    assert_eq!(cast["epoch"], 1, "the same owner, shown as its receiver");
+    assert!(!of(&drain(&mut a).await, "session.changed").is_empty());
+
+    c.beat("s1", 30.0, json!({})).await;
+    let (_, back) = c.call("GET", "/api/session", None).await;
+    assert_eq!(back["owner"]["targetId"], "A#t");
+    assert_ne!(back["owner"]["formFactor"], "cast");
+    assert!(!of(&drain(&mut a).await, "session.changed").is_empty());
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_preloaded_or_replayed_session_claims_nothing(pool: PgPool) {
     let c = ctx(pool, true).await;
     let (_a, conn_a) = c.device("A#t").await;

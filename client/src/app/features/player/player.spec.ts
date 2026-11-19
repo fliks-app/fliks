@@ -253,6 +253,7 @@ function createHarness(opts: {
         provide: CastService,
         useValue: {
           isConnected: () => false,
+          deviceName: () => null,
           resumedState: () => null,
           settled: Promise.resolve(),
           receiverPlays: () => true,
@@ -2780,7 +2781,7 @@ describe('PlayerComponent cast session picks', () => {
     const h = createHarness();
     const cast = TestBed.inject(CastService) as unknown as Record<string, unknown>;
     Object.assign(cast, {
-      isConnected: () => true, currentTime: () => 42, duration: () => 100, volume: () => 1, muted: () => false,
+      isConnected: () => true, deviceName: () => 'Living room', currentTime: () => 42, duration: () => 100, volume: () => 1, muted: () => false,
     });
     const cp = TestBed.inject(CastPlayerService) as unknown as Record<string, ReturnType<typeof vi.fn>>;
     return { h, cp };
@@ -2797,7 +2798,7 @@ describe('PlayerComponent cast session picks', () => {
     expect(cp['selectionFor']).toHaveBeenCalledWith(MAIN_FILE_ID);
     expect(h.streamingApi.updatePlaybackState).toHaveBeenLastCalledWith(
       MEDIA_ID,
-      expect.objectContaining({ audioTrackIndex: 2, subtitleId: 'ext-5' }),
+      expect.objectContaining({ audioTrackIndex: 2, subtitleId: 'ext-5', castDevice: 'Living room' }),
     );
   });
 

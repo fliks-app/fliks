@@ -442,11 +442,14 @@ fn account_beat(
         hub_user,
         sid: s.session_id.clone(),
         connection: s.sse_connection_id.clone(),
-        owner: Owner {
-            target_id: id.target_id.filter(|t| !t.is_empty()),
-            device_name: id.device_name,
-            form_factor: id.form_factor,
-        },
+        owner: cast_owner(
+            Owner {
+                target_id: id.target_id.filter(|t| !t.is_empty()),
+                device_name: id.device_name,
+                form_factor: id.form_factor,
+            },
+            b,
+        ),
         kind: MediaKind::parse(s.media_type.as_deref()?)?,
         item: item?,
         file: int(b, "mediaFileId")
@@ -458,6 +461,23 @@ fn account_beat(
         queue: b.get("queue").and_then(QueueState::from_beat),
         handoff: b.get("handoff").and_then(Value::as_bool) == Some(true),
     })
+}
+
+/// Rule 22b: a beat sent for a Cast receiver shows the receiver as the owner, the target staying the sender.
+fn cast_owner(owner: Owner, b: &Value) -> Owner {
+    let Some(name) = b
+        .get("castDevice")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    else {
+        return owner;
+    };
+    Owner {
+        device_name: Some(name.chars().take(80).collect()),
+        form_factor: Some("cast".into()),
+        ..owner
+    }
 }
 
 /// `session.md` rule 19: a reader's save leaves a parked row of the item; none without an owner.
@@ -774,6 +794,28 @@ mod tests {
             hdr_ladder: false,
             transcode_reasons: vec![],
             client_tonemap: false,
+        }
+    }
+
+    #[test]
+    fn a_cast_beat_shows_the_receiver_and_keeps_the_sender_target() {
+        let phone = Owner {
+            target_id: Some("phone#t".into()),
+            device_name: Some("Phone".into()),
+            form_factor: Some("phone".into()),
+        };
+        let cast = cast_owner(phone.clone(), &json!({"castDevice": "  Living room  "}));
+        assert_eq!(cast.target_id.as_deref(), Some("phone#t"));
+        assert_eq!(cast.device_name.as_deref(), Some("Living room"));
+        assert_eq!(cast.form_factor.as_deref(), Some("cast"));
+        let long = cast_owner(phone.clone(), &json!({"castDevice": "x".repeat(100)}));
+        assert_eq!(long.device_name.map(|n| n.len()), Some(80));
+        for absent in [
+            json!({}),
+            json!({"castDevice": " "}),
+            json!({"castDevice": 3}),
+        ] {
+            assert_eq!(cast_owner(phone.clone(), &absent), phone);
         }
     }
 

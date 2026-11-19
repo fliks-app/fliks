@@ -1445,7 +1445,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
 
   /** Opens a remote queue where the sender left it, from the start of the next track when the current one is unavailable;
    * the order is the sender's, never reshuffled. False when nothing was loaded. */
-  private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean): Promise<boolean> {
+  private async startQueue(q: WireQueue, shuffle: boolean, repeat: Repeat, startAt: number, autoplay: boolean, toCast = autoplay): Promise<boolean> {
     if (this.blockedByParty()) return false;
     const generation = ++this.generation;
     const { tracks, index, exact } = await this.queueOf(q);
@@ -1453,7 +1453,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.mq.adopt(tracks, index, shuffle);
     this.mq.repeat = repeat;
     this.syncQueue();
-    return this.startMusic(this.mq.current!, autoplay, exact ? startAt : 0);
+    return this.startMusic(this.mq.current!, autoplay, exact ? startAt : 0, toCast);
   }
 
   /** `load` of an audio family: an album queue, or the audio edition of a book. */
@@ -1479,7 +1479,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     let loaded: boolean;
     if (s.item.kind === 'album') {
       const q = s.queue ?? { itemIds, index: 0, shuffle: false, repeat: 'off' as const };
-      loaded = await this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused);
+      // A receiver this device casts to takes it, paused or not.
+      loaded = await this.startQueue(q, q.shuffle, q.repeat, positionSeconds, !paused, true);
     } else {
       const req = await this.audiobookRequest(s.item.mediaId, s.item.id);
       loaded = !!req && (await this.play(req, { startAt: positionSeconds, paused }));
@@ -1653,6 +1654,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         playbackRate: this.effectiveRate(),
         ...(this._musicMode() && { stemMode: this._stemMode(), vocalLevel: this._vocalLevel(), pitch: this._pitch(), stemsAvailable: this._stemsAvailable() }),
         ...this.volumeReport(),
+        ...(this.castOut.active() && { castDevice: this.castOut.deviceName() ?? undefined }),
       } satisfies BeatBody,
     } as { mediaId: number; payload: BeatBody };
   }

@@ -3902,12 +3902,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       autoplayBlocked?: boolean;
       hasNext?: boolean;
       handoff?: boolean;
+      castDevice?: string;
       qoe?: QoeSample;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
       mediaFileId: this.mediaFileId,
       episodeId: this.episodeId,
+      castDevice: this.castService.deviceName() ?? undefined,
     };
 
     const sessionId = this.activeSessionId();

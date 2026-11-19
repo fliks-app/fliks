@@ -114,6 +114,8 @@ function setup() {
     claimPending: signal(false),
     handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
     canTransfer: signal(true),
+    canPlayHere: signal(false),
+    playHere: vi.fn(async () => {}),
     parked: () => false,
     role: signal('owner'),
     transferTo: vi.fn(async (_id: string) => {}),
@@ -385,6 +387,26 @@ describe('PlaybackSession', () => {
       expect(session.transfersTo('dev-8')).toBe(true);
       session.setPartyRouter(() => true);
       expect(session.transfersTo('dev-8')).toBe(false);
+    });
+
+    it('starts the account session on the receiver when nothing plays here', async () => {
+      const { session, cast, castSvc, syncSvc } = setup();
+      castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
+      syncSvc.canPlayHere.set(true);
+      expect(await session.moveTo('cast', 'cc-1')).toBe(true);
+      expect(syncSvc.playHere).toHaveBeenCalled();
+    });
+
+    it('leaves the account session where it is for a reading position or a receiver that plays it', async () => {
+      const { session, cast, castSvc, syncSvc, castPlayer } = setup();
+      castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
+      syncSvc.canPlayHere.set(true);
+      syncSvc.canTransfer.set(false);
+      await session.moveTo('cast', 'cc-1');
+      syncSvc.canTransfer.set(true);
+      castPlayer.hasMedia.mockReturnValue(true);
+      await session.moveTo('cast', 'cc-1');
+      expect(syncSvc.playHere).not.toHaveBeenCalled();
     });
 
     it('refuses on a TV', async () => {
@@ -776,6 +798,13 @@ describe('PlaybackSession', () => {
 
   describe('play', () => {
     const item = { fileId: 7, mediaId: 3, episodeId: 9 };
+
+    it('starts the receiver where the caller knows playback stopped', async () => {
+      const { session, cast, castPlayer } = setup();
+      cast.isConnected.set(true);
+      await session.play({ ...item, positionSeconds: 30 }, { expand: false });
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ startTime: 30 }));
+    });
 
     it('sends a play to the live owner of the session, opening no player here', async () => {
       const { session, remoteSvc, router } = setup();

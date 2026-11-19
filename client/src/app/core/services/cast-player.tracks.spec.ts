@@ -42,6 +42,7 @@ const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption | null } = {}) {
   const cast = {
     isConnected: signal(true),
+    deviceName: signal('Living room'),
     replaced: signal(false),
     receiverPlays(id: number) {
       const m = this.receiverMedia();
@@ -275,8 +276,9 @@ describe('another sender takes the receiver while this one plays', () => {
     await (svc as any).saveCastPosition();
     expect(cast.loadMedia).not.toHaveBeenCalled();
     expect(svc.mediaFileId()).toBe(26);
-    const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number }][];
+    const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number; castDevice?: string }][];
     expect(saved.map((c) => c[1].mediaFileId)).toEqual([26]);
+    expect(saved[0][1].castDevice).toBe('Living room');
   });
 });
 

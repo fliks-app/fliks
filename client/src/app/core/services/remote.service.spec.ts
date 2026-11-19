@@ -41,11 +41,12 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
   };
 }
 
-function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number }; family?: string } = {}) {
+function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number }; family?: string; castOn?: string } = {}) {
   const owner = signal<string | null>(null);
   const session = () => {
     if (opts.held) return { owner: { targetId: opts.held.targetId }, item: { mediaFileId: opts.held.mediaFileId, family: 'video' } };
-    return owner() ? { owner: { targetId: owner() }, item: { mediaFileId: 2, family: opts.family ?? 'video' } } : null;
+    const face = opts.castOn ? { deviceName: opts.castOn, formFactor: 'cast' } : {};
+    return owner() ? { owner: { targetId: owner(), ...face }, item: { mediaFileId: 2, family: opts.family ?? 'video' } } : null;
   };
   const remoteState = signal<RemoteState | null>(null);
   const connectionId = signal<string | null>(null);
@@ -230,6 +231,13 @@ describe('RemoteService observation', () => {
     owner.set('pc#1');
     TestBed.tick();
     expect(service.targetState()?.mediaTitle).toBe('Other');
+  });
+
+  it('names the Cast receiver the observed owner plays on', () => {
+    const { service, owner } = setup({ selected: null, castOn: 'Living room' });
+    expect(service.observedCast()).toBeNull();
+    owner.set('phone#2');
+    expect(service.observedCast()).toBe('Living room');
   });
 
   it('observes nothing without a selection or an owner', () => {

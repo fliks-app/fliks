@@ -89,6 +89,7 @@ export class MusicCastOutput {
   /** The receiver ids of the last LOAD or advance, which the resume state carries. */
   private readonly loaded = signal<Pick<MusicCastState, 'mediaId' | 'mediaFileId' | 'itemId' | 'sid'> | null>(null);
   readonly isConnected = this.cast.isConnected;
+  readonly deviceName = this.cast.deviceName;
   /** This device's music plays on the receiver. */
   readonly active = this._active.asReadonly();
   /** Ours plays on the receiver, or a resumed state waits to take it back. */

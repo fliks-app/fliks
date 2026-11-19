@@ -22,7 +22,7 @@ export class PlaybackDevice {
 
   readonly icon = computed<DeviceIcon>(() => {
     if (!this.elsewhere()) return this.device.isTv() ? 'tv' : this.device.isTouch() ? 'phone' : 'monitor';
-    return this.session.kind() === 'cast' ? 'cast' : deviceIconFor(this.remote.observedTarget()?.formFactor);
+    return this.session.kind() === 'cast' || this.remote.observedCast() ? 'cast' : deviceIconFor(this.remote.observedTarget()?.formFactor);
   });
 
 }
