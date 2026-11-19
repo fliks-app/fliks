@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.0.1](https://github.com/fliks-app/fliks/compare/v7.0.0...v7.0.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **whats-new:** ship the release notes in the docker image ([#2799](https://github.com/fliks-app/fliks/issues/2799)) ([8d93bb2](https://github.com/fliks-app/fliks/commit/8d93bb2362cf89e21a23742b7cbded5b08582d91))
+
 ## [7.0.0](https://github.com/fliks-app/fliks/compare/v6.0.2...v7.0.0) (2026-11-19)
 
 
