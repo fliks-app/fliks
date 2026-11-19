@@ -1,5 +1,6 @@
 package media.fliks.app;
 
+import android.util.Log;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -63,6 +64,8 @@ import java.util.concurrent.Executors;
  *  it outlives the WebView, and beats progress itself while no web layer observes it. */
 @OptIn(markerClass = UnstableApi.class)
 final class MusicHost {
+    private static final String TAG = "FliksMusicHost";
+
     private static final long TICK_MS = 500;
     private static final long BEAT_MS = 15_000;
     private static final long ACK_RETRY_MS = 2_000;
@@ -889,15 +892,18 @@ final class MusicHost {
             io.execute(() -> {
                 try {
                     if (!api.signedIn()) {
+                        Log.w(TAG, "car browse: no signed-in session");
                         f.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_SESSION_AUTHENTICATION_EXPIRED));
                         return;
                     }
                     f.set(work.run());
                 } catch (FliksApi.HttpError e) {
+                    Log.w(TAG, "car browse failed: HTTP " + e.status, e);
                     f.set(LibraryResult.ofError(e.status == 401
                             ? LibraryResult.RESULT_ERROR_SESSION_AUTHENTICATION_EXPIRED
                             : LibraryResult.RESULT_ERROR_UNKNOWN));
                 } catch (IOException | JSONException | RuntimeException e) {
+                    Log.w(TAG, "car browse failed", e);
                     f.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_IO));
                 }
             });
