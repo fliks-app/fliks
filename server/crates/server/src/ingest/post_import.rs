@@ -422,24 +422,32 @@ async fn settled(st: &AppState, media_id: i32) {
             ),
         }
     }
-    if super::setting_on(&st.db, "sprites_auto_generate_on_import")
-        .await
-        .unwrap_or(true)
-    {
-        let thumbs = crate::paths::cache_dir().join("thumbnails");
-        for id in ids {
-            if immediate.contains(&id) || thumbs.join(id.to_string()).join("sprite.json").exists() {
-                continue;
-            }
-            if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await
-            {
-                tracing::warn!(
-                    "Post-import[media #{media_id}]: sprite of file #{id} failed: {e:?}"
-                );
-            }
+    for id in ids {
+        if !immediate.contains(&id) {
+            sprite_if_missing(st, id).await;
         }
     }
     if let Err(e) = crate::markers::auto_detect_missing(st, media_id).await {
         tracing::warn!("Post-import[media #{media_id}]: marker detection failed: {e}");
+    }
+}
+
+/// Queues the seek sprites of a file that has none, when the import setting asks for them.
+pub(crate) async fn sprite_if_missing(st: &AppState, id: i32) {
+    if !super::setting_on(&st.db, "sprites_auto_generate_on_import")
+        .await
+        .unwrap_or(true)
+    {
+        return;
+    }
+    let sheet = crate::paths::cache_dir()
+        .join("thumbnails")
+        .join(id.to_string())
+        .join("sprite.json");
+    if sheet.exists() {
+        return;
+    }
+    if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await {
+        tracing::warn!("sprite of file #{id} failed: {e:?}");
     }
 }

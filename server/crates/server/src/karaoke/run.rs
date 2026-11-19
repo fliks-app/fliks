@@ -284,19 +284,7 @@ async fn viewers(st: &AppState, item: i32) -> Arc<[i32]> {
 
 /// What a run still has to do: `Separate` is not valid, or an asked step has work and its feature.
 async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
-    let Ok(t) = track(st, item).await else {
-        return true;
-    };
-    let Ok(models) = st.engine.models().await else {
-        return true;
-    };
-    let Some(sep) = installed_model(&models.models, ModelKind::Separation) else {
-        return true;
-    };
-    if !store::valid(&st.db, t.file, &sep.id, &sep.version)
-        .await
-        .unwrap_or(false)
-    {
+    if !stems_valid(st, item).await {
         return true;
     }
     let caps = super::caps(st).await;
@@ -305,6 +293,22 @@ async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
     };
     lstore::sort(&mut rows);
     has_work(&rows, &caps, opts)
+}
+
+/// The track has valid stems of the installed separation model; false when any of that is unknown.
+pub(super) async fn stems_valid(st: &AppState, item: i32) -> bool {
+    let Ok(t) = track(st, item).await else {
+        return false;
+    };
+    let Ok(models) = st.engine.models().await else {
+        return false;
+    };
+    let Some(sep) = installed_model(&models.models, ModelKind::Separation) else {
+        return false;
+    };
+    store::valid(&st.db, t.file, &sep.id, &sep.version)
+        .await
+        .unwrap_or(false)
 }
 
 fn has_work(rows: &[lstore::Row], caps: &super::Caps, opts: Opts) -> bool {
@@ -332,8 +336,21 @@ pub async fn start(
     {
         return Start::Idle;
     }
+    let file = track(st, item).await.ok().map(|t| t.file);
+    // The pass leaves any worker job alone; a user's request only a job a worker will take.
+    if let Some(f) = file {
+        let held = if user.is_some() {
+            super::remote::held_by_worker(st, f).await
+        } else {
+            store::worker_separating(&st.db, f, &["queued", "leased"]).await
+        };
+        if held.unwrap_or(false) {
+            return Start::Idle;
+        }
+    }
     if user.is_some()
-        && store::total(&st.db).await.unwrap_or(0) >= super::budget_bytes(st).await * 2
+        && store::total(&st.db).await.unwrap_or(0)
+            >= super::budget_bytes(st).await.saturating_mul(2)
     {
         return Start::Refused(Refusal::Full);
     }
@@ -360,6 +377,21 @@ pub async fn start(
                 viewers,
             },
         );
+    }
+    // After admission, so a refused request deletes nothing; a lease won meanwhile ends the run.
+    if let (Some(f), Some(_)) = (file, user) {
+        let _ = store::take_queued_separation(&st.db, f).await;
+        if store::worker_separating(&st.db, f, &["leased"])
+            .await
+            .unwrap_or(false)
+        {
+            st.karaoke
+                .runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&item);
+            return Start::Idle;
+        }
     }
     update(st, item, |_| {});
     let st = st.clone();
@@ -468,6 +500,7 @@ async fn separate(
 ) -> Result<String, String> {
     let info = t.info.clone().ok_or("the file was not probed")?;
     stage(st, item, "separate");
+    let _separating = super::Separating::new(&st.karaoke, t.file);
     let dir = store::file_dir(t.file);
     tokio::fs::create_dir_all(&dir)
         .await

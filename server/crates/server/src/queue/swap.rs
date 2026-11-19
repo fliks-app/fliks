@@ -204,25 +204,11 @@ pub fn abort(j: &Journal) -> io::Result<()> {
     }
     if let Some(b) = &j.backup
         && is(&j.source, &j.source_id)
-        && same_file(b, &j.source)
+        && is(b, &j.source_id)
     {
         fs::remove_file(b)?;
     }
     Ok(())
-}
-
-#[cfg(unix)]
-fn same_file(a: &Path, b: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match (fs::metadata(a), fs::metadata(b)) {
-        (Ok(x), Ok(y)) => (x.dev(), x.ino()) == (y.dev(), y.ino()),
-        _ => false,
-    }
-}
-
-#[cfg(not(unix))]
-fn same_file(_: &Path, _: &Path) -> bool {
-    false
 }
 
 /// The optimized file of a restore waits here, never under the name that holds the original.
@@ -260,7 +246,9 @@ impl Restore {
 /// Runs, or finishes, a restore; every step looks at the disk first.
 pub fn perform_restore(r: &Restore) -> io::Result<()> {
     let parked = r.parked();
-    let started = fs::symlink_metadata(&parked).is_ok() || is(&r.source, &r.original);
+    let started = fs::symlink_metadata(&parked).is_ok()
+        || fs::symlink_metadata(&r.slot).is_ok()
+        || is(&r.source, &r.original);
     if !started && !r.startable() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -443,6 +431,7 @@ mod tests {
         perform_restore(&r).unwrap();
         fs::write(&j.source, b"edited elsewhere").unwrap();
         assert!(!r.startable());
+        perform_restore(&r).unwrap();
         fs::remove_dir_all(d).unwrap();
     }
 

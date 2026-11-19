@@ -3759,6 +3759,7 @@
       "warning": {
         "no_audio": "Les filtres retireraient toutes les pistes audio : aucune n'est retirée.",
         "profile_subtitle": "Les sous-titres « {{language}} » sont gardés : le profil de langue du média les demande.",
+        "no_language_match": "Aucune piste n'a une langue demandée : rien n'est retiré par langue.",
         "lossless": "Piste audio {{n}} : le son sans perte ou l'Atmos est perdu par le remplacement.",
         "video_copied": {
           "interlaced": "La vidéo est copiée : elle est entrelacée.",

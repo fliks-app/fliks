@@ -292,7 +292,7 @@ pub(crate) struct RealignResult {
     lyrics_at: i64,
 }
 
-/// `None` is a track the run skipped because it was busy.
+/// `None` is a track the run skipped: busy, or without stems where this server may not separate.
 pub(super) fn result_of(
     run: Option<Result<run::Outcome, run::Failure>>,
     s: &Stale,

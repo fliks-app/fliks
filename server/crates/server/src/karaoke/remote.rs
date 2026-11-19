@@ -49,6 +49,17 @@ pub async fn eligible(st: &AppState, key: &str, w: &Worker) -> bool {
     )
 }
 
+/// A worker will take the file's `separate` job: it holds it, or it waits and one could.
+pub async fn held_by_worker(st: &AppState, file: i32) -> sqlx::Result<bool> {
+    if store::worker_separating(&st.db, file, &["leased"]).await? {
+        return Ok(true);
+    }
+    Ok(
+        store::worker_separating(&st.db, file, &["queued"]).await?
+            && eligible_workers(st).await > 0,
+    )
+}
+
 /// Live workers that take `Separate` jobs now.
 pub async fn eligible_workers(st: &AppState) -> usize {
     let mut n = 0;
@@ -225,7 +236,7 @@ async fn drop_job(st: &AppState, key: &str, id: i64, attempt: i32) -> sqlx::Resu
     Ok(n > 0)
 }
 
-/// A job that landed `failed` leaves its item out of the pass until a restart, like a local failure.
+/// A job that landed `failed` leaves its item out of the pass for this profile and until a restart.
 async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
     crate::queue::remote::sweep(st).await;
     st.queue.wake.notify_waiters();
@@ -292,6 +303,9 @@ async fn commit(
     };
     // Stems of another version than the main engine's would be invalidated at once.
     let wanted = current.is_none_or(|m| *m == (out.model.clone(), out.model_version.clone()));
+    let _separating = item
+        .filter(|_| wanted)
+        .map(|(f, _)| super::Separating::new(&st.karaoke, f));
     let moved = match item {
         Some((f, _)) if wanted => match move_stems(st, f, id, attempt, &out).await {
             Ok(m) => m,

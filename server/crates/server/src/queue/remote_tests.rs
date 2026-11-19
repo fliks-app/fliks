@@ -307,3 +307,52 @@ async fn a_named_chunk_on_an_optimize_job_is_fenced(pool: PgPool) {
     );
     let _ = std::fs::remove_dir_all(staged.parent().unwrap());
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_revoked_token_ends_a_long_poll_in_flight(pool: PgPool) {
+    let (st, token, _, staged) = world(&pool).await;
+    sqlx::query("DELETE FROM jobs")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let tid: i32 = sqlx::query_scalar("SELECT id FROM worker_tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let device = serde_json::from_value(
+        json!({"id": "cpu", "encoders": [], "decoders": [], "maxJobs": 1, "pause": "suspend"}),
+    )
+    .unwrap();
+    st.queue.register(
+        format!("t{tid}:w"),
+        super::Worker {
+            principal: super::Principal::Token(tid),
+            engine_version: "1".into(),
+            devices: vec![device],
+            features: vec![],
+        },
+    );
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/engine/jobs/lease")
+        .header("authorization", format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({"workerId": "w", "deviceId": "cpu"}).to_string(),
+        ))
+        .unwrap();
+    let app = worker_router().with_state(st.clone());
+    let poll = tokio::spawn(async move { app.oneshot(req).await.unwrap().status() });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    sqlx::query(r#"UPDATE worker_tokens SET "revokedAt" = now()"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    st.queue.wake.notify_waiters();
+    let status = tokio::time::timeout(std::time::Duration::from_secs(5), poll)
+        .await
+        .expect("the poll ended")
+        .unwrap();
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let _ = std::fs::remove_dir_all(staged.parent().unwrap());
+}

@@ -253,6 +253,57 @@ pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) ->
     Ok(unlink(paths).await)
 }
 
+/// A `separate` job of `file` is in one of `states`.
+pub async fn worker_separating(db: &PgPool, file: i32, states: &[&str]) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM jobs WHERE "mediaFileId" = $1 AND kind = 'separate'
+                          AND state = ANY($2))"#,
+    )
+    .bind(file)
+    .bind(states)
+    .fetch_one(db)
+    .await
+}
+
+/// Deletes the queued `separate` jobs of `file`, for a request that runs the separation itself.
+pub async fn take_queued_separation(db: &PgPool, file: i32) -> sqlx::Result<u64> {
+    let n = sqlx::query(
+        r#"DELETE FROM jobs WHERE "mediaFileId" = $1 AND kind = 'separate' AND state = 'queued'"#,
+    )
+    .bind(file)
+    .execute(db)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        crate::queue::watch::changed();
+    }
+    Ok(n)
+}
+
+/// Deletes the rows whose file is gone (a lost cache): they would report `ready` for stems that 404.
+pub async fn drop_missing(db: &PgPool) -> sqlx::Result<u64> {
+    let rows: Vec<(i32, String, String)> =
+        sqlx::query_as(r#"SELECT "mediaFileId", kind, path FROM derived_audio"#)
+            .fetch_all(db)
+            .await?;
+    let mut removed = 0;
+    for (file, kind, path) in rows {
+        if Path::new(&path).is_file() {
+            continue;
+        }
+        removed += sqlx::query(
+            r#"DELETE FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2 AND path = $3"#,
+        )
+        .bind(file)
+        .bind(kind)
+        .bind(path)
+        .execute(db)
+        .await?
+        .rows_affected();
+    }
+    Ok(removed)
+}
+
 /// The bytes the budget can act on: imports are copies of library files that eviction never removes.
 pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
     sqlx::query_scalar(
@@ -280,7 +331,8 @@ pub async fn unprepared(
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
                              AND j.kind = 'separate' AND j.state IN ('queued', 'leased'))
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
-                             AND j.kind = 'separate' AND j.state = 'cancelled' AND j."profileHash" = $3)
+                             AND j.kind = 'separate' AND j.state IN ('cancelled', 'failed')
+                             AND j."profileHash" = $3)
              AND i.id <> ALL($1)
            ORDER BY i.id DESC LIMIT $2"#,
     )
@@ -327,6 +379,15 @@ pub async fn sweep(st: &AppState) -> std::io::Result<()> {
         else {
             continue;
         };
+        if st
+            .karaoke
+            .separating
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&file)
+        {
+            continue;
+        }
         let known: Vec<String> =
             sqlx::query_scalar(r#"SELECT path FROM derived_audio WHERE "mediaFileId" = $1"#)
                 .bind(file)
@@ -337,7 +398,9 @@ pub async fn sweep(st: &AppState) -> std::io::Result<()> {
             let _ = tokio::fs::remove_dir_all(&path).await;
             continue;
         }
-        let mut inner = tokio::fs::read_dir(&path).await?;
+        let Ok(mut inner) = tokio::fs::read_dir(&path).await else {
+            continue;
+        };
         while let Some(f) = inner.next_entry().await? {
             let p = f.path();
             let named = known.iter().any(|k| Path::new(k) == p);

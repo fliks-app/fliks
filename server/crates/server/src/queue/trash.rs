@@ -8,7 +8,8 @@ const GIB: i64 = 1 << 30;
 
 struct Held {
     id: i64,
-    path: PathBuf,
+    /// Absent under the `keep` and `delete` policies, which still trash OCR SRTs.
+    path: Option<PathBuf>,
     /// SRTs moved out of the library by the job.
     ocr: Vec<PathBuf>,
     /// Past the retention.
@@ -22,36 +23,48 @@ pub async fn purge(pool: &PgPool) {
     }
 }
 
+/// Not purged yet, and no restore in flight.
+const PENDING: &str = r#"state = 'done' AND NOT (result ? 'trashPurgedAt')
+    AND (result ? 'trashPath' OR (result ? 'ocrTrash' AND NOT (result ? 'ocrPurgedAt')))
+    AND (NOT (result ? 'restore') OR result ? 'restoredAt')"#;
+
+fn held_of(r: &sqlx::postgres::PgRow) -> Held {
+    Held {
+        id: r.get("id"),
+        path: r.get::<Option<String>, _>("path").map(PathBuf::from),
+        ocr: r
+            .get::<Option<serde_json::Value>, _>("ocr")
+            .and_then(|v| serde_json::from_value::<Vec<(PathBuf, PathBuf)>>(v).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, t)| t)
+            .collect(),
+        expired: r
+            .try_get::<Option<bool>, _>("expired")
+            .ok()
+            .flatten()
+            .unwrap_or(false),
+    }
+}
+
 async fn run(pool: &PgPool) -> sqlx::Result<()> {
     let s = settings::load(pool).await?;
-    let rows = sqlx::query(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"SELECT id, result ->> 'trashPath' AS path, result -> 'ocrTrash' AS ocr,
              "finishedAt" < now() - make_interval(days => $1) AS expired
-           FROM jobs WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')
-             AND (NOT (result ? 'restore') OR result ? 'restoredAt')
-           ORDER BY "finishedAt", id"#,
-    )
+           FROM jobs WHERE {PENDING} ORDER BY "finishedAt", id"#
+    )))
     .bind(s.trash_retention_days as i32)
     .fetch_all(pool)
     .await?;
-    let held: Vec<Held> = rows
-        .iter()
-        .map(|r| Held {
-            id: r.get("id"),
-            path: PathBuf::from(r.get::<String, _>("path")),
-            ocr: r
-                .get::<Option<serde_json::Value>, _>("ocr")
-                .and_then(|v| serde_json::from_value::<Vec<(PathBuf, PathBuf)>>(v).ok())
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(_, t)| t)
-                .collect(),
-            expired: r.get::<Option<bool>, _>("expired").unwrap_or(false),
-        })
-        .collect();
     let threshold = i64::from(s.trash_min_free_gb) * GIB;
-    for h in held {
-        let low = match h.path.parent() {
+    for h in rows.iter().map(held_of) {
+        let dir = h
+            .path
+            .as_deref()
+            .or(h.ocr.first().map(PathBuf::as_path))
+            .and_then(Path::parent);
+        let low = match dir {
             Some(d) => {
                 let d = disk(&d.to_string_lossy()).await;
                 d.accessible && d.free_space < threshold
@@ -62,18 +75,41 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
             // Oldest first: the next ones are younger and the disk is not low.
             continue;
         }
-        if remove(&h.path).await {
-            for p in &h.ocr {
-                remove(p).await;
-            }
-            sqlx::query(
-                r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now()),
-                     "updatedAt" = now() WHERE id = $1"#,
-            )
-            .bind(h.id)
-            .execute(pool)
-            .await?;
+        // The row lock orders the unlink against a restore, which writes `restore` under the same row.
+        let mut tx = pool.begin().await?;
+        let locked = sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"SELECT id, result ->> 'trashPath' AS path, result -> 'ocrTrash' AS ocr
+               FROM jobs WHERE id = $1 AND {PENDING} FOR UPDATE"#
+        )))
+        .bind(h.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(h) = locked.as_ref().map(held_of) else {
+            continue;
+        };
+        if let Some(p) = &h.path
+            && !remove(p).await
+        {
+            continue;
         }
+        for p in &h.ocr {
+            remove(p).await;
+        }
+        // Only a removed original ends the restore; OCR SRTs alone leave a kept original restorable.
+        let key = if h.path.is_some() {
+            "trashPurgedAt"
+        } else {
+            "ocrPurgedAt"
+        };
+        sqlx::query(
+            r#"UPDATE jobs SET result = result || jsonb_build_object($2::text, now()),
+                 "updatedAt" = now() WHERE id = $1"#,
+        )
+        .bind(h.id)
+        .bind(key)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
     }
     Ok(())
 }

@@ -3741,6 +3741,7 @@
       "warning": {
         "no_audio": "Os filtros removeriam todas as faixas de áudio: nenhuma é removida.",
         "profile_subtitle": "As legendas «{{language}}» são mantidas: o perfil de idioma do conteúdo pede-as.",
+        "no_language_match": "Nenhuma faixa tem um idioma pedido: nada é removido por idioma.",
         "lossless": "Faixa de áudio {{n}}: o som sem perdas ou o Atmos perde-se com a substituição.",
         "video_copied": {
           "interlaced": "O vídeo é copiado: é entrelaçado.",

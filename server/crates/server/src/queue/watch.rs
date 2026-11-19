@@ -77,6 +77,16 @@ async fn sweep(
             .and_then(|e| e["class"].as_str())
             .unwrap_or("");
         let optimize = r.get::<String, _>("kind") == "optimize";
+        // An optimize job that starts at once defers the file's sprites to its commit.
+        if optimize
+            && matches!(state.as_str(), "failed" | "cancelled" | "skipped")
+            && let Some(f) = r.get::<Option<i32>, _>("file")
+        {
+            let st = st.clone();
+            tokio::spawn(
+                async move { crate::ingest::post_import::sprite_if_missing(&st, f).await },
+            );
+        }
         let mut p = Map::new();
         p.insert("title".into(), r.get::<String, _>("title").into());
         p.insert("jobId".into(), id.into());
@@ -88,7 +98,7 @@ async fn sweep(
                 }
                 "optimize.completed"
             }
-            "failed" if class == "corrupt" => {
+            "failed" if matches!(class, "corrupt" | "damaged") => {
                 if !first_corrupt(st, id, r.get("file")).await? {
                     continue;
                 }

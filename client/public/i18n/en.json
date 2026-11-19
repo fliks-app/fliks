@@ -3759,6 +3759,7 @@
       "warning": {
         "no_audio": "The filters would remove every audio track: none is removed.",
         "profile_subtitle": "Subtitles \"{{language}}\" are kept: the media's language profile requests them.",
+        "no_language_match": "No track has a requested language: nothing is removed by language.",
         "lossless": "Audio track {{n}}: lossless sound or Atmos is lost by the replacement.",
         "video_copied": {
           "interlaced": "The video is copied: it is interlaced.",

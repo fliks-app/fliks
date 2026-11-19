@@ -47,11 +47,16 @@ async fn recover_one(st: &AppState, job: &Job) -> End {
         return End::Fail("a committing job without a journal".into());
     };
     let file = match job.file_id {
-        Some(id) => commit::file_row(st, id)
-            .await
-            .ok()
-            .flatten()
-            .map(|f| (id, f)),
+        Some(id) => match commit::file_row(st, id).await {
+            Ok(f) => f.map(|f| (id, f)),
+            Err(e) => {
+                tracing::warn!(
+                    job = job.id,
+                    "recovery file read failed, tried again later: {e}"
+                );
+                return End::Pending;
+            }
+        },
         None => None,
     };
     let _media = match &file {
@@ -77,9 +82,7 @@ async fn recover_one(st: &AppState, job: &Job) -> End {
             return End::Pending;
         }
         Ok(Err(e)) if swap::is(&journal.target, &journal.staged_id) => {
-            return End::Fail(format!(
-                "the output is placed but the swap cannot finish: {e}"
-            ));
+            tracing::warn!(job = job.id, "output placed, swap leftovers remain: {e}");
         }
         Ok(Err(e)) => {
             let jr = journal.clone();
@@ -168,16 +171,20 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     {
         return Err("the file is not the one the job produced".into());
     }
-    sqlx::query(
-        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $2::jsonb, 'trashPath', $3::text),
-             "updatedAt" = now() WHERE id = $1 AND state = 'done'"#,
+    // The purge holds this row while it unlinks the original: losing the race means it is gone.
+    let marked = sqlx::query(
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $2::jsonb),
+             "updatedAt" = now() WHERE id = $1 AND state = 'done'
+             AND NOT (result ? 'trashPurgedAt') AND NOT (result ? 'restore')"#,
     )
     .bind(id)
     .bind(json!(r))
-    .bind(r.slot.to_string_lossy())
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
+    if marked.rows_affected() != 1 {
+        return Err("the original is gone or already restored".into());
+    }
     let mut job = job;
     job.result["restore"] = json!(r);
     finish_restore(st, &job).await
@@ -202,21 +209,40 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     let file_id = job.file_id.ok_or("the file is gone")?;
     let rc = r.clone();
-    tokio::task::spawn_blocking(move || swap::perform_restore(&rc))
+    let moved = tokio::task::spawn_blocking(move || swap::perform_restore(&rc))
         .await
-        .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
+    if let Err(e) = moved {
+        if e.kind() == std::io::ErrorKind::InvalidData {
+            abandon_restore(st, job.id).await;
+        }
+        return Err(e.to_string());
+    }
     reinsert_ocr_rows(st, job, file_id, &r).await?;
     commit::sync_rows(st, file_id, &r.source, &r.companions, None).await?;
     sqlx::query(
-        r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now()), "updatedAt" = now()
-           WHERE id = $1"#,
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now(), 'trashPath', $2::text),
+             "updatedAt" = now() WHERE id = $1"#,
     )
     .bind(job.id)
+    .bind(r.slot.to_string_lossy())
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// A restore that moved nothing and cannot start ends here; the original keeps its recorded place.
+async fn abandon_restore(st: &AppState, id: i64) {
+    let res = sqlx::query(
+        r#"UPDATE jobs SET result = result - 'restore', "updatedAt" = now() WHERE id = $1"#,
+    )
+    .bind(id)
+    .execute(&st.db)
+    .await;
+    if let Err(e) = res {
+        tracing::warn!(job = id, "abandoned restore not recorded: {e}");
+    }
 }
 
 /// The OCR subtitle rows the commit removed come back with their SRTs, at the restored paths.
@@ -247,6 +273,9 @@ async fn reinsert_ocr_rows(
         else {
             continue;
         };
+        if !back.exists() {
+            continue;
+        }
         let Some(rel) = crate::ingest::fsx::rel_under(Path::new(&f.folder), back) else {
             continue;
         };

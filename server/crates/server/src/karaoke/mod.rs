@@ -32,7 +32,7 @@ use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize},
     },
 };
@@ -67,6 +67,8 @@ pub struct Shared {
     pub(crate) slots: Semaphore,
     /// Set when a `Separate` ran on the CPU: the pass rests until the next adoption or settings change.
     pub(crate) stopped: AtomicBool,
+    /// Files whose `Separate` is writing its folder: the sweep leaves them alone.
+    pub(crate) separating: Mutex<HashSet<i32>>,
     /// Tracks the pass failed on, left alone until the process restarts.
     pub(crate) failed: Mutex<HashSet<i32>>,
     pub(crate) wake: Notify,
@@ -80,12 +82,37 @@ pub struct Shared {
     pub(crate) realign_results: Mutex<HashMap<i32, aligner::RealignResult>>,
 }
 
+/// Keeps a file out of the sweep until dropped.
+pub(crate) struct Separating(Arc<Shared>, i32);
+
+impl Separating {
+    pub(crate) fn new(shared: &Arc<Shared>, file: i32) -> Self {
+        shared
+            .separating
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(file);
+        Self(shared.clone(), file)
+    }
+}
+
+impl Drop for Separating {
+    fn drop(&mut self) {
+        self.0
+            .separating
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.1);
+    }
+}
+
 impl Default for Shared {
     fn default() -> Self {
         Self {
             runs: Mutex::default(),
             slots: Semaphore::new(SLOTS),
             stopped: AtomicBool::new(false),
+            separating: Mutex::default(),
             failed: Mutex::default(),
             wake: Notify::new(),
             kick: Notify::new(),
@@ -144,7 +171,7 @@ pub(crate) async fn budget_bytes(st: &AppState) -> i64 {
         .flatten()
         .and_then(|v| v.trim().parse::<i64>().ok())
         .unwrap_or(DEFAULT_BUDGET_MB);
-    mb.max(MIN_BUDGET_MB) << 20
+    mb.clamp(MIN_BUDGET_MB, i64::MAX >> 20) << 20
 }
 
 pub(crate) async fn verified_providers(st: &AppState) -> Vec<String> {
@@ -324,6 +351,17 @@ fn failure_json(f: &run::Failure, detail: bool) -> Value {
     v
 }
 
+/// The run speaks only while queued or running; a finished one never outvotes the rows.
+fn derive_state(run: Option<&run::RunState>, ready: bool, worker: bool) -> &'static str {
+    match run {
+        Some(r) if r.active() => r.state,
+        _ if ready => "ready",
+        _ if worker => "queued",
+        Some(r) if r.state == "failed" => "failed",
+        _ => "none",
+    }
+}
+
 /// Rule 8.
 async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
     let file: Option<i32> = sqlx::query_scalar(
@@ -368,8 +406,13 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
         },
         None => false,
     };
+    let worker = match file {
+        Some(f) => remote::held_by_worker(st, f).await?,
+        None => false,
+    };
+    let state = derive_state(run.as_ref(), ready, worker);
     let mut out = json!({
-        "state": run.as_ref().map_or(if ready { "ready" } else { "none" }, |r| r.state),
+        "state": state,
         "cdg": cdg,
         "stems": stems,
         "lyrics": lyrics.iter().any(|r| r.source == "generated"),
@@ -780,5 +823,41 @@ mod tests {
             Some("small")
         );
         assert_eq!(pick(&[other]), None);
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::*;
+
+    fn run(state: &'static str) -> run::RunState {
+        run::RunState {
+            state,
+            stage: None,
+            progress: None,
+            error: None,
+            lyrics_error: None,
+            user: None,
+            viewers: Vec::new().into(),
+        }
+    }
+
+    #[test]
+    fn the_state_follows_the_rows_once_a_run_is_over() {
+        let cases = [
+            (Some("running"), true, false, "running"),
+            (Some("queued"), false, true, "queued"),
+            (Some("ready"), true, false, "ready"),
+            (Some("ready"), false, false, "none"),
+            (Some("failed"), true, false, "ready"),
+            (Some("failed"), false, false, "failed"),
+            (Some("failed"), false, true, "queued"),
+            (None, false, true, "queued"),
+            (None, false, false, "none"),
+        ];
+        for (r, ready, worker, want) in cases {
+            let r = r.map(run);
+            assert_eq!(derive_state(r.as_ref(), ready, worker), want);
+        }
     }
 }

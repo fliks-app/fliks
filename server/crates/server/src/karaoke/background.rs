@@ -38,6 +38,9 @@ pub async fn allowed(st: &AppState) -> bool {
 pub fn spawn(st: &AppState) {
     let sweeper = st.clone();
     tokio::spawn(async move {
+        if let Err(e) = store::drop_missing(&sweeper.db).await {
+            tracing::warn!("karaoke rows of missing files not dropped: {e}");
+        }
         if let Err(e) = store::sweep(&sweeper).await {
             tracing::warn!("karaoke sweep failed: {e}");
         }
@@ -141,6 +144,17 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
     .fetch_one(&st.db)
     .await?;
     for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE, &profile).await? {
+        // A local run took the track over: queueing it again would separate it twice.
+        if st
+            .karaoke
+            .runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&item)
+            .is_some_and(run::RunState::active)
+        {
+            continue;
+        }
         if active >= PER_WAKE || store::total(&st.db).await? >= budget / 10 * 9 {
             break;
         }
@@ -210,6 +224,11 @@ fn fail_list(k: &Shared) -> Vec<i32> {
         .collect()
 }
 
+async fn may_separate_here(st: &AppState) -> bool {
+    route(st).await == Some(Route::Local)
+        && store::total(&st.db).await.unwrap_or(i64::MAX) < super::budget_bytes(st).await / 10 * 9
+}
+
 /// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
 pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
     st.karaoke
@@ -223,11 +242,16 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
             melody: true,
             force: true,
         };
-        let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
-            run::Start::Started(handle) => {
-                Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
+        // Without stems a re-alignment separates on the main engine: only where the local pass may.
+        let outcome = if !run::stems_valid(&st, item).await && !may_separate_here(&st).await {
+            None
+        } else {
+            match run::start(&st, item, opts, JobPriority::Low, None).await {
+                run::Start::Started(handle) => {
+                    Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
+                }
+                _ => None,
             }
-            _ => None,
         };
         st.karaoke
             .realign_results

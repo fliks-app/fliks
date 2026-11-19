@@ -27,6 +27,8 @@ const MAX_BYTES: usize = 4096;
 /// Batches a socket may send per second; the phones send about four.
 const MAX_PER_SECOND: u32 = 20;
 const RECHECK: Duration = Duration::from_secs(5);
+/// A socket silent this long (no frame, no pong to the recheck ping) is half-open and closed.
+const SILENT: Duration = Duration::from_secs(15);
 /// Sockets one user may hold open on one party (a phone and a TV, with room to reconnect).
 const MAX_SOCKETS: usize = 4;
 
@@ -163,6 +165,7 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, 
     }
     let mut bucket = Bucket(Instant::now(), 0);
     let mut recheck = tokio::time::interval(RECHECK);
+    let mut heard = Instant::now();
     loop {
         tokio::select! {
             out = rx.recv(), if display => {
@@ -171,21 +174,29 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, 
                     break;
                 }
             }
-            msg = ws.recv() => match msg {
-                Some(Ok(Message::Text(t))) if !display => {
-                    if !bucket.allow() {
-                        continue;
-                    }
-                    if let Ok(v) = serde_json::from_str::<Value>(&t)
-                        && valid(&v)
-                    {
-                        st.relay.send(party, &stamped(&v, user));
-                    }
+            msg = ws.recv() => {
+                if matches!(msg, Some(Ok(_))) {
+                    heard = Instant::now();
                 }
-                Some(Ok(Message::Close(_)) | Err(_)) | None => break,
-                _ => {}
-            },
+                match msg {
+                    Some(Ok(Message::Text(t))) if !display => {
+                        if !bucket.allow() {
+                            continue;
+                        }
+                        if let Ok(v) = serde_json::from_str::<Value>(&t)
+                            && valid(&v)
+                        {
+                            st.relay.send(party, &stamped(&v, user));
+                        }
+                    }
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                    _ => {}
+                }
+            }
             _ = recheck.tick() => {
+                if heard.elapsed() > SILENT || ws.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    break;
+                }
                 let host = st.parties.brief(party).is_some_and(|b| b.host_id == user);
                 if !st.parties.has_user(party, user) || (display && !host) {
                     break;
