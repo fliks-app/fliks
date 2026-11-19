@@ -80,6 +80,8 @@ export interface CardDownloadState {
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
   host: {
     '[attr.data-card-link]': '_link()?.toString()',
+    // A square album card is shorter than its 2:3 neighbours in a mixed row.
+    '[class.self-center]': "aspect() === 'portrait' && albumCover()",
     '(focusin)': 'warmOnFocus()',
     '(focusout)': 'cancelFocusWarm()',
   },
