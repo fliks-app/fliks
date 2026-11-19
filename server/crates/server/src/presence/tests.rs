@@ -271,6 +271,33 @@ fn now_playing_carries_what_the_last_beat_told_the_card() {
 }
 
 #[test]
+fn a_beat_queue_replaces_the_stored_one_an_absent_one_keeps_it_and_the_listing_carries_it() {
+    use crate::{account_session::QueueState, events::event::Repeat};
+    let mut s = LiveSession::from_snapshot(&snap("a", None, 1000.0, 50_000.0));
+    let q = QueueState {
+        item_ids: vec![11, 12],
+        index: 1,
+        shuffle: true,
+        repeat: Repeat::All,
+    };
+    s.apply(
+        &Beat {
+            queue: Some(q.clone()),
+            ..Beat::default()
+        },
+        55_000.0,
+    );
+    s.apply(&Beat::default(), 56_000.0);
+    assert_eq!(s.queue.as_ref(), Some(&q));
+    let live = live_at(vec![s], 60_000.0, 30_000.0);
+    let np = serde_json::to_value(live[0].now_playing.as_ref().unwrap()).unwrap();
+    assert_eq!(
+        np["queue"],
+        json!({"itemIds": [11, 12], "index": 1, "shuffle": true, "repeat": "all"})
+    );
+}
+
+#[test]
 fn streams_follow_the_engine_list_else_the_ttl() {
     let a = LiveSession::from_snapshot(&snap("a", None, 1.0, 59_000.0));
     let b = LiveSession::from_snapshot(&snap("b", None, 1.0, 10_000.0));

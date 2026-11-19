@@ -85,6 +85,12 @@ export interface WireQueue {
   index: number;
 }
 
+/** The queue a playing device reports in its heartbeat, with its order and repeat modes. */
+export interface ReportedQueue extends WireQueue {
+  shuffle: boolean;
+  repeat: 'off' | 'all' | 'one';
+}
+
 export interface RemoteState {
   type: 'remote.state';
   targetId: string;
@@ -112,6 +118,8 @@ export interface RemoteState {
   vocalLevel?: number;
   pitch?: number;
   stemsAvailable?: boolean;
+  /** Only on a beat that carries one: the first beat of a session and each change. */
+  queue?: ReportedQueue;
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;

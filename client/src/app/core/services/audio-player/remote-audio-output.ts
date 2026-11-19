@@ -31,7 +31,8 @@ export class RemoteAudioOutput implements AudioOutput {
   readonly selected = this.remote.isRemoting;
   /** The account session, while the view follows its owner. */
   private readonly session = computed(() => (this.selected() ? null : this.sync.session()));
-  private readonly wire = computed(() => this.session()?.queue ?? null);
+  /** The queue of the account session, or the one a selected device reports itself. */
+  private readonly wire = computed(() => (this.selected() ? this.remote.targetQueue() : (this.session()?.queue ?? null)));
   /** Each row keeps its place in the wire queue, which a queue pick names. */
   private readonly rows = signal<{ row: MusicTrackRequest; wireIndex: number }[]>([]);
   private readonly idsKey = computed(() => (this.wire()?.itemIds ?? []).join(','));
@@ -51,15 +52,23 @@ export class RemoteAudioOutput implements AudioOutput {
   readonly musicMode = signal(true).asReadonly();
   readonly rate = computed(() => (this.live() ? (this.remote.targetState()?.playbackRate ?? 1) : 1));
   readonly queue = computed(() => this.rows().map((r) => r.row));
+  /** The item played: the session's, or the selected device's, kept through the gap between two of its tracks. */
+  private readonly itemId = computed(() => (this.selected() ? this.selectedTrack()?.itemId : this.session()?.item.id));
   private readonly reportedIndex = computed(() => {
     const index = this.wire()?.index;
     const i = this.rows().findIndex((r) => r.wireIndex === index);
-    return i >= 0 ? i : this.rows().findIndex((r) => r.row.itemId === this.session()?.item.id);
+    return i >= 0 ? i : this.rows().findIndex((r) => r.row.itemId === this.itemId());
   });
   /** The row a skip sent from here moved to, shown until the owner reports another track or index. */
   private readonly pending = linkedSignal<string, number | null>({
-    source: () => `${this.wire()?.index}|${this.session()?.item.id}`,
+    source: () => `${this.wire()?.index}|${this.itemId()}`,
     computation: () => null,
+  });
+  /** The track of that row, shown ahead of the report. */
+  private readonly pendingTrack = computed<AudioRequest | null>(() => {
+    const pending = this.pending();
+    const next = pending === null ? null : this.rows()[pending]?.row;
+    return next ? { mediaId: next.mediaId, itemId: next.itemId, title: next.title, artist: next.artists, album: next.albumTitle, coverUrl: next.coverUrl } : null;
   });
   private pendingTimer: ReturnType<typeof setTimeout> | undefined;
   readonly queueIndex = computed(() => this.pending() ?? this.reportedIndex());
@@ -94,15 +103,12 @@ export class RemoteAudioOutput implements AudioOutput {
     computation: (now, prev) => now.track ?? (prev?.source.id === now.id ? prev.value : null),
   });
   readonly track = computed<AudioRequest | null>(() => {
-    if (this.selected()) return this.selectedTrack();
+    if (this.selected()) return this.pendingTrack() ?? this.selectedTrack();
     const s = this.session();
     // A video session has no track: read as one, the open video view would fetch lyrics for an episode.
     if (!s || !this.sync.isAudio(s)) return null;
-    const pending = this.pending();
-    const next = pending === null ? null : this.rows()[pending]?.row;
-    if (next) {
-      return { mediaId: next.mediaId, itemId: next.itemId, title: next.title, artist: next.artists, album: next.albumTitle, coverUrl: next.coverUrl };
-    }
+    const next = this.pendingTrack();
+    if (next) return next;
     const row = this.rows().find((r) => r.row.itemId === s.item.id)?.row;
     // An album session's `subtitle` is the track title, `title` the album.
     const album = s.item.kind === 'album';

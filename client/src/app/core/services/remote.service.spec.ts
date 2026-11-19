@@ -293,6 +293,48 @@ describe('RemoteService observation', () => {
   });
 });
 
+describe('RemoteService reported queue', () => {
+  const q = (index: number) => ({ itemIds: [11, 12, 13], index, shuffle: false, repeat: 'off' as const });
+
+  it('holds the queue a device reports through the frames that leave it out and the gap between two tracks', () => {
+    const { service, remoteState } = setup({ selected: 'tv#1' });
+    remoteState.set(frame({ queue: q(0) }));
+    service.ingestState();
+    remoteState.set(frame({ positionSeconds: 40 }));
+    service.ingestState();
+    expect(service.targetQueue()).toEqual(q(0));
+    service.noteTargetStopped('tv#1', 'sid-1');
+    expect(service.targetState()).toBeNull();
+    expect(service.targetQueue()).toEqual(q(0));
+    remoteState.set(frame({ sessionId: 'sid-2', mediaFileId: 3, queue: q(1) }));
+    service.ingestState();
+    expect(service.targetQueue()).toEqual(q(1));
+  });
+
+  it('drops the queue once the device starts a session without one, and shows none of another device', () => {
+    const { service, remoteState } = setup({ selected: 'tv#1' });
+    remoteState.set(frame({ queue: q(0) }));
+    service.ingestState();
+    remoteState.set(frame({ sessionId: 'sid-2' }));
+    service.ingestState();
+    expect(service.targetQueue()).toBeNull();
+    remoteState.set(frame({ sessionId: 'sid-3', queue: q(2) }));
+    service.ingestState();
+    expect(service.targetQueue()).toEqual(q(2));
+    service.selectTarget('pc#1');
+    expect(service.targetQueue()).toBeNull();
+  });
+
+  it('reads the queue of a picked device from its listing', () => {
+    const { service } = setup({ selected: null });
+    const { type: _t, targetId: _id, lastCmdId: _c, ...nowPlaying } = frame({ targetId: 'tv#2' });
+    service.targets.set([{ targetId: 'tv#2', userAgent: null, deviceName: null, systemName: null, formFactor: null, tvPlatform: null, nowPlaying: { ...nowPlaying, queue: q(1) } }]);
+    service.selectTarget('tv#2');
+    expect(service.targetQueue()).toEqual(q(1));
+    expect(service.targetState()).not.toHaveProperty('queue', expect.anything());
+  });
+});
+
 describe('RemoteService play target', () => {
   const row = (targetId: string, actions?: string[]): RemoteTarget => ({
     targetId, userAgent: null, deviceName: null, systemName: null, formFactor: null, tvPlatform: null, nowPlaying: null, ...(actions && { actions }),

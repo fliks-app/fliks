@@ -599,6 +599,7 @@ mod tests {
                 vocal_level: None,
                 pitch: None,
                 stems_available: None,
+                queue: None,
                 supports_volume: None,
                 subtitle_id: None,
                 quality: None,

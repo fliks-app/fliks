@@ -1,4 +1,5 @@
 //! The `LiveSession` shape, its defaults and the engine-side mappings (`presence.md` rules 2-9).
+use crate::account_session::QueueState;
 use crate::events::{
     Identity,
     event::{PlayState, QualityRung, StemMode},
@@ -56,6 +57,8 @@ pub struct LiveSession {
     pub vocal_level: Option<f64>,
     pub pitch: Option<i32>,
     pub stems_available: Option<bool>,
+    /// The audio queue the device last reported (`heartbeat.md` rule 25).
+    pub queue: Option<QueueState>,
     pub audio_plan: Option<AudioPlan>,
     pub source_fps: Option<f64>,
     pub bitrate_by_quality: Option<BTreeMap<String, BitrateHint>>,
@@ -148,6 +151,8 @@ pub struct Beat {
     pub vocal_level: Option<Option<f64>>,
     pub pitch: Option<Option<i32>>,
     pub stems_available: Option<Option<bool>>,
+    /// A valid beat queue replaces the stored one; `None` keeps it.
+    pub queue: Option<QueueState>,
 }
 
 impl LiveSession {
@@ -204,6 +209,7 @@ impl LiveSession {
             vocal_level: None,
             pitch: None,
             stems_available: None,
+            queue: None,
             muted: None,
             audio_plan: Some(r.audio_plan.clone()),
             source_fps: r.source.frame_rate.as_deref().and_then(parse_source_fps),
@@ -287,6 +293,9 @@ impl LiveSession {
         }
         if b.owner.is_some() {
             self.owner.clone_from(&b.owner);
+        }
+        if b.queue.is_some() {
+            self.queue.clone_from(&b.queue);
         }
     }
 }

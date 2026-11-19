@@ -8,7 +8,7 @@ import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
 import { FullPlayerState } from '../playback/full-player-state';
-import type { MusicTrackRequest } from './music-queue';
+import type { MusicTrackRequest, Repeat } from './music-queue';
 import { RemoteAudioOutput } from './remote-audio-output';
 
 const track = (itemId: number): MusicTrackRequest => ({
@@ -60,6 +60,7 @@ async function setup(account: AccountSession | null, live = true, owned = false)
   const playback = { remoteFamily: signal<'audio' | 'video' | null>(null), nowPlaying: signal<Partial<NowPlayingMetadata> | null>(null) };
   const remote = {
     isRemoting: signal(false),
+    targetQueue: signal<{ itemIds: number[]; index: number; shuffle: boolean; repeat: Repeat } | null>(null),
     selectedTargetId: signal<string | null>(null),
     observedTargetId: signal<string | null>('pc#1'),
     send: vi.fn(),
@@ -293,6 +294,37 @@ describe('RemoteAudioOutput', () => {
   });
 
   describe('on a selected device', () => {
+    it('reads the queue, shuffle and repeat the device reports, and drives them', async () => {
+      const ctx = await setup(session());
+      await select(ctx);
+      const { out, remote } = ctx;
+      remote.targetQueue.set({ itemIds: [49, 50, 51], index: 1, shuffle: true, repeat: 'all' });
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(out.queue().map((t) => t.itemId)).toEqual([49, 50, 51]);
+      expect([out.queueIndex(), out.shuffle(), out.repeat()]).toEqual([1, true, 'all']);
+      out.next();
+      expect(out.track()?.itemId).toBe(51);
+      out.playQueueAt(0);
+      out.setShuffle(false);
+      out.cycleRepeat();
+      expect(remote.send.mock.calls).toEqual([
+        ['tv#2', { action: 'next' }],
+        ['tv#2', { action: 'queue', queue: { itemIds: [49, 50, 51], index: 0 } }],
+        ['tv#2', { action: 'shuffle', shuffle: false }],
+        ['tv#2', { action: 'repeat', repeat: 'one' }],
+      ]);
+    });
+
+    it('keeps reading the account session queue for an observed owner, whatever the frame reports', async () => {
+      const { out, remote } = await setup(session());
+      remote.targetQueue.set({ itemIds: [49, 50, 51], index: 2, shuffle: true, repeat: 'one' });
+      TestBed.tick();
+      expect(out.queue().map((t) => t.itemId)).toEqual([11, 12, 13]);
+      expect([out.queueIndex(), out.shuffle(), out.repeat()]).toEqual([1, false, 'off']);
+    });
+
     it('reads the own report of the device instead of the account session, which it plays outside of', async () => {
       const ctx = await setup(session({ state: 'parked' }));
       await select(ctx);
