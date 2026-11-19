@@ -83,13 +83,16 @@ function setup() {
     currentTime: vi.fn(() => 55),
     disconnect: vi.fn(),
     selectCastDevice: vi.fn(async () => {}),
+    connectedDeviceId: signal<string | null>(null),
     requestSession: vi.fn(),
   };
   const remoteSvc = {
     isRemoting: remote.isConnected,
     selectedTargetId: signal<string | null>(null),
     liveOwner: signal<string | null>(null),
-    playTarget: () => remoteSvc.selectedTargetId() ?? remoteSvc.liveOwner(),
+    /** Kinds the account session covers; null = all. */
+    scope: signal<string[] | null>(null),
+    playTarget: (kind: string) => remoteSvc.selectedTargetId() ?? (!remoteSvc.scope() || remoteSvc.scope()!.includes(kind) ? remoteSvc.liveOwner() : null),
     observedTargetId: () => remoteSvc.selectedTargetId() ?? 'tv-1',
     targetState: signal<{ mediaFileId: number; mediaType?: string; mediaId?: number; itemId?: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
@@ -113,7 +116,7 @@ function setup() {
     observedOwnerTargetId: signal<string | null>('tv-1'),
     observableOwner: signal<string | null>(null),
     claimPending: signal(false),
-    handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
+    claim: vi.fn(async (start: () => Promise<void> | void) => start()),
     canTransfer: signal(true),
     canPlayHere: signal(false),
     playHere: vi.fn(async () => {}),
@@ -488,7 +491,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('local')).toBe(true);
       expect(remote.stopPlayback).not.toHaveBeenCalled();
       expect(remote.disconnect).toHaveBeenCalled();
-      expect(syncSvc.handOver).toHaveBeenCalled();
+      expect(syncSvc.claim).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42 }));
     });
 
@@ -524,20 +527,6 @@ describe('PlaybackSession', () => {
       session.takeBack();
       expect(router.navigate).not.toHaveBeenCalled();
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-    });
-
-    it('lets the remote device play on alone when control stops, without resuming here', () => {
-      const { session, remote, remoteSvc, local } = setup();
-      session.attachLocal(local);
-      remote.isConnected.set(true);
-      TestBed.tick();
-      session.stopControlling();
-      remote.isConnected.set(false);
-      TestBed.tick();
-      expect(remote.stopPlayback).not.toHaveBeenCalled();
-      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-      expect(local.disconnect).toHaveBeenCalled();
-      expect(local.resume).not.toHaveBeenCalled();
     });
   });
 
@@ -576,6 +565,26 @@ describe('PlaybackSession', () => {
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('tv-2');
       expect(remoteSvc.send).toHaveBeenCalledWith('tv-2', expect.objectContaining({ action: 'load', mediaFileId: 7, mediaId: 3, positionSeconds: 42 }));
       expect(local.release).not.toHaveBeenCalled();
+    });
+
+    it('moves playback from one receiver to another, leaving the first before connecting the second', async () => {
+      const { session, cast, local, castSvc, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      cast.isConnected.set(true);
+      cast.disconnect.mockImplementation(() => cast.isConnected.set(false));
+      castSvc.selectCastDevice.mockImplementation(async () => cast.isConnected.set(true));
+      let connectedAtLoad = false;
+      castPlayer.quickStart.mockImplementation(async () => void (connectedAtLoad = cast.isConnected()));
+      castPlayer.mediaFileId.set(7);
+      castPlayer.hasMedia.mockReturnValue(true);
+      castSvc.connectedDeviceId.set('cc-1');
+      session.attachLocal(local);
+      TestBed.tick();
+      expect(await session.moveTo('cast', 'cc-2')).toBe(true);
+      expect(castSvc.selectCastDevice).toHaveBeenCalledWith('cc-2');
+      expect(cast.disconnect.mock.invocationCallOrder[0]).toBeLessThan(castSvc.selectCastDevice.mock.invocationCallOrder[0]);
+      expect(connectedAtLoad).toBe(true);
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ mediaFileId: 7 }));
     });
 
     it('loads the receiver paused when the remote device was paused', async () => {
@@ -842,17 +851,27 @@ describe('PlaybackSession', () => {
     it('sends a play to the live owner of the session, opening no player here', async () => {
       const { session, remoteSvc, router } = setup();
       remoteSvc.liveOwner.set('tv-1');
-      expect(session.playsHere()).toBe(false);
+      expect(session.playsHere(item)).toBe(false);
       expect(await session.play({ ...item, positionSeconds: 30 })).toBe('remote');
       expect(remoteSvc.send).toHaveBeenCalledWith('tv-1', expect.objectContaining({ action: 'load', mediaFileId: 7, positionSeconds: 30 }));
       expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('plays a video here when the session scope leaves videos out', async () => {
+      const { session, remoteSvc, router } = setup();
+      remoteSvc.liveOwner.set('tv-1');
+      remoteSvc.scope.set(['album']);
+      expect(session.playsHere(item)).toBe(true);
+      expect(await session.play(item)).toBe('local');
+      expect(remoteSvc.send).not.toHaveBeenCalled();
+      expect(router.navigate).toHaveBeenCalled();
     });
 
     it('plays a party item here while another device owns the session', async () => {
       const { session, remoteSvc, router, party } = setup();
       remoteSvc.liveOwner.set('tv-1');
       party.drives.set(true);
-      expect(session.playsHere()).toBe(true);
+      expect(session.playsHere(item)).toBe(true);
       expect(await session.play(item)).toBe('local');
       expect(remoteSvc.send).not.toHaveBeenCalled();
       expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());

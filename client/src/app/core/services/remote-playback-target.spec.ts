@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MarkersApiService } from './api/markers-api.service';
 import { MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
@@ -38,6 +38,26 @@ function setup(state: Partial<RemoteNowPlaying> | null, actions?: string[]) {
   });
   return TestBed.inject(RemotePlaybackTarget);
 }
+
+describe('RemotePlaybackTarget track lists', () => {
+  it('loads no video lists for a music report', () => {
+    const getOne = vi.fn(async () => null);
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: RemoteService, useValue: { targetState: signal({ mediaId: 1, mediaFileId: 2, itemId: 3 }), observedTargetId: signal('tv#1'), interpolatedPosition: signal(0), isRemoting: signal(false), isObserving: signal(true), restarting: signal(false), targetOffline: signal(false), pendingAction: signal(null), awaitingFirstReport: signal(false) } },
+        { provide: StreamingApiService, useValue: {} },
+        { provide: MarkersApiService, useValue: {} },
+        { provide: TrackManagerService, useValue: {} },
+        { provide: MediaService, useValue: { getOne } },
+        { provide: SubtitlesApiService, useValue: {} },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+      ],
+    });
+    TestBed.inject(RemotePlaybackTarget);
+    TestBed.tick();
+    expect(getOne).not.toHaveBeenCalled();
+  });
+});
 
 describe('RemotePlaybackTarget volume', () => {
   it('offers no volume before the device has reported', () => {

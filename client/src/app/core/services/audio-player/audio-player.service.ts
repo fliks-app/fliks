@@ -314,8 +314,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private async yieldToTakeover(): Promise<void> {
     if (!this._track()) return;
     this.fullPlayer.handTo('audio', true);
-    // A receiver this device cast to is left too: nothing of this device plays there any more.
-    if (this.castOut.active()) this.castOut.leave();
+    // A receiver this device cast to is left too, unless another sender already plays there.
+    if (this.castOut.active()) this.castOut.yield();
     await this.close();
   }
 
@@ -401,7 +401,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   /** Plays a track queue from `startIndex`, always from 0:00. */
   async playTracks(tracks: readonly MusicTrackRequest[], startIndex = 0, opts?: { shuffle?: boolean }): Promise<void> {
     if (!tracks.length || this.blockedByParty()) return;
-    const target = this.remote.playTarget();
+    const target = this.remote.playTarget('album');
     if (target) return this.playOnRemote(target, tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.set(tracks, startIndex, opts?.shuffle ?? this._shuffle());
     this.mq.repeat = this._repeat();
@@ -1648,7 +1648,6 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         mediaFileId: info.mediaFileId,
         itemId: track.itemId,
         sessionId: this.sessionId,
-        handoff: this.sessionSync.handoffFor(this.sessionId),
         // A start in flight reports playing: a skip never shows as a pause elsewhere.
         state: this.uiPlaying() ? ('playing' as const) : ('paused' as const),
         hasNext: this._musicMode() && this.neighbour(1) !== null,

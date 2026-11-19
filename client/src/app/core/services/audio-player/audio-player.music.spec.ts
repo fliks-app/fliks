@@ -65,6 +65,7 @@ describe('AudioPlayerService music mode', () => {
     hasNext: () => false,
     dropNext: vi.fn(),
     leave: vi.fn(() => castOut.active.set(false)),
+    yield: vi.fn(() => castOut.active.set(false)),
     setStemSource: vi.fn(),
     applyStems: vi.fn(async () => {}),
     clearStems: vi.fn(),
@@ -78,6 +79,7 @@ describe('AudioPlayerService music mode', () => {
   const markApplied = vi.fn();
   const send = vi.fn(async (_id: string, _input: RemoteCommandInput) => undefined);
   let playTarget: string | null = null;
+  let scope: string[] | null = null;
   const trackRequests = vi.fn(async (ids: readonly number[]) => ids.map((i) => track(i)));
   const cmd = (action: RemoteCommand['action'], extra: Partial<RemoteCommand> = {}): RemoteCommand => ({
     type: 'remote.command', cmdId: 'c1', expiresAt: Date.now() + 10_000, byTargetId: null, action, ...extra,
@@ -93,10 +95,11 @@ describe('AudioPlayerService music mode', () => {
     markApplied.mockClear();
     send.mockClear();
     playTarget = null;
+    scope = null;
     trackRequests.mockClear();
     castOut.active.set(false);
     castOut.isConnected.set(false);
-    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.leave, castOut.setStemSource, castOut.clearStems]) f.mockClear();
+    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.leave, castOut.yield, castOut.setStemSource, castOut.clearStems]) f.mockClear();
     castLoad.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
@@ -114,9 +117,9 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: () => playTarget, send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: (kind: string) => (!scope || scope.includes(kind) ? playTarget : null), send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
         { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
@@ -373,7 +376,7 @@ describe('AudioPlayerService music mode', () => {
     await audio.playTracks([track(1)]);
     expect(castOut.active()).toBe(true);
     await player!.yield();
-    expect(castOut.leave).toHaveBeenCalled();
+    expect(castOut.yield).toHaveBeenCalled();
     expect(audio.track()).toBeNull();
   });
 
@@ -863,6 +866,15 @@ describe('AudioPlayerService music mode', () => {
       expect(send.mock.calls[0][1].queue?.itemIds.slice().sort()).toEqual([1, 2, 3]);
       expect(getItemPlaybackInfo).not.toHaveBeenCalled();
       expect(audio.active()).toBe(false);
+    });
+
+    it('starts the album here when the session scope leaves music out', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      playTarget = 'tv#1';
+      scope = ['movie', 'series'];
+      await audio.playTracks([track(1)]);
+      expect(send).not.toHaveBeenCalled();
+      expect(audio.active()).toBe(true);
     });
 
     it('ignores commands while nothing plays', async () => {

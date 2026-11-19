@@ -1,5 +1,5 @@
 @if (selectedAudio() ? null : output(); as o) {
-  @if (!o.isIdle()) {
+  @if (surface.outputBar()) {
     <app-player-bar
       [raised]="surface.aboveAudio()"
       [openLabel]="'remote.open_player' | translate"

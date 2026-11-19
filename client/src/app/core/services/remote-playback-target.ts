@@ -102,11 +102,12 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
     effect(() => {
       const s = this.remote.targetState();
-      if (!s?.mediaId || !s.mediaFileId) return;
+      // A music track has no video lists to load.
+      if (!s?.mediaId || !s.mediaFileId || s.itemId) return;
       const key = `${s.mediaId}:${s.mediaFileId}`;
       if (key === this.tracksLoadedForKey) return;
       this.tracksLoadedForKey = key;
-      untracked(() => void this.loadTracks(s.mediaId!, s.mediaFileId));
+      untracked(() => void this.loadTracks(s.mediaId!, s.mediaFileId, key));
     });
   }
 
@@ -288,13 +289,15 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   /** Reuse the target's own builder: a second list produced different rows, so the selection named a track the target lacked. */
-  private async loadTracks(mediaId: number, mediaFileId: number): Promise<void> {
+  private async loadTracks(mediaId: number, mediaFileId: number, key: string): Promise<void> {
+    const live = () => this.tracksLoadedForKey === key;
     try {
       const media = await this.mediaService.getOne(mediaId).catch(() => null);
+      if (!live()) return;
       const file = (media?.files ?? []).find((f: { id: number }) => f.id === mediaFileId);
       this.audioOptions.set(buildCastAudioOptions(file?.streamInfo?.audio, this.translate));
-      void this.loadSprites(mediaFileId);
-      void this.loadMarkers(this.remote.targetState()?.episodeId ?? null);
+      void this.loadSprites(mediaFileId, live);
+      void this.loadMarkers(this.remote.targetState()?.episodeId ?? null, live);
 
       const subs = await this.trackManager.loadSubtitles(
         mediaId,
@@ -302,6 +305,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
         this.streamingApi,
         media,
       );
+      if (!live()) return;
       this.subtitleOptions.set(
         subs.map((o) => ({
           id: o.id,
@@ -317,12 +321,13 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   }
 
   /** Markers are per-episode, so a film simply has no cue. */
-  private async loadMarkers(episodeId: number | null): Promise<void> {
+  private async loadMarkers(episodeId: number | null, live: () => boolean): Promise<void> {
     this.introMarker.set(null);
     this.outroMarker.set(null);
     if (!episodeId) return;
     try {
       const markers = await this.markersApi.listForEpisode(episodeId);
+      if (!live()) return;
       this.introMarker.set(markers.find((m) => m.type === 'intro') ?? null);
       this.outroMarker.set(markers.find((m) => m.type === 'outro') ?? null);
     } catch (err) {
@@ -332,7 +337,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
 
   /** Seek previews belong to the file, not to whoever plays it, so the same
    *  sprite sheet the local player and the Cast sender use serves here too. */
-  private async loadSprites(mediaFileId: number): Promise<void> {
+  private async loadSprites(mediaFileId: number, live: () => boolean): Promise<void> {
     this.spriteUrl.set(null);
     this.spriteMetadata.set(null);
     try {
@@ -341,7 +346,9 @@ export class RemotePlaybackTarget implements PlaybackOutput {
         console.warn('[remote-playback-target] no sprite metadata', mediaFileId, res.status);
         return;
       }
-      this.spriteMetadata.set((await res.json()) as SpriteMetadata);
+      const metadata = (await res.json()) as SpriteMetadata;
+      if (!live()) return;
+      this.spriteMetadata.set(metadata);
       this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(mediaFileId));
     } catch (err) {
       console.warn('[remote-playback-target] failed to load sprites', mediaFileId, err);

@@ -251,6 +251,9 @@ export class CastService implements OnDestroy {
     this.isConnected() ? (this.castDevices().find((d) => d.connected)?.name ?? this.webDeviceName() ?? 'Chromecast') : null,
   );
 
+  /** The connected native receiver's id, null while not connected or when no listing names it. */
+  readonly connectedDeviceId = computed(() => (this.isConnected() ? (this.castDevices().find((d) => d.connected)?.id ?? null) : null));
+
   // ── Seek coalescing (see CAST_SEEK_* above) ──
   private seekCoalesceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSeekTarget: number | null = null;
@@ -545,6 +548,11 @@ export class CastService implements OnDestroy {
   receiverPlays(mediaFileId: number): boolean {
     const m = this.receiverMedia();
     return !this.replaced() && (!m || m['mediaFileId'] === mediaFileId);
+  }
+
+  /** Whether the receiver still plays the session `sid`; none known reads as not ours. */
+  receiverPlaysSession(sid: string | null | undefined): boolean {
+    return !!sid && this.receiverMedia()?.['sid'] === sid;
   }
 
   /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */

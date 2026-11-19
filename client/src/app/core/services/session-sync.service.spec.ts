@@ -350,41 +350,6 @@ describe('SessionSyncService dismiss on stop', () => {
 describe('SessionSyncService play here', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('flags the first beats of the session started by play here as a hand-over, once', async () => {
-    const { service, flush } = setup();
-    await flush(session());
-    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
-    expect(service.handoffFor('new')).toBeUndefined();
-    await service.playHere();
-    expect(service.handoffFor('new')).toBe(true);
-    expect(service.handoffFor('new')).toBe(true);
-    expect(service.handoffFor('other')).toBeUndefined();
-  });
-
-  it('never flags the session of a player already running when play here is armed', async () => {
-    const { service, flush } = setup();
-    await flush(session());
-    service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
-    service.registerPlayer({ sessionId: () => 'busy', active: () => true, yield: async () => undefined });
-    await service.playHere();
-    expect(service.handoffFor('busy')).toBeUndefined();
-    expect(service.handoffFor('new')).toBe(true);
-  });
-
-  it('lets a hand-over lapse after its TTL', async () => {
-    vi.useFakeTimers();
-    try {
-      const { service, flush } = setup();
-      await flush(session());
-      service.registerResumer('video', vi.fn().mockResolvedValue(undefined));
-      await service.playHere();
-      vi.advanceTimersByTime(61_000);
-      expect(service.handoffFor('late')).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('starts the item with its own pair at the extrapolated position through the adapter of its family', async () => {
     const { service, flush } = setup();
     await flush(session());
@@ -443,7 +408,6 @@ describe('SessionSyncService play here', () => {
     await taking;
     TestBed.tick();
     expect(service.claimPending()).toBe(true);
-    expect(service.handoffFor('sid-new')).toBe(true);
   });
 
   it('releases the claim of a resume that started no player', async () => {
@@ -453,7 +417,6 @@ describe('SessionSyncService play here', () => {
     await service.playHere();
     TestBed.tick();
     expect(service.claimPending()).toBe(false);
-    expect(service.handoffFor('sid-x')).toBeUndefined();
   });
 
   it('releases the claim when the resumer fails', async () => {

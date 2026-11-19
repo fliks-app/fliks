@@ -65,8 +65,8 @@ export interface LiveReport {
 export type SessionResumer = (session: AccountSession, positionSeconds: number) => Promise<void>;
 
 const HANDLED_MAX = 32;
-/** How long an armed hand-over waits for the new session's first beat. */
-const HANDOFF_TTL_MS = 60_000;
+/** How long a claim waits for the new session's first beat. */
+const CLAIM_TTL_MS = 60_000;
 
 /** The account's playback session as this device sees it: bootstrap, role, takeover. */
 @Injectable({ providedIn: 'root' })
@@ -101,6 +101,12 @@ export class SessionSyncService {
     if (!owner || !me) return false;
     return s.state === 'parked' ? deviceIdOf(owner) === deviceIdOf(me) : sameTarget(owner, me);
   });
+
+  /** Whether the account session covers `kind`; a kind outside it plays on its own, beside the session. */
+  covers(kind: MediaType): boolean {
+    const kinds = this.auth.user()?.sessionKinds;
+    return !kinds || kinds.includes(kind);
+  }
 
   /** The device to read state from and send commands to without selecting it. */
   readonly observedOwnerTargetId = computed<string | null>(() => (this.localPlaying() ? null : this.observableOwner()));
@@ -146,8 +152,6 @@ export class SessionSyncService {
   private readonly registered = signal(0);
   private readonly resumers: Partial<Record<MediaFamily, SessionResumer>> = {};
   private readonly handled: string[] = [];
-  /** A hand-over armed by this device: the first new sid to beat carries `handoff`. */
-  private handoff: { sid: string | null; until: number; skip: Set<string | undefined> } | null = null;
   /** Advances each second while a session plays elsewhere, so what reads `positionNow` follows its anchor. */
   private readonly tick = signal(0);
   private fetching: Promise<void> | null = null;
@@ -277,18 +281,11 @@ export class SessionSyncService {
     };
   }
 
-  /** The next session this device starts takes the account session over on purpose: its beats say so, and the old owner stops silently. */
-  async handOver(start: () => Promise<void> | void): Promise<void> {
-    const skip = new Set([...this.players].map((p) => p.sessionId()));
-    this.handoff = { sid: null, until: Date.now() + HANDOFF_TTL_MS, skip };
-    await this.claim(start);
-  }
-
   /** A start that makes this device the owner: until its first beat does, its player is no idle surface of the session. */
   async claim(start: () => Promise<void> | void): Promise<void> {
     this.claiming.set(true);
     if (this.claimTimer) clearTimeout(this.claimTimer);
-    this.claimTimer = setTimeout(() => this.releaseClaim(), HANDOFF_TTL_MS);
+    this.claimTimer = setTimeout(() => this.releaseClaim(), CLAIM_TTL_MS);
     this.starting.set(true);
     try {
       await start();
@@ -298,18 +295,9 @@ export class SessionSyncService {
   }
 
   private releaseClaim(): void {
-    this.handoff = null;
     this.claiming.set(false);
     if (this.claimTimer) clearTimeout(this.claimTimer);
     this.claimTimer = null;
-  }
-
-  /** What a beat of `sid` sends as `handoff`: true for the session an armed hand-over bound to. */
-  handoffFor(sid: string | undefined): true | undefined {
-    const h = this.handoff;
-    if (!h || !sid || Date.now() > h.until) return undefined;
-    if (h.sid === null && !h.skip.has(sid)) h.sid = sid;
-    return h.sid === sid ? true : undefined;
   }
 
   private readonly claiming = signal(false);
@@ -421,7 +409,7 @@ export class SessionSyncService {
     const s = this._session();
     const resumer = s && this.resumerFor(s);
     if (!s || !resumer || this.role() === 'owner') return;
-    await this.handOver(() => resumer(s, this.positionNow(s)));
+    await this.claim(() => resumer(s, this.positionNow(s)));
   }
 
   /** Moves the session to another device of the account, which loads it where it stands; its first beat claims and this one is superseded. */

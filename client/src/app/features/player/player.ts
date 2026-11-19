@@ -3903,7 +3903,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
       hasNext?: boolean;
-      handoff?: boolean;
       castDevice?: string;
       qoe?: QoeSample;
     } = {
@@ -3917,7 +3916,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const sessionId = this.activeSessionId();
     if (sessionId) {
       payload.sessionId = sessionId;
-      payload.handoff = this.sessionSync.handoffFor(sessionId);
       // The output in effect: while casting the local engine is paused and muted on purpose.
       const out = this.session.output() ?? this.localOutput;
       payload.state = out.buffering() ? 'buffering' : out.uiPaused() ? 'paused' : 'playing';

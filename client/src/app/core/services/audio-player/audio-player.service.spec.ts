@@ -49,7 +49,7 @@ describe('AudioPlayerService', () => {
       providers: [
       { provide: RemoteService, useValue: { registerLoader: vi.fn(), playTarget: () => null, validated: new Subject<RemoteCommand>(), markApplied: vi.fn(), lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
-      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn(), handoffFor: () => undefined } },
+      { provide: SessionSyncService, useValue: { registerPlayer: () => () => {}, registerResumer: () => () => {}, handleSuperseded: vi.fn() } },
         provideZonelessChangeDetection(),
         { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },

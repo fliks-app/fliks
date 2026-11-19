@@ -561,7 +561,8 @@ export class CastPlayerService {
     this.sessionSync.registerPlayer({
       sessionId: () => this.liveSessionId() ?? undefined,
       active: () => this.hasMedia() && !this.controlOnly(),
-      yield: async () => this.leave(),
+      // A takeover by another sender of the receiver leaves its playback alone.
+      yield: async () => (this.cast.receiverPlaysSession(this.liveSessionId()) ? this.leave() : this.clear()),
     });
     // Debounced teardown: a sender blip (Wi-Fi roam, sleep) drops the session while the TV keeps playing; CAF auto-rejoins, so reconnect cancels it.
     effect(() => {

@@ -219,7 +219,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
   readonly chromeBottomTotal = computed(() => {
     // The bar of another device's session and the audio mini-player share one slot.
-    const bars = (!this.device.isTv() && !this.session.isLocal() && !this.session.output()?.isIdle() ? 1 : 0) + (this.surface.bar() || this.surface.aboveAudio() ? 1 : 0);
+    const bars = (this.surface.outputBar() ? 1 : 0) + (this.surface.bar() || this.surface.aboveAudio() ? 1 : 0);
     return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
   });
 

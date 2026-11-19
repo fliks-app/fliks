@@ -231,9 +231,11 @@ export class RemoteService {
     const face = faceOf(this.targets(), owner);
     return face && targetSupports(face, 'load') ? face.targetId : null;
   });
-  /** Where a play started on this device goes, music and video alike: the selected device, else the account session's
-   *  live owner, which stays the active device until a play here takes the session back. Null plays here. */
-  readonly playTarget = computed(() => this.selectedTargetId() ?? this.liveOwner());
+  /** Where a play of `kind` started on this device goes: the selected device, else the account session's live owner
+   *  when the session covers that kind, which stays the active device until a play here takes it back. Null plays here. */
+  playTarget(kind: MediaType): string | null {
+    return this.selectedTargetId() ?? (this.sessionSync.covers(kind) ? this.liveOwner() : null);
+  }
   /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
   /** Following a device, selected or not. */
@@ -370,8 +372,6 @@ export class RemoteService {
     return this.wallClock() - this.observingSince < FIRST_REPORT_GRACE_MS;
   });
 
-  /** Hold the level the user just set until the target confirms it, so the
-   *  slider stops fighting the reports it triggers. */
   /** Hold a requested position until the target reports one that matches it. */
   private pinPosition(seconds: number): void {
     this.pinSeq++;
@@ -387,6 +387,8 @@ export class RemoteService {
     }
   }
 
+  /** Hold the level the user just set until the target confirms it, so the
+   *  slider stops fighting the reports it triggers. */
   pinVolume(level: number): void {
     this.pinnedVolume.set(level);
     this.volumePinAt = Date.now();

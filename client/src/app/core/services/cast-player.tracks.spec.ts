@@ -52,6 +52,9 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     resumedState: signal<unknown>(null),
     settled: Promise.resolve(),
     receiverMedia: signal<Record<string, unknown> | null>(null),
+    receiverPlaysSession(sid: string | null | undefined) {
+      return !!sid && this.receiverMedia()?.['sid'] === sid;
+    },
     receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number; mediaFileId?: number }>(),
     receiverError$: new Subject<object>(),
@@ -225,6 +228,17 @@ describe('a takeover of the cast session', () => {
     expect(cast.isConnected()).toBe(false);
     expect(svc.hasMedia()).toBe(false);
     expect(player.sessionId()).toBeUndefined();
+  });
+
+  it('leaves the receiver alone when another sender already plays the same file there', async () => {
+    const { svc, cast, players } = setup();
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-1' });
+    TestBed.tick();
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-2' });
+    TestBed.tick();
+    await players[0].yield(true);
+    expect(cast.disconnect).not.toHaveBeenCalled();
+    expect(svc.hasMedia()).toBe(false);
   });
 });
 

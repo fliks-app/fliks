@@ -12,9 +12,9 @@
   >
     <ng-container ngProjectAs="[barCover]">
       @if (t.coverUrl | resolveUrl: 'thumb'; as cover) {
-        @if (!coverFailed()) {
+        @if (!miniCoverFailed()) {
           @for (c of [cover]; track c) {
-            <img [cachedSrc]="c" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" (load)="tintFrom($any($event.target))" (error)="coverFailed.set(true)" />
+            <img [cachedSrc]="c" alt="" animate.enter="cover-in" animate.leave="cover-out" class="absolute inset-0 h-full w-full object-cover" (load)="tintFrom($any($event.target))" (error)="miniCoverFailed.set(true)" />
           }
         } @else {
           <svg lucideMusic class="h-5 w-5" [strokeWidth]="1.5"></svg>
