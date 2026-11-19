@@ -391,9 +391,37 @@
       "display": "Affichage",
       "storage": "Stockage",
       "home": "Accueil",
-      "update": "Mise à jour"
+      "update": "Mise à jour",
+      "notifications": "Notifications"
     },
-    "version": "Version {{version}}"
+    "version": "Version {{version}}",
+    "notifications": {
+      "device_title": "Cet appareil",
+      "device": "Notifications système sur cet appareil",
+      "device_hint": "Les notifications arrivent même quand Fliks est fermé.",
+      "denied": "Les notifications sont bloquées pour ce site. Autorisez-les dans les réglages du navigateur.",
+      "admin_disabled": "L'administrateur du serveur n'a pas activé les notifications mobiles.",
+      "toasts": "Notifications dans l'application sur cet appareil",
+      "toasts_hint": "Un court message s'affiche à l'écran quand quelque chose vous concerne.",
+      "categories_title": "Sujets des notifications",
+      "categories_hint": "Valable pour tous vos appareils.",
+      "cat_requests": "Demandes",
+      "cat_requests_hint": "Décisions sur vos demandes et demandes qui vous attendent.",
+      "cat_parties": "Soirées de visionnage",
+      "cat_parties_hint": "Invitations et soirées sur le point de commencer.",
+      "cat_social": "Social",
+      "cat_social_hint": "Demandes d'abonnement, nouveaux abonnés et recommandations.",
+      "cat_episodes": "Nouveaux épisodes",
+      "cat_episodes_hint": "Nouveaux épisodes des séries que vous regardez.",
+      "cat_account": "Compte",
+      "cat_account_hint": "Demandes de connexion depuis un autre appareil.",
+      "test": "Envoyer une notification de test",
+      "test_sent": "Notification de test envoyée.",
+      "test_failed": "La notification de test a échoué : {{error}}",
+      "enable_failed": "Impossible d'activer les notifications.",
+      "action_done": "Fait.",
+      "action_failed": "L'action a échoué."
+    }
   },
   "update_settings": {
     "title": "Mise à jour",
@@ -512,9 +540,7 @@
     "visibility_private": "Privée",
     "visibility_followers": "Abonnés seulement",
     "visibility_public": "Publique",
-    "toast_new_follower": "{{username}} vous suit désormais",
-    "toast_follow_request": "{{username}} souhaite vous suivre",
-    "toast_follow_accepted": "{{username}} a accepté votre demande de suivi"
+    "toast_new_follower": "{{username}} vous suit désormais"
   },
   "likes": {
     "like": "J'aime",
@@ -540,7 +566,6 @@
     "recommended_by": "Recommandé par {{username}} :",
     "for_you": "Recommandé pour vous",
     "dismiss": "Masquer",
-    "toast_received": "{{username}} vous recommande « {{title}} »",
     "profile_tab": "Recommandations",
     "profile_empty": "Aucune recommandation pour l'instant.",
     "profile_received": "Ce qui vous a été recommandé",
@@ -2568,7 +2593,17 @@
       "save_error": "Enregistrement impossible.",
       "save": "Enregistrer",
       "cancel": "Annuler",
-      "test_failed": "Échec du test de connexion"
+      "test_failed": "Échec du test de connexion",
+      "relay_enabled": "Fliks Relay actif",
+      "relay_hint": "Achemine les notifications vers les applications mobiles. Le relais voit quel serveur notifie quel appareil et à quelle fréquence, jamais le contenu, chiffré pour l'appareil.",
+      "relay_state": "État",
+      "relay_state_disabled": "Désactivé",
+      "relay_state_ready": "Enregistré",
+      "relay_state_error": "Erreur",
+      "relay_devices": "{{mobile}} abonnements mobiles et {{web}} navigateur.",
+      "relay_stats": "30 derniers jours : {{notifications}} notifications, {{accepted}} remises, {{limited}} limitées, {{failed}} échouées, {{dead}} jetons morts.",
+      "relay_pending": "Suppression en attente auprès d'un relais qui ne répond pas :",
+      "relay_pending_drop": "Abandonner"
     },
     "media_servers": {
       "title": "Serveurs de medias",
@@ -4539,8 +4574,6 @@
     "join": "Rejoindre",
     "panel_toggle": "Séance de groupe",
     "panel_close": "Fermer le panneau de la séance",
-    "toast_added": "{{host}} vous a ajouté à « {{name}} »",
-    "toast_starting": "« {{name}} » commence",
     "closed_host_ended": "La séance est terminée",
     "closed_host_ended_by": "{{name}} a mis fin à la séance",
     "closed_expired": "La séance a expiré",
@@ -5738,5 +5771,70 @@
     "loading": "Chargement",
     "failed": "Impossible de charger la musique depuis le serveur",
     "empty": "Rien pour l’instant"
+  },
+  "push": {
+    "request_approved": {
+      "title": "Demande approuvée",
+      "body": "« {{title}} » a été approuvé."
+    },
+    "request_declined": {
+      "title": "Demande refusée",
+      "body": "« {{title}} » a été refusé."
+    },
+    "request_available": {
+      "title": "Disponible",
+      "body": "« {{title}} » est disponible."
+    },
+    "request_created": {
+      "title": "Nouvelle demande",
+      "body": "{{user}} a demandé « {{title}} »."
+    },
+    "party_invited": {
+      "title": "Soirée de visionnage",
+      "body": "{{host}} vous invite à « {{party}} »."
+    },
+    "party_starting": {
+      "title": "Commence maintenant",
+      "body": "« {{party}} » commence."
+    },
+    "follow_request": {
+      "title": "Demande d'abonnement",
+      "body": "{{user}} veut vous suivre."
+    },
+    "follow_accepted": {
+      "title": "Abonnement accepté",
+      "body": "{{user}} a accepté votre demande."
+    },
+    "content_recommended": {
+      "title": "Recommandation",
+      "body": "{{user}} recommande « {{title}} »."
+    },
+    "episode_one": {
+      "title": "Nouvel épisode",
+      "body": "{{title}} {{episode}} est disponible."
+    },
+    "episodes_many": {
+      "title": "Nouveaux épisodes",
+      "body": "{{title}} {{season}} : {{count}} nouveaux épisodes."
+    },
+    "episodes_series": {
+      "title": "Nouveaux épisodes",
+      "body": "{{title}} : {{count}} nouveaux épisodes."
+    },
+    "pairing_requested": {
+      "title": "Demande de connexion",
+      "body": "{{device}} demande à se connecter."
+    },
+    "test": {
+      "title": "Notification de test",
+      "body": "Les notifications fonctionnent sur cet appareil."
+    },
+    "action": {
+      "approve": "Approuver",
+      "decline": "Refuser",
+      "join": "Rejoindre",
+      "accept": "Accepter",
+      "open": "Ouvrir"
+    }
   }
 }

@@ -391,9 +391,37 @@
       "display": "Visualização",
       "storage": "Armazenamento",
       "home": "Início",
-      "update": "Atualização"
+      "update": "Atualização",
+      "notifications": "Notificações"
     },
-    "version": "Versão {{version}}"
+    "version": "Versão {{version}}",
+    "notifications": {
+      "device_title": "Este dispositivo",
+      "device": "Notificações do sistema neste dispositivo",
+      "device_hint": "As notificações chegam mesmo com o Fliks fechado.",
+      "denied": "As notificações estão bloqueadas para este site. Permita-as nas definições do navegador.",
+      "admin_disabled": "O administrador do servidor não ativou as notificações móveis.",
+      "toasts": "Notificações na aplicação neste dispositivo",
+      "toasts_hint": "Aparece uma mensagem breve no ecrã quando algo lhe diz respeito.",
+      "categories_title": "Sobre o que notificar",
+      "categories_hint": "Aplica-se a todos os seus dispositivos.",
+      "cat_requests": "Pedidos",
+      "cat_requests_hint": "Decisões sobre os seus pedidos e pedidos à espera de si.",
+      "cat_parties": "Sessões de visualização",
+      "cat_parties_hint": "Convites e sessões prestes a começar.",
+      "cat_social": "Social",
+      "cat_social_hint": "Pedidos de seguimento, novos seguidores e recomendações.",
+      "cat_episodes": "Novos episódios",
+      "cat_episodes_hint": "Novos episódios das séries que vê.",
+      "cat_account": "Conta",
+      "cat_account_hint": "Pedidos de início de sessão a partir de outro dispositivo.",
+      "test": "Enviar uma notificação de teste",
+      "test_sent": "Notificação de teste enviada.",
+      "test_failed": "A notificação de teste falhou: {{error}}",
+      "enable_failed": "Não foi possível ativar as notificações.",
+      "action_done": "Feito.",
+      "action_failed": "A ação falhou."
+    }
   },
   "update_settings": {
     "title": "Atualização",
@@ -512,9 +540,7 @@
     "visibility_private": "Privada",
     "visibility_followers": "Apenas seguidores",
     "visibility_public": "Pública",
-    "toast_new_follower": "{{username}} começou a segui-lo",
-    "toast_follow_request": "{{username}} pretende segui-lo",
-    "toast_follow_accepted": "{{username}} aceitou o seu pedido de seguimento"
+    "toast_new_follower": "{{username}} começou a segui-lo"
   },
   "likes": {
     "like": "Gosto",
@@ -540,7 +566,6 @@
     "recommended_by": "Recomendado por {{username}}:",
     "for_you": "Recomendado para si",
     "dismiss": "Ocultar",
-    "toast_received": "{{username}} recomenda-lhe «{{title}}»",
     "profile_tab": "Recomendações",
     "profile_empty": "Nenhuma recomendação de momento.",
     "profile_received": "O que lhe foi recomendado",
@@ -2568,7 +2593,17 @@
       "save_error": "Não foi possível guardar.",
       "save": "Guardar",
       "cancel": "Cancelar",
-      "test_failed": "Falha no teste de ligação"
+      "test_failed": "Falha no teste de ligação",
+      "relay_enabled": "Fliks Relay ativo",
+      "relay_hint": "Entrega as notificações às aplicações móveis. O relay vê que servidor notifica que dispositivo e com que frequência, nunca o conteúdo, cifrado para o dispositivo.",
+      "relay_state": "Estado",
+      "relay_state_disabled": "Desativado",
+      "relay_state_ready": "Registado",
+      "relay_state_error": "Erro",
+      "relay_devices": "{{mobile}} subscrições móveis e {{web}} do navegador.",
+      "relay_stats": "Últimos 30 dias: {{notifications}} notificações, {{accepted}} entregues, {{limited}} limitadas, {{failed}} falhadas, {{dead}} tokens inválidos.",
+      "relay_pending": "Eliminação pendente num relay que não responde:",
+      "relay_pending_drop": "Desistir"
     },
     "media_servers": {
       "title": "Servidores de media",
@@ -4539,8 +4574,6 @@
     "join": "Entrar",
     "panel_toggle": "Sessão em grupo",
     "panel_close": "Fechar o painel da sessão",
-    "toast_added": "{{host}} adicionou-o a «{{name}}»",
-    "toast_starting": "«{{name}}» vai começar",
     "closed_host_ended": "A sessão terminou",
     "closed_host_ended_by": "{{name}} terminou a sessão",
     "closed_expired": "A sessão expirou",
@@ -5738,5 +5771,70 @@
     "loading": "A carregar",
     "failed": "Não foi possível carregar a música do servidor",
     "empty": "Ainda não há nada"
+  },
+  "push": {
+    "request_approved": {
+      "title": "Pedido aprovado",
+      "body": "«{{title}}» foi aprovado."
+    },
+    "request_declined": {
+      "title": "Pedido recusado",
+      "body": "«{{title}}» foi recusado."
+    },
+    "request_available": {
+      "title": "Já disponível",
+      "body": "«{{title}}» está disponível."
+    },
+    "request_created": {
+      "title": "Novo pedido",
+      "body": "{{user}} pediu «{{title}}»."
+    },
+    "party_invited": {
+      "title": "Sessão de visualização",
+      "body": "{{host}} convidou-o para «{{party}}»."
+    },
+    "party_starting": {
+      "title": "Começa agora",
+      "body": "«{{party}}» vai começar."
+    },
+    "follow_request": {
+      "title": "Pedido de seguimento",
+      "body": "{{user}} quer segui-lo."
+    },
+    "follow_accepted": {
+      "title": "Seguimento aceite",
+      "body": "{{user}} aceitou o seu pedido."
+    },
+    "content_recommended": {
+      "title": "Recomendação",
+      "body": "{{user}} recomenda «{{title}}»."
+    },
+    "episode_one": {
+      "title": "Novo episódio",
+      "body": "{{title}} {{episode}} está disponível."
+    },
+    "episodes_many": {
+      "title": "Novos episódios",
+      "body": "{{title}} {{season}}: {{count}} novos episódios."
+    },
+    "episodes_series": {
+      "title": "Novos episódios",
+      "body": "{{title}}: {{count}} novos episódios."
+    },
+    "pairing_requested": {
+      "title": "Pedido de início de sessão",
+      "body": "{{device}} pede para iniciar sessão."
+    },
+    "test": {
+      "title": "Notificação de teste",
+      "body": "As notificações funcionam neste dispositivo."
+    },
+    "action": {
+      "approve": "Aprovar",
+      "decline": "Recusar",
+      "join": "Entrar",
+      "accept": "Aceitar",
+      "open": "Abrir"
+    }
   }
 }

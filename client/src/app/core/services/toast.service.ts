@@ -13,7 +13,25 @@ export interface Toast {
   type: ToastType;
   duration: number;
   actions: ToastAction[];
+  /** A pushed notification: bold title, thumbnail; `tv` drops the buttons and the close control so focus never moves. */
+  title?: string;
+  image?: string;
+  tag?: string;
+  tv?: boolean;
 }
+
+export interface NotificationToast {
+  title: string;
+  body: string;
+  image?: string;
+  /** A toast with the same tag is replaced. */
+  tag?: string;
+  tv: boolean;
+  actions: ToastAction[];
+}
+
+const NOTIFICATION_MS = 10_000;
+const NOTIFICATION_TV_MS = 6_000;
 
 const CLOSED_QUIET_MS = 30_000;
 
@@ -37,6 +55,17 @@ export class ToastService {
 
   info(message: string, duration = 4000, ...actions: ToastAction[]) {
     return this.add(message, 'info', duration, actions);
+  }
+
+  notify(n: NotificationToast) {
+    const tv = n.tv;
+    const id = this.nextId++;
+    const toast: Toast = {
+      id, message: n.body, type: 'info', duration: tv ? NOTIFICATION_TV_MS : NOTIFICATION_MS,
+      actions: tv ? [] : n.actions, title: n.title, image: n.image, tag: n.tag, tv,
+    };
+    this.toasts.update((list) => [...list.filter((t) => !n.tag || t.tag !== n.tag), toast]);
+    setTimeout(() => this.dismiss(id), toast.duration);
   }
 
   /** A message the user closed by hand stays quiet for a while, so a repeating error does not reopen it. */

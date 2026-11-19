@@ -391,9 +391,37 @@
       "display": "Display",
       "storage": "Storage",
       "home": "Home",
-      "update": "Update"
+      "update": "Update",
+      "notifications": "Notifications"
     },
-    "version": "Version {{version}}"
+    "version": "Version {{version}}",
+    "notifications": {
+      "device_title": "This device",
+      "device": "System notifications on this device",
+      "device_hint": "Notifications arrive even when Fliks is closed.",
+      "denied": "Notifications are blocked for this site. Allow them in the browser settings.",
+      "admin_disabled": "The server administrator has not enabled mobile notifications.",
+      "toasts": "In-app notifications on this device",
+      "toasts_hint": "A short message appears on screen when something concerns you.",
+      "categories_title": "What to be notified about",
+      "categories_hint": "Applies to all your devices.",
+      "cat_requests": "Requests",
+      "cat_requests_hint": "Decisions on your requests, and requests waiting for you.",
+      "cat_parties": "Watch parties",
+      "cat_parties_hint": "Invitations and parties about to start.",
+      "cat_social": "Social",
+      "cat_social_hint": "Follow requests, new followers and recommendations.",
+      "cat_episodes": "New episodes",
+      "cat_episodes_hint": "New episodes of the series you watch.",
+      "cat_account": "Account",
+      "cat_account_hint": "Sign-in requests from another device.",
+      "test": "Send a test notification",
+      "test_sent": "Test notification sent.",
+      "test_failed": "The test notification failed: {{error}}",
+      "enable_failed": "Unable to turn notifications on.",
+      "action_done": "Done.",
+      "action_failed": "The action failed."
+    }
   },
   "update_settings": {
     "title": "Update",
@@ -512,9 +540,7 @@
     "visibility_private": "Private",
     "visibility_followers": "Followers only",
     "visibility_public": "Public",
-    "toast_new_follower": "{{username}} now follows you",
-    "toast_follow_request": "{{username}} wants to follow you",
-    "toast_follow_accepted": "{{username}} accepted your follow request"
+    "toast_new_follower": "{{username}} now follows you"
   },
   "likes": {
     "like": "Like",
@@ -540,7 +566,6 @@
     "recommended_by": "Recommended by {{username}}:",
     "for_you": "Recommended for you",
     "dismiss": "Hide",
-    "toast_received": "{{username}} recommends \"{{title}}\" to you",
     "profile_tab": "Recommendations",
     "profile_empty": "No recommendations for now.",
     "profile_received": "Recommended to you",
@@ -2568,7 +2593,17 @@
       "save_error": "Unable to save.",
       "save": "Save",
       "cancel": "Cancel",
-      "test_failed": "Connection test failed"
+      "test_failed": "Connection test failed",
+      "relay_enabled": "Fliks Relay active",
+      "relay_hint": "Delivers notifications to the mobile apps. The relay sees which server notifies which device and how often, never the content, which is encrypted for the device.",
+      "relay_state": "Status",
+      "relay_state_disabled": "Disabled",
+      "relay_state_ready": "Registered",
+      "relay_state_error": "Error",
+      "relay_devices": "{{mobile}} mobile and {{web}} browser subscriptions.",
+      "relay_stats": "Last 30 days: {{notifications}} notifications, {{accepted}} delivered, {{limited}} limited, {{failed}} failed, {{dead}} dead tokens.",
+      "relay_pending": "Deletion pending at a relay that does not answer:",
+      "relay_pending_drop": "Give up"
     },
     "media_servers": {
       "title": "Media servers",
@@ -4539,8 +4574,6 @@
     "join": "Join",
     "panel_toggle": "Party",
     "panel_close": "Close the party panel",
-    "toast_added": "{{host}} added you to \"{{name}}\"",
-    "toast_starting": "\"{{name}}\" is starting",
     "closed_host_ended": "The party has ended",
     "closed_host_ended_by": "{{name}} ended the session",
     "closed_expired": "The party expired",
@@ -5738,5 +5771,70 @@
     "loading": "Loading",
     "failed": "Couldn't load your music from the server",
     "empty": "Nothing here yet"
+  },
+  "push": {
+    "request_approved": {
+      "title": "Request approved",
+      "body": "\"{{title}}\" was approved."
+    },
+    "request_declined": {
+      "title": "Request declined",
+      "body": "\"{{title}}\" was declined."
+    },
+    "request_available": {
+      "title": "Now available",
+      "body": "\"{{title}}\" is available."
+    },
+    "request_created": {
+      "title": "New request",
+      "body": "{{user}} requested \"{{title}}\"."
+    },
+    "party_invited": {
+      "title": "Watch party",
+      "body": "{{host}} invited you to \"{{party}}\"."
+    },
+    "party_starting": {
+      "title": "Starting now",
+      "body": "\"{{party}}\" is starting."
+    },
+    "follow_request": {
+      "title": "Follow request",
+      "body": "{{user}} wants to follow you."
+    },
+    "follow_accepted": {
+      "title": "Follow accepted",
+      "body": "{{user}} accepted your follow request."
+    },
+    "content_recommended": {
+      "title": "Recommendation",
+      "body": "{{user}} recommends \"{{title}}\"."
+    },
+    "episode_one": {
+      "title": "New episode",
+      "body": "{{title}} {{episode}} is available."
+    },
+    "episodes_many": {
+      "title": "New episodes",
+      "body": "{{title}} {{season}}: {{count}} new episodes."
+    },
+    "episodes_series": {
+      "title": "New episodes",
+      "body": "{{title}}: {{count}} new episodes."
+    },
+    "pairing_requested": {
+      "title": "Sign-in request",
+      "body": "{{device}} is asking to sign in."
+    },
+    "test": {
+      "title": "Test notification",
+      "body": "Notifications work on this device."
+    },
+    "action": {
+      "approve": "Approve",
+      "decline": "Decline",
+      "join": "Join",
+      "accept": "Accept",
+      "open": "Open"
+    }
   }
 }

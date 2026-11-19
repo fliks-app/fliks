@@ -391,9 +391,37 @@
       "display": "Visualizzazione",
       "storage": "Archiviazione",
       "home": "Home",
-      "update": "Aggiornamento"
+      "update": "Aggiornamento",
+      "notifications": "Notifiche"
     },
-    "version": "Versione {{version}}"
+    "version": "Versione {{version}}",
+    "notifications": {
+      "device_title": "Questo dispositivo",
+      "device": "Notifiche di sistema su questo dispositivo",
+      "device_hint": "Le notifiche arrivano anche quando Fliks è chiuso.",
+      "denied": "Le notifiche sono bloccate per questo sito. Consentile nelle impostazioni del browser.",
+      "admin_disabled": "L'amministratore del server non ha attivato le notifiche mobili.",
+      "toasts": "Notifiche nell'app su questo dispositivo",
+      "toasts_hint": "Compare un breve messaggio sullo schermo quando qualcosa ti riguarda.",
+      "categories_title": "Cosa notificare",
+      "categories_hint": "Vale per tutti i tuoi dispositivi.",
+      "cat_requests": "Richieste",
+      "cat_requests_hint": "Decisioni sulle tue richieste e richieste che aspettano te.",
+      "cat_parties": "Sessioni di visione",
+      "cat_parties_hint": "Inviti e sessioni in procinto di iniziare.",
+      "cat_social": "Social",
+      "cat_social_hint": "Richieste di follow, nuovi follower e consigli.",
+      "cat_episodes": "Nuovi episodi",
+      "cat_episodes_hint": "Nuovi episodi delle serie che guardi.",
+      "cat_account": "Account",
+      "cat_account_hint": "Richieste di accesso da un altro dispositivo.",
+      "test": "Invia una notifica di prova",
+      "test_sent": "Notifica di prova inviata.",
+      "test_failed": "La notifica di prova non è riuscita: {{error}}",
+      "enable_failed": "Impossibile attivare le notifiche.",
+      "action_done": "Fatto.",
+      "action_failed": "L'azione non è riuscita."
+    }
   },
   "update_settings": {
     "title": "Aggiornamento",
@@ -512,9 +540,7 @@
     "visibility_private": "Privata",
     "visibility_followers": "Solo follower",
     "visibility_public": "Pubblica",
-    "toast_new_follower": "{{username}} ora ti segue",
-    "toast_follow_request": "{{username}} vuole seguirti",
-    "toast_follow_accepted": "{{username}} ha accettato la tua richiesta di seguito"
+    "toast_new_follower": "{{username}} ora ti segue"
   },
   "likes": {
     "like": "Mi piace",
@@ -540,7 +566,6 @@
     "recommended_by": "Consigliato da {{username}}:",
     "for_you": "Consigliato per te",
     "dismiss": "Nascondi",
-    "toast_received": "{{username}} ti consiglia « {{title}} »",
     "profile_tab": "Consigli",
     "profile_empty": "Al momento nessun consiglio.",
     "profile_received": "Ciò che ti è stato consigliato",
@@ -2568,7 +2593,17 @@
       "save_error": "Salvataggio non riuscito.",
       "save": "Salva",
       "cancel": "Annulla",
-      "test_failed": "Test di connessione non riuscito"
+      "test_failed": "Test di connessione non riuscito",
+      "relay_enabled": "Fliks Relay attivo",
+      "relay_hint": "Consegna le notifiche alle app mobili. Il relay vede quale server notifica quale dispositivo e con che frequenza, mai il contenuto, cifrato per il dispositivo.",
+      "relay_state": "Stato",
+      "relay_state_disabled": "Disattivato",
+      "relay_state_ready": "Registrato",
+      "relay_state_error": "Errore",
+      "relay_devices": "{{mobile}} iscrizioni mobili e {{web}} del browser.",
+      "relay_stats": "Ultimi 30 giorni: {{notifications}} notifiche, {{accepted}} consegnate, {{limited}} limitate, {{failed}} fallite, {{dead}} token non validi.",
+      "relay_pending": "Eliminazione in sospeso presso un relay che non risponde:",
+      "relay_pending_drop": "Rinuncia"
     },
     "media_servers": {
       "title": "Server multimediali",
@@ -4539,8 +4574,6 @@
     "join": "Partecipa",
     "panel_toggle": "Sessione di gruppo",
     "panel_close": "Chiudi il pannello della sessione",
-    "toast_added": "{{host}} ti ha aggiunto a «{{name}}»",
-    "toast_starting": "«{{name}}» sta per iniziare",
     "closed_host_ended": "La sessione è terminata",
     "closed_host_ended_by": "{{name}} ha terminato la sessione",
     "closed_expired": "La sessione è scaduta",
@@ -5738,5 +5771,70 @@
     "loading": "Caricamento",
     "failed": "Impossibile caricare la musica dal server",
     "empty": "Ancora niente qui"
+  },
+  "push": {
+    "request_approved": {
+      "title": "Richiesta approvata",
+      "body": "«{{title}}» è stata approvata."
+    },
+    "request_declined": {
+      "title": "Richiesta rifiutata",
+      "body": "«{{title}}» è stata rifiutata."
+    },
+    "request_available": {
+      "title": "Ora disponibile",
+      "body": "«{{title}}» è disponibile."
+    },
+    "request_created": {
+      "title": "Nuova richiesta",
+      "body": "{{user}} ha richiesto «{{title}}»."
+    },
+    "party_invited": {
+      "title": "Sessione di visione",
+      "body": "{{host}} ti ha invitato a «{{party}}»."
+    },
+    "party_starting": {
+      "title": "Inizia ora",
+      "body": "«{{party}}» sta per iniziare."
+    },
+    "follow_request": {
+      "title": "Richiesta di follow",
+      "body": "{{user}} vuole seguirti."
+    },
+    "follow_accepted": {
+      "title": "Follow accettato",
+      "body": "{{user}} ha accettato la tua richiesta."
+    },
+    "content_recommended": {
+      "title": "Consiglio",
+      "body": "{{user}} consiglia «{{title}}»."
+    },
+    "episode_one": {
+      "title": "Nuovo episodio",
+      "body": "{{title}} {{episode}} è disponibile."
+    },
+    "episodes_many": {
+      "title": "Nuovi episodi",
+      "body": "{{title}} {{season}}: {{count}} nuovi episodi."
+    },
+    "episodes_series": {
+      "title": "Nuovi episodi",
+      "body": "{{title}}: {{count}} nuovi episodi."
+    },
+    "pairing_requested": {
+      "title": "Richiesta di accesso",
+      "body": "{{device}} chiede di accedere."
+    },
+    "test": {
+      "title": "Notifica di prova",
+      "body": "Le notifiche funzionano su questo dispositivo."
+    },
+    "action": {
+      "approve": "Approva",
+      "decline": "Rifiuta",
+      "join": "Unisciti",
+      "accept": "Accetta",
+      "open": "Apri"
+    }
   }
 }
