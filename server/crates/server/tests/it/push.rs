@@ -527,10 +527,10 @@ async fn notify_renders_per_language_and_honours_mutes(pool: PgPool) {
     send();
     let got = tokio::time::timeout(Duration::from_millis(500), async {
         loop {
-            if let Ok(ev) = bus.recv().await {
-                if matches!(&*ev, Bus::Sse(SseEvent::Notification { .. })) {
-                    return true;
-                }
+            if let Ok(ev) = bus.recv().await
+                && matches!(&*ev, Bus::Sse(SseEvent::Notification { .. }))
+            {
+                return true;
             }
         }
     })
