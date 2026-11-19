@@ -828,22 +828,7 @@ pub async fn target_item(db: &PgPool, item: &Item) -> sqlx::Result<Option<i32>> 
         .await
 }
 
-/// Whether every item is in a library of `acl` for its media and for its edition.
-pub async fn items_open(db: &PgPool, items: &[i32], acl: &[i32]) -> sqlx::Result<bool> {
-    sqlx::query_scalar(
-        r#"SELECT NOT EXISTS (
-               SELECT 1 FROM unnest($1::int[]) AS t(id)
-               WHERE NOT EXISTS (
-                   SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
-                   JOIN media m ON m.id = i."mediaId"
-                   WHERE i.id = t.id AND m."libraryId" = ANY($2)
-                     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)))"#,
-    )
-    .bind(items)
-    .bind(acl)
-    .fetch_one(db)
-    .await
-}
+pub use crate::libraries::acl::items_open;
 
 /// Names of the playlists the parties follow.
 pub async fn playlist_names(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, String>> {

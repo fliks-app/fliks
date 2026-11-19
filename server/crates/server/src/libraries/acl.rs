@@ -92,3 +92,20 @@ pub async fn assert_media_visible(
 pub fn media_not_found(media_id: i32) -> AppError {
     AppError::not_found(format!("Media #{media_id} not found"))
 }
+
+/// Whether every item is in a library of `acl` for its media and for its edition.
+pub async fn items_open(db: &PgPool, items: &[i32], acl: &[i32]) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT NOT EXISTS (
+               SELECT 1 FROM unnest($1::int[]) AS t(id)
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
+                   JOIN media m ON m.id = i."mediaId"
+                   WHERE i.id = t.id AND m."libraryId" = ANY($2)
+                     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)))"#,
+    )
+    .bind(items)
+    .bind(acl)
+    .fetch_one(db)
+    .await
+}

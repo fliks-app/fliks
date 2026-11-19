@@ -20,15 +20,28 @@ async fn user(pool: &PgPool, name: &str, sync: bool, kinds: Option<&[&str]>) -> 
     .unwrap()
 }
 
+/// An item whose media holds the files 1, 7 and 8 the tests name.
 async fn item(pool: &PgPool) -> i32 {
-    sqlx::query_scalar(
+    let item: i32 = sqlx::query_scalar(
         r#"WITH m AS (INSERT INTO media (title, type) VALUES ('placeholder', 'movie') RETURNING id),
                 e AS (INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM m RETURNING id, "mediaId")
            INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id"#,
     )
     .fetch_one(pool)
     .await
-    .unwrap()
+    .unwrap();
+    sqlx::query(
+        r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ('L' || $1::text, '["movie"]') RETURNING id),
+                f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/m' || $1::text FROM l RETURNING id)
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+           SELECT n, (SELECT "mediaId" FROM items WHERE id = $1), (SELECT id FROM f), n || '.mkv', 1, 'HD'
+           FROM unnest(ARRAY[1, 7, 8]) n ON CONFLICT (id) DO NOTHING"#,
+    )
+    .bind(item)
+    .execute(pool)
+    .await
+    .unwrap();
+    item
 }
 
 fn beat(account: i32, sid: &str, target: &str, item: i32) -> BeatIn {
@@ -795,4 +808,113 @@ async fn a_device_is_held_by_its_newest_row_only(pool: PgPool) {
     st.account_sessions.beat(&st, new).await;
     assert!(st.account_sessions.holds(&[a, b], "dev#native", 8).await);
     assert!(!st.account_sessions.holds(&[a, b], "dev#native", 7).await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_reload_of_a_superseded_sid_stays_superseded(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "dev#a", i)).await;
+    {
+        let mut g = s.0.lock().await;
+        g.claimed.get_mut("s1").unwrap().superseded = true;
+        g.rows.get_mut(&u).unwrap().row.session_id = "s1".into();
+    }
+    s.replaced(&st, u, "s1", "s2").await;
+    assert!(s.is_superseded("s2").await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_dropped_replacement_clears_its_mark(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    assert!(s.replacing(u, "s1").await);
+    drop(ReplaceGuard::new(&st, "s1"));
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while s.0.lock().await.claimed["s1"].replacing {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("mark cleared");
+    assert!(s.replacing(u, "s1").await);
+    let guard = ReplaceGuard::new(&st, "s1");
+    assert_eq!(guard.old(), "s1");
+    guard.disarm();
+    tokio::task::yield_now().await;
+    assert!(s.0.lock().await.claimed["s1"].replacing, "disarmed: kept");
+}
+
+#[test]
+fn a_transfer_record_is_keyed_by_device_not_by_face() {
+    let mut g = Inner::default();
+    g.handoffs
+        .insert((1, device_id_of("dev#tab").to_owned()), (7, 2_000));
+    assert!(g.take_handoff(1, Some("dev#native"), 7, 1_000));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_replaced_while_playing_is_dropped_from_the_row_and_the_row_still_stores(
+    pool: PgPool,
+) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "tA", i);
+    b.file = Some(999_999);
+    s.beat(&st, b).await;
+    let r = row(&st, u).await.unwrap();
+    assert_eq!(r.media_file_id, None, "the missing file is unlinked");
+    assert!(
+        store::all(&st.db)
+            .await
+            .unwrap()
+            .iter()
+            .any(|r| r.user_id == u)
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_naming_a_gone_file_does_not_link_it_back(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "tA", i);
+    b.file = Some(999_999);
+    s.beat(&st, b).await;
+    let mut again = beat(u, "s1", "tA", i);
+    again.file = Some(999_999);
+    s.beat(&st, again).await;
+    let g = s.0.lock().await;
+    let e = &g.rows[&u];
+    assert_eq!((e.row.media_file_id, e.gone_file), (None, Some(999_999)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_item_is_open_only_through_an_accessible_library(pool: PgPool) {
+    let _ = state(&pool).await;
+    let i = item(&pool).await;
+    let lib: i32 = sqlx::query_scalar(
+        r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ('open', '["movie"]') RETURNING id),
+                m AS (UPDATE media SET "libraryId" = (SELECT id FROM l)
+                      WHERE id = (SELECT "mediaId" FROM items WHERE id = $1) RETURNING 1)
+           SELECT id FROM l"#,
+    )
+    .bind(i)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        !crate::libraries::acl::items_open(&pool, &[i], &[])
+            .await
+            .unwrap()
+    );
+    assert!(
+        crate::libraries::acl::items_open(&pool, &[i], &[lib])
+            .await
+            .unwrap()
+    );
 }

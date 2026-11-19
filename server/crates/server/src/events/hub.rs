@@ -530,21 +530,6 @@ impl Hub {
         self.lock().conns.contains_key(connection_id)
     }
 
-    /// The target of an SSE connection or a polled key; `None` for an unknown or absent id.
-    pub fn target_id_for(&self, connection_id: Option<&str>) -> Option<String> {
-        let id = connection_id?;
-        let g = self.lock();
-        g.conns
-            .get(id)
-            .and_then(|c| c.identity.target_id.clone())
-            .or_else(|| {
-                g.polled
-                    .iter()
-                    .find(|((_, key), _)| key == id)
-                    .and_then(|(_, p)| p.identity.target_id.clone())
-            })
-    }
-
     /// What the SSE connection or polled target `connection_id` of `user` knows about itself.
     pub fn identity_for(&self, user: i32, connection_id: Option<&str>) -> Option<Identity> {
         let id = connection_id?;
@@ -1157,7 +1142,12 @@ mod tests {
         assert_eq!(got(&mut watcher), [CHANGED]);
         let key = "polled:tv#native";
         assert_eq!(hub.resolve_target(1, "tv#native").as_deref(), Some(key));
-        assert_eq!(hub.target_id_for(Some(key)).as_deref(), Some("tv#native"));
+        assert_eq!(
+            hub.identity_for(1, Some(key))
+                .and_then(|i| i.target_id)
+                .as_deref(),
+            Some("tv#native")
+        );
         assert!(!hub.has_connection(key));
         for _ in 0..POLLED_QUEUE_MAX {
             assert!(hub.emit_to_connection(1, key, SseEvent::QueueUpdated {}));
@@ -1475,8 +1465,10 @@ mod tests {
         assert_eq!(hub.list_all().len(), 3);
         assert_eq!(hub.resolve_target(1, "d2#a"), Some(b.id.clone()));
         assert_eq!(hub.resolve_target(1, "d3#a"), None);
-        assert_eq!(hub.target_id_for(Some(&b.id)).as_deref(), Some("d2#a"));
-        assert_eq!(hub.target_id_for(None), None);
+        let target = |user, conn: Option<&str>| hub.identity_for(user, conn)?.target_id;
+        assert_eq!(target(1, Some(&b.id)).as_deref(), Some("d2#a"));
+        assert_eq!(target(2, Some(&b.id)), None);
+        assert_eq!(target(1, None), None);
     }
 
     #[test]

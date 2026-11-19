@@ -6,12 +6,9 @@ pub use routes::*;
 pub use store::kind_of;
 
 use crate::{
-    events::{
-        SseEvent,
-        event::{Queue, Repeat},
-    },
+    events::{SseEvent, event::Repeat},
     presence::{now_ms, ttl_ms},
-    remote::device_id_of,
+    remote::{device_id_of, dto::QUEUE_MAX},
     state::AppState,
 };
 use chrono::{DateTime, Utc};
@@ -30,8 +27,6 @@ pub const SWEEP_EVERY: Duration = Duration::from_secs(15);
 const PARKED_TTL: chrono::Duration = chrono::Duration::hours(24);
 const PERSIST_EVERY_MS: i64 = 30_000;
 const SEEK_JUMP: f64 = 30.0;
-/// Most items a queue carries (`remote.md` rule 35).
-const QUEUE_MAX: usize = 500;
 /// How long a transfer waits for the target's first beat to claim; past it the claim is a plain takeover.
 const HANDOFF_TTL_MS: i64 = 60_000;
 
@@ -82,17 +77,6 @@ impl QueueState {
         let q: Self = serde_json::from_value(v.clone()).ok()?;
         let in_range = q.index >= 0 && (q.item_ids.is_empty() || q.index < q.item_ids.len() as i64);
         (q.item_ids.len() <= QUEUE_MAX && in_range).then_some(q)
-    }
-}
-
-impl From<&Queue> for QueueState {
-    fn from(q: &Queue) -> Self {
-        Self {
-            item_ids: q.item_ids.clone(),
-            index: q.index,
-            shuffle: false,
-            repeat: Repeat::Off,
-        }
     }
 }
 
@@ -163,6 +147,8 @@ struct Entry {
     replaced: Option<(String, Option<String>)>,
     /// The history completed its item: the row lives on in memory while it plays, never stored again.
     done: bool,
+    /// A file the database dropped while it played: beats still naming it never link it back.
+    gone_file: Option<i32>,
 }
 
 /// A sid that claimed: the account and target it claimed for, when its engine session ended (ms), and whether it was superseded.
@@ -184,14 +170,14 @@ struct Inner {
     claimed: HashMap<String, Claim>,
     /// Sids found out of scope at their first beat, so later beats skip the preference read.
     unscoped: HashSet<String>,
-    /// Transfers sent but not yet claimed: (account, target) to the item and when the record lapses (ms).
+    /// Transfers sent but not yet claimed: (account, device) to the item and when the record lapses (ms).
     handoffs: HashMap<(i32, String), (i32, i64)>,
 }
 
 impl Inner {
     /// Consumes the transfer record of a claiming target: true only for its item and inside the TTL.
     fn take_handoff(&mut self, account: i32, target: Option<&str>, item: i32, now: i64) -> bool {
-        let rec = target.and_then(|t| self.handoffs.remove(&(account, t.to_owned())));
+        let rec = target.and_then(|t| self.handoffs.remove(&(account, device_id_of(t).to_owned())));
         rec.is_some_and(|(i, until)| i == item && until > now)
     }
 
@@ -267,6 +253,32 @@ fn reader_sid(item: i32) -> String {
     format!("{READER_PREFIX}{item}")
 }
 
+/// Clears the replacing mark of `old` when dropped armed, so a cancelled reload cannot pin the row.
+pub struct ReplaceGuard(Option<(AppState, String)>);
+
+impl ReplaceGuard {
+    pub fn new(st: &AppState, old: &str) -> Self {
+        Self(Some((st.clone(), old.to_owned())))
+    }
+
+    pub fn old(&self) -> &str {
+        self.0.as_ref().map_or("", |(_, old)| old)
+    }
+
+    /// Called once the mark is settled; a guard dropped before that clears it.
+    pub fn disarm(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for ReplaceGuard {
+    fn drop(&mut self) {
+        if let Some((st, old)) = self.0.take() {
+            tokio::spawn(async move { st.account_sessions.replace_failed(&old).await });
+        }
+    }
+}
+
 /// Cheap to clone, every clone shares the one lock.
 #[derive(Clone, Default)]
 pub struct AccountSessions(Arc<Mutex<Inner>>);
@@ -287,7 +299,28 @@ async fn persist(st: &AppState, e: &mut Entry) {
     if e.done {
         return;
     }
-    if let Err(err) = store::upsert(&st.db, &e.row).await {
+    let mut res = store::upsert(&st.db, &e.row).await;
+    if let (Err(err), Some(file)) = (&res, e.row.media_file_id)
+        && store::is_fk_violation(err)
+    {
+        match store::file_exists(&st.db, file).await {
+            Ok(false) => {
+                (e.row.media_file_id, e.gone_file) = (None, Some(file));
+                res = store::upsert(&st.db, &e.row).await;
+            }
+            Ok(true) => {}
+            Err(err) => {
+                tracing::warn!(
+                    user = e.row.user_id,
+                    "account session file not checked: {err}"
+                );
+                return;
+            }
+        }
+    }
+    if let Err(err) = res {
+        // The user or the item went: the row lives in memory until it parks, never stored again.
+        e.done = store::is_fk_violation(&err);
         tracing::warn!(user = e.row.user_id, "account session not stored: {err}");
     }
     e.persisted_at = now_ms() as i64;
@@ -355,6 +388,7 @@ impl AccountSessions {
                     persisted_pos: pos,
                     replaced: None,
                     done: false,
+                    gone_file: None,
                 };
                 (entry.row.user_id, entry)
             })
@@ -406,8 +440,10 @@ impl AccountSessions {
         let mut g = self.0.lock().await;
         let now = now_ms() as i64;
         Self::announce_lapsed_handoffs(st, &mut g, now);
-        g.handoffs
-            .insert((account, target.to_owned()), (item, now + HANDOFF_TTL_MS));
+        g.handoffs.insert(
+            (account, device_id_of(target).to_owned()),
+            (item, now + HANDOFF_TTL_MS),
+        );
     }
 
     /// Runs `f` on the row of `user` while it is still `sid` playing `item`, under the lock the claims
@@ -447,7 +483,8 @@ impl AccountSessions {
             e.row.owner.clone(),
         );
         let r = &mut e.row;
-        (r.item_id, r.media_file_id, r.kind, r.state) = (b.item, b.file, b.kind, b.state);
+        (r.item_id, r.kind, r.state) = (b.item, b.kind, b.state);
+        r.media_file_id = b.file.filter(|f| Some(*f) != e.gone_file);
         (r.position, r.duration, r.updated_at) = (b.position, b.duration, Utc::now());
         if b.queue.is_some() {
             r.queue = b.queue;
@@ -534,6 +571,7 @@ impl AccountSessions {
             persisted_pos: 0.0,
             replaced: None,
             done: false,
+            gone_file: None,
         };
         persist(st, &mut entry).await;
         announce(st, b.account, Some(&entry.row));
@@ -634,6 +672,7 @@ impl AccountSessions {
             persisted_pos: 0.0,
             replaced,
             done: false,
+            gone_file: None,
         };
         persist(st, &mut entry).await;
         announce(st, r.account, Some(&entry.row));
@@ -698,7 +737,7 @@ impl AccountSessions {
             account: c.account,
             target: c.target.clone(),
             ended_at: None,
-            superseded: false,
+            superseded: c.superseded,
             replacing: false,
         };
         g.claimed.insert(new.to_owned(), claim);
@@ -847,6 +886,7 @@ impl AccountSessions {
             && e.row.media_file_id == Some(file)
         {
             e.row.media_file_id = None;
+            e.gone_file = Some(file);
         }
     }
 

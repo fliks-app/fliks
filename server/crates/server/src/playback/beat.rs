@@ -334,7 +334,7 @@ fn native_face(st: &AppState, user: i32, conn: Option<&str>, body: &Value) -> Op
         .and_then(Value::as_str)
         .filter(|t| !t.is_empty())
         .map(str::to_owned)
-        .or_else(|| st.hub.target_id_for(conn))?;
+        .or_else(|| st.hub.identity_for(user, conn)?.target_id)?;
     Some(
         st.hub
             .native_face(user, device_id_of(&target))?

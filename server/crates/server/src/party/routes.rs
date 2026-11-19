@@ -466,18 +466,23 @@ async fn check_followed(st: &AppState, owner: i32, users: &[i32]) -> R<Vec<i32>>
     Ok(users)
 }
 
-/// The pair names one item the caller can open: a pair naming several is a 409, an item of a
-/// hidden edition a 404, any other mismatch a 400.
-pub(super) async fn check_item(st: &AppState, item: &Item, acl: &[i32]) -> R<()> {
+/// The item the pair names, `None` when it names none; a pair naming several is a 409, any other
+/// mismatch a 400.
+async fn valid_target(st: &AppState, item: &Item) -> R<Option<i32>> {
     if item.item_id.is_none() && item.episode_id.is_none() {
         crate::playback::named_item(&st.db, item.media_id, None).await?;
     }
     if !db::item_valid(&st.db, item).await? {
         return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
     }
-    let target = db::target_item(&st.db, item).await?;
+    Ok(db::target_item(&st.db, item).await?)
+}
+
+/// The pair names one item the caller can open: one of a hidden edition is a 404.
+pub(super) async fn check_item(st: &AppState, item: &Item, acl: &[i32]) -> R<i32> {
+    let target = valid_target(st, item).await?;
     match target {
-        Some(t) if db::items_open(&st.db, &[t], acl).await? => Ok(()),
+        Some(t) if db::items_open(&st.db, &[t], acl).await? => Ok(t),
         _ => Err(
             AppError::not_found(format!("Item #{} not found", target.unwrap_or_default())).into(),
         ),
@@ -534,6 +539,7 @@ async fn initial_programme(st: &AppState, a: &Authed, b: &Create) -> R<Vec<Item>
         if wanted && row.playable && media_ok(st, a, row.item.media_id).await? {
             let mut items = distinct(rows[at..].iter().map(|r| r.item.clone()).collect());
             items[0].media_file_id = b.media_file_id;
+            items.truncate(MAX_PROGRAMME);
             return Ok(items);
         }
     }
@@ -1337,8 +1343,13 @@ pub(super) async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
 async fn vet_items(st: &AppState, id: i32, items: &[Item], acl: &[i32]) -> R<()> {
     let mut targets = Vec::with_capacity(items.len());
     for it in items {
-        check_item(st, it, acl).await?;
-        targets.extend(db::target_item(&st.db, it).await?);
+        targets.extend(valid_target(st, it).await?);
+    }
+    // One query for the caller's access; only a refusal re-checks item by item to name the 404.
+    if targets.len() != items.len() || !db::items_open(&st.db, &targets, acl).await? {
+        for it in items {
+            check_item(st, it, acl).await?;
+        }
     }
     let members = st.parties.view(id).map_or_else(Vec::new, |v| v.members);
     let mut denied = vec![];

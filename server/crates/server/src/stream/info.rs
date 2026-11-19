@@ -6,6 +6,7 @@ use super::{
     hardware, item, preroll, scan,
 };
 use crate::{
+    account_session::ReplaceGuard,
     engine::{EngineError, enc},
     http::{
         AppError,
@@ -370,10 +371,20 @@ async fn run(
     } else {
         None
     };
-    let target = st.hub.target_id_for(sse_connection.as_deref());
-    let attributed = st
+    let target = st
+        .hub
+        .identity_for(a.user.id, sse_connection.as_deref())
+        .and_then(|i| i.target_id);
+    let taken = st
         .hub
         .take_attribution(target.as_deref(), i64::from(file.id));
+    // A reload keeps crediting whoever the replaced session was credited to.
+    let attributed = taken.or_else(|| {
+        let old = st.presence.peek(q.replaces.as_deref()?)?;
+        old.attributed_user_id
+            .filter(|_| old.user_id == Some(a.user.id))
+    });
+    let account = attributed.unwrap_or(a.user.id);
     let tags = to_tags(&Tags {
         username: Some(a.user.username.clone()),
         media_title: file.media_title.clone(),
@@ -391,8 +402,10 @@ async fn run(
     };
     let audio_count = file.info.as_ref().map_or(0, |i| i.audio.len());
     // Marked before the open: the engine ends the replaced session inside it (`session.md` rule 14).
-    let replacing = match q.replaces.as_deref() {
-        Some(old) if st.account_sessions.replacing(a.user.id, old).await => Some(old.to_owned()),
+    let mut replacing = match q.replaces.as_deref() {
+        Some(old) if st.account_sessions.replacing(account, old).await => {
+            Some(ReplaceGuard::new(st, old))
+        }
         _ => None,
     };
     let request = OpenSessionRequest {
@@ -453,18 +466,20 @@ async fn run(
     );
     let open = match open {
         Ok(o) => {
-            if let Some(old) = &replacing {
+            if let Some(g) = replacing.take() {
                 st.account_sessions
-                    .replaced(st, a.user.id, old, &o.session_id)
+                    .replaced(st, account, g.old(), &o.session_id)
                     .await;
+                g.disarm();
             }
             o
         }
         Err(e) => {
-            if let Some(old) = &replacing {
-                st.account_sessions.replace_failed(old).await;
+            if let Some(g) = replacing.take() {
+                st.account_sessions.replace_failed(g.old()).await;
+                g.disarm();
             }
-            if let (Some(t), Some(u)) = (&target, attributed) {
+            if let (Some(t), Some(u)) = (&target, taken) {
                 st.hub.claim_attribution(t, u, i64::from(file.id));
             }
             return Err(open_error(e));
