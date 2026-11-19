@@ -125,7 +125,7 @@ export class ArtistPageComponent {
   }
 
   protected want(row: PopularTrack): void {
-    if (!row.albumExternalId || !this.addDialog()?.idle) return;
+    if (!row.albumExternalId || this.addDialog()?.idle === false) return;
     this.pending = row.recordingId;
     void this.addDialog()?.add({
       kind: 'album',
