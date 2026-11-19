@@ -83,6 +83,7 @@ Claim
 Completion and expiry
 11. When the history write of a beat marks the item completed (the existing completion rule of its family, `heartbeat.md` rule 15), the stored row of that sid is deleted at once, so a completed item is never offered again after a restart. A row still playing stays in memory until the playback stops: its beats keep updating it (rule 8), it is served and superseded as before but never stored again, and where it would be parked (rule 14) it leaves memory instead, with `session.changed` with null fields. A parked row of that sid leaves memory at once, with the same event.
 12. A `parked` row is deleted 24 h (`PARKED_TTL`) after it was parked, when the sweep or boot finds it.
+12a. A stored write that fails with a foreign-key violation (23503): when the row's file no longer exists, the row drops the file (the database nulls it) and the write is retried; later beats naming that file do not link it back. When the user or the item is gone, the row stays in memory until it parks and is never stored again. `GET /api/session` answers `null`, and `POST /api/session/transfer` 404 `session.error_no_session`, for a row whose item the caller can no longer open (library access lost).
 13. A row also leaves by `DELETE /api/session` (rule 16), by the media being deleted (`ON DELETE CASCADE`), and with its user.
 
 Parked

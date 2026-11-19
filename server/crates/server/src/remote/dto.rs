@@ -12,7 +12,6 @@ use serde::{Deserialize, Deserializer};
 /// Most names a polled target declares in `actions`.
 const ACTIONS_MAX: usize = 32;
 
-/// Most items a remote queue carries.
 /// Most items a queue carries (`remote.md` rule 35).
 pub const QUEUE_MAX: usize = 500;
 

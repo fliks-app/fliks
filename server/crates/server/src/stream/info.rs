@@ -468,14 +468,16 @@ async fn run(
         Ok(o) => {
             if let Some(g) = replacing.take() {
                 st.account_sessions
-                    .replaced(st, account, &g.disarm(), &o.session_id)
+                    .replaced(st, account, g.old(), &o.session_id)
                     .await;
+                g.disarm();
             }
             o
         }
         Err(e) => {
             if let Some(g) = replacing.take() {
-                st.account_sessions.replace_failed(&g.disarm()).await;
+                st.account_sessions.replace_failed(g.old()).await;
+                g.disarm();
             }
             if let (Some(t), Some(u)) = (&target, taken) {
                 st.hub.claim_attribution(t, u, i64::from(file.id));

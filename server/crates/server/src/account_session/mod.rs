@@ -147,6 +147,8 @@ struct Entry {
     replaced: Option<(String, Option<String>)>,
     /// The history completed its item: the row lives on in memory while it plays, never stored again.
     done: bool,
+    /// A file the database dropped while it played: beats still naming it never link it back.
+    gone_file: Option<i32>,
 }
 
 /// A sid that claimed: the account and target it claimed for, when its engine session ended (ms), and whether it was superseded.
@@ -259,9 +261,13 @@ impl ReplaceGuard {
         Self(Some((st.clone(), old.to_owned())))
     }
 
-    /// Hands back the replaced sid; the caller settles the mark itself.
-    pub fn disarm(mut self) -> String {
-        self.0.take().map(|(_, old)| old).unwrap_or_default()
+    pub fn old(&self) -> &str {
+        self.0.as_ref().map_or("", |(_, old)| old)
+    }
+
+    /// Called once the mark is settled; a guard dropped before that clears it.
+    pub fn disarm(mut self) {
+        self.0 = None;
     }
 }
 
@@ -294,13 +300,23 @@ async fn persist(st: &AppState, e: &mut Entry) {
         return;
     }
     let mut res = store::upsert(&st.db, &e.row).await;
-    // The file went while it played (an upgrade): keep the row without it.
     if let (Err(err), Some(file)) = (&res, e.row.media_file_id)
         && store::is_fk_violation(err)
-        && !store::file_exists(&st.db, file).await
     {
-        e.row.media_file_id = None;
-        res = store::upsert(&st.db, &e.row).await;
+        match store::file_exists(&st.db, file).await {
+            Ok(false) => {
+                (e.row.media_file_id, e.gone_file) = (None, Some(file));
+                res = store::upsert(&st.db, &e.row).await;
+            }
+            Ok(true) => {}
+            Err(err) => {
+                tracing::warn!(
+                    user = e.row.user_id,
+                    "account session file not checked: {err}"
+                );
+                return;
+            }
+        }
     }
     if let Err(err) = res {
         // The user or the item went: the row lives in memory until it parks, never stored again.
@@ -372,6 +388,7 @@ impl AccountSessions {
                     persisted_pos: pos,
                     replaced: None,
                     done: false,
+                    gone_file: None,
                 };
                 (entry.row.user_id, entry)
             })
@@ -466,7 +483,8 @@ impl AccountSessions {
             e.row.owner.clone(),
         );
         let r = &mut e.row;
-        (r.item_id, r.media_file_id, r.kind, r.state) = (b.item, b.file, b.kind, b.state);
+        (r.item_id, r.kind, r.state) = (b.item, b.kind, b.state);
+        r.media_file_id = b.file.filter(|f| Some(*f) != e.gone_file);
         (r.position, r.duration, r.updated_at) = (b.position, b.duration, Utc::now());
         if b.queue.is_some() {
             r.queue = b.queue;
@@ -553,6 +571,7 @@ impl AccountSessions {
             persisted_pos: 0.0,
             replaced: None,
             done: false,
+            gone_file: None,
         };
         persist(st, &mut entry).await;
         announce(st, b.account, Some(&entry.row));
@@ -653,6 +672,7 @@ impl AccountSessions {
             persisted_pos: 0.0,
             replaced,
             done: false,
+            gone_file: None,
         };
         persist(st, &mut entry).await;
         announce(st, r.account, Some(&entry.row));
@@ -866,6 +886,7 @@ impl AccountSessions {
             && e.row.media_file_id == Some(file)
         {
             e.row.media_file_id = None;
+            e.gone_file = Some(file);
         }
     }
 

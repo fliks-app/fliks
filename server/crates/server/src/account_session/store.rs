@@ -62,12 +62,11 @@ pub fn is_fk_violation(e: &sqlx::Error) -> bool {
         .is_some_and(|c| c == "23503")
 }
 
-pub async fn file_exists(db: &PgPool, file: i32) -> bool {
+pub async fn file_exists(db: &PgPool, file: i32) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM media_files WHERE id = $1)")
         .bind(file)
         .fetch_one(db)
         .await
-        .unwrap_or(true)
 }
 
 pub async fn delete(db: &PgPool, user: i32) -> Result<(), sqlx::Error> {

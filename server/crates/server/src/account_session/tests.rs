@@ -842,7 +842,8 @@ async fn a_dropped_replacement_clears_its_mark(pool: PgPool) {
     .expect("mark cleared");
     assert!(s.replacing(u, "s1").await);
     let guard = ReplaceGuard::new(&st, "s1");
-    assert_eq!(guard.disarm(), "s1");
+    assert_eq!(guard.old(), "s1");
+    guard.disarm();
     tokio::task::yield_now().await;
     assert!(s.0.lock().await.claimed["s1"].replacing, "disarmed: kept");
 }
@@ -873,5 +874,47 @@ async fn a_file_replaced_while_playing_is_dropped_from_the_row_and_the_row_still
             .unwrap()
             .iter()
             .any(|r| r.user_id == u)
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_naming_a_gone_file_does_not_link_it_back(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let s = &st.account_sessions;
+    let mut b = beat(u, "s1", "tA", i);
+    b.file = Some(999_999);
+    s.beat(&st, b).await;
+    let mut again = beat(u, "s1", "tA", i);
+    again.file = Some(999_999);
+    s.beat(&st, again).await;
+    let g = s.0.lock().await;
+    let e = &g.rows[&u];
+    assert_eq!((e.row.media_file_id, e.gone_file), (None, Some(999_999)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_item_is_open_only_through_an_accessible_library(pool: PgPool) {
+    let _ = state(&pool).await;
+    let i = item(&pool).await;
+    let lib: i32 = sqlx::query_scalar(
+        r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ('open', '["movie"]') RETURNING id),
+                m AS (UPDATE media SET "libraryId" = (SELECT id FROM l)
+                      WHERE id = (SELECT "mediaId" FROM items WHERE id = $1) RETURNING 1)
+           SELECT id FROM l"#,
+    )
+    .bind(i)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        !crate::libraries::acl::items_open(&pool, &[i], &[])
+            .await
+            .unwrap()
+    );
+    assert!(
+        crate::libraries::acl::items_open(&pool, &[i], &[lib])
+            .await
+            .unwrap()
     );
 }

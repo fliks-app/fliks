@@ -127,7 +127,7 @@ SSE frames are `data: <JSON of the event>\n\n` with the `type` inside the JSON (
 | `remote.stopped` | same as `remote.state` | `{ type, targetId: string, sessionId: string }`: `sessionId` is the stopped sid, which a target can hold beside the one it reports (a preload, a download) | `DELETE /api/stream/sessions/:sid` when the session's connection resolves to a target | controllers |
 | `remote.targets_changed` | the owner's connections + household fan-out by `owner:<id>` key | `{ type }` (no data: "refetch the target list") | grant `announce` (claim, revoke); hub on SSE connect/disconnect with a target id, polled register/expiry/drop, `dropConnectionsForUser`/`ForTarget` | controllers |
 
-Domain events: none. Dependency on the hub (D-hub): this domain uses `listForUser`, `listAll`, `resolveTarget`, `emitToConnection`, `emitToUser` (+ fan-out hook), `emitToUsers`, `registerPolledTarget`, `drainCommands`, `claimAttribution`/`takeAttribution`, `targetIdFor(connectionId)`, `dropConnectionsForUser/ForTarget` from the hub component and does not duplicate connection state; `GET /api/remote/*` and the hub live in the same process.
+Domain events: none. Dependency on the hub (D-hub): this domain uses `listForUser`, `listAll`, `resolveTarget`, `emitToConnection`, `emitToUser` (+ fan-out hook), `emitToUsers`, `registerPolledTarget`, `drainCommands`, `claimAttribution`/`takeAttribution`, `identityFor(user, connectionId)`, `dropConnectionsForUser/ForTarget` from the hub component and does not duplicate connection state; `GET /api/remote/*` and the hub live in the same process.
 
 ## Settings keys
 
