@@ -91,7 +91,10 @@ pub fn spawn_claimer(st: &AppState) {
                     }
                     ids.push(rt.sh.id.to_string());
                     let lease = env.cfg.deadlines.scheduled + env.cfg.lease_extra;
-                    let Ok(rows) = scheduled::claim(&st.db, &rt.sh.id, free, lease).await else {
+                    // A key still running is left due: its end wakes the claimer, no push-back.
+                    let running = st.jobs.running_under(&format!("plugin-call:{}:", rt.sh.id));
+                    let Ok(rows) = scheduled::claim(&st.db, &rt.sh.id, free, lease, &running).await
+                    else {
                         continue;
                     };
                     claimed |= !rows.is_empty();

@@ -26,6 +26,14 @@ impl Running {
         self.0.lock_clean().contains(RESTORE)
     }
 
+    /// The names running under `prefix`, with the prefix stripped.
+    pub fn running_under(&self, prefix: &str) -> Vec<String> {
+        let set = self.0.lock_clean();
+        set.iter()
+            .filter_map(|n| n.strip_prefix(prefix).map(str::to_owned))
+            .collect()
+    }
+
     pub fn claim(self: &Arc<Self>, name: &str) -> Option<Claim> {
         let mut set = self.0.lock_clean();
         let free = if name == RESTORE {
