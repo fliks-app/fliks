@@ -224,7 +224,8 @@ pub async fn want_recording(
 }
 
 /// The playlist `name` of `user` that `plugin` created, made when missing, holding the items of `items` the
-/// owner can read, in that order; the rows other users added stay. An id that is no readable item is skipped.
+/// owner can read, in that order; only the rows this plugin's syncs created follow the list, any other row
+/// stays (after them). An id that is no readable item is skipped.
 pub async fn playlist_sync(
     st: &AppState,
     plugin: &str,
@@ -313,22 +314,37 @@ pub async fn playlist_sync(
     .map_err(db_err)?;
     sqlx::query(
         r#"DELETE FROM playlist_items
-            WHERE "playlistId" = $1 AND "addedById" IS NOT DISTINCT FROM $2 AND NOT ("itemId" = ANY($3))"#,
+            WHERE "playlistId" = $1 AND "syncedBy" = $2 AND NOT ("itemId" = ANY($3))"#,
     )
     .bind(playlist)
-    .bind(user)
+    .bind(plugin)
     .bind(&ids)
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
+    // An existing row of the same item (hand-added or another plugin's) keeps its mark and is left as is.
     sqlx::query(
-        r#"INSERT INTO playlist_items ("playlistId", "itemId", "addedById", position)
-           SELECT $1, t.i, $2, t.n::int - 1 FROM unnest($3::int[]) WITH ORDINALITY AS t(i, n)
-           ON CONFLICT ("playlistId", "itemId") DO UPDATE SET position = EXCLUDED.position"#,
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", "addedById", "syncedBy", position)
+           SELECT $1, t.i, $2, $4, t.n::int - 1 FROM unnest($3::int[]) WITH ORDINALITY AS t(i, n)
+           ON CONFLICT ("playlistId", "itemId") DO UPDATE SET position = EXCLUDED.position
+            WHERE playlist_items."syncedBy" = EXCLUDED."syncedBy""#,
     )
     .bind(playlist)
     .bind(user)
     .bind(&ids)
+    .bind(plugin)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    // The synced rows lead in list order; the other rows follow in their own order.
+    sqlx::query(
+        r#"UPDATE playlist_items pi SET position = r.n::int - 1
+            FROM (SELECT id, row_number() OVER (ORDER BY ("syncedBy" IS DISTINCT FROM $2), position, id) AS n
+                    FROM playlist_items WHERE "playlistId" = $1) r
+           WHERE pi.id = r.id AND pi.position IS DISTINCT FROM r.n::int - 1"#,
+    )
+    .bind(playlist)
+    .bind(plugin)
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
@@ -362,7 +378,7 @@ mod tests {
                  VALUES (1, 'Salt Meadows', 'album', 1, 'a/b', false);
                INSERT INTO editions ("mediaId", family) VALUES (1, 'audio');
                INSERT INTO items ("mediaId", "editionId", monitored, title)
-                 SELECT 1, e.id, false, 'T' || n FROM editions e, generate_series(1, 3) n;
+                 SELECT 1, e.id, false, 'T' || n FROM editions e, generate_series(1, 4) n;
                INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid")
                  SELECT i.id, 1, 1, ('00000000-0000-0000-0000-00000000000' || (i.id % 10))::uuid FROM items i;
                INSERT INTO album_details ("mediaId") VALUES (1)"#,
@@ -534,5 +550,46 @@ mod tests {
             .unwrap();
         assert_ne!(moved, other);
         assert_eq!(rows(&db, other).await, [ids[1]], "the old owner keeps hers");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_sync_manages_only_the_rows_it_created(db: PgPool) {
+        let ids = items(&db).await;
+        let u = user(&db, "u", true).await;
+        let st = state(&db);
+        let pl = playlist_sync(&st, "p", u as u32, "Mix", &order(&[ids[0], ids[1]]))
+            .await
+            .unwrap();
+        let add = |item: i32, by: Option<&'static str>, pos: i32| {
+            let db = db.clone();
+            async move {
+                sqlx::query(r#"INSERT INTO playlist_items ("playlistId", "itemId", "addedById", "syncedBy", position) VALUES ($1, $2, $3, $4, $5)"#)
+                    .bind(pl as i32)
+                    .bind(item)
+                    .bind(u)
+                    .bind(by)
+                    .bind(pos)
+                    .execute(&db)
+                    .await
+                    .unwrap();
+            }
+        };
+        add(ids[2], None, 0).await;
+        add(ids[3], Some("q"), 1).await;
+        let sync = |list: &[i32]| playlist_sync(&st, "p", u as u32, "Mix", &order(list));
+        sync(&[ids[1]]).await.unwrap();
+        assert_eq!(rows(&db, pl).await, [ids[1], ids[2], ids[3]]);
+        sync(&[ids[1]]).await.unwrap();
+        assert_eq!(
+            rows(&db, pl).await,
+            [ids[1], ids[2], ids[3]],
+            "a second sync changes nothing"
+        );
+        sync(&[ids[2], ids[0]]).await.unwrap();
+        assert_eq!(
+            rows(&db, pl).await,
+            [ids[0], ids[2], ids[3]],
+            "a hand-added item stays unmarked and is not moved ahead"
+        );
     }
 }
