@@ -113,6 +113,8 @@ pub struct UpdateUser {
     /// `null` is every kind.
     #[serde(default, deserialize_with = "nullable")]
     pub session_kinds: Option<Option<Vec<MediaKind>>>,
+    #[serde(default, deserialize_with = "non_null")]
+    pub push_muted: Option<Vec<String>>,
 }
 
 /// Email check: one `@`, a dotted domain, no whitespace.
@@ -216,6 +218,14 @@ impl UpdateUser {
                     .as_deref()
                     .is_none_or(|v| v == "public" || v == "private"),
                 "profileVisibility must be one of the following values: public, private",
+            ),
+            (
+                self.push_muted.as_ref().is_none_or(|v| {
+                    v.len() <= 100
+                        && v.iter()
+                            .all(|c| c.len() <= 64 && fliks_domain::push::is_category(c))
+                }),
+                "pushMuted must contain notification categories",
             ),
         ])
     }

@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_connections SET enabled = $2, \"updatedAt\" = now()\n           WHERE id = $1\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "createdAt"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "updatedAt"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "typ",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "settings: Json<Map<String, Value>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "settings"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "events: Json<Vec<String>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "events"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "enabled"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5d64c1a055789a574b323449cc3c13da4e9a8da14417863dc5ae8e1ada786d93"
+}

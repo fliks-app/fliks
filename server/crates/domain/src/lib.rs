@@ -22,6 +22,7 @@ pub mod party;
 pub mod persons;
 pub mod plugins;
 pub mod profiles;
+pub mod push;
 pub mod qoe;
 pub mod recommend;
 pub mod refresh;

@@ -4,6 +4,7 @@ use super::{
     dto::{self, CreateRequest, Field, UpdateRequest},
     rules, services,
 };
+use crate::push::ReqRef;
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed},
@@ -89,6 +90,27 @@ pub async fn assert_can_access_request_library(
     Err(AppError::forbidden(
         "You do not have access to this request's target library",
     ))
+}
+
+/// `counts.md` rule 5: pending requests in the kinds of `a`; every request when `all`, else their
+/// own. `libraries` limits the others to those a manager may decide (`pending_row`'s library check).
+pub async fn pending_count(
+    db: &sqlx::PgPool,
+    a: &Authed,
+    all: bool,
+    libraries: Option<&[i32]>,
+) -> sqlx::Result<i32> {
+    sqlx::query_scalar(
+        r#"SELECT count(*)::int FROM requests
+           WHERE status = 'pending' AND ($1 OR "userId" = $2) AND "mediaType" = ANY($3)
+             AND ($4::int[] IS NULL OR "libraryId" IS NULL OR "libraryId" = ANY($4) OR "userId" = $2)"#,
+    )
+    .bind(all)
+    .bind(a.user.id)
+    .bind(a.kinds.names())
+    .bind(libraries)
+    .fetch_one(db)
+    .await
 }
 
 /// Rule 3: a non-manager only reaches their own requests.
@@ -448,9 +470,9 @@ async fn want_tracks(st: &AppState, media: i32, recordings: &[String], held: boo
         .map_err(Refused::app_error)
 }
 
-fn notify(st: &AppState, event: &'static str, payload: Value) {
+fn notify(st: &AppState, event: &'static str, payload: Value, user: Option<ReqRef>) {
     if let Value::Object(m) = payload {
-        services::notify(st, event, m);
+        services::notify(st, event, m, user);
     }
 }
 
@@ -592,10 +614,16 @@ async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<
     } else {
         "request.created"
     };
+    let user = (!auto).then_some(ReqRef {
+        id: n.id,
+        requester: Some(n.user),
+        media: None,
+    });
     notify(
         &st,
         event,
         json!({"title": n.title, "mediaType": media_type}),
+        user,
     );
     Ok(media_id)
 }
@@ -868,6 +896,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
         st,
         "request.delete.created",
         json!({"title": dto.title, "mediaType": dto.media_type}),
+        None,
     );
     let mut row = row_json(st, id).await?;
     row.remove("qualityProfileId");
@@ -1112,7 +1141,17 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
         seasons: row.seasons.map(|s| s.0),
         approved_by_user_id: Some(i64::from(by)),
     });
-    notify(st, "request.approved", json!({"title": row.title}));
+    let user = ReqRef {
+        id,
+        requester: row.user_id,
+        media: media.map(|m| (m, row.media_type)),
+    };
+    notify(
+        st,
+        "request.approved",
+        json!({"title": row.title}),
+        Some(user),
+    );
     Ok(Value::Object(row_json(st, id).await?))
 }
 
@@ -1161,6 +1200,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
         st,
         "request.delete.approved",
         json!({"title": row.title, "mediaType": row.media_type}),
+        None,
     );
     Ok(Value::Object(row_json(st, id).await?))
 }
@@ -1179,6 +1219,11 @@ pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>)
         st,
         event,
         json!({"title": row.title, "reason": reason.unwrap_or_default()}),
+        Some(ReqRef {
+            id,
+            requester: row.user_id,
+            media: row.media_id.map(|m| (m, row.media_type)),
+        }),
     );
     let mut json = row_json(st, id).await?;
     json.remove("media");

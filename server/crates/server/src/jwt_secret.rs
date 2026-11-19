@@ -86,13 +86,18 @@ fn persist(dir: &Path, name: &str, fresh: &str) -> Option<String> {
 }
 
 fn resolve_file(cfg: &Config, name: &str) -> String {
-    let fresh = random_hex(32);
+    resolve_state(cfg, name, random_hex(32)).0
+}
+
+/// The content of `<conf>/<name>` (`fresh` is written 0600 when absent) and the path to rewrite it at;
+/// `None` for the path when no conf dir is usable, then the content is process-local.
+pub fn resolve_state(cfg: &Config, name: &str, fresh: String) -> (String, Option<PathBuf>) {
     conf_dirs(cfg)
         .iter()
-        .find_map(|d| persist(d, name, &fresh))
+        .find_map(|d| persist(d, name, &fresh).map(|s| (s, Some(d.join(name)))))
         .unwrap_or_else(|| {
-            tracing::warn!("no usable conf dir for {name}: using a process-local secret");
-            fresh
+            tracing::warn!("no usable conf dir for {name}: using a process-local value");
+            (fresh, None)
         })
 }
 

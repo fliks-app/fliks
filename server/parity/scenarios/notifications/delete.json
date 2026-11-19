@@ -60,7 +60,7 @@
       "expect": {
         "body": {
           "error": "Not Found",
-          "message": "Notification connection #1 not found",
+          "message": "Notification connection #2 not found",
           "statusCode": 404
         },
         "status": 404
@@ -73,7 +73,7 @@
       "expect": {
         "body": {
           "error": "Not Found",
-          "message": "Notification connection #1 not found",
+          "message": "Notification connection #2 not found",
           "statusCode": 404
         },
         "status": 404

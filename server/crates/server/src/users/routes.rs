@@ -209,6 +209,9 @@ pub async fn update(
             revoke_in_background(&st, id);
         }
     }
+    if password_changed || dto.enabled == Some(false) {
+        st.push.spawn_sweep(&st);
+    }
     if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
         revoke_in_background(&st, id);
     }
@@ -295,6 +298,7 @@ pub async fn revoke_sessions(
         return Err(forbidden());
     }
     db::revoke_other_sessions(&st.db, id, None).await?;
+    st.push.spawn_sweep(&st);
     st.hub.drop_connections_for_user(id);
     revoke_in_background(&st, id);
     Ok(StatusCode::NO_CONTENT)
@@ -372,6 +376,15 @@ fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
             out
         });
     }
+    if let Some(muted) = dto.push_muted.clone() {
+        let mut out: Vec<String> = vec![];
+        for c in muted {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
+        t.push_muted = out;
+    }
     if let Some(v) = dto.whats_new_seen.clone() {
         t.whats_new_seen = Some(v);
     }
@@ -399,7 +412,7 @@ async fn save_user(
         "edlEnabled" = $20, "edlAutoSkipCommercials" = $21, "spoilerHideStills" = $22,
         "spoilerHideOverviews" = $23, "spoilerHideTitles" = $24,
         "sessionSync" = $25, "sessionKinds" = $26, "whatsNewEnabled" = $27,
-        "whatsNewSeen" = $28,
+        "whatsNewSeen" = $28, "pushMuted" = $29,
         "updatedAt" = now() WHERE "id" = $1"#,
         id,
         &t.username,
@@ -428,7 +441,8 @@ async fn save_user(
         t.session_sync,
         t.session_kinds.as_deref(),
         t.whats_new_enabled,
-        t.whats_new_seen.as_deref()
+        t.whats_new_seen.as_deref(),
+        &t.push_muted
     )
         .execute(&mut *tx)
         .await?;
@@ -455,6 +469,7 @@ pub async fn remove(
     }
     crate::party::end_owned(&st, id).await?;
     let covers = crate::party::owned_uploads(&st.db, id).await?;
+    st.push.forget_user(&st, id).await;
     sqlx::query!("DELETE FROM users WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;

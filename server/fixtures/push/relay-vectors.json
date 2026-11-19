@@ -1,0 +1,83 @@
+{
+  "note": "Generated with an independent Ed25519 implementation (Python cryptography). Times are unix seconds.",
+  "host": "relay.example.test",
+  "server": {
+    "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "public_key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
+  },
+  "requests": [
+    {
+      "name": "push",
+      "method": "POST",
+      "host": "relay.example.test",
+      "path": "/v1/push",
+      "time": 1800000000,
+      "body": "{\"nid\":\"ICEiIyQlJicoKSorLC0uLw\",\"sub\":\"EBESExQVFhcYGRobHB0eHw\",\"payload\":\"b3BhcXVlIGNpcGhlcnRleHQ\",\"ttl\":86400}",
+      "signed_string": "fliks-relay-v1\nPOST\nrelay.example.test\n/v1/push\n1800000000\nce2dfb82ce128fcd091733935f0ac740bd2b333251edeb3ca40b260ac9fb890f",
+      "signature": "mfV3FJv38L4POWIc9LbnVhASryz3CrjPSi0dS3GoGanb0j-e6Ah7xgokuuyTcR99qV7nVKKd3CRt8irelBbPCw"
+    },
+    {
+      "name": "stats, empty body",
+      "method": "GET",
+      "host": "relay.example.test",
+      "path": "/v1/servers/self/stats",
+      "time": 1800000000,
+      "body": "",
+      "signed_string": "fliks-relay-v1\nGET\nrelay.example.test\n/v1/servers/self/stats\n1800000000\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "WkFU2kcgmO4H-qHbW3pTCWZKUjx9YYleEDHjEQ6d3tfMUmzJOjd7Sip1l2deLGj1PFow8IvBxqhsdYdm7YFHCg"
+    },
+    {
+      "name": "delete a subscription",
+      "method": "DELETE",
+      "host": "relay.example.test",
+      "path": "/v1/subscriptions/EBESExQVFhcYGRobHB0eHw",
+      "time": 1800000123,
+      "body": "",
+      "signed_string": "fliks-relay-v1\nDELETE\nrelay.example.test\n/v1/subscriptions/EBESExQVFhcYGRobHB0eHw\n1800000123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "LlwuNgHGPc5G9Un9E-kRjGeqE00H9joK8agWj77bfWGTPz4RbEmOPSJsShNFuweCau59odNNbmw6Tt_oNPNoBw"
+    }
+  ],
+  "request_wrong_host": {
+    "note": "signed for relay.other.test: must not verify against relay.example.test",
+    "name": "wrong host",
+    "method": "POST",
+    "host": "relay.other.test",
+    "path": "/v1/push",
+    "time": 1800000000,
+    "body": "{}",
+    "signed_string": "fliks-relay-v1\nPOST\nrelay.other.test\n/v1/push\n1800000000\n44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "signature": "8U99GNYFgJyG7MlrfrHQM4YjidVmDs1wPNrD6wIKC67FLLs_3RjQ5dxeFFSxJN9wxNby1bNltnWEpJ7JKOXFCg"
+  },
+  "tickets": {
+    "now": 1800000000,
+    "valid": {
+      "ticket": "eyJrZXkiOiJBNkVIdl9QT0VMNGRjTjBZNTB2QW1XZmsxakNicFExZkhkeUdaQkpWTWJnIiwic3ViIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsImF1ZCI6InJlbGF5LmV4YW1wbGUudGVzdCIsImV4cCI6MTgwMDAwMDMwMH0.gN3cmHED9avZeXUGJHU3TqX0OuHQoAvnoseWXWcshE2HNstMu0BIAvNZ8EZmAMvwa77zS2WtER7hy1tfN_jGDQ",
+      "sub": "EBESExQVFhcYGRobHB0eHw",
+      "aud": "relay.example.test",
+      "exp": 1800000300
+    },
+    "wrong_audience": "eyJrZXkiOiJBNkVIdl9QT0VMNGRjTjBZNTB2QW1XZmsxakNicFExZkhkeUdaQkpWTWJnIiwic3ViIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsImF1ZCI6InJlbGF5Lm90aGVyLnRlc3QiLCJleHAiOjE4MDAwMDAzMDB9.Km5KmNxkRPWKccI8OunuTkXX6ym9bozhGHM_wkgTbF77DfHw3ctKW7aQRxvMsKT4tZfvzfTrG7R7CIxHN7MPBw",
+    "expired": "eyJrZXkiOiJBNkVIdl9QT0VMNGRjTjBZNTB2QW1XZmsxakNicFExZkhkeUdaQkpWTWJnIiwic3ViIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsImF1ZCI6InJlbGF5LmV4YW1wbGUudGVzdCIsImV4cCI6MTc5OTk5OTk5OX0.CtRw3WDsddOWE6YRNtpHLunsYhexZ2CviPgr1zcyLnuDPL3UG4xTWeH3WVoflfYJtBkVcYUUUM7w1nTPzahpAw",
+    "too_far_ahead": "eyJrZXkiOiJBNkVIdl9QT0VMNGRjTjBZNTB2QW1XZmsxakNicFExZkhkeUdaQkpWTWJnIiwic3ViIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsImF1ZCI6InJlbGF5LmV4YW1wbGUudGVzdCIsImV4cCI6MTgwMDAwMDYwMX0.f3mEBrXVLAnrLSiwE27tHpIxpNU41anHbJmy1lFryKjaFT_fKGSiv6FCyD5yVQLYuLSmoC-IgSjCJRXmUmOBCw",
+    "malformed_sub": "eyJrZXkiOiJBNkVIdl9QT0VMNGRjTjBZNTB2QW1XZmsxakNicFExZkhkeUdaQkpWTWJnIiwic3ViIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME8iLCJhdWQiOiJyZWxheS5leGFtcGxlLnRlc3QiLCJleHAiOjE4MDAwMDAzMDB9.gFbjMyHNqWPRRrHYPEdjAUpKIMa3AsMDKiiZJHa9MzoqOdP88nbBbkyHZII7JWftBKRw4Ki9qn1WxLhIPMPCCg",
+    "malformed_key": "eyJrZXkiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R4QVJFaE1VRlJZWEdCa2FHeHdkSGciLCJzdWIiOiJFQkVTRXhRVkZoY1lHUm9iSEIwZUh3IiwiYXVkIjoicmVsYXkuZXhhbXBsZS50ZXN0IiwiZXhwIjoxODAwMDAwMzAwfQ.kyA1dUr_rdrZLelu9xbs6NZZrwZoG4VQmsssyvkwL2f6bYP2Pen4pa-TQuMM4n_rZ9gGV3UfsfRNvxbqO6cBAw"
+  },
+  "stats_id": {
+    "stats_secret_hex": "6465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80818283",
+    "key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+    "server_id": "78eec61c88006896"
+  },
+  "clock_skew": {
+    "note": "requests[0] is accepted when R's clock is within 300 s of its time, refused with 401 clock_skew beyond",
+    "request": 0,
+    "accepted_at": [
+      1799999700,
+      1800000000,
+      1800000300
+    ],
+    "refused_at": [
+      1799999699,
+      1800000301
+    ]
+  }
+}

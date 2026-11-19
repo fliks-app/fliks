@@ -48,6 +48,7 @@ pub struct AppState {
     pub kepub_cache: Option<Arc<std::path::Path>>,
     /// Signs the read grants of remote workers, so they outlive a restart.
     pub grant_key: Arc<[u8]>,
+    pub push: Arc<crate::push::Push>,
     /// Encrypts the secrets of `subsonic` device tokens (`device-tokens.md` rule 15).
     pub subsonic_key: Arc<[u8]>,
 }
@@ -112,6 +113,7 @@ impl AppState {
             ))
             .to_vec()
             .into(),
+            push: Arc::new(crate::push::Push::new(&cfg)),
             cfg: Arc::new(cfg),
             db,
         }

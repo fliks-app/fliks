@@ -1,6 +1,7 @@
 //! `/api/likes/*` and `/api/social/*` (`docs/spec/social.md`): likes, follow graph, discovery, profiles,
 //! stats, recommendations and the leave-social teardown.
 mod graph;
+pub(crate) use graph::{accept_request, reject_request};
 pub(crate) mod likes;
 mod profile;
 mod recommend;

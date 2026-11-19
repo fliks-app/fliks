@@ -6,7 +6,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/system/events` | `SessionAuthed`; policy: any authenticated user | `device?`, `ff?`, `tvPlatform?`, `name?` (raw strings, no validation) | `text/event-stream`, status 200, stays open | 401 no/invalid credential or disabled user (rule 1); 403 `session_token_required` (rule 2) | registers the connection, evicts superseded same-`targetId` connections, sends `remote.targets_changed` to the user when `device` is given, then `sse.connected` (rule 9) |
+| `GET /api/system/events` | `SessionAuthed`; policy: any authenticated user | `device?`, `ff?`, `tvPlatform?`, `name?`, `lang?` (raw strings, no validation) | `text/event-stream`, status 200, stays open | 401 no/invalid credential or disabled user (rule 1); 403 `session_token_required` (rule 2) | registers the connection, evicts superseded same-`targetId` connections, sends `remote.targets_changed` to the user when `device` is given, then `sse.connected` (rule 9) |
 | `POST /api/system/events/ticket` | `SessionAuthed` | none | 201 `{ticket: string, expiresIn: 30}` | 401; 403 `session_token_required` | stores the ticket in memory (rule 1a) |
 | `POST /api/system/events/keepalive` | `SessionAuthed` | body `{ connectionId: string }`, no unknown property | 204, no body | 401; 403 `session_token_required`; 404 `events.error_unknown_connection` (unknown connection or another account's) | refreshes the connection's keepalive (rule 31a) |
 | `GET /api/system/activity` | `Authed`; policy `ability.can(Action.Read, 'Settings')` | `page?`, `limit?` (raw strings) | `{ data: ActivityRow[]; total: number; dropped: number }` | 401; 403 without `read:Settings` | none |
@@ -18,7 +18,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 1. Auth runs once at connect (JWT extractor order cookie `fliks_access`, then `Bearer`, then `?token=`; `EventSource` cannot send headers so web uses the cookie, native clients `?token=`). The user must exist and be `enabled` (loaded with its role), else 401. A token expiring or a user being disabled later does not close the stream by itself; only rules 28-30 do.
 2. A token with any `scope` claim (only `'stream'` is minted, for both stream and Cast tokens) is rejected: 403 `{"statusCode":403,"message":"session_token_required","error":"Forbidden"}`. No cookie/Bearer/token or invalid: 401 (`auth.md` rule 14 body).
 1a. Ticket: `?ticket=` replaces the credential of rule 1. `POST /api/system/events/ticket` mints a 24-byte random value bound to the caller, valid 30 s and once; the connect removes it whatever follows. An unknown, used or expired ticket is 401 (even with a valid token alongside), and the ticket's user must still be `enabled`. The ticket also carries the minting session: it is 401 when that session is revoked. Without `ticket`, rules 1-2 apply unchanged, so released native clients (`?token=`) keep working; tickets live in process memory.
-3. Query params, all optional, copied into the connection identity: `device` -> `targetId`, `ff` -> `formFactor`, `tvPlatform`, `name` -> `deviceName`; `userAgent` = request `User-Agent` header. Absent is stored as `null` ; an empty `device=` is stored as `""`, which is falsy, so it behaves like absent for the eviction/announce/listing branches.
+3. Query params, all optional, copied into the connection identity: `device` -> `targetId`, `ff` -> `formFactor`, `tvPlatform`, `name` -> `deviceName`, `lang` -> `lang` (rule 52); `userAgent` = request `User-Agent` header. Absent is stored as `null` ; an empty `device=` is stored as `""`, which is falsy, so it behaves like absent for the eviction/announce/listing branches.
 4. `targetId` is `deviceId#tabNonce` (stable across reconnects, unique per screen). A client with no `device` never becomes a remote target (never listed, never announces).
 5. Response headers: `Content-Type: text/event-stream`, `Connection: keep-alive`, `Cache-Control: private, no-cache, no-store, must-revalidate, max-age=0, no-transform`, `Pragma: no-cache`, `Expire: 0` (sic, not `Expires`), `X-Accel-Buffering: no`; status 200; headers flushed immediately. The socket gets keep-alive and no-delay and the idle timeout is disabled.
 6. First bytes on the wire are a single blank line `\n`, before any event.
@@ -30,6 +30,13 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 12. Delivery filter per event: deliver if the envelope has no audience and no connection list (broadcast); or its `connectionIds` contains this connection id; or its `audience` contains this user id. Otherwise skip.
 13. A connection receives only events emitted after step (f); there is no `Last-Event-ID` handling and no history.
 14. No replay on connect: a client that connects later reads `GET /api/acquisition/progress` (`plugins.md` rule 65) for the downloads in flight, then follows `download.progress` for changes.
+
+### Notifications
+
+49. SSE event `notification` (user push, `push.md`): `{"type":"notification","id","ts","ttl","cat","title","body","url","image"?,"actions"?,"badge","tag"?}`: the plaintext of `push.md` rule 17 minus `v` and `user`; `id` is 16 random bytes base64url, `ts` unix seconds, `ttl` seconds, `cat` the category, `title` and `body` rendered, `url` an in-app path, `image` a server path, `actions` `[{id, title, kind: 'open'|'call', url?, token?}]` (two at most), `badge` the recipient's `attention` count, `tag` the replace key. Audience: `emit_to_users(recipients)`, one payload per recipient (the badge differs), each connection rendered in its own language (rule 52). No household hook.
+50. The `notification` event is a plain emit: the notification hook (rule 51) is not invoked for it, so it cannot loop. A connection that was closed or is not yet registered misses it (no replay); the system push paths of `push.md` cover the closed app.
+51. Notification hook: `register_notification_hook(fn)` is registered once at boot by the push module, like the household fan-out (rule 19). `emit_to_user` and `emit_to_users` call it with `(event, audience)` for the types `party.invited`, `party.starting`, `social.follow_request`, `social.follow_accepted`, `social.content_recommended` and `pairing.requested`, sent to users, and ignore every other type (`social.followed` included). It spawns `push::notify` and never blocks or fails the emit. A broadcast (`emit`), a connection-addressed event and `notification` itself never reach it. The catalogue (recipients, text, actions) is `push.md` rules 32 to 37.
+52. `lang` (optional query parameter of `GET /api/system/events`, beside `ff`, `tvPlatform` and `name`): the language the connection's `notification` events are rendered in. The value is normalised to its base language when it is one of `en fr de es it pt`, else `en`; a connection without `lang` gets English. It is stored on the connection identity and never changes for the life of the connection.
 
 ### Teardown
 
@@ -100,7 +107,7 @@ The hub and registry are in-memory: no SQL. Audience resolution for media-scoped
 
 ## Events
 
-### Wire events (`SseEvent`, 53 named types + `ping` + `plugin.<id>.<type>`)
+### Wire events (`SseEvent`, 54 named types + `ping` + `plugin.<id>.<type>`)
 
 Audience legend: B = broadcast to every connection; U(x) = connections of user x (+household hook for the three `remote.*` types); Us(list) = connections of those users; C = one connection. Payload types are TypeScript-style; `?` = may be absent on the wire.
 
@@ -151,6 +158,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 37 | `social.followed` / `social.follow_request` | U(target user) | `{userId: number, username: string, avatar: string|null}` |
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
+| 39a | `notification` | Us(recipients), one payload each | `{id: string, ts: number, ttl: number, cat: string, title: string, body: string, url: string, image?: string, actions?: {id, title, kind: 'open'|'call', url?, token?}[], badge: number, tag?: string}` (rule 49, `push.md`) |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
 | 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed, or a provider with a release picker turned ready or stopped being ready (`plugins.md` rules 63, 71) |
 | 40b | `acquisition.queue` (raw, outside the union, no `plugin.` prefix) | Us(enabled users holding `media.grab`, admins and `manage:all` included) | `{payload: {pluginId: string, rows: AcquisitionRow[]|null}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue; `rows` the changed wire rows (`plugins.md` rule 73) when nothing joined or left the open list and at most 100 changed, else null (`plugins.md` rule 75) |
@@ -169,7 +177,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, upvoterIds, downvoterIds}[]}` (`watch-party.md`, Proposals) |
 | 53 | `pairing.cancelled` | U(hinted user, none without `userId`) | `{userId: number, pairingId: string}` |
 
-Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 52 of the 53 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 53. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
+Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 53 of the 54 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 54. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
 `RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'prev'|'shuffle'|'repeat'|'queue'|'enqueue'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`, `next` and `prev`.
 
@@ -201,10 +209,11 @@ Two in-process buses: the SSE bus (`subscribe`, audience-blind) and the domain b
 | request lifecycle | domain bus | `acquisition.grabbed` | APPROVED to PROCESSING for the media and season |
 | post-import queue | domain bus | `media.files.imported` | debounce-schedule sprites/markers/scans for the media |
 | post-import queue | SSE bus | `rescan.completed` | schedule post-import when `added > 0`, else scan sources |
+| new-episode notifier (`push.md` rule 35) | domain bus | `media.files.imported` | groups imports of a series for 5 minutes, then `push::notify` |
 | plugin webhook dispatcher | domain bus | all 11 domain types (filtered by each plugin's declared webhooks) | HTTP webhook delivery |
 | plugin process dispatcher | domain bus | all 11 | NDJSON event to every ready `process` plugin |
 
-Not subscribers: media-server dispatch and notification dispatch are direct calls at the emitting sites, and the settings change consumers are the direct calls of `settings.md` rule 11, not the bus.
+The notification hook of rule 51 is a hub-level hook (like the household fan-out), not a bus subscriber. Not subscribers: media-server dispatch and notification dispatch are direct calls at the emitting sites, and the settings change consumers are the direct calls of `settings.md` rule 11, not the bus.
 
 ## Settings keys
 

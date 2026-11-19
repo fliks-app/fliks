@@ -86,6 +86,8 @@ pub struct UserRow {
     pub whats_new_seen: Option<String>,
     /// `None` is every kind (`session.md`).
     pub session_kinds: Option<Vec<String>>,
+    /// Push categories this user does not want, any device.
+    pub push_muted: Vec<String>,
 }
 
 /// A `roles` row; `permissions` is the JSON text column parsed (an unparsable value is no permission).
@@ -157,6 +159,7 @@ async fn load_rows(
         u."spoilerHideOverviews" AS spoiler_hide_overviews,
         u."spoilerHideTitles" AS spoiler_hide_titles,
         u."sessionSync" AS session_sync, u."sessionKinds" AS session_kinds,
+        u."pushMuted" AS "push_muted!",
         u."whatsNewEnabled" AS whats_new_enabled, u."whatsNewSeen" AS whats_new_seen,
         r."id" AS "role_row_id?", r."createdAt" AS "role_created_at?", r."updatedAt" AS "role_updated_at?",
         r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
@@ -218,6 +221,7 @@ async fn load_rows(
                 whats_new_enabled: r.whats_new_enabled,
                 whats_new_seen: r.whats_new_seen,
                 session_kinds: r.session_kinds,
+                push_muted: r.push_muted,
             };
             (user, role)
         })

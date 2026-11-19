@@ -40,6 +40,8 @@ pub struct Identity {
     pub tv_platform: Option<String>,
     pub device_name: Option<String>,
     pub user_agent: Option<String>,
+    /// `lang` query parameter: the language a `notification` event is rendered in.
+    pub lang: Option<String>,
 }
 
 impl Identity {
@@ -136,11 +138,13 @@ struct Inner {
 }
 
 type FanOut = Arc<dyn Fn(&SseEvent, i32) + Send + Sync>;
+type UsersHook = Arc<dyn Fn(&SseEvent, &[i32]) + Send + Sync>;
 
 pub struct Shared {
     inner: Mutex<Inner>,
     bus: broadcast::Sender<Arc<Bus>>,
     fan_out: Mutex<Option<FanOut>>,
+    to_users: Mutex<Option<UsersHook>>,
     down: watch::Sender<bool>,
     pub(super) activity: Activity,
 }
@@ -152,6 +156,8 @@ enum Aud<'a> {
     All,
     Users(&'a [i32]),
     Conn(&'a str),
+    /// One user's connections that declared this language (`None`: none declared).
+    UserLang(i32, Option<&'a str>),
 }
 
 struct Out {
@@ -212,6 +218,7 @@ impl Hub {
             inner: Mutex::default(),
             bus: broadcast::channel(BUS_CAPACITY).0,
             fan_out: Mutex::new(None),
+            to_users: Mutex::new(None),
             down: watch::channel(false).0,
             activity: Activity::new(w.clone()),
         }))
@@ -239,6 +246,28 @@ impl Hub {
     /// `emit_to_user` past their owner. It must use `emit_to_users`, which never calls it back.
     pub fn register_household_fan_out(&self, f: impl Fn(&SseEvent, i32) + Send + Sync + 'static) {
         *self.0.fan_out.lock_clean() = Some(Arc::new(f));
+    }
+
+    /// Set once by the push module: sees every event sent to a list of users, outside the hub lock;
+    /// it must return at once.
+    pub fn register_users_hook(&self, f: impl Fn(&SseEvent, &[i32]) + Send + Sync + 'static) {
+        *self.0.to_users.lock_clean() = Some(Arc::new(f));
+    }
+
+    /// To every connection of `user`, once per declared language: `build` renders for that language.
+    pub fn emit_to_user_langs(&self, user: i32, build: impl Fn(Option<&str>) -> SseEvent) {
+        let mut langs: Vec<Option<String>> = vec![];
+        for c in self.lock().conns.values().filter(|c| c.user == user) {
+            if !langs.contains(&c.identity.lang) {
+                langs.push(c.identity.lang.clone());
+            }
+        }
+        for lang in langs {
+            self.send(
+                Aud::UserLang(user, lang.as_deref()),
+                Out::sse(build(lang.as_deref())),
+            );
+        }
     }
 
     /// To every connection of every user.
@@ -781,6 +810,12 @@ impl Hub {
     }
 
     fn send(&self, aud: Aud<'_>, out: Out) {
+        if let (Aud::Users(users), Bus::Sse(ev)) = (&aud, &out.bus) {
+            let hook = self.0.to_users.lock_clean().clone();
+            if let Some(hook) = hook {
+                hook(ev, users);
+            }
+        }
         {
             let mut g = self.lock();
             self.dispatch(&mut g, aud, out);
@@ -803,6 +838,7 @@ impl Hub {
                 Aud::All => true,
                 Aud::Users(users) => users.contains(&c.user),
                 Aud::Conn(only) => only == id,
+                Aud::UserLang(user, lang) => c.user == *user && c.identity.lang.as_deref() == *lang,
             };
             if to_it && c.tx.try_send(Msg::Event(out.json.clone())).is_err() {
                 full.push(id.clone());

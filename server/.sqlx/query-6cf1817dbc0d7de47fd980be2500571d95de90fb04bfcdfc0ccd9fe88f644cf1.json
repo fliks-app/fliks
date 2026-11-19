@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET \"username\" = $2, \"email\" = $3,\n        \"passwordHash\" = COALESCE($4, \"passwordHash\"), \"roleId\" = $5, \"isAdmin\" = $6, \"enabled\" = $7,\n        \"requirePasswordChange\" = $8, \"quotaPeriodDays\" = $9, \"libraryOrder\" = $10,\n        \"hiddenLibraryIds\" = $11, \"profileVisibility\" = $12::text::users_profilevisibility_enum,\n        \"shareTastes\" = $13, \"shareRecommendations\" = $14, \"shareWatchHistory\" = $15,\n        \"shareLikes\" = $16, \"shareStats\" = $17, \"shareDisabled\" = $18, \"hideSpoilers\" = $19,\n        \"edlEnabled\" = $20, \"edlAutoSkipCommercials\" = $21, \"spoilerHideStills\" = $22,\n        \"spoilerHideOverviews\" = $23, \"spoilerHideTitles\" = $24,\n        \"sessionSync\" = $25, \"sessionKinds\" = $26, \"whatsNewEnabled\" = $27,\n        \"whatsNewSeen\" = $28, \"pushMuted\" = $29,\n        \"updatedAt\" = now() WHERE \"id\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Int4",
+        "Jsonb",
+        "Jsonb",
+        "Text",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "TextArray",
+        "Bool",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cf1817dbc0d7de47fd980be2500571d95de90fb04bfcdfc0ccd9fe88f644cf1"
+}

@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT u.id, u.username, u.enabled, u.\"isAdmin\" AS is_admin, r.permissions AS \"permissions?\"\n           FROM users u LEFT JOIN roles r ON r.id = u.\"roleId\" WHERE u.enabled",
+  "query": "SELECT u.id AS \"id!\", u.username AS \"username!\", u.enabled AS \"enabled!\", u.\"isAdmin\" AS \"is_admin!\", r.permissions AS \"permissions?\"\n           FROM users u LEFT JOIN roles r ON r.id = u.\"roleId\" WHERE u.enabled",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id!",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "username",
+        "name": "username!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "enabled",
+        "name": "enabled!",
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "is_admin",
+        "name": "is_admin!",
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -63,12 +63,12 @@
       "Left": []
     },
     "nullable": [
-      false,
-      false,
-      false,
-      false,
-      true
+      true,
+      true,
+      true,
+      true,
+      false
     ]
   },
-  "hash": "73dbb9c7fbfa125ccfb54968206cd86c42d4da8e30913d16a64bcecd1340701e"
+  "hash": "6bfcbdd151b1279fddcbaad0d77eed3a42dba221a7dc6f45380fbb7b026bbcdd"
 }

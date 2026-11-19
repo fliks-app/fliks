@@ -65,6 +65,13 @@
       "expect": {
         "body": [
           {
+            "enabled": false,
+            "events": [],
+            "name": "Fliks Relay",
+            "settings": {},
+            "type": "fliks-relay"
+          },
+          {
             "enabled": true,
             "events": [],
             "name": "a-first",

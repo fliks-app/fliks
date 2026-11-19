@@ -121,6 +121,16 @@ pub async fn update(
     let id = id_of(id)?;
     let body = body(req).await?;
     let stored = db::find(&st.db, id).await?;
+    if let Some(builtin) = stored.as_ref().filter(|c| c.typ == dom::BUILTIN) {
+        let enabled = body["enabled"]
+            .as_bool()
+            .ok_or_else(|| AppError::bad_request("enabled must be a boolean value"))?;
+        let conn = db::set_enabled(&st.db, builtin.id, enabled)
+            .await?
+            .ok_or_else(|| not_found(id))?;
+        st.push.spawn_reconcile(&st);
+        return Ok(Json(conn.json()));
+    }
     let same_type = stored.as_ref().filter(|c| body["type"] == c.typ.as_str());
     let mut msgs = dom::validate(&body, same_type.map(|c| &c.settings.0));
     // These nulls are a 400, never stored.
@@ -146,6 +156,12 @@ pub async fn remove(
 ) -> Res<StatusCode> {
     a.require(Action::Manage, Subject::Settings)?;
     let id = id_of(id)?;
+    if db::find(&st.db, id)
+        .await?
+        .is_some_and(|c| c.typ == dom::BUILTIN)
+    {
+        return Err(AppError::bad_request("notifications.error_builtin"));
+    }
     if db::delete(&st.db, id).await? {
         Ok(StatusCode::OK)
     } else {
@@ -162,6 +178,9 @@ pub async fn test(
     a.require(Action::Manage, Subject::Settings)?;
     let id = id_of(id)?;
     let conn = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
+    if conn.typ == dom::BUILTIN {
+        return Ok((StatusCode::CREATED, Json(st.push.check(&st).await)));
+    }
     let payload = json!({"test": true, "message": "Test notification from Fliks"});
     let payload = payload.as_object().cloned().unwrap_or_default();
     let out = match send(&conn, "health.issue", &payload).await {

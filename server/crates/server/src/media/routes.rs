@@ -320,15 +320,12 @@ pub async fn sidebar_counts(
     State(st): State<AppState>,
     a: Authed,
 ) -> Result<Json<Value>, AppError> {
-    let pending = async {
-        let all = a.perms.can(Action::Manage, &Subject::FliksRequest);
-        sqlx::query_scalar::<_, i32>(r#"SELECT count(*)::int FROM requests WHERE status = 'pending' AND ($1 OR "userId" = $2) AND "mediaType" = ANY($3)"#)
-            .bind(all)
-            .bind(a.user.id)
-            .bind(a.kinds.names())
-            .fetch_one(&st.db)
-            .await
-    };
+    let pending = crate::requests::flow::pending_count(
+        &st.db,
+        &a,
+        a.perms.can(Action::Manage, &Subject::FliksRequest),
+        None,
+    );
     let by_library = async {
         if !a.perms.can(Action::Read, &Subject::Media) {
             return Ok(aggregates::ByLibrary(vec![]));
@@ -336,7 +333,8 @@ pub async fn sidebar_counts(
         let ids = accessible_library_ids(&st.db, &a).await?;
         aggregates::counts_by_library(&st.db, &ids, &a.kinds).await
     };
-    let (pending, by_library) = tokio::try_join!(pending, by_library)?;
+    let attention = async { crate::push::attention(&st.db, &a).await };
+    let (pending, by_library, attention) = tokio::try_join!(pending, by_library, attention)?;
     let mut badges = serde_json::Map::new();
     let sees_queue = a.perms.can(Action::Manage, &Subject::Settings)
         || a.perms.can(Action::Track, &Subject::Media);
@@ -344,6 +342,6 @@ pub async fn sidebar_counts(
         badges.insert("queueActive".into(), n.into());
     }
     Ok(Json(
-        json!({ "badgeCounts": badges, "pendingRequests": pending, "mediaByLibrary": by_library }),
+        json!({ "badgeCounts": badges, "pendingRequests": pending, "mediaByLibrary": by_library, "attention": attention }),
     ))
 }

@@ -99,6 +99,7 @@ pub async fn events(
         form_factor: param(&q, "ff"),
         tv_platform: param(&q, "tvPlatform"),
         device_name: param(&q, "name"),
+        lang: param(&q, "lang").filter(|l| !l.is_empty() && l.len() <= 16),
         user_agent: headers
             .get(header::USER_AGENT)
             .and_then(|v| v.to_str().ok())

@@ -2,7 +2,7 @@
 
 Auth, CASL and error-body rules are in `auth.md` (cited as "auth rule N").
 
-One route, three independent counters computed in one round trip for the app shell sidebar. `badgeCounts` reads the in-memory plugin push cache that only plugin code fills (rule 12).
+One route, independent counters computed in one round trip for the app shell sidebar. `badgeCounts` reads the in-memory plugin push cache that only plugin code fills (rule 12).
 
 ## Routes
 
@@ -10,7 +10,7 @@ One route.
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/counts` | `Authed` only, no policy: any authenticated enabled user; a scoped stream token is 401 | none (no query, no body; unknown query keys ignored: no DTO) | 200 `{ badgeCounts: { [key: string]: number }, pendingRequests: int, mediaByLibrary: { [libraryId: string]: int } }` (rule 1) | 401 (auth rule 14) | none |
+| `GET /api/counts` | `Authed` only, no policy: any authenticated enabled user; a scoped stream token is 401 | none (no query, no body; unknown query keys ignored: no DTO) | 200 `{ badgeCounts: { [key: string]: number }, pendingRequests: int, mediaByLibrary: { [libraryId: string]: int }, attention: int }` (rule 1) | 401 (auth rule 14) | none |
 
 No 403 exists: each counter applies its own ability check inside the service and degrades to an empty value (rules 5-9). No route emits an SSE or domain event.
 
@@ -18,7 +18,7 @@ No 403 exists: each counter applies its own ability check inside the service and
 
 ### A. Shape
 
-1. Response is always the three keys, none ever `null`: `badgeCounts` (object, possibly `{}`), `pendingRequests` (integer, `0` when nothing), `mediaByLibrary` (object, possibly `{}`). Key order in JSON: `badgeCounts`, `pendingRequests`, `mediaByLibrary`.
+1. Response is always the four keys, none ever `null`: `badgeCounts` (object, possibly `{}`), `pendingRequests` (integer, `0` when nothing), `mediaByLibrary` (object, possibly `{}`), `attention` (integer, `0` when nothing, rule 16). Key order in JSON: `badgeCounts`, `pendingRequests`, `mediaByLibrary`, `attention`.
 2. Null vs absent: a `badgeCounts` key that no publisher pushed, or that the caller may not see, is ABSENT, never present-and-0 (the client folds `pendingRequests` into the same map and shows a badge only for a truthy value). `mediaByLibrary` omits libraries without media.
 3. The ability is built once per request , then the two SQL counters run concurrently; `badgeCounts` is a synchronous in-memory read. Any DB error rejects the whole call (500), there is no per-counter fallback.
 4. No cache of any kind on the SQL counters: every call re-queries. Nothing memoises; the client refetches on SSE count-bearing events.
@@ -43,12 +43,17 @@ No 403 exists: each counter applies its own ability check inside the service and
 14. Writer: host method `counts.set {key, value}` (scope `events:emit`). The plugin host validates: `value` must be a JSON integer `>= 0` (serde check) and `key` 1 to 64 characters, else the host call errors and nothing is stored. This keeps rule 1's `number` type true. A call outside a plugin context (no current plugin id) is silently dropped.
 15. The cache lives in the plugin host; `/api/counts` reads it through one in-process function (`has`/`get`/`forget`), same sum and absent-vs-0 semantics. A restart empties it.
 
+### E. `attention`
+
+16. `attention` is the number a push badge shows (`push.md` rule 44): the requests waiting for the caller's decision plus the follow requests waiting for their answer. First part: the manager pending count of rule 5 when `ability.can(Action.Manage, FliksRequest)`, else `0` (the own-scope count of a plain requester is not added: those requests wait for someone else). Second part: the pending follow requests addressed to the caller (`user_follows` rows with `"followingId"` = the caller and `status = 'pending'`, the list of `GET /api/social/requests`). Always an integer, never absent. It runs with the other SQL counters and shares their error rule (rule 3).
+
 ## SQL
 
 All reads. `$1 = user.id`, `$2 = accessible library ids`.
 
 - Pending, manager (rule 5): `SELECT count(*)::int FROM requests WHERE status = 'pending'`.
 - Pending, own: `SELECT count(*)::int FROM requests WHERE status = 'pending' AND "userId" = $1`.
+- Attention (rule 16): the manager pending count above (manager only) plus `SELECT count(*)::int FROM user_follows WHERE "followingId" = $1 AND status = 'pending'`.
 - Media per library (rule 9), only when `media.read`: the `counts_by_library` query, `SELECT m."libraryId", COUNT(*)::int FROM media m WHERE m."libraryId" IS NOT NULL AND m."libraryId" = ANY($2) GROUP BY m."libraryId" ORDER BY m."libraryId"` (`ORDER BY` gives the numeric key order; `$2 = []` matches nothing, so `{}`).
 - Accessible ids (`libraries.md` rule 30, `accessible_library_ids`): `SELECT id FROM libraries ORDER BY id` (admin/`manage:all`) or `SELECT "libraryId" FROM library_user_access WHERE "userId" = $1 AND "libraryId" IS NOT NULL ORDER BY id`.
 

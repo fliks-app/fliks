@@ -66,6 +66,13 @@
             },
             "type": "discord",
             "updatedAt": "x"
+          },
+          {
+            "enabled": false,
+            "events": [],
+            "name": "Fliks Relay",
+            "settings": {},
+            "type": "fliks-relay"
           }
         ],
         "status": 200

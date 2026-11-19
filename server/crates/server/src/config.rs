@@ -37,6 +37,8 @@ pub struct Config {
     pub serve_static_path: Option<PathBuf>,
     pub cast_dir: PathBuf,
     pub conf_dir: Option<PathBuf>,
+    /// `FLIKS_PUSH_RELAY_URL`: the push relay of development builds and forks; the official one when unset.
+    pub push_relay_url: Option<String>,
     pub jwt_secret: Option<String>,
     /// `JWT_EXPIRATION` in whole seconds (`ms()` grammar, unitless is milliseconds).
     pub jwt_ttl_secs: u64,
@@ -88,6 +90,7 @@ impl Config {
             serve_static_path: text("SERVE_STATIC_PATH").map(PathBuf::from),
             cast_dir: text("FLIKS_CAST_DIR").map_or_else(|| "public".into(), PathBuf::from),
             conf_dir: text("FLIKS_CONF_DIR").map(PathBuf::from),
+            push_relay_url: text("FLIKS_PUSH_RELAY_URL"),
             jwt_secret: get("JWT_SECRET").filter(|v| !v.is_empty()),
             jwt_ttl_secs: ttl_secs(
                 "JWT_EXPIRATION",

@@ -4,6 +4,9 @@ use serde_json::{Map, Value, json};
 
 pub const TYPES: [&str; 5] = ["discord", "slack", "webhook", "gotify", "ntfy"];
 
+/// The built-in mobile push connection: seeded, never created or deleted by a user, no settings.
+pub const BUILTIN: &str = "fliks-relay";
+
 /// `NOTIFICATION_EVENTS`, in vocabulary order.
 pub const EVENTS: [&str; 23] = [
     "request.created",
@@ -299,6 +302,9 @@ pub fn normalize_settings(
 
 /// Response settings: secrets removed, `secretsSet` lists the ones holding a value.
 pub fn redact(typ: &str, settings: &Map<String, Value>) -> Map<String, Value> {
+    if typ == BUILTIN {
+        return Map::new();
+    }
     let mut out = settings.clone();
     let mut set = vec![];
     for key in secret_keys(typ) {

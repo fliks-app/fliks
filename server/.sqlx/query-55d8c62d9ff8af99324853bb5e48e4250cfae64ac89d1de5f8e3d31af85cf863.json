@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                  settings AS \"settings: Json<Map<String, Value>>\",\n                  events AS \"events: Json<Vec<String>>\", enabled\n           FROM notification_connections WHERE enabled AND jsonb_exists(events, $1)",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                  settings AS \"settings: Json<Map<String, Value>>\",\n                  events AS \"events: Json<Vec<String>>\", enabled\n           FROM notification_connections\n           WHERE enabled AND type <> 'fliks-relay' AND jsonb_exists(events, $1)",
   "describe": {
     "columns": [
       {
@@ -108,5 +108,5 @@
       false
     ]
   },
-  "hash": "39f2f4167f6e36eb0ca554ba9b8c89fb507d1b808f3f5cab8949f85eb1597703"
+  "hash": "55d8c62d9ff8af99324853bb5e48e4250cfae64ac89d1de5f8e3d31af85cf863"
 }

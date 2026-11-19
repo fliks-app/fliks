@@ -704,6 +704,7 @@ const ADDITIVE: &[&str] = &[
     "$..hasPassword",
     "$..sessionSync",
     "$..sessionKinds",
+    "$..pushMuted",
     "$[*].state",
     "$[*].requestStatus",
 ];

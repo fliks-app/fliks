@@ -248,8 +248,16 @@ pub async fn remove_media(st: &AppState, media_id: i32) -> Result<Removed, PortE
     })
 }
 
-/// `NotificationsService.dispatch`: fire and forget.
-pub fn notify(st: &AppState, event: &'static str, payload: Map<String, Value>) {
+/// `NotificationsService.dispatch`: fire and forget; `user` is the matching user notification (`push.md`).
+pub fn notify(
+    st: &AppState,
+    event: &'static str,
+    payload: Map<String, Value>,
+    user: Option<crate::push::ReqRef>,
+) {
+    if let Some(r) = user {
+        crate::push::request_event(st, event, &payload, r);
+    }
     let db = st.db.clone();
     tokio::spawn(async move {
         if let Err(e) = notifications::dispatch(&db, event, &payload).await {

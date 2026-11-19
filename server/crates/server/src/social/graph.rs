@@ -248,6 +248,15 @@ pub async fn accept(
     a: Authed,
     PathParams(requester): PathParams<i32>,
 ) -> Result<StatusCode, AppError> {
+    accept_request(&st, &a, requester).await
+}
+
+/// The accept of a follow request; also the `follow.accept` action of a push notification.
+pub(crate) async fn accept_request(
+    st: &AppState,
+    a: &Authed,
+    requester: i32,
+) -> Result<StatusCode, AppError> {
     let done = sqlx::query_scalar!(
         r#"UPDATE user_follows SET status = 'accepted', "updatedAt" = now()
            WHERE "followerId" = $1 AND "followingId" = $2 AND status = 'pending' RETURNING id"#,
@@ -275,6 +284,15 @@ pub async fn reject(
     State(st): State<AppState>,
     a: Authed,
     PathParams(requester): PathParams<i32>,
+) -> Result<StatusCode, AppError> {
+    reject_request(&st, &a, requester).await
+}
+
+/// The reject of a follow request; also the `follow.decline` action of a push notification.
+pub(crate) async fn reject_request(
+    st: &AppState,
+    a: &Authed,
+    requester: i32,
 ) -> Result<StatusCode, AppError> {
     sqlx::query!(
         r#"DELETE FROM user_follows

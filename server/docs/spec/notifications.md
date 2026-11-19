@@ -1,30 +1,30 @@
 # Spec: notifications (connections, senders, dispatch)
 
-Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch` caller (listed in Events). Auth, CASL, error bodies: `auth.md` ("auth rule N"). Requests that dispatch: `requests.md`.
+Scope: connections CRUD (the built-in `fliks-relay` connection included, rules 30 to 36; user push is `push.md`), senders and dispatch, and every `notifications.dispatch` caller (listed in Events). Auth, CASL, error bodies: `auth.md` ("auth rule N"). Requests that dispatch: `requests.md`.
 
 ## Routes
 
 7 routes. Class-level guards `JwtOrApiKeyGuard, PoliciesGuard`; `scope:'stream'` tokens are rejected by the extractor. POST = 201, DELETE = 200 (empty). Declaration order: `GET events` before `GET:id`. Read policies need `settings.access` (it grants both `Read` and `Manage` on `Settings`, auth rule 25).
 
-`ConnectionJSON` = `{id: number, createdAt: ISO, updatedAt: ISO, name: string, type: 'discord'|'slack'|'webhook'|'gotify'|'ntfy', settings: object, events: string[], enabled: boolean}` with `settings` redacted (rule 8; `webhookUrl` of discord/slack is a secret too, rule 24).
+`ConnectionJSON` = `{id: number, createdAt: ISO, updatedAt: ISO, name: string, type: 'discord'|'slack'|'webhook'|'gotify'|'ntfy'|'fliks-relay', settings: object, events: string[], enabled: boolean}` with `settings` redacted (rule 8; `webhookUrl` of discord/slack is a secret too, rule 24).
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `POST /api/notifications` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `(ability) => ability.can(Action.Manage, 'Settings')` | body (rule 2): `name` string, `type` in the 5 types, `settings` object (endpoint rule), `events?` string[] of the 18 names, `enabled?` boolean | 201, `ConnectionJSON` (redacted, saved row) | 400 validation (auth rule 16, rule 29); 400 `gotify requires a non-empty settings.token` | INSERT `notification_connections` |
+| `POST /api/notifications` | `JwtOrApiKeyGuard`, `PoliciesGuard` (class); `(ability) => ability.can(Action.Manage, 'Settings')` | body (rule 2): `name` string, `type` in the 5 types, `settings` object (endpoint rule), `events?` string[] of the 18 names, `enabled?` boolean | 201, `ConnectionJSON` (redacted, saved row) | 400 validation (auth rule 16, rule 29); 400 `gotify requires a non-empty settings.token`; 400 for type `fliks-relay` (rule 30) | INSERT `notification_connections` |
 | `GET /api/notifications` | same; `Action.Read, 'Settings'` | none | `ConnectionJSON[]` `ORDER BY name ASC` | 401, 403 | none |
 | `GET /api/notifications/events` | same; `Action.Read, 'Settings'` | none | `string[]`: the 17 subscribable events in vocabulary order (rule 3) | 401, 403 | none |
 | `GET /api/notifications/:id` | same; `Action.Read, 'Settings'` | path `id` numeric | `ConnectionJSON` | 400 `Validation failed (numeric string is expected)`; 404 `Notification connection #<id> not found` | none |
-| `PUT /api/notifications/:id` | same; `Action.Manage, 'Settings'` | path `id`; body = the same as create (so `name`, `type`, `settings` are required; `events?`, `enabled?` optional) | 200, `ConnectionJSON` (saved row, redacted) | 400; 404; 400 gotify token | UPDATE (rules 5-7) |
-| `DELETE /api/notifications/:id` | same; `Action.Manage, 'Settings'` | path `id` | 200, empty body | 400 numeric; 404 | DELETE |
-| `POST /api/notifications/:id/test` | same; `Action.Manage, 'Settings'` | path `id`, no body | 201, `{ok: boolean, message: string}` (always 201, a failed send is `ok:false`, never an HTTP error) | 400 numeric; 404 `Notification connection #<id> not found` | one outbound HTTP request (rule 17) |
+| `PUT /api/notifications/:id` | same; `Action.Manage, 'Settings'` | path `id`; body = the same as create (so `name`, `type`, `settings` are required; `events?`, `enabled?` optional) | 200, `ConnectionJSON` (saved row, redacted) | 400; 404; 400 gotify token | UPDATE (rules 5-7); on the `fliks-relay` row only `enabled` (rule 32) |
+| `DELETE /api/notifications/:id` | same; `Action.Manage, 'Settings'` | path `id` | 200, empty body | 400 numeric; 404; 400 `notifications.error_builtin` on the `fliks-relay` row (rule 31) | DELETE |
+| `POST /api/notifications/:id/test` | same; `Action.Manage, 'Settings'` | path `id`, no body | 201, `{ok: boolean, message: string}` (always 201, a failed send is `ok:false`, never an HTTP error) | 400 numeric; 404 `Notification connection #<id> not found` | one outbound HTTP request (rule 17); on the `fliks-relay` row a registration check (rule 35) |
 
 
 ## Rules
 
 ### A. Entity, vocabulary, validation
 
-1. Table `notification_connections`: `id`, `createdAt`, `updatedAt`, `name` varchar, `type` varchar, `settings` jsonb (default `{}`), `events` jsonb array (default `[]`), `enabled` boolean (default true).
-2. Vocabulary (`NOTIFICATION_EVENTS`, 23, in this order): `request.created`, `request.approved`, `request.declined`, `request.processing`, `request.available`, `request.delete.created`, `request.delete.approved`, `request.delete.declined`, `grab.started`, `download.complete`, `health.issue`, `subtitle.downloaded`, `subtitle.upgraded`, `subtitle.failed`, `subtitle.synced`, `livetv.account_expiring`, `livetv.account_expired`, `livetv.adult_guard_failed`, `media.leaving_soon`, `media.cleaned_up`, `optimize.completed`, `optimize.failed`, `health.corrupt`. Types (`NOTIFICATION_TYPES`): `discord`, `slack`, `webhook`, `gotify`, `ntfy`. Validation: `name` string; `type` one of the types; `settings` object + endpoint constraint (rule 4); `events` optional array of vocabulary names; `enabled` optional boolean. An unknown event is a 400 (`each value in events must be one of the following values: <23 values joined ", ">`, free-text validation message).
+1. Table `notification_connections` (also holds the built-in row of rule 30): `id`, `createdAt`, `updatedAt`, `name` varchar, `type` varchar, `settings` jsonb (default `{}`), `events` jsonb array (default `[]`), `enabled` boolean (default true).
+2. Vocabulary (`NOTIFICATION_EVENTS`, 23, in this order): `request.created`, `request.approved`, `request.declined`, `request.processing`, `request.available`, `request.delete.created`, `request.delete.approved`, `request.delete.declined`, `grab.started`, `download.complete`, `health.issue`, `subtitle.downloaded`, `subtitle.upgraded`, `subtitle.failed`, `subtitle.synced`, `livetv.account_expiring`, `livetv.account_expired`, `livetv.adult_guard_failed`, `media.leaving_soon`, `media.cleaned_up`, `optimize.completed`, `optimize.failed`, `health.corrupt`. Types (`NOTIFICATION_TYPES`): `discord`, `slack`, `webhook`, `gotify`, `ntfy`; the built-in type `fliks-relay` is stored only (rules 30 to 36) and is not creatable. Validation: `name` string; `type` one of the types; `settings` object + endpoint constraint (rule 4); `events` optional array of vocabulary names; `enabled` optional boolean. An unknown event is a 400 (`each value in events must be one of the following values: <23 values joined ", ">`, free-text validation message).
 3. `GET /api/notifications/events` = the vocabulary minus `health.issue` (test-only: nothing dispatches it): 22 names, same order. `health.issue` stays a valid stored value (4.x connections).
 4. Endpoint key per type (`ENDPOINT_KEY`): `discord`, `slack` → `settings.webhookUrl`; `webhook`, `gotify`, `ntfy` → `settings.url`. Constraint: the endpoint (for `url` types either `url` or `webhookUrl`, `url` winning when truthy) trimmed must match `/^https?:\/\//i`, else 400 message `<type> requires settings.<url|webhookUrl> to be an http(s) URL` (e.g. `ntfy requires settings.url to be an http(s) URL`); a blank or scheme-less endpoint fails; an unknown `type` is rejected by the type check, not by this constraint.
 
@@ -83,7 +83,7 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 
    Other payload keys (`mediaType`, `reason`, `quality`, `sourceTitle`, `provider`, `score`, `oldScore`, `newScore`, `error`, `subtitleId`, `expiresAt`) are NOT in MSG; they reach only the `webhook` channel.
 17. `POST:id/test`: loads the connection (404), then `send(conn, 'health.issue', {test: true, message: 'Test notification from Fliks'})` regardless of `enabled` and of the connection's `events`; success → `{ok: true, message: 'Test notification sent'}`; any error → `{ok: false, message: <error.message>}` (HTTP 201 both ways). Resulting message per channel: discord `content` / slack `text` / ntfy body / gotify `message` = `Test notification from Fliks`; webhook body `{"event":"health.issue","test":true,"message":"Test notification from Fliks"}`; gotify title `Fliks — health.issue`, ntfy `Title: Fliks - health.issue`. Error `message` texts: the literals of rule 14 for missing config; transport errors carry no request URL (rule 26): `Request failed with status code <n>` is exact, the rest is free text.
-18. `GET /api/notifications` sorts by `name` (sorted bytewise); `DELETE` removes the row with no dependants (nothing references `notification_connections`); the setup checklist's `notification` item is `count(*) > 0`.
+18. `GET /api/notifications` sorts by `name` (sorted bytewise); `DELETE` removes the row with no dependants (nothing references `notification_connections`); the setup checklist's `notification` item is `count(*) > 0` over the connections other than `fliks-relay` (rule 36).
 
 ### D. Dispatch callers
 
@@ -123,12 +123,22 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 29. A plugin-supplied `event` outside the 18-name vocabulary is rejected with 400 (`{"message": <string[]>, "error": "Bad Request", "statusCode": 400}`) before any sender runs; the dispatcher takes a typed event. Ids beyond int4, non-integer ids and null on non-nullable fields (`events`, `enabled`) on `GET`/`PUT`/`DELETE`/`test:id` answer 400 or 404, never 500. Admin-set endpoints are accepted as given (SSRF accepted, admin only).
 
 
+### F. Built-in Fliks Relay connection
+
+30. One built-in row, type `fliks-relay`, name `Fliks Relay`, is seeded by the push migration with `enabled = false`, `settings` `{}` and `events` `[]`. A unique partial index on `type` where `type = 'fliks-relay'` keeps it the only one. It is listed from the first boot (`GET /api/notifications`, ordered by name like the others). It is not creatable: `POST /api/notifications` with that type stays the type-validation 400 of rule 2 (the type is not in the creatable `NOTIFICATION_TYPES`).
+31. It is not deletable: `DELETE /api/notifications/:id` on it is 400 `notifications.error_builtin`, the row stays.
+32. `PUT` on it changes `enabled` only and ignores every other field (`name`, `type`, `settings`, `events`); the `secretsSet`, `normalizeSettings` and type-switch rules (6, 7, 24, 25) do not apply. Every write to it triggers the push reconcile (`push.md` rule 20).
+33. Its responses have `settings: {}` and no `secretsSet`. Disabling it deletes the server's registration at the relay and its mobile subscriptions (`push.md` rules 20 and 46).
+34. `dispatch` (rule 10) skips it whatever its `events`: admin events never go to the relay. It carries only user notifications (`push.md`).
+35. `POST /api/notifications/:id/test` on it checks the registration (`GET /v1/servers/self/stats`, signed) and answers 201 `{ok, message}`: `ok: false` with a message when the connection is disabled, has no registered identity or the relay does not answer.
+36. The setup checklist `notification` item (rule 18) counts the connections other than the `fliks-relay` row, so a fresh install does not tick it.
+
 ## SQL
 
 1. List: `SELECT * FROM notification_connections ORDER BY name ASC`.
 2. By id (get, update, delete, test): `SELECT * FROM notification_connections WHERE id = $1`; update = `UPDATE notification_connections SET <changed columns>, "updatedAt" = now WHERE id = $1 RETURNING *`; delete = `DELETE FROM notification_connections WHERE id = $1`; create = `INSERT... RETURNING id, "createdAt", "updatedAt"` (`settings` and `events` as jsonb).
-3. Dispatch: `SELECT * FROM notification_connections WHERE enabled = true` (no ORDER BY), `events` filtered in application code (`WHERE enabled AND events ? $1` gives the same result).
-4. Setup checklist: `SELECT count(*) FROM notification_connections`.
+3. Dispatch: `SELECT * FROM notification_connections WHERE enabled = true AND type <> 'fliks-relay'` (no ORDER BY), `events` filtered in application code (`WHERE enabled AND events ? $1` gives the same result).
+4. Setup checklist: `SELECT count(*) FROM notification_connections WHERE type <> 'fliks-relay'` (rule 36).
 
 ## Events
 
