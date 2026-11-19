@@ -58,7 +58,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "username": "manager",
           "whatsNewEnabled": true,
-          "whatsNewSeen": null
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },

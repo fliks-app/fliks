@@ -61,7 +61,7 @@
           "spoilerHideTitles": true,
           "username": "other",
           "whatsNewEnabled": true,
-          "whatsNewSeen": null
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },
@@ -139,7 +139,7 @@
           "spoilerHideTitles": true,
           "username": "manager",
           "whatsNewEnabled": true,
-          "whatsNewSeen": null
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },

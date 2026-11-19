@@ -47,7 +47,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "username": "admin",
             "whatsNewEnabled": true,
-            "whatsNewSeen": null
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -95,7 +95,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "username": "manager",
             "whatsNewEnabled": true,
-            "whatsNewSeen": null
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -145,7 +145,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "username": "other",
             "whatsNewEnabled": true,
-            "whatsNewSeen": null
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -192,7 +192,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "username": "readonly",
             "whatsNewEnabled": true,
-            "whatsNewSeen": null
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -242,7 +242,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "username": "user",
             "whatsNewEnabled": true,
-            "whatsNewSeen": null
+            "whatsNewSeen": "5.0.0"
           }
         ],
         "status": 200
