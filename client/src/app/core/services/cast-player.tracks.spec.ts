@@ -226,6 +226,17 @@ describe('a takeover of the cast session', () => {
     expect(svc.hasMedia()).toBe(false);
     expect(player.sessionId()).toBeUndefined();
   });
+
+  it('leaves the receiver alone when another sender already plays the same file there', async () => {
+    const { svc, cast, players } = setup();
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-1' });
+    TestBed.tick();
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-2' });
+    TestBed.tick();
+    await players[0].yield(true);
+    expect(cast.disconnect).not.toHaveBeenCalled();
+    expect(svc.hasMedia()).toBe(false);
+  });
 });
 
 describe('another sender loads on the receiver', () => {

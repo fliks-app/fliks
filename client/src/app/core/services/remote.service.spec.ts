@@ -51,6 +51,8 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
     const face = opts.castOn ? { deviceName: opts.castOn, formFactor: 'cast' } : {};
     return owner() ? { owner: { targetId: owner(), ...face }, item: { mediaFileId: 2, family: opts.family ?? 'video' } } : null;
   };
+  /** Kinds the account session covers; null = all. */
+  const kinds = signal<string[] | null>(null);
   const remoteState = signal<RemoteState | null>(null);
   const connectionId = signal<string | null>(null);
   const sse = {
@@ -69,14 +71,14 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: watched, observableOwner: owner, session, isReading: (s: { item: { family: string } }) => s.item.family === 'text', setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: watched, observableOwner: owner, session, isReading: (s: { item: { family: string } }) => s.item.family === 'text', setLiveSource: vi.fn(), ownerReportAt: () => 0, covers: (k: string) => !kinds() || kinds()!.includes(k), claim: async (start: () => unknown) => void (await start()) } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
   const service = TestBed.inject(RemoteService);
   service.selectedTargetId.set(opts.selected === undefined ? 'tv#1' : opts.selected);
-  return { service, remoteState, sse, owner, busy };
+  return { service, remoteState, sse, owner, busy, kinds };
 }
 
 describe('RemoteService observation', () => {
@@ -307,27 +309,37 @@ describe('RemoteService play target', () => {
     const { service, owner } = online({ selected: 'pc#1' });
     owner.set('tv#1');
     TestBed.tick();
-    expect(service.playTarget()).toBe('pc#1');
+    expect(service.playTarget('movie')).toBe('pc#1');
     service.selectTarget(null);
-    expect(service.playTarget()).toBe('tv#1');
+    expect(service.playTarget('movie')).toBe('tv#1');
+  });
+
+  it('sends a kind outside the session scope to the selected device only, never to the owner', () => {
+    const { service, owner, kinds } = online();
+    owner.set('tv#1');
+    kinds.set(['movie', 'series']);
+    expect(service.playTarget('album')).toBeNull();
+    expect(service.playTarget('movie')).toBe('tv#1');
+    service.selectTarget('pc#1');
+    expect(service.playTarget('album')).toBe('pc#1');
   });
 
   it('plays here when the owner is not listed or takes no load, or this device is offline', () => {
     const { service, owner, sse } = online();
     owner.set('tv#2');
-    expect(service.playTarget()).toBeNull();
+    expect(service.playTarget('movie')).toBeNull();
     service.targets.set([row('tv#2', ['play', 'pause', 'resume'])]);
-    expect(service.playTarget()).toBeNull();
+    expect(service.playTarget('movie')).toBeNull();
     service.targets.set([row('tv#2')]);
-    expect(service.playTarget()).toBe('tv#2');
+    expect(service.playTarget('movie')).toBe('tv#2');
     sse.connectionId.set(null);
-    expect(service.playTarget()).toBeNull();
+    expect(service.playTarget('movie')).toBeNull();
   });
 
   it('plays here while the session is a reading position', () => {
     const { service, owner } = online({ family: 'text' });
     owner.set('tv#1');
-    expect(service.playTarget()).toBeNull();
+    expect(service.playTarget('movie')).toBeNull();
   });
 
   it('drives the owner it started until another device takes the session', () => {
@@ -798,7 +810,7 @@ describe('RemoteService mirrors navigation to a target', () => {
           { path: 'settings', children: [] },
         ]),
         { provide: SseService, useValue: sse },
-        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), observableOwner: signal(null), session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
+        { provide: SessionSyncService, useValue: { observedOwnerTargetId: signal(null), observableOwner: signal(null), session: () => null, setLiveSource: vi.fn(), ownerReportAt: () => 0, covers: () => true, claim: async (start: () => unknown) => void (await start()) } },
         { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],

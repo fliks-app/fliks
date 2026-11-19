@@ -76,6 +76,9 @@ export class PlaybackSurface {
   /** Whether the audio mini-player gives way to the bar of another device's playback. */
   readonly miniHidden = computed(() => this.state() === 'remote' && this.bar() !== null);
 
+  /** The cast or remote output's own bar is up: another device plays under this one's control. */
+  readonly outputBar = computed(() => !this.device.isTv() && !this.session.isLocal() && this.session.output()?.isIdle() === false);
+
   /** Another bar (cast, remote output) rises above the audio mini-player at the same place. */
   readonly aboveAudio = computed(() => (this.audio.active() || this.parkedMusic()) && !this.miniHidden());
 

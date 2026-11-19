@@ -65,6 +65,7 @@ describe('AudioPlayerService music mode', () => {
     hasNext: () => false,
     dropNext: vi.fn(),
     leave: vi.fn(() => castOut.active.set(false)),
+    yield: vi.fn(() => castOut.active.set(false)),
     setStemSource: vi.fn(),
     applyStems: vi.fn(async () => {}),
     clearStems: vi.fn(),
@@ -96,7 +97,7 @@ describe('AudioPlayerService music mode', () => {
     trackRequests.mockClear();
     castOut.active.set(false);
     castOut.isConnected.set(false);
-    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.leave, castOut.setStemSource, castOut.clearStems]) f.mockClear();
+    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.leave, castOut.yield, castOut.setStemSource, castOut.clearStems]) f.mockClear();
     castLoad.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
@@ -116,7 +117,7 @@ describe('AudioPlayerService music mode', () => {
       providers: [
       { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: () => playTarget, send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), handoffFor: () => undefined, observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
         provideZonelessChangeDetection(),
         { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
@@ -373,7 +374,7 @@ describe('AudioPlayerService music mode', () => {
     await audio.playTracks([track(1)]);
     expect(castOut.active()).toBe(true);
     await player!.yield();
-    expect(castOut.leave).toHaveBeenCalled();
+    expect(castOut.yield).toHaveBeenCalled();
     expect(audio.track()).toBeNull();
   });
 

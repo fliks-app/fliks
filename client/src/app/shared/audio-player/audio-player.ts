@@ -237,6 +237,11 @@ export class AudioPlayerComponent {
     source: () => this.audio.uiTrack()?.coverUrl,
     computation: () => false,
   });
+  /** The mini-player's own, keyed on its cover: the full player can show another output's track. */
+  protected readonly miniCoverFailed = linkedSignal<string | null | undefined, boolean>({
+    source: () => this.mini()?.uiTrack()?.coverUrl,
+    computation: () => false,
+  });
   /** Kept across tracks until the new cover has loaded, so the bar doesn't flash back to grey. */
   protected readonly tint = linkedSignal<string | null | undefined, string | null>({
     source: () => this.mini()?.uiTrack()?.coverUrl,

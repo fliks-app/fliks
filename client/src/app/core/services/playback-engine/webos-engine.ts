@@ -234,7 +234,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         await this.attachAndPlay(url, start, true);
       } catch (e) {
         // A refused <source> (mediaOption schema, a type canPlayType rejects such as MKV) retries with plain src;
-        // a load timeout means a slow stream, so surface it (a retry burns another 30s).
+        // a load timeout is surfaced as unsupported for the copy fallback (a plain-src retry burns another 30s).
         if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
         await this.attachAndPlay(url, start, false);
       }
@@ -254,7 +254,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       let settled = false;
       const timer = setTimeout(
         () => finish(() => {
-          // Tagged so loadInternal can tell a slow-stream timeout (don't retry) from a mediaOption schema rejection (fall back to plain src).
+          // Tagged so loadInternal can tell a timeout (no plain-src retry) from a mediaOption schema rejection (plain-src retry).
           reject(new WebOsLoadError(MEDIA_ERR_SRC_NOT_SUPPORTED, 'webOS <video> load timeout (30s)', 'WebOsLoadTimeout'));
         }),
         30000,

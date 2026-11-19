@@ -153,9 +153,11 @@ export class RemoteAudioOutput implements AudioOutput {
 
   constructor() {
     effect((onCleanup) => {
-      const ids = this.idsKey() ? this.idsKey().split(',').map(Number) : [];
+      // The owner plays the queue itself and never shows this view.
+      const ids = this.idsKey() && !this.sync.ownedHere() ? this.idsKey().split(',').map(Number) : [];
       let stale = false;
       onCleanup(() => (stale = true));
+      if (!ids.length) return this.rows.set([]);
       void this.music.trackRequests(ids).then(
         (r) => {
           if (stale) return;

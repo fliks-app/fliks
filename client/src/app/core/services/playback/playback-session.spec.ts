@@ -83,6 +83,7 @@ function setup() {
     currentTime: vi.fn(() => 55),
     disconnect: vi.fn(),
     selectCastDevice: vi.fn(async () => {}),
+    connectedDeviceId: signal<string | null>(null),
     requestSession: vi.fn(),
   };
   const remoteSvc = {
@@ -113,7 +114,7 @@ function setup() {
     observedOwnerTargetId: signal<string | null>('tv-1'),
     observableOwner: signal<string | null>(null),
     claimPending: signal(false),
-    handOver: vi.fn(async (start: () => Promise<void> | void) => start()),
+    claim: vi.fn(async (start: () => Promise<void> | void) => start()),
     canTransfer: signal(true),
     canPlayHere: signal(false),
     playHere: vi.fn(async () => {}),
@@ -488,7 +489,7 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('local')).toBe(true);
       expect(remote.stopPlayback).not.toHaveBeenCalled();
       expect(remote.disconnect).toHaveBeenCalled();
-      expect(syncSvc.handOver).toHaveBeenCalled();
+      expect(syncSvc.claim).toHaveBeenCalled();
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42 }));
     });
 
@@ -524,20 +525,6 @@ describe('PlaybackSession', () => {
       session.takeBack();
       expect(router.navigate).not.toHaveBeenCalled();
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-    });
-
-    it('lets the remote device play on alone when control stops, without resuming here', () => {
-      const { session, remote, remoteSvc, local } = setup();
-      session.attachLocal(local);
-      remote.isConnected.set(true);
-      TestBed.tick();
-      session.stopControlling();
-      remote.isConnected.set(false);
-      TestBed.tick();
-      expect(remote.stopPlayback).not.toHaveBeenCalled();
-      expect(remoteSvc.selectTarget).toHaveBeenCalledWith(null);
-      expect(local.disconnect).toHaveBeenCalled();
-      expect(local.resume).not.toHaveBeenCalled();
     });
   });
 
@@ -576,6 +563,20 @@ describe('PlaybackSession', () => {
       expect(remoteSvc.selectTarget).toHaveBeenCalledWith('tv-2');
       expect(remoteSvc.send).toHaveBeenCalledWith('tv-2', expect.objectContaining({ action: 'load', mediaFileId: 7, mediaId: 3, positionSeconds: 42 }));
       expect(local.release).not.toHaveBeenCalled();
+    });
+
+    it('moves playback from one receiver to another', async () => {
+      const { session, cast, local, castSvc, castPlayer } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      cast.isConnected.set(true);
+      castPlayer.mediaFileId.set(7);
+      castPlayer.hasMedia.mockReturnValue(true);
+      castSvc.connectedDeviceId.set('cc-1');
+      session.attachLocal(local);
+      TestBed.tick();
+      expect(await session.moveTo('cast', 'cc-2')).toBe(true);
+      expect(castSvc.selectCastDevice).toHaveBeenCalledWith('cc-2');
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ mediaFileId: 7 }));
     });
 
     it('loads the receiver paused when the remote device was paused', async () => {

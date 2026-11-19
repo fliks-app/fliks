@@ -97,6 +97,8 @@ export class MusicCastOutput {
 
   /** Bumped by every call that makes an in-flight load or prepare stale. */
   private generation = 0;
+  /** Bumped only by `dropNext`: an in-flight up-next prepare is stale, a load is not. */
+  private nextGen = 0;
   /** The next track, queued on the receiver after the playing one. */
   private next: { req: MusicTrackRequest; info: PlaybackInfoResponse } | null = null;
   /** The track a queueing was started for, so one track is prepared once. */
@@ -221,6 +223,12 @@ export class MusicCastOutput {
     this.cast.disconnect();
   }
 
+  /** Another device took the session: the receiver is left only while it still plays our session, else another sender's. */
+  yield(): void {
+    if (this.cast.receiverMedia()?.['sid'] === this.loaded()?.sid) this.leave();
+    else this.release();
+  }
+
   /** Forgets the receiver media without touching it. */
   release(): void {
     this.generation++;
@@ -247,11 +255,12 @@ export class MusicCastOutput {
     if (this.tried === next) return;
     this.tried = next;
     const generation = this.generation;
+    const nextGen = this.nextGen;
     this.nowPlaying.primeTracks([next]);
     void this.prepareTrack(next)
       .then(({ pi, media }) => {
         // The receiver names the track it plays by its session: one without could not be followed.
-        if (generation !== this.generation || !this.active() || !pi.sessionId) {
+        if (generation !== this.generation || nextGen !== this.nextGen || !this.active() || !pi.sessionId) {
           if (pi.sessionId) void this.streaming.stopSession(pi.sessionId).catch(() => undefined);
           return;
         }
@@ -267,7 +276,7 @@ export class MusicCastOutput {
 
   /** Takes the queued track off the receiver and ends its session. */
   dropNext(): void {
-    this.generation++;
+    this.nextGen++;
     this.tried = null;
     const queued = this.next;
     this.next = null;

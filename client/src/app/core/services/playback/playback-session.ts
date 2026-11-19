@@ -90,8 +90,6 @@ export class PlaybackSession {
   private moving: Promise<boolean> | null = null;
   private wasCasting = false;
   private wasAway = false;
-  /** Set by `stopControlling`: that return to this device is deliberate and must not resume it. */
-  private releasing = false;
   private watchReturns: EffectRef | null = null;
   /** What the cast or remote output last held: once it is gone, its own position reads nothing. */
   private away: Away | null = null;
@@ -281,9 +279,9 @@ export class PlaybackSession {
     if (this.injector.get(DeviceService).isTv() || !this.canMoveTo(kind, deviceId)) return Promise.resolve(false);
     if (this.moving) return this.moving;
     const from = this.kind();
-    // Another remote device is a switch too, not only another kind of output.
-    const switching =
-      from !== 'local' && (from !== kind || (kind === 'remote' && deviceId !== this.remoteSvc().selectedTargetId()));
+    // Another device of the same kind is a switch too, not only another kind of output.
+    const current = kind === 'remote' ? this.remoteSvc().selectedTargetId() : this.castSvc().connectedDeviceId();
+    const switching = from !== 'local' && (from !== kind || (kind === 'remote' ? deviceId !== current : !!deviceId && deviceId !== current));
     const run =
       kind === 'local'
         ? this.toLocal()
@@ -304,30 +302,21 @@ export class PlaybackSession {
     return settled;
   }
 
-  /** Lets go of the remote device without taking the playback back: it plays on alone and the player closes. */
-  stopControlling(): void {
-    if (this.kind() !== 'remote') return;
-    // A view keeps kind remote, so no return to local follows to consume the flag.
-    this.releasing = !this.viewing();
-    this.remoteSvc().selectTarget(null);
-    this.local()?.disconnect();
-  }
-
   /** The device `play` loads on (`RemoteService.playTarget`); a party plays on this device or the output it drives. */
-  private playTarget(): string | null {
-    return this.kind() === 'local' && this.partyActive() ? null : this.remoteSvc().playTarget();
+  private playTarget(episodeId?: number): string | null {
+    return this.kind() === 'local' && this.partyActive() ? null : this.remoteSvc().playTarget(episodeId ? 'series' : 'movie');
   }
 
-  /** A play started now stays on this device. */
-  playsHere(): boolean {
-    return this.isLocal() && !this.playTarget();
+  /** A video play started now stays on this device. */
+  playsHere(episodeId?: number): boolean {
+    return this.isLocal() && !this.playTarget(episodeId);
   }
 
   /** Opens an item where this device's plays go: a remote device, the cast receiver, else the player route here. */
   async play(item: PlayItem, opts: PlayOptions = {}): Promise<OutputKind> {
     const kind = this.kind();
     const startAt = opts.fromStart ? 0 : undefined;
-    const targetId = this.playTarget();
+    const targetId = this.playTarget(item.episodeId);
     if (targetId) {
       void this.remoteSvc().send(targetId, {
         action: 'load',
@@ -545,7 +534,7 @@ export class PlaybackSession {
     if (takeover) from.disconnect();
     else this.leave(from);
     this.fullPlayer.handTo('video', false);
-    if (takeover) await sync.handOver(() => local.resume(snap));
+    if (takeover) await sync.claim(() => local.resume(snap));
     else await local.resume(snap);
     return true;
   }
@@ -638,12 +627,10 @@ export class PlaybackSession {
   }
 
   private onBackToLocal(): void {
-    const releasing = this.releasing;
-    this.releasing = false;
     const away = this.away;
     this.away = null;
     // The account session playing on another device is no playback of this one's to resume.
-    if (!away || this.moving || releasing || this.sync().observableOwner()) return;
+    if (!away || this.moving || this.sync().observableOwner()) return;
     if (away.kind === 'music') void this.audio().resume(away.snapshot);
     else void this.local()?.resume(away.snapshot);
   }

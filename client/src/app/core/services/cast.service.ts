@@ -251,6 +251,9 @@ export class CastService implements OnDestroy {
     this.isConnected() ? (this.castDevices().find((d) => d.connected)?.name ?? this.webDeviceName() ?? 'Chromecast') : null,
   );
 
+  /** The connected native receiver's id, null while not connected or when no listing names it. */
+  readonly connectedDeviceId = computed(() => (this.isConnected() ? (this.castDevices().find((d) => d.connected)?.id ?? null) : null));
+
   // ── Seek coalescing (see CAST_SEEK_* above) ──
   private seekCoalesceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSeekTarget: number | null = null;

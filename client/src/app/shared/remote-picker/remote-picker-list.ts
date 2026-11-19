@@ -248,9 +248,9 @@ export class RemotePickerListComponent {
       else if (!row.connected) this.session.takeBack();
       return;
     }
-    // Pressing the device in use is the way out of it: a Cast session ends, a remote device plays on alone.
+    // Pressing the Cast device in use ends its session; the selected remote device has no way out here.
     if (row.connected) {
-      this.leave();
+      if (row.kind !== 'remote') this.leave();
       return;
     }
     this.setLastUsed(row.id);

@@ -50,6 +50,7 @@ describe('MusicCastOutput', () => {
     togglePlayPause: vi.fn(),
     seek: vi.fn(),
     stop: vi.fn(),
+    disconnect: vi.fn(),
     saveResumeState: vi.fn(),
     clearResumeState: vi.fn(),
   };
@@ -94,7 +95,7 @@ describe('MusicCastOutput', () => {
     cast.isPaused.set(true);
     cast.ended.set(false);
     cast.receiverMedia.set(null);
-    for (const f of [cast.queueNext, cast.loadMedia, cast.setMix, cast.stop, cast.saveResumeState, cast.clearResumeState, ...Object.values(host)]) (f as ReturnType<typeof vi.fn>).mockClear?.();
+    for (const f of [cast.queueNext, cast.loadMedia, cast.setMix, cast.stop, cast.disconnect, cast.saveResumeState, cast.clearResumeState, ...Object.values(host)]) (f as ReturnType<typeof vi.fn>).mockClear?.();
     getItemPlaybackInfo.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => info(`s${itemId}`, itemId * 10));
     stopSession.mockClear();
@@ -244,6 +245,28 @@ describe('MusicCastOutput', () => {
     expect(out.active()).toBe(false);
     expect(stopSession).toHaveBeenCalledWith('s1');
     expect(cast.stop).toHaveBeenCalled();
+  });
+
+  it('on a takeover leaves the receiver only while it plays our session', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    await start(out);
+    cast.receiverMedia.set({ itemId: 1, sid: 'other' });
+    out.yield();
+    expect(out.active()).toBe(false);
+    expect(cast.disconnect).not.toHaveBeenCalled();
+    await start(out);
+    cast.receiverMedia.set({ itemId: 1, sid: 's1' });
+    out.yield();
+    expect(cast.disconnect).toHaveBeenCalled();
+  });
+
+  it('keeps a LOAD alive when the queue is edited meanwhile', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    out.attach(host as MusicCastHost);
+    cast.loadMedia.mockImplementationOnce(async () => out.dropNext());
+    expect(await out.load(track(1), true, 0, () => true)).not.toBeNull();
+    expect(out.active()).toBe(true);
+    expect(cast.stop).not.toHaveBeenCalled();
   });
 
   it('snapshots the receiver position and play state with the queue track', () => {

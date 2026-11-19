@@ -214,7 +214,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         useValue: { hasMedia: () => false, mediaTitle: () => '' },
       },
       { provide: PlaybackSession, useValue: { isLocal: () => !f.away, output: () => (f.idleOutput ? { isIdle: () => true } : null), openPlayer: () => {} } },
-      { provide: PlaybackSurface, useValue: { bar: () => null, aboveAudio: () => !!f.audio || !!f.parked } },
+      { provide: PlaybackSurface, useValue: { bar: () => null, outputBar: () => !!f.away && !f.idleOutput, aboveAudio: () => !!f.audio || !!f.parked } },
       { provide: AppUpdateService, useValue: { available: () => false } },
       {
         provide: PluginUiRegistryService,

@@ -40,10 +40,11 @@ function session(over: Partial<AccountSession> = {}): AccountSession {
   };
 }
 
-async function setup(account: AccountSession | null, live = true) {
+async function setup(account: AccountSession | null, live = true, owned = false) {
   const sync = {
     session: signal(account),
     claimPending: signal(false),
+    ownedHere: signal(owned),
     parked: signal(account?.state === 'parked'),
     playHere: vi.fn(),
     role: signal(account ? 'observer' : 'none'),
@@ -118,7 +119,7 @@ describe('RemoteAudioOutput', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
+        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), ownedHere: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
         { provide: RemotePlaybackTarget, useValue: {} },
         { provide: RemoteService, useValue: { isRemoting: signal(false) } },
         { provide: PlaybackSession, useValue: {} },
@@ -132,6 +133,12 @@ describe('RemoteAudioOutput', () => {
   it('has no track for a video session, which the video view shows', async () => {
     const { out } = await setup(session({ item: { ...session().item, kind: 'series', family: 'video', episodeId: 7 } }));
     expect(out.track()).toBeNull();
+  });
+
+  it('fetches no rows for a session this device owns', async () => {
+    const { out, primeTracks } = await setup(session(), true, true);
+    expect(out.queue()).toEqual([]);
+    expect(primeTracks).not.toHaveBeenCalled();
   });
 
   it('primes the metadata service with the rows it loads', async () => {

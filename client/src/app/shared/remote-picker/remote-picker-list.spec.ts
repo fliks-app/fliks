@@ -130,6 +130,13 @@ describe('RemotePickerListComponent while controlling a device', () => {
     expect(selectTarget).not.toHaveBeenCalled();
   });
 
+  it('does nothing when the selected remote device is pressed', () => {
+    const selectTarget = vi.fn();
+    const { component } = setup({ remote: { selectTarget } });
+    expect(() => component.selectRow({ kind: 'remote', id: 'tv#1', icon: 'tv', label: 'TV', subtitle: null, connected: true })).not.toThrow();
+    expect(selectTarget).not.toHaveBeenCalled();
+  });
+
   it('opens the player on the device that owns the session instead of selecting it', () => {
     const selectTarget = vi.fn();
     const open = vi.fn();
